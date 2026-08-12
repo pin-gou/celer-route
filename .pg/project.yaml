@@ -1,0 +1,34 @@
+# pg-skills project declaration
+# Edit this file to declare real modules, environments, tracks, and stages.
+# Schema: .pg/skills/src/runtime/spec/project.schema.json
+
+schema: spec-driven
+# project: name=my-gateway
+
+modules:
+  placeholder:
+    root: .
+    language: python
+    description: "Placeholder module; replaced by pg-init-project."
+environments:
+  placeholder:
+    description: "Placeholder environment; replace during project onboarding."
+    roles:
+      placeholder:
+        instances:
+          - name: placeholder-1
+            host: localhost
+            port: 9999
+tracks:
+  placeholder:
+    modules: [placeholder]
+    max_fail_retries: 1
+    max_fix_retries: 1
+    description: "Placeholder track; replace after defining real modules."
+stages:
+  - name: placeholder
+    tracks: [placeholder]
+    gate: all_pass
+    environment:
+      required: false
+    description: "Placeholder stage; replace after defining real modules."
