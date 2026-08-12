@@ -28,12 +28,16 @@ const (
 // than a transient rate-limit hiccup. Transient 429s that don't match any
 // of these patterns are intentionally NOT marked — they self-heal on the
 // next retry, and over-cooling on them would cause avoidable fallback churn.
+//
+// "payment required" is intentionally NOT in this list. That string is the
+// canonical HTTP 402 reason phrase, which is a permanent billing failure
+// handled by bifrost's deadKeyIDs — see IsQuotaExhausted for the full
+// rationale.
 var quotaExhaustedSubstrings = []string{
 	"insufficient_quota",
 	"quota exceeded",
 	"quota_exceeded",
 	"billing",
-	"payment required",
 	"usage limit",
 }
 
@@ -271,7 +275,7 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 		return fmt.Errorf("provider-cooldown: %w", err)
 	}
 	p.stopGC()
-	p.State = cfg.AsState()
+	p.State = cfg.AsState(p.logger)
 	p.startGC()
 	if p.logger != nil {
 		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s))",
@@ -352,17 +356,24 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, _ *schemas.Bif
 }
 
 // IsQuotaExhausted returns true when the given BifrostError looks like the
-// provider's quota / billing on this key is exhausted, as opposed to a
-// transient 429 that will recover on its own.
+// provider's per-key quota on this key is exhausted, as opposed to a
+// transient 429 that will recover on its own or a permanent billing
+// failure that the retry loop already routes around via deadKeyIDs.
 //
 // Recognised signals:
-//   - HTTP 402 (Payment Required) is always treated as billing/quota.
 //   - HTTP 429 is treated as quota only when the rendered message matches
 //     one of the known quota-exhaustion substrings (insufficient_quota,
 //     quota exceeded, billing, payment required, usage limit). Generic
 //     "rate limit" / "too many requests" messages are intentionally NOT
 //     treated as quota — they self-heal and over-cooling them would
 //     cause unnecessary fallback churn.
+//
+// HTTP 402 (Payment Required) is intentionally NOT treated as quota:
+// billing failures are permanent (a dead account does not recover after
+// 10 minutes), so cooldown would let the same dead key get retried
+// repeatedly. Bifrost core already routes 402 (along with 401/403) into
+// the request-scoped deadKeyIDs set on the first failure, so the plugin
+// has nothing to add.
 func IsQuotaExhausted(err *schemas.BifrostError) bool {
 	if err == nil {
 		return false
@@ -370,7 +381,9 @@ func IsQuotaExhausted(err *schemas.BifrostError) bool {
 	if err.StatusCode != nil {
 		switch *err.StatusCode {
 		case 402:
-			return true
+			// Permanent billing failure — handled by bifrost's deadKeyIDs.
+			// Don't cooldown: the key is dead, not transiently quota-exhausted.
+			return false
 		case 429:
 			// fall through to message check
 		default:

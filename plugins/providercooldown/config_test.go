@@ -1,6 +1,7 @@
 package providercooldown
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -94,7 +95,7 @@ func TestConfigAsStateAppliesValues(t *testing.T) {
 			"openai": 30,
 		},
 	}
-	s := c.AsState()
+	s := c.AsState(nil)
 
 	if s.ttl != 120*time.Second {
 		t.Fatalf("default TTL = %v, want 120s", s.ttl)
@@ -109,7 +110,7 @@ func TestConfigAsStateAppliesValues(t *testing.T) {
 
 func TestConfigAsStateFallsBackOnZero(t *testing.T) {
 	c := &Config{DefaultTTLSeconds: 0} // zero / negative -> DefaultCooldownTTL
-	s := c.AsState()
+	s := c.AsState(nil)
 	if s.ttl != DefaultCooldownTTL {
 		t.Fatalf("zero TTL must fall back to DefaultCooldownTTL, got %v", s.ttl)
 	}
@@ -123,11 +124,60 @@ func TestConfigAsStateIgnoresNonPositiveOverrides(t *testing.T) {
 			"anthropic": 0,   // ignored
 		},
 	}
-	s := c.AsState()
+	s := c.AsState(nil)
 	if _, ok := s.ttlOverrides[schemas.OpenAI]; ok {
 		t.Fatal("non-positive openai override should be ignored")
 	}
 	if _, ok := s.ttlOverrides[schemas.Anthropic]; ok {
 		t.Fatal("zero anthropic override should be ignored")
+	}
+}
+
+func TestConfigAsStateWarnsOnUnknownProvider(t *testing.T) {
+	log := &testLogger{}
+	c := &Config{
+		DefaultTTLSeconds: 60,
+		TTLOverrides: map[string]int{
+			"openai":    30,  // known — no warning expected
+			"open-ai":   45,  // typo — warning expected
+			"anthropic": 90,  // known — no warning expected
+			"made-up-provider": 120, // unknown — warning expected
+		},
+	}
+	s := c.AsState(log)
+
+	// Known providers should still get applied.
+	if got := s.effectiveTTLLocked(schemas.OpenAI); got != 30*time.Second {
+		t.Fatalf("openai override = %v, want 30s", got)
+	}
+	if got := s.effectiveTTLLocked(schemas.Anthropic); got != 90*time.Second {
+		t.Fatalf("anthropic override = %v, want 90s", got)
+	}
+
+	// Two warnings expected (for "open-ai" and "made-up-provider").
+	if !log.contains(`"open-ai"`) {
+		t.Fatalf("expected warning for typo'd provider name, got messages: %v", log.msgs)
+	}
+	if !log.contains(`"made-up-provider"`) {
+		t.Fatalf("expected warning for unknown provider, got messages: %v", log.msgs)
+	}
+	// Known providers should NOT appear in warnings.
+	for _, m := range log.msgs {
+		if strings.Contains(m, `"openai"`) || strings.Contains(m, `"anthropic"`) {
+			t.Fatalf("known providers should not appear in warnings, got: %v", log.msgs)
+		}
+	}
+}
+
+func TestConfigAsStateNilLoggerDoesNotPanic(t *testing.T) {
+	c := &Config{
+		TTLOverrides: map[string]int{
+			"some-unknown-provider": 60,
+		},
+	}
+	// nil logger must not panic on unknown provider names.
+	s := c.AsState(nil)
+	if s == nil {
+		t.Fatal("AsState should still return a state with nil logger")
 	}
 }

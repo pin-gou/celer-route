@@ -241,7 +241,9 @@ func TestIsQuotaExhausted(t *testing.T) {
 		want bool
 	}{
 		{"nil", nil, false},
-		{"402 billing", &schemas.BifrostError{StatusCode: intPtr(402)}, true},
+		// 402 is a permanent billing failure, handled by bifrost's deadKeyIDs.
+		// Don't cooldown — see IsQuotaExhausted docstring.
+		{"402 billing", &schemas.BifrostError{StatusCode: intPtr(402)}, false},
 		{"429 quota message", newQuotaError(schemas.OpenAI), true},
 		{"429 generic rate limit only", &schemas.BifrostError{
 			StatusCode: intPtr(429),
@@ -257,7 +259,11 @@ func TestIsQuotaExhausted(t *testing.T) {
 		}, true},
 		{"500", &schemas.BifrostError{StatusCode: intPtr(500)}, false},
 		{"401", &schemas.BifrostError{StatusCode: intPtr(401)}, false},
-		{"402 via message only", &schemas.BifrostError{Error: &schemas.ErrorField{Message: "payment required"}}, true},
+		// 402 message-only (no status code) used to match the substring
+		// "payment required". With the new semantics, message-only detection
+		// still works for genuine quota exhaustion, but a 402-style message
+		// in isolation now correctly does NOT trigger cooldown.
+		{"402 via message only", &schemas.BifrostError{Error: &schemas.ErrorField{Message: "payment required"}}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -265,6 +271,26 @@ func TestIsQuotaExhausted(t *testing.T) {
 				t.Fatalf("IsQuotaExhausted(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPluginIgnores402(t *testing.T) {
+	log := &testLogger{}
+	plugin := NewPlugin(log)
+	ctx := newTrailCtx("key-1")
+	// 402 status code only — was previously triggering cooldown.
+	plugin.PostLLMHook(ctx, nil, &schemas.BifrostError{
+		StatusCode: intPtr(402),
+		Error:      &schemas.ErrorField{Message: "Payment required"},
+		ExtraFields: schemas.BifrostErrorExtraFields{
+			RoutingInfo: schemas.RoutingInfo{Provider: schemas.OpenAI, Model: "gpt-4o"},
+		},
+	})
+	if plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
+		t.Fatal("402 must not trigger cooldown (handled by bifrost deadKeyIDs)")
+	}
+	if log.contains("marked key") {
+		t.Fatalf("expected no Mark log for 402, got messages: %v", log.msgs)
 	}
 }
 

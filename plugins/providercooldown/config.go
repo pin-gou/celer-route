@@ -59,7 +59,12 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 // AsState builds a CooldownState with the parsed config applied. The state
 // is independent of the receiver and is safe to mutate further (e.g. via
 // SetTTLOverride) without affecting the source Config.
-func (c *Config) AsState() *CooldownState {
+//
+// If a logger is provided, AsState logs a warning for each ttl_overrides
+// key whose name does not match any known Bifrost provider. A typo
+// (`"open-ai"` instead of `"openai"`) would otherwise be silently ignored
+// and the admin would think their override took effect when it did not.
+func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 	ttl := DefaultCooldownTTL
 	if c.DefaultTTLSeconds > 0 {
 		ttl = time.Duration(c.DefaultTTLSeconds) * time.Second
@@ -69,7 +74,14 @@ func (c *Config) AsState() *CooldownState {
 		if secs <= 0 {
 			continue
 		}
-		s.SetTTLOverride(schemas.ModelProvider(prov), time.Duration(secs)*time.Second)
+		mp := schemas.ModelProvider(prov)
+		if logger != nil && !schemas.IsKnownProvider(prov) {
+			logger.Warn(
+				"[provider-cooldown] ttl_overrides key %q does not match any known provider; override will be silently ignored",
+				prov,
+			)
+		}
+		s.SetTTLOverride(mp, time.Duration(secs)*time.Second)
 	}
 	return s
 }
