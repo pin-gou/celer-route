@@ -70,24 +70,23 @@ export function getPort(): string {
  * Get the base URL for API calls (includes protocol and host)
  */
 export function getApiBaseUrl(): string {
-	const config = getPortConfig();
-
-	if (config.isDevelopment) {
-		return `${config.baseUrl}/api`;
-	} else {
-		// Production mode: use relative URL for API calls
-		return "/api";
-	}
+	// 开发/生产模式一致使用相对路径，开发时由 vite proxy 转发到后端
+	return "/api";
 }
 
 /**
  * Get the WebSocket URL for real-time connections
  */
 export function getWebSocketUrl(path: string = ""): string {
-	const config = getPortConfig();
 	const cleanPath = path.startsWith("/") ? path : `/${path}`;
 
-	return `${config.wsUrl}${cleanPath}`;
+	// 与 getApiBaseUrl 一致：优先取当前页面 origin（开发时为 vite dev server，
+	// 由 vite proxy 转发到后端；生产时为后端同源），不直接拼后端端口。
+	if (typeof window === "undefined") {
+		return "";
+	}
+	const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+	return `${wsProtocol}//${window.location.host}${cleanPath}`;
 }
 
 /**
@@ -118,10 +117,6 @@ export function getEndpointUrl(endpoint: string): string {
 	const config = getPortConfig();
 	const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
 
-	if (config.isDevelopment) {
-		return `${config.baseUrl}${cleanEndpoint}`;
-	} else {
-		// Production mode: use relative URLs
-		return cleanEndpoint;
-	}
+	// 开发/生产模式一致使用相对路径，开发时由 vite proxy 转发
+	return cleanEndpoint;
 }

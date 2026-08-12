@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -uo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export PG_SKILLS_PATH="${PG_SKILLS_PATH:-$SELF_DIR}"
+source "$PG_SKILLS_PATH/src/runtime/lib/hook-helpers.sh"
+trap 'pg_fail_on_error $? $LINENO' ERR
+
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$HOOK_DIR/lib/common.sh" ]]; then
+    source "$HOOK_DIR/lib/common.sh"
+    pg_resolve_paths
+fi
+
+pkill -f 'vite' 2>/dev/null || true
+pg_stop_bg "$PID_DIR/ui-dev.pid" "ui-dev" 2>&1 || true
+
+pg_exit --status=pass --duration=$(( $(date +%s) - $(date +%s) )) \
+        --metadata="role=\"${PG_ROLE:-}\" instance=\"${PG_INSTANCE_NAME:-}\""

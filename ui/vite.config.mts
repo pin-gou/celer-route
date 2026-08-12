@@ -54,8 +54,12 @@ export default defineConfig({
 		port: 3000,
 		proxy: {
 			"/api": {
-				target: "http://localhost:8080",
+				target: `http://localhost:${process.env.BIFROST_PORT ?? "8080"}`,
 				changeOrigin: true,
+			},
+			"/ws": {
+				target: `http://localhost:${process.env.BIFROST_PORT ?? "8080"}`,
+				ws: true,
 			},
 		},
 	},
