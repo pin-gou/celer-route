@@ -1,8 +1,11 @@
 # Dockerfile.local - Uses local module sources via go workspace
 # For pre-release CI builds where module versions aren't published yet
+# Supports cross-compilation: use `docker buildx build --platform linux/arm64`
+# Builder stages run on BUILDPLATFORM (native) to avoid QEMU CGO segfaults,
+# runtime stage produces the final image for TARGETPLATFORM.
 
-# --- UI Build Stage: Build the React + Vite frontend ---
-  FROM node:25-alpine3.23@sha256:cf38e1f3c28ac9d81cdc0c51d8220320b3b618780e44ef96a39f76f7dbfef023 AS ui-builder
+# --- UI Build Stage: Build the React + Vite frontend (native) ---
+  FROM --platform=$BUILDPLATFORM node:25-alpine3.23@sha256:cf38e1f3c28ac9d81cdc0c51d8220320b3b618780e44ef96a39f76f7dbfef023 AS ui-builder
   WORKDIR /app
 
   # Copy UI package files and install dependencies
@@ -16,15 +19,22 @@
   RUN npm run build-enterprise
   # Skip the copy-build step since we'll copy the files in the Go build stage
 
-  # --- Go Build Stage: Compile the Go binary using local modules ---
-  FROM golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc AS builder
+  # --- Go Build Stage: Compile the Go binary (native, cross-compile to TARGETARCH) ---
+  FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc AS builder
   WORKDIR /build
 
-  # Install dependencies including gcc for CGO and sqlite
-  RUN apk add --no-cache gcc musl-dev sqlite-dev binutils binutils-gold
+  ARG TARGETARCH
+
+  # Install native or cross-compilation tools
+  RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      apk add --no-cache musl-cross binutils binutils-gold; \
+    else \
+      apk add --no-cache gcc musl-dev sqlite-dev binutils binutils-gold; \
+    fi
 
   # Set environment for CGO-enabled build (required for go-sqlite3)
   ENV CGO_ENABLED=1 GOOS=linux
+  ENV GOARCH=$TARGETARCH
 
   # Copy all local modules
   COPY core/ ./core/
@@ -42,8 +52,10 @@
     go work use ./plugins/logging && \
     go work use ./plugins/maxim && \
     go work use ./plugins/mocker && \
+    go work use ./plugins/modelcatalogresolver && \
     go work use ./plugins/otel && \
     go work use ./plugins/prompts && \
+    go work use ./plugins/providercooldown && \
     go work use ./plugins/semanticcache && \
     go work use ./plugins/telemetry && \
     go work use ./transports
@@ -52,8 +64,10 @@
   COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 
   # Build the binary with CGO enabled and static SQLite linking
+  # CC is set dynamically: use aarch64-linux-musl-gcc for arm64 cross-compilation, gcc for native
   ARG VERSION=unknown
   RUN cd /build/transports && \
+    CC=$(if [ "$TARGETARCH" = "arm64" ]; then echo aarch64-linux-musl-gcc; else echo gcc; fi) \
     go build \
       -ldflags="-w -s -X main.Version=v${VERSION} -extldflags '-static'" \
       -a -trimpath \
@@ -64,8 +78,8 @@
   # Verify build succeeded
   RUN test -f /app/main || (echo "Build failed" && exit 1)
 
-  # --- Runtime Stage: Minimal runtime image ---
-  FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+  # --- Runtime Stage: Minimal runtime image (target platform) ---
+  FROM --platform=$TARGETPLATFORM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
   WORKDIR /app
 
   # Install runtime dependencies for CGO-enabled binary
