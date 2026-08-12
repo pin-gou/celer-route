@@ -53,7 +53,7 @@ if check_port "$PORT"; then
 fi
 
 # 清理旧数据
-rm -f "$DATA_DIR"/*.db "$DATA_DIR"/config.json
+rm -f "$DATA_DIR"/config.db* "$DATA_DIR"/config.json
 
 # 启动 bifrost-api
 echo "启动 bifrost-api (port $PORT)..."
