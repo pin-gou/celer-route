@@ -36,6 +36,7 @@ import (
 	"github.com/maximhq/bifrost/plugins/logging"
 	"github.com/maximhq/bifrost/plugins/otel"
 	"github.com/maximhq/bifrost/plugins/prompts"
+	"github.com/maximhq/bifrost/plugins/providercooldown"
 	"github.com/maximhq/bifrost/plugins/semanticcache"
 	"github.com/maximhq/bifrost/plugins/telemetry"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
@@ -1931,6 +1932,17 @@ func (s *BifrostHTTPServer) SyncLoadedPlugin(ctx context.Context, name string, p
 	}
 	// 3b. Sync plugin execution order from config to core
 	s.Client.ReorderPlugins(s.Config.GetPluginOrder())
+	// 3c. Special-case: provider-cooldown rewires its KeyPoolFilter through the
+	// bifrost core so the new plugin instance's State is what the filter
+	// closure captures. Without this, after a plugin reload the filter would
+	// still point at the old (now-orphaned) State and new Mark() calls would
+	// never reach it — the cooldown would silently stop working.
+	if cp, ok := plugin.(*providercooldown.CooldownPlugin); ok && cp.State != nil {
+		f := cp.State.AsFilter(logger)
+		s.KeyPoolFilter = f
+		s.Client.SetKeyPoolFilter(f)
+		logger.Info("provider-cooldown: filter rewired after plugin reload")
+	}
 	// 4. Special handling for observability plugins
 	if _, ok := plugin.(schemas.ObservabilityPlugin); ok {
 		s.reloadObservabilityPlugins()

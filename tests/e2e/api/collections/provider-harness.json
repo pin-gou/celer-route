@@ -49834,6 +49834,201 @@
           }
         }
       ]
+    },
+    {
+      "name": "46. Provider-Cooldown (Plugin Wire-Visible Smoke)",
+      "description": "Smoke tests that the provider-cooldown plugin does not regress the wire path. The plugin operates at the key-pool level (PostLLMHook + KeyPoolFilter), so the only directly observable side-effects in normal traffic are (a) zero impact on the happy path and (b) the filter keeps working after the plugin is reloaded via the API. These cases pin both. Filter correctness under real quota errors is covered by Go-level tests in plugins/providercooldown/cooldown_test.go (which exercise the state machine directly).",
+      "item": [
+        {
+          "name": "provider-cooldown openai chat smoke - plugin does not break wire",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('provider-cooldown openai chat smoke - plugin does not break wire', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.choices && j.choices[0] && j.choices[0].message, 'expected a chat completion response').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Reply with one word.\"\n    }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "provider-cooldown openai streaming smoke - per-chunk PostLLMHook does not crash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('provider-cooldown openai streaming smoke - SSE stream completed', function () {",
+                  "  var ct = pm.response.headers.get('content-type') || '';",
+                  "  pm.expect(ct, 'expected SSE, got ' + ct).to.include('event-stream');",
+                  "  pm.expect(pm.response.text(), 'stream must end with [DONE]').to.include('[DONE]');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Reply with one word.\"\n    }\n  ],\n  \"max_tokens\": 16,\n  \"stream\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "provider-cooldown openai chat smoke after plugin update - filter rewired",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('plugin update succeeded (provider-cooldown re-enabled)', function () {",
+                  "  pm.expect(pm.response.code, 'plugin update failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.name, 'plugin name should be provider-cooldown').to.eql('provider-cooldown');",
+                  "  pm.expect(j.enabled, 'plugin should be enabled after update').to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"provider-cooldown\",\n  \"enabled\": true,\n  \"config\": {\n    \"default_ttl_seconds\": 600,\n    \"ttl_overrides\": {\n      \"openai\": 60\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/plugins/provider-cooldown",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plugins",
+                "provider-cooldown"
+              ]
+            }
+          }
+        },
+        {
+          "name": "provider-cooldown openai chat after reload - cooldown filter still wired",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('provider-cooldown openai chat after reload - wire intact (BUG-1 regression)', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.choices && j.choices[0] && j.choices[0].message, 'expected a chat completion response').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Reply with one word.\"\n    }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

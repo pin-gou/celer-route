@@ -94,7 +94,7 @@ type Bifrost struct {
 	mcpInitOnce         sync.Once                           // Ensures MCP manager is initialized only once
 	dropExcessRequests  atomic.Bool                         // If true, in cases where the queue is full, requests will not wait for the queue to be empty and will be dropped instead.
 	keySelector         schemas.KeySelector                 // Custom key selector function
-	keyPoolFilter       schemas.KeyPoolFilter               // optional hook to veto keys before selection (nil = all eligible)
+	keyPoolFilter       atomic.Pointer[schemas.KeyPoolFilter] // optional hook to veto keys before selection (nil pointer = all eligible); hot-swappable via SetKeyPoolFilter
 	kvStore             schemas.KVStore                     // optional KV store for session stickiness (nil = disabled)
 }
 
@@ -242,11 +242,13 @@ func Init(ctx context.Context, config schemas.BifrostConfig) (*Bifrost, error) {
 		requestQueues: sync.Map{},
 		waitGroups:    sync.Map{},
 		keySelector:   config.KeySelector,
-		keyPoolFilter: config.KeyPoolFilter,
 		mcpCredStore:  credstore.NewCredStore(config.OAuth2Provider, config.MCPHeadersProvider, config.Logger),
 		logger:        config.Logger,
 		kvStore:       config.KVStore,
 		modelCatalog:  config.ModelCatalog,
+	}
+	if config.KeyPoolFilter != nil {
+		bifrost.keyPoolFilter.Store(&config.KeyPoolFilter)
 	}
 	bifrost.tracer.Store(&tracerWrapper{tracer: tracer})
 	if config.LLMPlugins == nil {
@@ -385,6 +387,19 @@ func (bifrost *Bifrost) SetTracer(tracer schemas.Tracer) {
 		tracer = schemas.DefaultTracer()
 	}
 	bifrost.tracer.Store(&tracerWrapper{tracer: tracer})
+}
+
+// SetKeyPoolFilter atomically installs a new KeyPoolFilter on the running
+// Bifrost instance. Pass nil to disable the filter. Subsequent retry/fallback
+// invocations will read the new filter on their next call — there is no need
+// to recreate the instance or re-init plugins. Used by the transport to
+// rewire the provider-cooldown filter after a plugin reload.
+func (bifrost *Bifrost) SetKeyPoolFilter(f schemas.KeyPoolFilter) {
+	if f == nil {
+		bifrost.keyPoolFilter.Store(nil)
+		return
+	}
+	bifrost.keyPoolFilter.Store(&f)
 }
 
 // getTracer returns the tracer from atomic storage with type assertion.
@@ -6799,8 +6814,8 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 								}
 								available = append(available, k)
 							}
-							if bifrost.keyPoolFilter != nil {
-								if filtered, err := bifrost.keyPoolFilter(req.Context, provKey, mdl, available); err != nil {
+							if f := bifrost.keyPoolFilter.Load(); f != nil && *f != nil {
+								if filtered, err := (*f)(req.Context, provKey, mdl, available); err != nil {
 									bifrost.logger.Warn("key pool filter failed for provider %s, using unfiltered keys: %v", provKey, err)
 								} else {
 									available = filtered
@@ -6818,8 +6833,8 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 									}
 								}
 								liveCount := len(available) // non-dead keys before the filter runs
-								if bifrost.keyPoolFilter != nil {
-									if filtered, err := bifrost.keyPoolFilter(req.Context, provKey, mdl, available); err != nil {
+								if f := bifrost.keyPoolFilter.Load(); f != nil && *f != nil {
+									if filtered, err := (*f)(req.Context, provKey, mdl, available); err != nil {
 										bifrost.logger.Warn("key pool filter failed for provider %s, using unfiltered keys: %v", provKey, err)
 									} else {
 										available = filtered

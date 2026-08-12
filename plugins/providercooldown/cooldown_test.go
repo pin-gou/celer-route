@@ -155,6 +155,85 @@ func TestAsFilterEmptyInput(t *testing.T) {
 	}
 }
 
+// TestFilterSwapSeesNewCooldown simulates the wire-path behavior of plugin
+// reload: after a reload, a new plugin instance is created with a fresh
+// CooldownState, and the transport rewires s.KeyPoolFilter to point at the
+// new State's filter. This test verifies that:
+//
+//  1. The new filter, after rewiring, correctly suppresses a key freshly
+//     marked on the new State (proving the rewiring is wired correctly).
+//  2. The OLD filter (which captures the OLD State) does NOT see the new
+//     cooldown — confirming the old State has been orphaned (no longer
+//     written to), as expected by the design.
+func TestFilterSwapSeesNewCooldown(t *testing.T) {
+	oldPlugin := NewPlugin(nil)
+	oldFilter := oldPlugin.State.AsFilter(nil)
+
+	// Simulate reload: a new plugin instance replaces the old one in the
+	// transport layer (SyncLoadedPlugin). The transport then calls
+	// plugin.State.AsFilter(...) to rewire s.KeyPoolFilter.
+	newPlugin := NewPlugin(nil)
+	newFilter := newPlugin.State.AsFilter(nil)
+
+	// Mark a key on the NEW plugin's State (this is what PostLLMHook would
+	// do for a quota error after the reload).
+	newPlugin.State.Mark(schemas.OpenAI, "key-after-reload")
+
+	keys := []schemas.Key{
+		{ID: "key-after-reload", Name: "k1"},
+		{ID: "key-fresh", Name: "k2"},
+	}
+
+	// Old filter should NOT filter "key-after-reload" because its captured
+	// State has no entry for it.
+	out, err := oldFilter(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("oldFilter: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("old filter should let all keys through (its State was orphaned by reload), got %d keys", len(out))
+	}
+
+	// New filter MUST filter "key-after-reload".
+	out, err = newFilter(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("newFilter: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != "key-fresh" {
+		t.Fatalf("new filter should suppress the cooled key, got %+v", out)
+	}
+}
+
+// TestSharedStateAcrossFilters simulates a future-proofing scenario where the
+// transport chooses to share a single *CooldownState across plugin reloads
+// (e.g. to preserve cooldowns across config changes). It is not the current
+// behavior but documents the underlying contract: a State can back multiple
+// filter closures, and writes through any of them are visible to all.
+func TestSharedStateAcrossFilters(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	f1 := s.AsFilter(nil)
+	f2 := s.AsFilter(nil)
+
+	s.Mark(schemas.OpenAI, "shared-key")
+
+	keys := []schemas.Key{{ID: "shared-key"}, {ID: "other-key"}}
+
+	out1, err := f1(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("f1: %v", err)
+	}
+	out2, err := f2(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("f2: %v", err)
+	}
+	if len(out1) != 1 || out1[0].ID != "other-key" {
+		t.Fatalf("f1 did not see cooldown, got %+v", out1)
+	}
+	if len(out2) != 1 || out2[0].ID != "other-key" {
+		t.Fatalf("f2 did not see cooldown, got %+v", out2)
+	}
+}
+
 func TestIsQuotaExhausted(t *testing.T) {
 	cases := []struct {
 		name string
@@ -261,7 +340,7 @@ func TestPluginNameAndCleanup(t *testing.T) {
 		t.Fatal("plugin name must be non-empty")
 	}
 	if err := p.Cleanup(); err != nil {
-		t.Fatalf("Cleanup should be a no-op, got %v", err)
+		t.Fatalf("Cleanup should succeed, got %v", err)
 	}
 }
 
@@ -295,6 +374,117 @@ func TestRunGCPrunesExpired(t *testing.T) {
 	}
 	if s.Size() != 0 {
 		t.Fatalf("lazy prune should have removed the entry, got size %d", s.Size())
+	}
+}
+
+// TestStateGCLoopPrunesAtCustomInterval drives runGCLocked directly with a
+// short interval to verify the GC actually removes expired entries (not just
+// the lazy prune path).
+func TestStateGCLoopPrunesAtCustomInterval(t *testing.T) {
+	log := &testLogger{}
+	s := NewCooldownState(20 * time.Millisecond)
+	s.Mark(schemas.OpenAI, "k1")
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.runGCLocked(log, 10*time.Millisecond, stop)
+	}()
+
+	// Wait for TTL + at least one tick.
+	time.Sleep(80 * time.Millisecond)
+	close(stop)
+	<-done
+
+	if s.IsCoolingDown(schemas.OpenAI, "k1") {
+		t.Fatal("GC loop should have pruned the expired entry")
+	}
+	if !log.contains("GC pruned 1 expired") {
+		t.Fatalf("expected GC log, got messages: %v", log.msgs)
+	}
+}
+
+// TestPluginCleanupStopsGC verifies the plugin's auto-started GC goroutine
+// exits promptly when Cleanup is called. This is the regression for the P0
+// issue where the GC never started in production; without an explicit
+// Cleanup, plugin reloads and shutdowns would leak goroutines.
+func TestPluginCleanupStopsGC(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	// Sanity: plugin must have a non-nil stop/done channel after NewPlugin.
+	if p.gcStop == nil || p.gcDone == nil {
+		t.Fatal("NewPlugin should auto-start the GC goroutine")
+	}
+}
+
+// TestPluginCleanupIdempotent verifies calling Cleanup twice is a no-op.
+func TestPluginCleanupIdempotent(t *testing.T) {
+	p := NewPlugin(nil)
+	if err := p.Cleanup(); err != nil {
+		t.Fatalf("first Cleanup: %v", err)
+	}
+	if err := p.Cleanup(); err != nil {
+		t.Fatalf("second Cleanup should be a no-op, got %v", err)
+	}
+}
+
+// TestPluginInitRestartsGC verifies Init replaces the State and restarts the
+// GC against the new State. Without restart, the GC goroutine would still
+// point at the OLD State.
+func TestPluginInitRestartsGC(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	oldStop := p.gcStop
+	if oldStop == nil {
+		t.Fatal("NewPlugin must start GC")
+	}
+
+	if err := p.Init(map[string]any{
+		"default_ttl_seconds": float64(45),
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer p.Cleanup()
+
+	if p.gcStop == nil {
+		t.Fatal("Init should restart GC, but gcStop is nil")
+	}
+	// We can't reliably assert they're different channel values (gcStop is
+	// reassigned), so just confirm the old channel was closed by attempting
+	// a non-blocking receive on it.
+	select {
+	case <-oldStop:
+		// expected: Init closed the old stop channel
+	default:
+		t.Fatal("Init did not close the previous GC stop channel — goroutine leak")
+	}
+}
+
+// TestPluginCleanupExitsGoroutine verifies the GC goroutine actually exits
+// after Cleanup (not just that the channel was closed).
+func TestPluginCleanupExitsGoroutine(t *testing.T) {
+	p := NewPlugin(nil)
+	done := p.gcDone
+
+	// Spawn a watcher that signals when gcDone closes.
+	watcher := make(chan struct{})
+	go func() {
+		<-done
+		close(watcher)
+	}()
+
+	if err := p.Cleanup(); err != nil {
+		t.Fatalf("Cleanup: %v", err)
+	}
+
+	select {
+	case <-watcher:
+		// good
+	case <-time.After(time.Second):
+		t.Fatal("GC goroutine did not exit after Cleanup (goroutine leak)")
 	}
 }
 

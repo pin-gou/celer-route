@@ -146,17 +146,11 @@ func (c *CooldownState) Size() int {
 	return len(c.cooldowns)
 }
 
-// RunGC prunes expired entries on a fixed cadence. Blocks until stop is
-// closed (or receives a value). Safe to invoke from a goroutine without
-// further synchronization.
-//
-// Typical usage:
-//
-//	stop := make(chan struct{})
-//	go cooldown.RunGC(stop)
-//	defer close(stop)
-func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
-	ticker := time.NewTicker(time.Minute)
+// runGCLocked is the inner GC loop, factored out so tests can drive it with a
+// short interval and the plugin's auto-started GC can use the default. The
+// caller must hold no locks — runGC acquires c.mu itself.
+func (c *CooldownState) runGCLocked(logger schemas.Logger, interval time.Duration, stop <-chan struct{}) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -180,6 +174,20 @@ func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
 			}
 		}
 	}
+}
+
+// RunGC prunes expired entries on a fixed cadence (default 1 minute). Blocks
+// until stop is closed. Safe to invoke from a goroutine without further
+// synchronization. New callers should usually rely on the plugin's
+// auto-started GC instead — see CooldownPlugin.Cleanup.
+//
+// Typical usage:
+//
+//	stop := make(chan struct{})
+//	go cooldown.RunGC(stop)
+//	defer close(stop)
+func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
+	c.runGCLocked(logger, time.Minute, stop)
 }
 
 // AsFilter returns a schemas.KeyPoolFilter that suppresses any key currently
@@ -215,20 +223,29 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 //
 // The logger is used to record cooldown events and filter decisions. Pass a
 // nil logger (or a no-op implementation) to suppress logging.
+//
+// The plugin owns a background GC goroutine that prunes expired entries on
+// a 1-minute cadence. NewPlugin and Init start it; Cleanup stops it.
 type CooldownPlugin struct {
 	State  *CooldownState
 	logger schemas.Logger
+
+	gcStop chan struct{}
+	gcDone chan struct{}
 }
 
 // NewPlugin returns a CooldownPlugin with a fresh state using DefaultCooldownTTL
-// and the given logger. For a custom TTL or to share state across plugins/filters,
-// build the state via NewCooldownState and embed it directly. Pass a nil logger
-// to suppress all logging.
+// and the given logger. The background GC goroutine is started automatically;
+// call Cleanup to stop it. For a custom TTL or to share state across
+// plugins/filters, build the state via NewCooldownState and embed it
+// directly. Pass a nil logger to suppress all logging.
 func NewPlugin(logger schemas.Logger) *CooldownPlugin {
-	return &CooldownPlugin{
+	p := &CooldownPlugin{
 		State:  NewCooldownState(DefaultCooldownTTL),
 		logger: logger,
 	}
+	p.startGC()
+	return p
 }
 
 // Init applies the plugin's configuration. It is invoked by Bifrost with
@@ -237,8 +254,9 @@ func NewPlugin(logger schemas.Logger) *CooldownPlugin {
 // empty config and the plugin keeps its default state.
 //
 // Init is idempotent: calling it more than once replaces the state with
-// one built from the new config. Callers that need to preserve a running
-// state across reconfigs should call SetTTLOverride directly instead.
+// one built from the new config and restarts the GC goroutine against the
+// new state. Callers that need to preserve a running state across
+// reconfigs should call SetTTLOverride directly instead.
 func (p *CooldownPlugin) Init(rawConfig any) error {
 	var raw map[string]any
 	if rawConfig != nil {
@@ -252,7 +270,9 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	if err != nil {
 		return fmt.Errorf("provider-cooldown: %w", err)
 	}
+	p.stopGC()
 	p.State = cfg.AsState()
+	p.startGC()
 	if p.logger != nil {
 		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s))",
 			p.State.ttl, len(p.State.ttlOverrides))
@@ -260,13 +280,40 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	return nil
 }
 
+// startGC launches the background GC goroutine on State. Idempotent within
+// the same plugin instance only if the previous stop channel has already
+// been closed and drained — otherwise it no-ops to avoid goroutine leaks.
+func (p *CooldownPlugin) startGC() {
+	p.gcStop = make(chan struct{})
+	p.gcDone = make(chan struct{})
+	go func() {
+		defer close(p.gcDone)
+		p.State.runGCLocked(p.logger, time.Minute, p.gcStop)
+	}()
+}
+
+// stopGC closes the GC's stop channel and waits for the goroutine to exit.
+// Safe to call multiple times.
+func (p *CooldownPlugin) stopGC() {
+	if p.gcStop == nil {
+		return
+	}
+	close(p.gcStop)
+	<-p.gcDone
+	p.gcStop = nil
+	p.gcDone = nil
+}
+
 // GetName implements schemas.BasePlugin.
 func (p *CooldownPlugin) GetName() string { return pluginName }
 
-// Cleanup implements schemas.BasePlugin. The plugin owns no external resources
-// beyond the in-memory map; the GC goroutine (if started via State.RunGC)
-// should be stopped by cancelling its context.
-func (p *CooldownPlugin) Cleanup() error { return nil }
+// Cleanup implements schemas.BasePlugin. Stops the background GC goroutine
+// the plugin started in NewPlugin/Init. Idempotent — calling Cleanup more
+// than once is a no-op.
+func (p *CooldownPlugin) Cleanup() error {
+	p.stopGC()
+	return nil
+}
 
 // PreLLMHook is a no-op. The plugin only needs to act on the failure path.
 func (p *CooldownPlugin) PreLLMHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
