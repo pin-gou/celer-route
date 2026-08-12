@@ -1,0 +1,132 @@
+package huggingface_test
+
+import (
+	"os"
+	"testing"
+
+	"github.com/maximhq/bifrost/core/internal/llmtests"
+	"github.com/maximhq/bifrost/core/providers/huggingface"
+
+	"github.com/maximhq/bifrost/core/schemas"
+)
+
+func TestHuggingface(t *testing.T) {
+	t.Parallel()
+	if os.Getenv("HUGGING_FACE_API_KEY") == "" {
+		t.Skip("Skipping HuggingFace tests because HUGGING_FACE_API_KEY is not set")
+	}
+
+	client, ctx, cancel, err := llmtests.SetupTest()
+	if err != nil {
+		t.Fatalf("Error initializing test setup: %v", err)
+	}
+	defer cancel()
+	defer client.Shutdown()
+
+	testConfig := llmtests.ComprehensiveTestConfig{
+		Provider:             schemas.HuggingFace,
+		ChatModel:            "groq/meta-llama/Llama-3.3-70B-Instruct",
+		VisionModel:          "novita/meta-llama/Llama-4-Scout-17B-16E-Instruct",
+		EmbeddingModel:       "sambanova/intfloat/e5-mistral-7b-instruct",
+		TranscriptionModel:   "fal-ai/openai/whisper-large-v3",
+		SpeechSynthesisModel: "fal-ai/hexgrad/Kokoro-82M",
+		SpeechSynthesisFallbacks: []schemas.Fallback{
+			{Provider: schemas.HuggingFace, Model: "fal-ai/ResembleAI/chatterbox"},
+		},
+		ReasoningModel:       "groq/openai/gpt-oss-120b",
+		ImageGenerationModel: "fal-ai/fal-ai/flux/dev",
+		ImageEditModel:       "fal-ai/fal-ai/flux-2/edit",
+		Scenarios: llmtests.TestScenarios{
+			TextCompletion:        false,
+			TextCompletionStream:  false,
+			SimpleChat:            true,
+			CompletionStream:      true,
+			MultiTurnConversation: true,
+			ToolCalls:             true,
+			ToolCallsStreaming:    true,
+			MultipleToolCalls:     false,
+			End2EndToolCalling:    true,
+			AutomaticFunctionCall: true,
+			ImageURL:              true,
+			ImageBase64:           true,
+			MultipleImages:        true,
+			CompleteEnd2End:       true,
+			Embedding:             false,
+			Transcription:         false,
+			TranscriptionStream:   false,
+			SpeechSynthesis:       false,
+			SpeechSynthesisStream: false,
+			Reasoning:             true,
+			ListModels:            true,
+			BatchCreate:           false,
+			BatchList:             false,
+			BatchRetrieve:         false,
+			BatchCancel:           false,
+			BatchResults:          false,
+			FileUpload:            false,
+			FileList:              false,
+			FileRetrieve:          false,
+			FileDelete:            false,
+			FileContent:           false,
+			FileBatchInput:        false,
+			ImageGeneration:       false,
+			ImageGenerationStream: false,
+			ImageEdit:             false,
+			ImageEditStream:       false,
+		},
+	}
+
+	t.Run("HuggingFaceTests", func(t *testing.T) {
+		llmtests.RunAllComprehensiveTests(t, client, ctx, testConfig)
+	})
+}
+
+func TestUnmarshalHuggingFaceEmbeddingResponsePreservesPrecision(t *testing.T) {
+	const want = 0.12345678901234568
+
+	resp, err := huggingface.UnmarshalHuggingFaceEmbeddingResponse([]byte(`[[0.12345678901234568]]`), "test-model")
+	if err != nil {
+		t.Fatalf("UnmarshalHuggingFaceEmbeddingResponse failed: %v", err)
+	}
+
+	if resp == nil || len(resp.Data) != 1 {
+		t.Fatalf("expected single embedding response, got %#v", resp)
+	}
+	if len(resp.Data[0].Embedding.EmbeddingArray) != 1 {
+		t.Fatalf("expected single embedding value, got %#v", resp.Data[0].Embedding.EmbeddingArray)
+	}
+
+	got := resp.Data[0].Embedding.EmbeddingArray[0]
+	if got != want {
+		t.Fatalf("expected %0.18f, got %0.18f", want, got)
+	}
+
+	if got == float64(float32(want)) {
+		t.Fatalf("expected preserved precision, got float32-rounded value %0.18f", got)
+	}
+}
+
+func TestUnmarshalHuggingFaceEmbeddingResponse1DPreservesPrecision(t *testing.T) {
+	const want = 0.12345678901234568
+
+	resp, err := huggingface.UnmarshalHuggingFaceEmbeddingResponse([]byte(`[0.12345678901234568]`), "test-model")
+	if err != nil {
+		t.Fatalf("UnmarshalHuggingFaceEmbeddingResponse failed: %v", err)
+	}
+
+	if resp == nil || len(resp.Data) != 1 {
+		t.Fatalf("expected single embedding response, got %#v", resp)
+	}
+	if len(resp.Data[0].Embedding.EmbeddingArray) != 1 {
+		t.Fatalf("expected single embedding value, got %#v", resp.Data[0].Embedding.EmbeddingArray)
+	}
+
+	got := resp.Data[0].Embedding.EmbeddingArray[0]
+	if got != want {
+		t.Fatalf("expected %0.18f, got %0.18f", want, got)
+	}
+
+	if got == float64(float32(want)) {
+		t.Fatalf("expected preserved precision, got float32-rounded value %0.18f", got)
+	}
+}

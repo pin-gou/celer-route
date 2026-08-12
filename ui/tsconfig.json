@@ -1,0 +1,25 @@
+{
+	"compilerOptions": {
+		"target": "ES2017",
+		"lib": ["dom", "dom.iterable", "esnext"],
+		"allowJs": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"noEmit": true,
+		"esModuleInterop": true,
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"jsx": "preserve",
+		"incremental": true,
+		"types": ["vite/client"],
+		"paths": {
+			"@/*": ["./*"],
+			"@enterprise/*": ["./app/enterprise/*", "./app/_fallbacks/enterprise/*"],
+			"@schemas/*": ["./app/enterprise/lib/schemas/*", "./app/_fallbacks/enterprise/lib/schemas/*"]
+		}
+	},
+	"include": ["**/*.ts", "**/*.tsx"],
+	"exclude": ["node_modules", "out"]
+}

@@ -1,0 +1,60 @@
+package cerebras_test
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/maximhq/bifrost/core/internal/llmtests"
+
+	"github.com/maximhq/bifrost/core/schemas"
+)
+
+func TestCerebras(t *testing.T) {
+	t.Parallel()
+	if strings.TrimSpace(os.Getenv("CEREBRAS_API_KEY")) == "" {
+		t.Skip("Skipping Cerebras tests because CEREBRAS_API_KEY is not set")
+	}
+
+	client, ctx, cancel, err := llmtests.SetupTest()
+	if err != nil {
+		t.Fatalf("Error initializing test setup: %v", err)
+	}
+	defer cancel()
+	defer client.Shutdown()
+
+	testConfig := llmtests.ComprehensiveTestConfig{
+		Provider:  schemas.Cerebras,
+		ChatModel: "gpt-oss-120b",
+		Fallbacks: []schemas.Fallback{
+			{Provider: schemas.Cerebras, Model: "gpt-oss-120b"},
+			{Provider: schemas.Cerebras, Model: "zai-glm-4.7"},
+		},
+		TextModel:      "gpt-oss-120b",
+		EmbeddingModel: "", // Cerebras doesn't support embedding
+		ReasoningModel: "gpt-oss-120b",
+		Scenarios: llmtests.TestScenarios{
+			TextCompletion:        true,
+			TextCompletionStream:  true,
+			SimpleChat:            true,
+			CompletionStream:      true,
+			MultiTurnConversation: true,
+			ToolCalls:             true,
+			ToolCallsStreaming:    true,
+			MultipleToolCalls:     false, // llama3.1-8b doesn't reliably produce parallel tool calls
+			End2EndToolCalling:    true,
+			AutomaticFunctionCall: true,
+			ImageURL:              false,
+			ImageBase64:           false,
+			MultipleImages:        false,
+			CompleteEnd2End:       true,
+			Embedding:             false,
+			ListModels:            true,
+			Reasoning:             true,
+		},
+	}
+
+	t.Run("CerebrasTests", func(t *testing.T) {
+		llmtests.RunAllComprehensiveTests(t, client, ctx, testConfig)
+	})
+}

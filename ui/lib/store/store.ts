@@ -1,0 +1,46 @@
+import { configureStore } from "@reduxjs/toolkit";
+import { baseApi } from "./apis/baseApi";
+import { appReducer, pluginReducer, providerReducer } from "./slices";
+import { middleware as enterpriseMiddleware, reducers as enterpriseReducers, type EnterpriseState } from "@enterprise/lib/store/slices";
+// Importing enterprise APIs triggers their self-injection into baseApi
+import "@enterprise/lib/store/apis";
+
+export const store = configureStore({
+	reducer: {
+		// RTK Query API
+		[baseApi.reducerPath]: baseApi.reducer,
+		// App state slice
+		app: appReducer,
+		// Provider state slice
+		provider: providerReducer,
+		// Plugin state slice
+		plugin: pluginReducer,
+		// Enterprise reducers (if available)
+		...enterpriseReducers,
+	},
+	middleware: (getDefaultMiddleware) =>
+		getDefaultMiddleware({
+			serializableCheck: {
+				// Ignore these action types for RTK Query
+				ignoredActions: [
+					"persist/PERSIST",
+					"persist/REHYDRATE",
+					"api/executeQuery/pending",
+					"api/executeQuery/fulfilled",
+					"api/executeQuery/rejected",
+					"api/executeMutation/pending",
+					"api/executeMutation/fulfilled",
+					"api/executeMutation/rejected",
+				],
+				// Ignore these field paths in all actions
+				ignoredActionsPaths: ["meta.arg", "payload.timestamp"],
+				// Ignore these paths in the state
+				ignoredPaths: ["api.queries", "api.mutations"],
+			},
+		}).concat(baseApi.middleware, ...enterpriseMiddleware),
+	devTools: process.env.NODE_ENV !== "production",
+});
+
+export type RootState = ReturnType<typeof store.getState> & EnterpriseState;
+
+export type AppDispatch = typeof store.dispatch;

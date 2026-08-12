@@ -1,0 +1,472 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
+
+# Detect what components need to be released based on version changes
+# Usage: ./detect-all-changes.sh
+echo "🔍 Auto-detecting version changes across all components..."
+
+# Initialize outputs
+CORE_NEEDS_RELEASE="false"
+FRAMEWORK_NEEDS_RELEASE="false"
+PLUGINS_NEED_RELEASE="false"
+BIFROST_HTTP_NEEDS_RELEASE="false"
+DOCKER_NEEDS_RELEASE="false"
+CHANGED_PLUGINS="[]"
+
+# Every version read here is echoed into GITHUB_OUTPUT and then interpolated with
+# ${{ }} into `run:` blocks throughout the release pipeline. GitHub expands ${{ }}
+# TEXTUALLY, before the shell parses the line, so quoting at the call site cannot
+# contain a value carrying command substitution - "$(id)" still runs. Validating once
+# here, where the value enters the pipeline, is what makes every downstream
+# interpolation safe; there are dozens of them and guarding each is neither reliable
+# nor reviewable.
+validate_version() {
+  local value="$1"
+  local name="$2"
+  # Anchored, and a regex rather than a glob: a `case` pattern like
+  # [0-9]*.[0-9]*.[0-9]* looks structural but is not, because each `*` matches
+  # anything - it accepted 1x.2.3, 1.2.3rc1 and 1.2.3.4. Three numeric components are
+  # required, and a suffix is permitted only after PATCH and only when introduced by
+  # `-` or `+`. The suffix quantifier is `+`, not `*`: a separator introducing nothing
+  # (1.2.3- / 1.2.3+) is malformed per Semantic Versioning 2.0.0 clauses 9 and 10,
+  # which both require that identifiers MUST NOT be empty - and it is the shape a
+  # truncated version file takes, which is worth catching here rather than at tag time.
+  if [[ ! "$value" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.+_-]+)?$ ]]; then
+    echo "::error::refusing malformed $name version: '$value' (expected MAJOR.MINOR.PATCH, optionally v-prefixed, with an optional -suffix)" >&2
+    return 1
+  fi
+  # A second, independent check on the character set. The regex above already implies
+  # it, so this is belt-and-braces: it is what keeps a future loosening of the shape
+  # pattern from silently re-admitting shell metacharacters. The set is deliberately wide
+  # enough for the prerelease shapes this repo actually ships - v2.0.0-prerelease1,
+  # and multi-hyphen forms like v1.5.0-prerelease3-ajhfix-base - because a guard that
+  # false-rejects blocks a release, and every character admitted here is inert to a
+  # shell.
+  case "$value" in
+    *[!v0-9.A-Za-z_+-]*)
+      echo "::error::refusing $name version with unexpected characters: '$value'" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Plugin names travel the same way and by a sharper edge: they are collected into the
+# changed-plugins JSON and interpolated as '${{ ... }}' inside single quotes at the
+# release-all-plugins.sh call site. jq -R escapes double quotes and backslashes when
+# building that JSON but leaves single quotes alone, so a name containing one closes
+# the shell string. A plugin name is a directory name - it has no business containing
+# anything but the characters below.
+validate_plugin_name() {
+  local value="$1"
+  case "$value" in
+    "")
+      echo "::error::refusing empty plugin name" >&2
+      return 1
+      ;;
+    *[!A-Za-z0-9._-]*)
+      echo "::error::refusing plugin name with unexpected characters: '$value'" >&2
+      return 1
+      ;;
+    *..*)
+      echo "::error::refusing plugin name containing '..': '$value'" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Get current versions
+CORE_VERSION=$(cat core/version)
+FRAMEWORK_VERSION=$(cat framework/version)
+TRANSPORT_VERSION=$(cat transports/version)
+
+validate_version "$CORE_VERSION" "core"
+validate_version "$FRAMEWORK_VERSION" "framework"
+validate_version "$TRANSPORT_VERSION" "transport"
+
+echo "📦 Current versions:"
+echo "   Core: $CORE_VERSION"
+echo "   Framework: $FRAMEWORK_VERSION"
+echo "   Transport: $TRANSPORT_VERSION"
+
+START_FROM="none"
+
+# Check Core
+echo ""
+echo "🔧 Checking core..."
+CORE_TAG="core/v${CORE_VERSION}"
+if git rev-parse --verify "$CORE_TAG" >/dev/null 2>&1; then
+  echo "   ⏭️ Tag $CORE_TAG already exists"
+else
+  # Extract major.minor track from version (e.g., "1.3.55" -> "1.3", "1.4.0-prerelease1" -> "1.4")
+  CORE_BASE_VERSION=$(echo "$CORE_VERSION" | sed 's/-.*$//')
+  CORE_MAJOR_MINOR=$(echo "$CORE_BASE_VERSION" | cut -d. -f1,2)
+  echo "   🔍 Checking track: ${CORE_MAJOR_MINOR}.x"
+  
+  # Get previous version in the same track
+  LATEST_CORE_TAG=$(git tag -l "core/v${CORE_MAJOR_MINOR}.*" | sort -V | tail -1)
+  echo "🏷️ Latest core tag in track ${CORE_MAJOR_MINOR}.x: $LATEST_CORE_TAG"
+  if [ -z "$LATEST_CORE_TAG" ]; then
+    echo "   ✅ First core release in track ${CORE_MAJOR_MINOR}.x: $CORE_VERSION"
+    CORE_NEEDS_RELEASE="true"
+  else
+    if [[ "$CORE_VERSION" == *"-"* ]]; then
+      # current_version has prerelease, so include all versions but prefer stable
+      ALL_TAGS=$(git tag -l "core/v${CORE_MAJOR_MINOR}.*" | sort -V)
+      STABLE_TAGS=$(echo "$ALL_TAGS" | grep -v '\-' || true)
+      PRERELEASE_TAGS=$(echo "$ALL_TAGS" | grep '\-' || true)
+      if [ -n "$STABLE_TAGS" ]; then
+        # Get the highest stable version
+        LATEST_CORE_TAG=$(echo "$STABLE_TAGS" | tail -1)
+        echo "latest core tag (stable preferred): $LATEST_CORE_TAG"
+      else
+        # No stable versions, get highest prerelease
+        LATEST_CORE_TAG=$(echo "$PRERELEASE_TAGS" | tail -1)
+        echo "latest core tag (prerelease only): $LATEST_CORE_TAG"
+      fi
+    else
+      # VERSION has no prerelease, so only consider stable releases in same track
+      LATEST_CORE_TAG=$(git tag -l "core/v${CORE_MAJOR_MINOR}.*" | grep -v '\-' | sort -V | tail -1 || true)
+      echo "latest core tag (stable only): $LATEST_CORE_TAG"
+    fi
+    PREVIOUS_CORE_VERSION=${LATEST_CORE_TAG#core/v}
+    echo "   📋 Previous: $PREVIOUS_CORE_VERSION, Current: $CORE_VERSION"
+    # Fixed: Use head -1 instead of tail -1 for your sort -V behavior, and check against current version
+    if [ "$(printf '%s\n' "$PREVIOUS_CORE_VERSION" "$CORE_VERSION" | sort -V | tail -1)" = "$CORE_VERSION" ] && [ "$PREVIOUS_CORE_VERSION" != "$CORE_VERSION" ]; then
+      echo "   ✅ Core version incremented: $PREVIOUS_CORE_VERSION → $CORE_VERSION"
+      CORE_NEEDS_RELEASE="true"
+    else
+      echo "   ⏭️ No core version increment"
+    fi
+  fi
+fi
+
+# Check Framework
+echo ""
+echo "📦 Checking framework..."
+FRAMEWORK_TAG="framework/v${FRAMEWORK_VERSION}"
+if git rev-parse --verify "$FRAMEWORK_TAG" >/dev/null 2>&1; then
+  echo "   ⏭️ Tag $FRAMEWORK_TAG already exists"
+else
+  # Extract major.minor track from version (e.g., "1.3.55" -> "1.3", "1.4.0-prerelease1" -> "1.4")
+  FRAMEWORK_BASE_VERSION=$(echo "$FRAMEWORK_VERSION" | sed 's/-.*$//')
+  FRAMEWORK_MAJOR_MINOR=$(echo "$FRAMEWORK_BASE_VERSION" | cut -d. -f1,2)
+  echo "   🔍 Checking track: ${FRAMEWORK_MAJOR_MINOR}.x"
+  
+  LATEST_FRAMEWORK_TAG=""
+  if [[ "$FRAMEWORK_VERSION" == *"-"* ]]; then
+    # current_version has prerelease, so include all versions but prefer stable
+    ALL_TAGS=$(git tag -l "framework/v${FRAMEWORK_MAJOR_MINOR}.*" | sort -V)
+    STABLE_TAGS=$(echo "$ALL_TAGS" | grep -v '\-' || true)
+    PRERELEASE_TAGS=$(echo "$ALL_TAGS" | grep '\-' || true)
+    if [ -n "$STABLE_TAGS" ]; then
+      # Get the highest stable version
+      LATEST_FRAMEWORK_TAG=$(echo "$STABLE_TAGS" | tail -1)
+      echo "latest framework tag (stable preferred): $LATEST_FRAMEWORK_TAG"
+    else
+      # No stable versions, get highest prerelease
+      LATEST_FRAMEWORK_TAG=$(echo "$PRERELEASE_TAGS" | tail -1)
+      echo "latest framework tag (prerelease only): $LATEST_FRAMEWORK_TAG"
+    fi
+  else
+    # VERSION has no prerelease, so only consider stable releases in same track
+    LATEST_FRAMEWORK_TAG=$(git tag -l "framework/v${FRAMEWORK_MAJOR_MINOR}.*" | grep -v '\-' | sort -V | tail -1 || true)
+    echo "latest framework tag (stable only): $LATEST_FRAMEWORK_TAG"
+  fi
+  if [ -z "$LATEST_FRAMEWORK_TAG" ]; then
+    echo "   ✅ First framework release in track ${FRAMEWORK_MAJOR_MINOR}.x: $FRAMEWORK_VERSION"
+    FRAMEWORK_NEEDS_RELEASE="true"
+  else
+    PREVIOUS_FRAMEWORK_VERSION=${LATEST_FRAMEWORK_TAG#framework/v}
+    echo "   📋 Previous: $PREVIOUS_FRAMEWORK_VERSION, Current: $FRAMEWORK_VERSION"
+    # Fixed: Use head -1 instead of tail -1 for your sort -V behavior, and check against current version
+    if [ "$(printf '%s\n' "$PREVIOUS_FRAMEWORK_VERSION" "$FRAMEWORK_VERSION" | sort -V | tail -1)" = "$FRAMEWORK_VERSION" ] && [ "$PREVIOUS_FRAMEWORK_VERSION" != "$FRAMEWORK_VERSION" ]; then
+      echo "   ✅ Framework version incremented: $PREVIOUS_FRAMEWORK_VERSION → $FRAMEWORK_VERSION"
+      FRAMEWORK_NEEDS_RELEASE="true"
+    else
+      echo "   ⏭️ No framework version increment"
+    fi
+  fi
+fi
+
+# Check Plugins
+echo ""
+echo "🔌 Checking plugins..."
+PLUGIN_CHANGES=()
+
+for plugin_dir in plugins/*/; do
+  if [ ! -d "$plugin_dir" ]; then
+    continue
+  fi
+
+  plugin_name=$(basename "$plugin_dir")
+  validate_plugin_name "$plugin_name"
+  version_file="${plugin_dir}version"
+
+  if [ ! -f "$version_file" ]; then
+    echo "   ⚠️ No version file for: $plugin_name"
+    continue
+  fi
+
+  current_version=$(cat "$version_file" | tr -d '\n\r')
+  if [ -z "$current_version" ]; then
+    echo "   ⚠️ Empty version file for: $plugin_name"
+    continue
+  fi
+  # A missing or empty version file means "this plugin is not versioned" and is skipped
+  # above. A version file that exists and holds something malformed is a different
+  # thing - a repo error - so it stops the run rather than silently dropping the plugin
+  # from the release, which would be far harder to notice.
+  validate_version "$current_version" "plugin $plugin_name"
+
+  tag_name="plugins/${plugin_name}/v${current_version}"
+  echo "   📦 Plugin: $plugin_name (v$current_version)"
+
+  if git rev-parse --verify "$tag_name" >/dev/null 2>&1; then
+    echo "      ⏭️ Tag already exists"
+    continue
+  fi
+
+  # Extract major.minor track from version (e.g., "1.3.55" -> "1.3", "1.4.0-prerelease1" -> "1.4")
+  plugin_base_version=$(echo "$current_version" | sed 's/-.*$//')
+  plugin_major_minor=$(echo "$plugin_base_version" | cut -d. -f1,2)
+  echo "      🔍 Checking track: ${plugin_major_minor}.x"
+
+  if [[ "$current_version" == *"-"* ]]; then
+    # current_version has prerelease, so include all versions but prefer stable
+    ALL_TAGS=$(git tag -l "plugins/${plugin_name}/v${plugin_major_minor}.*" | sort -V)
+    STABLE_TAGS=$(echo "$ALL_TAGS" | grep -v '\-' || true)
+    PRERELEASE_TAGS=$(echo "$ALL_TAGS" | grep '\-' || true)
+
+    if [ -n "$STABLE_TAGS" ]; then
+      # Get the highest stable version
+      LATEST_PLUGIN_TAG=$(echo "$STABLE_TAGS" | tail -1)
+      echo "latest plugin tag (stable preferred): $LATEST_PLUGIN_TAG"
+    else
+      # No stable versions, get highest prerelease
+      LATEST_PLUGIN_TAG=$(echo "$PRERELEASE_TAGS" | tail -1)
+      echo "latest plugin tag (prerelease only): $LATEST_PLUGIN_TAG"
+    fi
+  else
+    # VERSION has no prerelease, so only consider stable releases in same track
+    LATEST_PLUGIN_TAG=$(git tag -l "plugins/${plugin_name}/v${plugin_major_minor}.*" | grep -v '\-' | sort -V | tail -1 || true)
+    echo "latest plugin tag (stable only): $LATEST_PLUGIN_TAG"
+  fi
+
+  latest_tag=$LATEST_PLUGIN_TAG
+  if [ -z "$latest_tag" ]; then
+    echo "      ✅ First release in track ${plugin_major_minor}.x"
+    PLUGIN_CHANGES+=("$plugin_name")
+  else
+    previous_version=${latest_tag#plugins/${plugin_name}/v}
+    echo "previous version: $previous_version"
+    echo "current version: $current_version"
+    echo "latest tag: $latest_tag"
+    if [ "$(printf '%s\n' "$previous_version" "$current_version" | sort -V | tail -1)" = "$current_version" ] && [ "$previous_version" != "$current_version" ]; then
+      echo "      ✅ Version incremented: $previous_version → $current_version"
+      PLUGIN_CHANGES+=("$plugin_name")
+    else
+      echo "      ⏭️ No version increment"
+    fi
+  fi
+done
+
+if [ ${#PLUGIN_CHANGES[@]} -gt 0 ]; then
+  PLUGINS_NEED_RELEASE="true"
+  echo "   🔄 Plugins with changes: ${PLUGIN_CHANGES[*]}"
+else
+  echo "   ⏭️ No plugin changes detected"
+fi
+
+# Check Bifrost HTTP
+echo ""
+echo "🚀 Checking bifrost-http..."
+TRANSPORT_TAG="transports/v${TRANSPORT_VERSION}"
+DOCKER_TAG_EXISTS="false"
+
+# Check if Git tag exists
+GIT_TAG_EXISTS="false"
+if git rev-parse --verify "$TRANSPORT_TAG" >/dev/null 2>&1; then
+  echo "   ⏭️ Git tag $TRANSPORT_TAG already exists"
+  GIT_TAG_EXISTS="true"
+fi
+
+# Check if Docker tag exists on DockerHub
+echo "   🐳 Checking DockerHub for tag v${TRANSPORT_VERSION}..."
+DOCKER_CHECK_RESPONSE=$(curl -s "https://registry.hub.docker.com/v2/repositories/maximhq/bifrost/tags/v${TRANSPORT_VERSION}/" 2>/dev/null || echo "")
+if [ -n "$DOCKER_CHECK_RESPONSE" ] && echo "$DOCKER_CHECK_RESPONSE" | grep -q '"name"'; then
+  echo "   ⏭️ Docker tag v${TRANSPORT_VERSION} already exists on DockerHub"
+  DOCKER_TAG_EXISTS="true"
+else
+  echo "   ❌ Docker tag v${TRANSPORT_VERSION} not found on DockerHub"
+fi
+
+# Determine if release is needed
+if [ "$GIT_TAG_EXISTS" = "true" ] && [ "$DOCKER_TAG_EXISTS" = "true" ]; then
+  echo "   ⏭️ Both Git tag and Docker image exist - no release needed"
+else
+  # Extract major.minor track from version (e.g., "1.3.55" -> "1.3", "1.4.0-prerelease1" -> "1.4")
+  TRANSPORT_BASE_VERSION=$(echo "$TRANSPORT_VERSION" | sed 's/-.*$//')
+  TRANSPORT_MAJOR_MINOR=$(echo "$TRANSPORT_BASE_VERSION" | cut -d. -f1,2)
+  echo "   🔍 Checking track: ${TRANSPORT_MAJOR_MINOR}.x"
+  
+  # Get all transport tags in the same track, prioritize stable over prerelease for same base version
+  ALL_TRANSPORT_TAGS=$(git tag -l "transports/v${TRANSPORT_MAJOR_MINOR}.*" | sort -V)
+  
+  # Function to get base version (remove prerelease suffix)
+  get_base_version() {
+    echo "$1" | sed 's/-.*$//'
+  }
+  
+  # Find the latest version, prioritizing stable over prerelease
+  LATEST_TRANSPORT_TAG=""
+  LATEST_BASE_VERSION=""
+  
+  for tag in $ALL_TRANSPORT_TAGS; do
+    version=${tag#transports/v}
+    base_version=$(get_base_version "$version")
+    
+    # If this base version is newer, or same base version but current is stable and we had prerelease
+    if [ -z "$LATEST_BASE_VERSION" ] || \
+       [ "$(printf '%s\n' "$LATEST_BASE_VERSION" "$base_version" | sort -V | tail -1)" = "$base_version" ]; then
+      
+      if [ "$base_version" = "$LATEST_BASE_VERSION" ]; then
+        # Same base version - prefer stable (no hyphen) over prerelease, otherwise take the later one
+        if [[ "$version" != *"-"* ]]; then
+          # Current is stable, always prefer it
+          LATEST_TRANSPORT_TAG="$tag"
+        elif [[ "${LATEST_TRANSPORT_TAG#transports/v}" == *"-"* ]]; then
+          # Both are prereleases, take the later one (thanks to sort -V)
+          LATEST_TRANSPORT_TAG="$tag"
+        fi
+      else
+        # New base version is higher
+        LATEST_TRANSPORT_TAG="$tag"
+        LATEST_BASE_VERSION="$base_version"
+      fi
+    fi
+  done
+  
+  if [ -n "$LATEST_TRANSPORT_TAG" ]; then
+    echo "   🏷️ Latest transport tag: $LATEST_TRANSPORT_TAG"
+  fi
+  if [ -z "$LATEST_TRANSPORT_TAG" ]; then
+    echo "   ✅ First transport release in track ${TRANSPORT_MAJOR_MINOR}.x: $TRANSPORT_VERSION"
+    if [ "$GIT_TAG_EXISTS" = "false" ]; then
+      echo "   🏷️  Git tag missing - transport release needed"
+      BIFROST_HTTP_NEEDS_RELEASE="true"
+    fi
+  else
+    PREVIOUS_TRANSPORT_VERSION=${LATEST_TRANSPORT_TAG#transports/v}
+    echo "   📋 Previous: $PREVIOUS_TRANSPORT_VERSION, Current: $TRANSPORT_VERSION"
+    
+    # Function to compare versions with proper prerelease handling
+    # Returns 0 if $1 < $2, 1 otherwise
+    version_less_than() {
+      local v1="$1"
+      local v2="$2"
+      
+      # Extract base versions (remove prerelease suffix)
+      local base1=$(echo "$v1" | sed 's/-.*$//')
+      local base2=$(echo "$v2" | sed 's/-.*$//')
+      
+      # Compare base versions
+      if [ "$base1" != "$base2" ]; then
+        # Different base versions, use sort -V
+        [ "$(printf '%s\n' "$base1" "$base2" | sort -V | head -1)" = "$base1" ]
+        return $?
+      fi
+      
+      # Same base version, check prereleases
+      local pre1=$(echo "$v1" | grep -o '\-.*$' || echo "")
+      local pre2=$(echo "$v2" | grep -o '\-.*$' || echo "")
+      
+      if [ -z "$pre1" ] && [ -n "$pre2" ]; then
+        # v1 is stable, v2 is prerelease: v2 < v1
+        return 1
+      elif [ -n "$pre1" ] && [ -z "$pre2" ]; then
+        # v1 is prerelease, v2 is stable: v1 < v2
+        return 0
+      elif [ -n "$pre1" ] && [ -n "$pre2" ]; then
+        # Both prereleases, compare them
+        [ "$(printf '%s\n' "$pre1" "$pre2" | sort -V | head -1)" = "$pre1" ]
+        return $?
+      else
+        # Both stable and same base: equal
+        return 1
+      fi
+    }
+    
+    # Check if current version is greater than previous
+    if version_less_than "$PREVIOUS_TRANSPORT_VERSION" "$TRANSPORT_VERSION"; then
+      echo "   ✅ Transport version incremented: $PREVIOUS_TRANSPORT_VERSION → $TRANSPORT_VERSION"
+      if [ "$GIT_TAG_EXISTS" = "false" ]; then
+        echo "   🏷️  Git tag missing - transport release needed"
+        BIFROST_HTTP_NEEDS_RELEASE="true"
+      fi
+    else
+      echo "   ⏭️ No transport version increment"
+    fi
+  fi
+fi
+  
+# Check if Docker image needs to be built (independent of transport release)
+if [ "$DOCKER_TAG_EXISTS" = "false" ]; then
+  echo "   🐳 Docker image missing - docker release needed"
+  DOCKER_NEEDS_RELEASE="true"
+fi
+
+
+# Convert plugin array to JSON (compact format)
+if [ ${#PLUGIN_CHANGES[@]} -eq 0 ]; then
+  CHANGED_PLUGINS_JSON="[]"
+else
+  CHANGED_PLUGINS_JSON=$(printf '%s\n' "${PLUGIN_CHANGES[@]}" | jq -R . | jq -s -c .)
+fi
+
+echo "CHANGED_PLUGINS_JSON: $CHANGED_PLUGINS_JSON"
+
+# Summary
+echo ""
+echo "📋 Release Summary:"
+echo "   Core: $CORE_NEEDS_RELEASE (v$CORE_VERSION)"
+echo "   Framework: $FRAMEWORK_NEEDS_RELEASE (v$FRAMEWORK_VERSION)"
+echo "   Plugins: $PLUGINS_NEED_RELEASE (${#PLUGIN_CHANGES[@]} plugins)"
+echo "   Bifrost HTTP: $BIFROST_HTTP_NEEDS_RELEASE (v$TRANSPORT_VERSION)"
+echo "   Docker: $DOCKER_NEEDS_RELEASE (v$TRANSPORT_VERSION)"
+
+# Set outputs (only when running in GitHub Actions)
+# Version strings are read straight out of the repo's version files and are then
+# interpolated by callers into shell commands (the R2 upload steps, the changelog
+# push, the docker manifest). A value carrying a quote, a space or a newline would
+# break out of the generated command, and GITHUB_OUTPUT is line-oriented so a
+# newline would additionally forge an extra output line. Nothing downstream can
+# defend against that once it is written, so it is rejected here, at the single
+# point where these values enter the workflow.
+for _pair in "core:$CORE_VERSION" "framework:$FRAMEWORK_VERSION" "transport:$TRANSPORT_VERSION"; do
+  _name="${_pair%%:*}"
+  _value="${_pair#*:}"
+  case "$_value" in
+    "") continue ;;
+    *[!0-9A-Za-z.+_-]*)
+      echo "❌ refusing to emit $_name version with unexpected characters: $_value" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  {
+    echo "core-needs-release=$CORE_NEEDS_RELEASE"
+    echo "framework-needs-release=$FRAMEWORK_NEEDS_RELEASE"
+    echo "plugins-need-release=$PLUGINS_NEED_RELEASE"
+    echo "bifrost-http-needs-release=$BIFROST_HTTP_NEEDS_RELEASE"
+    echo "docker-needs-release=$DOCKER_NEEDS_RELEASE"
+    echo "changed-plugins=$CHANGED_PLUGINS_JSON"
+    echo "core-version=$CORE_VERSION"
+    echo "framework-version=$FRAMEWORK_VERSION"
+    echo "transport-version=$TRANSPORT_VERSION"
+  } >> "$GITHUB_OUTPUT"
+else
+  echo "ℹ️ GITHUB_OUTPUT not set; skipping outputs write (local run)"
+fi

@@ -1,0 +1,429 @@
+// Known provider names array - centralized definition
+export const KnownProvidersNames = [
+	"anthropic",
+	"azure",
+	"bedrock",
+	"bedrock_mantle",
+	"cerebras",
+	"cohere",
+	"deepseek",
+	"gemini",
+	"groq",
+	"huggingface",
+	"mistral",
+	"ollama",
+	"opencode-go",
+	"opencode-zen",
+	"openai",
+	"openrouter",
+	"parasail",
+	"elevenlabs",
+	"perplexity",
+	"sgl",
+	"vertex",
+	"nebius",
+	"xai",
+	"replicate",
+	"vllm",
+	"runway",
+	"runware",
+	"fireworks",
+	"sarvam",
+	"wafer",
+] as const;
+
+// Local Provider type derived from KNOWN_PROVIDERS constant
+export type ProviderName = (typeof KnownProvidersNames)[number];
+
+export const ProviderNames: readonly ProviderName[] = KnownProvidersNames;
+
+// Built-in providers whose Bifrost implementation supports embedding requests.
+// Custom providers must instead be checked via custom_provider_config.allowed_requests.embedding.
+export const EmbeddingSupportedProviders: readonly ProviderName[] = [
+	"azure",
+	"bedrock",
+	"cohere",
+	"fireworks",
+	"gemini",
+	"huggingface",
+	"mistral",
+	"nebius",
+	"ollama",
+	"openai",
+	"openrouter",
+	"sgl",
+	"vertex",
+	"vllm",
+] as const;
+
+export const Statuses = ["success", "error", "processing", "cancelled"] as const;
+
+export const RequestTypes = [
+	"list_models",
+	"text_completion",
+	"text_completion_stream",
+	"chat_completion",
+	"chat_completion_stream",
+	"responses",
+	"responses_stream",
+	"responses_retrieve",
+	"responses_retrieve_stream",
+	"responses_delete",
+	"responses_cancel",
+	"responses_input_items",
+	"embedding",
+	"rerank",
+	"speech",
+	"speech_stream",
+	"transcription",
+	"transcription_stream",
+	"image_generation",
+	"image_generation_stream",
+	"image_edit",
+	"image_edit_stream",
+	"image_variation",
+	"ocr",
+	"ocr_stream",
+	"video_generation",
+	"video_retrieve",
+	"video_download",
+	"video_delete",
+	"video_list",
+	"video_remix",
+	"count_tokens",
+	"compaction",
+	// Container operations
+	"container_create",
+	"container_list",
+	"container_retrieve",
+	"container_delete",
+	// Container file operations
+	"container_file_create",
+	"container_file_list",
+	"container_file_retrieve",
+	"container_file_content",
+	"container_file_delete",
+	"passthrough",
+	"passthrough_stream",
+	// WebSocket/Realtime operations
+	"websocket_responses",
+	"realtime",
+	"realtime.turn",
+] as const;
+
+export const ProviderLabels: Record<ProviderName, string> = {
+	openai: "OpenAI",
+	anthropic: "Anthropic",
+	azure: "Azure",
+	bedrock: "AWS Bedrock",
+	bedrock_mantle: "AWS Bedrock Mantle",
+	cohere: "Cohere",
+	deepseek: "DeepSeek",
+	vertex: "Vertex AI",
+	mistral: "Mistral AI",
+	ollama: "Ollama",
+	"opencode-go": "OpenCode Go",
+	"opencode-zen": "OpenCode Zen",
+	groq: "Groq",
+	parasail: "Parasail",
+	elevenlabs: "Elevenlabs",
+	perplexity: "Perplexity",
+	sgl: "SGLang",
+	cerebras: "Cerebras",
+	gemini: "Gemini",
+	openrouter: "OpenRouter",
+	huggingface: "HuggingFace",
+	nebius: "Nebius Token Factory",
+	xai: "xAI",
+	replicate: "Replicate",
+	vllm: "vLLM",
+	runway: "Runway",
+	runware: "Runware",
+	fireworks: "Fireworks AI",
+	sarvam: "Sarvam AI",
+	wafer: "Wafer",
+} as const;
+
+// Helper function to get provider label, supporting custom providers
+export const getProviderLabel = (provider: string): string => {
+	// Use hasOwnProperty for safe lookup without checking prototype chain
+	if (Object.prototype.hasOwnProperty.call(ProviderLabels, provider.toLowerCase().trim() as ProviderName)) {
+		return ProviderLabels[provider.toLowerCase().trim() as ProviderName];
+	}
+
+	// For custom providers, return the original provider name as is
+	return provider;
+};
+
+// ClientApp is the display info for a client application resolved from a raw
+// User-Agent string. `icon`, when set, is a path under /public/images.
+export interface ClientApp {
+	name: string;
+	icon?: string;
+}
+
+// userAgentAppMatchers maps User-Agent substrings to a client app. The DB stores
+// the raw User-Agent verbatim and this is the single place the UI maps it to an
+// app for the logs table, the "App" filter, and metrics breakdowns.
+//
+// Matching is case-insensitive substring matching against the lowercased UA, and
+// is evaluated top-to-bottom: list more specific identifiers first (e.g. a Roo
+// fork "kilo" before "roo", "roo" before its "cline" ancestor). Versions change
+// every release, so never match on an exact string. Identifiers are best-effort
+// and meant to be extended as new clients appear.
+const userAgentAppMatchers: { identifiers: string[]; app: ClientApp }[] = [
+	{ identifiers: ["chatgpt-web"], app: { name: "ChatGPT Web", icon: "/images/openai.png" } },
+	{ identifiers: ["claude-chat-web", "claude-web"], app: { name: "Claude Chat Web", icon: "/images/claude-desktop.png" } },
+	{ identifiers: ["claude-desktop"], app: { name: "Claude Desktop", icon: "/images/claude-desktop.png" } },
+	{ identifiers: ["claude-code", "claude-cli", "claude-vscode"], app: { name: "Claude Code", icon: "/images/claude-code.png" } },
+	{ identifiers: ["codex-cli", "codex-tui"], app: { name: "Codex CLI", icon: "/images/codex.png" } },
+	{ identifiers: ["codex-desktop"], app: { name: "Codex Desktop", icon: "/images/codex.png" } },
+	{ identifiers: ["codex"], app: { name: "Codex Desktop", icon: "/images/codex.png" } },
+	{ identifiers: ["cursor"], app: { name: "Cursor", icon: "/images/cursor.png" } },
+	{ identifiers: ["kilo"], app: { name: "Kilo Code", icon: "/images/kilo-code.png" } },
+	{ identifiers: ["roo"], app: { name: "Roo Code", icon: "/images/roo-code.png" } },
+	{ identifiers: ["cline"], app: { name: "Cline", icon: "/images/cline.png" } },
+	{ identifiers: ["opencode"], app: { name: "OpenCode", icon: "/images/opencode.png" } },
+	{ identifiers: ["windsurf"], app: { name: "Windsurf", icon: "/images/windsurf.png" } },
+	{ identifiers: ["gemini", "geminicli"], app: { name: "Gemini CLI", icon: "/images/gemini-cli.png" } },
+	{ identifiers: ["qwencode", "qwen"], app: { name: "Qwen Code" } },
+];
+
+const appByName = new Map(userAgentAppMatchers.map((matcher) => [matcher.app.name, matcher.app]));
+
+export const mapAppToClientApp = (app?: string | null): ClientApp => {
+	if (!app || app.trim() === "") {
+		return { name: "Unknown" };
+	}
+	return appByName.get(app) || { name: app };
+};
+
+// mapUserAgentToApp resolves a raw User-Agent string to a client app for display.
+// Returns { name: "Unknown" } for an empty/absent UA and { name: "Other" } for a
+// UA that matches no known client (so it can still be grouped and filtered).
+export const mapUserAgentToApp = (userAgent?: string | null): ClientApp => {
+	if (!userAgent || userAgent.trim() === "") {
+		return { name: "Unknown" };
+	}
+	const ua = userAgent.toLowerCase();
+	for (const matcher of userAgentAppMatchers) {
+		if (matcher.identifiers.some((id) => ua.includes(id))) {
+			return matcher.app;
+		}
+	}
+	return { name: "Other" };
+};
+
+export const logAppDisplayName = (app: ClientApp, userAgent?: string | null): string => {
+	if ((app.name === "Unknown" || app.name === "Other") && userAgent?.trim()) {
+		return userAgent.trim();
+	}
+	return app.name;
+};
+
+export const StatusColors = {
+	success: "bg-green-100 text-green-800",
+	error: "bg-red-100 text-red-800",
+	processing: "bg-blue-100 text-blue-800",
+	cancelled: "bg-gray-100 text-gray-800",
+} as const;
+
+export const StatusBarColors = {
+	success: "bg-green-500",
+	error: "bg-red-500",
+	processing: "bg-blue-500",
+	cancelled: "bg-gray-400",
+} as const;
+
+export const RequestTypeLabels = {
+	"chat.completion": "Chat",
+	response: "Responses",
+	"response.completion.chunk": "Responses Stream",
+	completion: "Completion",
+	"text.completion": "Text",
+	list: "List",
+	"audio.speech": "Speech",
+	"audio.transcription": "Transcription",
+	"chat.completion.chunk": "Chat Stream",
+	"audio.speech.chunk": "Speech Stream",
+	"audio.transcription.chunk": "Transcription Stream",
+
+	// Request Types
+	list_models: "List Models",
+	text_completion: "Text",
+	text_completion_stream: "Text Stream",
+	chat_completion: "Chat",
+	chat_completion_stream: "Chat Stream",
+	responses: "Responses",
+	responses_stream: "Responses Stream",
+	responses_retrieve: "Responses Retrieve",
+	responses_retrieve_stream: "Responses Retrieve Stream",
+	responses_delete: "Responses Delete",
+	responses_cancel: "Responses Cancel",
+	responses_input_items: "Responses Input Items",
+
+	embedding: "Embedding",
+	rerank: "Rerank",
+
+	speech: "Speech",
+	speech_stream: "Speech Stream",
+
+	transcription: "Transcription",
+	transcription_stream: "Transcription Stream",
+
+	image_generation: "Image Generation",
+	image_generation_stream: "Image Generation Stream",
+	image_edit: "Image Edit",
+	image_edit_stream: "Image Edit Stream",
+	image_variation: "Image Variation",
+	ocr: "OCR",
+	ocr_stream: "OCR Stream",
+	video_generation: "Video Generation",
+	video_retrieve: "Video Retrieve",
+	video_download: "Video Download",
+	video_delete: "Video Delete",
+	video_list: "Video List",
+	video_remix: "Video Remix",
+	count_tokens: "Count Tokens",
+	compaction: "Compaction",
+
+	batch_create: "Batch Create",
+	batch_list: "Batch List",
+	batch_retrieve: "Batch Retrieve",
+	batch_cancel: "Batch Cancel",
+	batch_delete: "Batch Delete",
+	batch_results: "Batch Results",
+
+	file_upload: "File Upload",
+	file_list: "File List",
+	file_retrieve: "File Retrieve",
+	file_delete: "File Delete",
+	file_content: "File Content",
+
+	// Container operations
+	container_create: "Container Create",
+	container_list: "Container List",
+	container_retrieve: "Container Retrieve",
+	container_delete: "Container Delete",
+
+	// Container file operations
+	container_file_create: "Container File Create",
+	container_file_list: "Container File List",
+	container_file_retrieve: "Container File Retrieve",
+	container_file_content: "Container File Content",
+	container_file_delete: "Container File Delete",
+
+	passthrough: "Passthrough",
+	passthrough_stream: "Passthrough Stream",
+	// WebSocket operations
+	websocket_responses: "WebSocket Responses",
+	realtime: "Realtime",
+	"realtime.turn": "Realtime Turn",
+} as const;
+
+export const RequestTypeColors = {
+	"chat.completion": "bg-blue-100 text-blue-800",
+	response: "bg-teal-100 text-teal-800",
+	"response.completion.chunk": "bg-violet-100 text-violet-800",
+	"text.completion": "bg-green-100 text-green-800",
+	list: "bg-red-100 text-red-800",
+	"audio.speech": "bg-purple-100 text-purple-800",
+	"audio.transcription": "bg-orange-100 text-orange-800",
+	"chat.completion.chunk": "bg-yellow-100 text-yellow-800",
+	"audio.speech.chunk": "bg-pink-100 text-pink-800",
+	"audio.transcription.chunk": "bg-lime-100 text-lime-800",
+	completion: "bg-yellow-100 text-yellow-800",
+
+	// Request Types
+	list_models: "bg-green-100 text-green-800",
+	text_completion: "bg-green-100 text-green-800",
+	text_completion_stream: "bg-amber-100 text-amber-800",
+
+	chat_completion: "bg-blue-100 text-blue-800",
+	chat_completion_stream: "bg-yellow-100 text-yellow-800",
+
+	responses: "bg-teal-100 text-teal-800",
+	responses_stream: "bg-violet-100 text-violet-800",
+	responses_retrieve: "bg-teal-100 text-teal-800",
+	responses_retrieve_stream: "bg-violet-100 text-violet-800",
+	responses_delete: "bg-teal-100 text-teal-800",
+	responses_cancel: "bg-teal-100 text-teal-800",
+	responses_input_items: "bg-teal-100 text-teal-800",
+
+	embedding: "bg-red-100 text-red-800",
+	rerank: "bg-fuchsia-100 text-fuchsia-800",
+
+	speech: "bg-purple-100 text-purple-800",
+	speech_stream: "bg-pink-100 text-pink-800",
+
+	transcription: "bg-orange-100 text-orange-800",
+	transcription_stream: "bg-lime-100 text-lime-800",
+
+	image_generation: "bg-indigo-100 text-indigo-800",
+	image_generation_stream: "bg-sky-100 text-sky-800",
+	image_edit: "bg-emerald-100 text-emerald-800",
+	image_edit_stream: "bg-teal-100 text-teal-800",
+	image_variation: "bg-violet-100 text-violet-800",
+	ocr: "bg-amber-100 text-amber-800",
+	ocr_stream: "bg-yellow-100 text-yellow-800",
+	video_generation: "bg-fuchsia-100 text-fuchsia-800",
+	video_retrieve: "bg-blue-100 text-blue-800",
+	video_download: "bg-purple-100 text-purple-800",
+	video_delete: "bg-rose-100 text-rose-800",
+	video_list: "bg-cyan-100 text-cyan-800",
+	video_remix: "bg-pink-100 text-pink-800",
+	count_tokens: "bg-cyan-100 text-cyan-800",
+	compaction: "bg-indigo-100 text-indigo-800",
+
+	// Container operations
+	container_create: "bg-emerald-100 text-emerald-800",
+	container_list: "bg-teal-100 text-teal-800",
+	container_retrieve: "bg-cyan-100 text-cyan-800",
+	container_delete: "bg-rose-100 text-rose-800",
+
+	// Container file operations
+	container_file_create: "bg-emerald-100 text-emerald-800",
+	container_file_list: "bg-teal-100 text-teal-800",
+	container_file_retrieve: "bg-cyan-100 text-cyan-800",
+	container_file_content: "bg-sky-100 text-sky-800",
+	container_file_delete: "bg-rose-100 text-rose-800",
+
+	passthrough: "bg-slate-100 text-slate-800",
+	passthrough_stream: "bg-slate-200 text-slate-800",
+
+	batch_create: "bg-green-100 text-green-800",
+	batch_list: "bg-blue-100 text-blue-800",
+	batch_retrieve: "bg-red-100 text-red-800",
+	batch_cancel: "bg-yellow-100 text-yellow-800",
+	batch_delete: "bg-amber-100 text-amber-800",
+	batch_results: "bg-purple-100 text-purple-800",
+
+	file_upload: "bg-pink-100 text-pink-800",
+	file_list: "bg-lime-100 text-lime-800",
+	file_retrieve: "bg-orange-100 text-orange-800",
+	file_delete: "bg-red-100 text-red-800",
+	file_content: "bg-blue-100 text-blue-800",
+
+	// WebSocket operations
+	websocket_responses: "bg-teal-100 text-teal-800",
+	realtime: "bg-indigo-100 text-indigo-800",
+	"realtime.turn": "bg-cyan-100 text-cyan-800",
+} as const;
+
+export const RoutingEngineUsedLabels = {
+	"routing-rule": "Routing Rule",
+	governance: "Governance",
+	loadbalancing: "Loadbalancing",
+	"model-catalog": "Model Catalog",
+	core: "Core",
+} as const;
+
+export const RoutingEngineUsedColors = {
+	"routing-rule": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+	governance: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+	loadbalancing: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+	"model-catalog": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+	core: "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300",
+} as const;
+
+export type Status = (typeof Statuses)[number];

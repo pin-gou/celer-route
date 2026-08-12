@@ -1,0 +1,6009 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Migration Tests for Bifrost
+# This script validates database migrations by:
+# 1. Running previous versions of bifrost to create schema
+# 2. Inserting faker data into all tables
+# 3. Running current version to verify migrations work
+#
+# Usage: ./run-migration-tests.sh [db_type]
+#   db_type: "postgres", "sqlite", or "all" (default: "all")
+#
+# Examples:
+#   ./run-migration-tests.sh           # Test both PostgreSQL and SQLite
+#   ./run-migration-tests.sh postgres  # Test PostgreSQL only
+#   ./run-migration-tests.sh sqlite    # Test SQLite only
+#
+# Environment Variables (optional overrides):
+#   POSTGRES_HOST     - PostgreSQL host (default: localhost)
+#   POSTGRES_PORT     - PostgreSQL port (default: 5432)
+#   POSTGRES_USER     - PostgreSQL user (default: bifrost)
+#   POSTGRES_PASSWORD - PostgreSQL password (default: bifrost_password)
+#   POSTGRES_DB       - PostgreSQL database (default: bifrost)
+#   BIFROST_PORT      - Port for bifrost server (default: 8089)
+#   VERSIONS_TO_TEST  - Number of previous versions to test (default: 3)
+
+# Pull all the tags available
+git fetch --tags
+
+# Get the absolute path of the script directory
+if command -v readlink >/dev/null 2>&1 && readlink -f "$0" >/dev/null 2>&1; then
+  SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+else
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+fi
+
+# Repository root (3 levels up from .github/workflows/scripts)
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd -P)"
+
+# Setup Go workspace for CI (go.work is gitignored, must be regenerated)
+source "$SCRIPT_DIR/setup-go-workspace.sh"
+
+# Configuration
+DB_TYPE="${1:-all}"
+
+POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+POSTGRES_USER="${POSTGRES_USER:-bifrost}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-bifrost_password}"
+POSTGRES_DB="${POSTGRES_DB:-bifrost_migration_test}"
+POSTGRES_SSLMODE="${POSTGRES_SSLMODE:-disable}"
+BIFROST_PORT="${BIFROST_PORT:-8089}"
+VERSIONS_TO_TEST="${VERSIONS_TO_TEST:-3}"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Temp directory for test artifacts
+TEMP_DIR=""
+BIFROST_PID=""
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+log_info() {
+  echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+  echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+  echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if running in CI
+is_ci() {
+  [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]
+}
+
+# Find an available port
+find_available_port() {
+  local start_port="${1:-8089}"
+  local port=$start_port
+
+  while [ $port -lt $((start_port + 100)) ]; do
+    if ! lsof -i ":$port" >/dev/null 2>&1; then
+      echo "$port"
+      return 0
+    fi
+    port=$((port + 1))
+  done
+
+  # Fallback to a random high port
+  echo $((RANDOM % 10000 + 50000))
+}
+
+# Cleanup function
+cleanup() {
+  local exit_code=$?
+
+  log_info "Cleaning up..."
+
+  # Kill bifrost if running
+  if [ -n "${BIFROST_PID:-}" ]; then
+    log_info "Stopping bifrost (PID: $BIFROST_PID)..."
+    kill "$BIFROST_PID" 2>/dev/null || true
+    wait "$BIFROST_PID" 2>/dev/null || true
+  fi
+
+  # Also kill any bifrost processes on our port
+  if [ -n "${BIFROST_PORT:-}" ]; then
+    local pids
+    pids=$(lsof -t -i ":$BIFROST_PORT" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      log_info "Killing processes on port $BIFROST_PORT: $pids"
+      echo "$pids" | xargs kill 2>/dev/null || true
+    fi
+  fi
+
+  # Remove temp directory
+  if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
+    log_info "Removing temp directory: $TEMP_DIR"
+    rm -rf "$TEMP_DIR"
+  fi
+
+  exit $exit_code
+}
+trap cleanup EXIT
+
+# Get the previous N stable transport versions (prereleases excluded), strictly
+# older than the version being released (transports/version). Publishing v1.5.8
+# tests migration from v1.5.7, v1.5.6, v1.5.5 - never from v1.5.8 itself.
+# The current version is injected as a sort sentinel so this works whether or
+# not its tag exists yet (the release tag is created after this test runs).
+get_previous_versions() {
+  local count="${1:-3}"
+  cd "$REPO_ROOT"
+  local current
+  current="v$(tr -d '[:space:]' < "$REPO_ROOT/transports/version")"
+  { git tag -l "transports/v*" | awk '!/-/' | sed 's|transports/||'; echo "$current"; } \
+    | sort -V -u \
+    | awk -v cur="$current" '$0 == cur { exit } { print }' \
+    | tail -n "$count"
+}
+
+# Wait for bifrost to start
+wait_for_bifrost() {
+  local log_file="$1"
+  local max_wait="${2:-60}"
+  local elapsed=0
+
+  while [ $elapsed -lt $max_wait ]; do
+    if grep -q "successfully started bifrost" "$log_file" 2>/dev/null; then
+      return 0
+    fi
+
+    # Check if process is still running
+    if [ -n "${BIFROST_PID:-}" ] && ! kill -0 "$BIFROST_PID" 2>/dev/null; then
+      log_error "Bifrost process died unexpectedly"
+      cat "$log_file" 2>/dev/null || true
+      return 1
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  log_error "Bifrost failed to start within ${max_wait}s"
+  cat "$log_file" 2>/dev/null || true
+  return 1
+}
+
+# Stop bifrost gracefully
+stop_bifrost() {
+  if [ -n "${BIFROST_PID:-}" ]; then
+    log_info "Stopping bifrost (PID: $BIFROST_PID)..."
+    kill "$BIFROST_PID" 2>/dev/null || true
+    wait "$BIFROST_PID" 2>/dev/null || true
+    BIFROST_PID=""
+
+    # Wait for port to be released
+    local max_wait=10
+    local elapsed=0
+    while [ $elapsed -lt $max_wait ]; do
+      if ! lsof -i ":$BIFROST_PORT" >/dev/null 2>&1; then
+        log_info "Port $BIFROST_PORT is now free"
+        return 0
+      fi
+      sleep 1
+      elapsed=$((elapsed + 1))
+    done
+
+    # Force kill anything still on the port
+    local pids
+    pids=$(lsof -t -i ":$BIFROST_PORT" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      log_warn "Force killing processes on port $BIFROST_PORT: $pids"
+      echo "$pids" | xargs kill -9 2>/dev/null || true
+      sleep 1
+    fi
+  fi
+}
+
+# ============================================================================
+# PostgreSQL Functions
+# ============================================================================
+
+check_postgres_available() {
+  if ! command -v docker >/dev/null 2>&1; then
+    log_warn "Docker not found. PostgreSQL tests will be skipped."
+    return 1
+  fi
+  return 0
+}
+
+ensure_postgres_running() {
+  local compose_file="$REPO_ROOT/.github/workflows/configs/docker-compose.yml"
+
+  if [ ! -f "$compose_file" ]; then
+    log_error "Docker compose file not found: $compose_file"
+    return 1
+  fi
+
+  # Always ensure docker-compose postgres is running (not some other postgres)
+  log_info "Ensuring docker-compose PostgreSQL is running..."
+  docker compose -f "$compose_file" up -d postgres
+
+  # Wait for postgres to be ready via docker exec
+  log_info "Waiting for PostgreSQL to be ready..."
+  local max_wait=30
+  local elapsed=0
+  while [ $elapsed -lt $max_wait ]; do
+    if docker compose -f "$compose_file" exec -T postgres pg_isready -U "$POSTGRES_USER" >/dev/null 2>&1; then
+      log_info "PostgreSQL container is ready"
+      break
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  if [ $elapsed -ge $max_wait ]; then
+    log_error "PostgreSQL container failed to start within ${max_wait}s"
+    return 1
+  fi
+
+  # Also verify we can connect from localhost (port mapping works)
+  log_info "Verifying localhost connectivity on port $POSTGRES_PORT..."
+  elapsed=0
+  while [ $elapsed -lt 10 ]; do
+    if pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" >/dev/null 2>&1; then
+      log_info "PostgreSQL is accessible on $POSTGRES_HOST:$POSTGRES_PORT"
+      return 0
+    fi
+    # Alternative check using nc/netcat if pg_isready not available
+    if command -v nc >/dev/null 2>&1; then
+      if nc -z "$POSTGRES_HOST" "$POSTGRES_PORT" 2>/dev/null; then
+        log_info "PostgreSQL port $POSTGRES_PORT is open"
+        return 0
+      fi
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  log_warn "Could not verify localhost connectivity, but container is running - proceeding"
+  return 0
+}
+
+reset_postgres_database() {
+  log_info "Resetting PostgreSQL database: $POSTGRES_DB"
+
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    log_error "Could not find any postgres container"
+    return 1
+  fi
+
+  log_info "Using postgres container: $container"
+
+  # First, terminate any existing connections to the database
+  log_info "Terminating existing connections..."
+  docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d postgres \
+    -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$POSTGRES_DB' AND pid <> pg_backend_pid();" \
+    2>/dev/null || true
+
+  # Now drop and recreate
+  log_info "Dropping and recreating database..."
+  if ! docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d postgres \
+    -c "DROP DATABASE IF EXISTS $POSTGRES_DB;"; then
+      log_error "Failed to drop database"
+      return 1
+  fi
+
+  if ! docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d postgres \
+    -c "CREATE DATABASE $POSTGRES_DB;"; then
+      log_error "Failed to create database"
+      return 1
+  fi
+
+  log_info "Database reset complete"
+  return 0
+}
+
+get_postgres_container() {
+  local compose_file="$REPO_ROOT/.github/workflows/configs/docker-compose.yml"
+  local container
+
+  # First try docker-compose container
+  container=$(docker compose -f "$compose_file" ps -q postgres 2>/dev/null || true)
+
+  if [ -z "$container" ]; then
+    # Fallback: find container by name pattern (prefer configs-postgres)
+    container=$(docker ps -q --filter "name=configs-postgres" 2>/dev/null | head -1 || true)
+  fi
+
+  if [ -z "$container" ]; then
+    # Last resort: any postgres container with port 5432 mapped
+    container=$(docker ps --filter "publish=5432" -q 2>/dev/null | head -1 || true)
+  fi
+
+  echo "$container"
+}
+
+run_postgres_sql() {
+  local sql="$1"
+
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    log_error "PostgreSQL container not found"
+    return 1
+  fi
+
+  docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -c "$sql" 2>/dev/null
+}
+
+run_postgres_scalar() {
+  local sql="$1"
+
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    log_error "PostgreSQL container not found"
+    return 1
+  fi
+
+  docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A \
+    -c "$sql" 2>/dev/null | tr -d '[:space:]'
+}
+
+run_postgres_sql_file() {
+  local sql_file="$1"
+
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    log_error "PostgreSQL container not found"
+    return 1
+  fi
+
+  docker exec -i "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$sql_file" 2>/dev/null
+}
+
+get_postgres_table_count() {
+  local table="$1"
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    echo "0"
+    return
+  fi
+
+  local result
+  result=$(docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A \
+    -c "SELECT COUNT(*) FROM $table;" 2>/dev/null || echo "0")
+  echo "${result:-0}"
+}
+
+# ============================================================================
+# SQLite Functions
+# ============================================================================
+
+reset_sqlite_database() {
+  local db_path="$1"
+
+  log_info "Resetting SQLite database: $db_path"
+  rm -f "$db_path"
+  return 0
+}
+
+run_sqlite_sql() {
+  local db_path="$1"
+  local sql="$2"
+
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    log_error "sqlite3 not found"
+    return 1
+  fi
+
+  sqlite3 "$db_path" "$sql" 2>/dev/null
+}
+
+run_sqlite_sql_file() {
+  local db_path="$1"
+  local sql_file="$2"
+
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    log_error "sqlite3 not found"
+    return 1
+  fi
+
+  sqlite3 "$db_path" < "$sql_file" 2>/dev/null
+}
+
+get_sqlite_table_count() {
+  local db_path="$1"
+  local table="$2"
+  local result
+  result=$(run_sqlite_sql "$db_path" "SELECT COUNT(*) FROM $table;" 2>/dev/null)
+  echo "${result:-0}"
+}
+
+# ============================================================================
+# Faker Data Generation
+# ============================================================================
+
+generate_faker_sql() {
+  local db_type="$1"  # postgres or sqlite
+  local output_file="$2"
+
+  local now
+  local future
+  local past
+  if [ "$db_type" = "postgres" ]; then
+    now="NOW()"
+    future="NOW() + INTERVAL '1 hour'"
+    past="NOW() - INTERVAL '1 day'"
+  else
+    now="datetime('now')"
+    future="datetime('now', '+1 hour')"
+    past="datetime('now', '-1 day')"
+  fi
+
+  cat > "$output_file" << EOF
+-- Faker data for migration tests
+-- Generated for: $db_type
+-- IMPORTANT: Insert data into ALL tables to verify migration preserves data
+-- Order respects foreign key dependencies
+-- NOTE: All columns must be covered to ensure migration tests are comprehensive
+
+-- ============================================================================
+-- 1. Tables with NO foreign keys (base tables)
+-- ============================================================================
+
+-- config_hashes (tracks config file hash)
+INSERT INTO config_hashes (id, hash, created_at, updated_at)
+VALUES (1, 'migration-test-hash-abc123def456', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- governance_budgets (reset_duration is a string like "1d", "1h", etc.)
+-- NOTE: calendar_aligned excluded - it was added in prerelease1, dropped in prerelease2, re-added in prerelease4
+INSERT INTO governance_budgets (id, max_limit, current_usage, reset_duration, last_reset, config_hash, created_at, updated_at)
+VALUES
+  ('budget-migration-test-1', 1000.00, 100.00, '1d', $now, 'budget-hash-001', $now, $now),
+  ('budget-migration-test-2', 5000.00, 250.00, '7d', $now, 'budget-hash-002', $now, $now),
+  ('budget-migration-test-3', 2000.00, 75.00, '30d', $now, 'budget-hash-003', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- governance_rate_limits (flexible duration format with token_* and request_* columns)
+INSERT INTO governance_rate_limits (id, token_max_limit, token_reset_duration, token_current_usage, token_last_reset, request_max_limit, request_reset_duration, request_current_usage, request_last_reset, config_hash, created_at, updated_at)
+VALUES
+  ('ratelimit-migration-test-1', 10000, '1m', 500, $now, 100, '1m', 10, $now, 'ratelimit-hash-001', $now, $now),
+  ('ratelimit-migration-test-2', 50000, '1d', 2500, $now, 500, '1d', 50, $now, 'ratelimit-hash-002', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- governance_customers (with budget_id, rate_limit_id, and config_hash)
+-- NOTE: customer-migration-test-1 owns its own dedicated budget (budget-migration-test-3).
+-- Budgets become single-owner in v1.5.0-prerelease4+ (governance_budgets.<owner>_id), and the
+-- add_customer_budgets_to_budgets_table migration refuses to claim a customer budget that another
+-- entity already owns. budget-migration-test-1 is already claimed by the VK/provider/model-config
+-- folds, so the customer must reference a budget no one else does.
+INSERT INTO governance_customers (id, name, budget_id, rate_limit_id, config_hash, created_at, updated_at)
+VALUES
+  ('customer-migration-test-1', 'Migration Test Customer One', 'budget-migration-test-3', 'ratelimit-migration-test-1', 'customer-hash-001', $now, $now),
+  ('customer-migration-test-2', 'Migration Test Customer Two', NULL, NULL, 'customer-hash-002', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- governance_teams (with customer_id, rate_limit_id, profile, config, claims, config_hash)
+-- NOTE: budget_id excluded - it was dropped from governance_teams in prerelease4 (team budgets moved to governance_budgets.team_id)
+INSERT INTO governance_teams (id, name, customer_id, rate_limit_id, profile, config, claims, config_hash, created_at, updated_at)
+VALUES
+  ('team-migration-test-1', 'Migration Test Team Alpha', 'customer-migration-test-1', 'ratelimit-migration-test-2', '{"role": "admin"}', '{"setting": "value"}', '{"claim1": "val1"}', 'team-hash-001', $now, $now),
+  ('team-migration-test-2', 'Migration Test Team Beta', NULL, NULL, NULL, NULL, NULL, 'team-hash-002', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- config_providers (with all JSON config fields and governance fields including budget_id, rate_limit_id)
+INSERT INTO config_providers (name, send_back_raw_request, send_back_raw_response, network_config_json, concurrency_buffer_json, proxy_config_json, custom_provider_config_json, open_ai_config_json, budget_id, rate_limit_id, config_hash, created_at, updated_at)
+VALUES
+  ('openai', false, false, '{"timeout": 30}', '{"buffer_size": 100}', NULL, NULL, '{"organization": "org-test"}', 'budget-migration-test-1', 'ratelimit-migration-test-1', 'provider-hash-openai', $now, $now),
+  ('anthropic', true, true, '{"timeout": 60}', '{"buffer_size": 200}', '{"url": "http://proxy.test"}', NULL, NULL, NULL, NULL, 'provider-hash-anthropic', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- framework_configs
+INSERT INTO framework_configs (id, pricing_url, pricing_sync_interval)
+VALUES (1, 'https://example.com/pricing.json', 3600)
+ON CONFLICT DO NOTHING;
+
+-- config_log_store (with config column)
+INSERT INTO config_log_store (id, enabled, type, config, created_at, updated_at)
+VALUES (1, true, 'postgres', '{"host": "localhost", "port": 5432}', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- config_vector_store (with config column)
+INSERT INTO config_vector_store (id, enabled, type, ttl_seconds, cache_by_model, cache_by_provider, config, created_at, updated_at)
+VALUES (1, false, 'redis', 300, true, false, '{"host": "localhost", "port": 6379}', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- oauth_tokens (OAuth access/refresh tokens - no FK, must be before oauth_configs)
+INSERT INTO oauth_tokens (id, access_token, refresh_token, token_type, expires_at, scopes, last_refreshed_at, created_at, updated_at)
+VALUES
+  ('oauth-token-migration-test-001', 'encrypted-access-token-fake-001', 'encrypted-refresh-token-fake-001', 'Bearer', $future, '["read", "write"]', $now, $now, $now),
+  ('oauth-token-migration-test-002', 'encrypted-access-token-fake-002', '', 'Bearer', $future, '[]', NULL, $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- oauth_configs (OAuth client configurations - references oauth_tokens via token_id)
+INSERT INTO oauth_configs (id, client_id, client_secret, authorize_url, token_url, registration_url, redirect_uri, scopes, state, code_verifier, code_challenge, status, token_id, server_url, use_discovery, mcp_client_config_json, created_at, updated_at, expires_at)
+VALUES
+  ('oauth-config-migration-test-001', 'client-id-fake-001', 'encrypted-secret-fake-001', 'https://auth.example.com/authorize', 'https://auth.example.com/token', NULL, 'https://bifrost.example.com/oauth/callback', '["read", "write"]', 'state-migration-test-001', 'verifier-migration-test-001', 'challenge-migration-test-001', 'authorized', 'oauth-token-migration-test-001', 'https://mcp.example.com', false, NULL, $now, $now, $future),
+  ('oauth-config-migration-test-002', 'client-id-fake-002', '', 'https://auth2.example.com/authorize', 'https://auth2.example.com/token', 'https://auth2.example.com/register', 'https://bifrost.example.com/oauth/callback2', '[]', 'state-migration-test-002', 'verifier-migration-test-002', 'challenge-migration-test-002', 'pending', NULL, 'https://mcp2.example.com', true, '{"name":"test-client"}', $now, $now, $future)
+ON CONFLICT DO NOTHING;
+
+-- distributed_locks
+INSERT INTO distributed_locks (lock_key, holder_id, expires_at, created_at)
+VALUES ('migration-test-lock', 'holder-migration-test-001', $future, $now)
+ON CONFLICT DO NOTHING;
+
+-- config_client (global client configuration)
+INSERT INTO config_client (id, drop_excess_requests, prometheus_labels_json, allowed_origins_json, allowed_headers_json, header_filter_config_json, initial_pool_size, enable_logging, disable_content_logging, disable_db_pings_in_health, log_retention_days, enforce_governance_header, allow_direct_keys, max_request_body_size_mb, mcp_agent_depth, mcp_tool_execution_timeout, mcp_code_mode_binding_level, mcp_tool_sync_interval, compat_convert_text_to_chat, compat_convert_chat_to_responses, compat_should_drop_params, compat_should_convert_params, config_hash, created_at, updated_at)
+VALUES (1, false, '["provider", "model"]', '["*"]', '["Authorization"]', '{}', 300, true, false, false, 365, true, false, 100, 10, 30, 'server', 10, false, false, false, true, 'client-config-hash-001', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- governance_config (key-value config table)
+INSERT INTO governance_config (key, value)
+VALUES
+  ('migration_test_key_1', 'migration_test_value_1'),
+  ('migration_test_key_2', 'migration_test_value_2')
+ON CONFLICT DO NOTHING;
+
+-- governance_model_pricing (model pricing data - with ALL columns)
+-- NOTE: base_model and newer columns (above_128k with underscore, priority tiers, pixel/quality pricing, etc.)
+-- are added dynamically via append_dynamic_inserts() for schema compatibility.
+-- This INSERT covers columns that exist in the oldest tested version's schema (v1.4.10),
+-- including the old-format names (above128k without underscore, output_cost_per_character).
+INSERT INTO governance_model_pricing (id, model, provider, input_cost_per_token, output_cost_per_token, mode, input_cost_per_video_per_second, input_cost_per_audio_per_second, input_cost_per_character, output_cost_per_character, input_cost_per_token_above128k_tokens, input_cost_per_character_above128k_tokens, input_cost_per_image_above128k_tokens, input_cost_per_video_per_second_above128k_tokens, input_cost_per_audio_per_second_above128k_tokens, output_cost_per_token_above128k_tokens, output_cost_per_character_above128k_tokens, input_cost_per_token_above_200k_tokens, output_cost_per_token_above_200k_tokens, cache_creation_input_token_cost_above_200k_tokens, cache_read_input_token_cost_above_200k_tokens, cache_read_input_token_cost, cache_creation_input_token_cost, input_cost_per_token_batches, output_cost_per_token_batches, input_cost_per_image_token, output_cost_per_image_token, input_cost_per_image, output_cost_per_image, cache_read_input_image_token_cost)
+VALUES
+  (1, 'gpt-4', 'openai', 0.00003, 0.00006, 'chat', NULL, NULL, NULL, NULL, 0.00006, NULL, NULL, NULL, NULL, 0.00012, NULL, NULL, NULL, NULL, NULL, 0.000015, 0.000045, 0.000015, 0.00003, NULL, NULL, NULL, NULL, NULL),
+  (2, 'claude-3-opus', 'anthropic', 0.000015, 0.000075, 'chat', NULL, NULL, 0.00000125, 0.00000625, 0.00002, 0.00000150, NULL, NULL, NULL, 0.0001, 0.0000075, 0.000025, 0.000125, 0.0000375, 0.0000075, 0.0000075, 0.0000375, 0.0000075, 0.0000375, NULL, NULL, 0.02, 0.04, NULL)
+ON CONFLICT DO NOTHING;
+
+-- governance_model_configs (model-level governance configuration)
+INSERT INTO governance_model_configs (id, model_name, provider, budget_id, rate_limit_id, config_hash, created_at, updated_at)
+VALUES
+  ('model-config-migration-test-1', 'gpt-4', 'openai', 'budget-migration-test-1', 'ratelimit-migration-test-1', 'model-config-hash-001', $now, $now),
+  ('model-config-migration-test-2', 'claude-3-opus', 'anthropic', NULL, NULL, 'model-config-hash-002', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- migrations (migration tracking table - used by gorp migrator)
+-- NOTE: sequence and status are added dynamically via append_dynamic_inserts() for schema compatibility
+INSERT INTO migrations (id, applied_at)
+VALUES ('migration-test-001', $now)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- 2. Tables with foreign keys to base tables
+-- ============================================================================
+
+-- config_keys (references config_providers) - with ALL columns including Azure/Vertex/Bedrock/Replicate fields
+-- NOTE: azure_scopes column is added dynamically via append_dynamic_inserts() for schema compatibility
+INSERT INTO config_keys (name, provider_id, provider, key_id, value, models_json, blacklisted_models_json, weight, enabled, config_hash, azure_endpoint, azure_api_version, azure_deployments_json, azure_client_id, azure_client_secret, azure_tenant_id, vertex_project_id, vertex_project_number, vertex_region, vertex_auth_credentials, vertex_deployments_json, bedrock_access_key, bedrock_secret_key, bedrock_session_token, bedrock_region, bedrock_arn, bedrock_deployments_json, bedrock_batch_s3_config_json, use_for_batch_api, replicate_deployments_json, created_at, updated_at)
+SELECT 'migration-test-key-openai', id, 'openai', 'key-migration-uuid-001', 'sk-migration-test-fake-key-value-openai', '["gpt-4", "gpt-3.5-turbo"]', '["gpt-4-32k"]', 1.0, true, 'key-hash-001', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, false, NULL, $now, $now
+FROM config_providers WHERE name = 'openai'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO config_keys (name, provider_id, provider, key_id, value, models_json, blacklisted_models_json, weight, enabled, config_hash, azure_endpoint, azure_api_version, azure_deployments_json, azure_client_id, azure_client_secret, azure_tenant_id, vertex_project_id, vertex_project_number, vertex_region, vertex_auth_credentials, vertex_deployments_json, bedrock_access_key, bedrock_secret_key, bedrock_session_token, bedrock_region, bedrock_arn, bedrock_deployments_json, bedrock_batch_s3_config_json, use_for_batch_api, replicate_deployments_json, created_at, updated_at)
+SELECT 'migration-test-key-anthropic', id, 'anthropic', 'key-migration-uuid-002', 'sk-ant-migration-test-fake-key', '["claude-3-opus"]', '[]', 0.8, true, 'key-hash-002', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, false, NULL, $now, $now
+FROM config_providers WHERE name = 'anthropic'
+ON CONFLICT DO NOTHING;
+
+-- config_models (references config_providers) - column is 'name' not 'model_name', 'id' not 'model_id'
+INSERT INTO config_models (id, provider_id, name, created_at, updated_at)
+SELECT 'model-migration-uuid-001', id, 'gpt-4-turbo', $now, $now
+FROM config_providers WHERE name = 'openai'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO config_models (id, provider_id, name, created_at, updated_at)
+SELECT 'model-migration-uuid-002', id, 'claude-3-opus', $now, $now
+FROM config_providers WHERE name = 'anthropic'
+ON CONFLICT DO NOTHING;
+
+-- config_env_keys (no FK but tracks env vars)
+INSERT INTO config_env_keys (env_var, provider, key_type, config_path, key_id, created_at)
+VALUES
+  ('OPENAI_API_KEY', 'openai', 'api_key', 'providers.openai.keys[0]', 'key-migration-uuid-001', $now),
+  ('ANTHROPIC_API_KEY', 'anthropic', 'api_key', 'providers.anthropic.keys[0]', 'key-migration-uuid-002', $now)
+ON CONFLICT DO NOTHING;
+
+-- config_plugins (with path and config_hash)
+INSERT INTO config_plugins (name, enabled, config_json, version, is_custom, path, config_hash, created_at, updated_at)
+VALUES
+  ('migration-test-plugin', true, '{"setting1": "value1", "setting2": 42}', 1, false, '/path/to/plugin', 'plugin-hash-001', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- config_mcp_clients INSERT is generated dynamically after this heredoc
+-- to handle older schemas that may not have newer columns (tool_pricing_json, auth_type, etc.)
+
+-- governance_virtual_keys (with all columns including description, is_active, team_id, customer_id, rate_limit_id, config_hash)
+-- NOTE: budget_id excluded - dropped from governance_virtual_keys in prerelease2 (ownership moved to governance_budgets.virtual_key_id)
+INSERT INTO governance_virtual_keys (id, name, description, value, is_active, team_id, customer_id, rate_limit_id, config_hash, created_at, updated_at)
+VALUES
+  ('vk-migration-test-1', 'Migration Test Virtual Key 1', 'Test virtual key for migration', 'vk-migration-fake-value-001', true, 'team-migration-test-1', NULL, 'ratelimit-migration-test-1', 'vk-hash-001', $now, $now),
+  ('vk-migration-test-2', 'Migration Test Virtual Key 2', 'Another test virtual key', 'vk-migration-fake-value-002', true, NULL, 'customer-migration-test-2', NULL, 'vk-hash-002', $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- governance_virtual_key_provider_configs (references virtual_keys - with all columns)
+-- NOTE: budget_id excluded - dropped from governance_virtual_key_provider_configs in prerelease2
+INSERT INTO governance_virtual_key_provider_configs (virtual_key_id, provider, weight, allowed_models, rate_limit_id)
+VALUES
+  ('vk-migration-test-1', 'openai', 0.7, '["gpt-4"]', NULL),
+  ('vk-migration-test-2', 'anthropic', 0.3, '[]', 'ratelimit-migration-test-2')
+ON CONFLICT DO NOTHING;
+
+-- governance_virtual_key_provider_config_keys (join table for provider configs and keys)
+-- Insert after provider configs exist - link to config_keys
+INSERT INTO governance_virtual_key_provider_config_keys (table_virtual_key_provider_config_id, table_key_id)
+SELECT vpc.id, ck.id
+FROM governance_virtual_key_provider_configs vpc
+CROSS JOIN config_keys ck
+WHERE vpc.virtual_key_id = 'vk-migration-test-1' AND ck.name = 'migration-test-key-openai'
+ON CONFLICT DO NOTHING;
+
+-- governance_virtual_key_mcp_configs: handled dynamically after config_mcp_clients is inserted
+-- (see generate_mcp_clients_insert_postgres/sqlite) so the subquery finds the MCP client row.
+-- Both test VKs are covered to prevent migrationBackfillEmptyVirtualKeyConfigs from adding rows.
+
+-- sessions (id is auto-increment integer, not a string)
+INSERT INTO sessions (token, expires_at, created_at, updated_at)
+VALUES
+  ('session-migration-token-fake-123', $future, $now, $now),
+  ('session-migration-token-fake-456', $future, $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- routing_rules (with all columns including config_hash, description, model, fallbacks, query, scope_id)
+INSERT INTO routing_rules (id, config_hash, name, description, cel_expression, provider, model, fallbacks, query, scope, scope_id, enabled, priority, created_at, updated_at)
+VALUES
+  ('rule-migration-test-1', 'rule-hash-001', 'Migration Test Rule One', 'Routes all traffic to openai', 'true', 'openai', 'gpt-4', '["anthropic", "azure"]', '{"temperature": 0.7}', 'global', NULL, true, 1, $now, $now),
+  ('rule-migration-test-2', 'rule-hash-002', 'Migration Test Rule Two', 'Fallback rule for anthropic', 'true', 'anthropic', '', NULL, NULL, 'team', 'team-migration-test-1', false, 2, $now, $now)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- 2b. Prompt Repository Tables (added in v1.4.12+)
+-- NOTE: These tables are dynamically created, INSERTs generated via append_dynamic functions
+-- ============================================================================
+
+-- folders (generic folder container for prompts - no FK)
+-- NOTE: This table is added dynamically via generate_prompt_repo_tables_insert() for schema compatibility
+
+-- prompts (prompt entity - references folders)
+-- NOTE: This table is added dynamically via generate_prompt_repo_tables_insert() for schema compatibility
+
+-- prompt_versions, prompt_version_messages, prompt_sessions, prompt_session_messages
+-- NOTE: These tables are added dynamically via generate_prompt_repo_tables_insert() for schema compatibility
+
+-- ============================================================================
+-- 3. Log store tables
+-- ============================================================================
+
+-- logs (main log table) - with ALL columns
+-- NOTE: routing_engine_used column is added dynamically via append_dynamic_inserts() for schema compatibility
+INSERT INTO logs (id, parent_request_id, timestamp, object_type, provider, model, number_of_retries, fallback_index, selected_key_id, selected_key_name, virtual_key_id, virtual_key_name, routing_rule_id, routing_rule_name, input_history, responses_input_history, output_message, responses_output, embedding_output, params, tools, tool_calls, speech_input, transcription_input, image_generation_input, speech_output, transcription_output, image_generation_output, cache_debug, latency, token_usage, cost, status, error_details, stream, content_summary, raw_request, raw_response, prompt_tokens, completion_tokens, total_tokens, created_at)
+VALUES
+  ('log-migration-test-001', NULL, $past, 'chat_completion', 'openai', 'gpt-4', 0, 0, 'key-migration-uuid-001', 'migration-test-key-openai', 'vk-migration-test-1', 'Migration Test Virtual Key 1', 'rule-migration-test-1', 'Migration Test Rule One', '[{"role":"user","content":"Hello"}]', '', '{"role":"assistant","content":"Hi there!"}', '', '', '{"temperature":0.7}', '[]', '[]', '', '', '', '', '', '', '', 1250.5, '{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}', 0.0045, 'success', '', false, 'Test summary', '{"model":"gpt-4"}', '{"id":"resp-001"}', 10, 20, 30, $past),
+  ('log-migration-test-002', 'log-migration-test-001', $past, 'chat_completion', 'anthropic', 'claude-3-opus', 1, 0, 'key-migration-uuid-002', 'migration-test-key-anthropic', 'vk-migration-test-2', 'Migration Test Virtual Key 2', NULL, NULL, '[{"role":"user","content":"Test"}]', '', '{"role":"assistant","content":"Response"}', '', '', '{}', '[]', '[]', '', '', '', '', '', '', '', 2500.75, '{"prompt_tokens":5,"completion_tokens":15,"total_tokens":20}', 0.0125, 'success', '', true, '', '', '', 5, 15, 20, $past),
+  ('log-migration-test-003', NULL, $past, 'embedding', 'openai', 'text-embedding-3-small', 0, 0, 'key-migration-uuid-001', 'migration-test-key-openai', NULL, NULL, NULL, NULL, '', '', '', '', '[[0.1,0.2,0.3]]', '{}', '[]', '[]', '', '', '', '', '', '', '', 500.0, '{"prompt_tokens":8,"total_tokens":8}', NULL, 'error', '{"message":"Rate limit exceeded"}', false, '', '', '', 8, 0, 8, $past)
+ON CONFLICT DO NOTHING;
+
+-- mcp_tool_logs (with all columns including virtual_key_id, virtual_key_name)
+INSERT INTO mcp_tool_logs (id, llm_request_id, timestamp, tool_name, server_label, virtual_key_id, virtual_key_name, arguments, result, error_details, latency, cost, status, created_at)
+VALUES
+  ('mcp-log-migration-001', 'log-migration-test-001', $past, 'migration_test_tool_alpha', 'test-server-1', 'vk-migration-test-1', 'Migration Test Virtual Key 1', '{"arg1":"value1"}', '{"result":"success"}', '', 150.5, 0.001, 'success', $past),
+  ('mcp-log-migration-002', NULL, $past, 'migration_test_tool_beta', 'test-server-2', NULL, NULL, '{"arg2":"value2"}', '', '{"message":"Tool failed"}', 75.25, NULL, 'error', $past)
+ON CONFLICT DO NOTHING;
+
+EOF
+
+  # NOTE: config_mcp_clients INSERT is NOT generated here because it needs to be
+  # generated dynamically AFTER the schema is created for each version.
+  # Use append_dynamic_mcp_clients_insert() after schema creation.
+
+  log_info "Generated faker SQL: $output_file"
+}
+
+# Generate v1.6.3-era config-store coverage rows for SQLite.
+generate_v163_config_store_insert_sqlite() {
+  local output_file="$1"
+  local config_db="$2"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- v1.6.3-era config-store coverage rows (SQLite-only)" >> "$output_file"
+
+  if column_exists_sqlite "$config_db" "config_client" "mcp_server_auth_mode"; then
+    echo "UPDATE config_client SET mcp_server_auth_mode = 'headers' WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_sqlite "$config_db" "config_client" "oauth2_server_config_json"; then
+    echo "UPDATE config_client SET oauth2_server_config_json = '{\"auth_code_ttl\":300,\"access_token_ttl\":600}' WHERE id = 1;" >> "$output_file"
+  fi
+
+  for col in bedrock_mantle_access_key bedrock_mantle_secret_key bedrock_mantle_session_token bedrock_mantle_region bedrock_mantle_role_arn bedrock_mantle_external_id bedrock_mantle_role_session_name; do
+    if column_exists_sqlite "$config_db" "config_keys" "$col"; then
+      echo "UPDATE config_keys SET $col = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+  done
+
+  if column_exists_sqlite "$config_db" "governance_model_pricing" "is_deprecated"; then
+    echo "UPDATE governance_model_pricing SET is_deprecated = 0 WHERE model = 'gpt-4';" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET is_deprecated = 1 WHERE model = 'claude-3-opus';" >> "$output_file"
+  fi
+
+  if column_exists_sqlite "$config_db" "governance_virtual_keys" "expires_at"; then
+    echo "UPDATE governance_virtual_keys SET expires_at = datetime('now', '+1 day') WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET expires_at = datetime('now', '+2 day') WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+}
+
+# Generate v1.6.3-era OAuth2 coverage rows for SQLite.
+generate_v163_oauth2_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  # oauth2_clients, oauth2_authorize_requests, and oauth2_refresh_tokens are each guarded
+  # individually rather than assuming presence of one implies presence of the others.
+  local oauth2_clients_exists oauth2_authorize_requests_exists oauth2_refresh_tokens_exists
+  oauth2_clients_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='oauth2_clients';" 2>/dev/null || echo "0")
+  oauth2_authorize_requests_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='oauth2_authorize_requests';" 2>/dev/null || echo "0")
+  oauth2_refresh_tokens_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='oauth2_refresh_tokens';" 2>/dev/null || echo "0")
+
+  if [ "$oauth2_clients_exists" = "1" ]; then
+    echo "" >> "$output_file"
+    echo "-- oauth2_clients" >> "$output_file"
+    echo "INSERT INTO oauth2_clients (id, client_id, client_name, redirect_uris_json, grant_types_json, scope, created_at) VALUES ('oauth2-client-migration-test-001', 'oauth2-client-migration-test-001', 'Migration Test OAuth2 Client', '[\"https://bifrost.example.com/oauth/callback\"]', '[\"authorization_code\",\"refresh_token\"]', 'openid profile', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+
+  if [ "$oauth2_authorize_requests_exists" = "1" ] && [ "$oauth2_clients_exists" = "1" ]; then
+    echo "" >> "$output_file"
+    echo "-- oauth2_authorize_requests" >> "$output_file"
+    echo "INSERT INTO oauth2_authorize_requests (id, client_id, redirect_uri, state, scope, resource, code_challenge, code_challenge_method, status, bf_mode, bf_sub, code_hash, expires_at, created_at, updated_at) VALUES ('oauth2-authorize-migration-test-001', 'oauth2-client-migration-test-001', 'https://bifrost.example.com/oauth/callback', 'oauth2-state-migration-test-001', 'openid profile', 'https://mcp.example.com', 'migration-test-code-challenge', 'S256', 'pending', 'vk', 'vk-migration-test-1', NULL, datetime('now', '+15 minutes'), $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+
+  if [ "$oauth2_refresh_tokens_exists" = "1" ] && [ "$oauth2_clients_exists" = "1" ]; then
+    echo "" >> "$output_file"
+    echo "-- oauth2_refresh_tokens" >> "$output_file"
+    echo "INSERT INTO oauth2_refresh_tokens (id, token_hash, family_id, client_id, bf_mode, bf_sub, scope, resource, revoked_at, last_used_at, created_at) VALUES ('oauth2-refresh-migration-test-001', 'migration-test-refresh-token-hash-001', 'oauth2-authorize-migration-test-001', 'oauth2-client-migration-test-001', 'vk', 'vk-migration-test-1', 'openid profile', 'https://mcp.example.com', NULL, NULL, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+}
+
+# Append dynamic INSERTs to faker SQL based on current schema
+# Must be called AFTER the database schema is created (e.g., after bifrost starts/stops)
+# Handles columns that may not exist in older schema versions
+append_dynamic_mcp_clients_insert() {
+  local db_type="$1"
+  local faker_sql="$2"
+  local config_db="${3:-}"  # Only used for SQLite
+
+  local now
+  local future
+  local past
+  if [ "$db_type" = "postgres" ]; then
+    now="NOW()"
+    future="NOW() + INTERVAL '1 hour'"
+    past="NOW() - INTERVAL '1 day'"
+    generate_mcp_clients_insert_postgres "$now" "$faker_sql"
+    generate_async_jobs_insert_postgres "$now" "$future" "$faker_sql"
+    generate_webhook_tables_insert_postgres "$now" "$future" "$faker_sql"
+    generate_prompt_repo_tables_insert_postgres "$now" "$faker_sql"
+    generate_per_user_oauth_tables_insert_postgres "$now" "$faker_sql"
+    generate_mcp_per_user_headers_insert_postgres "$now" "$faker_sql"
+    generate_feature_flags_insert_postgres "$now" "$faker_sql"
+    generate_temp_tokens_insert_postgres "$now" "$faker_sql"
+    generate_model_parameters_insert_postgres "$now" "$faker_sql"
+    generate_routing_targets_insert_postgres "$now" "$faker_sql"
+    generate_pricing_overrides_insert_postgres "$now" "$faker_sql"
+    generate_mcp_library_insert_postgres "$now" "$faker_sql"
+    generate_skills_repo_tables_insert_postgres "$now" "$faker_sql"
+    generate_oauth2_issuance_tables_insert_postgres "$now" "$faker_sql"
+    generate_sidekiq_insert_postgres "$now" "$past" "$faker_sql"
+    append_dynamic_columns_postgres "$now" "$past" "$faker_sql"
+  else
+    now="datetime('now')"
+    future="datetime('now', '+1 hour')"
+    past="datetime('now', '-1 day')"
+    generate_mcp_clients_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_v163_config_store_insert_sqlite "$faker_sql" "$config_db"
+    generate_v163_oauth2_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_async_jobs_insert_sqlite "$now" "$future" "$faker_sql"
+    generate_webhook_tables_insert_sqlite "$now" "$future" "$faker_sql" "$config_db"
+    generate_prompt_repo_tables_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_per_user_oauth_tables_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_mcp_per_user_headers_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_feature_flags_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_temp_tokens_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_model_parameters_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_routing_targets_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_pricing_overrides_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_mcp_library_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_skills_repo_tables_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_oauth2_issuance_tables_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_sidekiq_insert_sqlite "$now" "$past" "$faker_sql" "$config_db"
+    append_dynamic_columns_sqlite "$now" "$past" "$faker_sql" "$config_db"
+  fi
+}
+
+# Append dynamic column UPDATEs for columns that may not exist in older schemas (PostgreSQL)
+# Uses UPDATE instead of modifying the INSERT to keep the static INSERTs working for all versions
+append_dynamic_columns_postgres() {
+  local now="$1"
+  local past="$2"
+  local output_file="$3"
+
+  echo "" >> "$output_file"
+  echo "-- Dynamic column coverage for newer columns (generated based on schema)" >> "$output_file"
+
+  # config_keys.azure_scopes (added in v1.4.5)
+  # Set to NULL for coverage - config sync resets this column on startup so non-null values
+  # would cause a snapshot comparison diff
+  if column_exists_postgres "config_keys" "azure_scopes"; then
+    echo "UPDATE config_keys SET azure_scopes = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # governance_model_pricing.base_model (added in v1.4.5)
+  if column_exists_postgres "governance_model_pricing" "base_model"; then
+    echo "UPDATE governance_model_pricing SET base_model = 'claude-3-opus-20240229' WHERE model = 'claude-3-opus';" >> "$output_file"
+  fi
+
+  # logs.routing_engine_used (added in v1.4.5)
+  if column_exists_postgres "logs" "routing_engine_used"; then
+    echo "UPDATE logs SET routing_engine_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET routing_engine_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # config_keys.status (added in v1.4.7)
+  if column_exists_postgres "config_keys" "status"; then
+    echo "UPDATE config_keys SET status = 'active' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET status = 'unknown' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.description (added in v1.4.7)
+  if column_exists_postgres "config_keys" "description"; then
+    echo "UPDATE config_keys SET description = 'Migration test key for OpenAI' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET description = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_providers.status (added in v1.4.7)
+  if column_exists_postgres "config_providers" "status"; then
+    echo "UPDATE config_providers SET status = 'active' WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET status = 'unknown' WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # config_providers.description (added in v1.4.7)
+  if column_exists_postgres "config_providers" "description"; then
+    echo "UPDATE config_providers SET description = 'Migration test OpenAI provider' WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET description = '' WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # logs.routing_engines_used (renamed from routing_engine_used in v1.4.7)
+  if column_exists_postgres "logs" "routing_engines_used"; then
+    echo "UPDATE logs SET routing_engines_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET routing_engines_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # logs.list_models_output (added in v1.4.7)
+  if column_exists_postgres "logs" "list_models_output"; then
+    echo "UPDATE logs SET list_models_output = '[{\"id\":\"gpt-4\",\"object\":\"model\"}]' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET list_models_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # logs.routing_engine_logs (added in v1.4.7)
+  if column_exists_postgres "logs" "routing_engine_logs"; then
+    echo "UPDATE logs SET routing_engine_logs = 'Route matched: gpt-4 -> openai' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET routing_engine_logs = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # Dropped columns - columns that existed in older versions but were removed
+  # -------------------------------------------------------------------------
+
+  # config_client.enable_governance (dropped in v1.4.8)
+  if column_exists_postgres "config_client" "enable_governance"; then
+    echo "UPDATE config_client SET enable_governance = true WHERE id = 1;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # migrations.sequence, migrations.status (added with updated migrator in v1.4.8)
+  if column_exists_postgres "migrations" "sequence"; then
+    echo "UPDATE migrations SET sequence = 1 WHERE id = 'migration-test-001';" >> "$output_file"
+  fi
+  if column_exists_postgres "migrations" "status"; then
+    echo "UPDATE migrations SET status = 'success' WHERE id = 'migration-test-001';" >> "$output_file"
+  fi
+
+  # config_keys.vllm_url, vllm_model_name (added in v1.4.8)
+  if column_exists_postgres "config_keys" "vllm_url"; then
+    echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_keys" "vllm_model_name"; then
+    echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.ollama_url, sgl_url (added in v1.5.0-prerelease1)
+  if column_exists_postgres "config_keys" "ollama_url"; then
+    echo "UPDATE config_keys SET ollama_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET ollama_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_keys" "sgl_url"; then
+    echo "UPDATE config_keys SET sgl_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET sgl_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_keys" "encryption_status"; then
+    echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_providers.pricing_overrides_json, encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_providers" "pricing_overrides_json"; then
+    echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_providers" "encryption_status"; then
+    echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # config_plugins.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_plugins" "encryption_status"; then
+    echo "UPDATE config_plugins SET encryption_status = 'plain_text' WHERE name = 'migration-test-plugin';" >> "$output_file"
+  fi
+
+  # config_plugins.placement, exec_order (added in v1.4.13)
+  if column_exists_postgres "config_plugins" "placement"; then
+    echo "UPDATE config_plugins SET placement = 'post_builtin' WHERE name = 'migration-test-plugin';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_plugins" "exec_order"; then
+    echo "UPDATE config_plugins SET exec_order = 0 WHERE name = 'migration-test-plugin';" >> "$output_file"
+  fi
+
+  # config_vector_store.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_vector_store" "encryption_status"; then
+    echo "UPDATE config_vector_store SET encryption_status = 'plain_text' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_virtual_keys.encryption_status, value_hash (added in v1.4.8)
+  # value_hash uses NULL to avoid unique constraint violations (multiple empty strings would violate unique index)
+  if column_exists_postgres "governance_virtual_keys" "encryption_status"; then
+    echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_virtual_keys" "value_hash"; then
+    echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # sessions.encryption_status, token_hash (added in v1.4.8)
+  # token_hash uses NULL to avoid unique constraint violations
+  if column_exists_postgres "sessions" "encryption_status"; then
+    echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+    echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+  fi
+  if column_exists_postgres "sessions" "token_hash"; then
+    echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+    echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+  fi
+
+  # oauth_configs.encryption_status (added in v1.4.8)
+  if column_exists_postgres "oauth_configs" "encryption_status"; then
+    echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-001';" >> "$output_file"
+    echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-002';" >> "$output_file"
+  fi
+
+  # oauth_tokens.encryption_status (added in v1.4.8)
+  if column_exists_postgres "oauth_tokens" "encryption_status"; then
+    echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-001';" >> "$output_file"
+    echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-002';" >> "$output_file"
+  fi
+
+  # governance_model_pricing.output_cost_per_video_per_second, output_cost_per_second (added in v1.4.8)
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_video_per_second"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_second"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # governance_model_pricing.additional_attributes (added in v1.5.6 - JSON object string, default '{}')
+  if column_exists_postgres "governance_model_pricing" "additional_attributes"; then
+    echo "UPDATE governance_model_pricing SET additional_attributes = '{}' WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET additional_attributes = '{}' WHERE id = 2;" >> "$output_file"
+  fi
+
+  # config_client new columns (added in v1.4.8)
+  if column_exists_postgres "config_client" "enforce_auth_on_inference"; then
+    echo "UPDATE config_client SET enforce_auth_on_inference = false WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "enforce_scim_auth"; then
+    echo "UPDATE config_client SET enforce_scim_auth = false WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "async_job_result_ttl"; then
+    echo "UPDATE config_client SET async_job_result_ttl = 3600 WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "required_headers_json"; then
+    echo "UPDATE config_client SET required_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "logging_headers_json"; then
+    echo "UPDATE config_client SET logging_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.rerank_output (added in v1.4.8)
+  if column_exists_postgres "logs" "rerank_output"; then
+    echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs video columns (added in v1.4.8)
+  if column_exists_postgres "logs" "video_generation_input"; then
+    echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_generation_output"; then
+    echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_retrieve_output"; then
+    echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_download_output"; then
+    echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  # logs.image_edit_input, image_variation_input (added in v1.5.0-prerelease1)
+  if column_exists_postgres "logs" "image_edit_input"; then
+    echo "UPDATE logs SET image_edit_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET image_edit_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET image_edit_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "image_variation_input"; then
+    echo "UPDATE logs SET image_variation_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET image_variation_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET image_variation_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_list_output"; then
+    echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_delete_output"; then
+    echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.metadata (added in v1.4.8)
+  if column_exists_postgres "logs" "metadata"; then
+    echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.metadata (added in v1.4.8)
+  if column_exists_postgres "mcp_tool_logs" "metadata"; then
+    echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.10 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # config_keys Bedrock assume-role columns (added in v1.4.10)
+  if column_exists_postgres "config_keys" "bedrock_role_arn"; then
+    echo "UPDATE config_keys SET bedrock_role_arn = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET bedrock_role_arn = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_keys" "bedrock_external_id"; then
+    echo "UPDATE config_keys SET bedrock_external_id = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET bedrock_external_id = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_keys" "bedrock_role_session_name"; then
+    echo "UPDATE config_keys SET bedrock_role_session_name = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET bedrock_role_session_name = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.12 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # config_client.hide_deleted_virtual_keys_in_filters (added in v1.4.12)
+  if column_exists_postgres "config_client" "hide_deleted_virtual_keys_in_filters"; then
+    echo "UPDATE config_client SET hide_deleted_virtual_keys_in_filters = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_providers.store_raw_request_response (added in v1.4.12)
+  if column_exists_postgres "config_providers" "store_raw_request_response"; then
+    echo "UPDATE config_providers SET store_raw_request_response = false WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET store_raw_request_response = true WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.12 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.passthrough_request_body (added in v1.4.12)
+  if column_exists_postgres "logs" "passthrough_request_body"; then
+    echo "UPDATE logs SET passthrough_request_body = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET passthrough_request_body = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET passthrough_request_body = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.passthrough_response_body (added in v1.4.12)
+  if column_exists_postgres "logs" "passthrough_response_body"; then
+    echo "UPDATE logs SET passthrough_response_body = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET passthrough_response_body = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET passthrough_response_body = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.is_large_payload_request (added in v1.4.12)
+  if column_exists_postgres "logs" "is_large_payload_request"; then
+    echo "UPDATE logs SET is_large_payload_request = false WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET is_large_payload_request = false WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET is_large_payload_request = false WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.is_large_payload_response (added in v1.4.12)
+  if column_exists_postgres "logs" "is_large_payload_response"; then
+    echo "UPDATE logs SET is_large_payload_response = false WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET is_large_payload_response = false WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET is_large_payload_response = false WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.15 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.cached_read_tokens (added in migrationAddDashboardEnhancements)
+  if column_exists_postgres "logs" "cached_read_tokens"; then
+    echo "UPDATE logs SET cached_read_tokens = 128 WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET cached_read_tokens = 0 WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET cached_read_tokens = 0 WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.12 columns - governance_model_pricing new pricing columns
+  # -------------------------------------------------------------------------
+
+  # Priority tier columns
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_token_priority"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_token_priority"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # 128k tier columns
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_token_above_128k_tokens"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_image_above_128k_tokens"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_image_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_image_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_video_per_second_above_128k_tokens"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_video_per_second_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_video_per_second_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_audio_per_second_above_128k_tokens"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_audio_per_second_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_audio_per_second_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_token_above_128k_tokens"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # Cache columns (1hr tier, audio)
+  if column_exists_postgres "governance_model_pricing" "cache_creation_input_token_cost_above_1hr"; then
+    echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "cache_creation_input_token_cost_above_1hr_above_200k_tokens"; then
+    echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr_above_200k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr_above_200k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "cache_creation_input_audio_token_cost"; then
+    echo "UPDATE governance_model_pricing SET cache_creation_input_audio_token_cost = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_creation_input_audio_token_cost = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "cache_read_input_token_cost_priority"; then
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # Pixel-based pricing columns
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_pixel"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_pixel = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_pixel = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_pixel"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_pixel = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_pixel = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # Image output premium/resolution columns
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_premium_image"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_premium_image = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_premium_image = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_above_512_and_512_pixels"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_above_512x512_pixels_premium"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512x512_pixels_premium = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512x512_pixels_premium = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  # output_cost_per_image_above_512_and_512_pixels_and_premium_imag (PG-truncated 63-char name, renamed to output_cost_per_image_above_512x512_pixels_premium)
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_above_512_and_512_pixels_and_premium_imag"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels_and_premium_imag = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels_and_premium_imag = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_above_1024_and_1024_pixels"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024_and_1024_pixels = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024_and_1024_pixels = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_above_1024x1024_pixels_premium"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024x1024_pixels_premium = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024x1024_pixels_premium = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_above_2048_and_2048_pixels"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_2048_and_2048_pixels = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_2048_and_2048_pixels = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_above_4096_and_4096_pixels"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_4096_and_4096_pixels = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_above_4096_and_4096_pixels = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # Image quality columns
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_low_quality"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_low_quality = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_low_quality = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_medium_quality"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_medium_quality = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_medium_quality = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_high_quality"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_high_quality = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_high_quality = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_image_auto_quality"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_auto_quality = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_image_auto_quality = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # Audio/Video pricing columns
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_audio_token"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_audio_token = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_audio_token = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_second"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_second = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_second = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_audio_token"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_audio_token = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_audio_token = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # Other pricing columns
+  if column_exists_postgres "governance_model_pricing" "search_context_cost_per_query"; then
+    echo "UPDATE governance_model_pricing SET search_context_cost_per_query = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET search_context_cost_per_query = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "code_interpreter_cost_per_session"; then
+    echo "UPDATE governance_model_pricing SET code_interpreter_cost_per_session = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET code_interpreter_cost_per_session = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # config_client.mcp_disable_auto_tool_inject (added in v1.5.0)
+  if column_exists_postgres "config_client" "mcp_disable_auto_tool_inject"; then
+    echo "UPDATE config_client SET mcp_disable_auto_tool_inject = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.mcp_enable_temp_token_auth
+  if column_exists_postgres "config_client" "mcp_enable_temp_token_auth"; then
+    echo "UPDATE config_client SET mcp_enable_temp_token_auth = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.whitelisted_routes_json (added in v1.5.0)
+  if column_exists_postgres "config_client" "whitelisted_routes_json"; then
+    echo "UPDATE config_client SET whitelisted_routes_json = '[]' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.mcp_external_server_url (added in v1.5.0 - varchar(512) public OAuth server base URL)
+  if column_exists_postgres "config_client" "mcp_external_server_url"; then
+    echo "UPDATE config_client SET mcp_external_server_url = 'https://mcp.migration-test.example.com' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.mcp_external_client_url (added in v1.5.0 - varchar(512) public OAuth client redirect base URL)
+  if column_exists_postgres "config_client" "mcp_external_client_url"; then
+    echo "UPDATE config_client SET mcp_external_client_url = 'https://mcp-client.migration-test.example.com' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.allow_per_request_content_storage_override (added in v1.5.0)
+  if column_exists_postgres "config_client" "allow_per_request_content_storage_override"; then
+    echo "UPDATE config_client SET allow_per_request_content_storage_override = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.allow_per_request_raw_override (added in v1.5.0)
+  if column_exists_postgres "config_client" "allow_per_request_raw_override"; then
+    echo "UPDATE config_client SET allow_per_request_raw_override = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.dump_errors_in_console_logs (added in v1.6.0)
+  if column_exists_postgres "config_client" "dump_errors_in_console_logs"; then
+    echo "UPDATE config_client SET dump_errors_in_console_logs = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_virtual_key_provider_configs.allow_all_keys (added in v1.5.0)
+  # vk-migration-test-1 has a key in the join table, so old behavior was restricted to that key -> allow_all_keys=false
+  # vk-migration-test-2 has no key rows, so old "empty=allow-all" semantics -> allow_all_keys=true
+  if column_exists_postgres "governance_virtual_key_provider_configs" "allow_all_keys"; then
+    echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = false WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = true WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.plugin_logs (added in v1.5.0)
+  if column_exists_postgres "logs" "plugin_logs"; then
+    echo "UPDATE logs SET plugin_logs = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET plugin_logs = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET plugin_logs = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.stop_reason (added in v1.5.0 via migrationAddStopReasonColumn - nullable varchar(50))
+  if column_exists_postgres "logs" "stop_reason"; then
+    echo "UPDATE logs SET stop_reason = 'stop' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET stop_reason = 'length' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET stop_reason = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.19 columns
+  # -------------------------------------------------------------------------
+
+  # governance_model_pricing: context_length, max_input_tokens, max_output_tokens, architecture (added in v1.4.19, removed later)
+  if column_exists_postgres "governance_model_pricing" "context_length"; then
+    echo "UPDATE governance_model_pricing SET context_length = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET context_length = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "max_input_tokens"; then
+    echo "UPDATE governance_model_pricing SET max_input_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET max_input_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "max_output_tokens"; then
+    echo "UPDATE governance_model_pricing SET max_output_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET max_output_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "architecture"; then
+    echo "UPDATE governance_model_pricing SET architecture = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET architecture = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.17 columns
+  # -------------------------------------------------------------------------
+
+  # config_keys.blacklisted_models_json (added in v1.4.17 - per-key model deny list)
+  if column_exists_postgres "config_keys" "blacklisted_models_json"; then
+    echo "UPDATE config_keys SET blacklisted_models_json = '[]' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET blacklisted_models_json = '[\"gpt-4-vision\"]' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_providers.open_ai_config_json (added in v1.4.17 - OpenAI-specific provider config)
+  if column_exists_postgres "config_providers" "open_ai_config_json"; then
+    echo "UPDATE config_providers SET open_ai_config_json = '{\"disable_store\":false}' WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET open_ai_config_json = '' WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.20 columns - governance_model_pricing model capability metadata
+  # -------------------------------------------------------------------------
+
+  # governance_model_pricing.context_length (added in v1.4.20)
+  if column_exists_postgres "governance_model_pricing" "context_length"; then
+    echo "UPDATE governance_model_pricing SET context_length = 128000 WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET context_length = 200000 WHERE id = 2;" >> "$output_file"
+  fi
+
+  # governance_model_pricing.max_input_tokens (added in v1.4.20)
+  if column_exists_postgres "governance_model_pricing" "max_input_tokens"; then
+    echo "UPDATE governance_model_pricing SET max_input_tokens = 128000 WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET max_input_tokens = 200000 WHERE id = 2;" >> "$output_file"
+  fi
+
+  # governance_model_pricing.max_output_tokens (added in v1.4.20)
+  if column_exists_postgres "governance_model_pricing" "max_output_tokens"; then
+    echo "UPDATE governance_model_pricing SET max_output_tokens = 4096 WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET max_output_tokens = 4096 WHERE id = 2;" >> "$output_file"
+  fi
+
+  # governance_model_pricing.architecture (added in v1.4.20 - JSON serialized)
+  if column_exists_postgres "governance_model_pricing" "architecture"; then
+    echo "UPDATE governance_model_pricing SET architecture = '{\"modality\":\"text\",\"input_modalities\":[\"text\"],\"output_modalities\":[\"text\"]}' WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET architecture = '{\"modality\":\"text\",\"input_modalities\":[\"text\",\"image\"],\"output_modalities\":[\"text\"]}' WHERE id = 2;" >> "$output_file"
+  fi
+
+  # governance_model_pricing.base_model (added in v1.4.20)
+  if column_exists_postgres "governance_model_pricing" "base_model"; then
+    echo "UPDATE governance_model_pricing SET base_model = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET base_model = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # config_client.whitelisted_routes_json (added in v1.4.20 - JSON serialized []string)
+  if column_exists_postgres "config_client" "whitelisted_routes_json"; then
+    echo "UPDATE config_client SET whitelisted_routes_json = '[]' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.21 columns - governance_model_pricing 272k tier and priority tier pricing
+  # -------------------------------------------------------------------------
+
+  # 200k priority tier columns
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_token_above_200k_tokens_priority"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_token_above_200k_tokens_priority"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "cache_read_input_token_cost_above_200k_tokens_priority"; then
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_200k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_200k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # 272k tier columns
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_token_above_272k_tokens"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_token_above_272k_tokens_priority"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_token_above_272k_tokens"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_token_above_272k_tokens_priority"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "cache_read_input_token_cost_above_272k_tokens"; then
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "cache_read_input_token_cost_above_272k_tokens_priority"; then
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.21 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.ocr_output (added in v1.4.21 - OCR endpoint logging)
+  if column_exists_postgres "logs" "ocr_output"; then
+    echo "UPDATE logs SET ocr_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET ocr_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET ocr_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.request_id (added in v1.4.21)
+  if column_exists_postgres "mcp_tool_logs" "request_id"; then
+    echo "UPDATE mcp_tool_logs SET request_id = '' WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET request_id = '' WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.22 columns - flex tier pricing and litellm fallbacks toggle
+  # -------------------------------------------------------------------------
+
+  # config_client.enable_litellm_fallbacks (added in v1.4.22)
+  if column_exists_postgres "config_client" "enable_litellm_fallbacks"; then
+    echo "UPDATE config_client SET enable_litellm_fallbacks = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_token_flex"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_flex = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_flex = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_token_flex"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_flex = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_flex = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "cache_read_input_token_cost_flex"; then
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_flex = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_flex = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # Columns dropped in v1.5.0 migrations - coverage for old schemas that still have them
+  # -------------------------------------------------------------------------
+
+  # governance_virtual_keys.budget_id (dropped in v1.5.0-prerelease2 via migrationAddMultiBudgetTables)
+  # Static INSERT no longer includes this column; set NULL so old-schema validators pass
+  if column_exists_postgres "governance_virtual_keys" "budget_id"; then
+    echo "UPDATE governance_virtual_keys SET budget_id = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET budget_id = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_virtual_key_provider_configs.budget_id (dropped in v1.5.0-prerelease2)
+  if column_exists_postgres "governance_virtual_key_provider_configs" "budget_id"; then
+    echo "UPDATE governance_virtual_key_provider_configs SET budget_id = NULL WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_key_provider_configs SET budget_id = NULL WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_teams.budget_id (dropped in v1.5.0-prerelease4 via migrationAddTeamBudgetsToBudgetsTable)
+  if column_exists_postgres "governance_teams" "budget_id"; then
+    echo "UPDATE governance_teams SET budget_id = NULL WHERE id = 'team-migration-test-1';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease2 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # config_keys.aliases_json (added in v1.5.0-prerelease2 via migrationDropDeploymentColumnsAndAddAliases)
+  if column_exists_postgres "config_keys" "aliases_json"; then
+    echo "UPDATE config_keys SET aliases_json = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET aliases_json = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.replicate_use_deployments_endpoint (added in v1.5.0-prerelease2)
+  if column_exists_postgres "config_keys" "replicate_use_deployments_endpoint"; then
+    echo "UPDATE config_keys SET replicate_use_deployments_endpoint = false WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET replicate_use_deployments_endpoint = false WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_client.routing_chain_max_depth (added in v1.5.0-prerelease2)
+  if column_exists_postgres "config_client" "routing_chain_max_depth"; then
+    echo "UPDATE config_client SET routing_chain_max_depth = 10 WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client compat columns (added in v1.5.0-prerelease2 via migrationReplaceEnableLiteLLMWithCompatColumns)
+  # NOTE: also present in static INSERT, but that INSERT may fail on old schemas; UPDATE covers all cases
+  if column_exists_postgres "config_client" "compat_convert_text_to_chat"; then
+    echo "UPDATE config_client SET compat_convert_text_to_chat = false WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "compat_convert_chat_to_responses"; then
+    echo "UPDATE config_client SET compat_convert_chat_to_responses = false WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "compat_should_drop_params"; then
+    echo "UPDATE config_client SET compat_should_drop_params = false WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "compat_should_convert_params"; then
+    echo "UPDATE config_client SET compat_should_convert_params = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_virtual_keys.calendar_aligned (added in v1.5.0-prerelease2 via migrationAddMultiBudgetTables)
+  if column_exists_postgres "governance_virtual_keys" "calendar_aligned"; then
+    echo "UPDATE governance_virtual_keys SET calendar_aligned = false WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET calendar_aligned = false WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_budgets.virtual_key_id (added in v1.5.0-prerelease2 via migrationAddMultiBudgetTables)
+  if column_exists_postgres "governance_budgets" "virtual_key_id"; then
+    echo "UPDATE governance_budgets SET virtual_key_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET virtual_key_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+    echo "UPDATE governance_budgets SET virtual_key_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+  fi
+
+  # governance_budgets.provider_config_id (added in v1.5.0-prerelease2 via migrationAddMultiBudgetTables)
+  if column_exists_postgres "governance_budgets" "provider_config_id"; then
+    echo "UPDATE governance_budgets SET provider_config_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET provider_config_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+    echo "UPDATE governance_budgets SET provider_config_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+  fi
+
+  # routing_rules.chain_rule (added in v1.5.0-prerelease2)
+  if column_exists_postgres "routing_rules" "chain_rule"; then
+    echo "UPDATE routing_rules SET chain_rule = false WHERE id = 'rule-migration-test-1';" >> "$output_file"
+    echo "UPDATE routing_rules SET chain_rule = false WHERE id = 'rule-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_virtual_key_provider_configs.allow_all_keys (added in v1.5.0-prerelease2)
+  # vk-migration-test-1 has a key in the join table (restricted) -> allow_all_keys=false
+  # vk-migration-test-2 has no key rows (old empty=allow-all semantics) -> allow_all_keys=true
+  if column_exists_postgres "governance_virtual_key_provider_configs" "allow_all_keys"; then
+    echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = false WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = true WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease2 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.alias (added in v1.5.0-prerelease2 via migrationAddAliasColumn)
+  if column_exists_postgres "logs" "alias"; then
+    echo "UPDATE logs SET alias = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET alias = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET alias = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.has_object (added in v1.5.0-prerelease2 via migrationAddHasObjectColumn)
+  if column_exists_postgres "logs" "has_object"; then
+    echo "UPDATE logs SET has_object = false WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET has_object = false WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET has_object = false WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.has_object (added in v1.5.0-prerelease2 via migrationAddHasObjectColumnToMCPToolLogs)
+  if column_exists_postgres "mcp_tool_logs" "has_object"; then
+    echo "UPDATE mcp_tool_logs SET has_object = false WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET has_object = false WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+  fi
+
+  # logs governance context columns (added in v1.5.0-prerelease2 via migrationAddGovernanceContextColumns)
+  for ctx_col in user_id team_id team_name customer_id customer_name business_unit_id business_unit_name; do
+    if column_exists_postgres "logs" "$ctx_col"; then
+      echo "UPDATE logs SET $ctx_col = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+      echo "UPDATE logs SET $ctx_col = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+      echo "UPDATE logs SET $ctx_col = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+    fi
+  done
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease4 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # governance_budgets.team_id (added in v1.5.0-prerelease4 via migrationAddTeamBudgetsToBudgetsTable)
+  if column_exists_postgres "governance_budgets" "team_id"; then
+    echo "UPDATE governance_budgets SET team_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET team_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+    echo "UPDATE governance_budgets SET team_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+  fi
+
+  # governance_budgets.calendar_aligned (re-added in v1.5.0-prerelease4 via migrateCalendarAlignedToBudgetsAndRateLimitsTable)
+  # NOTE: was present in prerelease1, dropped in prerelease2, re-added in prerelease4
+  if column_exists_postgres "governance_budgets" "calendar_aligned"; then
+    echo "UPDATE governance_budgets SET calendar_aligned = false WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET calendar_aligned = false WHERE id = 'budget-migration-test-2';" >> "$output_file"
+    echo "UPDATE governance_budgets SET calendar_aligned = false WHERE id = 'budget-migration-test-3';" >> "$output_file"
+  fi
+
+  # governance_rate_limits.calendar_aligned (added in v1.5.0-prerelease4 via migrateCalendarAlignedToBudgetsAndRateLimitsTable)
+  if column_exists_postgres "governance_rate_limits" "calendar_aligned"; then
+    echo "UPDATE governance_rate_limits SET calendar_aligned = false WHERE id = 'ratelimit-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_rate_limits SET calendar_aligned = false WHERE id = 'ratelimit-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_model_pricing OCR pricing columns (added in v1.5.0-prerelease4 via migrationAddOCRPricingColumns)
+  if column_exists_postgres "governance_model_pricing" "ocr_cost_per_page"; then
+    echo "UPDATE governance_model_pricing SET ocr_cost_per_page = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET ocr_cost_per_page = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "annotation_cost_per_page"; then
+    echo "UPDATE governance_model_pricing SET annotation_cost_per_page = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET annotation_cost_per_page = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease4 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.user_name (added in v1.5.0-prerelease4 via migrationAddUserNameColumn)
+  if column_exists_postgres "logs" "user_name"; then
+    echo "UPDATE logs SET user_name = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET user_name = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET user_name = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.attempt_trail (added in v1.5.0-prerelease4 via migrationAddAttemptTrailColumn)
+  if column_exists_postgres "logs" "attempt_trail"; then
+    echo "UPDATE logs SET attempt_trail = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET attempt_trail = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET attempt_trail = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.selected_prompt_* columns (added in v1.5.0-prerelease4 via migrationAddSelectedPromptColumns)
+  for sp_col in selected_prompt_name selected_prompt_version selected_prompt_id; do
+    if column_exists_postgres "logs" "$sp_col"; then
+      echo "UPDATE logs SET $sp_col = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+      echo "UPDATE logs SET $sp_col = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+      echo "UPDATE logs SET $sp_col = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+    fi
+  done
+
+  # logs.ocr_input (added in v1.5.0-prerelease4 via migrationAddOCRInputColumn)
+  if column_exists_postgres "logs" "ocr_input"; then
+    echo "UPDATE logs SET ocr_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET ocr_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET ocr_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease2 columns - prompt repo tables
+  # -------------------------------------------------------------------------
+
+  # prompt_versions.variables_json (added in v1.5.0-prerelease2 via migrationAddPromptVariablesColumns)
+  if column_exists_postgres "prompt_versions" "variables_json"; then
+    echo "UPDATE prompt_versions SET variables_json = '{}' WHERE prompt_id = 'prompt-migration-test-001';" >> "$output_file"
+  fi
+
+  # prompt_sessions.variables_json (added in v1.5.0-prerelease2 via migrationAddPromptVariablesColumns)
+  if column_exists_postgres "prompt_sessions" "variables_json"; then
+    echo "UPDATE prompt_sessions SET variables_json = '{}' WHERE prompt_id = 'prompt-migration-test-001';" >> "$output_file"
+    echo "UPDATE prompt_sessions SET variables_json = '{}' WHERE prompt_id = 'prompt-migration-test-002';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.3 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # config_client.metadata_json (added in v1.5.3 via migrationAddClientConfigMetadataColumn)
+  if column_exists_postgres "config_client" "metadata_json"; then
+    echo "UPDATE config_client SET metadata_json = '{}' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # framework_configs.model_parameters_url (added in v1.5.3 via add_model_parameters_url_column)
+  if column_exists_postgres "framework_configs" "model_parameters_url"; then
+    echo "UPDATE framework_configs SET model_parameters_url = NULL WHERE id = 1;" >> "$output_file"
+  fi
+
+  # framework_configs.config_hash (added in v1.5.3 via migrationAddFrameworkConfigHashColumn)
+  if column_exists_postgres "framework_configs" "config_hash"; then
+    echo "UPDATE framework_configs SET config_hash = 'framework-config-hash-001' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_teams.source_id (added in v1.5.3 via add_team_source_id_column)
+  if column_exists_postgres "governance_teams" "source_id"; then
+    echo "UPDATE governance_teams SET source_id = NULL WHERE id = 'team-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_teams SET source_id = NULL WHERE id = 'team-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_teams.calendar_aligned (added in v1.5.3 via migrationAddTeamCalendarAlignedColumn)
+  if column_exists_postgres "governance_teams" "calendar_aligned"; then
+    echo "UPDATE governance_teams SET calendar_aligned = false WHERE id = 'team-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_teams SET calendar_aligned = false WHERE id = 'team-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_virtual_keys.access_profile_id (added in v1.5.3 via add_vk_access_profile_id_column)
+  if column_exists_postgres "governance_virtual_keys" "access_profile_id"; then
+    echo "UPDATE governance_virtual_keys SET access_profile_id = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET access_profile_id = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.3 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.cluster_node_id (added in v1.5.3 via migrationAddClusterGovernanceColumns)
+  if column_exists_postgres "logs" "cluster_node_id"; then
+    echo "UPDATE logs SET cluster_node_id = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET cluster_node_id = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET cluster_node_id = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.budget_ids (added in v1.5.3 via migrationAddClusterGovernanceColumns)
+  if column_exists_postgres "logs" "budget_ids"; then
+    echo "UPDATE logs SET budget_ids = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET budget_ids = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET budget_ids = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.rate_limit_ids (added in v1.5.3 via migrationAddClusterGovernanceColumns)
+  if column_exists_postgres "logs" "rate_limit_ids"; then
+    echo "UPDATE logs SET rate_limit_ids = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET rate_limit_ids = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET rate_limit_ids = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.user_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  if column_exists_postgres "mcp_tool_logs" "user_id"; then
+    echo "UPDATE mcp_tool_logs SET user_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET user_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.team_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  if column_exists_postgres "mcp_tool_logs" "team_id"; then
+    echo "UPDATE mcp_tool_logs SET team_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET team_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.customer_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  if column_exists_postgres "mcp_tool_logs" "customer_id"; then
+    echo "UPDATE mcp_tool_logs SET customer_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET customer_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.business_unit_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  if column_exists_postgres "mcp_tool_logs" "business_unit_id"; then
+    echo "UPDATE mcp_tool_logs SET business_unit_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET business_unit_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.4 columns
+  # -------------------------------------------------------------------------
+
+  # governance_virtual_key_provider_configs.blacklisted_models (added in v1.5.4 via migrationAddVirtualKeyBlacklistedModelsColumn)
+  if column_exists_postgres "governance_virtual_key_provider_configs" "blacklisted_models"; then
+    echo "UPDATE governance_virtual_key_provider_configs SET blacklisted_models = '[]' WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_key_provider_configs SET blacklisted_models = '[]' WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_virtual_keys.created_by_user_id (added in v1.5.4 via migrationAddCreatedByUserIDColumnForVirtualKeys)
+  if column_exists_postgres "governance_virtual_keys" "created_by_user_id"; then
+    echo "UPDATE governance_virtual_keys SET created_by_user_id = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET created_by_user_id = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # logs.inc_number (added in v1.5.4 via migrationAddLogIncNumberColumn)
+  if column_exists_postgres "logs" "inc_number"; then
+    echo "UPDATE logs SET inc_number = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET inc_number = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET inc_number = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.9 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # governance_budgets.model_config_id (added in v1.5.9 via add_budget_model_config_id_column)
+  if column_exists_postgres "governance_budgets" "model_config_id"; then
+    echo "UPDATE governance_budgets SET model_config_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET model_config_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+    echo "UPDATE governance_budgets SET model_config_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+  fi
+
+  # governance_budgets.customer_id (added in v1.5.9 via add_customer_budgets_to_budgets_table)
+  if column_exists_postgres "governance_budgets" "customer_id"; then
+    echo "UPDATE governance_budgets SET customer_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET customer_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+    echo "UPDATE governance_budgets SET customer_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+  fi
+
+  # governance_customers.calendar_aligned (added in v1.5.9 via add_customer_calendar_aligned_column)
+  if column_exists_postgres "governance_customers" "calendar_aligned"; then
+    echo "UPDATE governance_customers SET calendar_aligned = false WHERE id = 'customer-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_customers SET calendar_aligned = false WHERE id = 'customer-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_model_configs.scope / scope_id (added in v1.5.9 via add_model_config_scope_columns)
+  # scope is set to the column default 'global'; scope_id stays NULL so the seeded rows keep
+  # satisfying the idx_model_scope_provider unique index
+  if column_exists_postgres "governance_model_configs" "scope"; then
+    echo "UPDATE governance_model_configs SET scope = 'global' WHERE id = 'model-config-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_model_configs SET scope = 'global' WHERE id = 'model-config-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_configs" "scope_id"; then
+    echo "UPDATE governance_model_configs SET scope_id = NULL WHERE id = 'model-config-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_model_configs SET scope_id = NULL WHERE id = 'model-config-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_model_configs.calendar_aligned (added in v1.5.9 via add_model_config_calendar_aligned_column)
+  if column_exists_postgres "governance_model_configs" "calendar_aligned"; then
+    echo "UPDATE governance_model_configs SET calendar_aligned = false WHERE id = 'model-config-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_model_configs SET calendar_aligned = false WHERE id = 'model-config-migration-test-2';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.9 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs multi-team/BU/customer JSON-array columns (added in v1.5.9 via
+  # logs_add_multi_team_business_unit_columns and logs_add_customer_array_columns)
+  for arr_col in team_ids team_names customer_ids customer_names business_unit_ids business_unit_names; do
+    if column_exists_postgres "logs" "$arr_col"; then
+      echo "UPDATE logs SET $arr_col = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+      echo "UPDATE logs SET $arr_col = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+      echo "UPDATE logs SET $arr_col = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+    fi
+  done
+
+  # -------------------------------------------------------------------------
+  # v1.5.10+ columns
+  # -------------------------------------------------------------------------
+
+  # framework_configs.mcp_library_url, mcp_library_sync_interval (added via add_mcp_library_config_columns)
+  # Seed the current version's defaults (modelcatalog.DefaultMCPLibraryURL / DefaultSyncInterval=24h)
+  # because the current version backfills these on startup; a NULL seed would diff before vs after.
+  if column_exists_postgres "framework_configs" "mcp_library_url"; then
+    echo "UPDATE framework_configs SET mcp_library_url = 'https://getbifrost.ai/mcp-library' WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "framework_configs" "mcp_library_sync_interval"; then
+    echo "UPDATE framework_configs SET mcp_library_sync_interval = 86400 WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_model_pricing.input_cost_per_token_fast, output_cost_per_token_fast (added via add_fast_mode_pricing_columns)
+  if column_exists_postgres "governance_model_pricing" "input_cost_per_token_fast"; then
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_fast = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET input_cost_per_token_fast = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_token_fast"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_fast = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_token_fast = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # logs.canonical_model_name, alias_model_family (added via logs_add_canonical_model_columns)
+  if column_exists_postgres "logs" "canonical_model_name"; then
+    echo "UPDATE logs SET canonical_model_name = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET canonical_model_name = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET canonical_model_name = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "alias_model_family"; then
+    echo "UPDATE logs SET alias_model_family = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET alias_model_family = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET alias_model_family = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.6.3 columns and tables - config store / OAuth2 / governance
+  # -------------------------------------------------------------------------
+
+  if column_exists_postgres "config_client" "mcp_server_auth_mode"; then
+    echo "UPDATE config_client SET mcp_server_auth_mode = 'headers' WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "oauth2_server_config_json"; then
+    echo "UPDATE config_client SET oauth2_server_config_json = '{\"auth_code_ttl\":300,\"access_token_ttl\":600}' WHERE id = 1;" >> "$output_file"
+  fi
+
+  for col in bedrock_mantle_access_key bedrock_mantle_secret_key bedrock_mantle_session_token bedrock_mantle_region bedrock_mantle_role_arn bedrock_mantle_external_id bedrock_mantle_role_session_name; do
+    if column_exists_postgres "config_keys" "$col"; then
+      echo "UPDATE config_keys SET $col = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+  done
+
+  if column_exists_postgres "config_mcp_clients" "tool_execution_timeout"; then
+    echo "UPDATE config_mcp_clients SET tool_execution_timeout = 30 WHERE client_id = 'mcp-migration-test-001';" >> "$output_file"
+  fi
+
+  if column_exists_postgres "governance_model_pricing" "is_deprecated"; then
+    echo "UPDATE governance_model_pricing SET is_deprecated = false WHERE model = 'gpt-4';" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET is_deprecated = true WHERE model = 'claude-3-opus';" >> "$output_file"
+  fi
+
+  if column_exists_postgres "governance_virtual_keys" "expires_at"; then
+    echo "UPDATE governance_virtual_keys SET expires_at = NOW() + INTERVAL '1 day' WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET expires_at = NOW() + INTERVAL '2 day' WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # oauth2_clients, oauth2_authorize_requests, and oauth2_refresh_tokens are each guarded
+  # individually rather than assuming presence of one implies presence of the others.
+  local oauth2_clients_exists=0
+  if column_exists_postgres "oauth2_clients" "id"; then
+    oauth2_clients_exists=1
+    {
+      echo ""
+      echo "-- oauth2_clients"
+      echo "INSERT INTO oauth2_clients (id, client_id, client_name, redirect_uris_json, grant_types_json, scope, created_at) VALUES ('oauth2-client-migration-test-001', 'oauth2-client-migration-test-001', 'Migration Test OAuth2 Client', '[\"https://bifrost.example.com/oauth/callback\"]', '[\"authorization_code\",\"refresh_token\"]', 'openid profile', NOW()) ON CONFLICT DO NOTHING;"
+    } >> "$output_file"
+  fi
+
+  if [ "$oauth2_clients_exists" = "1" ] && column_exists_postgres "oauth2_authorize_requests" "id"; then
+    {
+      echo ""
+      echo "-- oauth2_authorize_requests"
+      echo "INSERT INTO oauth2_authorize_requests (id, client_id, redirect_uri, state, scope, resource, code_challenge, code_challenge_method, status, bf_mode, bf_sub, code_hash, expires_at, created_at, updated_at) VALUES ('oauth2-authorize-migration-test-001', 'oauth2-client-migration-test-001', 'https://bifrost.example.com/oauth/callback', 'oauth2-state-migration-test-001', 'openid profile', 'https://mcp.example.com', 'migration-test-code-challenge', 'S256', 'pending', 'vk', 'vk-migration-test-1', NULL, NOW() + INTERVAL '15 minutes', NOW(), NOW()) ON CONFLICT DO NOTHING;"
+    } >> "$output_file"
+  fi
+
+  if [ "$oauth2_clients_exists" = "1" ] && column_exists_postgres "oauth2_refresh_tokens" "id"; then
+    {
+      echo ""
+      echo "-- oauth2_refresh_tokens"
+      echo "INSERT INTO oauth2_refresh_tokens (id, token_hash, family_id, client_id, bf_mode, bf_sub, scope, resource, revoked_at, last_used_at, created_at) VALUES ('oauth2-refresh-migration-test-001', 'migration-test-refresh-token-hash-001', 'oauth2-authorize-migration-test-001', 'oauth2-client-migration-test-001', 'vk', 'vk-migration-test-1', 'openid profile', 'https://mcp.example.com', NULL, NULL, NOW()) ON CONFLICT DO NOTHING;"
+    } >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.6.4 columns - config store / governance / log store tables
+  # -------------------------------------------------------------------------
+
+  # config_keys.vertex_force_single_region (added via add_vertex_force_single_region_column)
+  if column_exists_postgres "config_keys" "vertex_force_single_region"; then
+    echo "UPDATE config_keys SET vertex_force_single_region = false WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET vertex_force_single_region = true WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.bedrock_project_id, bedrock_mantle_project_id (added via add_bedrock_project_id_columns)
+  if column_exists_postgres "config_keys" "bedrock_project_id"; then
+    echo "UPDATE config_keys SET bedrock_project_id = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_keys" "bedrock_mantle_project_id"; then
+    echo "UPDATE config_keys SET bedrock_mantle_project_id = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # governance_model_pricing fast-mode, flex/priority 272k-tier, and inference-geo pricing columns
+  # (added via add_fast_mode_pricing_columns, add_fast_mode_cache_pricing_columns,
+  # add_inference_geo_multiplier_column, add_flex_and_cache_creation_272k_pricing_columns)
+  for col in input_cost_per_token_flex_above_272k_tokens output_cost_per_token_flex_above_272k_tokens \
+    cache_read_input_token_cost_flex_above_272k_tokens cache_creation_input_token_cost_above_272k_tokens \
+    cache_creation_input_token_cost_flex cache_creation_input_token_cost_flex_above_272k_tokens \
+    cache_creation_input_token_cost_priority cache_creation_input_token_cost_fast \
+    cache_creation_input_token_cost_above_1hr_fast cache_read_input_token_cost_fast inference_geo_us_multiplier; do
+    if column_exists_postgres "governance_model_pricing" "$col"; then
+      echo "UPDATE governance_model_pricing SET $col = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET $col = NULL WHERE id = 2;" >> "$output_file"
+    fi
+  done
+
+  # logs.redaction_mapping (added via logs_add_redaction_mapping_column)
+  if column_exists_postgres "logs" "redaction_mapping"; then
+    echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  # v1.6.3 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # config_client.mcp_server_auth_mode (added in v1.6.3 - varchar(20), default 'headers')
+  if column_exists_postgres "config_client" "mcp_server_auth_mode"; then
+    echo "UPDATE config_client SET mcp_server_auth_mode = 'headers' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.oauth2_server_config_json (added in v1.6.3 - text, empty string when unset)
+  if column_exists_postgres "config_client" "oauth2_server_config_json"; then
+    echo "UPDATE config_client SET oauth2_server_config_json = '' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_keys.bedrock_mantle_* (added in v1.6.3 - nullable text SecretVars for Bedrock Mantle auth)
+  for mantle_col in bedrock_mantle_access_key bedrock_mantle_secret_key bedrock_mantle_session_token bedrock_mantle_region bedrock_mantle_role_arn bedrock_mantle_external_id bedrock_mantle_role_session_name; do
+    if column_exists_postgres "config_keys" "$mantle_col"; then
+      echo "UPDATE config_keys SET $mantle_col = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET $mantle_col = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+  done
+
+  # governance_model_pricing.is_deprecated (added in v1.6.3 - bool, default false)
+  if column_exists_postgres "governance_model_pricing" "is_deprecated"; then
+    echo "UPDATE governance_model_pricing SET is_deprecated = false WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET is_deprecated = false WHERE id = 2;" >> "$output_file"
+  fi
+
+  # governance_virtual_keys.expires_at (added in v1.6.3 - nullable timestamp, NULL = never expires)
+  if column_exists_postgres "governance_virtual_keys" "expires_at"; then
+    echo "UPDATE governance_virtual_keys SET expires_at = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET expires_at = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.6.5 columns - config store / webhooks / log store tables
+  # -------------------------------------------------------------------------
+
+  # config_client.retain_content_in_object_storage (added via add_retain_content_in_object_storage_column)
+  if column_exists_postgres "config_client" "retain_content_in_object_storage"; then
+    echo "UPDATE config_client SET retain_content_in_object_storage = false WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.dual_credential_conflict_behavior (added via add_dual_credential_conflict_behavior_column)
+  if column_exists_postgres "config_client" "dual_credential_conflict_behavior"; then
+    echo "UPDATE config_client SET dual_credential_conflict_behavior = 'prefer_idp' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_client.webhook_config_json (added via add_webhook_config_client_column)
+  # Seeded as '' rather than NULL: BeforeSave writes '' for a nil WebhookConfig, so '' is stable either way.
+  if column_exists_postgres "config_client" "webhook_config_json"; then
+    echo "UPDATE config_client SET webhook_config_json = '' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # config_keys.use_anthropic_endpoints (added via add_use_anthropic_endpoints_column)
+  if column_exists_postgres "config_keys" "use_anthropic_endpoints"; then
+    echo "UPDATE config_keys SET use_anthropic_endpoints = false WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET use_anthropic_endpoints = true WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # oauth_configs.resource (added via add_oauth_config_resource_column)
+  if column_exists_postgres "oauth_configs" "resource"; then
+    echo "UPDATE oauth_configs SET resource = 'https://mcp.example.com' WHERE id = 'oauth-config-migration-test-001';" >> "$output_file"
+    echo "UPDATE oauth_configs SET resource = NULL WHERE id = 'oauth-config-migration-test-002';" >> "$output_file"
+  fi
+
+  # async_jobs.request_id, webhook_endpoint_id (added via async_jobs_add_request_id_column,
+  # async_jobs_add_webhook_endpoint_id_column)
+  if column_exists_postgres "async_jobs" "request_id"; then
+    echo "UPDATE async_jobs SET request_id = 'req-async-migration-test-001' WHERE id = 'async-job-migration-test-001';" >> "$output_file"
+  fi
+  if column_exists_postgres "async_jobs" "webhook_endpoint_id"; then
+    echo "UPDATE async_jobs SET webhook_endpoint_id = NULL WHERE id = 'async-job-migration-test-001';" >> "$output_file"
+  fi
+
+  # logs.content_hidden, server_side_fallback_model (added via logs_add_content_hidden_column,
+  # logs_add_server_side_fallback_model_column)
+  if column_exists_postgres "logs" "content_hidden"; then
+    echo "UPDATE logs SET content_hidden = false WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET content_hidden = false WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET content_hidden = true WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "server_side_fallback_model"; then
+    echo "UPDATE logs SET server_side_fallback_model = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET server_side_fallback_model = 'gpt-4-turbo' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET server_side_fallback_model = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  # v1.6.4 columns
+  # -------------------------------------------------------------------------
+
+  # config_keys.vertex_force_single_region (added in v1.6.4 via add_vertex_force_single_region_column - nullable bool)
+  if column_exists_postgres "config_keys" "vertex_force_single_region"; then
+    echo "UPDATE config_keys SET vertex_force_single_region = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET vertex_force_single_region = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.bedrock_project_id, bedrock_mantle_project_id (added in v1.6.4 via add_bedrock_project_id_columns - nullable text SecretVars)
+  for bedrock_proj_col in bedrock_project_id bedrock_mantle_project_id; do
+    if column_exists_postgres "config_keys" "$bedrock_proj_col"; then
+      echo "UPDATE config_keys SET $bedrock_proj_col = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET $bedrock_proj_col = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+  done
+
+  # governance_model_pricing flex/272k cache-creation tiers (added in v1.6.4 via
+  # add_flex_and_cache_creation_272k_pricing_columns), fast-mode cache pricing
+  # (add_fast_mode_cache_pricing_columns), and inference geo multiplier
+  # (add_inference_geo_multiplier_column) - all nullable float64
+  for pricing_col in \
+    input_cost_per_token_flex_above_272k_tokens \
+    output_cost_per_token_flex_above_272k_tokens \
+    cache_read_input_token_cost_flex_above_272k_tokens \
+    cache_creation_input_token_cost_above_272k_tokens \
+    cache_creation_input_token_cost_flex \
+    cache_creation_input_token_cost_flex_above_272k_tokens \
+    cache_creation_input_token_cost_priority \
+    cache_creation_input_token_cost_fast \
+    cache_creation_input_token_cost_above_1hr_fast \
+    cache_read_input_token_cost_fast \
+    inference_geo_us_multiplier; do
+    if column_exists_postgres "governance_model_pricing" "$pricing_col"; then
+      echo "UPDATE governance_model_pricing SET $pricing_col = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET $pricing_col = NULL WHERE id = 2;" >> "$output_file"
+    fi
+  done
+
+  # logs.redaction_mapping (added in v1.6.4 via logs_add_redaction_mapping_column -
+  # nullable text, stores the encrypted reversible redaction mapping)
+  if column_exists_postgres "logs" "redaction_mapping"; then
+    echo "UPDATE logs SET redaction_mapping = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # config_keys.bedrock_batch_role_arn (added via add_bedrock_batch_role_arn_column)
+  # Set to NULL for coverage, matching the bedrock_mantle_* SecretVar columns above.
+  if column_exists_postgres "config_keys" "bedrock_batch_role_arn"; then
+    echo "UPDATE config_keys SET bedrock_batch_role_arn = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # framework_configs.live_models_sync_interval (added via add_live_models_sync_interval_column)
+  if column_exists_postgres "framework_configs" "live_models_sync_interval"; then
+    echo "UPDATE framework_configs SET live_models_sync_interval = 3600 WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_budgets.override_amount, override_mode, override_cycles_remaining,
+  # override_cycles_total, override_anchor_reset (added via budget override columns migration)
+  if column_exists_postgres "governance_budgets" "override_amount"; then
+    echo "UPDATE governance_budgets SET override_amount = 500.00 WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_amount = 1000.00 WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_budgets" "override_mode"; then
+    echo "UPDATE governance_budgets SET override_mode = 'cycles' WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_mode = 'forever' WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_budgets" "override_cycles_remaining"; then
+    echo "UPDATE governance_budgets SET override_cycles_remaining = 2 WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_cycles_remaining = 0 WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_budgets" "override_cycles_total"; then
+    echo "UPDATE governance_budgets SET override_cycles_total = 3 WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_cycles_total = 0 WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_budgets" "override_anchor_reset"; then
+    echo "UPDATE governance_budgets SET override_anchor_reset = $now WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_anchor_reset = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_pricing_overrides.user_id (added via add_pricing_override_user_id_column)
+  if column_exists_postgres "governance_pricing_overrides" "user_id"; then
+    echo "UPDATE governance_pricing_overrides SET user_id = 'user-migration-test-001' WHERE id = 'pricing-override-migration-002';" >> "$output_file"
+    echo "UPDATE governance_pricing_overrides SET user_id = NULL WHERE id = 'pricing-override-migration-001';" >> "$output_file"
+  fi
+
+  # sidekiq.partitioning_key (added via add_sidekiq_partitioning_key_column)
+  if column_exists_postgres "sidekiq" "partitioning_key"; then
+    echo "UPDATE sidekiq SET partitioning_key = 'migration-test-partition-001' WHERE id = 'sidekiq-migration-test-001';" >> "$output_file"
+    echo "UPDATE sidekiq SET partitioning_key = '' WHERE id = 'sidekiq-migration-test-002';" >> "$output_file"
+  fi
+
+  # logs.service_tier, speed, inference_geo (added for Anthropic/OpenAI service-tier billing)
+  if column_exists_postgres "logs" "service_tier"; then
+    echo "UPDATE logs SET service_tier = 'priority' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET service_tier = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "speed"; then
+    echo "UPDATE logs SET speed = 'fast' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET speed = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "inference_geo"; then
+    echo "UPDATE logs SET inference_geo = 'us' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET inference_geo = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+}
+
+# Append dynamic column UPDATEs for columns that may not exist in older schemas (SQLite)
+append_dynamic_columns_sqlite() {
+  local now="$1"
+  local past="$2"
+  local output_file="$3"
+  local config_db="$4"
+
+  echo "" >> "$output_file"
+  echo "-- Dynamic column coverage for newer columns (generated based on schema)" >> "$output_file"
+
+  if [ -f "$config_db" ]; then
+    # config_keys.azure_scopes (added in v1.4.5)
+    # Set to NULL for coverage - config sync resets this column on startup
+    if column_exists_sqlite "$config_db" "config_keys" "azure_scopes"; then
+      echo "UPDATE config_keys SET azure_scopes = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # governance_model_pricing.base_model (added in v1.4.5)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "base_model"; then
+      echo "UPDATE governance_model_pricing SET base_model = 'claude-3-opus-20240229' WHERE model = 'claude-3-opus';" >> "$output_file"
+    fi
+  fi
+
+  # logs.routing_engine_used (added in v1.4.5)
+  # logs table is in a separate DB (logs_db). The faker SQL is run against both DBs,
+  # so these UPDATEs will be harmless on config_db (table doesn't exist) and work on logs_db.
+  # We always emit them - if the column doesn't exist, the UPDATE will fail silently.
+  echo "UPDATE logs SET routing_engine_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET routing_engine_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  if [ -f "$config_db" ]; then
+    # config_keys.status (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_keys" "status"; then
+      echo "UPDATE config_keys SET status = 'active' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET status = 'unknown' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.description (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_keys" "description"; then
+      echo "UPDATE config_keys SET description = 'Migration test key for OpenAI' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET description = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_providers.status (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_providers" "status"; then
+      echo "UPDATE config_providers SET status = 'active' WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET status = 'unknown' WHERE name = 'anthropic';" >> "$output_file"
+    fi
+
+    # config_providers.description (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_providers" "description"; then
+      echo "UPDATE config_providers SET description = 'Migration test OpenAI provider' WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET description = '' WHERE name = 'anthropic';" >> "$output_file"
+    fi
+  fi
+
+  # logs.routing_engines_used (renamed from routing_engine_used in v1.4.7)
+  # Same pattern as routing_engine_used - emitted unconditionally, fails silently on config_db
+  echo "UPDATE logs SET routing_engines_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET routing_engines_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  # logs.list_models_output (added in v1.4.7)
+  echo "UPDATE logs SET list_models_output = '[{\"id\":\"gpt-4\",\"object\":\"model\"}]' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET list_models_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  # logs.routing_engine_logs (added in v1.4.7)
+  echo "UPDATE logs SET routing_engine_logs = 'Route matched: gpt-4 -> openai' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET routing_engine_logs = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # Dropped columns - columns that existed in older versions but were removed
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_client.enable_governance (dropped in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_client" "enable_governance"; then
+      echo "UPDATE config_client SET enable_governance = true WHERE id = 1;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # migrations.sequence, migrations.status (added with updated migrator in v1.4.8)
+    if column_exists_sqlite "$config_db" "migrations" "sequence"; then
+      echo "UPDATE migrations SET sequence = 1 WHERE id = 'migration-test-001';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "migrations" "status"; then
+      echo "UPDATE migrations SET status = 'success' WHERE id = 'migration-test-001';" >> "$output_file"
+    fi
+
+    # config_keys.vllm_url, vllm_model_name (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_keys" "vllm_url"; then
+      echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_keys" "vllm_model_name"; then
+      echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.ollama_url, sgl_url (added in v1.5.0-prerelease1)
+    if column_exists_sqlite "$config_db" "config_keys" "ollama_url"; then
+      echo "UPDATE config_keys SET ollama_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET ollama_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_keys" "sgl_url"; then
+      echo "UPDATE config_keys SET sgl_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET sgl_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_keys" "encryption_status"; then
+      echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_providers.pricing_overrides_json, encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_providers" "pricing_overrides_json"; then
+      echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_providers" "encryption_status"; then
+      echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'anthropic';" >> "$output_file"
+    fi
+
+    # config_plugins.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_plugins" "encryption_status"; then
+      echo "UPDATE config_plugins SET encryption_status = 'plain_text' WHERE name = 'migration-test-plugin';" >> "$output_file"
+    fi
+
+    # config_plugins.placement, exec_order (added in v1.4.13)
+    if column_exists_sqlite "$config_db" "config_plugins" "placement"; then
+      echo "UPDATE config_plugins SET placement = 'post_builtin' WHERE name = 'migration-test-plugin';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_plugins" "exec_order"; then
+      echo "UPDATE config_plugins SET exec_order = 0 WHERE name = 'migration-test-plugin';" >> "$output_file"
+    fi
+
+    # config_vector_store.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_vector_store" "encryption_status"; then
+      echo "UPDATE config_vector_store SET encryption_status = 'plain_text' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # governance_virtual_keys.encryption_status, value_hash (added in v1.4.8)
+    # value_hash uses NULL to avoid unique constraint violations
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "encryption_status"; then
+      echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "value_hash"; then
+      echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # sessions.encryption_status, token_hash (added in v1.4.8)
+    # token_hash uses NULL to avoid unique constraint violations
+    if column_exists_sqlite "$config_db" "sessions" "encryption_status"; then
+      echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+      echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "sessions" "token_hash"; then
+      echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+      echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+    fi
+
+    # oauth_configs.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "oauth_configs" "encryption_status"; then
+      echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-001';" >> "$output_file"
+      echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-002';" >> "$output_file"
+    fi
+
+    # oauth_tokens.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "oauth_tokens" "encryption_status"; then
+      echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-001';" >> "$output_file"
+      echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-002';" >> "$output_file"
+    fi
+
+    # governance_model_pricing.output_cost_per_video_per_second, output_cost_per_second (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_video_per_second"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_second"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # governance_model_pricing.additional_attributes (added in v1.5.6 - JSON object string, default '{}')
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "additional_attributes"; then
+      echo "UPDATE governance_model_pricing SET additional_attributes = '{}' WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET additional_attributes = '{}' WHERE id = 2;" >> "$output_file"
+    fi
+
+    # config_client new columns (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_client" "enforce_auth_on_inference"; then
+      echo "UPDATE config_client SET enforce_auth_on_inference = 0 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "enforce_scim_auth"; then
+      echo "UPDATE config_client SET enforce_scim_auth = 0 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "async_job_result_ttl"; then
+      echo "UPDATE config_client SET async_job_result_ttl = 3600 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "required_headers_json"; then
+      echo "UPDATE config_client SET required_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "logging_headers_json"; then
+      echo "UPDATE config_client SET logging_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.rerank_output (added in v1.4.8)
+  echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs video columns (added in v1.4.8)
+  echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  # logs.image_edit_input, image_variation_input (added in v1.5.0-prerelease1)
+  if column_exists_sqlite "$logs_db" "logs" "image_edit_input"; then
+    echo "UPDATE logs SET image_edit_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET image_edit_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET image_edit_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$logs_db" "logs" "image_variation_input"; then
+    echo "UPDATE logs SET image_variation_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET image_variation_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET image_variation_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.metadata (added in v1.4.8)
+  echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # mcp_tool_logs.metadata (added in v1.4.8)
+  echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # v1.4.10 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_keys Bedrock assume-role columns (added in v1.4.10)
+    if column_exists_sqlite "$config_db" "config_keys" "bedrock_role_arn"; then
+      echo "UPDATE config_keys SET bedrock_role_arn = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET bedrock_role_arn = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_keys" "bedrock_external_id"; then
+      echo "UPDATE config_keys SET bedrock_external_id = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET bedrock_external_id = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_keys" "bedrock_role_session_name"; then
+      echo "UPDATE config_keys SET bedrock_role_session_name = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET bedrock_role_session_name = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.12 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_client.hide_deleted_virtual_keys_in_filters (added in v1.4.12)
+    if column_exists_sqlite "$config_db" "config_client" "hide_deleted_virtual_keys_in_filters"; then
+      echo "UPDATE config_client SET hide_deleted_virtual_keys_in_filters = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_providers.store_raw_request_response (added in v1.4.12)
+    if column_exists_sqlite "$config_db" "config_providers" "store_raw_request_response"; then
+      echo "UPDATE config_providers SET store_raw_request_response = 0 WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET store_raw_request_response = 1 WHERE name = 'anthropic';" >> "$output_file"
+    fi
+
+    # -------------------------------------------------------------------------
+    # v1.4.12 columns - governance_model_pricing new pricing columns
+    # -------------------------------------------------------------------------
+
+    # Priority tier columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_priority"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_priority"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # 128k tier columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_above_128k_tokens"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_image_above_128k_tokens"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_image_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_image_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_video_per_second_above_128k_tokens"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_video_per_second_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_video_per_second_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_audio_per_second_above_128k_tokens"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_audio_per_second_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_audio_per_second_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_above_128k_tokens"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_128k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_128k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # Cache columns (1hr tier, audio)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_creation_input_token_cost_above_1hr"; then
+      echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_creation_input_token_cost_above_1hr_above_200k_tokens"; then
+      echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr_above_200k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_creation_input_token_cost_above_1hr_above_200k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_creation_input_audio_token_cost"; then
+      echo "UPDATE governance_model_pricing SET cache_creation_input_audio_token_cost = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_creation_input_audio_token_cost = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_read_input_token_cost_priority"; then
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # Pixel-based pricing columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_pixel"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_pixel = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_pixel = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_pixel"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_pixel = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_pixel = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # Image output premium/resolution columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_premium_image"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_premium_image = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_premium_image = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_above_512_and_512_pixels"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_above_512x512_pixels_premium"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512x512_pixels_premium = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512x512_pixels_premium = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    # output_cost_per_image_above_512_and_512_pixels_and_premium_image (full 64-char name, renamed to output_cost_per_image_above_512x512_pixels_premium)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_above_512_and_512_pixels_and_premium_image"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels_and_premium_image = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_512_and_512_pixels_and_premium_image = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_above_1024_and_1024_pixels"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024_and_1024_pixels = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024_and_1024_pixels = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_above_1024x1024_pixels_premium"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024x1024_pixels_premium = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_1024x1024_pixels_premium = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_above_2048_and_2048_pixels"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_2048_and_2048_pixels = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_2048_and_2048_pixels = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_above_4096_and_4096_pixels"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_4096_and_4096_pixels = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_above_4096_and_4096_pixels = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # Image quality columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_low_quality"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_low_quality = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_low_quality = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_medium_quality"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_medium_quality = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_medium_quality = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_high_quality"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_high_quality = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_high_quality = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_image_auto_quality"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_auto_quality = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_image_auto_quality = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # Audio/Video pricing columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_audio_token"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_audio_token = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_audio_token = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_second"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_second = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_second = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_audio_token"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_audio_token = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_audio_token = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # Other pricing columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "search_context_cost_per_query"; then
+      echo "UPDATE governance_model_pricing SET search_context_cost_per_query = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET search_context_cost_per_query = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "code_interpreter_cost_per_session"; then
+      echo "UPDATE governance_model_pricing SET code_interpreter_cost_per_session = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET code_interpreter_cost_per_session = NULL WHERE id = 2;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.12 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.passthrough_request_body (added in v1.4.12)
+  echo "UPDATE logs SET passthrough_request_body = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET passthrough_request_body = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET passthrough_request_body = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.passthrough_response_body (added in v1.4.12)
+  echo "UPDATE logs SET passthrough_response_body = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET passthrough_response_body = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET passthrough_response_body = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.is_large_payload_request (added in v1.4.12)
+  echo "UPDATE logs SET is_large_payload_request = 0 WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET is_large_payload_request = 0 WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET is_large_payload_request = 0 WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.is_large_payload_response (added in v1.4.12)
+  echo "UPDATE logs SET is_large_payload_response = 0 WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET is_large_payload_response = 0 WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET is_large_payload_response = 0 WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # v1.4.15 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.cached_read_tokens (added in migrationAddDashboardEnhancements)
+  echo "UPDATE logs SET cached_read_tokens = 128 WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET cached_read_tokens = 0 WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET cached_read_tokens = 0 WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # v1.5.0 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_client.mcp_disable_auto_tool_inject (added in v1.5.0)
+    if column_exists_sqlite "$config_db" "config_client" "mcp_disable_auto_tool_inject"; then
+      echo "UPDATE config_client SET mcp_disable_auto_tool_inject = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.mcp_enable_temp_token_auth
+    if column_exists_sqlite "$config_db" "config_client" "mcp_enable_temp_token_auth"; then
+      echo "UPDATE config_client SET mcp_enable_temp_token_auth = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # governance_virtual_key_provider_configs.allow_all_keys (added in v1.5.0)
+    # vk-migration-test-1 has a key in the join table, so old behavior was restricted to that key -> allow_all_keys=false
+    # vk-migration-test-2 has no key rows, so old "empty=allow-all" semantics -> allow_all_keys=true
+    if column_exists_sqlite "$config_db" "governance_virtual_key_provider_configs" "allow_all_keys"; then
+      echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = 0 WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = 1 WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # config_client.mcp_external_server_url (added in v1.5.0)
+    if column_exists_sqlite "$config_db" "config_client" "mcp_external_server_url"; then
+      echo "UPDATE config_client SET mcp_external_server_url = 'https://mcp.migration-test.example.com' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.mcp_external_client_url (added in v1.5.0)
+    if column_exists_sqlite "$config_db" "config_client" "mcp_external_client_url"; then
+      echo "UPDATE config_client SET mcp_external_client_url = 'https://mcp-client.migration-test.example.com' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.allow_per_request_content_storage_override (added in v1.5.0)
+    if column_exists_sqlite "$config_db" "config_client" "allow_per_request_content_storage_override"; then
+      echo "UPDATE config_client SET allow_per_request_content_storage_override = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.allow_per_request_raw_override (added in v1.5.0)
+    if column_exists_sqlite "$config_db" "config_client" "allow_per_request_raw_override"; then
+      echo "UPDATE config_client SET allow_per_request_raw_override = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.dump_errors_in_console_logs (added in v1.6.0)
+    if column_exists_sqlite "$config_db" "config_client" "dump_errors_in_console_logs"; then
+      echo "UPDATE config_client SET dump_errors_in_console_logs = 0 WHERE id = 1;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.plugin_logs (added in v1.5.0)
+  echo "UPDATE logs SET plugin_logs = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET plugin_logs = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET plugin_logs = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.stop_reason (added in v1.5.0 via migrationAddStopReasonColumn - nullable varchar(50))
+  echo "UPDATE logs SET stop_reason = 'stop' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET stop_reason = 'length' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET stop_reason = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # v1.4.19 columns
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # governance_model_pricing: context_length, max_input_tokens, max_output_tokens, architecture (added in v1.4.19, removed later)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "context_length"; then
+      echo "UPDATE governance_model_pricing SET context_length = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET context_length = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "max_input_tokens"; then
+      echo "UPDATE governance_model_pricing SET max_input_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET max_input_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "max_output_tokens"; then
+      echo "UPDATE governance_model_pricing SET max_output_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET max_output_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "architecture"; then
+      echo "UPDATE governance_model_pricing SET architecture = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET architecture = NULL WHERE id = 2;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.17 columns
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_keys.blacklisted_models_json (added in v1.4.17 - per-key model deny list)
+    if column_exists_sqlite "$config_db" "config_keys" "blacklisted_models_json"; then
+      echo "UPDATE config_keys SET blacklisted_models_json = '[]' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET blacklisted_models_json = '[\"gpt-4-vision\"]' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_providers.open_ai_config_json (added in v1.4.17 - OpenAI-specific provider config)
+    if column_exists_sqlite "$config_db" "config_providers" "open_ai_config_json"; then
+      echo "UPDATE config_providers SET open_ai_config_json = '{\"disable_store\":false}' WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET open_ai_config_json = '' WHERE name = 'anthropic';" >> "$output_file"
+    fi
+
+    # -------------------------------------------------------------------------
+    # v1.4.20 columns - governance_model_pricing model capability metadata
+    # -------------------------------------------------------------------------
+
+    # governance_model_pricing.context_length (added in v1.4.20)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "context_length"; then
+      echo "UPDATE governance_model_pricing SET context_length = 128000 WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET context_length = 200000 WHERE id = 2;" >> "$output_file"
+    fi
+
+    # governance_model_pricing.max_input_tokens (added in v1.4.20)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "max_input_tokens"; then
+      echo "UPDATE governance_model_pricing SET max_input_tokens = 128000 WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET max_input_tokens = 200000 WHERE id = 2;" >> "$output_file"
+    fi
+
+    # governance_model_pricing.max_output_tokens (added in v1.4.20)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "max_output_tokens"; then
+      echo "UPDATE governance_model_pricing SET max_output_tokens = 4096 WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET max_output_tokens = 4096 WHERE id = 2;" >> "$output_file"
+    fi
+
+    # governance_model_pricing.architecture (added in v1.4.20 - JSON serialized)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "architecture"; then
+      echo "UPDATE governance_model_pricing SET architecture = '{\"modality\":\"text\",\"input_modalities\":[\"text\"],\"output_modalities\":[\"text\"]}' WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET architecture = '{\"modality\":\"text\",\"input_modalities\":[\"text\",\"image\"],\"output_modalities\":[\"text\"]}' WHERE id = 2;" >> "$output_file"
+    fi
+
+    # config_client.whitelisted_routes_json (added in v1.4.20 - JSON serialized []string)
+    if column_exists_sqlite "$config_db" "config_client" "whitelisted_routes_json"; then
+      echo "UPDATE config_client SET whitelisted_routes_json = '[]' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # -------------------------------------------------------------------------
+    # v1.4.21 columns - governance_model_pricing 272k tier and priority tier pricing
+    # -------------------------------------------------------------------------
+
+    # 200k priority tier columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_above_200k_tokens_priority"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_above_200k_tokens_priority"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_200k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_read_input_token_cost_above_200k_tokens_priority"; then
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_200k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_200k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # 272k tier columns
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_above_272k_tokens"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_above_272k_tokens_priority"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_above_272k_tokens"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_above_272k_tokens_priority"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_above_272k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_read_input_token_cost_above_272k_tokens"; then
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_read_input_token_cost_above_272k_tokens_priority"; then
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens_priority = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_above_272k_tokens_priority = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # -------------------------------------------------------------------------
+    # v1.4.22 columns - governance_model_pricing flex tier pricing
+    # -------------------------------------------------------------------------
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_flex"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_flex = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_flex = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_flex"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_flex = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_flex = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_read_input_token_cost_flex"; then
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_flex = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_flex = NULL WHERE id = 2;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.21 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.ocr_output (added in v1.4.21 - OCR endpoint logging)
+  echo "UPDATE logs SET ocr_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET ocr_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET ocr_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # mcp_tool_logs.request_id (added in v1.4.21)
+  echo "UPDATE mcp_tool_logs SET request_id = '' WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET request_id = '' WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # v1.4.22 columns - flex tier pricing and litellm fallbacks toggle
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_client.enable_litellm_fallbacks (added in v1.4.22)
+    if column_exists_sqlite "$config_db" "config_client" "enable_litellm_fallbacks"; then
+      echo "UPDATE config_client SET enable_litellm_fallbacks = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # governance_model_pricing flex tier columns (added in v1.4.22)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_flex"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_flex = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_flex = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_flex"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_flex = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_flex = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "cache_read_input_token_cost_flex"; then
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_flex = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET cache_read_input_token_cost_flex = NULL WHERE id = 2;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # Columns dropped in v1.5.0 migrations - coverage for old schemas that still have them
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # governance_virtual_keys.budget_id (dropped in v1.5.0-prerelease2 via migrationAddMultiBudgetTables)
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "budget_id"; then
+      echo "UPDATE governance_virtual_keys SET budget_id = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET budget_id = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_virtual_key_provider_configs.budget_id (dropped in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "governance_virtual_key_provider_configs" "budget_id"; then
+      echo "UPDATE governance_virtual_key_provider_configs SET budget_id = NULL WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_key_provider_configs SET budget_id = NULL WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_teams.budget_id (dropped in v1.5.0-prerelease4 via migrationAddTeamBudgetsToBudgetsTable)
+    if column_exists_sqlite "$config_db" "governance_teams" "budget_id"; then
+      echo "UPDATE governance_teams SET budget_id = NULL WHERE id = 'team-migration-test-1';" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease2 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_keys.aliases_json (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "config_keys" "aliases_json"; then
+      echo "UPDATE config_keys SET aliases_json = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET aliases_json = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.replicate_use_deployments_endpoint (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "config_keys" "replicate_use_deployments_endpoint"; then
+      echo "UPDATE config_keys SET replicate_use_deployments_endpoint = 0 WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET replicate_use_deployments_endpoint = 0 WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_client.routing_chain_max_depth (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "config_client" "routing_chain_max_depth"; then
+      echo "UPDATE config_client SET routing_chain_max_depth = 10 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client compat columns (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "config_client" "compat_convert_text_to_chat"; then
+      echo "UPDATE config_client SET compat_convert_text_to_chat = 0 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "compat_convert_chat_to_responses"; then
+      echo "UPDATE config_client SET compat_convert_chat_to_responses = 0 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "compat_should_drop_params"; then
+      echo "UPDATE config_client SET compat_should_drop_params = 0 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "compat_should_convert_params"; then
+      echo "UPDATE config_client SET compat_should_convert_params = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # governance_virtual_keys.calendar_aligned (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "calendar_aligned"; then
+      echo "UPDATE governance_virtual_keys SET calendar_aligned = 0 WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET calendar_aligned = 0 WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_budgets.virtual_key_id, provider_config_id (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "governance_budgets" "virtual_key_id"; then
+      echo "UPDATE governance_budgets SET virtual_key_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_budgets SET virtual_key_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+      echo "UPDATE governance_budgets SET virtual_key_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_budgets" "provider_config_id"; then
+      echo "UPDATE governance_budgets SET provider_config_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_budgets SET provider_config_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+      echo "UPDATE governance_budgets SET provider_config_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+    fi
+
+    # routing_rules.chain_rule (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "routing_rules" "chain_rule"; then
+      echo "UPDATE routing_rules SET chain_rule = 0 WHERE id = 'rule-migration-test-1';" >> "$output_file"
+      echo "UPDATE routing_rules SET chain_rule = 0 WHERE id = 'rule-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_virtual_key_provider_configs.allow_all_keys (added in v1.5.0-prerelease2)
+    if column_exists_sqlite "$config_db" "governance_virtual_key_provider_configs" "allow_all_keys"; then
+      echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = 0 WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_key_provider_configs SET allow_all_keys = 1 WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # -------------------------------------------------------------------------
+    # v1.5.0-prerelease4 columns - config store tables
+    # -------------------------------------------------------------------------
+
+    # governance_budgets.team_id (added in v1.5.0-prerelease4)
+    if column_exists_sqlite "$config_db" "governance_budgets" "team_id"; then
+      echo "UPDATE governance_budgets SET team_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_budgets SET team_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+      echo "UPDATE governance_budgets SET team_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+    fi
+
+    # governance_budgets.calendar_aligned (re-added in v1.5.0-prerelease4)
+    if column_exists_sqlite "$config_db" "governance_budgets" "calendar_aligned"; then
+      echo "UPDATE governance_budgets SET calendar_aligned = 0 WHERE id = 'budget-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_budgets SET calendar_aligned = 0 WHERE id = 'budget-migration-test-2';" >> "$output_file"
+      echo "UPDATE governance_budgets SET calendar_aligned = 0 WHERE id = 'budget-migration-test-3';" >> "$output_file"
+    fi
+
+    # governance_rate_limits.calendar_aligned (added in v1.5.0-prerelease4)
+    if column_exists_sqlite "$config_db" "governance_rate_limits" "calendar_aligned"; then
+      echo "UPDATE governance_rate_limits SET calendar_aligned = 0 WHERE id = 'ratelimit-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_rate_limits SET calendar_aligned = 0 WHERE id = 'ratelimit-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_model_pricing OCR pricing columns (added in v1.5.0-prerelease4 via migrationAddOCRPricingColumns)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "ocr_cost_per_page"; then
+      echo "UPDATE governance_model_pricing SET ocr_cost_per_page = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET ocr_cost_per_page = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "annotation_cost_per_page"; then
+      echo "UPDATE governance_model_pricing SET annotation_cost_per_page = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET annotation_cost_per_page = NULL WHERE id = 2;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease2 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.alias (added in v1.5.0-prerelease2)
+  echo "UPDATE logs SET alias = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET alias = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET alias = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.has_object (added in v1.5.0-prerelease2)
+  echo "UPDATE logs SET has_object = 0 WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET has_object = 0 WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET has_object = 0 WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # mcp_tool_logs.has_object (added in v1.5.0-prerelease2)
+  echo "UPDATE mcp_tool_logs SET has_object = 0 WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET has_object = 0 WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+
+  # logs governance context columns (added in v1.5.0-prerelease2)
+  for ctx_col in user_id team_id team_name customer_id customer_name business_unit_id business_unit_name; do
+    echo "UPDATE logs SET $ctx_col = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET $ctx_col = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET $ctx_col = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  done
+
+  # -------------------------------------------------------------------------
+  # v1.5.0-prerelease4 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.user_name (added in v1.5.0-prerelease4)
+  echo "UPDATE logs SET user_name = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET user_name = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET user_name = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.attempt_trail (added in v1.5.0-prerelease4)
+  echo "UPDATE logs SET attempt_trail = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET attempt_trail = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET attempt_trail = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.selected_prompt_* columns (added in v1.5.0-prerelease4)
+  for sp_col in selected_prompt_name selected_prompt_version selected_prompt_id; do
+    echo "UPDATE logs SET $sp_col = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET $sp_col = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET $sp_col = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  done
+
+  # logs.ocr_input (added in v1.5.0-prerelease4)
+  echo "UPDATE logs SET ocr_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET ocr_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET ocr_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  if [ -f "$config_db" ]; then
+    # prompt_versions.variables_json (added in v1.5.0-prerelease2 via migrationAddPromptVariablesColumns)
+    if column_exists_sqlite "$config_db" "prompt_versions" "variables_json"; then
+      echo "UPDATE prompt_versions SET variables_json = '{}' WHERE prompt_id = 'prompt-migration-test-001';" >> "$output_file"
+    fi
+
+    # prompt_sessions.variables_json (added in v1.5.0-prerelease2 via migrationAddPromptVariablesColumns)
+    if column_exists_sqlite "$config_db" "prompt_sessions" "variables_json"; then
+      echo "UPDATE prompt_sessions SET variables_json = '{}' WHERE prompt_id = 'prompt-migration-test-001';" >> "$output_file"
+      echo "UPDATE prompt_sessions SET variables_json = '{}' WHERE prompt_id = 'prompt-migration-test-002';" >> "$output_file"
+    fi
+
+    # -------------------------------------------------------------------------
+    # v1.5.3 columns - config store tables
+    # -------------------------------------------------------------------------
+
+    # config_client.metadata_json (added in v1.5.3 via migrationAddClientConfigMetadataColumn)
+    if column_exists_sqlite "$config_db" "config_client" "metadata_json"; then
+      echo "UPDATE config_client SET metadata_json = '{}' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # framework_configs.model_parameters_url (added in v1.5.3 via add_model_parameters_url_column)
+    if column_exists_sqlite "$config_db" "framework_configs" "model_parameters_url"; then
+      echo "UPDATE framework_configs SET model_parameters_url = NULL WHERE id = 1;" >> "$output_file"
+    fi
+
+    # framework_configs.config_hash (added in v1.5.3 via migrationAddFrameworkConfigHashColumn)
+    if column_exists_sqlite "$config_db" "framework_configs" "config_hash"; then
+      echo "UPDATE framework_configs SET config_hash = 'framework-config-hash-001' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # governance_teams.source_id (added in v1.5.3 via add_team_source_id_column)
+    if column_exists_sqlite "$config_db" "governance_teams" "source_id"; then
+      echo "UPDATE governance_teams SET source_id = NULL WHERE id = 'team-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_teams SET source_id = NULL WHERE id = 'team-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_teams.calendar_aligned (added in v1.5.3 via migrationAddTeamCalendarAlignedColumn)
+    if column_exists_sqlite "$config_db" "governance_teams" "calendar_aligned"; then
+      echo "UPDATE governance_teams SET calendar_aligned = 0 WHERE id = 'team-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_teams SET calendar_aligned = 0 WHERE id = 'team-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_virtual_keys.access_profile_id (added in v1.5.3 via add_vk_access_profile_id_column)
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "access_profile_id"; then
+      echo "UPDATE governance_virtual_keys SET access_profile_id = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET access_profile_id = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.5.3 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.cluster_node_id (added in v1.5.3 via migrationAddClusterGovernanceColumns)
+  echo "UPDATE logs SET cluster_node_id = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET cluster_node_id = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET cluster_node_id = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.budget_ids (added in v1.5.3 via migrationAddClusterGovernanceColumns)
+  echo "UPDATE logs SET budget_ids = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET budget_ids = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET budget_ids = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.rate_limit_ids (added in v1.5.3 via migrationAddClusterGovernanceColumns)
+  echo "UPDATE logs SET rate_limit_ids = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET rate_limit_ids = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET rate_limit_ids = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # mcp_tool_logs.user_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  echo "UPDATE mcp_tool_logs SET user_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET user_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+
+  # mcp_tool_logs.team_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  echo "UPDATE mcp_tool_logs SET team_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET team_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+
+  # mcp_tool_logs.customer_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  echo "UPDATE mcp_tool_logs SET customer_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET customer_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+
+  # mcp_tool_logs.business_unit_id (added in v1.5.3 via migrationAddGovernanceColumnsToMCPToolLogs)
+  echo "UPDATE mcp_tool_logs SET business_unit_id = NULL WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET business_unit_id = NULL WHERE id = 'mcp-log-migration-002';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # v1.5.4 columns
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # governance_virtual_key_provider_configs.blacklisted_models (added in v1.5.4 via migrationAddVirtualKeyBlacklistedModelsColumn)
+    if column_exists_sqlite "$config_db" "governance_virtual_key_provider_configs" "blacklisted_models"; then
+      echo "UPDATE governance_virtual_key_provider_configs SET blacklisted_models = '[]' WHERE virtual_key_id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_key_provider_configs SET blacklisted_models = '[]' WHERE virtual_key_id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_virtual_keys.created_by_user_id (added in v1.5.4 via migrationAddCreatedByUserIDColumnForVirtualKeys)
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "created_by_user_id"; then
+      echo "UPDATE governance_virtual_keys SET created_by_user_id = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET created_by_user_id = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+  fi
+
+  # logs.inc_number (added in v1.5.4 via migrationAddLogIncNumberColumn)
+  # Emitted unconditionally - logs table is in logs_db; fails silently on config_db
+  echo "UPDATE logs SET inc_number = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET inc_number = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET inc_number = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # v1.5.9 columns
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # governance_budgets.model_config_id (added in v1.5.9 via add_budget_model_config_id_column)
+    if column_exists_sqlite "$config_db" "governance_budgets" "model_config_id"; then
+      echo "UPDATE governance_budgets SET model_config_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_budgets SET model_config_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+      echo "UPDATE governance_budgets SET model_config_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+    fi
+
+    # governance_budgets.customer_id (added in v1.5.9 via add_customer_budgets_to_budgets_table)
+    if column_exists_sqlite "$config_db" "governance_budgets" "customer_id"; then
+      echo "UPDATE governance_budgets SET customer_id = NULL WHERE id = 'budget-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_budgets SET customer_id = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+      echo "UPDATE governance_budgets SET customer_id = NULL WHERE id = 'budget-migration-test-3';" >> "$output_file"
+    fi
+
+    # governance_customers.calendar_aligned (added in v1.5.9 via add_customer_calendar_aligned_column)
+    if column_exists_sqlite "$config_db" "governance_customers" "calendar_aligned"; then
+      echo "UPDATE governance_customers SET calendar_aligned = 0 WHERE id = 'customer-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_customers SET calendar_aligned = 0 WHERE id = 'customer-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_model_configs.scope / scope_id (added in v1.5.9 via add_model_config_scope_columns)
+    # scope is set to the column default 'global'; scope_id stays NULL so the seeded rows keep
+    # satisfying the idx_model_scope_provider unique index
+    if column_exists_sqlite "$config_db" "governance_model_configs" "scope"; then
+      echo "UPDATE governance_model_configs SET scope = 'global' WHERE id = 'model-config-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_model_configs SET scope = 'global' WHERE id = 'model-config-migration-test-2';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_configs" "scope_id"; then
+      echo "UPDATE governance_model_configs SET scope_id = NULL WHERE id = 'model-config-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_model_configs SET scope_id = NULL WHERE id = 'model-config-migration-test-2';" >> "$output_file"
+    fi
+
+    # governance_model_configs.calendar_aligned (added in v1.5.9 via add_model_config_calendar_aligned_column)
+    if column_exists_sqlite "$config_db" "governance_model_configs" "calendar_aligned"; then
+      echo "UPDATE governance_model_configs SET calendar_aligned = 0 WHERE id = 'model-config-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_model_configs SET calendar_aligned = 0 WHERE id = 'model-config-migration-test-2';" >> "$output_file"
+    fi
+
+    # -----------------------------------------------------------------------
+    # v1.5.10+ columns - config store tables
+    # -----------------------------------------------------------------------
+
+    # framework_configs.mcp_library_url, mcp_library_sync_interval (added via add_mcp_library_config_columns)
+    # Seed the current version's defaults (modelcatalog.DefaultMCPLibraryURL / DefaultSyncInterval=24h)
+    # because the current version backfills these on startup; a NULL seed would diff before vs after.
+    if column_exists_sqlite "$config_db" "framework_configs" "mcp_library_url"; then
+      echo "UPDATE framework_configs SET mcp_library_url = 'https://getbifrost.ai/mcp-library' WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "framework_configs" "mcp_library_sync_interval"; then
+      echo "UPDATE framework_configs SET mcp_library_sync_interval = 86400 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # governance_model_pricing fast-mode pricing columns (added via add_fast_mode_pricing_columns)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "input_cost_per_token_fast"; then
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_fast = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET input_cost_per_token_fast = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_token_fast"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_fast = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_token_fast = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # -----------------------------------------------------------------------
+    # v1.6.3 columns - config store tables
+    # -----------------------------------------------------------------------
+
+    # config_client.mcp_server_auth_mode (added in v1.6.3 - varchar(20), default 'headers')
+    if column_exists_sqlite "$config_db" "config_client" "mcp_server_auth_mode"; then
+      echo "UPDATE config_client SET mcp_server_auth_mode = 'headers' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.oauth2_server_config_json (added in v1.6.3 - text, empty string when unset)
+    if column_exists_sqlite "$config_db" "config_client" "oauth2_server_config_json"; then
+      echo "UPDATE config_client SET oauth2_server_config_json = '' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_keys.bedrock_mantle_* (added in v1.6.3 - nullable text SecretVars for Bedrock Mantle auth)
+    for mantle_col in bedrock_mantle_access_key bedrock_mantle_secret_key bedrock_mantle_session_token bedrock_mantle_region bedrock_mantle_role_arn bedrock_mantle_external_id bedrock_mantle_role_session_name; do
+      if column_exists_sqlite "$config_db" "config_keys" "$mantle_col"; then
+        echo "UPDATE config_keys SET $mantle_col = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+        echo "UPDATE config_keys SET $mantle_col = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+      fi
+    done
+
+    # governance_model_pricing.is_deprecated (added in v1.6.3 - bool, default false)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "is_deprecated"; then
+      echo "UPDATE governance_model_pricing SET is_deprecated = 0 WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET is_deprecated = 0 WHERE id = 2;" >> "$output_file"
+    fi
+
+    # governance_virtual_keys.expires_at (added in v1.6.3 - nullable timestamp, NULL = never expires)
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "expires_at"; then
+      echo "UPDATE governance_virtual_keys SET expires_at = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET expires_at = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # -----------------------------------------------------------------------
+    # v1.6.4 columns
+    # -----------------------------------------------------------------------
+
+    # config_keys.vertex_force_single_region (added in v1.6.4 via add_vertex_force_single_region_column - nullable bool)
+    if column_exists_sqlite "$config_db" "config_keys" "vertex_force_single_region"; then
+      echo "UPDATE config_keys SET vertex_force_single_region = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET vertex_force_single_region = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.bedrock_project_id, bedrock_mantle_project_id (added in v1.6.4 via add_bedrock_project_id_columns - nullable text SecretVars)
+    for bedrock_proj_col in bedrock_project_id bedrock_mantle_project_id; do
+      if column_exists_sqlite "$config_db" "config_keys" "$bedrock_proj_col"; then
+        echo "UPDATE config_keys SET $bedrock_proj_col = NULL WHERE name = 'migration-test-key-openai';" >> "$output_file"
+        echo "UPDATE config_keys SET $bedrock_proj_col = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+      fi
+    done
+
+    # governance_model_pricing flex/272k cache-creation tiers (added in v1.6.4 via
+    # add_flex_and_cache_creation_272k_pricing_columns), fast-mode cache pricing
+    # (add_fast_mode_cache_pricing_columns), and inference geo multiplier
+    # (add_inference_geo_multiplier_column) - all nullable float64
+    for pricing_col in \
+      input_cost_per_token_flex_above_272k_tokens \
+      output_cost_per_token_flex_above_272k_tokens \
+      cache_read_input_token_cost_flex_above_272k_tokens \
+      cache_creation_input_token_cost_above_272k_tokens \
+      cache_creation_input_token_cost_flex \
+      cache_creation_input_token_cost_flex_above_272k_tokens \
+      cache_creation_input_token_cost_priority \
+      cache_creation_input_token_cost_fast \
+      cache_creation_input_token_cost_above_1hr_fast \
+      cache_read_input_token_cost_fast \
+      inference_geo_us_multiplier; do
+      if column_exists_sqlite "$config_db" "governance_model_pricing" "$pricing_col"; then
+        echo "UPDATE governance_model_pricing SET $pricing_col = NULL WHERE id = 1;" >> "$output_file"
+        echo "UPDATE governance_model_pricing SET $pricing_col = NULL WHERE id = 2;" >> "$output_file"
+      fi
+    done
+  fi
+
+  # logs multi-team/BU/customer JSON-array columns (added in v1.5.9 via
+  # logs_add_multi_team_business_unit_columns and logs_add_customer_array_columns)
+  # Emitted unconditionally - logs table is in logs_db; fails silently on config_db
+  for arr_col in team_ids team_names customer_ids customer_names business_unit_ids business_unit_names; do
+    echo "UPDATE logs SET $arr_col = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET $arr_col = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET $arr_col = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  done
+
+  # logs.canonical_model_name, alias_model_family (added via logs_add_canonical_model_columns).
+  # Guarded on the logs_db schema (in dynamic scope from the SQLite test runner) since these
+  # columns are newer than the oldest tested version, unlike the array columns above.
+  if column_exists_sqlite "$logs_db" "logs" "canonical_model_name"; then
+    echo "UPDATE logs SET canonical_model_name = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET canonical_model_name = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET canonical_model_name = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$logs_db" "logs" "alias_model_family"; then
+    echo "UPDATE logs SET alias_model_family = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET alias_model_family = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET alias_model_family = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.6.4 columns - config store / governance / log store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_keys.vertex_force_single_region (added via add_vertex_force_single_region_column)
+    if column_exists_sqlite "$config_db" "config_keys" "vertex_force_single_region"; then
+      echo "UPDATE config_keys SET vertex_force_single_region = 0 WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET vertex_force_single_region = 1 WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.bedrock_project_id, bedrock_mantle_project_id (added via add_bedrock_project_id_columns)
+    if column_exists_sqlite "$config_db" "config_keys" "bedrock_project_id"; then
+      echo "UPDATE config_keys SET bedrock_project_id = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_keys" "bedrock_mantle_project_id"; then
+      echo "UPDATE config_keys SET bedrock_mantle_project_id = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # governance_model_pricing fast-mode, flex/priority 272k-tier, and inference-geo pricing columns
+    # (added via add_fast_mode_pricing_columns, add_fast_mode_cache_pricing_columns,
+    # add_inference_geo_multiplier_column, add_flex_and_cache_creation_272k_pricing_columns)
+    for col in input_cost_per_token_flex_above_272k_tokens output_cost_per_token_flex_above_272k_tokens \
+      cache_read_input_token_cost_flex_above_272k_tokens cache_creation_input_token_cost_above_272k_tokens \
+      cache_creation_input_token_cost_flex cache_creation_input_token_cost_flex_above_272k_tokens \
+      cache_creation_input_token_cost_priority cache_creation_input_token_cost_fast \
+      cache_creation_input_token_cost_above_1hr_fast cache_read_input_token_cost_fast inference_geo_us_multiplier; do
+      if column_exists_sqlite "$config_db" "governance_model_pricing" "$col"; then
+        echo "UPDATE governance_model_pricing SET $col = NULL WHERE id = 1;" >> "$output_file"
+        echo "UPDATE governance_model_pricing SET $col = NULL WHERE id = 2;" >> "$output_file"
+      fi
+    done
+  fi
+
+  # logs.redaction_mapping (added via logs_add_redaction_mapping_column)
+  if column_exists_sqlite "$logs_db" "logs" "redaction_mapping"; then
+    echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  # logs.redaction_mapping (added in v1.6.4 via logs_add_redaction_mapping_column -
+  # nullable text, stores the encrypted reversible redaction mapping)
+  if column_exists_sqlite "$logs_db" "logs" "redaction_mapping"; then
+    echo "UPDATE logs SET redaction_mapping = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET redaction_mapping = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.6.5 columns - config store / webhooks / log store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_client.retain_content_in_object_storage (added via add_retain_content_in_object_storage_column)
+    if column_exists_sqlite "$config_db" "config_client" "retain_content_in_object_storage"; then
+      echo "UPDATE config_client SET retain_content_in_object_storage = 0 WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.dual_credential_conflict_behavior (added via add_dual_credential_conflict_behavior_column)
+    if column_exists_sqlite "$config_db" "config_client" "dual_credential_conflict_behavior"; then
+      echo "UPDATE config_client SET dual_credential_conflict_behavior = 'prefer_idp' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_client.webhook_config_json (added via add_webhook_config_client_column)
+    # Seeded as '' rather than NULL: BeforeSave writes '' for a nil WebhookConfig, so '' is stable either way.
+    if column_exists_sqlite "$config_db" "config_client" "webhook_config_json"; then
+      echo "UPDATE config_client SET webhook_config_json = '' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # config_keys.use_anthropic_endpoints (added via add_use_anthropic_endpoints_column)
+    if column_exists_sqlite "$config_db" "config_keys" "use_anthropic_endpoints"; then
+      echo "UPDATE config_keys SET use_anthropic_endpoints = 0 WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET use_anthropic_endpoints = 1 WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # oauth_configs.resource (added via add_oauth_config_resource_column)
+    if column_exists_sqlite "$config_db" "oauth_configs" "resource"; then
+      echo "UPDATE oauth_configs SET resource = 'https://mcp.example.com' WHERE id = 'oauth-config-migration-test-001';" >> "$output_file"
+      echo "UPDATE oauth_configs SET resource = NULL WHERE id = 'oauth-config-migration-test-002';" >> "$output_file"
+    fi
+  fi
+
+  # async_jobs.request_id, webhook_endpoint_id (added via async_jobs_add_request_id_column,
+  # async_jobs_add_webhook_endpoint_id_column)
+  if column_exists_sqlite "$logs_db" "async_jobs" "request_id"; then
+    echo "UPDATE async_jobs SET request_id = 'req-async-migration-test-001' WHERE id = 'async-job-migration-test-001';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$logs_db" "async_jobs" "webhook_endpoint_id"; then
+    echo "UPDATE async_jobs SET webhook_endpoint_id = NULL WHERE id = 'async-job-migration-test-001';" >> "$output_file"
+  fi
+
+  # logs.content_hidden, server_side_fallback_model (added via logs_add_content_hidden_column,
+  # logs_add_server_side_fallback_model_column)
+  if column_exists_sqlite "$logs_db" "logs" "content_hidden"; then
+    echo "UPDATE logs SET content_hidden = 0 WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET content_hidden = 0 WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET content_hidden = 1 WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$logs_db" "logs" "server_side_fallback_model"; then
+    echo "UPDATE logs SET server_side_fallback_model = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET server_side_fallback_model = 'gpt-4-turbo' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET server_side_fallback_model = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # config_keys.bedrock_batch_role_arn (added via add_bedrock_batch_role_arn_column)
+  # Set to NULL for coverage, matching the bedrock_mantle_* SecretVar columns above.
+  if column_exists_sqlite "$config_db" "config_keys" "bedrock_batch_role_arn"; then
+    echo "UPDATE config_keys SET bedrock_batch_role_arn = NULL WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # framework_configs.live_models_sync_interval (added via add_live_models_sync_interval_column)
+  if column_exists_sqlite "$config_db" "framework_configs" "live_models_sync_interval"; then
+    echo "UPDATE framework_configs SET live_models_sync_interval = 3600 WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_budgets.override_amount, override_mode, override_cycles_remaining,
+  # override_cycles_total, override_anchor_reset (added via budget override columns migration)
+  # NOTE: one UPDATE per column - extract_faker_columns only picks up the first
+  # "SET col =" per line, so a combined multi-column UPDATE would silently hide
+  # the other columns from faker coverage validation.
+  if column_exists_sqlite "$config_db" "governance_budgets" "override_amount"; then
+    echo "UPDATE governance_budgets SET override_amount = 500.00 WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_amount = 1000.00 WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$config_db" "governance_budgets" "override_mode"; then
+    echo "UPDATE governance_budgets SET override_mode = 'cycles' WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_mode = 'forever' WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$config_db" "governance_budgets" "override_cycles_remaining"; then
+    echo "UPDATE governance_budgets SET override_cycles_remaining = 2 WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_cycles_remaining = 0 WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$config_db" "governance_budgets" "override_cycles_total"; then
+    echo "UPDATE governance_budgets SET override_cycles_total = 3 WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_cycles_total = 0 WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$config_db" "governance_budgets" "override_anchor_reset"; then
+    echo "UPDATE governance_budgets SET override_anchor_reset = $now WHERE id = 'budget-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_budgets SET override_anchor_reset = NULL WHERE id = 'budget-migration-test-2';" >> "$output_file"
+  fi
+
+  # governance_pricing_overrides.user_id (added via add_pricing_override_user_id_column)
+  if column_exists_sqlite "$config_db" "governance_pricing_overrides" "user_id"; then
+    echo "UPDATE governance_pricing_overrides SET user_id = 'user-migration-test-001' WHERE id = 'pricing-override-migration-002';" >> "$output_file"
+    echo "UPDATE governance_pricing_overrides SET user_id = NULL WHERE id = 'pricing-override-migration-001';" >> "$output_file"
+  fi
+
+  # sidekiq.partitioning_key (added via add_sidekiq_partitioning_key_column)
+  if column_exists_sqlite "$config_db" "sidekiq" "partitioning_key"; then
+    echo "UPDATE sidekiq SET partitioning_key = 'migration-test-partition-001' WHERE id = 'sidekiq-migration-test-001';" >> "$output_file"
+    echo "UPDATE sidekiq SET partitioning_key = '' WHERE id = 'sidekiq-migration-test-002';" >> "$output_file"
+  fi
+
+  # logs.service_tier, speed, inference_geo (added for Anthropic/OpenAI service-tier billing)
+  if column_exists_sqlite "$logs_db" "logs" "service_tier"; then
+    echo "UPDATE logs SET service_tier = 'priority' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET service_tier = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$logs_db" "logs" "speed"; then
+    echo "UPDATE logs SET speed = 'fast' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET speed = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+  if column_exists_sqlite "$logs_db" "logs" "inference_geo"; then
+    echo "UPDATE logs SET inference_geo = 'us' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET inference_geo = NULL WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+}
+
+# ============================================================================
+# Faker Column Coverage Validation
+# ============================================================================
+
+# Extract table -> columns mapping from the generated faker SQL
+# Output format: table_name:col1,col2,col3 (one per line)
+# Handles INSERT INTO and UPDATE SET statements
+# Multiple lines per table are OK - the validation merges them via grep + sort -u
+extract_faker_columns() {
+  local faker_sql="$1"
+  local output_file="$2"
+
+  # Extract INSERT statements and parse table/columns
+  # Handles both "INSERT INTO table (cols)" and "INSERT INTO table (cols) SELECT ..."
+  grep -E "^INSERT INTO [a-z0-9_]+ \(" "$faker_sql" | \
+    sed -E 's/INSERT INTO ([a-z0-9_]+) \(([^)]+)\).*/\1:\2/' | \
+    tr -d ' ' | sort -u > "$output_file"
+
+  # Also extract UPDATE SET columns (for dynamically added columns)
+  # Pattern: UPDATE table SET col = value WHERE ...
+  # Note: Column names can contain digits (e.g., input_cost_per_token_above_128k_tokens)
+  grep -E "^UPDATE [a-z0-9_]+ SET [a-z0-9_]+" "$faker_sql" | \
+    sed -E 's/UPDATE ([a-z0-9_]+) SET ([a-z0-9_]+) =.*/\1:\2/' | \
+    tr -d ' ' | sort -u >> "$output_file"
+}
+
+# Check if a column exists in a PostgreSQL table
+column_exists_postgres() {
+  local table="$1"
+  local column="$2"
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    return 1
+  fi
+
+  local count
+  count=$(docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A \
+    -c "SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_name = '$table'
+        AND column_name = '$column'
+        AND table_schema = 'public';" 2>/dev/null)
+
+  [ "$count" = "1" ]
+}
+
+# Generate config_mcp_clients INSERT based on schema columns
+# This handles older schemas that may not have newer columns like tool_pricing_json, auth_type, etc.
+generate_mcp_clients_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Core columns that always exist in config_mcp_clients
+  local cols="client_id, name, is_code_mode_client, connection_type, connection_string, stdio_config_json, tools_to_execute_json, tools_to_auto_execute_json, headers_json, is_ping_available, config_hash, created_at, updated_at"
+  local vals="'mcp-migration-test-001', 'migration-test-mcp-server', false, 'sse', 'http://mcp-server:8080', NULL, '[\"tool1\", \"tool2\"]', '[]', '{}', true, 'mcp-hash-001', $now, $now"
+
+  # Add optional columns if they exist in the schema
+  if column_exists_postgres "config_mcp_clients" "tool_pricing_json"; then
+    cols="$cols, tool_pricing_json"
+    vals="$vals, '{\"tool1\": 0.001, \"tool2\": 0.002}'"
+  fi
+
+  if column_exists_postgres "config_mcp_clients" "tool_sync_interval"; then
+    cols="$cols, tool_sync_interval"
+    vals="$vals, 5"
+  fi
+
+  if column_exists_postgres "config_mcp_clients" "auth_type"; then
+    cols="$cols, auth_type"
+    vals="$vals, 'oauth'"
+  fi
+
+  if column_exists_postgres "config_mcp_clients" "oauth_config_id"; then
+    cols="$cols, oauth_config_id"
+    vals="$vals, 'oauth-config-migration-test-001'"
+  fi
+
+  # config_mcp_clients.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_mcp_clients" "encryption_status"; then
+    cols="$cols, encryption_status"
+    vals="$vals, 'plain_text'"
+  fi
+
+  # config_mcp_clients.allowed_extra_headers_json (added in v1.5.0)
+  if column_exists_postgres "config_mcp_clients" "allowed_extra_headers_json"; then
+    cols="$cols, allowed_extra_headers_json"
+    vals="$vals, '[]'"
+  fi
+
+  # config_mcp_clients.allow_on_all_virtual_keys (added in v1.5.0)
+  if column_exists_postgres "config_mcp_clients" "allow_on_all_virtual_keys"; then
+    cols="$cols, allow_on_all_virtual_keys"
+    vals="$vals, false"
+  fi
+
+  # config_mcp_clients.discovered_tools_json (added in v1.5.0-prerelease2)
+  if column_exists_postgres "config_mcp_clients" "discovered_tools_json"; then
+    cols="$cols, discovered_tools_json"
+    vals="$vals, '{}'"
+  fi
+
+  # config_mcp_clients.tool_name_mapping_json (added in v1.5.0-prerelease2)
+  if column_exists_postgres "config_mcp_clients" "tool_name_mapping_json"; then
+    cols="$cols, tool_name_mapping_json"
+    vals="$vals, '{}'"
+  fi
+
+  # config_mcp_clients.disabled (added in v1.5.0 via migrationAddMCPClientDisabledColumn)
+  if column_exists_postgres "config_mcp_clients" "disabled"; then
+    cols="$cols, disabled"
+    vals="$vals, false"
+  fi
+
+  # config_mcp_clients.tls_config_json (added in v1.5.6 - nullable JSON of schemas.MCPTLSConfig)
+  if column_exists_postgres "config_mcp_clients" "tls_config_json"; then
+    cols="$cols, tls_config_json"
+    # Non-default JSON so the migration's preservation of this field is actually verified
+    # by the before/after snapshot comparison (a reset-to-NULL would otherwise pass silently).
+    vals="$vals, '{\"ca_cert_path\":\"/etc/ssl/test-ca.pem\",\"insecure_skip_verify\":false}'"
+  fi
+
+  # config_mcp_clients.per_user_header_keys_json (added in v1.5.6 - JSON []string)
+  if column_exists_postgres "config_mcp_clients" "per_user_header_keys_json"; then
+    cols="$cols, per_user_header_keys_json"
+    # Non-default JSON so preservation of this field is verified by snapshot comparison.
+    vals="$vals, '[\"X-Tenant-Id\",\"X-Request-Id\"]'"
+  fi
+
+  # config_mcp_clients.tool_execution_timeout (added in v1.6.3 - per-client timeout in seconds, 0 = use global)
+  if column_exists_postgres "config_mcp_clients" "tool_execution_timeout"; then
+    cols="$cols, tool_execution_timeout"
+    vals="$vals, 0"
+  fi
+
+  # Append the dynamic INSERT to the output file
+  echo "" >> "$output_file"
+  echo "-- config_mcp_clients (MCP server configurations - dynamically generated based on schema)" >> "$output_file"
+  echo "INSERT INTO config_mcp_clients ($cols) VALUES ($vals) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # governance_virtual_key_mcp_configs: link both test VKs to the test MCP client.
+  # Must run AFTER config_mcp_clients INSERT so the subquery finds the row.
+  # Both VKs covered to prevent migrationBackfillEmptyVirtualKeyConfigs from adding rows.
+  echo "" >> "$output_file"
+  echo "-- governance_virtual_key_mcp_configs (dynamically generated after config_mcp_clients)" >> "$output_file"
+  echo "INSERT INTO governance_virtual_key_mcp_configs (virtual_key_id, mcp_client_id, tools_to_execute) SELECT vk.id, mc.id, '[\"tool1\"]' FROM governance_virtual_keys vk CROSS JOIN config_mcp_clients mc WHERE mc.client_id = 'mcp-migration-test-001' AND vk.id IN ('vk-migration-test-1', 'vk-migration-test-2') ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Get columns that are auto-increment primary keys (don't need faker coverage)
+get_postgres_auto_increment_columns() {
+  local table="$1"
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    return
+  fi
+
+  # Find columns with SERIAL/BIGSERIAL or identity columns
+  docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A \
+    -c "SELECT column_name FROM information_schema.columns
+        WHERE table_name = '$table'
+        AND table_schema = 'public'
+        AND (column_default LIKE 'nextval%' OR is_identity = 'YES');" 2>/dev/null
+}
+
+# Validate that faker SQL covers all columns in the older version's schema
+validate_faker_column_coverage_postgres() {
+  local faker_sql="$1"
+  local version="$2"
+  local temp_dir="$3"
+
+  log_info "Validating faker column coverage for $version schema..."
+
+  # Tables to skip (system/tracking tables)
+  local skip_tables="gorp_migrations schema_migrations"
+
+  # Extract faker columns to a temp file
+  local faker_cols_file="$temp_dir/faker_columns.txt"
+  extract_faker_columns "$faker_sql" "$faker_cols_file"
+
+  local failed=0
+  local missing_report=""
+
+  # Get all tables from the database
+  local tables
+  tables=$(get_postgres_tables)
+
+  for table in $tables; do
+    # Skip system tables
+    if [[ " $skip_tables " == *" $table "* ]]; then
+      continue
+    fi
+
+    # Get columns that faker inserts for this table
+    local faker_cols
+    faker_cols=$(grep "^${table}:" "$faker_cols_file" 2>/dev/null | cut -d: -f2 | tr ',' '\n' | sort -u)
+
+    # If faker doesn't insert into this table at all, that's a problem
+    if [ -z "$faker_cols" ]; then
+      missing_report="${missing_report}\n  Table '$table': NO FAKER DATA - table not covered by faker SQL"
+      failed=1
+      continue
+    fi
+
+    # Get all columns from the database schema
+    local db_cols
+    db_cols=$(get_postgres_columns "$table")
+
+    # Get auto-increment columns (these don't need faker coverage)
+    local auto_cols
+    auto_cols=$(get_postgres_auto_increment_columns "$table")
+
+    # Check each DB column
+    local missing_cols=""
+    for col in $db_cols; do
+      # Skip auto-increment columns
+      if echo "$auto_cols" | grep -q "^${col}$"; then
+        continue
+      fi
+
+      # Check if faker covers this column
+      if ! echo "$faker_cols" | grep -q "^${col}$"; then
+        if [ -z "$missing_cols" ]; then
+          missing_cols="$col"
+        else
+          missing_cols="$missing_cols, $col"
+        fi
+      fi
+    done
+
+    if [ -n "$missing_cols" ]; then
+      missing_report="${missing_report}\n  Table '$table': $missing_cols"
+      failed=1
+    fi
+  done
+
+  if [ $failed -eq 1 ]; then
+    log_error "Faker SQL missing coverage for columns in $version schema:"
+    echo -e "$missing_report" | while read -r line; do
+      [ -n "$line" ] && log_error "$line"
+    done
+    log_error ""
+    log_error "Please update generate_faker_sql() in this script to include these columns."
+    log_error "Migration tests require all columns in the older schema to have test data coverage."
+    return 1
+  fi
+
+  log_info "Faker column coverage validation passed for $version schema"
+  return 0
+}
+
+# Get SQLite table columns
+get_sqlite_columns() {
+  local db_path="$1"
+  local table="$2"
+
+  if [ ! -f "$db_path" ]; then
+    return
+  fi
+
+  sqlite3 "$db_path" "PRAGMA table_info($table);" 2>/dev/null | cut -d'|' -f2
+}
+
+# Get SQLite tables
+get_sqlite_tables() {
+  local db_path="$1"
+
+  if [ ! -f "$db_path" ]; then
+    return
+  fi
+
+  sqlite3 "$db_path" "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;" 2>/dev/null
+}
+
+# Get SQLite auto-increment primary key columns
+get_sqlite_auto_increment_columns() {
+  local db_path="$1"
+  local table="$2"
+
+  if [ ! -f "$db_path" ]; then
+    return
+  fi
+
+  # In SQLite, INTEGER PRIMARY KEY columns are auto-increment
+  sqlite3 "$db_path" "PRAGMA table_info($table);" 2>/dev/null | \
+    awk -F'|' '$3 == "INTEGER" && $6 == "1" {print $2}'
+}
+
+# Check if a column exists in a SQLite table
+column_exists_sqlite() {
+  local db_path="$1"
+  local table="$2"
+  local column="$3"
+
+  if [ ! -f "$db_path" ]; then
+    return 1
+  fi
+
+  local count
+  count=$(sqlite3 "$db_path" "PRAGMA table_info($table);" 2>/dev/null | grep -c "^[0-9]*|${column}|") || count=0
+
+  [ "$count" -ge "1" ]
+}
+
+# Generate config_mcp_clients INSERT based on schema columns for SQLite
+# This handles older schemas that may not have newer columns like tool_pricing_json, auth_type, etc.
+generate_mcp_clients_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  # Check if the table exists in the database
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local table_exists
+  table_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='config_mcp_clients';" 2>/dev/null || echo "0")
+
+  if [ "$table_exists" != "1" ]; then
+    return
+  fi
+
+  # Core columns that always exist in config_mcp_clients
+  local cols="client_id, name, is_code_mode_client, connection_type, connection_string, stdio_config_json, tools_to_execute_json, tools_to_auto_execute_json, headers_json, is_ping_available, config_hash, created_at, updated_at"
+  local vals="'mcp-migration-test-001', 'migration-test-mcp-server', 0, 'sse', 'http://mcp-server:8080', NULL, '[\"tool1\", \"tool2\"]', '[]', '{}', 1, 'mcp-hash-001', $now, $now"
+
+  # Add optional columns if they exist in the schema
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "tool_pricing_json"; then
+    cols="$cols, tool_pricing_json"
+    vals="$vals, '{\"tool1\": 0.001, \"tool2\": 0.002}'"
+  fi
+
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "tool_sync_interval"; then
+    cols="$cols, tool_sync_interval"
+    vals="$vals, 5"
+  fi
+
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "auth_type"; then
+    cols="$cols, auth_type"
+    vals="$vals, 'oauth'"
+  fi
+
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "oauth_config_id"; then
+    cols="$cols, oauth_config_id"
+    vals="$vals, 'oauth-config-migration-test-001'"
+  fi
+
+  # config_mcp_clients.encryption_status (added in v1.4.8)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "encryption_status"; then
+    cols="$cols, encryption_status"
+    vals="$vals, 'plain_text'"
+  fi
+
+  # config_mcp_clients.allowed_extra_headers_json (added in v1.5.0)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "allowed_extra_headers_json"; then
+    cols="$cols, allowed_extra_headers_json"
+    vals="$vals, '[]'"
+  fi
+
+  # config_mcp_clients.allow_on_all_virtual_keys (added in v1.5.0)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "allow_on_all_virtual_keys"; then
+    cols="$cols, allow_on_all_virtual_keys"
+    vals="$vals, 0"
+  fi
+
+  # config_mcp_clients.discovered_tools_json (added in v1.5.0-prerelease2)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "discovered_tools_json"; then
+    cols="$cols, discovered_tools_json"
+    vals="$vals, '{}'"
+  fi
+
+  # config_mcp_clients.tool_name_mapping_json (added in v1.5.0-prerelease2)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "tool_name_mapping_json"; then
+    cols="$cols, tool_name_mapping_json"
+    vals="$vals, '{}'"
+  fi
+
+  # config_mcp_clients.disabled (added in v1.5.0 via migrationAddMCPClientDisabledColumn)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "disabled"; then
+    cols="$cols, disabled"
+    vals="$vals, 0"
+  fi
+
+  # config_mcp_clients.tls_config_json (added in v1.5.6 - nullable JSON of schemas.MCPTLSConfig)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "tls_config_json"; then
+    cols="$cols, tls_config_json"
+    # Non-default JSON so the migration's preservation of this field is actually verified
+    # by the before/after snapshot comparison (a reset-to-NULL would otherwise pass silently).
+    vals="$vals, '{\"ca_cert_path\":\"/etc/ssl/test-ca.pem\",\"insecure_skip_verify\":false}'"
+  fi
+
+  # config_mcp_clients.per_user_header_keys_json (added in v1.5.6 - JSON []string)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "per_user_header_keys_json"; then
+    cols="$cols, per_user_header_keys_json"
+    # Non-default JSON so preservation of this field is verified by snapshot comparison.
+    vals="$vals, '[\"X-Tenant-Id\",\"X-Request-Id\"]'"
+  fi
+
+  # config_mcp_clients.tool_execution_timeout (added in v1.6.3 - per-client timeout in seconds, 0 = use global)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "tool_execution_timeout"; then
+    cols="$cols, tool_execution_timeout"
+    vals="$vals, 0"
+  fi
+
+  # Append the dynamic INSERT to the output file
+  echo "" >> "$output_file"
+  echo "-- config_mcp_clients (MCP server configurations - dynamically generated based on schema)" >> "$output_file"
+  echo "INSERT INTO config_mcp_clients ($cols) VALUES ($vals) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # governance_virtual_key_mcp_configs: link both test VKs to the test MCP client.
+  # Must run AFTER config_mcp_clients INSERT so the subquery finds the row.
+  # Both VKs covered to prevent migrationBackfillEmptyVirtualKeyConfigs from adding rows.
+  echo "" >> "$output_file"
+  echo "-- governance_virtual_key_mcp_configs (dynamically generated after config_mcp_clients)" >> "$output_file"
+  echo "INSERT INTO governance_virtual_key_mcp_configs (virtual_key_id, mcp_client_id, tools_to_execute) SELECT vk.id, mc.id, '[\"tool1\"]' FROM governance_virtual_keys vk CROSS JOIN config_mcp_clients mc WHERE mc.client_id = 'mcp-migration-test-001' AND vk.id IN ('vk-migration-test-1', 'vk-migration-test-2') ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate async_jobs INSERT based on schema existence for PostgreSQL
+# The async_jobs table was added in v1.4.8; only emit the INSERT if the table exists.
+generate_async_jobs_insert_postgres() {
+  local now="$1"
+  local future="$2"
+  local output_file="$3"
+
+  # Use column_exists_postgres on a known column as a table-existence check
+  if ! column_exists_postgres "async_jobs" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- async_jobs (async job tracking table - added in v1.4.8, dynamically generated based on schema)" >> "$output_file"
+  echo "INSERT INTO async_jobs (id, status, request_type, response, status_code, error, virtual_key_id, result_ttl, expires_at, created_at, completed_at) VALUES ('async-job-migration-test-001', 'completed', 'chat_completion', '{\"id\":\"resp-async-001\"}', 200, '', 'vk-migration-test-1', 3600, $future, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate async_jobs INSERT for SQLite
+# async_jobs lives in the logs_db. The faker SQL is run against both config_db and logs_db,
+# so this INSERT will fail silently on config_db (table doesn't exist) and succeed on logs_db.
+generate_async_jobs_insert_sqlite() {
+  local now="$1"
+  local future="$2"
+  local output_file="$3"
+
+  echo "" >> "$output_file"
+  echo "-- async_jobs (async job tracking table - added in v1.4.8)" >> "$output_file"
+  echo "INSERT INTO async_jobs (id, status, request_type, response, status_code, error, virtual_key_id, result_ttl, expires_at, created_at, completed_at) VALUES ('async-job-migration-test-001', 'completed', 'chat_completion', '{\"id\":\"resp-async-001\"}', 200, '', 'vk-migration-test-1', 3600, $future, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate webhook tables INSERTs for PostgreSQL
+# config_webhook_endpoints + webhook_jobs (config store, added via add_webhook_endpoints_table /
+# add_webhook_jobs_table) and webhook_deliveries (log store, added via webhook_deliveries_init).
+# Each table is guarded individually rather than assuming presence of one implies the others.
+generate_webhook_tables_insert_postgres() {
+  local now="$1"
+  local future="$2"
+  local output_file="$3"
+
+  if column_exists_postgres "config_webhook_endpoints" "id"; then
+    echo "" >> "$output_file"
+    echo "-- config_webhook_endpoints (webhook endpoint registry - added in v1.6.5, dynamically generated)" >> "$output_file"
+    # secret/headers_json stay NULL: both are encrypted at rest, so a seeded value could be rewritten.
+    echo "INSERT INTO config_webhook_endpoints (id, name, url, secret, events_json, headers_json, include_response, allow_private_network, max_retries, retry_backoff_initial_seconds, retry_backoff_max_seconds, attempt_timeout_seconds, max_response_payload_kbs, max_concurrent_deliveries, disabled, consecutive_failures, last_success_at, last_failure_at, config_hash, encryption_status, created_at, updated_at) VALUES ('webhook-endpoint-migration-test-001', 'Migration Test Webhook', 'https://webhook.example.com/bifrost', NULL, '[\"async_job.completed\",\"async_job.failed\"]', NULL, false, false, 4, 30, 1800, 10, 256, 10, false, 0, NULL, NULL, 'webhook-endpoint-hash-001', 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+
+  if column_exists_postgres "webhook_jobs" "id"; then
+    echo "" >> "$output_file"
+    echo "-- webhook_jobs (delivery work queue - added in v1.6.5)" >> "$output_file"
+    # next_attempt_at must stay in the future: the dispatcher's first scan runs immediately at
+    # startup and would claim, deliver and delete a due job before the post-migration snapshot.
+    echo "INSERT INTO webhook_jobs (id, endpoint_id, async_job_id, event, attempt_count, next_attempt_at, claimed_by, claimed_until, created_at) VALUES ('webhook-job-migration-test-001', 'webhook-endpoint-migration-test-001', 'async-job-migration-test-001', 'async_job.completed', 0, $future, '', NULL, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+
+  if column_exists_postgres "webhook_deliveries" "id"; then
+    echo "" >> "$output_file"
+    echo "-- webhook_deliveries (delivery history - added in v1.6.5, lives in the log store)" >> "$output_file"
+    # expires_at must stay in the future: DeleteExpiredWebhookDeliveries prunes history rows whose expiry passed.
+    echo "INSERT INTO webhook_deliveries (id, webhook_id, endpoint_id, async_job_id, request_id, event, attempt_no, outcome, status_code, error, created_at, expires_at) VALUES ('webhook-delivery-migration-test-001', 'webhook-migration-test-001', 'webhook-endpoint-migration-test-001', 'async-job-migration-test-001', 'req-async-migration-test-001', 'async_job.completed', 1, 'delivered', 200, '', $now, $future) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+}
+
+# Generate webhook tables INSERTs for SQLite. config_webhook_endpoints and webhook_jobs live in
+# config_db; webhook_deliveries lives in logs_db.
+generate_webhook_tables_insert_sqlite() {
+  local now="$1"
+  local future="$2"
+  local output_file="$3"
+  local config_db="$4"
+
+  if column_exists_sqlite "$config_db" "config_webhook_endpoints" "id"; then
+    echo "" >> "$output_file"
+    echo "-- config_webhook_endpoints (webhook endpoint registry - added in v1.6.5)" >> "$output_file"
+    # secret/headers_json stay NULL: both are encrypted at rest, so a seeded value could be rewritten.
+    echo "INSERT INTO config_webhook_endpoints (id, name, url, secret, events_json, headers_json, include_response, allow_private_network, max_retries, retry_backoff_initial_seconds, retry_backoff_max_seconds, attempt_timeout_seconds, max_response_payload_kbs, max_concurrent_deliveries, disabled, consecutive_failures, last_success_at, last_failure_at, config_hash, encryption_status, created_at, updated_at) VALUES ('webhook-endpoint-migration-test-001', 'Migration Test Webhook', 'https://webhook.example.com/bifrost', NULL, '[\"async_job.completed\",\"async_job.failed\"]', NULL, 0, 0, 4, 30, 1800, 10, 256, 10, 0, 0, NULL, NULL, 'webhook-endpoint-hash-001', 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+
+  if column_exists_sqlite "$config_db" "webhook_jobs" "id"; then
+    echo "" >> "$output_file"
+    echo "-- webhook_jobs (delivery work queue - added in v1.6.5)" >> "$output_file"
+    # next_attempt_at must stay in the future: the dispatcher's first scan runs immediately at
+    # startup and would claim, deliver and delete a due job before the post-migration snapshot.
+    echo "INSERT INTO webhook_jobs (id, endpoint_id, async_job_id, event, attempt_count, next_attempt_at, claimed_by, claimed_until, created_at) VALUES ('webhook-job-migration-test-001', 'webhook-endpoint-migration-test-001', 'async-job-migration-test-001', 'async_job.completed', 0, $future, '', NULL, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+
+  if column_exists_sqlite "$logs_db" "webhook_deliveries" "id"; then
+    echo "" >> "$output_file"
+    echo "-- webhook_deliveries (delivery history - added in v1.6.5, lives in logs_db)" >> "$output_file"
+    # expires_at must stay in the future: DeleteExpiredWebhookDeliveries prunes history rows whose expiry passed.
+    echo "INSERT INTO webhook_deliveries (id, webhook_id, endpoint_id, async_job_id, request_id, event, attempt_no, outcome, status_code, error, created_at, expires_at) VALUES ('webhook-delivery-migration-test-001', 'webhook-migration-test-001', 'webhook-endpoint-migration-test-001', 'async-job-migration-test-001', 'req-async-migration-test-001', 'async_job.completed', 1, 'delivered', 200, '', $now, $future) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+}
+
+# Generate prompt repository tables INSERTs for PostgreSQL
+# These tables were added in v1.4.12+: folders, prompts, prompt_versions, prompt_version_messages,
+# prompt_sessions, prompt_session_messages
+generate_prompt_repo_tables_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Check if folders table exists (indicator that prompt repo tables exist)
+  if ! column_exists_postgres "folders" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+  echo "-- Prompt Repository Tables (added in v1.4.12+, dynamically generated)" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+
+  # folders (base table, no FK)
+  echo "" >> "$output_file"
+  echo "-- folders (generic folder container for prompts)" >> "$output_file"
+  echo "INSERT INTO folders (id, name, description, config_hash, created_at, updated_at) VALUES ('folder-migration-test-001', 'Migration Test Folder', 'A test folder for migration testing', 'folder-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO folders (id, name, description, config_hash, created_at, updated_at) VALUES ('folder-migration-test-002', 'Migration Test Folder 2', NULL, 'folder-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompts (references folders)
+  echo "" >> "$output_file"
+  echo "-- prompts (prompt entity - references folders)" >> "$output_file"
+  echo "INSERT INTO prompts (id, name, folder_id, config_hash, created_at, updated_at) VALUES ('prompt-migration-test-001', 'Migration Test Prompt 1', 'folder-migration-test-001', 'prompt-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompts (id, name, folder_id, config_hash, created_at, updated_at) VALUES ('prompt-migration-test-002', 'Migration Test Prompt 2', NULL, 'prompt-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_versions (references prompts, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_versions (immutable prompt versions - references prompts)" >> "$output_file"
+  echo "INSERT INTO prompt_versions (prompt_id, version_number, commit_message, model_params_json, provider, model, is_latest, created_at) VALUES ('prompt-migration-test-001', 1, 'Initial version', '{\"temperature\": 0.7}', 'openai', 'gpt-4', false, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompt_versions (prompt_id, version_number, commit_message, model_params_json, provider, model, is_latest, created_at) VALUES ('prompt-migration-test-001', 2, 'Updated version', '{\"temperature\": 0.8}', 'openai', 'gpt-4-turbo', true, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_version_messages (references prompt_versions, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_version_messages (messages in immutable versions)" >> "$output_file"
+  echo "INSERT INTO prompt_version_messages (prompt_id, version_id, order_index, message_json) SELECT 'prompt-migration-test-001', id, 0, '{\"role\":\"system\",\"content\":\"You are a helpful assistant.\"}' FROM prompt_versions WHERE prompt_id = 'prompt-migration-test-001' AND version_number = 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompt_version_messages (prompt_id, version_id, order_index, message_json) SELECT 'prompt-migration-test-001', id, 1, '{\"role\":\"user\",\"content\":\"Hello!\"}' FROM prompt_versions WHERE prompt_id = 'prompt-migration-test-001' AND version_number = 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_sessions (references prompts and optionally prompt_versions, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_sessions (mutable working drafts - references prompts)" >> "$output_file"
+  echo "INSERT INTO prompt_sessions (prompt_id, version_id, name, model_params_json, provider, model, created_at, updated_at) SELECT 'prompt-migration-test-001', id, 'Migration Test Session', '{\"temperature\": 0.9}', 'anthropic', 'claude-3-opus', $now, $now FROM prompt_versions WHERE prompt_id = 'prompt-migration-test-001' AND version_number = 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompt_sessions (prompt_id, version_id, name, model_params_json, provider, model, created_at, updated_at) VALUES ('prompt-migration-test-002', NULL, 'Session without version', '{}', 'openai', 'gpt-4', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_session_messages (references prompt_sessions, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_session_messages (messages in mutable sessions)" >> "$output_file"
+  echo "INSERT INTO prompt_session_messages (prompt_id, session_id, order_index, message_json) SELECT 'prompt-migration-test-001', id, 0, '{\"role\":\"user\",\"content\":\"Test message in session\"}' FROM prompt_sessions WHERE prompt_id = 'prompt-migration-test-001' LIMIT 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate prompt repository tables INSERTs for SQLite
+generate_prompt_repo_tables_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  # Check if the table exists in the database
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local table_exists
+  table_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='folders';" 2>/dev/null || echo "0")
+
+  if [ "$table_exists" != "1" ]; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+  echo "-- Prompt Repository Tables (added in v1.4.12+, dynamically generated)" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+
+  # folders (base table, no FK)
+  echo "" >> "$output_file"
+  echo "-- folders (generic folder container for prompts)" >> "$output_file"
+  echo "INSERT INTO folders (id, name, description, config_hash, created_at, updated_at) VALUES ('folder-migration-test-001', 'Migration Test Folder', 'A test folder for migration testing', 'folder-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO folders (id, name, description, config_hash, created_at, updated_at) VALUES ('folder-migration-test-002', 'Migration Test Folder 2', NULL, 'folder-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompts (references folders)
+  echo "" >> "$output_file"
+  echo "-- prompts (prompt entity - references folders)" >> "$output_file"
+  echo "INSERT INTO prompts (id, name, folder_id, config_hash, created_at, updated_at) VALUES ('prompt-migration-test-001', 'Migration Test Prompt 1', 'folder-migration-test-001', 'prompt-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompts (id, name, folder_id, config_hash, created_at, updated_at) VALUES ('prompt-migration-test-002', 'Migration Test Prompt 2', NULL, 'prompt-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_versions (references prompts, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_versions (immutable prompt versions - references prompts)" >> "$output_file"
+  echo "INSERT INTO prompt_versions (prompt_id, version_number, commit_message, model_params_json, provider, model, is_latest, created_at) VALUES ('prompt-migration-test-001', 1, 'Initial version', '{\"temperature\": 0.7}', 'openai', 'gpt-4', 0, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompt_versions (prompt_id, version_number, commit_message, model_params_json, provider, model, is_latest, created_at) VALUES ('prompt-migration-test-001', 2, 'Updated version', '{\"temperature\": 0.8}', 'openai', 'gpt-4-turbo', 1, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_version_messages (references prompt_versions, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_version_messages (messages in immutable versions)" >> "$output_file"
+  echo "INSERT INTO prompt_version_messages (prompt_id, version_id, order_index, message_json) SELECT 'prompt-migration-test-001', id, 0, '{\"role\":\"system\",\"content\":\"You are a helpful assistant.\"}' FROM prompt_versions WHERE prompt_id = 'prompt-migration-test-001' AND version_number = 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompt_version_messages (prompt_id, version_id, order_index, message_json) SELECT 'prompt-migration-test-001', id, 1, '{\"role\":\"user\",\"content\":\"Hello!\"}' FROM prompt_versions WHERE prompt_id = 'prompt-migration-test-001' AND version_number = 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_sessions (references prompts and optionally prompt_versions, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_sessions (mutable working drafts - references prompts)" >> "$output_file"
+  echo "INSERT INTO prompt_sessions (prompt_id, version_id, name, model_params_json, provider, model, created_at, updated_at) SELECT 'prompt-migration-test-001', id, 'Migration Test Session', '{\"temperature\": 0.9}', 'anthropic', 'claude-3-opus', $now, $now FROM prompt_versions WHERE prompt_id = 'prompt-migration-test-001' AND version_number = 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO prompt_sessions (prompt_id, version_id, name, model_params_json, provider, model, created_at, updated_at) VALUES ('prompt-migration-test-002', NULL, 'Session without version', '{}', 'openai', 'gpt-4', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # prompt_session_messages (references prompt_sessions, has auto-increment id)
+  echo "" >> "$output_file"
+  echo "-- prompt_session_messages (messages in mutable sessions)" >> "$output_file"
+  echo "INSERT INTO prompt_session_messages (prompt_id, session_id, order_index, message_json) SELECT 'prompt-migration-test-001', id, 0, '{\"role\":\"user\",\"content\":\"Test message in session\"}' FROM prompt_sessions WHERE prompt_id = 'prompt-migration-test-001' LIMIT 1 ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate skills repository tables INSERTs for PostgreSQL
+# Tables (skills, skill_versions, skill_file_blobs, skill_files) were added via
+# migrationAddSkillsRepoTables. Files belong to versions; blobs are reused across versions.
+# FK order: skills -> skill_versions -> skill_file_blobs -> skill_files.
+generate_skills_repo_tables_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Check if skills table exists (indicator that skills repo tables exist)
+  if ! column_exists_postgres "skills" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+  echo "-- Skills Repository Tables (added via migrationAddSkillsRepoTables, dynamically generated)" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+
+  # skills (base table, no FK; name is unique)
+  echo "" >> "$output_file"
+  echo "-- skills (skill entity; every save creates a version snapshot)" >> "$output_file"
+  echo "INSERT INTO skills (id, name, description, license, compatibility, metadata, extra_frontmatter, allowed_tools, skill_md_body, latest_version, created_by, config_hash, created_at, updated_at) VALUES ('skill-migration-test-001', 'migration-test-skill', 'A test skill for migration testing', 'MIT', '>=1.0.0', '{\"category\":\"test\"}', '{\"x-custom\":\"val\"}', 'Read,Write', '# Migration Test Skill\nDoes things.', '1.0.0', 'migration-tester', 'skill-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO skills (id, name, description, license, compatibility, metadata, extra_frontmatter, allowed_tools, skill_md_body, latest_version, created_by, config_hash, created_at, updated_at) VALUES ('skill-migration-test-002', 'migration-test-skill-2', 'Second test skill', NULL, NULL, NULL, NULL, NULL, '# Migration Test Skill 2', '2.0.0', NULL, 'skill-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # skill_versions (references skills via skill_id; (skill_id, version) is unique)
+  echo "" >> "$output_file"
+  echo "-- skill_versions (immutable snapshot of a skill save)" >> "$output_file"
+  echo "INSERT INTO skill_versions (id, skill_id, version, skill_md_body, frontmatter_snapshot, created_by, created_at) VALUES ('skill-version-migration-001', 'skill-migration-test-001', '1.0.0', '# Migration Test Skill\nDoes things.', '{\"name\":\"migration-test-skill\"}', 'migration-tester', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO skill_versions (id, skill_id, version, skill_md_body, frontmatter_snapshot, created_by, created_at) VALUES ('skill-version-migration-002', 'skill-migration-test-002', '2.0.0', '# Migration Test Skill 2', NULL, NULL, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # skill_file_blobs (fallback file bytes; no FK; data is bytea)
+  echo "" >> "$output_file"
+  echo "-- skill_file_blobs (fallback file bytes when object storage is unavailable)" >> "$output_file"
+  echo "INSERT INTO skill_file_blobs (id, data, created_at) VALUES ('skill-blob-migration-001', decode('48656c6c6f2c206d6967726174696f6e21', 'hex'), $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # skill_files (references skill_versions via skill_version_id and optionally skill_file_blobs via blob_id; (skill_version_id, path) is unique)
+  echo "" >> "$output_file"
+  echo "-- skill_files (a file pointer for a skill version; points to a blob or external storage)" >> "$output_file"
+  echo "INSERT INTO skill_files (id, skill_version_id, path, source_type, source_url, storage_key, blob_id, mime_type, file_size_bytes, created_at, updated_at) VALUES ('skill-file-migration-001', 'skill-version-migration-001', 'scripts/run.sh', 'blob', NULL, NULL, 'skill-blob-migration-001', 'text/x-shellscript', 18, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO skill_files (id, skill_version_id, path, source_type, source_url, storage_key, blob_id, mime_type, file_size_bytes, created_at, updated_at) VALUES ('skill-file-migration-002', 'skill-version-migration-002', 'reference/doc.md', 'url', 'https://example.com/doc.md', 'skills/skill-002/doc.md', NULL, 'text/markdown', 0, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate skills repository tables INSERTs for SQLite
+generate_skills_repo_tables_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  # Check if the table exists in the database
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local table_exists
+  table_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='skills';" 2>/dev/null || echo "0")
+
+  if [ "$table_exists" != "1" ]; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+  echo "-- Skills Repository Tables (added via migrationAddSkillsRepoTables, dynamically generated)" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+
+  # skills (base table, no FK; name is unique)
+  echo "" >> "$output_file"
+  echo "-- skills (skill entity; every save creates a version snapshot)" >> "$output_file"
+  echo "INSERT INTO skills (id, name, description, license, compatibility, metadata, extra_frontmatter, allowed_tools, skill_md_body, latest_version, created_by, config_hash, created_at, updated_at) VALUES ('skill-migration-test-001', 'migration-test-skill', 'A test skill for migration testing', 'MIT', '>=1.0.0', '{\"category\":\"test\"}', '{\"x-custom\":\"val\"}', 'Read,Write', '# Migration Test Skill\nDoes things.', '1.0.0', 'migration-tester', 'skill-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO skills (id, name, description, license, compatibility, metadata, extra_frontmatter, allowed_tools, skill_md_body, latest_version, created_by, config_hash, created_at, updated_at) VALUES ('skill-migration-test-002', 'migration-test-skill-2', 'Second test skill', NULL, NULL, NULL, NULL, NULL, '# Migration Test Skill 2', '2.0.0', NULL, 'skill-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # skill_versions (references skills via skill_id; (skill_id, version) is unique)
+  echo "" >> "$output_file"
+  echo "-- skill_versions (immutable snapshot of a skill save)" >> "$output_file"
+  echo "INSERT INTO skill_versions (id, skill_id, version, skill_md_body, frontmatter_snapshot, created_by, created_at) VALUES ('skill-version-migration-001', 'skill-migration-test-001', '1.0.0', '# Migration Test Skill\nDoes things.', '{\"name\":\"migration-test-skill\"}', 'migration-tester', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO skill_versions (id, skill_id, version, skill_md_body, frontmatter_snapshot, created_by, created_at) VALUES ('skill-version-migration-002', 'skill-migration-test-002', '2.0.0', '# Migration Test Skill 2', NULL, NULL, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # skill_file_blobs (fallback file bytes; no FK; data is a BLOB)
+  echo "" >> "$output_file"
+  echo "-- skill_file_blobs (fallback file bytes when object storage is unavailable)" >> "$output_file"
+  echo "INSERT INTO skill_file_blobs (id, data, created_at) VALUES ('skill-blob-migration-001', X'48656c6c6f2c206d6967726174696f6e21', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # skill_files (references skill_versions via skill_version_id and optionally skill_file_blobs via blob_id; (skill_version_id, path) is unique)
+  echo "" >> "$output_file"
+  echo "-- skill_files (a file pointer for a skill version; points to a blob or external storage)" >> "$output_file"
+  echo "INSERT INTO skill_files (id, skill_version_id, path, source_type, source_url, storage_key, blob_id, mime_type, file_size_bytes, created_at, updated_at) VALUES ('skill-file-migration-001', 'skill-version-migration-001', 'scripts/run.sh', 'blob', NULL, NULL, 'skill-blob-migration-001', 'text/x-shellscript', 18, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO skill_files (id, skill_version_id, path, source_type, source_url, storage_key, blob_id, mime_type, file_size_bytes, created_at, updated_at) VALUES ('skill-file-migration-002', 'skill-version-migration-002', 'reference/doc.md', 'url', 'https://example.com/doc.md', 'skills/skill-002/doc.md', NULL, 'text/markdown', 0, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate per-user OAuth tables INSERTs for PostgreSQL
+# These tables were added in v1.5.0-prerelease4 via migrationAddPerUserOAuthTables
+generate_per_user_oauth_tables_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Generate based on schema version:
+  # - If oauth_per_user_clients exists  -> v1.5.0-prerelease4 schema with all per-user tables
+  # - If oauth_per_user_clients dropped but oauth_user_sessions has session_id -> v1.5.3+ refactored schema
+  if column_exists_postgres "oauth_per_user_clients" "id"; then
+    echo "" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+    echo "-- Per-User OAuth Tables (added in v1.5.0-prerelease4, dynamically generated)" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+
+    # oauth_per_user_clients (no FK dependencies)
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_clients (registered OAuth clients for per-user flows)" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_clients (id, client_id, client_name, redirect_uris, grant_types, created_at, updated_at) VALUES ('per-user-oauth-client-001', 'client-id-migration-test-001', 'Migration Test Client', '[\"http://localhost:3000/callback\"]', '[\"authorization_code\"]', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_per_user_sessions (client_id is a string field, no FK constraint enforced by DB)
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_sessions (Bifrost-issued sessions for authenticated MCP connections)" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_sessions (id, access_token, access_token_hash, refresh_token, refresh_token_hash, client_id, virtual_key_id, user_id, expires_at, encryption_status, created_at, updated_at) VALUES ('per-user-oauth-session-001', 'migration-test-access-token-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3', '', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae4', 'client-id-migration-test-001', 'vk-migration-test-1', NULL, $now + INTERVAL '1 hour', 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_per_user_codes (references per_user_sessions.id as session_id, no enforced FK)
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_codes (short-lived authorization codes)" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_codes (id, code, code_hash, client_id, redirect_uri, code_challenge, scopes, session_id, expires_at, used, created_at) VALUES ('per-user-oauth-code-001', 'migration-test-code-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae5', 'client-id-migration-test-001', 'http://localhost:3000/callback', 'migration-test-challenge-001', '[\"openid\"]', 'per-user-oauth-session-001', $now + INTERVAL '5 minutes', false, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_per_user_pending_flows (no enforced FK)
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_pending_flows (pending OAuth flows awaiting consent)" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_pending_flows (id, client_id, redirect_uri, code_challenge, state, virtual_key_id, user_id, browser_secret_hash, expires_at, created_at, updated_at) VALUES ('per-user-oauth-flow-001', 'client-id-migration-test-001', 'http://localhost:3000/callback', 'migration-test-challenge-002', 'migration-test-state-001', NULL, NULL, 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae6', $now + INTERVAL '15 minutes', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_user_sessions (old prerelease4 schema: session_token, session_token_hash, gateway_session_id)
+    echo "" >> "$output_file"
+    echo "-- oauth_user_sessions (pending per-user OAuth flows)" >> "$output_file"
+    echo "INSERT INTO oauth_user_sessions (id, mcp_client_id, oauth_config_id, state, redirect_uri, code_verifier, session_token, session_token_hash, gateway_session_id, virtual_key_id, user_id, status, encryption_status, expires_at, created_at, updated_at) VALUES ('oauth-user-session-001', 'mcp-migration-test-001', 'oauth-config-migration-test-001', 'migration-test-state-002', 'http://localhost:3000/callback', 'migration-test-verifier-001', 'migration-test-session-token-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae7', 'gateway-session-001', 'vk-migration-test-1', NULL, 'authorized', 'plain_text', $now + INTERVAL '15 minutes', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_user_tokens (old prerelease4 schema: session_token, session_token_hash)
+    echo "" >> "$output_file"
+    echo "-- oauth_user_tokens (per-user OAuth credentials)" >> "$output_file"
+    echo "INSERT INTO oauth_user_tokens (id, session_token, session_token_hash, virtual_key_id, user_id, mcp_client_id, oauth_config_id, access_token, refresh_token, token_type, expires_at, scopes, last_refreshed_at, encryption_status, created_at, updated_at) VALUES ('oauth-user-token-001', 'migration-test-session-token-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae7', 'vk-migration-test-1', NULL, 'mcp-migration-test-001', 'oauth-config-migration-test-001', 'migration-test-user-access-token-001', '', 'Bearer', $now + INTERVAL '1 hour', '[\"openid\"]', NULL, 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  elif column_exists_postgres "oauth_user_sessions" "session_id"; then
+    # v1.5.3+: oauth_per_user_* tables dropped; oauth_user_sessions/tokens refactored.
+    # New schema uses session_id + flow_mode instead of session_token/session_token_hash/gateway_session_id.
+    echo "" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+    echo "-- OAuth User Tables (v1.5.3+ refactored schema, dynamically generated)" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+
+    echo "" >> "$output_file"
+    echo "-- oauth_user_sessions (v1.5.3+ schema: session_id + flow_mode, no session_token/gateway_session_id)" >> "$output_file"
+    echo "INSERT INTO oauth_user_sessions (id, mcp_client_id, oauth_config_id, state, redirect_uri, code_verifier, session_id, virtual_key_id, user_id, flow_mode, status, encryption_status, expires_at, created_at, updated_at) VALUES ('oauth-user-session-001', 'mcp-migration-test-001', 'oauth-config-migration-test-001', 'migration-test-state-002', 'http://localhost:3000/callback', 'migration-test-verifier-001', '', 'vk-migration-test-1', NULL, 'vk', 'authorized', 'plain_text', $now + INTERVAL '15 minutes', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    echo "" >> "$output_file"
+    echo "-- oauth_user_tokens (v1.5.3+ schema: session_id + auth_mode + status, no session_token)" >> "$output_file"
+    echo "INSERT INTO oauth_user_tokens (id, session_id, virtual_key_id, user_id, mcp_client_id, auth_mode, status, oauth_config_id, access_token, refresh_token, token_type, expires_at, scopes, last_refreshed_at, encryption_status, created_at, updated_at) VALUES ('oauth-user-token-001', '', 'vk-migration-test-1', NULL, 'mcp-migration-test-001', 'vk', 'active', 'oauth-config-migration-test-001', 'migration-test-user-access-token-001', '', 'Bearer', $now + INTERVAL '1 hour', '[\"openid\"]', NULL, 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+}
+
+# Generate per-user OAuth tables INSERTs for SQLite
+# These tables were added in v1.5.0-prerelease4 via migrationAddPerUserOAuthTables
+generate_per_user_oauth_tables_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local oauth_per_user_clients_exists
+  oauth_per_user_clients_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='oauth_per_user_clients';" 2>/dev/null || echo "0")
+
+  if [ "$oauth_per_user_clients_exists" = "1" ]; then
+    echo "" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+    echo "-- Per-User OAuth Tables (added in v1.5.0-prerelease4, dynamically generated)" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+
+    # oauth_per_user_clients
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_clients" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_clients (id, client_id, client_name, redirect_uris, grant_types, created_at, updated_at) VALUES ('per-user-oauth-client-001', 'client-id-migration-test-001', 'Migration Test Client', '[\"http://localhost:3000/callback\"]', '[\"authorization_code\"]', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_per_user_sessions
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_sessions" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_sessions (id, access_token, access_token_hash, refresh_token, refresh_token_hash, client_id, virtual_key_id, user_id, expires_at, encryption_status, created_at, updated_at) VALUES ('per-user-oauth-session-001', 'migration-test-access-token-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3', '', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae4', 'client-id-migration-test-001', 'vk-migration-test-1', NULL, datetime('now', '+1 hour'), 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_per_user_codes
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_codes" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_codes (id, code, code_hash, client_id, redirect_uri, code_challenge, scopes, session_id, expires_at, used, created_at) VALUES ('per-user-oauth-code-001', 'migration-test-code-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae5', 'client-id-migration-test-001', 'http://localhost:3000/callback', 'migration-test-challenge-001', '[\"openid\"]', 'per-user-oauth-session-001', datetime('now', '+5 minutes'), 0, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_per_user_pending_flows
+    echo "" >> "$output_file"
+    echo "-- oauth_per_user_pending_flows" >> "$output_file"
+    echo "INSERT INTO oauth_per_user_pending_flows (id, client_id, redirect_uri, code_challenge, state, virtual_key_id, user_id, browser_secret_hash, expires_at, created_at, updated_at) VALUES ('per-user-oauth-flow-001', 'client-id-migration-test-001', 'http://localhost:3000/callback', 'migration-test-challenge-002', 'migration-test-state-001', NULL, NULL, 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae6', datetime('now', '+15 minutes'), $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_user_sessions (old prerelease4 schema: session_token, session_token_hash, gateway_session_id)
+    echo "" >> "$output_file"
+    echo "-- oauth_user_sessions" >> "$output_file"
+    echo "INSERT INTO oauth_user_sessions (id, mcp_client_id, oauth_config_id, state, redirect_uri, code_verifier, session_token, session_token_hash, gateway_session_id, virtual_key_id, user_id, status, encryption_status, expires_at, created_at, updated_at) VALUES ('oauth-user-session-001', 'mcp-migration-test-001', 'oauth-config-migration-test-001', 'migration-test-state-002', 'http://localhost:3000/callback', 'migration-test-verifier-001', 'migration-test-session-token-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae7', 'gateway-session-001', 'vk-migration-test-1', NULL, 'authorized', 'plain_text', datetime('now', '+15 minutes'), $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    # oauth_user_tokens (old prerelease4 schema: session_token, session_token_hash)
+    echo "" >> "$output_file"
+    echo "-- oauth_user_tokens" >> "$output_file"
+    echo "INSERT INTO oauth_user_tokens (id, session_token, session_token_hash, virtual_key_id, user_id, mcp_client_id, oauth_config_id, access_token, refresh_token, token_type, expires_at, scopes, last_refreshed_at, encryption_status, created_at, updated_at) VALUES ('oauth-user-token-001', 'migration-test-session-token-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae7', 'vk-migration-test-1', NULL, 'mcp-migration-test-001', 'oauth-config-migration-test-001', 'migration-test-user-access-token-001', '', 'Bearer', datetime('now', '+1 hour'), '[\"openid\"]', NULL, 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  elif column_exists_sqlite "$config_db" "oauth_user_sessions" "session_id"; then
+    # v1.5.3+: oauth_per_user_* tables dropped; oauth_user_sessions/tokens refactored.
+    # New schema uses session_id + flow_mode instead of session_token/session_token_hash/gateway_session_id.
+    echo "" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+    echo "-- OAuth User Tables (v1.5.3+ refactored schema, dynamically generated)" >> "$output_file"
+    echo "-- ============================================================================" >> "$output_file"
+
+    echo "" >> "$output_file"
+    echo "-- oauth_user_sessions (v1.5.3+ schema: session_id + flow_mode, no session_token/gateway_session_id)" >> "$output_file"
+    echo "INSERT INTO oauth_user_sessions (id, mcp_client_id, oauth_config_id, state, redirect_uri, code_verifier, session_id, virtual_key_id, user_id, flow_mode, status, encryption_status, expires_at, created_at, updated_at) VALUES ('oauth-user-session-001', 'mcp-migration-test-001', 'oauth-config-migration-test-001', 'migration-test-state-002', 'http://localhost:3000/callback', 'migration-test-verifier-001', '', 'vk-migration-test-1', NULL, 'vk', 'authorized', 'plain_text', datetime('now', '+15 minutes'), $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+    echo "" >> "$output_file"
+    echo "-- oauth_user_tokens (v1.5.3+ schema: session_id + auth_mode + status, no session_token)" >> "$output_file"
+    echo "INSERT INTO oauth_user_tokens (id, session_id, virtual_key_id, user_id, mcp_client_id, auth_mode, status, oauth_config_id, access_token, refresh_token, token_type, expires_at, scopes, last_refreshed_at, encryption_status, created_at, updated_at) VALUES ('oauth-user-token-001', '', 'vk-migration-test-1', NULL, 'mcp-migration-test-001', 'vk', 'active', 'oauth-config-migration-test-001', 'migration-test-user-access-token-001', '', 'Bearer', datetime('now', '+1 hour'), '[\"openid\"]', NULL, 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  fi
+}
+
+# Generate MCP per-user header tables INSERTs for PostgreSQL.
+# Tables added in v1.5.6 (mcp_per_user_header_flows, mcp_per_user_header_credentials);
+# they mirror the OAuth per-user surfaces. Guarded by table existence so older schemas skip them.
+generate_mcp_per_user_headers_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  if ! column_exists_postgres "mcp_per_user_header_flows" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+  echo "-- MCP Per-User Header Tables (added in v1.5.6, dynamically generated)" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+
+  # mcp_per_user_header_flows (pending per-user-header submission flows; display-only FKs, none enforced)
+  echo "" >> "$output_file"
+  echo "-- mcp_per_user_header_flows" >> "$output_file"
+  echo "INSERT INTO mcp_per_user_header_flows (id, mcp_client_id, session_id, virtual_key_id, user_id, flow_mode, status, expires_at, created_at, updated_at) VALUES ('mcp-header-flow-migration-001', 'mcp-migration-test-001', '', 'vk-migration-test-1', NULL, 'vk', 'pending', $now + INTERVAL '15 minutes', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # mcp_per_user_header_credentials (encrypted per-user header values; headers_json defaults to '{}')
+  echo "" >> "$output_file"
+  echo "-- mcp_per_user_header_credentials" >> "$output_file"
+  echo "INSERT INTO mcp_per_user_header_credentials (id, session_id, virtual_key_id, user_id, mcp_client_id, auth_mode, status, headers_json, encryption_status, created_at, updated_at) VALUES ('mcp-header-cred-migration-001', '', 'vk-migration-test-1', NULL, 'mcp-migration-test-001', 'vk', 'active', '{\"X-Test-Header\":\"test-value\"}', 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate MCP per-user header tables INSERTs for SQLite. See postgres variant above.
+generate_mcp_per_user_headers_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local flows_exists
+  flows_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mcp_per_user_header_flows';" 2>/dev/null || echo "0")
+
+  if [ "$flows_exists" != "1" ]; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+  echo "-- MCP Per-User Header Tables (added in v1.5.6, dynamically generated)" >> "$output_file"
+  echo "-- ============================================================================" >> "$output_file"
+
+  # mcp_per_user_header_flows
+  echo "" >> "$output_file"
+  echo "-- mcp_per_user_header_flows" >> "$output_file"
+  echo "INSERT INTO mcp_per_user_header_flows (id, mcp_client_id, session_id, virtual_key_id, user_id, flow_mode, status, expires_at, created_at, updated_at) VALUES ('mcp-header-flow-migration-001', 'mcp-migration-test-001', '', 'vk-migration-test-1', NULL, 'vk', 'pending', datetime('now', '+15 minutes'), $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+
+  # mcp_per_user_header_credentials
+  echo "" >> "$output_file"
+  echo "-- mcp_per_user_header_credentials" >> "$output_file"
+  echo "INSERT INTO mcp_per_user_header_credentials (id, session_id, virtual_key_id, user_id, mcp_client_id, auth_mode, status, headers_json, encryption_status, created_at, updated_at) VALUES ('mcp-header-cred-migration-001', '', 'vk-migration-test-1', NULL, 'mcp-migration-test-001', 'vk', 'active', '{\"X-Test-Header\":\"test-value\"}', 'plain_text', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate feature_flags INSERT for PostgreSQL (added in v1.5.3 via migrationAddFeatureFlagsTable)
+generate_feature_flags_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  if ! column_exists_postgres "feature_flags" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- feature_flags (user-toggled feature flag overrides - added in v1.5.3, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO feature_flags (id, enabled, updated_at) VALUES ('migration-test-flag-001', false, extract(epoch from NOW())::bigint * 1000) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate feature_flags INSERT for SQLite (added in v1.5.3 via migrationAddFeatureFlagsTable)
+generate_feature_flags_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  if ! column_exists_sqlite "$config_db" "feature_flags" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- feature_flags (user-toggled feature flag overrides - added in v1.5.3, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO feature_flags (id, enabled, updated_at) VALUES ('migration-test-flag-001', 0, cast(strftime('%s', 'now') as integer) * 1000) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate temp_tokens INSERT for PostgreSQL (added in v1.5.3 via migrationAddTempTokensTable)
+generate_temp_tokens_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  if ! column_exists_postgres "temp_tokens" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- temp_tokens (short-lived narrow-scope credentials - added in v1.5.3, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO temp_tokens (id, token, token_hash, scope, resource_id, expires_at, created_at, updated_at, encryption_status) VALUES ('temp-token-migration-test-001', 'migration-test-temp-token-value-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3', 'mcp_auth', 'oauth-config-migration-test-001', $now + INTERVAL '15 minutes', $now, $now, 'plain_text') ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate temp_tokens INSERT for SQLite (added in v1.5.3 via migrationAddTempTokensTable)
+generate_temp_tokens_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  if ! column_exists_sqlite "$config_db" "temp_tokens" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- temp_tokens (short-lived narrow-scope credentials - added in v1.5.3, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO temp_tokens (id, token, token_hash, scope, resource_id, expires_at, created_at, updated_at, encryption_status) VALUES ('temp-token-migration-test-001', 'migration-test-temp-token-value-001', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3', 'mcp_auth', 'oauth-config-migration-test-001', datetime('now', '+15 minutes'), $now, $now, 'plain_text') ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate sidekiq INSERT for PostgreSQL (added in v1.6.4 via migrationAddSidekiqTable)
+# Only terminal statuses (completed/failed) are seeded: the sidekiq runner and reaper
+# mutate pending/running jobs on startup, which would diff the before/after snapshots.
+generate_sidekiq_insert_postgres() {
+  local now="$1"
+  local past="$2"
+  local output_file="$3"
+
+  if ! column_exists_postgres "sidekiq" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- sidekiq (generic durable background jobs - added in v1.6.4, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO sidekiq (id, kind, status, runner_id, metadata, attempts, last_error, created_at, updated_at, started_at, created_by_user_id, completed_at) VALUES ('sidekiq-migration-test-001', 'migration-test-kind', 'completed', 'runner-migration-test-001', '{\"cursor\":\"migration-test\"}', 1, '', $past, $now, $past, 'user-migration-test-001', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO sidekiq (id, kind, status, runner_id, metadata, attempts, last_error, created_at, updated_at, started_at, created_by_user_id, completed_at) VALUES ('sidekiq-migration-test-002', 'migration-test-kind', 'failed', '', '{}', 3, 'migration test failure message', $past, $now, $past, NULL, NULL) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate sidekiq INSERT for SQLite (added in v1.6.4 via migrationAddSidekiqTable)
+generate_sidekiq_insert_sqlite() {
+  local now="$1"
+  local past="$2"
+  local output_file="$3"
+  local config_db="$4"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  if ! column_exists_sqlite "$config_db" "sidekiq" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- sidekiq (generic durable background jobs - added in v1.6.4, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO sidekiq (id, kind, status, runner_id, metadata, attempts, last_error, created_at, updated_at, started_at, created_by_user_id, completed_at) VALUES ('sidekiq-migration-test-001', 'migration-test-kind', 'completed', 'runner-migration-test-001', '{\"cursor\":\"migration-test\"}', 1, '', $past, $now, $past, 'user-migration-test-001', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO sidekiq (id, kind, status, runner_id, metadata, attempts, last_error, created_at, updated_at, started_at, created_by_user_id, completed_at) VALUES ('sidekiq-migration-test-002', 'migration-test-kind', 'failed', '', '{}', 3, 'migration test failure message', $past, $now, $past, NULL, NULL) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate oauth2_clients / oauth2_authorize_requests / oauth2_refresh_tokens INSERTs for PostgreSQL
+# (added in v1.6.3 via migrationAddOAuth2IssuanceTables - MCP OAuth2 authorization server)
+# Every column is named explicitly so faker coverage validation passes; the authorize request
+# uses a future expires_at and 'consented' status so no TTL cleanup mutates it between snapshots.
+generate_oauth2_issuance_tables_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  if ! column_exists_postgres "oauth2_clients" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- oauth2 issuance tables (MCP OAuth2 authorization server - added in v1.6.3, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO oauth2_clients (id, client_id, client_name, redirect_uris_json, grant_types_json, scope, created_at) VALUES ('oauth2-client-migration-test-001', 'migration-test-oauth2-client-001', 'Migration Test Client', '[\"http://localhost:3000/callback\"]', '[\"authorization_code\",\"refresh_token\"]', 'openid', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO oauth2_authorize_requests (id, client_id, redirect_uri, state, scope, resource, code_challenge, code_challenge_method, status, bf_mode, bf_sub, code_hash, expires_at, created_at, updated_at) VALUES ('oauth2-authreq-migration-test-001', 'migration-test-oauth2-client-001', 'http://localhost:3000/callback', 'migration-test-state-001', 'openid', 'https://bifrost.example.com/mcp', 'migration-test-challenge-001', 'S256', 'consented', 'vk', 'vk-migration-test-1', 'migration-test-code-hash-001', $now + INTERVAL '10 minutes', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO oauth2_refresh_tokens (id, token_hash, family_id, client_id, bf_mode, bf_sub, scope, resource, revoked_at, last_used_at, created_at) VALUES ('oauth2-rt-migration-test-001', 'migration-test-rt-hash-001', 'oauth2-authreq-migration-test-001', 'migration-test-oauth2-client-001', 'vk', 'vk-migration-test-1', 'openid', 'https://bifrost.example.com/mcp', NULL, NULL, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate oauth2 issuance table INSERTs for SQLite (added in v1.6.3 via migrationAddOAuth2IssuanceTables)
+generate_oauth2_issuance_tables_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  if ! column_exists_sqlite "$config_db" "oauth2_clients" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- oauth2 issuance tables (MCP OAuth2 authorization server - added in v1.6.3, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO oauth2_clients (id, client_id, client_name, redirect_uris_json, grant_types_json, scope, created_at) VALUES ('oauth2-client-migration-test-001', 'migration-test-oauth2-client-001', 'Migration Test Client', '[\"http://localhost:3000/callback\"]', '[\"authorization_code\",\"refresh_token\"]', 'openid', $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO oauth2_authorize_requests (id, client_id, redirect_uri, state, scope, resource, code_challenge, code_challenge_method, status, bf_mode, bf_sub, code_hash, expires_at, created_at, updated_at) VALUES ('oauth2-authreq-migration-test-001', 'migration-test-oauth2-client-001', 'http://localhost:3000/callback', 'migration-test-state-001', 'openid', 'https://bifrost.example.com/mcp', 'migration-test-challenge-001', 'S256', 'consented', 'vk', 'vk-migration-test-1', 'migration-test-code-hash-001', datetime('now', '+10 minutes'), $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO oauth2_refresh_tokens (id, token_hash, family_id, client_id, bf_mode, bf_sub, scope, resource, revoked_at, last_used_at, created_at) VALUES ('oauth2-rt-migration-test-001', 'migration-test-rt-hash-001', 'oauth2-authreq-migration-test-001', 'migration-test-oauth2-client-001', 'vk', 'vk-migration-test-1', 'openid', 'https://bifrost.example.com/mcp', NULL, NULL, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate governance_model_parameters INSERT for PostgreSQL
+# This table stores model parameters/capabilities data synced from external API
+generate_model_parameters_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Check if the table exists
+  if ! column_exists_postgres "governance_model_parameters" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- governance_model_parameters (model parameters/capabilities data - dynamically generated)" >> "$output_file"
+  echo "INSERT INTO governance_model_parameters (model, data) VALUES ('gpt-4', '{\"max_tokens\": 8192, \"supports_functions\": true}') ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO governance_model_parameters (model, data) VALUES ('claude-3-opus', '{\"max_tokens\": 4096, \"supports_vision\": true}') ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate governance_model_parameters INSERT for SQLite
+generate_model_parameters_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  # Check if the table exists in the database
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local table_exists
+  table_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='governance_model_parameters';" 2>/dev/null || echo "0")
+
+  if [ "$table_exists" != "1" ]; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- governance_model_parameters (model parameters/capabilities data - dynamically generated)" >> "$output_file"
+  echo "INSERT INTO governance_model_parameters (model, data) VALUES ('gpt-4', '{\"max_tokens\": 8192, \"supports_functions\": true}') ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO governance_model_parameters (model, data) VALUES ('claude-3-opus', '{\"max_tokens\": 4096, \"supports_vision\": true}') ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate routing_targets INSERT for PostgreSQL
+# This table stores weighted routing targets for routing rules (added with routing refactor)
+generate_routing_targets_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Check if the table exists
+  if ! column_exists_postgres "routing_targets" "rule_id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- routing_targets (weighted routing targets - references routing_rules, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO routing_targets (rule_id, provider, model, key_id, weight) VALUES ('rule-migration-test-1', 'openai', 'gpt-4', NULL, 1.0) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO routing_targets (rule_id, provider, model, key_id, weight) VALUES ('rule-migration-test-2', 'anthropic', 'claude-3-opus', NULL, 0.7) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO routing_targets (rule_id, provider, model, key_id, weight) VALUES ('rule-migration-test-2', NULL, NULL, NULL, 0.3) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate routing_targets INSERT for SQLite
+generate_routing_targets_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  # Check if the table exists in the database
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local table_exists
+  table_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='routing_targets';" 2>/dev/null || echo "0")
+
+  if [ "$table_exists" != "1" ]; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- routing_targets (weighted routing targets - references routing_rules, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO routing_targets (rule_id, provider, model, key_id, weight) VALUES ('rule-migration-test-1', 'openai', 'gpt-4', NULL, 1.0) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO routing_targets (rule_id, provider, model, key_id, weight) VALUES ('rule-migration-test-2', 'anthropic', 'claude-3-opus', NULL, 0.7) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO routing_targets (rule_id, provider, model, key_id, weight) VALUES ('rule-migration-test-2', NULL, NULL, NULL, 0.3) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate governance_pricing_overrides INSERT for PostgreSQL
+# This table was added in v1.5.0 as part of the custom pricing refactor.
+# Two rows: one global (no FK deps) and one virtual_key-scoped (references vk-migration-test-1).
+generate_pricing_overrides_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Check if the table exists
+  if ! column_exists_postgres "governance_pricing_overrides" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- governance_pricing_overrides (scoped pricing overrides - added in v1.5.0, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO governance_pricing_overrides (id, name, scope_kind, virtual_key_id, provider_id, provider_key_id, match_type, pattern, request_types_json, pricing_patch_json, config_hash, created_at, updated_at) VALUES ('pricing-override-migration-001', 'Migration Test Override Global', 'global', NULL, NULL, NULL, 'exact', 'gpt-4', '[]', '{\"input_cost_per_token\": 0.00001}', 'po-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO governance_pricing_overrides (id, name, scope_kind, virtual_key_id, provider_id, provider_key_id, match_type, pattern, request_types_json, pricing_patch_json, config_hash, created_at, updated_at) VALUES ('pricing-override-migration-002', 'Migration Test Override VK', 'virtual_key', 'vk-migration-test-1', NULL, NULL, 'prefix', 'claude', '[]', '{\"output_cost_per_token\": 0.00002}', 'po-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate governance_pricing_overrides INSERT for SQLite
+# This table was added in v1.5.0 as part of the custom pricing refactor.
+generate_pricing_overrides_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  # Check if the table exists in the database
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  local table_exists
+  table_exists=$(sqlite3 "$config_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='governance_pricing_overrides';" 2>/dev/null || echo "0")
+
+  if [ "$table_exists" != "1" ]; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- governance_pricing_overrides (scoped pricing overrides - added in v1.5.0, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO governance_pricing_overrides (id, name, scope_kind, virtual_key_id, provider_id, provider_key_id, match_type, pattern, request_types_json, pricing_patch_json, config_hash, created_at, updated_at) VALUES ('pricing-override-migration-001', 'Migration Test Override Global', 'global', NULL, NULL, NULL, 'exact', 'gpt-4', '[]', '{\"input_cost_per_token\": 0.00001}', 'po-hash-001', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+  echo "INSERT INTO governance_pricing_overrides (id, name, scope_kind, virtual_key_id, provider_id, provider_key_id, match_type, pattern, request_types_json, pricing_patch_json, config_hash, created_at, updated_at) VALUES ('pricing-override-migration-002', 'Migration Test Override VK', 'virtual_key', 'vk-migration-test-1', NULL, NULL, 'prefix', 'claude', '[]', '{\"output_cost_per_token\": 0.00002}', 'po-hash-002', $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate mcp_library INSERT for PostgreSQL (table added via add_mcp_library_table).
+# source/deleted_at are added later by add_mcp_library_source_columns, so they are
+# only included when present in the schema being tested.
+generate_mcp_library_insert_postgres() {
+  local now="$1"
+  local output_file="$2"
+
+  # Skip if the table doesn't exist in this version's schema
+  if ! column_exists_postgres "mcp_library" "id"; then
+    return
+  fi
+
+  local cols="slug, name, description, category, connection_type, connection_url, stdio_config, auth_type, required_header_keys, icon_url, docs_url, publisher, tags, metadata, created_at, updated_at"
+  local vals="'migration-test-mcp-lib-001', 'Migration Test MCP Server', 'A test MCP library entry for migration testing', 'testing', 'http', 'https://mcp.example.com/sse', NULL, 'none', NULL, 'https://example.com/icon.png', 'https://example.com/docs', 'Migration Test Publisher', NULL, NULL, $now, $now"
+
+  # source/deleted_at added in add_mcp_library_source_columns. source='custom' so the
+  # remote sync never overwrites or prunes the test row.
+  if column_exists_postgres "mcp_library" "source"; then
+    cols="$cols, source"
+    vals="$vals, 'custom'"
+  fi
+  if column_exists_postgres "mcp_library" "deleted_at"; then
+    cols="$cols, deleted_at"
+    vals="$vals, NULL"
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- mcp_library (MCP server catalog - added via add_mcp_library_table, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO mcp_library ($cols) VALUES ($vals) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate mcp_library INSERT for SQLite (table added via add_mcp_library_table).
+generate_mcp_library_insert_sqlite() {
+  local now="$1"
+  local output_file="$2"
+  local config_db="$3"
+
+  if [ ! -f "$config_db" ]; then
+    return
+  fi
+
+  if ! column_exists_sqlite "$config_db" "mcp_library" "id"; then
+    return
+  fi
+
+  local cols="slug, name, description, category, connection_type, connection_url, stdio_config, auth_type, required_header_keys, icon_url, docs_url, publisher, tags, metadata, created_at, updated_at"
+  local vals="'migration-test-mcp-lib-001', 'Migration Test MCP Server', 'A test MCP library entry for migration testing', 'testing', 'http', 'https://mcp.example.com/sse', NULL, 'none', NULL, 'https://example.com/icon.png', 'https://example.com/docs', 'Migration Test Publisher', NULL, NULL, $now, $now"
+
+  if column_exists_sqlite "$config_db" "mcp_library" "source"; then
+    cols="$cols, source"
+    vals="$vals, 'custom'"
+  fi
+  if column_exists_sqlite "$config_db" "mcp_library" "deleted_at"; then
+    cols="$cols, deleted_at"
+    vals="$vals, NULL"
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- mcp_library (MCP server catalog - added via add_mcp_library_table, dynamically generated)" >> "$output_file"
+  echo "INSERT INTO mcp_library ($cols) VALUES ($vals) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Validate faker column coverage for SQLite
+validate_faker_column_coverage_sqlite() {
+  local faker_sql="$1"
+  local version="$2"
+  local temp_dir="$3"
+  local config_db="$4"
+  local logs_db="$5"
+
+  log_info "Validating faker column coverage for $version schema (SQLite)..."
+
+  # Tables to skip (system/tracking tables)
+  local skip_tables="gorp_migrations schema_migrations"
+
+  # Extract faker columns to a temp file
+  local faker_cols_file="$temp_dir/faker_columns.txt"
+  extract_faker_columns "$faker_sql" "$faker_cols_file"
+
+  local failed=0
+  local missing_report=""
+
+  # Check both config and logs databases
+  for db_path in "$config_db" "$logs_db"; do
+    if [ ! -f "$db_path" ]; then
+      continue
+    fi
+
+    local db_name
+    db_name=$(basename "$db_path")
+
+    # Get all tables from the database
+    local tables
+    tables=$(get_sqlite_tables "$db_path")
+
+    for table in $tables; do
+      # Skip system tables
+      if [[ " $skip_tables " == *" $table "* ]]; then
+        continue
+      fi
+
+      # Get columns that faker inserts for this table
+      local faker_cols
+      faker_cols=$(grep "^${table}:" "$faker_cols_file" 2>/dev/null | cut -d: -f2 | tr ',' '\n' | sort -u)
+
+      # If faker doesn't insert into this table at all, that's a problem
+      if [ -z "$faker_cols" ]; then
+        missing_report="${missing_report}\n  Table '$table' ($db_name): NO FAKER DATA - table not covered by faker SQL"
+        failed=1
+        continue
+      fi
+
+      # Get all columns from the database schema
+      local db_cols
+      db_cols=$(get_sqlite_columns "$db_path" "$table")
+
+      # Get auto-increment columns
+      local auto_cols
+      auto_cols=$(get_sqlite_auto_increment_columns "$db_path" "$table")
+
+      # Check each DB column
+      local missing_cols=""
+      for col in $db_cols; do
+        # Skip auto-increment columns
+        if echo "$auto_cols" | grep -q "^${col}$"; then
+          continue
+        fi
+
+        # Check if faker covers this column
+        if ! echo "$faker_cols" | grep -q "^${col}$"; then
+          if [ -z "$missing_cols" ]; then
+            missing_cols="$col"
+          else
+            missing_cols="$missing_cols, $col"
+          fi
+        fi
+      done
+
+      if [ -n "$missing_cols" ]; then
+        missing_report="${missing_report}\n  Table '$table' ($db_name): $missing_cols"
+        failed=1
+      fi
+    done
+  done
+
+  if [ $failed -eq 1 ]; then
+    log_error "Faker SQL missing coverage for columns in $version schema:"
+    echo -e "$missing_report" | while read -r line; do
+      [ -n "$line" ] && log_error "$line"
+    done
+    log_error ""
+    log_error "Please update generate_faker_sql() in this script to include these columns."
+    log_error "Migration tests require all columns in the older schema to have test data coverage."
+    return 1
+  fi
+
+  log_info "Faker column coverage validation passed for $version schema (SQLite)"
+  return 0
+}
+
+# ============================================================================
+# Data Snapshot Functions - Capture table data before/after migration
+# ============================================================================
+
+# Get list of all tables in the database
+get_postgres_tables() {
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    return
+  fi
+
+  docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A \
+    -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>/dev/null
+}
+
+# Get columns for a table
+get_postgres_columns() {
+  local table="$1"
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    return
+  fi
+
+  docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A \
+    -c "SELECT column_name FROM information_schema.columns WHERE table_name = '$table' AND table_schema = 'public' ORDER BY ordinal_position;" 2>/dev/null
+}
+
+# Dump table data as CSV-like format (for comparison)
+dump_postgres_table() {
+  local table="$1"
+  local output_file="$2"
+  local container
+  container=$(get_postgres_container)
+
+  if [ -z "$container" ]; then
+    return 1
+  fi
+
+  # Get column list
+  local columns
+  columns=$(get_postgres_columns "$table" | tr '\n' ',' | sed 's/,$//')
+
+  if [ -z "$columns" ]; then
+    echo "# Table $table does not exist" > "$output_file"
+    return 0
+  fi
+
+  # Export data as CSV (header + data), sorted by first column for consistent ordering
+  docker exec "$container" \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A -F'|' \
+    -c "SELECT $columns FROM $table ORDER BY 1;" 2>/dev/null > "$output_file"
+
+  # Prepend column header
+  local tmp_file="${output_file}.tmp"
+  echo "# COLUMNS: $columns" > "$tmp_file"
+  cat "$output_file" >> "$tmp_file"
+  mv "$tmp_file" "$output_file"
+}
+
+# Capture snapshot of all tables
+capture_postgres_snapshot() {
+  local snapshot_dir="$1"
+
+  mkdir -p "$snapshot_dir"
+
+  log_info "Capturing database snapshot..."
+
+  local tables
+  tables=$(get_postgres_tables)
+
+  # Save table list
+  echo "$tables" > "$snapshot_dir/tables.txt"
+
+  local table_count=0
+  for table in $tables; do
+    # Skip migration tracking tables
+    if [[ "$table" == "gorp_migrations" ]] || [[ "$table" == "schema_migrations" ]]; then
+      continue
+    fi
+
+    dump_postgres_table "$table" "$snapshot_dir/${table}.csv"
+    local row_count
+    row_count=$(get_postgres_table_count "$table")
+    log_info "  Captured $table: $row_count rows"
+    table_count=$((table_count + 1))
+  done
+
+  log_info "Snapshot captured: $table_count tables"
+}
+
+# Compare two snapshots - verifies all data from before exists unchanged after migration
+compare_postgres_snapshots() {
+  local before_dir="$1"
+  local after_dir="$2"
+
+  log_info "Comparing data before and after migration..."
+
+  local failed=0
+  local checked=0
+  local new_cols_count=0
+
+  # Tables to skip entirely (system/tracking tables that change during migration)
+  # governance_model_pricing, governance_model_parameters: synced from remote model catalog URL
+  # during startup (see framework/modelcatalog/sync.go) - row count grows from seed-only to full catalog
+  local skip_tables="gorp_migrations schema_migrations migrations governance_config governance_model_pricing governance_model_parameters"
+
+  # Tables whose row count is allowed to GROW during migration (rows added by design) but
+  # whose pre-existing seeded rows must still be value-compared. Unlike skip_tables (which
+  # disables ALL validation), these relax only the row-count assertion and restrict the value
+  # comparison to the seeded test rows - so a migration that mutates or drops existing data is
+  # still caught.
+  # governance_model_configs: the governance-folding migrations (migrate_provider_governance_to_model_configs,
+  # migrate_virtual_key_governance_to_model_configs) create wildcard model-config rows from provider/VK
+  # governance, so the row count grows by design (e.g. seed 2 -> 5). The migration-added rows have random
+  # UUID ids; the seeded model-config-migration-test-* rows must survive unchanged.
+  local rowcount_grow_tables="governance_model_configs"
+
+  # Tables intentionally removed by migrations — their disappearance is by design,
+  # not data loss. The four oauth_per_user_* tables backed the Bifrost-as-OAuth-server
+  # flow and were dropped by migrationDropLegacyOAuthServerTables when Bifrost became
+  # strictly an OAuth client; any rows present were orphans of a deleted code path.
+  local dropped_tables="oauth_per_user_clients oauth_per_user_codes oauth_per_user_pending_flows oauth_per_user_sessions"
+
+  # Columns to ignore when comparing (these are expected to change during migration)
+  # - updated_at: timestamps are updated when records are touched
+  # - config_hash: recomputed when config is synced
+  # - created_at: some migrations reset this to default (known issue, tracked separately)
+  # - models_json: migrations add default empty array
+  # - weight: migrations add default value
+  # - allowed_models: migrations add default empty array
+  # - network_config_json, concurrency_buffer_json, proxy_config_json, custom_provider_config_json:
+  #   JSON fields that get normalized with default values during migration
+  # - budget_id, rate_limit_id: governance fields that may be reset or initialized during migrations
+  # - virtual_key_id, provider_config_id: new FK columns on governance_budgets (added by multi-budget migration)
+  # - status, description: key validation runs after migration, updating these fields
+  #   for invalid/test keys (e.g., status becomes "list_models_failed")
+  local ignore_columns="updated_at config_hash created_at models_json weight allowed_models network_config_json concurrency_buffer_json proxy_config_json custom_provider_config_json budget_id rate_limit_id status description"
+
+  # Get tables from before snapshot
+  if [ ! -f "$before_dir/tables.txt" ]; then
+    log_error "Before snapshot not found!"
+    return 1
+  fi
+
+  local before_tables
+  before_tables=$(cat "$before_dir/tables.txt")
+
+  for table in $before_tables; do
+    # Skip system/tracking tables
+    if [[ " $skip_tables " == *" $table "* ]]; then
+      log_info "  Skipping $table (system table)"
+      continue
+    fi
+
+    local before_file="$before_dir/${table}.csv"
+    local after_file="$after_dir/${table}.csv"
+
+    if [ ! -f "$before_file" ]; then
+      continue
+    fi
+
+    # Check if table still exists after migration
+    if [ ! -f "$after_file" ]; then
+      if [[ " $dropped_tables " == *" $table "* ]]; then
+        log_info "  Skipping $table (intentionally dropped by migration)"
+        continue
+      fi
+      log_error "Table $table missing after migration!"
+      failed=1
+      continue
+    fi
+
+    # Get before columns
+    local before_columns
+    before_columns=$(head -1 "$before_file" | sed 's/^# COLUMNS: //')
+
+    # Get after columns
+    local after_columns
+    after_columns=$(head -1 "$after_file" | sed 's/^# COLUMNS: //')
+
+    # Check that all before columns still exist (new columns are OK)
+    # Columns that are intentionally renamed during migration should be excluded
+    # routing_engine_used -> routing_engines_used (v1.4.7)
+    # output_cost_per_image_above_512_and_512_pixels_and_premium_imag (PG-truncated) -> output_cost_per_image_above_512x512_pixels_premium
+    # output_cost_per_image_above_512_and_512_pixels_and_premium_image (SQLite full) -> output_cost_per_image_above_512x512_pixels_premium
+    local renamed_columns="routing_engine_used output_cost_per_image_above_512_and_512_pixels_and_premium_imag output_cost_per_image_above_512_and_512_pixels_and_premium_image"
+
+    # Columns that are intentionally dropped during migration should be excluded
+    # enable_governance (dropped in v1.4.8) - applies to all tables
+    local dropped_columns="enable_governance"
+    # provider, model (dropped from routing_rules only in v1.4.12)
+    if [ "$table" = "routing_rules" ]; then
+      dropped_columns="$dropped_columns provider model"
+    fi
+    # azure_deployments_json, vertex_deployments_json, bedrock_deployments_json, replicate_deployments_json
+    # (dropped from config_keys - migrated to provider-level deployment config)
+    # azure_api_version (dropped from config_keys in v1.5.4 via migrationDropAzureAPIVersionColumn)
+    if [ "$table" = "config_keys" ]; then
+      dropped_columns="$dropped_columns azure_deployments_json vertex_deployments_json bedrock_deployments_json replicate_deployments_json azure_api_version"
+    fi
+    # budget_id (dropped from governance_virtual_keys and governance_virtual_key_provider_configs
+    # in add_multi_budget_tables - ownership moved to governance_budgets.virtual_key_id/provider_config_id)
+    # access_profile_id (dropped from governance_virtual_keys in v1.5.3 via migrationDropVKAccessProfileIDColumn -
+    # the add migration ran transiently in v1.5.2 but the feature was reverted before stable release)
+    if [ "$table" = "governance_virtual_keys" ] || [ "$table" = "governance_virtual_key_provider_configs" ]; then
+      dropped_columns="$dropped_columns budget_id"
+    fi
+    if [ "$table" = "governance_virtual_keys" ]; then
+      dropped_columns="$dropped_columns access_profile_id"
+    fi
+    # budget_id (dropped from governance_teams in migrationAddTeamBudgetsToBudgetsTable v1.5.0-prerelease4 -
+    # ownership moved to governance_budgets.team_id)
+    if [ "$table" = "governance_teams" ]; then
+      dropped_columns="$dropped_columns budget_id"
+    fi
+    # calendar_aligned was dropped from governance_budgets and governance_rate_limits by
+    # migrationDropLegacyCalendarAlignedColumns. Calendar alignment is now a VK-level
+    # (and team-level) setting; budget and rate-limit reset logic derives the value from
+    # the owning VK/team at reset time, so the column is intentionally removed. (History:
+    # added to governance_budgets in prerelease1, dropped in prerelease2, re-added to both
+    # tables in prerelease4, then dropped again here.)
+    if [ "$table" = "governance_budgets" ] || [ "$table" = "governance_rate_limits" ]; then
+      dropped_columns="$dropped_columns calendar_aligned"
+    fi
+    # session_token / session_token_hash were replaced by session_id in both
+    # oauth_user_sessions and oauth_user_tokens; gateway_session_id was additionally
+    # dropped from oauth_user_sessions. The per-user OAuth refactor removed the
+    # Bifrost-as-OAuth-server flow (migrationReplaceOauthSessionTokenWithSessionID
+    # and migrationDropLegacyOAuthServerTables); identity is now keyed by session_id.
+    if [ "$table" = "oauth_user_sessions" ]; then
+      dropped_columns="$dropped_columns session_token session_token_hash gateway_session_id"
+    fi
+    if [ "$table" = "oauth_user_tokens" ]; then
+      dropped_columns="$dropped_columns session_token session_token_hash"
+    fi
+    # enable_litellm_fallbacks (dropped from config_client in latest cut - behavior moved elsewhere)
+    # allow_direct_keys (dropped from config_client in v1.5.0 - direct-keys-only mode removed; HTTP header
+    # pass-through is no longer accepted)
+    # mcp_external_server_url (dropped by migrationDropMCPExternalServerURL - Bifrost no longer acts as an
+    # OAuth authorization server, so the .well-known / WWW-Authenticate advertise URL is dead)
+    if [ "$table" = "config_client" ]; then
+      dropped_columns="$dropped_columns enable_litellm_fallbacks allow_direct_keys mcp_external_server_url"
+    fi
+
+    local before_col_array
+    IFS=',' read -ra before_col_array <<< "$before_columns"
+
+    local missing_cols=""
+    for col in "${before_col_array[@]}"; do
+      # Skip columns that are intentionally renamed during migration
+      if [[ " $renamed_columns " == *" $col "* ]]; then
+        continue
+      fi
+      # Skip columns that are intentionally dropped during migration
+      if [[ " $dropped_columns " == *" $col "* ]]; then
+        continue
+      fi
+      if [[ ! ",$after_columns," == *",$col,"* ]]; then
+        missing_cols="$missing_cols $col"
+      fi
+    done
+
+    if [ -n "$missing_cols" ]; then
+      log_error "Table $table: columns dropped after migration:$missing_cols"
+      failed=1
+      continue
+    fi
+
+    # Check row count
+    local before_rows
+    local after_rows
+    before_rows=$(tail -n +2 "$before_file" | wc -l | tr -d ' ')
+    after_rows=$(tail -n +2 "$after_file" | wc -l | tr -d ' ')
+
+    if [ "$before_rows" -ne "$after_rows" ]; then
+      if [[ " $rowcount_grow_tables " == *" $table "* ]] && [ "$after_rows" -ge "$before_rows" ]; then
+        log_info "  Table $table: row count grew $before_rows -> $after_rows (rows added by migration; comparing seeded rows only)"
+      else
+        log_error "Table $table: row count changed! Before: $before_rows, After: $after_rows"
+        failed=1
+        continue
+      fi
+    fi
+
+    # Skip empty tables
+    if [ "$before_rows" -eq 0 ]; then
+      log_info "  Table $table: 0 rows (empty)"
+      checked=$((checked + 1))
+      continue
+    fi
+
+    # Check if new columns were added (this is OK)
+    if [ "$before_columns" != "$after_columns" ]; then
+      new_cols_count=$((new_cols_count + 1))
+    fi
+
+    # Build column indices for comparison - map before column positions to after positions
+    # This allows us to compare only the columns that existed before migration
+    local after_col_array
+    IFS=',' read -ra after_col_array <<< "$after_columns"
+
+    # Create index mapping: for each before column, find its position in after columns
+    local col_map=""
+    local compare_cols=""
+    local col_idx=1
+    for col in "${before_col_array[@]}"; do
+      # Skip columns that are expected to change
+      # virtual_key_id, provider_config_id: only ignore on governance_budgets (new FK columns from multi-budget migration)
+      # team_id: only ignore on governance_budgets (backfilled from governance_teams.budget_id in prerelease4 migration)
+      local table_ignore_columns="$ignore_columns"
+      if [ "$table" = "governance_budgets" ]; then
+        # virtual_key_id, provider_config_id, team_id: new FK columns added by multi-budget migration
+        # current_usage: DumpBudgets runs on every startup and writes the float64 value back,
+        #   changing the DECIMAL column representation (e.g. 100.00 → 100) without changing the value
+        table_ignore_columns="$table_ignore_columns virtual_key_id provider_config_id team_id current_usage"
+      fi
+      # tool_sync_interval: migrationConvertMCPClientToolSyncIntervalMinutesToSeconds converts
+      # legacy minute values to seconds (e.g. 5 → 300), so this column intentionally changes.
+      if [ "$table" = "config_mcp_clients" ]; then
+        table_ignore_columns="$table_ignore_columns tool_sync_interval"
+      fi
+      # model_parameters_url: set to DefaultModelParametersURL by initFrameworkConfig on every
+      # startup (via ResolveFrameworkPricingConfig), so it changes from NULL to the URL when
+      # bifrost first starts after the add_model_parameters_url_column migration.
+      if [ "$table" = "framework_configs" ]; then
+        table_ignore_columns="$table_ignore_columns model_parameters_url"
+      fi
+      if [[ " $table_ignore_columns " == *" $col "* ]]; then
+        col_idx=$((col_idx + 1))
+        continue
+      fi
+
+      # Find this column in after_columns
+      local after_idx=1
+      for after_col in "${after_col_array[@]}"; do
+        if [ "$col" = "$after_col" ]; then
+          col_map="$col_map $col_idx:$after_idx"
+          compare_cols="$compare_cols $col"
+          break
+        fi
+        after_idx=$((after_idx + 1))
+      done
+      col_idx=$((col_idx + 1))
+    done
+
+    # Guard: skip if no comparable columns (all columns were ignored or not matched)
+    if [ -z "$col_map" ]; then
+      log_info "  Table $table: no comparable columns (all ignored or unmatched), skipping data comparison"
+      checked=$((checked + 1))
+      continue
+    fi
+
+    # Extract comparable data from before file (using before column positions)
+    local before_comparable="$before_dir/${table}_comparable.txt"
+    local after_comparable="$after_dir/${table}_comparable.txt"
+
+    # Build cut command for before columns
+    local before_cut_cols=""
+    for mapping in $col_map; do
+      local before_idx="${mapping%%:*}"
+      if [ -z "$before_cut_cols" ]; then
+        before_cut_cols="$before_idx"
+      else
+        before_cut_cols="$before_cut_cols,$before_idx"
+      fi
+    done
+
+    # Build cut command for after columns
+    local after_cut_cols=""
+    for mapping in $col_map; do
+      local after_idx="${mapping##*:}"
+      if [ -z "$after_cut_cols" ]; then
+        after_cut_cols="$after_idx"
+      else
+        after_cut_cols="$after_cut_cols,$after_idx"
+      fi
+    done
+
+    # Extract and sort data for comparison.
+    # awk is used instead of `cut -f` because cut always emits fields in
+    # ascending position order regardless of the spec, which misaligns rows
+    # when before/after physical column orders differ (e.g. a column that
+    # was dropped and then re-added via ALTER TABLE ADD COLUMN ends up at
+    # the end of the table in the after-schema even though its logical
+    # position is in the middle).
+    tail -n +2 "$before_file" | awk -F'|' -v cols="$before_cut_cols" '
+      BEGIN { n = split(cols, idx, ",") }
+      {
+        out = $idx[1]
+        for (i = 2; i <= n; i++) out = out "|" $idx[i]
+        print out
+      }
+    ' | sort > "$before_comparable"
+    tail -n +2 "$after_file" | awk -F'|' -v cols="$after_cut_cols" '
+      BEGIN { n = split(cols, idx, ",") }
+      {
+        out = $idx[1]
+        for (i = 2; i <= n; i++) out = out "|" $idx[i]
+        print out
+      }
+    ' | sort > "$after_comparable"
+
+    # governance_rate_limits: ratelimit-migration-test-1 has a 1-minute reset window, so
+    # PerformStartupResets may legitimately zero its usage counters and advance its
+    # last_reset timestamps on startup. Blank out only those four fields for that one row
+    # (on both sides) instead of skipping the whole row, so immutable fields like
+    # token_max_limit / token_reset_duration are still verified for it. ratelimit-migration-test-2
+    # (1-day window, never expected to reset) is compared unchanged, including its usage/reset
+    # columns.
+    if [ "$table" = "governance_rate_limits" ]; then
+      local reset_field_idx=""
+      local reset_field_pos=1
+      for compare_col in $compare_cols; do
+        case "$compare_col" in
+          token_current_usage|token_last_reset|request_current_usage|request_last_reset)
+            reset_field_idx="${reset_field_idx:+$reset_field_idx }$reset_field_pos"
+            ;;
+        esac
+        reset_field_pos=$((reset_field_pos + 1))
+      done
+      if [ -n "$reset_field_idx" ]; then
+        for comparable_file in "$before_comparable" "$after_comparable"; do
+          awk -F'|' -v OFS='|' -v idxs="$reset_field_idx" '
+            BEGIN { n = split(idxs, arr, " ") }
+            {
+              if ($1 == "ratelimit-migration-test-1") {
+                for (i = 1; i <= n; i++) $arr[i] = "<reset-managed>"
+              }
+              print
+            }
+          ' "$comparable_file" > "${comparable_file}.tmp" && mv "${comparable_file}.tmp" "$comparable_file"
+        done
+      fi
+    fi
+
+    # For grow-allowed tables, restrict the value comparison to the seeded test rows. The
+    # migration-added rows carry random UUID ids and are not part of the data contract, so
+    # they self-exclude from the seed-id filter on both sides; what remains is the seeded
+    # rows, which must be preserved byte-for-byte across the migration.
+    if [[ " $rowcount_grow_tables " == *" $table "* ]]; then
+      local seed_pattern=""
+      case "$table" in
+        governance_model_configs) seed_pattern="model-config-migration-test" ;;
+      esac
+      if [ -n "$seed_pattern" ]; then
+        grep -F "$seed_pattern" "$before_comparable" > "${before_comparable}.seed" || true
+        grep -F "$seed_pattern" "$after_comparable" > "${after_comparable}.seed" || true
+        mv "${before_comparable}.seed" "$before_comparable"
+        mv "${after_comparable}.seed" "$after_comparable"
+      fi
+    fi
+
+    # Compare the extracted data
+    if ! diff -q "$before_comparable" "$after_comparable" > /dev/null 2>&1; then
+      log_error "Table $table: data values changed after migration!"
+      log_error "  Compared columns:$compare_cols"
+
+      # Show first difference
+      local diff_output
+      diff_output=$(diff "$before_comparable" "$after_comparable" | head -10)
+      log_error "  Difference (first 10 lines):"
+      echo "$diff_output" | while read -r line; do
+        log_error "    $line"
+      done
+
+      failed=1
+      rm -f "$before_comparable" "$after_comparable"
+      continue
+    fi
+
+    rm -f "$before_comparable" "$after_comparable"
+
+    log_info "  Table $table: $before_rows rows ✓ (verified ${#before_col_array[@]} columns)"
+    checked=$((checked + 1))
+  done
+
+  log_info "Comparison complete: $checked tables checked"
+  if [ "$new_cols_count" -gt 0 ]; then
+    log_info "  $new_cols_count tables have new columns added (OK - schema expansion)"
+  fi
+
+  return $failed
+}
+
+# ============================================================================
+# Validation Functions (simplified, uses snapshots)
+# ============================================================================
+
+# verify_budget_migration checks that the multi-budget FK migration correctly
+# moved budget ownership from VK/ProviderConfig budget_id columns to
+# governance_budgets.virtual_key_id / governance_budgets.provider_config_id
+verify_budget_migration_postgres() {
+  log_info "Verifying budget migration (budget_id → virtual_key_id/provider_config_id)..."
+  local failed=0
+
+  # Check: budget-migration-test-1 was linked to vk-migration-test-1 via budget_id
+  # After migration, governance_budgets.virtual_key_id should be set
+  local vk_budget_count
+  vk_budget_count=$(run_postgres_scalar "SELECT COUNT(*) FROM governance_budgets WHERE id = 'budget-migration-test-1' AND virtual_key_id = 'vk-migration-test-1'")
+  if [ "$vk_budget_count" = "1" ]; then
+    log_info "  VK budget migration: budget-migration-test-1 → vk-migration-test-1 ✓"
+  else
+    log_warn "  VK budget migration: budget-migration-test-1 virtual_key_id not set (count=$vk_budget_count) — may be expected if old version didn't have budget_id on VK"
+  fi
+
+  # Check: budget-migration-test-2 was linked to provider config via budget_id
+  # After migration, governance_budgets.provider_config_id should be set
+  local pc_budget_count
+  pc_budget_count=$(run_postgres_scalar "SELECT COUNT(*) FROM governance_budgets WHERE id = 'budget-migration-test-2' AND provider_config_id IS NOT NULL")
+  if [ "$pc_budget_count" = "1" ]; then
+    log_info "  PC budget migration: budget-migration-test-2 → provider_config ✓"
+  else
+    log_warn "  PC budget migration: budget-migration-test-2 provider_config_id not set (count=$pc_budget_count) — may be expected if old version didn't have budget_id on PC"
+  fi
+
+  # Check: virtual_key_id and provider_config_id columns exist on governance_budgets
+  local has_vk_col
+  has_vk_col=$(run_postgres_scalar "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'governance_budgets' AND column_name = 'virtual_key_id'")
+  if [ "$has_vk_col" = "1" ]; then
+    log_info "  Column governance_budgets.virtual_key_id exists ✓"
+  else
+    log_error "  Column governance_budgets.virtual_key_id MISSING!"
+    failed=1
+  fi
+
+  local has_pc_col
+  has_pc_col=$(run_postgres_scalar "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'governance_budgets' AND column_name = 'provider_config_id'")
+  if [ "$has_pc_col" = "1" ]; then
+    log_info "  Column governance_budgets.provider_config_id exists ✓"
+  else
+    log_error "  Column governance_budgets.provider_config_id MISSING!"
+    failed=1
+  fi
+
+  # Check: budget_id column should be dropped from governance_virtual_keys
+  local vk_has_budget_id
+  vk_has_budget_id=$(run_postgres_scalar "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'governance_virtual_keys' AND column_name = 'budget_id'")
+  if [ "$vk_has_budget_id" = "0" ]; then
+    log_info "  Column governance_virtual_keys.budget_id dropped ✓"
+  else
+    log_error "  Column governance_virtual_keys.budget_id still exists!"
+    failed=1
+  fi
+
+  # Check: budget_id column should be dropped from governance_virtual_key_provider_configs
+  local pc_has_budget_id
+  pc_has_budget_id=$(run_postgres_scalar "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'governance_virtual_key_provider_configs' AND column_name = 'budget_id'")
+  if [ "$pc_has_budget_id" = "0" ]; then
+    log_info "  Column governance_virtual_key_provider_configs.budget_id dropped ✓"
+  else
+    log_error "  Column governance_virtual_key_provider_configs.budget_id still exists!"
+    failed=1
+  fi
+
+  # Check: junction tables should not exist
+  local junction_vk
+  junction_vk=$(run_postgres_scalar "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'governance_virtual_key_budgets'")
+  if [ "$junction_vk" = "0" ]; then
+    log_info "  Junction table governance_virtual_key_budgets dropped ✓"
+  else
+    log_warn "  Junction table governance_virtual_key_budgets still exists (may not have existed in old version)"
+  fi
+
+  # Check: customer_id column added to governance_budgets by add_customer_budgets_to_budgets_table
+  local has_customer_col
+  has_customer_col=$(run_postgres_scalar "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'governance_budgets' AND column_name = 'customer_id'")
+  if [ "$has_customer_col" = "1" ]; then
+    log_info "  Column governance_budgets.customer_id exists ✓"
+  else
+    log_error "  Column governance_budgets.customer_id MISSING!"
+    failed=1
+  fi
+
+  # Check: customer-migration-test-1 owned budget-migration-test-3 via governance_customers.budget_id.
+  # After migration, governance_budgets.customer_id should be backfilled to that customer. Without this
+  # the customer-budget fold path (seeded but previously unverified) could silently break and still pass.
+  local customer_budget_count
+  customer_budget_count=$(run_postgres_scalar "SELECT COUNT(*) FROM governance_budgets WHERE id = 'budget-migration-test-3' AND customer_id = 'customer-migration-test-1'")
+  if [ "$customer_budget_count" = "1" ]; then
+    log_info "  Customer budget migration: budget-migration-test-3 → customer-migration-test-1 ✓"
+  else
+    log_warn "  Customer budget migration: budget-migration-test-3 customer_id not set (count=$customer_budget_count) — may be expected if old version didn't have budget_id on governance_customers"
+  fi
+
+  return $failed
+}
+
+validate_postgres_data() {
+  local before_snapshot="$1"
+  local after_snapshot="$2"
+
+  compare_postgres_snapshots "$before_snapshot" "$after_snapshot"
+}
+
+validate_sqlite_data() {
+  local config_db="$1"
+  local logs_db="$2"
+
+  log_info "Validating SQLite data integrity..."
+
+  local failed=0
+
+  # Check config store tables
+  if [ -f "$config_db" ]; then
+    # Required tables
+    local required_tables=("config_providers")
+    for table in "${required_tables[@]}"; do
+      local count
+      count=$(get_sqlite_table_count "$config_db" "$table")
+      if [ "$count" -eq 0 ]; then
+        log_error "Required table $table has no data after migration!"
+        failed=1
+      else
+        log_info "Table $table: $count rows ✓"
+      fi
+    done
+  fi
+
+  # Check log store tables
+  if [ -f "$logs_db" ]; then
+    local log_tables=("logs")
+    for table in "${log_tables[@]}"; do
+      local count
+      count=$(get_sqlite_table_count "$logs_db" "$table")
+      if [ "$count" -eq 0 ]; then
+        log_error "Required table $table has no data after migration!"
+        failed=1
+      else
+        log_info "Table $table: $count rows ✓"
+      fi
+    done
+  fi
+
+  return $failed
+}
+
+# ============================================================================
+# PostgreSQL Migration Test
+# ============================================================================
+
+run_postgres_migration_tests() {
+  log_info "=========================================="
+  log_info "Running PostgreSQL Migration Tests"
+  log_info "=========================================="
+
+  # Check prerequisites
+  if ! check_postgres_available; then
+    log_warn "Skipping PostgreSQL tests - Docker not available"
+    return 0
+  fi
+
+  # Find an available port for bifrost
+  BIFROST_PORT=$(find_available_port 8089)
+  log_info "Using port $BIFROST_PORT for bifrost"
+
+  if ! ensure_postgres_running; then
+    log_error "Failed to start PostgreSQL"
+    return 1
+  fi
+
+  # Create temp directory
+  TEMP_DIR=$(mktemp -d)
+  log_info "Using temp directory: $TEMP_DIR"
+
+  # Create config file for PostgreSQL
+  local config_file="$TEMP_DIR/config.json"
+  cat > "$config_file" << EOF
+{
+  "\$schema": "https://www.getbifrost.ai/schema",
+  "config_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "$POSTGRES_HOST",
+      "port": "$POSTGRES_PORT",
+      "user": "$POSTGRES_USER",
+      "password": "$POSTGRES_PASSWORD",
+      "db_name": "$POSTGRES_DB",
+      "ssl_mode": "$POSTGRES_SSLMODE"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "$POSTGRES_HOST",
+      "port": "$POSTGRES_PORT",
+      "user": "$POSTGRES_USER",
+      "password": "$POSTGRES_PASSWORD",
+      "db_name": "$POSTGRES_DB",
+      "ssl_mode": "$POSTGRES_SSLMODE"
+    }
+  }
+}
+EOF
+
+  # Generate faker SQL
+  local faker_sql="$TEMP_DIR/faker.sql"
+  generate_faker_sql "postgres" "$faker_sql"
+
+  # Build current version ONCE before testing
+  log_info "Building current version from Go workspace..."
+  local current_binary="$TEMP_DIR/bifrost-http-current"
+  cd "$REPO_ROOT"
+  # Ensure the embedded ui directory exists (it's gitignored, so it won't be present in CI)
+  if [ ! -d "$REPO_ROOT/transports/bifrost-http/ui" ]; then
+    mkdir -p "$REPO_ROOT/transports/bifrost-http/ui"
+    echo "placeholder" > "$REPO_ROOT/transports/bifrost-http/ui/.gitkeep"
+  fi
+  if ! go build -o "$current_binary" ./transports/bifrost-http; then
+    log_error "Failed to build current version"
+    return 1
+  fi
+  log_info "Current version built successfully: $current_binary"
+
+  # Get previous versions
+  local versions
+  versions=$(get_previous_versions "$VERSIONS_TO_TEST")
+
+  if [ -z "$versions" ]; then
+    log_warn "No previous versions found, skipping version-based migration tests"
+    versions="latest"
+  fi
+
+  log_info "Testing versions: $(echo $versions | tr '\n' ' ')"
+
+  # Test each version
+  for version in $versions; do
+    log_info "------------------------------------------"
+    log_info "Testing migration from version: $version"
+    log_info "------------------------------------------"
+
+    # Create snapshot directories for this version
+    local before_snapshot="$TEMP_DIR/snapshot-before-$version"
+    local after_snapshot="$TEMP_DIR/snapshot-after-$version"
+
+    # Reset database
+    if ! reset_postgres_database; then
+      log_error "Failed to reset database for version $version"
+      exit 1
+    fi
+
+    # Start bifrost with this version using npx
+    local server_log="$TEMP_DIR/server-$version.log"
+    log_info "Starting bifrost $version via npx..."
+
+    npx @maximhq/bifrost --transport-version "$version" \
+      --app-dir "$TEMP_DIR" --port "$BIFROST_PORT" > "$server_log" 2>&1 &
+    BIFROST_PID=$!
+
+    if ! wait_for_bifrost "$server_log" 300; then
+      log_error "Failed to start bifrost $version"
+      cat "$server_log" 2>/dev/null || true
+      stop_bifrost
+      exit 1
+    fi
+
+    log_info "Bifrost $version started successfully"
+
+    # Stop bifrost (schema is now created)
+    stop_bifrost
+
+    # Create version-specific faker SQL with dynamic config_mcp_clients INSERT
+    local version_faker_sql="$TEMP_DIR/faker-$version.sql"
+    cp "$faker_sql" "$version_faker_sql"
+    append_dynamic_mcp_clients_insert "postgres" "$version_faker_sql"
+
+    # Validate faker column coverage against older version's schema
+    if ! validate_faker_column_coverage_postgres "$version_faker_sql" "$version" "$TEMP_DIR"; then
+      log_error "Faker column coverage validation failed for $version"
+      return 1
+    fi
+
+    # Insert faker data
+    log_info "Inserting faker data..."
+    if ! run_postgres_sql_file "$version_faker_sql"; then
+      log_warn "Some faker data inserts may have failed (tables might not exist in this version)"
+    fi
+
+    # STEP 3: Capture snapshot BEFORE migration (after inserting faker data)
+    log_info "Capturing pre-migration snapshot..."
+    capture_postgres_snapshot "$before_snapshot"
+
+    # Now run current version to test migration
+    log_info "Running current version to test migration..."
+
+    # Start current version (already built)
+    local current_log="$TEMP_DIR/server-current-$version.log"
+    "$current_binary" --app-dir "$TEMP_DIR" --port "$BIFROST_PORT" > "$current_log" 2>&1 &
+    BIFROST_PID=$!
+
+    if ! wait_for_bifrost "$current_log" 300; then
+      log_error "Current version failed to start after migrating from $version"
+      cat "$current_log"
+      stop_bifrost
+      return 1
+    fi
+
+    log_info "Current version started successfully after migration from $version"
+
+    # Wait a moment to ensure all migrations are fully committed to DB
+    # The "successfully started" log means server is listening, but async operations may still be completing
+    sleep 2
+
+    # Verify the server is actually responding before we capture snapshot
+    local health_check_attempts=0
+    while [ $health_check_attempts -lt 10 ]; do
+      if curl -s "http://localhost:$BIFROST_PORT/health" >/dev/null 2>&1; then
+        log_info "Health check passed, server fully operational"
+        break
+      fi
+      sleep 1
+      health_check_attempts=$((health_check_attempts + 1))
+    done
+
+    # Fail fast if health check never succeeded
+    if [ $health_check_attempts -ge 10 ]; then
+      log_error "Health check failed: server did not respond on /health after 10 attempts"
+      stop_bifrost
+      return 1
+    fi
+
+    # Stop current version before taking snapshot
+    stop_bifrost
+
+    # STEP 4: Capture snapshot AFTER migration
+    log_info "Capturing post-migration snapshot..."
+    capture_postgres_snapshot "$after_snapshot"
+
+    # STEP 5: Compare snapshots - validate all data is intact
+    if ! validate_postgres_data "$before_snapshot" "$after_snapshot"; then
+      log_error "Data validation failed after migration from $version"
+      stop_bifrost
+      return 1
+    fi
+
+    # STEP 6: Verify budget migration (budget_id → virtual_key_id/provider_config_id)
+    if ! verify_budget_migration_postgres; then
+      log_error "Budget migration verification failed after migration from $version"
+      stop_bifrost
+      return 1
+    fi
+
+    stop_bifrost
+    log_info "Migration from $version: SUCCESS"
+  done
+
+  log_info "=========================================="
+  log_info "PostgreSQL Migration Tests: PASSED"
+  log_info "=========================================="
+  return 0
+}
+
+# ============================================================================
+# SQLite Migration Test
+# ============================================================================
+
+run_sqlite_migration_tests() {
+  log_info "=========================================="
+  log_info "Running SQLite Migration Tests"
+  log_info "=========================================="
+
+  # Check if sqlite3 is available
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    log_warn "sqlite3 not found, skipping SQLite tests"
+    return 0
+  fi
+
+  # Find an available port for bifrost
+  BIFROST_PORT=$(find_available_port 8089)
+  log_info "Using port $BIFROST_PORT for bifrost"
+
+  # Create temp directory
+  TEMP_DIR=$(mktemp -d)
+  log_info "Using temp directory: $TEMP_DIR"
+
+  local config_db="$TEMP_DIR/config.db"
+  local logs_db="$TEMP_DIR/logs.db"
+
+  # Create config file for SQLite
+  local config_file="$TEMP_DIR/config.json"
+  cat > "$config_file" << EOF
+{
+  "\$schema": "https://www.getbifrost.ai/schema",
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "$config_db"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "$logs_db"
+    }
+  }
+}
+EOF
+
+  # Generate faker SQL
+  local faker_sql="$TEMP_DIR/faker.sql"
+  generate_faker_sql "sqlite" "$faker_sql"
+
+  # Build current version ONCE before testing
+  log_info "Building current version from Go workspace..."
+  local current_binary="$TEMP_DIR/bifrost-http-current"
+  cd "$REPO_ROOT"
+  # Ensure the embedded ui directory exists (it's gitignored, so it won't be present in CI)
+  if [ ! -d "$REPO_ROOT/transports/bifrost-http/ui" ]; then
+    mkdir -p "$REPO_ROOT/transports/bifrost-http/ui"
+    echo "placeholder" > "$REPO_ROOT/transports/bifrost-http/ui/.gitkeep"
+  fi
+  if ! go build -o "$current_binary" ./transports/bifrost-http; then
+    log_error "Failed to build current version"
+    return 1
+  fi
+  log_info "Current version built successfully: $current_binary"
+
+  # Get previous versions
+  local versions
+  versions=$(get_previous_versions "$VERSIONS_TO_TEST")
+
+  if [ -z "$versions" ]; then
+    log_warn "No previous versions found, skipping version-based migration tests"
+    versions="latest"
+  fi
+
+  log_info "Testing versions: $(echo $versions | tr '\n' ' ')"
+
+  # Test each version
+  for version in $versions; do
+    log_info "------------------------------------------"
+    log_info "Testing migration from version: $version"
+    log_info "------------------------------------------"
+
+    # Reset databases
+    reset_sqlite_database "$config_db"
+    reset_sqlite_database "$logs_db"
+
+    # Start bifrost with this version using npx
+    local server_log="$TEMP_DIR/server-$version.log"
+    log_info "Starting bifrost $version via npx..."
+
+    npx @maximhq/bifrost --transport-version "$version" \
+      --app-dir "$TEMP_DIR" --port "$BIFROST_PORT" > "$server_log" 2>&1 &
+    BIFROST_PID=$!
+
+    if ! wait_for_bifrost "$server_log" 300; then
+      log_error "Failed to start bifrost $version"
+      cat "$server_log" 2>/dev/null || true
+      stop_bifrost
+      exit 1
+    fi
+
+    log_info "Bifrost $version started successfully"
+
+    # Stop bifrost (schema is now created)
+    stop_bifrost
+
+    # Create version-specific faker SQL with dynamic config_mcp_clients INSERT
+    local version_faker_sql="$TEMP_DIR/faker-$version.sql"
+    cp "$faker_sql" "$version_faker_sql"
+    append_dynamic_mcp_clients_insert "sqlite" "$version_faker_sql" "$config_db"
+
+    # Validate faker column coverage against older version's schema
+    if ! validate_faker_column_coverage_sqlite "$version_faker_sql" "$version" "$TEMP_DIR" "$config_db" "$logs_db"; then
+      log_error "Faker column coverage validation failed for $version"
+      return 1
+    fi
+
+    # Insert faker data into config store
+    log_info "Inserting faker data..."
+    if [ -f "$config_db" ]; then
+      run_sqlite_sql_file "$config_db" "$version_faker_sql" 2>/dev/null || true
+    fi
+    if [ -f "$logs_db" ]; then
+      run_sqlite_sql_file "$logs_db" "$version_faker_sql" 2>/dev/null || true
+    fi
+
+    # Now run current version to test migration
+    log_info "Running current version to test migration..."
+
+    # Start current version (already built)
+    local current_log="$TEMP_DIR/server-current-$version.log"
+    "$current_binary" --app-dir "$TEMP_DIR" --port "$BIFROST_PORT" > "$current_log" 2>&1 &
+    BIFROST_PID=$!
+
+    if ! wait_for_bifrost "$current_log" 300; then
+      log_error "Current version failed to start after migrating from $version"
+      cat "$current_log"
+      stop_bifrost
+      return 1
+    fi
+
+    log_info "Current version started successfully after migration from $version"
+
+    # Stop server before reading SQLite databases to avoid locks
+    stop_bifrost
+    sleep 2
+
+    # Validate data
+    if ! validate_sqlite_data "$config_db" "$logs_db"; then
+      log_error "Data validation failed after migration from $version"
+      cat "$current_log"
+      return 1
+    fi
+
+    log_info "Migration from $version: SUCCESS"
+  done
+
+  log_info "=========================================="
+  log_info "SQLite Migration Tests: PASSED"
+  log_info "=========================================="
+  return 0
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+main() {
+  log_info "=========================================="
+  log_info "Bifrost Migration Tests"
+  log_info "=========================================="
+  log_info "Database type: $DB_TYPE"
+  log_info "Versions to test: $VERSIONS_TO_TEST"
+  log_info ""
+
+  local exit_code=0
+
+  case "$DB_TYPE" in
+    postgres)
+      run_postgres_migration_tests || exit_code=$?
+      ;;
+    sqlite)
+      run_sqlite_migration_tests || exit_code=$?
+      ;;
+    all)
+      run_postgres_migration_tests || exit_code=$?
+      run_sqlite_migration_tests || exit_code=$?
+      ;;
+    *)
+      log_error "Unknown db_type: $DB_TYPE"
+      echo "Usage: $0 [postgres|sqlite|all]"
+      exit 1
+      ;;
+  esac
+
+  if [ $exit_code -eq 0 ]; then
+    log_info "=========================================="
+    log_info "All Migration Tests: PASSED"
+    log_info "=========================================="
+  else
+    log_error "=========================================="
+    log_error "Migration Tests: FAILED"
+    log_error "=========================================="
+  fi
+
+  exit $exit_code
+}
+
+main "$@"

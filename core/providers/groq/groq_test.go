@@ -1,0 +1,68 @@
+package groq_test
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/maximhq/bifrost/core/internal/llmtests"
+
+	"github.com/maximhq/bifrost/core/schemas"
+)
+
+func TestGroq(t *testing.T) {
+	t.Parallel()
+	if strings.TrimSpace(os.Getenv("GROQ_API_KEY")) == "" {
+		t.Skip("Skipping Groq tests because GROQ_API_KEY is not set")
+	}
+
+	client, ctx, cancel, err := llmtests.SetupTest()
+	if err != nil {
+		t.Fatalf("Error initializing test setup: %v", err)
+	}
+	defer cancel()
+	defer client.Shutdown()
+
+	testConfig := llmtests.ComprehensiveTestConfig{
+		Provider:  schemas.Groq,
+		ChatModel: "llama-3.3-70b-versatile",
+		Fallbacks: []schemas.Fallback{
+			{Provider: schemas.Groq, Model: "openai/gpt-oss-120b"},
+		},
+		TextModel: "llama-3.3-70b-versatile",
+		TextCompletionFallbacks: []schemas.Fallback{
+			{Provider: schemas.Groq, Model: "openai/gpt-oss-20b"},
+		},
+		EmbeddingModel:       "", // Groq doesn't support embedding
+		ReasoningModel:       "openai/gpt-oss-120b",
+		TranscriptionModel:   "whisper-large-v3",
+		SpeechSynthesisModel: "canopylabs/orpheus-v1-english",
+		Scenarios: llmtests.TestScenarios{
+			TextCompletion:             false,
+			TextCompletionStream:       false,
+			SimpleChat:                 true,
+			CompletionStream:           true,
+			MultiTurnConversation:      true,
+			ToolCalls:                  true,
+			ToolCallsStreaming:         true,
+			MultipleToolCalls:          true,
+			MultipleToolCallsStreaming: true,
+			End2EndToolCalling:         true,
+			AutomaticFunctionCall:      true,
+			ImageURL:                   false,
+			ImageBase64:                false,
+			MultipleImages:             false,
+			FileBase64:                 false, // Not supported
+			FileURL:                    false, // Not supported
+			CompleteEnd2End:            true,
+			Embedding:                  false,
+			ListModels:                 true,
+			Reasoning:                  true,
+			Transcription:              true,
+			SpeechSynthesis:            true,
+		},
+	}
+	t.Run("GroqTests", func(t *testing.T) {
+		llmtests.RunAllComprehensiveTests(t, client, ctx, testConfig)
+	})
+}

@@ -1,0 +1,153 @@
+# Bifrost Framework Development Services
+#
+# Supported Vector Stores:
+# - Weaviate: Runs locally via this docker-compose (port 9000)
+# - Redis: Runs locally via this docker-compose (port 6379)
+# - Qdrant: Runs locally via this docker-compose (REST: 6333, gRPC: 6334)
+# - Pinecone: Runs locally via Pinecone Local emulator (port 5081)
+#             For production, use cloud service with PINECONE_API_KEY and PINECONE_INDEX_HOST
+#             See: https://docs.pinecone.io/guides/operations/local-development
+#
+# Supported Log Stores:
+# - Postgres: shared with configstore (port 5432)
+# - ClickHouse: native protocol on host port 9001 (container 9000; host 9000 is
+#               taken by Weaviate), HTTP on 8123. Used by logstore clickhouse tests.
+#
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bifrost-postgres-fw
+    environment:
+      POSTGRES_USER: bifrost
+      POSTGRES_PASSWORD: bifrost_password
+      POSTGRES_DB: bifrost
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bifrost -d bifrost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - bifrost_network
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: bifrost-clickhouse-fw
+    environment:
+      CLICKHOUSE_DB: bifrost
+      CLICKHOUSE_USER: bifrost
+      CLICKHOUSE_PASSWORD: bifrost_password
+    ports:
+      - "9001:9000"
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - bifrost_network
+
+  redis:
+    image: redis/redis-stack:latest
+    container_name: bifrost-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - bifrost_network
+
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.25.0
+    container_name: bifrost-weaviate
+    ports:
+      - "9000:8080"
+      - "50051:50051"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - bifrost_network
+
+  pinecone:
+    image: ghcr.io/pinecone-io/pinecone-index:latest
+    container_name: bifrost-pinecone
+    environment:
+      PORT: 5081
+      INDEX_TYPE: serverless
+      VECTOR_TYPE: dense
+      DIMENSION: 1536  # Matches text-embedding-3-small dimension
+      METRIC: cosine
+    ports:
+      - "5081:5081"
+    platform: linux/amd64
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5081/describe_index_stats"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - bifrost_network
+
+  qdrant:
+    image: qdrant/qdrant:v1.16.3
+    container_name: bifrost-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - bifrost_network
+
+networks:
+  bifrost_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  weaviate_data:
+    driver: local
+  redis_data:
+    driver: local
+  qdrant_data:
+    driver: local
+

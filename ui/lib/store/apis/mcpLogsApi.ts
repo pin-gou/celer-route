@@ -1,0 +1,242 @@
+import {
+	MCPToolLogEntry,
+	MCPToolLogFilters,
+	MCPToolLogStats,
+	MCPToolLogFilterData,
+	MCPHistogramResponse,
+	MCPCostHistogramResponse,
+	MCPTopToolsResponse,
+	Pagination,
+} from "@/lib/types/logs";
+import { baseApi } from "./baseApi";
+
+// Helper function to build MCP histogram filter params
+function buildMCPFilterParams(filters: MCPToolLogFilters): Record<string, string | number> {
+	const params: Record<string, string | number> = {};
+	if (filters.tool_names && filters.tool_names.length > 0) {
+		params.tool_names = filters.tool_names.join(",");
+	}
+	if (filters.server_labels && filters.server_labels.length > 0) {
+		params.server_labels = filters.server_labels.join(",");
+	}
+	if (filters.status && filters.status.length > 0) {
+		params.status = filters.status.join(",");
+	}
+	if (filters.virtual_key_ids && filters.virtual_key_ids.length > 0) {
+		params.virtual_key_ids = filters.virtual_key_ids.join(",");
+	}
+	if (filters.llm_request_ids && filters.llm_request_ids.length > 0) {
+		params.llm_request_ids = filters.llm_request_ids.join(",");
+	}
+	if (filters.apps && filters.apps.length > 0) {
+		params.apps = JSON.stringify(filters.apps);
+	}
+	if (filters.user_agents && filters.user_agents.length > 0) {
+		params.user_agents = JSON.stringify(filters.user_agents);
+	}
+	if (filters.period) {
+		params.period = filters.period;
+	} else {
+		if (filters.start_time) params.start_time = filters.start_time;
+		if (filters.end_time) params.end_time = filters.end_time;
+	}
+	if (filters.min_latency !== undefined) params.min_latency = filters.min_latency;
+	if (filters.max_latency !== undefined) params.max_latency = filters.max_latency;
+	if (filters.content_search) params.content_search = filters.content_search;
+	return params;
+}
+
+export const mcpLogsApi = baseApi.injectEndpoints({
+	endpoints: (builder) => ({
+		// Get MCP tool logs with filters and pagination
+		getMCPLogs: builder.query<
+			{
+				logs: MCPToolLogEntry[];
+				pagination: Pagination & { total_count: number };
+				has_logs: boolean;
+			},
+			{
+				filters: MCPToolLogFilters;
+				pagination: Pagination;
+			}
+		>({
+			query: ({ filters, pagination }) => {
+				const params: Record<string, string | number> = {
+					limit: pagination.limit,
+					offset: pagination.offset,
+					sort_by: pagination.sort_by,
+					order: pagination.order,
+				};
+
+				// Add filters to params if they exist
+				if (filters.tool_names && filters.tool_names.length > 0) {
+					params.tool_names = filters.tool_names.join(",");
+				}
+				if (filters.server_labels && filters.server_labels.length > 0) {
+					params.server_labels = filters.server_labels.join(",");
+				}
+				if (filters.status && filters.status.length > 0) {
+					params.status = filters.status.join(",");
+				}
+				if (filters.virtual_key_ids && filters.virtual_key_ids.length > 0) {
+					params.virtual_key_ids = filters.virtual_key_ids.join(",");
+				}
+				if (filters.llm_request_ids && filters.llm_request_ids.length > 0) {
+					params.llm_request_ids = filters.llm_request_ids.join(",");
+				}
+				if (filters.apps && filters.apps.length > 0) {
+					params.apps = JSON.stringify(filters.apps);
+				}
+				if (filters.user_agents && filters.user_agents.length > 0) {
+					params.user_agents = JSON.stringify(filters.user_agents);
+				}
+				if (filters.period) {
+					params.period = filters.period;
+				} else {
+					if (filters.start_time) params.start_time = filters.start_time;
+					if (filters.end_time) params.end_time = filters.end_time;
+				}
+				if (filters.min_latency) params.min_latency = filters.min_latency;
+				if (filters.max_latency) params.max_latency = filters.max_latency;
+				if (filters.content_search) params.content_search = filters.content_search;
+
+				return {
+					url: "/mcp-logs",
+					params,
+				};
+			},
+			providesTags: ["MCPLogs"],
+		}),
+
+		// Get a single MCP tool log entry by ID
+		getMCPLogById: builder.query<MCPToolLogEntry, string>({
+			query: (id) => `/mcp-logs/${encodeURIComponent(id)}`,
+			providesTags: (result, error, id) => [{ type: "MCPLogs", id }],
+		}),
+
+		// Get MCP tool logs statistics with filters
+		getMCPLogsStats: builder.query<
+			MCPToolLogStats,
+			{
+				filters: MCPToolLogFilters;
+			}
+		>({
+			query: ({ filters }) => {
+				const params: Record<string, string | number> = {};
+
+				// Add filters to params if they exist
+				if (filters.tool_names && filters.tool_names.length > 0) {
+					params.tool_names = filters.tool_names.join(",");
+				}
+				if (filters.server_labels && filters.server_labels.length > 0) {
+					params.server_labels = filters.server_labels.join(",");
+				}
+				if (filters.status && filters.status.length > 0) {
+					params.status = filters.status.join(",");
+				}
+				if (filters.virtual_key_ids && filters.virtual_key_ids.length > 0) {
+					params.virtual_key_ids = filters.virtual_key_ids.join(",");
+				}
+				if (filters.llm_request_ids && filters.llm_request_ids.length > 0) {
+					params.llm_request_ids = filters.llm_request_ids.join(",");
+				}
+				if (filters.apps && filters.apps.length > 0) {
+					params.apps = JSON.stringify(filters.apps);
+				}
+				if (filters.user_agents && filters.user_agents.length > 0) {
+					params.user_agents = JSON.stringify(filters.user_agents);
+				}
+				if (filters.period) {
+					params.period = filters.period;
+				} else {
+					if (filters.start_time) params.start_time = filters.start_time;
+					if (filters.end_time) params.end_time = filters.end_time;
+				}
+				if (filters.min_latency) params.min_latency = filters.min_latency;
+				if (filters.max_latency) params.max_latency = filters.max_latency;
+				if (filters.content_search) params.content_search = filters.content_search;
+
+				return {
+					url: "/mcp-logs/stats",
+					params,
+				};
+			},
+			providesTags: ["MCPLogs"],
+		}),
+
+		// Get available MCP filter data. Pass `dimensions` to fetch only a subset
+		// (tool_names, server_labels, virtual_keys); omit for all.
+		getMCPAvailableFilterData: builder.query<Partial<MCPToolLogFilterData>, { dimensions?: string[]; q?: string } | void>({
+			query: (arg) => {
+				const dims = arg && "dimensions" in arg ? arg.dimensions : undefined;
+				const q = arg && "q" in arg ? arg.q : undefined;
+				const params = new URLSearchParams();
+				if (dims && dims.length > 0) {
+					params.set("dimensions", [...dims].sort().join(","));
+				}
+				if (q) {
+					params.set("q", q);
+				}
+				const qs = params.toString();
+				return qs ? `/mcp-logs/filterdata?${qs}` : "/mcp-logs/filterdata";
+			},
+			providesTags: ["MCPLogs"],
+		}),
+
+		// Get MCP tool call volume histogram
+		getMCPHistogram: builder.query<MCPHistogramResponse, { filters: MCPToolLogFilters }>({
+			query: ({ filters }) => ({
+				url: "/mcp-logs/histogram",
+				params: buildMCPFilterParams(filters),
+			}),
+			providesTags: ["MCPLogs"],
+		}),
+
+		// Get MCP cost histogram
+		getMCPCostHistogram: builder.query<MCPCostHistogramResponse, { filters: MCPToolLogFilters }>({
+			query: ({ filters }) => ({
+				url: "/mcp-logs/histogram/cost",
+				params: buildMCPFilterParams(filters),
+			}),
+			providesTags: ["MCPLogs"],
+		}),
+
+		// Get top MCP tools by call count
+		getMCPTopTools: builder.query<MCPTopToolsResponse, { filters: MCPToolLogFilters }>({
+			query: ({ filters }) => ({
+				url: "/mcp-logs/histogram/top-tools",
+				params: buildMCPFilterParams(filters),
+			}),
+			providesTags: ["MCPLogs"],
+		}),
+
+		// Delete MCP tool logs by their IDs
+		deleteMCPLogs: builder.mutation<void, { ids: string[] }>({
+			query: ({ ids }) => ({
+				url: "/mcp-logs",
+				method: "DELETE",
+				body: { ids },
+			}),
+			invalidatesTags: ["MCPLogs"],
+		}),
+	}),
+});
+
+export const {
+	useGetMCPLogsQuery,
+	useGetMCPLogByIdQuery,
+	useGetMCPLogsStatsQuery,
+	useGetMCPAvailableFilterDataQuery,
+	useGetMCPAvailableFilterDataQuery: useGetMCPLogsFilterDataQuery,
+	useLazyGetMCPLogsQuery,
+	useLazyGetMCPLogByIdQuery,
+	useLazyGetMCPLogsStatsQuery,
+	useLazyGetMCPAvailableFilterDataQuery,
+	useGetMCPHistogramQuery,
+	useLazyGetMCPHistogramQuery,
+	useGetMCPCostHistogramQuery,
+	useGetMCPTopToolsQuery,
+	useLazyGetMCPCostHistogramQuery,
+	useLazyGetMCPTopToolsQuery,
+	useDeleteMCPLogsMutation,
+} = mcpLogsApi;
