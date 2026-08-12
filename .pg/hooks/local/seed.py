@@ -181,6 +181,33 @@ def seed_rate_limits():
     # rate_limits 是嵌套对象，这里不单独 seed — 由 model_configs 创建时连带创建
 
 
+def seed_plugins():
+    data = load_fixture("fixature_plugins.json")
+    if not data:
+        return
+    plugins = data.get("plugins", [])
+    for p in plugins:
+        pname = p.get("name")
+        if not pname:
+            continue
+        payload = {
+            "name": pname,
+            "enabled": p.get("enabled", True),
+            "config": p.get("config") or {},
+            "placement": p.get("placement"),
+            "order": p.get("order"),
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        status, resp = api("POST", "/api/plugins", payload)
+        if status in (200, 201):
+            print(f"  ✓ plugin {pname}")
+        elif status == 409:
+            print(f"  ~ plugin {pname} 已存在")
+        else:
+            print(f"  ✗ plugin {pname}: {status} {resp.get('error', resp)}")
+
+
 def seed_proxy_config():
     data = load_fixture("fixature_proxy_config.json")
     if data:
@@ -220,6 +247,10 @@ def main():
     # 5. Model configs
     print("5. 创建模型配置...")
     seed_model_configs()
+
+    # 6. Plugins
+    print("6. 创建 plugin...")
+    seed_plugins()
 
     elapsed = time.time() - start
     print(f"=== 种子化完成 ({elapsed:.1f}s) ===")
