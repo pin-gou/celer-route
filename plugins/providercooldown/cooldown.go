@@ -129,6 +129,14 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 	c.mu.Unlock()
 }
 
+// EffectiveTTL returns the TTL that applies to the given provider, respecting
+// any per-provider override. Safe for concurrent use.
+func (c *CooldownState) EffectiveTTL(provider schemas.ModelProvider) time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.effectiveTTLLocked(provider)
+}
+
 // Size returns the current number of cooldown entries (including those that
 // may have expired but haven't been pruned yet). Primarily for tests and
 // debug logging.
@@ -147,7 +155,7 @@ func (c *CooldownState) Size() int {
 //	stop := make(chan struct{})
 //	go cooldown.RunGC(stop)
 //	defer close(stop)
-func (c *CooldownState) RunGC(stop <-chan struct{}) {
+func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -157,24 +165,32 @@ func (c *CooldownState) RunGC(stop <-chan struct{}) {
 		case <-ticker.C:
 			now := time.Now()
 			c.mu.Lock()
+			pruned := 0
+			remaining := 0
 			for k, exp := range c.cooldowns {
 				if !now.Before(exp) {
 					delete(c.cooldowns, k)
+					pruned++
 				}
 			}
+			remaining = len(c.cooldowns)
 			c.mu.Unlock()
+			if pruned > 0 && logger != nil {
+				logger.Debug("[provider-cooldown] GC pruned %d expired entries, %d remaining", pruned, remaining)
+			}
 		}
 	}
 }
 
 // AsFilter returns a schemas.KeyPoolFilter that suppresses any key currently
-// in cooldown. Wire it into BifrostConfig.KeyPoolFilter at startup.
+// in cooldown. Wire it into BifrostConfig.KeyPoolFilter at startup. The given
+// logger records each suppression decision (may be nil).
 //
 // The filter is read-only against the state — Bifrost's retry loop calls it
 // on every attempt, and we must not introduce back-pressure by holding the
 // write lock here.
-func (c *CooldownState) AsFilter() schemas.KeyPoolFilter {
-	return func(_ *schemas.BifrostContext, provider schemas.ModelProvider, _ string, keys []schemas.Key) ([]schemas.Key, error) {
+func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
+	return func(_ *schemas.BifrostContext, provider schemas.ModelProvider, model string, keys []schemas.Key) ([]schemas.Key, error) {
 		if len(keys) == 0 {
 			return keys, nil
 		}
@@ -182,6 +198,8 @@ func (c *CooldownState) AsFilter() schemas.KeyPoolFilter {
 		for _, k := range keys {
 			if !c.IsCoolingDown(provider, k.ID) {
 				out = append(out, k)
+			} else if logger != nil {
+				logger.Debug("[provider-cooldown] suppressed key %s/%s (model=%s)", provider, k.ID, model)
 			}
 		}
 		return out, nil
@@ -194,15 +212,23 @@ func (c *CooldownState) AsFilter() schemas.KeyPoolFilter {
 // state's TTL. Subsequent requests will skip that key during weighted-random
 // selection, falling back to the configured Fallbacks chain (or another
 // non-cooled key in the same provider's pool) instead of burning a 429.
+//
+// The logger is used to record cooldown events and filter decisions. Pass a
+// nil logger (or a no-op implementation) to suppress logging.
 type CooldownPlugin struct {
-	State *CooldownState
+	State  *CooldownState
+	logger schemas.Logger
 }
 
-// NewPlugin returns a CooldownPlugin with a fresh state using DefaultCooldownTTL.
-// For a custom TTL or to share state across plugins/filters, build the state
-// via NewCooldownState and embed it directly.
-func NewPlugin() *CooldownPlugin {
-	return &CooldownPlugin{State: NewCooldownState(DefaultCooldownTTL)}
+// NewPlugin returns a CooldownPlugin with a fresh state using DefaultCooldownTTL
+// and the given logger. For a custom TTL or to share state across plugins/filters,
+// build the state via NewCooldownState and embed it directly. Pass a nil logger
+// to suppress all logging.
+func NewPlugin(logger schemas.Logger) *CooldownPlugin {
+	return &CooldownPlugin{
+		State:  NewCooldownState(DefaultCooldownTTL),
+		logger: logger,
+	}
 }
 
 // Init applies the plugin's configuration. It is invoked by Bifrost with
@@ -227,6 +253,10 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 		return fmt.Errorf("provider-cooldown: %w", err)
 	}
 	p.State = cfg.AsState()
+	if p.logger != nil {
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s))",
+			p.State.ttl, len(p.State.ttlOverrides))
+	}
 	return nil
 }
 
@@ -268,6 +298,9 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, _ *schemas.Bif
 		return nil, nil, nil
 	}
 	p.State.Mark(provider, keyID)
+	if p.logger != nil {
+		p.logger.Info("[provider-cooldown] marked key %s/%s (TTL=%v)", provider, keyID, p.State.EffectiveTTL(provider))
+	}
 	return nil, nil, nil
 }
 

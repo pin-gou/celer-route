@@ -130,6 +130,13 @@ func loadBuiltinPlugin(ctx context.Context, name string, pluginConfig any, bifro
 	case modelcatalogresolver.PluginName:
 		return modelcatalogresolver.Init(bifrostConfig.ModelCatalog, logger)
 
+	case providercooldown.PluginName:
+		plugin := providercooldown.NewPlugin(logger)
+		if err := plugin.Init(pluginConfig); err != nil {
+			return nil, fmt.Errorf("provider-cooldown: %w", err)
+		}
+		return plugin, nil
+
 	default:
 		return nil, fmt.Errorf("unknown built-in plugin: %s", name)
 	}
@@ -287,7 +294,7 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	// the feature to take effect: the LLMPlugin records events, the filter applies them.
 	cooldownCfg := s.getPluginConfig(providercooldown.PluginName)
 	if cooldownCfg != nil && cooldownCfg.Enabled {
-		plugin := providercooldown.NewPlugin()
+		plugin := providercooldown.NewPlugin(logger)
 		if err := plugin.Init(cooldownCfg.Config); err != nil {
 			s.Config.UpdatePluginOverallStatus(providercooldown.PluginName, providercooldown.PluginName,
 				schemas.PluginStatusError,
@@ -302,7 +309,7 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 		// Wire the filter into the bifrost core boundary. This runs BEFORE
 		// bifrost.Init at server.go:2466 (LoadPlugins fires at server.go:2425),
 		// so the very first request sees the filter.
-		s.KeyPoolFilter = plugin.State.AsFilter()
+		s.KeyPoolFilter = plugin.State.AsFilter(logger)
 	} else {
 		s.markPluginDisabled(providercooldown.PluginName)
 	}

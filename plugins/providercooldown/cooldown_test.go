@@ -1,6 +1,9 @@
 package providercooldown
 
 import (
+	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +33,48 @@ func newTrailCtx(keyID string) *schemas.BifrostContext {
 		{Attempt: 1, KeyID: keyID, KeyName: "k-" + keyID},
 	})
 	return ctx
+}
+
+// testLogger captures formatted log lines for assertions.
+type testLogger struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (l *testLogger) Debug(msg string, args ...any) { l.record("debug", msg, args) }
+func (l *testLogger) Info(msg string, args ...any)   { l.record("info", msg, args) }
+func (l *testLogger) Warn(msg string, args ...any)   { l.record("warn", msg, args) }
+func (l *testLogger) Error(msg string, args ...any)  { l.record("error", msg, args) }
+
+func (l *testLogger) record(level, msg string, args []any) {
+	line := level + " " + fmt.Sprintf(msg, args...)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.msgs = append(l.msgs, line)
+}
+
+func (l *testLogger) contains(substr string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, m := range l.msgs {
+		if strings.Contains(m, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *testLogger) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.msgs)
+}
+
+func (l *testLogger) Fatal(msg string, args ...any)               { l.record("fatal", msg, args) }
+func (l *testLogger) SetLevel(schemas.LogLevel)                   {}
+func (l *testLogger) SetOutputType(schemas.LoggerOutputType)      {}
+func (l *testLogger) LogHTTPRequest(schemas.LogLevel, string) schemas.LogEventBuilder {
+	return schemas.NoopLogEvent
 }
 
 func TestCooldownStateMarkAndExpiry(t *testing.T) {
@@ -88,7 +133,7 @@ func TestAsFilterSkipsCooledKeys(t *testing.T) {
 	provider := schemas.OpenAI
 	s.Mark(provider, "hot-key")
 
-	filter := s.AsFilter()
+	filter := s.AsFilter(nil)
 	keys := []schemas.Key{
 		{ID: "hot-key", Name: "hot"},
 		{ID: "cold-key", Name: "cold"},
@@ -104,7 +149,7 @@ func TestAsFilterSkipsCooledKeys(t *testing.T) {
 
 func TestAsFilterEmptyInput(t *testing.T) {
 	s := NewCooldownState(time.Minute)
-	out, err := s.AsFilter()(nil, schemas.OpenAI, "gpt-4o", nil)
+	out, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", nil)
 	if err != nil || len(out) != 0 {
 		t.Fatalf("expected empty pass-through, got out=%v err=%v", out, err)
 	}
@@ -145,7 +190,7 @@ func TestIsQuotaExhausted(t *testing.T) {
 }
 
 func TestPluginMarksOnQuotaError(t *testing.T) {
-	plugin := NewPlugin()
+	plugin := NewPlugin(nil)
 	ctx := newTrailCtx("key-1")
 	plugin.PostLLMHook(ctx, nil, newQuotaError(schemas.OpenAI))
 
@@ -158,7 +203,7 @@ func TestPluginMarksOnQuotaError(t *testing.T) {
 }
 
 func TestPluginIgnoresNonQuotaError(t *testing.T) {
-	plugin := NewPlugin()
+	plugin := NewPlugin(nil)
 	ctx := newTrailCtx("key-1")
 	err := &schemas.BifrostError{
 		StatusCode: intPtr(429),
@@ -174,7 +219,7 @@ func TestPluginIgnoresNonQuotaError(t *testing.T) {
 }
 
 func TestPluginIgnoresSuccess(t *testing.T) {
-	plugin := NewPlugin()
+	plugin := NewPlugin(nil)
 	ctx := newTrailCtx("key-1")
 	plugin.PostLLMHook(ctx, &schemas.BifrostResponse{}, nil)
 	if plugin.State.Size() != 0 {
@@ -183,7 +228,7 @@ func TestPluginIgnoresSuccess(t *testing.T) {
 }
 
 func TestPluginRequiresTrailForKeyID(t *testing.T) {
-	plugin := NewPlugin()
+	plugin := NewPlugin(nil)
 	// ctx without an attempt trail — nothing to mark, must not panic.
 	ctx := schemas.NewBifrostContext(nil, time.Time{})
 	plugin.PostLLMHook(ctx, nil, newQuotaError(schemas.OpenAI))
@@ -193,7 +238,7 @@ func TestPluginRequiresTrailForKeyID(t *testing.T) {
 }
 
 func TestPluginPrefersRoutingInfoProvider(t *testing.T) {
-	plugin := NewPlugin()
+	plugin := NewPlugin(nil)
 	ctx := newTrailCtx("key-1")
 	err := newQuotaError(schemas.Anthropic)
 	plugin.PostLLMHook(ctx, nil, err)
@@ -211,7 +256,7 @@ func TestPluginImplementsLLMPlugin(t *testing.T) {
 }
 
 func TestPluginNameAndCleanup(t *testing.T) {
-	p := NewPlugin()
+	p := NewPlugin(nil)
 	if p.GetName() == "" {
 		t.Fatal("plugin name must be non-empty")
 	}
@@ -232,7 +277,7 @@ func TestRunGCPrunesExpired(t *testing.T) {
 		// unit test, so this test primarily verifies (a) the goroutine exits
 		// promptly when stop is closed, and (b) the lazy-prune path inside
 		// IsCoolingDown removes the expired entry on the next access.
-		s.RunGC(stop)
+		s.RunGC(nil, stop)
 	}()
 
 	close(stop)
@@ -250,6 +295,83 @@ func TestRunGCPrunesExpired(t *testing.T) {
 	}
 	if s.Size() != 0 {
 		t.Fatalf("lazy prune should have removed the entry, got size %d", s.Size())
+	}
+}
+
+func TestPluginLogsOnMark(t *testing.T) {
+	log := &testLogger{}
+	plugin := NewPlugin(log)
+	ctx := newTrailCtx("key-1")
+	plugin.PostLLMHook(ctx, nil, newQuotaError(schemas.OpenAI))
+
+	if !plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
+		t.Fatal("expected (openai, key-1) to be in cooldown")
+	}
+	if !log.contains("marked key openai/key-1") {
+		t.Fatalf("expected log about marked key, got %d messages: %v", log.count(), log.msgs)
+	}
+}
+
+func TestPluginLogsOnInit(t *testing.T) {
+	log := &testLogger{}
+	plugin := NewPlugin(log)
+	if err := plugin.Init(map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides": map[string]any{
+			"openai": float64(60),
+		},
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if !log.contains("initialized") {
+		t.Fatalf("expected init log, got %d messages: %v", log.count(), log.msgs)
+	}
+	if !log.contains("default_ttl=5m0s") {
+		t.Fatalf("expected default TTL in init log, got %v", log.msgs)
+	}
+	if !log.contains("1 provider override") {
+		t.Fatalf("expected override count in init log, got %v", log.msgs)
+	}
+}
+
+func TestAsFilterLogsSuppressedKeys(t *testing.T) {
+	log := &testLogger{}
+	s := NewCooldownState(30 * time.Minute)
+	s.Mark(schemas.OpenAI, "hot-key")
+
+	filter := s.AsFilter(log)
+	keys := []schemas.Key{
+		{ID: "hot-key", Name: "hot"},
+		{ID: "cold-key", Name: "cold"},
+	}
+	out, err := filter(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != "cold-key" {
+		t.Fatalf("expected only cold-key, got %+v", out)
+	}
+	if !log.contains("suppressed key openai/hot-key") {
+		t.Fatalf("expected suppression log, got %d messages: %v", log.count(), log.msgs)
+	}
+}
+
+func TestAsFilterNilLoggerNoPanic(t *testing.T) {
+	s := NewCooldownState(30 * time.Minute)
+	s.Mark(schemas.OpenAI, "hot-key")
+	filter := s.AsFilter(nil)
+	keys := []schemas.Key{{ID: "hot-key"}, {ID: "cold-key"}}
+	out, err := filter(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil || len(out) != 1 {
+		t.Fatalf("nil logger must not panic, got out=%v err=%v", out, err)
+	}
+}
+
+func TestNewPluginNilLoggerNoPanic(t *testing.T) {
+	plugin := NewPlugin(nil)
+	plugin.PostLLMHook(newTrailCtx("k1"), nil, newQuotaError(schemas.OpenAI))
+	if !plugin.State.IsCoolingDown(schemas.OpenAI, "k1") {
+		t.Fatal("nil logger must not affect cooldown behavior")
 	}
 }
 
@@ -302,7 +424,7 @@ func TestPluginInitNilIsNoOp(t *testing.T) {
 }
 
 func TestPluginInitIsIdempotent(t *testing.T) {
-	p := NewPlugin()
+	p := NewPlugin(nil)
 	if err := p.Init(map[string]any{
 		"default_ttl_seconds": float64(45),
 	}); err != nil {
