@@ -155,6 +155,107 @@ func TestAsFilterEmptyInput(t *testing.T) {
 	}
 }
 
+func TestStateSnapshot(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.Mark(schemas.OpenAI, "key-a")
+	s.Mark(schemas.Anthropic, "key-b")
+
+	entries := s.Snapshot()
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+
+	// Verify entries are parseable and carry provider/key info.
+	seen := map[string]bool{}
+	for _, e := range entries {
+		seen[string(e.Provider)+"::"+e.KeyID] = true
+		if e.ExpiresAt.IsZero() {
+			t.Fatal("ExpiresAt must be set")
+		}
+		if e.Remaining <= 0 {
+			t.Fatalf("Remaining must be positive for an active cooldown, got %v", e.Remaining)
+		}
+	}
+	if !seen["openai::key-a"] || !seen["anthropic::key-b"] {
+		t.Fatalf("expected openai::key-a and anthropic::key-b, got %+v", seen)
+	}
+}
+
+func TestStateSnapshotSkipsExpired(t *testing.T) {
+	s := NewCooldownState(10 * time.Millisecond)
+	s.Mark(schemas.OpenAI, "key-a")
+	time.Sleep(20 * time.Millisecond)
+
+	entries := s.Snapshot()
+	if len(entries) != 0 {
+		t.Fatalf("expected expired entries to be skipped, got %d", len(entries))
+	}
+}
+
+func TestStateSnapshotEmpty(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	entries := s.Snapshot()
+	if len(entries) != 0 {
+		t.Fatalf("expected empty snapshot on fresh state, got %d", len(entries))
+	}
+}
+
+func TestStateClearKey(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.Mark(schemas.OpenAI, "key-a")
+
+	if !s.IsCoolingDown(schemas.OpenAI, "key-a") {
+		t.Fatal("precondition: key should be cooling down")
+	}
+
+	if !s.ClearKey(schemas.OpenAI, "key-a") {
+		t.Fatal("ClearKey should return true for an existing entry")
+	}
+	if s.IsCoolingDown(schemas.OpenAI, "key-a") {
+		t.Fatal("after ClearKey, the key must no longer be cooling down")
+	}
+	// Clearing again is a no-op returning false.
+	if s.ClearKey(schemas.OpenAI, "key-a") {
+		t.Fatal("ClearKey on a non-existent entry should return false")
+	}
+}
+
+func TestStateClearKeyEmptyKeyID(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	if s.ClearKey(schemas.OpenAI, "") {
+		t.Fatal("ClearKey with empty keyID must return false")
+	}
+}
+
+func TestPluginSnapshotAndClearKeyDelegates(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	p.State.Mark(schemas.OpenAI, "key-a")
+	entries := p.Snapshot()
+	if len(entries) != 1 || entries[0].KeyID != "key-a" {
+		t.Fatalf("expected 1 entry for key-a, got %+v", entries)
+	}
+	if !p.ClearKey(schemas.OpenAI, "key-a") {
+		t.Fatal("plugin ClearKey should delegate and return true")
+	}
+	if len(p.Snapshot()) != 0 {
+		t.Fatal("after plugin ClearKey, snapshot must be empty")
+	}
+}
+
+func TestPluginSnapshotNilState(t *testing.T) {
+	// A zero-value plugin has nil State; Snapshot must not panic and must
+	// return nil (distinct from empty slice, signaling "never initialized").
+	p := &CooldownPlugin{}
+	if got := p.Snapshot(); got != nil {
+		t.Fatalf("Snapshot on nil-state plugin should return nil, got %+v", got)
+	}
+	if p.ClearKey(schemas.OpenAI, "k") {
+		t.Fatal("ClearKey on nil-state plugin should return false")
+	}
+}
+
 // TestFilterSwapSeesNewCooldown simulates the wire-path behavior of plugin
 // reload: after a reload, a new plugin instance is created with a fresh
 // CooldownState, and the transport rewires s.KeyPoolFilter to point at the
@@ -585,9 +686,33 @@ func TestAsFilterNilLoggerNoPanic(t *testing.T) {
 
 func TestNewPluginNilLoggerNoPanic(t *testing.T) {
 	plugin := NewPlugin(nil)
+	defer plugin.Cleanup()
 	plugin.PostLLMHook(newTrailCtx("k1"), nil, newQuotaError(schemas.OpenAI))
 	if !plugin.State.IsCoolingDown(schemas.OpenAI, "k1") {
 		t.Fatal("nil logger must not affect cooldown behavior")
+	}
+}
+
+func TestNewPluginWithTTL(t *testing.T) {
+	plugin := NewPluginWithTTL(nil, 20*time.Millisecond)
+	defer plugin.Cleanup()
+	plugin.State.Mark(schemas.OpenAI, "k1")
+
+	if !plugin.State.IsCoolingDown(schemas.OpenAI, "k1") {
+		t.Fatal("key should be cooling down immediately after Mark")
+	}
+	time.Sleep(30 * time.Millisecond)
+	if plugin.State.IsCoolingDown(schemas.OpenAI, "k1") {
+		t.Fatal("cooldown must expire after the custom TTL")
+	}
+}
+
+func TestNewPluginWithTTLNonPositiveFallsBack(t *testing.T) {
+	plugin := NewPluginWithTTL(nil, 0)
+	defer plugin.Cleanup()
+	// Non-positive TTL must fall back to DefaultCooldownTTL (10 min).
+	if got := plugin.State.EffectiveTTL(schemas.OpenAI); got != DefaultCooldownTTL {
+		t.Fatalf("expected fallback to DefaultCooldownTTL, got %v", got)
 	}
 }
 

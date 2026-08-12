@@ -2,6 +2,7 @@ package providercooldown
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -22,6 +23,14 @@ type Config struct {
 	// TTLOverrides maps a provider name to its provider-specific TTL in
 	// seconds. Entries <= 0 are ignored at apply time.
 	TTLOverrides map[string]int `json:"ttl_overrides"`
+
+	// QuotaPatterns extends the built-in quotaExhaustedSubstrings with
+	// additional lower-case substrings that should be treated as quota
+	// exhaustion. Useful when a provider returns quota errors with
+	// non-standard phrasing. Empty / nil falls back to the built-in list.
+	// Patterns are matched against the lower-cased error message via
+	// strings.Contains (same semantics as the built-in list).
+	QuotaPatterns []string `json:"quota_patterns"`
 }
 
 // ParseConfig decodes the raw config map (as received from the plugin
@@ -51,6 +60,22 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 				return nil, fmt.Errorf("ttl_overrides[%s]: %w", k, err)
 			}
 			c.TTLOverrides[k] = n
+		}
+	}
+	if v, ok := raw["quota_patterns"]; ok {
+		list, ok := v.([]any)
+		if !ok {
+			return nil, fmt.Errorf("quota_patterns: expected array, got %T", v)
+		}
+		c.QuotaPatterns = make([]string, 0, len(list))
+		for i, item := range list {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("quota_patterns[%d]: expected string, got %T", i, item)
+			}
+			if s = strings.TrimSpace(strings.ToLower(s)); s != "" {
+				c.QuotaPatterns = append(c.QuotaPatterns, s)
+			}
 		}
 	}
 	return c, nil

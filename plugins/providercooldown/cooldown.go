@@ -150,6 +150,63 @@ func (c *CooldownState) Size() int {
 	return len(c.cooldowns)
 }
 
+// CooldownEntry is a read-only view of one cooldown entry, exposed via the
+// state-monitoring API. ExpiresAt is the wall-clock time at which the
+// cooldown will no longer suppress the key.
+type CooldownEntry struct {
+	Provider  schemas.ModelProvider `json:"provider"`
+	KeyID     string                `json:"key_id"`
+	ExpiresAt time.Time             `json:"expires_at"`
+	Remaining time.Duration         `json:"remaining"`
+}
+
+// Snapshot returns a copy of every active (non-expired) cooldown entry,
+// suitable for surfacing through a management API. Expired entries are
+// pruned lazily as they are encountered; callers wanting an exact snapshot
+// may want to call this twice and trust the second result.
+func (c *CooldownState) Snapshot() []CooldownEntry {
+	now := time.Now()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make([]CooldownEntry, 0, len(c.cooldowns))
+	for k, exp := range c.cooldowns {
+		if !now.Before(exp) {
+			continue
+		}
+		// k is "provider::keyID". Find the first "::" (provider names
+		// never contain it; keyIDs come from provider configs).
+		i := strings.Index(k, "::")
+		if i < 0 {
+			continue
+		}
+		out = append(out, CooldownEntry{
+			Provider:  schemas.ModelProvider(k[:i]),
+			KeyID:     k[i+2:],
+			ExpiresAt: exp,
+			Remaining: exp.Sub(now),
+		})
+	}
+	return out
+}
+
+// ClearKey removes any cooldown on the given (provider, keyID). Returns true
+// if an entry was removed. Calling on an unknown key or empty keyID is a
+// no-op (returns false). Useful when an operator manually un-cools a key
+// after fixing the underlying issue (e.g. topping up quota).
+func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string) bool {
+	if keyID == "" {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	k := c.key(provider, keyID)
+	if _, ok := c.cooldowns[k]; !ok {
+		return false
+	}
+	delete(c.cooldowns, k)
+	return true
+}
+
 // runGCLocked is the inner GC loop, factored out so tests can drive it with a
 // short interval and the plugin's auto-started GC can use the default. The
 // caller must hold no locks — runGC acquires c.mu itself.
@@ -234,18 +291,32 @@ type CooldownPlugin struct {
 	State  *CooldownState
 	logger schemas.Logger
 
+	// quotaPatterns extends the built-in quotaExhaustedSubstrings. Empty
+	// means "use only the built-in list". Populated from config.json's
+	// quota_patterns by Init; nil for plugins constructed directly.
+	quotaPatterns []string
+
 	gcStop chan struct{}
 	gcDone chan struct{}
 }
 
 // NewPlugin returns a CooldownPlugin with a fresh state using DefaultCooldownTTL
 // and the given logger. The background GC goroutine is started automatically;
-// call Cleanup to stop it. For a custom TTL or to share state across
-// plugins/filters, build the state via NewCooldownState and embed it
-// directly. Pass a nil logger to suppress all logging.
+// call Cleanup to stop it. For a custom initial TTL use NewPluginWithTTL; for
+// a shared or externally-managed state, build the state via NewCooldownState
+// and embed it directly. Pass a nil logger to suppress all logging.
 func NewPlugin(logger schemas.Logger) *CooldownPlugin {
+	return NewPluginWithTTL(logger, DefaultCooldownTTL)
+}
+
+// NewPluginWithTTL is like NewPlugin but uses the given initial TTL instead
+// of DefaultCooldownTTL. A non-positive TTL falls back to DefaultCooldownTTL
+// (matching NewCooldownState). Any subsequent Init call replaces the state
+// with one built from config.json, so this TTL only governs the period
+// before Init has been invoked.
+func NewPluginWithTTL(logger schemas.Logger, ttl time.Duration) *CooldownPlugin {
 	p := &CooldownPlugin{
-		State:  NewCooldownState(DefaultCooldownTTL),
+		State:  NewCooldownState(ttl),
 		logger: logger,
 	}
 	p.startGC()
@@ -276,12 +347,44 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	}
 	p.stopGC()
 	p.State = cfg.AsState(p.logger)
+	p.quotaPatterns = cfg.QuotaPatterns
 	p.startGC()
 	if p.logger != nil {
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s))",
-			p.State.ttl, len(p.State.ttlOverrides))
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s))",
+			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns))
 	}
 	return nil
+}
+
+// isQuotaExhausted reports whether the error looks like quota exhaustion,
+// honoring any quota_patterns configured via config.json. When no custom
+// patterns are configured, this is equivalent to the package-level
+// IsQuotaExhausted. Custom patterns EXTEND the built-in list (they do not
+// replace it), but both are subject to the same status-code gate — a 402
+// never triggers cooldown even if a custom pattern matches its message.
+func (p *CooldownPlugin) isQuotaExhausted(err *schemas.BifrostError) bool {
+	if err == nil {
+		return false
+	}
+	if IsQuotaExhausted(err) {
+		return true
+	}
+	if len(p.quotaPatterns) == 0 {
+		return false
+	}
+	// Built-in patterns did not match. Apply the same status-code gate, then
+	// scan with the custom patterns. This keeps 402/5xx excluded even when a
+	// custom pattern happens to match their message text.
+	if !statusCodeAllowsQuota(err) {
+		return false
+	}
+	msg := strings.ToLower(err.GetErrorString())
+	for _, sub := range p.quotaPatterns {
+		if strings.Contains(msg, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 // startGC launches the background GC goroutine on State. Idempotent within
@@ -319,6 +422,25 @@ func (p *CooldownPlugin) Cleanup() error {
 	return nil
 }
 
+// Snapshot returns a copy of every active cooldown entry, delegating to the
+// current State. Returning nil when the plugin has no state yet lets callers
+// distinguish "plugin loaded but never initialized" from "no cooldowns".
+func (p *CooldownPlugin) Snapshot() []CooldownEntry {
+	if p.State == nil {
+		return nil
+	}
+	return p.State.Snapshot()
+}
+
+// ClearKey removes any cooldown on (provider, keyID) from the current State.
+// Returns false when the plugin has no state or no entry matched.
+func (p *CooldownPlugin) ClearKey(provider schemas.ModelProvider, keyID string) bool {
+	if p.State == nil {
+		return false
+	}
+	return p.State.ClearKey(provider, keyID)
+}
+
 // PreLLMHook is a no-op. The plugin only needs to act on the failure path.
 func (p *CooldownPlugin) PreLLMHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
 	return nil, nil, nil
@@ -340,7 +462,7 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, _ *schemas.Bif
 	if p.State == nil || bifrostErr == nil {
 		return nil, nil, nil
 	}
-	if !IsQuotaExhausted(bifrostErr) {
+	if !p.isQuotaExhausted(bifrostErr) {
 		return nil, nil, nil
 	}
 
@@ -374,23 +496,34 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, _ *schemas.Bif
 // repeatedly. Bifrost core already routes 402 (along with 401/403) into
 // the request-scoped deadKeyIDs set on the first failure, so the plugin
 // has nothing to add.
+// statusCodeAllowsQuota reports whether the error's status code is in a
+// range where a message-based quota scan is even meaningful. Errors with
+// no status code, 429, or other 4xx (except 402) pass the gate; 402 and
+// non-4xx codes are rejected up front so message scanning never runs on
+// them. Shared by IsQuotaExhausted and the plugin's custom-pattern scan so
+// both apply the same gate.
+func statusCodeAllowsQuota(err *schemas.BifrostError) bool {
+	if err.StatusCode == nil {
+		return true
+	}
+	switch *err.StatusCode {
+	case 402:
+		// Permanent billing failure — handled by bifrost's deadKeyIDs.
+		// Don't cooldown: the key is dead, not transiently quota-exhausted.
+		return false
+	case 429:
+		return true
+	default:
+		return *err.StatusCode >= 400 && *err.StatusCode < 500
+	}
+}
+
 func IsQuotaExhausted(err *schemas.BifrostError) bool {
 	if err == nil {
 		return false
 	}
-	if err.StatusCode != nil {
-		switch *err.StatusCode {
-		case 402:
-			// Permanent billing failure — handled by bifrost's deadKeyIDs.
-			// Don't cooldown: the key is dead, not transiently quota-exhausted.
-			return false
-		case 429:
-			// fall through to message check
-		default:
-			if *err.StatusCode < 400 || *err.StatusCode >= 500 {
-				return false
-			}
-		}
+	if !statusCodeAllowsQuota(err) {
+		return false
 	}
 	msg := strings.ToLower(err.GetErrorString())
 	for _, sub := range quotaExhaustedSubstrings {

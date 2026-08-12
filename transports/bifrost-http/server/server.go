@@ -2117,6 +2117,17 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		}
 		return p
 	})
+	// Resolve provider-cooldown per request so plugin reloads via /api/plugins
+	// are honored — same pattern as the cache handler above. The resolver
+	// returns nil when the plugin is not loaded, and the handler returns 400
+	// with a clear message in that case rather than the route being absent.
+	cooldownHandler := handlers.NewCooldownHandler(func() *providercooldown.CooldownPlugin {
+		p, err := lib.FindPluginAs[*providercooldown.CooldownPlugin](s.Config, providercooldown.PluginName)
+		if err != nil || p == nil {
+			return nil
+		}
+		return p
+	})
 	var promptsReloader handlers.PromptCacheReloader
 	if promptsPlugin, err := lib.FindPluginAs[handlers.PromptCacheReloader](s.Config, s.getPromptsPluginName()); err == nil && promptsPlugin != nil {
 		promptsReloader = promptsPlugin
@@ -2180,6 +2191,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		skillsServingHandler.RegisterRoutes(s.Router, middlewares...)
 	}
 	cacheHandler.RegisterRoutes(s.Router, middlewares...)
+	cooldownHandler.RegisterRoutes(s.Router, middlewares...)
 	if featureFlagsHandler != nil {
 		featureFlagsHandler.RegisterRoutes(s.Router, middlewares...)
 	}

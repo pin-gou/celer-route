@@ -181,3 +181,157 @@ func TestConfigAsStateNilLoggerDoesNotPanic(t *testing.T) {
 		t.Fatal("AsState should still return a state with nil logger")
 	}
 }
+
+func TestParseConfigQuotaPatterns(t *testing.T) {
+	c, err := ParseConfig(map[string]any{
+		"quota_patterns": []any{"custom_quota", "  WHITESPACE AND CAPS  ", ""},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Whitespace trimmed, lowercased, empty strings dropped.
+	if len(c.QuotaPatterns) != 2 {
+		t.Fatalf("expected 2 patterns after trimming/dropping, got %d: %v", len(c.QuotaPatterns), c.QuotaPatterns)
+	}
+	if c.QuotaPatterns[0] != "custom_quota" {
+		t.Fatalf("first pattern = %q, want custom_quota", c.QuotaPatterns[0])
+	}
+	if c.QuotaPatterns[1] != "whitespace and caps" {
+		t.Fatalf("second pattern = %q, want trimmed+lowercased", c.QuotaPatterns[1])
+	}
+}
+
+func TestParseConfigQuotaPatternsRejectsNonArray(t *testing.T) {
+	_, err := ParseConfig(map[string]any{
+		"quota_patterns": "not-an-array",
+	})
+	if err == nil {
+		t.Fatal("expected error on non-array quota_patterns")
+	}
+}
+
+func TestParseConfigQuotaPatternsRejectsNonString(t *testing.T) {
+	_, err := ParseConfig(map[string]any{
+		"quota_patterns": []any{float64(42)},
+	})
+	if err == nil {
+		t.Fatal("expected error on non-string pattern element")
+	}
+}
+
+func TestParseConfigQuotaPatternsNilIsOK(t *testing.T) {
+	c, err := ParseConfig(map[string]any{
+		"default_ttl_seconds": float64(60),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(c.QuotaPatterns) != 0 {
+		t.Fatalf("absent quota_patterns should parse to empty, got %v", c.QuotaPatterns)
+	}
+}
+
+func TestPluginCustomQuotaPatternMatches(t *testing.T) {
+	log := &testLogger{}
+	plugin := NewPlugin(log)
+	defer plugin.Cleanup()
+
+	// Configure a custom pattern that is NOT in the built-in list.
+	if err := plugin.Init(map[string]any{
+		"quota_patterns": []any{"myprovider quota exhausted"},
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	ctx := newTrailCtx("key-1")
+	err := &schemas.BifrostError{
+		StatusCode: intPtr(429),
+		Error:      &schemas.ErrorField{Message: "MyProvider Quota Exhausted: please upgrade"},
+		ExtraFields: schemas.BifrostErrorExtraFields{
+			RoutingInfo: schemas.RoutingInfo{Provider: schemas.OpenAI},
+		},
+	}
+	plugin.PostLLMHook(ctx, nil, err)
+
+	if !plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
+		t.Fatal("custom quota pattern should have triggered cooldown")
+	}
+	if !log.contains("marked key openai/key-1") {
+		t.Fatalf("expected Mark log, got messages: %v", log.msgs)
+	}
+}
+
+func TestPluginCustomQuotaPatternDoesNotMaskBuiltin(t *testing.T) {
+	plugin := NewPlugin(nil)
+	defer plugin.Cleanup()
+
+	// Even with a custom pattern configured, the built-in patterns must
+	// still work (custom patterns EXTEND, not replace).
+	if err := plugin.Init(map[string]any{
+		"quota_patterns": []any{"irrelevant pattern"},
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	ctx := newTrailCtx("key-1")
+	// Uses the built-in "insufficient_quota" substring.
+	err := &schemas.BifrostError{
+		StatusCode: intPtr(429),
+		Error:      &schemas.ErrorField{Message: "insufficient_quota"},
+		ExtraFields: schemas.BifrostErrorExtraFields{
+			RoutingInfo: schemas.RoutingInfo{Provider: schemas.OpenAI},
+		},
+	}
+	plugin.PostLLMHook(ctx, nil, err)
+
+	if !plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
+		t.Fatal("built-in patterns must still work when custom patterns are configured")
+	}
+}
+
+func TestPluginCustomQuotaPatternStillRespects402(t *testing.T) {
+	plugin := NewPlugin(nil)
+	defer plugin.Cleanup()
+
+	// Even if a custom pattern matches a 402 message, 402 must still NOT
+	// trigger cooldown (permanent billing failure is handled by deadKeyIDs).
+	if err := plugin.Init(map[string]any{
+		"quota_patterns": []any{"payment required"},
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	ctx := newTrailCtx("key-1")
+	err := &schemas.BifrostError{
+		StatusCode: intPtr(402),
+		Error:      &schemas.ErrorField{Message: "payment required"},
+		ExtraFields: schemas.BifrostErrorExtraFields{
+			RoutingInfo: schemas.RoutingInfo{Provider: schemas.OpenAI},
+		},
+	}
+	plugin.PostLLMHook(ctx, nil, err)
+
+	if plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
+		t.Fatal("402 must never trigger cooldown, even with a matching custom pattern")
+	}
+}
+
+func TestPluginIsQuotaExhaustedMethodNoCustomPatterns(t *testing.T) {
+	// A plugin constructed directly (no Init) has no custom patterns, so
+	// isQuotaExhausted must behave exactly like the package-level
+	// IsQuotaExhausted.
+	plugin := NewPlugin(nil)
+	defer plugin.Cleanup()
+
+	quotaErr := newQuotaError(schemas.OpenAI)
+	if !plugin.isQuotaExhausted(quotaErr) {
+		t.Fatal("isQuotaExhausted should match built-in quota error")
+	}
+	transient := &schemas.BifrostError{
+		StatusCode: intPtr(429),
+		Error:      &schemas.ErrorField{Message: "too many requests"},
+	}
+	if plugin.isQuotaExhausted(transient) {
+		t.Fatal("isQuotaExhausted should not match generic rate limit")
+	}
+}
