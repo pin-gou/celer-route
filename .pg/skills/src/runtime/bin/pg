@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+"""pg-skills CLI — minimal MVP (Phase 1 §1.4)
+
+Subcommands:
+    pg init              Ensure .pg/ structure + selected tool integration
+    pg doctor            Validate .pg/ structure and project.yaml
+    pg upgrade [version] Upgrade pg-skills (指定版本 tag 或默认 master)
+    pg upgrade --list     Fetch remote tags, list available versions
+
+Usage:
+    python3 pg <subcommand> [options]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+if os.name == 'nt':
+    # The CLI emits Chinese text and Unicode status marks. Windows terminals
+    # may otherwise inherit a legacy code page that cannot encode them.
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+# The executable lives at src/runtime/bin/pg. Add src/ so integrations can be
+# imported both from a source checkout and from a vendored .pg/skills tree.
+PG_SRC_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PG_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(PG_SRC_ROOT))
+
+from core import (  # noqa: E402
+    InitOptions,
+    initialize_project,
+    refresh_configured_integration as core_refresh_configured_integration,
+    run_doctor,
+)
+from core.init import create_pg_run_wrappers, ensure_project_skeleton  # noqa: E402
+
+
+# ----- 路径解析 -----
+
+def find_pg_skills_root() -> Path:
+    """从本脚本位置反推 pg-skills 仓库根.
+
+    Layout: pg-skills/src/runtime/bin/pg
+            → parent (bin/) → parent (runtime/) → parent (src/) → parent (pg-skills/)
+    """
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def find_project_root(start: Path | None = None) -> Path:
+    """向上找项目根（包含 .pg/ 或常见标记）."""
+    cur = (start or Path.cwd()).resolve()
+    markers = ['.pg', 'package.json', 'pom.xml', 'go.mod', 'pyproject.toml']
+    while cur != cur.parent:
+        for m in markers:
+            if (cur / m).exists():
+                return cur
+        cur = cur.parent
+    return Path.cwd().resolve()
+
+
+# ----- subcommand: init -----
+
+def cmd_init(args) -> int:
+    """Initialize .pg/ and install the selected development-tool adapter."""
+    return initialize_project(
+        find_project_root(),
+        find_pg_skills_root(),
+        InitOptions(
+            tool=args.tool,
+            list_tools=args.list_tools,
+            skip_tool_config=args.no_symlinks or args.no_tool_config,
+            assume_yes=args.yes,
+            non_interactive=args.non_interactive,
+        ),
+    )
+
+
+def refresh_configured_integration(project_root: Path, pg_skills_root: Path) -> None:
+    """Refresh the adapter selected by the last successful pg init."""
+    core_refresh_configured_integration(project_root, pg_skills_root)
+
+
+def create_pg_run_symlink(project_root: Path) -> None:
+    """Compatibility wrapper for the core pg-run launcher installer."""
+    create_pg_run_wrappers(project_root)
+
+
+# ----- subcommand: doctor -----
+
+def cmd_doctor(args) -> int:
+    """Validate the tool-agnostic pg-skills project state."""
+    return run_doctor(find_project_root(), find_pg_skills_root())
+
+
+# ----- subcommand: upgrade (--list / --interactive / [version] 默认 master) -----
+
+def cmd_upgrade(args) -> int:
+    """Upgrade pg-skills via git subtree.
+
+    Modes:
+        --list:         Fetch remote tags, list available versions
+        --interactive:  列出冲突文件, 让用户逐文件决策 (overwrite / keep-mine / abort)
+        (默认):         执行 git subtree pull, 版本号自动补 v 前缀
+    """
+    project_root = find_project_root()
+    pg_skills_root = find_pg_skills_root()
+    current = (pg_skills_root / 'VERSION').read_text().strip()
+    ref = _normalize_ref(args.version)
+
+    if args.list:
+        return _upgrade_check(project_root, current)
+
+    if args.interactive:
+        changed_files = _compute_changed_files(project_root, ref)
+        return _upgrade_interactive(project_root, pg_skills_root, current, ref, changed_files)
+
+    return _upgrade_pull(project_root, current, ref, args.force)
+
+
+def _normalize_ref(version: str | None) -> str:
+    if version is None:
+        return 'master'
+    if re.fullmatch(r'\d+(\.\d+)*', version):
+        return f'v{version}'
+    return version
+
+
+def _to_tag_ref(ref: str) -> str:
+    if bool(re.match(r'^v?\d+\.\d+', ref)):
+        return f'refs/tags/{ref}'
+    return ref
+
+
+def _upgrade_check(project_root: Path, current: str) -> int:
+    """Fetch remote tags, 列出可用版本."""
+    remote = 'pg-skills'
+    check = subprocess.run(
+        ['git', '-C', str(project_root), 'remote', 'get-url', remote],
+        capture_output=True, text=True,
+    )
+    if check.returncode != 0:
+        print(f'ERROR: remote "{remote}" not configured.')
+        print(f'  Run: git remote add {remote} git@github.com:pin-gou/pg-skills.git')
+        return 1
+
+    subprocess.run(
+        ['git', '-C', str(project_root), 'fetch', remote, '--tags'],
+        capture_output=True, text=True,
+    )
+
+    result = subprocess.run(
+        ['git', '-C', str(project_root), 'tag', '-l', 'v*'],
+        capture_output=True, text=True,
+    )
+    tags = [t for t in result.stdout.strip().split('\n') if t]
+
+    current_tag = f'v{current}' if not current.startswith('v') else current
+    print(f'Current: {current_tag}')
+    for t in sorted(tags):
+        marker = '  ← current' if t == current_tag else ''
+        print(f'  {t}{marker}')
+    return 0
+
+
+def _compute_changed_files(project_root: Path, ref: str) -> list:
+    """Fetch remote ref 并计算 .pg/skills/ 差异."""
+    remote = 'pg-skills'
+    fetch_ref = _to_tag_ref(ref)
+    subprocess.run(
+        ['git', '-C', str(project_root), 'fetch', remote, fetch_ref],
+        capture_output=True, text=True,
+    )
+    result = subprocess.run(
+        ['git', '-C', str(project_root), 'diff', '--name-only', 'FETCH_HEAD', '--', '.pg/skills/'],
+        capture_output=True, text=True,
+    )
+    return [f for f in result.stdout.strip().split('\n') if f]
+
+
+def _upgrade_pull(project_root: Path, current: str, ref: str, force: bool = False) -> int:
+    """Upgrade pg-skills.
+
+    --force: clone-to-temp + 覆盖复制 (绕过 git subtree, 脏树健壮)
+    非 force: git subtree pull (要求干净工作树)
+    """
+    remote = 'pg-skills'
+    prefix = '.pg/skills'
+
+    check = subprocess.run(
+        ['git', '-C', str(project_root), 'remote', 'get-url', remote],
+        capture_output=True, text=True,
+    )
+    if check.returncode != 0:
+        print(f'ERROR: remote "{remote}" not configured.')
+        print(f'  Run: git remote add {remote} https://github.com/pin-gou/pg-skills.git')
+        print(f'  Run: git fetch {remote}')
+        return 1
+
+    if force:
+        return _upgrade_by_copy(project_root, project_root / prefix, ref)
+
+    status = subprocess.run(
+        ['git', '-C', str(project_root), 'status', '--porcelain'],
+        capture_output=True, text=True,
+    )
+    if status.stdout.strip():
+        print('ERROR: Working tree has modifications. Run with --force to overwrite.')
+        return 1
+
+    subtree_ref = _to_tag_ref(ref)
+    if not (project_root / prefix).exists():
+        print(f'INFO: {prefix}/ not found, performing initial subtree add')
+        cmd = ['git', 'subtree', 'add', f'--prefix={prefix}', remote, subtree_ref, '--squash']
+    else:
+        cmd = ['git', 'subtree', 'pull', f'--prefix={prefix}', remote, subtree_ref, '--squash']
+
+    print(f'Running: {" ".join(cmd)}')
+    result = subprocess.run(cmd, cwd=str(project_root), text=True)
+    if result.returncode != 0:
+        print(f'ERROR: git subtree failed (exit {result.returncode})')
+        print(f'  Try: pg upgrade --force')
+        return 1
+
+    pg_skills_root = find_pg_skills_root()
+    new_version = (pg_skills_root / 'VERSION').read_text().strip()
+
+    ensure_project_skeleton(project_root)
+    refresh_configured_integration(project_root, pg_skills_root)
+    create_pg_run_symlink(project_root)
+
+    print(f'✓ pg-skills {current} → {new_version}: {n_changed(project_root)} files updated')
+    return 0
+
+
+def _upgrade_by_copy(project_root: Path, pg_skills_dir: Path, ref: str) -> int:
+    """Clone target ref to temp dir → 覆盖复制到 .pg/skills/.
+
+    绕过 git subtree, 兼容脏工作树.
+    """
+    from datetime import datetime
+    import shutil
+    import tempfile
+
+    remote_https = f'https://github.com/pin-gou/pg-skills.git'
+    remote_ssh = f'git@github.com:pin-gou/pg-skills.git'
+
+    # 1. 备份现有 .pg/skills/
+    backup_dir = None
+    if pg_skills_dir.exists():
+        ts = datetime.now().strftime('%Y%m%d%H%M%S')
+        backup_dir = project_root / f'.pg/skills.backup.{ts}'
+        print(f'Backing up existing {pg_skills_dir} to {backup_dir} ...')
+        shutil.copytree(pg_skills_dir, backup_dir)
+
+    # 2. Clone 到临时目录
+    tmp_dir = Path(tempfile.mkdtemp(prefix='pg-upgrade-'))
+    clone_ref = ref
+    print(f'Cloning {remote_https} ({clone_ref}) ...')
+    clone_result = subprocess.run(
+        ['git', 'clone', '--depth=1', '--branch', clone_ref, remote_https, str(tmp_dir)],
+        capture_output=True, text=True, timeout=120,
+    )
+    if clone_result.returncode != 0:
+        print(f'  https failed, trying ssh ...')
+        clone_result = subprocess.run(
+            ['git', 'clone', '--depth=1', '--branch', clone_ref, remote_ssh, str(tmp_dir)],
+            capture_output=True, text=True, timeout=120,
+        )
+    if clone_result.returncode != 0:
+        print(f'ERROR: clone failed: {clone_result.stderr.strip()[-300:]}')
+        if backup_dir and backup_dir.exists():
+            print(f'  Backup preserved at {backup_dir}, restore manually.')
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return 1
+
+    # 3. 删除旧 .pg/skills/ → 复制新文件
+    if pg_skills_dir.exists() or pg_skills_dir.is_symlink():
+        if pg_skills_dir.is_symlink():
+            pg_skills_dir.unlink()
+        else:
+            shutil.rmtree(pg_skills_dir)
+    print(f'Copying files to .pg/skills/ ...')
+    shutil.copytree(tmp_dir, pg_skills_dir, ignore=shutil.ignore_patterns('.git'))
+
+    # 4. 清理临时目录
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    # 5. 补齐骨架目录 + 刷新上次 pg init 选择的开发工具适配
+    ensure_project_skeleton(project_root)
+    refresh_configured_integration(project_root, pg_skills_dir)
+    create_pg_run_symlink(project_root)
+
+    new_version = (pg_skills_dir / 'VERSION').read_text().strip()
+    print(f'✓ pg-skills upgraded to {new_version} (by copy, {ref})')
+
+    # 6. 提示备份
+    if backup_dir and backup_dir.exists():
+        print(f'  ⚠ Backup preserved at {backup_dir}')
+        print(f'    如需本地修改请自行还原：rm -rf .pg/skills && mv {backup_dir} .pg/skills')
+
+    return 0
+
+
+def _upgrade_interactive(project_root: Path, pg_skills_root: Path, current: str, ref: str, changed_files: list) -> int:
+    """dry-run diff, 列出冲突文件, 让用户逐文件决策."""
+    if not changed_files:
+        print(f'No file changes detected between current and {ref}')
+        return 0
+
+    print(f'pg-skills {current} → {ref}')
+    print(f'  Files that would change ({len(changed_files)}):')
+    for f in changed_files[:20]:
+        print(f'    - {f}')
+    if len(changed_files) > 20:
+        print(f'    ... and {len(changed_files) - 20} more')
+
+    # 检查本地修改
+    has_local = False
+    for f in changed_files:
+        local = project_root / '.pg/skills' / f
+        if local.exists():
+            status = subprocess.run(
+                ['git', '-C', str(project_root), 'status', '--porcelain', str(local)],
+                capture_output=True, text=True,
+            )
+            if status.stdout.strip():
+                has_local = True
+                break
+
+    if has_local:
+        print('\n⚠ WARNING: Local changes detected in .pg/skills/ that conflict with upstream.')
+        print('  Recommend: keep-mine for files you have customized, overwrite for the rest.')
+        print('  Run: pg upgrade    (with default keep-mine strategy)')
+
+    print(f'\nTo upgrade: pg upgrade')
+    return 0
+
+
+def n_changed(project_root: Path) -> int:
+    """数最新一次 commit 改了 .pg/skills/ 几个文件."""
+    result = subprocess.run(
+        ['git', '-C', str(project_root), 'diff', '--name-only', 'HEAD~1', 'HEAD', '--', '.pg/skills/'],
+        capture_output=True, text=True,
+    )
+    files = [f for f in result.stdout.strip().split('\n') if f]
+    return len(files)
+
+
+# ----- main -----
+
+def main():
+    parser = argparse.ArgumentParser(prog='pg', description='pg-skills CLI')
+    subparsers = parser.add_subparsers(dest='subcommand', required=True)
+
+    # init
+    p_init = subparsers.add_parser('init', help='Initialize .pg/ in current project (idempotent)')
+    p_init.add_argument(
+        '--tool',
+        default=None,
+        metavar='TOOL',
+        help='Development-tool adapter to install; omit for interactive detection',
+    )
+    p_init.add_argument(
+        '--list-tools',
+        action='store_true',
+        help='List supported development-tool adapters and exit',
+    )
+    p_init.add_argument(
+        '--no-tool-config',
+        action='store_true',
+        help='Create only the .pg/ skeleton; skip development-tool configuration',
+    )
+    p_init.add_argument(
+        '--no-symlinks',
+        action='store_true',
+        help='Legacy alias for --no-tool-config',
+    )
+    p_init.add_argument(
+        '-y',
+        '--yes',
+        action='store_true',
+        help='Accept a single detected development tool without confirmation',
+    )
+    p_init.add_argument(
+        '--non-interactive',
+        action='store_true',
+        help='Disable prompts; requires an explicit --tool',
+    )
+    p_init.set_defaults(func=cmd_init)
+
+    # doctor
+    p_doctor = subparsers.add_parser('doctor', help='Validate .pg/ structure')
+    p_doctor.set_defaults(func=cmd_doctor)
+
+    # upgrade (--list / --interactive / [version] 默认 master)
+    p_upgrade = subparsers.add_parser('upgrade', help='Upgrade pg-skills via git subtree')
+    p_upgrade.add_argument('version', nargs='?', default=None,
+                           help='Version tag to upgrade to (e.g., 0.2.0). Default: master')
+    p_upgrade.add_argument('--list', action='store_true', help='Fetch remote tags, list available versions')
+    p_upgrade.add_argument('--interactive', action='store_true', help='Show conflict files before upgrade')
+    p_upgrade.add_argument('--force', action='store_true', help='Stash working tree modifications before pull')
+    p_upgrade.set_defaults(func=cmd_upgrade)
+
+    args = parser.parse_args()
+    sys.exit(args.func(args))
+
+
+if __name__ == '__main__':
+    main()
