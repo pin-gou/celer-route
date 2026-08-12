@@ -461,6 +461,110 @@ func TestPluginImplementsLLMPlugin(t *testing.T) {
 	var _ schemas.BasePlugin = (*CooldownPlugin)(nil)
 }
 
+// TestPreLLMHookReturnsRequestUnchanged is a regression guard for a P0
+// production incident: PreLLMHook originally returned nil for the request,
+// which made the pipeline hand every subsequent plugin a nil request and
+// collapsed all LLM traffic into "bifrost request after plugin hooks cannot
+// be nil". The hook MUST return the request unchanged.
+func TestPreLLMHookReturnsRequestUnchanged(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	req := &schemas.BifrostRequest{}
+	gotReq, shortCircuit, err := p.PreLLMHook(nil, req)
+
+	if err != nil {
+		t.Fatalf("PreLLMHook must not return an error, got %v", err)
+	}
+	if shortCircuit != nil {
+		t.Fatalf("PreLLMHook must not short-circuit, got %+v", shortCircuit)
+	}
+	if gotReq == nil {
+		t.Fatal("PreLLMHook returned nil request — this breaks the pipeline for all subsequent plugins")
+	}
+	if gotReq != req {
+		t.Fatal("PreLLMHook must return the SAME request pointer unchanged")
+	}
+}
+
+// TestPreLLMHookNilRequestIsPassthrough verifies the hook never turns a nil
+// input into a non-nil output and never panics. (A nil request reaching the
+// hook would already be a pipeline bug upstream, but the hook must not make
+// things worse.)
+func TestPreLLMHookNilRequestIsPassthrough(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	gotReq, shortCircuit, err := p.PreLLMHook(nil, nil)
+	if err != nil || shortCircuit != nil {
+		t.Fatalf("unexpected err=%v shortCircuit=%v", err, shortCircuit)
+	}
+	if gotReq != nil {
+		t.Fatal("nil input must pass through as nil, not be fabricated")
+	}
+}
+
+// TestPostLLMHookReturnsInputsUnchanged is a regression guard: PostLLMHook
+// must return the response and error it was given, because the pipeline
+// reassigns its working resp/bifrostErr to these return values. Returning
+// nil,nil would wipe a valid response (success path) or error (failure path)
+// for every downstream consumer.
+func TestPostLLMHookReturnsInputsUnchanged(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	t.Run("success path returns response unchanged", func(t *testing.T) {
+		resp := &schemas.BifrostResponse{}
+		gotResp, gotErr, err := p.PostLLMHook(newTrailCtx("k1"), resp, nil)
+		if err != nil {
+			t.Fatalf("PostLLMHook must not return an error, got %v", err)
+		}
+		if gotResp != resp {
+			t.Fatal("PostLLMHook must return the SAME response pointer on success")
+		}
+		if gotErr != nil {
+			t.Fatalf("PostLLMHook must not fabricate an error, got %v", gotErr)
+		}
+	})
+
+	t.Run("non-quota error path returns both unchanged", func(t *testing.T) {
+		resp := &schemas.BifrostResponse{}
+		berr := &schemas.BifrostError{
+			StatusCode: intPtr(429),
+			Error:      &schemas.ErrorField{Message: "too many requests, retry later"},
+		}
+		gotResp, gotErr, err := p.PostLLMHook(newTrailCtx("k1"), resp, berr)
+		if err != nil {
+			t.Fatalf("PostLLMHook must not return an error, got %v", err)
+		}
+		if gotResp != resp {
+			t.Fatal("PostLLMHook must return the SAME response pointer")
+		}
+		if gotErr != berr {
+			t.Fatal("PostLLMHook must return the SAME error pointer for non-quota errors")
+		}
+	})
+
+	t.Run("quota error path still returns both unchanged", func(t *testing.T) {
+		resp := &schemas.BifrostResponse{}
+		berr := newQuotaError(schemas.OpenAI)
+		gotResp, gotErr, err := p.PostLLMHook(newTrailCtx("k1"), resp, berr)
+		if err != nil {
+			t.Fatalf("PostLLMHook must not return an error, got %v", err)
+		}
+		if gotResp != resp {
+			t.Fatal("PostLLMHook must return the SAME response pointer even when marking cooldown")
+		}
+		if gotErr != berr {
+			t.Fatal("PostLLMHook must return the SAME error pointer even when marking cooldown")
+		}
+		// And the cooldown was actually marked.
+		if !p.State.IsCoolingDown(schemas.OpenAI, "k1") {
+			t.Fatal("expected cooldown to be marked")
+		}
+	})
+}
+
 func TestPluginNameAndCleanup(t *testing.T) {
 	p := NewPlugin(nil)
 	if p.GetName() == "" {

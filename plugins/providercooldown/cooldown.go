@@ -442,8 +442,13 @@ func (p *CooldownPlugin) ClearKey(provider schemas.ModelProvider, keyID string) 
 }
 
 // PreLLMHook is a no-op. The plugin only needs to act on the failure path.
-func (p *CooldownPlugin) PreLLMHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
-	return nil, nil, nil
+//
+// IMPORTANT: must return the request UNCHANGED. The pipeline reassigns its
+// working request to this return value (RunLLMPreHooks), so returning nil
+// would hand every subsequent plugin a nil request and collapse the whole
+// chain into "bifrost request after plugin hooks cannot be nil".
+func (p *CooldownPlugin) PreLLMHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
 }
 
 // PreRequestHook is a no-op.
@@ -458,23 +463,30 @@ func (p *CooldownPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.Bi
 // The hook is intentionally conservative: it never mutates the response or
 // error, and it never panics on missing context values — both can occur when
 // called from short-circuit or fallback paths.
-func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, _ *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+//
+// IMPORTANT: must return the response and error UNCHANGED. The pipeline
+// reassigns its working resp/bifrostErr to these return values
+// (RunPostLLMHooks), so returning nil,nil would wipe a valid response or
+// error for every downstream consumer. A plugin only nils one of them when
+// it deliberately recovers from an error (nil err + new resp) or invalidates
+// a response (nil resp + new err) — neither applies here.
+func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
 	if p.State == nil || bifrostErr == nil {
-		return nil, nil, nil
+		return resp, bifrostErr, nil
 	}
 	if !p.isQuotaExhausted(bifrostErr) {
-		return nil, nil, nil
+		return resp, bifrostErr, nil
 	}
 
 	provider, keyID := lastAttemptProviderAndKey(ctx, bifrostErr)
 	if keyID == "" {
-		return nil, nil, nil
+		return resp, bifrostErr, nil
 	}
 	p.State.Mark(provider, keyID)
 	if p.logger != nil {
 		p.logger.Info("[provider-cooldown] marked key %s/%s (TTL=%v)", provider, keyID, p.State.EffectiveTTL(provider))
 	}
-	return nil, nil, nil
+	return resp, bifrostErr, nil
 }
 
 // IsQuotaExhausted returns true when the given BifrostError looks like the
