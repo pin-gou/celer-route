@@ -1,0 +1,225 @@
+schema_version: '2026-06-30'
+change: strip-enterprise-features
+stages:
+- name: dev
+  environment: local
+  tracks:
+  - id: core
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 1. dev.core:test - dev 测试先行
+      dev:
+        tasks_md_section: 2. dev.core:dev - 实现开发
+      review:
+        tasks_md_section: 3. dev.core:review - 静态代码审查
+      verify:
+        tasks_md_section: 4. dev.core:verify - dev 集成验证
+      gate:
+        tasks_md_section: 5. dev.core:gate - dev 门控审查
+  - id: framework
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 6. dev.framework:test - dev 测试先行
+      dev:
+        tasks_md_section: 7. dev.framework:dev - 实现开发
+      review:
+        tasks_md_section: 8. dev.framework:review - 静态代码审查
+      verify:
+        tasks_md_section: 9. dev.framework:verify - dev 集成验证
+      gate:
+        tasks_md_section: 10. dev.framework:gate - dev 门控审查
+  - id: transports
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 11. dev.transports:test - dev 测试先行
+      dev:
+        tasks_md_section: 12. dev.transports:dev - 实现开发
+      review:
+        tasks_md_section: 13. dev.transports:review - 静态代码审查
+      verify:
+        tasks_md_section: 14. dev.transports:verify - dev 集成验证
+      gate:
+        tasks_md_section: 15. dev.transports:gate - dev 门控审查
+  - id: plugins
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 16. dev.plugins:test - dev 测试先行
+      dev:
+        tasks_md_section: 17. dev.plugins:dev - 实现开发
+      review:
+        tasks_md_section: 18. dev.plugins:review - 静态代码审查
+      verify:
+        tasks_md_section: 19. dev.plugins:verify - dev 集成验证
+      gate:
+        tasks_md_section: 20. dev.plugins:gate - dev 门控审查
+  - id: ui
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 21. dev.ui:test - dev 测试先行
+      dev:
+        tasks_md_section: 22. dev.ui:dev - 实现开发
+      review:
+        tasks_md_section: 23. dev.ui:review - 静态代码审查
+      verify:
+        tasks_md_section: 24. dev.ui:verify - dev 集成验证
+      gate:
+        tasks_md_section: 25. dev.ui:gate - dev 门控审查
+- name: int
+  environment: local
+  tracks:
+  - id: core
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 26. int.core:test - int 测试先行
+      dev:
+        tasks_md_section: 27. int.core:dev - 实现开发
+      review:
+        tasks_md_section: 28. int.core:review - 静态代码审查
+      verify:
+        tasks_md_section: 29. int.core:verify - int 集成验证
+      gate:
+        tasks_md_section: 30. int.core:gate - int 门控审查
+  - id: framework
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 31. int.framework:test - int 测试先行
+      dev:
+        tasks_md_section: 32. int.framework:dev - 实现开发
+      review:
+        tasks_md_section: 33. int.framework:review - 静态代码审查
+      verify:
+        tasks_md_section: 34. int.framework:verify - int 集成验证
+      gate:
+        tasks_md_section: 35. int.framework:gate - int 门控审查
+  - id: transports
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 36. int.transports:test - int 测试先行
+      dev:
+        tasks_md_section: 37. int.transports:dev - 实现开发
+      review:
+        tasks_md_section: 38. int.transports:review - 静态代码审查
+      verify:
+        tasks_md_section: 39. int.transports:verify - int 集成验证
+      gate:
+        tasks_md_section: 40. int.transports:gate - int 门控审查
+  - id: plugins
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 41. int.plugins:test - int 测试先行
+      dev:
+        tasks_md_section: 42. int.plugins:dev - 实现开发
+      review:
+        tasks_md_section: 43. int.plugins:review - 静态代码审查
+      verify:
+        tasks_md_section: 44. int.plugins:verify - int 集成验证
+      gate:
+        tasks_md_section: 45. int.plugins:gate - int 门控审查
+  - id: ui
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 46. int.ui:test - int 测试先行
+      dev:
+        tasks_md_section: 47. int.ui:dev - 实现开发
+      review:
+        tasks_md_section: 48. int.ui:review - 静态代码审查
+      verify:
+        tasks_md_section: 49. int.ui:verify - int 集成验证
+      gate:
+        tasks_md_section: 50. int.ui:gate - int 门控审查
+  - id: scenario
+    type: scenario
+    enabled: true
+    reason: 跨模块联调场景需要 scenario track 验证 core/framework/transports/plugins/ui 联合 build
+      通过；纯 refactor 无新 API 端点也无跨 service 协作。
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      scenario-execute:
+        tasks_md_section: 51. int.scenario:scenario-execute - 真机场景执行
+    scenario_yaml: scenario-scenario.yaml
+final_gate:
+  tasks_md_section: 52. final-gate - 最终门控审查

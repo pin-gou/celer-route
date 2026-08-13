@@ -1,0 +1,176 @@
+scenarios:
+- scenario_id: S-bifrost-api-version-after-strip
+  critical: true
+  description: 验证 enterprise 剥离后 bifrost-http 仍能响应 GET /api/version 端点（健康检查）
+  given:
+  - '# REQUIRE: prepare_env 已启动 bifrost-http 实例（端口 9080）'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=health].url} 健康检查通过'
+  - enterprise 钩子（enterprisePlugins / FeatureFlags.EnterpriseOnly / VaultResolveHook）已从源代码删除
+  covers:
+  - V-transports-2
+  when:
+  - name: 调用 bifrost-http /api/version 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/version'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body matches '"version":\s*".+"'
+  evidence:
+  - 2-build/<report_seq>-bifrost-api-version-after-strip-evidence.json
+
+- scenario_id: S-bifrost-api-rbac-route-404
+  critical: true
+  description: 验证 enterprise-only /api/rbac 端点返回 404（OSS handler 从未注册）
+  given:
+  - '# REQUIRE: bifrost-http 已启动（端口 9080）'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=health].url} 健康检查通过'
+  - 路由注册中 enterprise-only 端点（rbac/scim/audit-logs/access-profiles）已从 handlers 删除
+  covers:
+  - V-transports-2
+  when:
+  - name: 调用 /api/rbac 端点（OSS 中不存在）
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/rbac'
+    expect_status: 404
+  - name: 调用 /api/scim 端点（OSS 中不存在）
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/scim'
+    expect_status: 404
+  - name: 调用 /api/audit-logs 端点（OSS 中不存在）
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/audit-logs'
+    expect_status: 404
+  - name: 调用 /api/access-profiles 端点（OSS 中不存在）
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/access-profiles'
+    expect_status: 404
+  then:
+  - status_code == 404
+  - 全部 4 个端点返回 404
+  evidence:
+  - 2-build/<report_seq>-bifrost-api-rbac-route-404-evidence.json
+
+- scenario_id: S-bifrost-api-config-still-works
+  critical: true
+  description: 验证 /api/config 端点返回 200 且响应结构完整（OSS 路径未受影响）
+  given:
+  - '# REQUIRE: bifrost-http 已启动（端口 9080）'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=health].url} 健康检查通过'
+  covers:
+  - V-transports-2
+  when:
+  - name: 调用 bifrost-http /api/config 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/config'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body matches '"config":'
+  evidence:
+  - 2-build/<report_seq>-bifrost-api-config-still-works-evidence.json
+
+- scenario_id: S-bifrost-api-virtual-keys-list
+  critical: false
+  description: 验证 OSS Virtual Keys 路由能正常返回列表（customer/team 字段已移除但 VK 基础功能保留）
+  given:
+  - '# REQUIRE: bifrost-http 已启动（端口 9080）'
+  - '{env.data_resources[name=config-db].state.status} 为 seeded'
+  covers:
+  - V-transports-2
+  when:
+  - name: 调用 /api/governance/virtual-keys 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/governance/virtual-keys'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body 不含 access_profile_id 字段
+  evidence:
+  - 2-build/<report_seq>-bifrost-api-virtual-keys-list-evidence.json
+
+- scenario_id: S-bifrost-api-routing-rules-list
+  critical: false
+  description: 验证 OSS Routing Rules 路由能正常返回列表（scope 收窄为 virtual_key/global）
+  given:
+  - '# REQUIRE: bifrost-http 已启动（端口 9080）'
+  - '{env.data_resources[name=config-db].state.status} 为 seeded'
+  covers:
+  - V-transports-2
+  when:
+  - name: 调用 /api/routing-rules 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/routing-rules'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body 不含 business_unit_id 字段
+  evidence:
+  - 2-build/<report_seq>-bifrost-api-routing-rules-list-evidence.json
+
+- scenario_id: S-bifrost-api-prometheus-metrics
+  critical: false
+  description: 验证 /metrics 端点仍可用（OSS Prometheus 集成未受影响）
+  given:
+  - '# REQUIRE: bifrost-http 已启动（端口 9080）'
+  covers:
+  - V-transports-2
+  when:
+  - name: 调用 /metrics 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/metrics'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body matches '# HELP'
+  evidence:
+  - 2-build/<report_seq>-bifrost-api-prometheus-metrics-evidence.json
+
+- scenario_id: S-bifrost-api-no-enterprise-endpoints-registered
+  critical: false
+  description: 验证 enterprise 端点（teams/customers/users/business-units/access-profiles/audit-logs/alerting）全部返回 404 或 405（OSS handler 从未注册）
+  given:
+  - '# REQUIRE: bifrost-http 已启动（端口 9080）'
+  covers:
+  - V-transports-2
+  when:
+  - name: 调用 /api/governance/teams 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/governance/teams'
+    expect_status: 404
+  - name: 调用 /api/governance/customers 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/governance/customers'
+    expect_status: 404
+  - name: 调用 /api/governance/users 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/governance/users'
+    expect_status: 404
+  - name: 调用 /api/alerting/rules 端点
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/alerting/rules'
+    expect_status: 404
+  then:
+  - status_code == 404
+  - 全部端点返回 404
+  evidence:
+  - 2-build/<report_seq>-bifrost-api-no-enterprise-endpoints-registered-evidence.json
+
+_meta:
+  _comment: 'scenario-<track>.yaml 由 LLM 填充完整 scenario body（given/when/then/and/evidence）。_meta 段最终会被 pg-build scenario-execute agent 忽略。v1.0 (v6 hook 协议): scenario given 直接引用 .pg/changes/<id>/env-description.yaml 中的资源路径, 不再使用 _meta.env_constraint 字段.v1.1.0 (硬约束): given/when/then 中禁止硬编码 IPv4 / ssh://user@host / port 字面, 必须用 {env.<段>.<name>.<字段路径>} 占位引用 env-description.yaml 中的真实资源。'
+  change: strip-enterprise-features
+  track_id: scenario
+  schema_version: v3.10
