@@ -23,9 +23,9 @@ if check_port "$PORT"; then
     sleep 1
 fi
 
-if ! pid=$(pg_start_bg "$LOG_DIR/ui-dev.log" "$PID_DIR/ui-dev.pid" \
+if ! pid=$(pg_run_bash "$LOG_DIR/ui-dev.log" "$PID_DIR/ui-dev.pid" \
         "PORT=$PORT" "BIFROST_PORT=$BIFROST_API_PORT" "PATH=$PATH" -- \
-        bash -c "cd '$PROJECT_ROOT/ui' && npm run dev -- --port $PORT"); then
+        "cd '$PROJECT_ROOT/ui' && npm run dev -- --port $PORT"); then
     pg_fail --category=service_start_failure --code=PG-E-0800 \
         --message="启动 UI dev server 失败" \
         --hint="Check npm install / node version" \

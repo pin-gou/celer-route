@@ -15,7 +15,7 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 PROJECT_ROOT="$(cd "$HOOK_DIR/../.." && pwd)"
 BIFROST_BIN="${BIFROST_BIN:-$PROJECT_ROOT/tmp/bifrost-http}"
 DATA_DIR="$HOOK_DIR/local/data"
-PORT="${BIFROST_START_PORT:-9080}"
+PORT="${BIFROST_START_PORT:-${PG_INSTANCE_PORT:-9080}}"
 HOST="${PG_INSTANCE_HOST:-localhost}"
 
 # 重新构建

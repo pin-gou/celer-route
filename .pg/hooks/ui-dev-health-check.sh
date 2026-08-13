@@ -13,9 +13,10 @@ fi
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 HOST="${PG_INSTANCE_HOST:-localhost}"
-pg_http_health_check "ui-dev" "${PG_INSTANCE_NAME:-}" "$HOST" "3008" "/" \
+PORT="${PG_INSTANCE_PORT:-3008}"
+pg_http_health_check "ui-dev" "${PG_INSTANCE_NAME:-}" "$HOST" "$PORT" "/" \
     || pg_fail --category=service_health_check --code=PG-E-0903 \
-               --message="UI dev server health check failed at ${HOST}:3008/" \
+               --message="UI dev server health check failed at ${HOST}:${PORT}/" \
                --hint="Check ui-dev logs at $LOG_DIR/ui-dev.log" \
                --agent-recoverable=true
 

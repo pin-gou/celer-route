@@ -60,6 +60,39 @@ python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
 
 ⚠️ **任务结束必须换新 session-id**——否则新任务的日志会污染旧 session 的归档目录。
 
+## §2.3 注入的 PG_* 环境变量
+
+hook 脚本运行时通过 `pg-invoke-hook.py` 注入以下常用变量（SSOT 见 `.pg/skills/src/runtime/spec/hook-env-vars.yaml`）：
+
+| 变量 | 来源 | 用途 |
+|------|------|------|
+| `PG_ROLE` | per-role | 当前 role 名 |
+| `PG_INSTANCE_NAME` | per-role | 当前 instance 名 |
+| `PG_INSTANCE_HOST` | per-role | instance 的 host |
+| `PG_INSTANCE_PORT` | per-role | instance 声明的端口 (project.yaml instances[].port) |
+| `PG_ENV` | per-stage | 当前 environment 名 |
+| `PG_HOOK_TYPE` | per-action | 当前 action 类型 (start/stop/logs/health_check/prepare_env/clean_env) |
+
+脚本中**优先使用 `PG_INSTANCE_PORT`** 而非硬编码端口，确保与 project.yaml 中的实例定义一致。
+
+## §2.4 action script 字段
+
+`project.yaml` 中 `actions.<action>.script` 应引用 `.pg/hooks/<role>-<action>.sh` 文件，而非内联命令。`pg-invoke-hook.py` 执行的是 `script` 字段中的内容——若为内联命令则绕过 hook 文件，丢失 hook 脚本中的端口检测、duration 计算等逻辑。
+
+## §2.5 复合命令
+
+对于含 shell 操作符（`&&`、`||`、`cd`）的启动命令，hook 脚本应使用 `pg_run_bash` 而非 `pg_start_bg`：
+
+```bash
+# 正确：pg_run_bash 自动包装为 bash -c "..."
+pg_run_bash "$LOG_DIR/app.log" "$PID_DIR/app.pid" "KEY=VALUE" -- \
+    "cd /app && npm run start -- --port $PORT"
+
+# 错误：pg_start_bg 将 && 作为 exec 参数传递，不会执行 shell 操作符
+pg_start_bg "$LOG_DIR/app.log" "$PID_DIR/app.pid" -- \
+    cd /app && npm run start
+```
+
 ## §3 日志路径（按 caller × session × env）
 
 | caller | session 格式 | 环境 | 日志路径 |

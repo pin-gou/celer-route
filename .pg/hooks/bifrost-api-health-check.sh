@@ -13,9 +13,10 @@ fi
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 HOST="${PG_INSTANCE_HOST:-localhost}"
-pg_http_health_check "bifrost-api" "${PG_INSTANCE_NAME:-}" "$HOST" "9080" "/health" \
+PORT="${PG_INSTANCE_PORT:-9080}"
+pg_http_health_check "bifrost-api" "${PG_INSTANCE_NAME:-}" "$HOST" "$PORT" "/health" \
     || pg_fail --category=service_health_check --code=PG-E-0902 \
-               --message="bifrost-api health check failed at ${HOST}:9080/health" \
+               --message="bifrost-api health check failed at ${HOST}:${PORT}/health" \
                --hint="Check bifrost-api logs at $LOG_DIR/bifrost-api.log" \
                --agent-recoverable=true
 

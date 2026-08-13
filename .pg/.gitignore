@@ -10,6 +10,8 @@ skills.backup.*
 *.profile
 cronjobs/prompt.txt
 
+*.pid
+
 # pg-init-project dynamic output (review-only, regenerated each run)
 agents-md-patches.md
 
