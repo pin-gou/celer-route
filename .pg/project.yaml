@@ -70,6 +70,10 @@ environments:
       host: localhost
       script: .pg/hooks/local/prepare.sh
       description: "启动 bifrost-api 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例"
+    describe_env:
+      script: .pg/hooks/local/describe_env.sh
+      timeout_seconds: 30
+      description: "探测 local 环境各角色健康状态与端口可用性，输出 env-description.yaml"
     roles:
       - name: bifrost-api
         instances:
