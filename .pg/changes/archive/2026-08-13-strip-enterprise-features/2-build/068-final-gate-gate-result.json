@@ -1,0 +1,24 @@
+{
+  "summary": "[final-gate] pass — 14/14 V-* 通过; G-1 vaultStore 已修复（5df2825: values.schema.json/_helpers.tpl/values.yaml/README 全清, helm template 渲染通过 0 enterprise 键）; 实现完整性硬标记 0 命中, tasks-V 映射完整, scope creep 0, design 一致性 100%, runtime_boot 4 步齐全; 10/10 track gate 全 PASS + scenario 7/7 PASS, gate_score: 95, p0_failures: []",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/068-final-gate-gate-report.md"
+  ],
+  "tasks_updated": [],
+  "status": "pass",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/065-int.scenario-scenario-execute.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/067-final-gate-gate-report.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/005-dev.core-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/010-dev.framework-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/019-dev.transports-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/024-dev.plugins-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/033-dev.ui-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/038-int.core-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/043-int.framework-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/048-int.transports-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/053-int.plugins-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/058-int.ui-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/066-final-gate-gate-report.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/068-final-gate-gate-report.md"
+}

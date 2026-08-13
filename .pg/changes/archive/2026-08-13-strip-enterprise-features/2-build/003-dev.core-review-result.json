@@ -1,0 +1,10 @@
+{
+  "summary": "[dev.core:review] completed — review_score: 100, p0_failures: []. All 6 checks PASS (design_alignment 30, scope_creep 25, pattern_consistency 20, file_location 15, test_contract 10, error_wrapping 20). design.md 4 backend contracts (BifrostContextKey/vault hook/SSEReaderFactory deletion + comment cleanup) all implemented. All non-.pg diffs in core/ scope. go build/vet pass; new strip tests use strong assertions. 2 pre-existing test failures reproduce on master (unrelated).",
+  "outputs": [],
+  "tasks_updated": [],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/003-dev.core-review.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/003-dev.core-review.md"
+}

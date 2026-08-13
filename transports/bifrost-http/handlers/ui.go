@@ -73,6 +73,16 @@ func (h *UIHandler) serveDashboard(ctx *fasthttp.RequestCtx) {
 	// Get the request path
 	requestPath := string(ctx.Path())
 
+	// Any path starting with /api/ that reaches the UI handler is an unregistered
+	// API route (all valid API routes are registered before the UI catch-all).
+	// Return 404 instead of serving the SPA, so enterprise-only endpoints that
+	// have been removed from the OSS build correctly return 404.
+	if strings.HasPrefix(requestPath, "/api/") {
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+		ctx.SetBodyString("404 - Route not found: " + requestPath)
+		return
+	}
+
 	// Clean the path to prevent directory traversal
 	cleanPath := path.Clean(requestPath)
 

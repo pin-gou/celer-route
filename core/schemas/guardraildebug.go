@@ -76,35 +76,19 @@ func cloneUint(value *uint) *uint {
 }
 
 // GuardrailDebugFromContext returns typed guardrail debug data stored on ctx.
+// OSS deployments never have guardrail debug data, so this always returns false.
 func GuardrailDebugFromContext(ctx *BifrostContext) (*BifrostGuardrailDebug, bool) {
-	if ctx == nil {
-		return nil, false
-	}
-	debug, ok := ctx.Value(BifrostContextKeyGuardrailDebug).(*BifrostGuardrailDebug)
-	if !ok || debug == nil || len(debug.JudgeCalls) == 0 {
-		return nil, false
-	}
-	return debug.Clone(), true
+	return nil, false
 }
 
 // SetGuardrailDebugOnContext stores non-empty guardrail debug data on ctx.
+// OSS deployments never have guardrail debug data, so this always returns false.
 func SetGuardrailDebugOnContext(ctx *BifrostContext, debug *BifrostGuardrailDebug) bool {
-	if ctx == nil || debug == nil || len(debug.JudgeCalls) == 0 {
-		return false
-	}
-	ctx.SetValue(BifrostContextKeyGuardrailDebug, debug.Clone())
-	return true
+	return false
 }
 
 // AppendGuardrailJudgeCallOnContext appends one guardrail judge call to ctx.
+// OSS deployments never have guardrail judge calls, so this always returns false.
 func AppendGuardrailJudgeCallOnContext(ctx *BifrostContext, call BifrostGuardrailJudgeCall) bool {
-	if ctx == nil || call.TotalTokens == 0 && call.PromptTokens == 0 && call.CompletionTokens == 0 {
-		return false
-	}
-	current, _ := GuardrailDebugFromContext(ctx)
-	if current == nil {
-		current = &BifrostGuardrailDebug{}
-	}
-	current.JudgeCalls = append(current.JudgeCalls, call)
-	return SetGuardrailDebugOnContext(ctx, current)
+	return false
 }

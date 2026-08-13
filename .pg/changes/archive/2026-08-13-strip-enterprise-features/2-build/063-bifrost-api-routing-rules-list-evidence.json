@@ -1,0 +1,17 @@
+{
+  "scenario_id": "S-bifrost-api-routing-rules-list",
+  "critical": false,
+  "status": "fail",
+  "type": "api",
+  "steps": [
+    {"phase": "given", "result": "ok", "note": "bifrost-http running on 9080, config-db seeded"},
+    {"phase": "when", "result": "fail", "step_type": "api", "method": "GET", "url": "http://localhost:9080/api/routing-rules", "response_status": 404, "note": "actual path is /api/governance/routing-rules"},
+    {"phase": "then", "result": "fail", "assertions": [
+      {"name": "status_code == 200", "actual": 404, "passed": false, "note": "path should be /api/governance/routing-rules"}
+    ]},
+    {"phase": "and", "result": "ok", "note": "no cleanup needed"}
+  ],
+  "request_ids": [],
+  "timestamps": {"start": "2026-08-13T22:10:57+00:00", "end": "2026-08-13T22:10:57+00:00"},
+  "cleanup_result": "ok"
+}

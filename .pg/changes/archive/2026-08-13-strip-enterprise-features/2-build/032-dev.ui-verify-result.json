@@ -1,0 +1,10 @@
+{
+  "summary": "dev.ui verification PASSED: All 5 V-ui verification items passed. Lint (0 errors), typecheck (0 errors), tests (214 passed), UI build (success), enterprise routes removed (12/12), IS_ENTERPRISE sidebar refs removed (0/0). No residual @enterprise references in business code.",
+  "outputs": [],
+  "tasks_updated": [],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/032-dev.ui-verify-evidence.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/032-dev.ui-verify.md"
+}

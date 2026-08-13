@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } from "@/lib/store";
 import { CoreConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { parseArrayFromText } from "@/lib/utils/array";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";

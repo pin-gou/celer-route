@@ -6,7 +6,7 @@ import { getErrorMessage } from "@/lib/store";
 import { useCreateProviderKeyMutation, useGetProviderKeysQuery, useUpdateProviderKeyMutation } from "@/lib/store/apis/providersApi";
 import { ModelProvider } from "@/lib/types/config";
 import { modelProviderKeySchema } from "@/lib/types/schemas";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Save } from "lucide-react";
 import { useCallback, useEffect } from "react";

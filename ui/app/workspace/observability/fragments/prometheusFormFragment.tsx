@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { prometheusFormSchema, type SecretVar, type PrometheusFormSchema } from "@/lib/types/schemas";
 import { emptySecretVar, toSecretVarFormValue } from "@/lib/utils/secretVarForm";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, Copy, Info, Plus, Trash, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";

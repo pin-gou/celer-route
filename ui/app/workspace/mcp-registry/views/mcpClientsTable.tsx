@@ -32,7 +32,7 @@ import {
 } from "@/lib/store";
 import { MCPClient } from "@/lib/types/mcp";
 import { titleCaseFromSnakeCase } from "@/lib/utils/strings";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Link } from "@tanstack/react-router";
 import {
 	Box,

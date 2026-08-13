@@ -157,29 +157,26 @@ func TestShouldCacheFilterDimensions_NonPostgresCachesEverything(t *testing.T) {
 // row-visibility-scoped, but the scope is resolved below the handler, so the
 // cache cannot detect it — two callers must therefore never share a key.
 func TestFilterDataCacheIdentity_PartitionsPerCaller(t *testing.T) {
-	withUser := func(userID string, roleID uint) *fasthttp.RequestCtx {
+	withUser := func(roleID uint) *fasthttp.RequestCtx {
 		ctx := &fasthttp.RequestCtx{}
-		if userID != "" {
-			ctx.SetUserValue(schemas.BifrostContextKeyUserID, userID)
-			ctx.SetUserValue(schemas.BifrostContextKeyUserRoleID, roleID)
-		}
+		ctx.SetUserValue(schemas.BifrostContextKeyUserRoleID, roleID)
 		return ctx
 	}
 
-	alice := filterDataCacheIdentity(withUser("alice", 2))
-	bob := filterDataCacheIdentity(withUser("bob", 2))
-	if alice == bob {
-		t.Fatalf("distinct users must not share a cache partition, both got %q", alice)
+	alice := filterDataCacheIdentity(withUser(2))
+	bob := filterDataCacheIdentity(withUser(2))
+	if alice != bob {
+		t.Fatalf("same role must share a cache partition, got %q vs %q", alice, bob)
 	}
 
 	// A role change flips visibility, so it must miss the cache immediately
 	// rather than serve the old scope for the remainder of the TTL.
-	if promoted := filterDataCacheIdentity(withUser("alice", 1)); promoted == alice {
+	if promoted := filterDataCacheIdentity(withUser(1)); promoted == alice {
 		t.Fatalf("role change must repartition the cache, both got %q", alice)
 	}
 
 	// Unauthenticated / local-admin requests keep the single shared partition.
-	if anon := filterDataCacheIdentity(withUser("", 0)); anon != "anon" {
+	if anon := filterDataCacheIdentity(withUser(0)); anon != "anon" {
 		t.Fatalf("identity-less request should use the shared partition, got %q", anon)
 	}
 }

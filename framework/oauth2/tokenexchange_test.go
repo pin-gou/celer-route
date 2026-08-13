@@ -67,7 +67,7 @@ func newExchangeProvider(t *testing.T, tokenURL string, shape schemas.TokenExcha
 
 func userExchangeContext(subjectToken string) *schemas.BifrostContext {
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-	ctx.SetValue(schemas.BifrostContextKeyUserID, "user-1")
+	ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyID, "vk-1")
 	if subjectToken != "" {
 		ctx.SetValue(schemas.BifrostContextKeyMCPInboundBearer, subjectToken)
 	}
@@ -218,7 +218,7 @@ func TestGetExchangedAccessTokenCachesUntilExpiry(t *testing.T) {
 
 	// A distinct identity misses the cache and exchanges again.
 	otherCtx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-	otherCtx.SetValue(schemas.BifrostContextKeyUserID, "user-2")
+	otherCtx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyID, "vk-2")
 	otherCtx.SetValue(schemas.BifrostContextKeyMCPInboundBearer, "subject-jwt-2")
 	if _, err := p.GetExchangedAccessToken(otherCtx, config); err != nil {
 		t.Fatalf("GetExchangedAccessToken returned error: %v", err)

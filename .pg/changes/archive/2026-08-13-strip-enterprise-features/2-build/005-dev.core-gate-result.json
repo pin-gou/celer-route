@@ -1,0 +1,12 @@
+{
+  "summary": "[dev.core:gate] pass — 10/10 检查通过, gate_score: 94, p0_failures: []",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/005-dev.core-gate-verify.md"
+  ],
+  "tasks_updated": [],
+  "status": "pass",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/004-dev.core-verify-evidence.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/005-dev.core-gate-verify.md"
+}

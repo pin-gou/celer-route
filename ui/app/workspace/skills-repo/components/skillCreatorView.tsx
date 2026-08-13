@@ -2,7 +2,7 @@
 
 import { useCreateSkillMutation } from "@/lib/store/apis/skillsApi";
 import { getErrorMessage } from "@/lib/store/apis/baseApi";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { toast } from "sonner";
 import { useSkillForm } from "./helpers";
 import { SkillEditView } from "../forms/skillEditForm";

@@ -1,34 +1,26 @@
 package integrations
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 
-func TestExtractModelAndRequestType_LargePayloadUsesMetadataWithoutBodyParse(t *testing.T) {
+func TestExtractModelAndRequestType_ParsesBodyWhenLargePayloadMetadataIsAbsent(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.SetUserValue("model", "gemini-2.5-pro:generateContent")
-	// Intentionally invalid JSON: detection must rely on large-payload metadata, not body parse.
-	ctx.Request.SetBodyString(`{"contents":[INVALID`)
-
-	bifrostCtx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-	bifrostCtx.SetValue(schemas.BifrostContextKeyLargePayloadMode, true)
-	bifrostCtx.SetValue(schemas.BifrostContextKeyLargePayloadMetadata, &schemas.LargePayloadMetadata{
-		ResponseModalities: []string{"AUDIO"},
-	})
-	ctx.SetUserValue(lib.FastHTTPUserValueBifrostContext, bifrostCtx)
+	// OSS has no large-payload metadata (resolveLargePayloadMetadata returns nil),
+	// so type detection for a small request parses the body instead.
+	ctx.Request.SetBodyString(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
 
 	model, reqType := extractModelAndRequestType(ctx)
 	if model != "gemini-2.5-pro" {
 		t.Fatalf("expected normalized model gemini-2.5-pro, got %q", model)
 	}
-	if reqType != schemas.SpeechRequest {
-		t.Fatalf("expected speech request type from metadata, got %q", reqType)
+	if reqType != schemas.ResponsesRequest {
+		t.Fatalf("expected responses request type from body parse, got %q", reqType)
 	}
 }
 

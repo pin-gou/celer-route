@@ -626,8 +626,7 @@ type Config struct {
 
 	// Process-wide feature flag store. Flags are code-declared via
 	// featureflags.Register; this struct holds the effective state with
-	// layered overrides (DB then file). May be wired with a SyncDelegate
-	// by enterprise for cluster-wide gossip.
+	// layered overrides (DB then file).
 	FeatureFlags *featureflags.Store
 
 	// Catalog managers
@@ -757,9 +756,8 @@ func applyV1Compat(configData *ConfigData) {
 // promoteDeprecatedCalendarAligned lifts the legacy per-budget / per-rate-limit
 // calendar_aligned input to the owning VK or Team. Owner wins if already true;
 // otherwise OR across descendants (own budgets/rate-limit + every provider
-// config's budgets/rate-limit). Inner pointers are always cleared. Mirrors the
-// enterprise promoteDeprecatedAccessProfileCalendarAligned at the access
-// profile level. Runs on every load regardless of config version
+// config's budgets/rate-limit). Inner pointers are always cleared. Runs on
+// every load regardless of config version
 func promoteDeprecatedCalendarAligned(configData *ConfigData) {
 	if configData == nil || configData.Governance == nil {
 		return
@@ -941,9 +939,7 @@ func LoadConfig(ctx context.Context, configDirPath string) (*Config, error) {
 	if err := initEncryption(&configData); err != nil {
 		return nil, err
 	}
-	// 1a. Vault config acknowledgement (initialization handled by enterprise layer)
-	initVault(&configData)
-	// 1b. Bootstrap setup token (from config file or BIFROST_SETUP_TOKEN env var)
+	// 1a. Bootstrap setup token (from config file or BIFROST_SETUP_TOKEN env var)
 	config.SetupToken = resolveSetupToken(&configData)
 	// 2. Stores (config, logs, vector) — creates defaults for absent configs
 	if err := initStores(ctx, config, &configData, configDBPath, logsDBPath); err != nil {
@@ -5019,10 +5015,6 @@ func initEncryption(configData *ConfigData) error {
 	return nil
 }
 
-// initVault is a no-op stub at the OSS level.
-// Vault initialization is performed by the enterprise layer via config_store.vault_store.
-func initVault(_ *ConfigData) {}
-
 // resolveSetupToken resolves the bootstrap setup token required to create the very
 // first admin account from config data or the BIFROST_SETUP_TOKEN environment
 // variable. Returns "" when neither is set — callers must then fail closed rather
@@ -5492,13 +5484,7 @@ func initSkillsObjectStore(ctx context.Context, config *Config, logStoreConfig *
 // at boot does not block startup; the store falls back to defaults +
 // file overrides.
 func initFeatureFlags(ctx context.Context, config *Config, configData *ConfigData) error {
-	// Type-assert to bool so a stored `false` (or non-bool / missing key)
-	// resolves to OSS mode rather than the misleading "any non-nil = true"
-	// behavior of the previous `!= nil` check. The schemas comment for this
-	// context key declares it as bool, so the assertion is the documented
-	// shape; the comma-ok zero-value handles the unset path cleanly.
-	isEnterprise, _ := ctx.Value(schemas.BifrostContextKeyIsEnterprise).(bool)
-	store, err := featureflags.New(featureflags.Config{IsEnterprise: isEnterprise})
+	store, err := featureflags.New(featureflags.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to initialize feature flags: %w", err)
 	}

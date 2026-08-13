@@ -319,13 +319,6 @@ func (vk *TableVirtualKey) BeforeSave(tx *gorm.DB) error {
 		}
 		vk.ValueHash = encrypt.HashSHA256(resolved)
 	}
-	// Store plaintext SecretVar into vault and rewrite to vault ref before encrypting.
-	if schemas.VaultStoreWriteEnabled() {
-		base := schemas.VaultBasePath(vk.TableName(), vk.VaultPathKey())
-		if err := schemas.StoreOwnedVaultSecretVars(tx.Statement.Context, base, vk); err != nil {
-			return fmt.Errorf("failed to store virtual key secrets to vault: %w", err)
-		}
-	}
 	if encrypt.IsEnabled() && vk.Value.IsSet() {
 		if err := encryptSecretVar(&vk.Value); err != nil {
 			return fmt.Errorf("failed to encrypt virtual key value: %w", err)

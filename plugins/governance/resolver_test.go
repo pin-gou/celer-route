@@ -161,7 +161,6 @@ func TestGovernancePlugin_EvaluateGovernanceRequest_DirectKeySatisfiesMandatoryA
 		store:         store,
 		resolver:      NewBudgetResolver(store, nil, logger, nil),
 		isVkMandatory: &mandatory,
-		isEnterprise:  true,
 	}
 
 	ctx := &schemas.BifrostContext{}
@@ -191,7 +190,6 @@ func TestGovernancePlugin_EvaluateGovernanceRequest_HeaderWithoutContextDoesNotS
 		store:         store,
 		resolver:      NewBudgetResolver(store, nil, logger, nil),
 		isVkMandatory: &mandatory,
-		isEnterprise:  true,
 	}
 
 	_, bifrostErr := plugin.EvaluateGovernanceRequest(&schemas.BifrostContext{}, &EvaluationRequest{
@@ -202,7 +200,7 @@ func TestGovernancePlugin_EvaluateGovernanceRequest_HeaderWithoutContextDoesNotS
 	require.NotNil(t, bifrostErr)
 	require.NotNil(t, bifrostErr.StatusCode)
 	assert.Equal(t, 401, *bifrostErr.StatusCode)
-	assert.Equal(t, "authentication is required. Provide a virtual key (x-bf-vk), API key, or user token.", bifrostErr.Error.Message)
+	assert.Equal(t, "virtual key is required. Provide a virtual key via the x-bf-vk header.", bifrostErr.Error.Message)
 }
 
 // TestHasDirectKeyAuth reads only the transport-owned direct-key context value.

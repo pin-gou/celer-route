@@ -8,9 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } from "@/lib/store";
 import { CoreConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { SecretVar } from "@/lib/types/schemas";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
-import { useGetSCIMProvidersQuery } from "@enterprise/lib/store/apis/scimApi";
-import { IS_ENTERPRISE } from "@/lib/constants/config";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -25,10 +24,8 @@ export default function MCPView() {
 
 	// The "require identity-provider login" toggle is enterprise-only and only
 	// meaningful when an identity provider is configured — the backend ignores
-	// disable_vk_identity otherwise, so surfacing it would be a no-op. The SCIM
-	// query is skipped (and stubbed to []) in OSS builds.
-	const { data: scimProviders } = useGetSCIMProvidersQuery(undefined, { skip: !IS_ENTERPRISE });
-	const idpConfigured = !!scimProviders?.some((p) => (p as { enabled?: boolean }).enabled);
+	// disable_vk_identity otherwise, so surfacing it would be a no-op.
+	const idpConfigured = false;
 	const [updateCoreConfig, { isLoading }] = useUpdateCoreConfigMutation();
 	const [localConfig, setLocalConfig] = useState<CoreConfig>(DefaultCoreConfig);
 

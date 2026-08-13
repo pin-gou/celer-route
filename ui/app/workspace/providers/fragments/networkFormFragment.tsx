@@ -12,7 +12,7 @@ import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
 import { ModelProvider, isKnownProvider } from "@/lib/types/config";
 import { networkOnlyFormSchema, type SecretVar, type NetworkOnlyFormSchema } from "@/lib/types/schemas";
 import { toSecretVarFormValue, toOptionalSecretVarPayload } from "@/lib/utils/secretVarForm";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { useForm, type Resolver } from "react-hook-form";

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { useGetRoutingRulesQuery } from "@/lib/store/apis/routingRulesApi";
 import { RoutingRule } from "@/lib/types/routingRules";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Link } from "@tanstack/react-router";
 import { GitBranch, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

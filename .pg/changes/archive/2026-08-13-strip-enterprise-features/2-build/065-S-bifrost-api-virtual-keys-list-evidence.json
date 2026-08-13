@@ -1,0 +1,17 @@
+{
+  "scenario_id": "S-bifrost-api-virtual-keys-list",
+  "critical": false,
+  "status": "pass",
+  "type": "api",
+  "steps": [
+    {"phase": "given", "result": "ok", "detail": "config-db status: seeded"},
+    {"phase": "when", "result": "ok", "step_type": "api", "request_id": "", "response_status": 200, "url": "http://localhost:9080/api/governance/virtual-keys"},
+    {"phase": "then", "result": "ok", "assertions": [
+      {"name": "status_code == 200", "actual": 200, "passed": true},
+      {"name": "response.body 不含 access_profile_id", "actual": "access_profile_id not found in body", "passed": true}
+    ]}
+  ],
+  "request_ids": [""],
+  "timestamps": {"start": "2026-08-14T02:00:16+08:00", "end": "2026-08-14T02:00:17+08:00"},
+  "cleanup_result": "n/a"
+}

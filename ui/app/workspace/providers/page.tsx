@@ -17,7 +17,7 @@ import {
 } from "@/lib/store";
 import { KnownProvider, ModelProviderName, ProviderStatus } from "@/lib/types/config";
 import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
 import { useQueryState } from "nuqs";

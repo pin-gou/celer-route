@@ -1,7 +1,6 @@
 import {
 	ArrowUpRight,
 	BadgeCheck,
-	BadgeInfo,
 	BookOpenText,
 	BookUser,
 	Boxes,
@@ -19,7 +18,6 @@ import {
 	FolderGit,
 	Gavel,
 	GitCompareArrows,
-	Globe,
 	Hexagon,
 	History,
 	KeyRound,
@@ -30,7 +28,6 @@ import {
 	Logs,
 	Megaphone,
 	Network,
-	Palette,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Plug,
@@ -47,7 +44,6 @@ import {
 	Telescope,
 	ToolCase,
 	TrendingUp,
-	User,
 	UserRoundCheck,
 	Users,
 	Wallet,
@@ -56,7 +52,6 @@ import {
 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import {
 	Sidebar,
 	SidebarContent,
@@ -74,12 +69,9 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HIDDEN_UNTIL_NAV_COOKIE, REMIND_LATER_COOKIE, useOnboardingChecklist } from "@/hooks/useOnboardingChecklist";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { IS_ENTERPRISE } from "@/lib/constants/config";
 import { useBranding } from "@/lib/hooks/useBranding";
 import { useGetCoreConfigQuery, useGetLatestReleaseQuery, useGetVersionQuery, useLogoutMutation } from "@/lib/store";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
-import type { UserInfo } from "@enterprise/lib/store/utils/tokenManager";
-import { getUserInfo } from "@enterprise/lib/store/utils/tokenManager";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { BooksIcon, DiscordLogoIcon, GithubLogoIcon } from "@phosphor-icons/react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
@@ -543,7 +535,6 @@ export default function AppSidebar() {
 	const [mounted, setMounted] = useState(false);
 	const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 	const [areCardsEmpty, setAreCardsEmpty] = useState(false);
-	const [userPopoverOpen, setUserPopoverOpen] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [focusedIndex, setFocusedIndex] = useState(-1);
 	const searchInputRef = useRef<HTMLInputElement>(null);
@@ -1053,17 +1044,6 @@ export default function AppSidebar() {
 						description: "Security settings",
 						hasAccess: hasSettingsAccess,
 					},
-					...(IS_ENTERPRISE
-						? [
-							{
-								title: "Proxy",
-								url: "/workspace/config/proxy",
-								icon: Globe,
-								description: "Proxy configuration",
-								hasAccess: hasSettingsAccess,
-							},
-						]
-						: []),
 					{
 						title: "API Keys",
 						url: "/workspace/config/api-keys",
@@ -1085,24 +1065,6 @@ export default function AppSidebar() {
 						description: "Toggle feature flags",
 						hasAccess: hasFeatureFlagsAccess,
 					},
-					...(IS_ENTERPRISE
-						? [
-							{
-								title: "Branding",
-								url: "/workspace/config/branding",
-								icon: Palette,
-								description: "Custom logo and icon",
-								hasAccess: hasSettingsAccess,
-							},
-							{
-								title: "License Info",
-								url: "/workspace/config/license",
-								icon: BadgeInfo,
-								description: "Enterprise license information",
-								hasAccess: hasSettingsAccess,
-							},
-						]
-						: []),
 				],
 			},
 		],
@@ -1181,22 +1143,15 @@ export default function AppSidebar() {
 			.filter(Boolean) as SidebarItem[];
 	}, [accessibleItems, searchQuery]);
 
-	const { data: version } = useGetVersionQuery();
+const { data: version } = useGetVersionQuery();
 	const { resolvedTheme } = useTheme();
 	const [logout] = useLogoutMutation();
 
-	// Get user info from localStorage (for enterprise SCIM OAuth)
-	const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-
 	useEffect(() => {
-		if (IS_ENTERPRISE) {
-			const info = getUserInfo();
-			setUserInfo(info);
-		}
+		setMounted(true);
 	}, []);
 
 	const showNewReleaseBanner = useMemo(() => {
-		if (IS_ENTERPRISE) return false;
 		if (latestRelease && version) {
 			return compareVersions(latestRelease.name, version) > 0;
 		}
@@ -1438,7 +1393,7 @@ export default function AppSidebar() {
 			});
 		}
 		// Only show after mounted to ensure cookie is properly hydrated and avoid flash
-		if (!IS_ENTERPRISE && mounted && !isProductionSetupDismissed) {
+		if (mounted && !isProductionSetupDismissed) {
 			cards.push(productionSetupHelpCard);
 		}
 		return cards;
@@ -1507,7 +1462,6 @@ export default function AppSidebar() {
 
 	const handleLogout = async () => {
 		try {
-			setUserPopoverOpen(false);
 			await logout().unwrap();
 			navigate("/login");
 		} catch {
@@ -1652,35 +1606,7 @@ export default function AppSidebar() {
 									</a>
 								))}
 							<ThemeToggle />
-							{IS_ENTERPRISE && userInfo ? (
-								<Popover open={userPopoverOpen} onOpenChange={setUserPopoverOpen}>
-									<PopoverTrigger asChild>
-										<button
-											className="hover:text-primary text-muted-foreground flex cursor-pointer items-center space-x-3 p-0.5"
-											type="button"
-											aria-label="User menu"
-										>
-											<User className="hover:text-primary text-muted-foreground h-4 w-4" size={20} strokeWidth={2} />
-										</button>
-									</PopoverTrigger>
-									<PopoverContent side="top" align="start" className="w-56 p-0">
-										<div className="flex flex-col">
-											<div className="px-4 py-3">
-												<p className="text-sm font-medium">{userInfo.name || userInfo.email || userInfo.preferred_username || "User"}</p>
-											</div>
-											<Separator />
-											<button
-												onClick={handleLogout}
-												className="hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors"
-												type="button"
-											>
-												<LogOut className="h-4 w-4" strokeWidth={2} />
-												<span>Logout</span>
-											</button>
-										</div>
-									</PopoverContent>
-								</Popover>
-							) : isAuthEnabled ? (
+							{isAuthEnabled ? (
 								<div>
 									<button
 										className="hover:text-primary text-muted-foreground flex cursor-pointer items-center space-x-3 p-0.5"

@@ -21,7 +21,7 @@ import {
 } from "@/lib/store/apis/promptsApi";
 import { useGetModelParametersQuery } from "@/lib/store/apis/providersApi";
 import { Folder, ModelParams, Prompt, PromptSession, PromptVersion } from "@/lib/types/prompts";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";

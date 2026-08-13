@@ -3,7 +3,7 @@ import { Form } from "@/components/ui/form";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { getErrorMessage, useCreatePluginMutation, useUpdatePluginMutation } from "@/lib/store";
 import { Plugin } from "@/lib/types/plugins";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";

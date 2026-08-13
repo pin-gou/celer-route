@@ -25,7 +25,7 @@ import {
 } from "@/lib/store";
 import { WEBHOOK_EVENTS, WebhookEndpoint, WebhookEndpointRequest, WebhookEvent } from "@/lib/types/webhooks";
 import { useDebouncedValue } from "@/hooks/useDebounce";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ChevronLeft, ChevronRight, MoreHorizontal, PencilIcon, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { parseAsArrayOf, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useEffect, useMemo, useState } from "react";

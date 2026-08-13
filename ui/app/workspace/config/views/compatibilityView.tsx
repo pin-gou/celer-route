@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } from "@/lib/store";
 import { CompatConfig, DefaultCoreConfig } from "@/lib/types/config";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 

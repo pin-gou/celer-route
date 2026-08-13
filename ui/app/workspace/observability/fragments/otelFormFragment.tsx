@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { otelFormSchema, type OtelFormSchema, type SecretVar } from "@/lib/types/schemas";
 import { emptySecretVar, toSecretVarFormValue, toSecretVarMapFormValue } from "@/lib/utils/secretVarForm";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";

@@ -1,0 +1,13 @@
+{
+  "summary": "int.framework:dev 阶段完成。Task 32.1-32.3 的 enterprise 功能（EnterpriseOnly、ErrFlagEnterpriseOnly、SyncDelegate、delegate/delegateM）已在上一阶段 dev.framework:dev 中删除，生产代码已无残留。Task 32.4 清理 enterprise 注释：featureflags 生产文件无注释残留，测试文件中的 enterprise 引用是合法的 strip 验证测试。Task 32.5：go build ./... 和 go vet ./... 均通过。featureflags 包全部 19 个测试 PASS。",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/framework/featureflags/featureflags.go",
+    "/home/ubuntu/workspace/my-gateway/framework/featureflags/registry.go"
+  ],
+  "tasks_updated": [
+    "32.1,32.2,32.3,32.4,32.5"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": ""
+}

@@ -1,0 +1,12 @@
+{
+  "summary": "int.plugins:dev 完成。42.1：grep 复核 plugins/governance/ 生产代码（非 _test）中三个指定模式注释（enterprise-only/set by enterprise/OSS no-op）已清零；一般性 'enterprise layer' 注释为必要导出契约信息，按保留必要逻辑分支原则保留；测试文件描述文本属红 phase 测试，红线不改。42.2：plugins 全模块 go build ./... 通过。附带验证：go vet 全模块 0 警告；go test -short 全 13 模块 PASS（含 enterprisestrip_test.go 红 phase 测试）；tasks.md 42.1/42.2 已勾选。",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/tasks.md"
+  ],
+  "tasks_updated": [
+    "42.1,42.2"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": ""
+}

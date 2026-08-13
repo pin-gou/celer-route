@@ -30,7 +30,7 @@ import {
 import { AllSkillsVersionBump, SkillListItem } from "@/lib/types/skills";
 import { cn } from "@/lib/utils";
 import { getApiBaseUrl, getExampleBaseUrl } from "@/lib/utils/port";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import {
 	ArrowDown,
 	ArrowUp,

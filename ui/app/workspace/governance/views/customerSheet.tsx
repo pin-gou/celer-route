@@ -23,7 +23,7 @@ import { resetDurationOptions, supportsCalendarAlignment } from "@/lib/constants
 import { getErrorMessage, useCreateCustomerMutation, useUpdateCustomerMutation } from "@/lib/store";
 import { CreateBudgetRequest, CreateCustomerRequest, Customer, UpdateCustomerRequest } from "@/lib/types/governance";
 import { Validator } from "@/lib/utils/validation";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import isEqual from "lodash.isequal";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";

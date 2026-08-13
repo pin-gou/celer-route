@@ -6,7 +6,7 @@ import { useGetProviderGovernanceQuery } from "@/lib/store";
 import { ModelProvider } from "@/lib/types/config";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/governance";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 
 interface Props {
 	className?: string;

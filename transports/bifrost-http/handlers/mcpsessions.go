@@ -396,8 +396,7 @@ func bindingKeyFromFlow(f tables.TableMCPOauthFlow) sessionBindingKey {
 // context. Returns "" when unauthenticated or in OSS — callers should treat
 // empty as "no user identity" (which fails the user-mode access gate).
 func callerUserIDFromCtx(ctx *fasthttp.RequestCtx) string {
-	v, _ := ctx.UserValue(schemas.BifrostContextKeyUserID).(string)
-	return v
+	return ""
 }
 
 // canAccessUserFlow is the single identity gate for user-mode flow/credential
@@ -495,9 +494,7 @@ func (h *MCPSessionsHandler) reauth(ctx *fasthttp.RequestCtx) {
 			bfCtx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyID, *tok.VirtualKeyID)
 		}
 	case schemas.MCPAuthModeUser:
-		if tok.UserID != nil && *tok.UserID != "" {
-			bfCtx.SetValue(schemas.BifrostContextKeyUserID, *tok.UserID)
-		}
+		// User identity is enterprise-only (BifrostContextKeyUserID deleted in OSS).
 	}
 
 	provider := h.store.OAuthProvider

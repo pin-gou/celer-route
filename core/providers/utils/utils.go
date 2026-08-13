@@ -1103,18 +1103,11 @@ type RequestBodyWithExtraParams interface {
 
 type RequestBodyConverter func() (RequestBodyWithExtraParams, error)
 
-// IsLargePayloadPassthroughEnabled returns true when large payload mode has already
-// prepared an upstream body reader in context.
+// IsLargePayloadPassthroughEnabled reports whether a large payload body reader
+// is available in context. OSS deployments never provide one, so this always
+// returns false.
 func IsLargePayloadPassthroughEnabled(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-	isLargePayload, ok := ctx.Value(schemas.BifrostContextKeyLargePayloadMode).(bool)
-	if !ok || !isLargePayload {
-		return false
-	}
-	reader, ok := ctx.Value(schemas.BifrostContextKeyLargePayloadReader).(io.Reader)
-	return ok && reader != nil
+	return false
 }
 
 // ApplyLargePayloadRequestBody applies the request body reader from context to the
@@ -1128,49 +1121,14 @@ const largePayloadModelRewriteScanBytes = 256 * 1024
 // ApplyLargePayloadRequestBodyWithModelNormalization applies the streaming body
 // reader from context and optionally rewrites prefixed model values for JSON
 // passthrough requests (for example "openai/gpt-5" -> "gpt-5").
-// This preserves low-memory streaming while keeping large-payload behavior
-// aligned with the normal parsed path that strips provider prefixes.
+// OSS never has a large payload body reader in context, so the streaming body
+// path is never applied and this always returns false.
 func ApplyLargePayloadRequestBodyWithModelNormalization(
 	ctx context.Context,
 	req *fasthttp.Request,
 	defaultProvider schemas.ModelProvider,
 ) bool {
-	if req == nil || !IsLargePayloadPassthroughEnabled(ctx) {
-		return false
-	}
-
-	bodyReader, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadReader).(io.Reader)
-	bodySize := -1
-	if contentLength, ok := ctx.Value(schemas.BifrostContextKeyLargePayloadContentLength).(int); ok {
-		bodySize = contentLength
-	}
-
-	if contentType, ok := ctx.Value(schemas.BifrostContextKeyLargePayloadContentType).(string); ok && contentType != "" {
-		ctLower := strings.ToLower(contentType)
-		if metadata, ok := ctx.Value(schemas.BifrostContextKeyLargePayloadMetadata).(*schemas.LargePayloadMetadata); ok && metadata != nil {
-			if rawModel := strings.TrimSpace(metadata.Model); rawModel != "" && defaultProvider != "" {
-				_, normalizedModel := schemas.ParseModelString(rawModel, defaultProvider)
-				if normalizedModel != "" && normalizedModel != rawModel {
-					if strings.Contains(ctLower, "application/json") {
-						rewrittenReader, sizeDelta := RewriteLargePayloadModelInJSONPrefix(bodyReader, rawModel, normalizedModel)
-						bodyReader = rewrittenReader
-						if bodySize >= 0 {
-							bodySize += sizeDelta
-						}
-					} else if strings.Contains(ctLower, "multipart/form-data") {
-						rewrittenReader, sizeDelta := RewriteLargePayloadModelInMultipartPrefix(bodyReader, rawModel, normalizedModel)
-						bodyReader = rewrittenReader
-						if bodySize >= 0 {
-							bodySize += sizeDelta
-						}
-					}
-				}
-			}
-		}
-		req.Header.SetContentType(contentType)
-	}
-	req.SetBodyStream(bodyReader, bodySize)
-	return true
+	return false
 }
 
 // RewriteLargePayloadModelInJSONPrefix reads the first 256KB of a streaming body,
@@ -1292,19 +1250,8 @@ func RewriteLargePayloadModelInMultipartPrefix(reader io.Reader, fromModel, toMo
 }
 
 // DrainLargePayloadRemainder drains any unread bytes from the large payload reader.
-// This is useful for request types that may receive an upstream response before the
-// incoming client upload is fully consumed (for example, lightweight preflight APIs).
-// Example failure this prevents: fronting proxy returns 502/broken-pipe when backend
-// responds early while client is still uploading a large body.
+// OSS never has a large payload reader, so this is a no-op.
 func DrainLargePayloadRemainder(ctx context.Context) {
-	if !IsLargePayloadPassthroughEnabled(ctx) {
-		return
-	}
-	bodyReader, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadReader).(io.Reader)
-	if bodyReader == nil {
-		return
-	}
-	_, _ = io.Copy(io.Discard, bodyReader)
 }
 
 // CloneFastHTTPClientConfig creates a fresh fasthttp.Client by copying only

@@ -1,0 +1,12 @@
+{
+  "summary": "[dev.transports:fix] completed — 修复 5 个插件文件 + 8 个 transports 文件中对已删除 enterprise BifrostContextKey 的引用，所有模块 go vet 通过",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/015-dev.transports-fix-1.md"
+  ],
+  "tasks_updated": [
+    "14.1,14.2,14.3"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/015-dev.transports-fix-1.md"
+}

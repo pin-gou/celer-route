@@ -1,0 +1,13 @@
+{
+  "summary": "[dev.ui:review] escalate — review_score: 65.2, pass_threshold: 85. FAIL R-1 design_alignment: routingRuleInfoSheet.tsx/rfRuleNode.tsx/tree constants.ts 未修改，team/customer scope 分支残留。FAIL R-5 test_contract: enterprise-stripping.test.ts 描述 21.4 断言 sidebar 中 'false' 字符串字面量不存在，但 sidebar 含 20 处合法布尔 false，运行 vitest 必然失败。PASS R-2/R-3/R-4/R-6。tasks_updated: 23.2/23.3/23.4。gate_score: 65.2, p0_failures: [design_alignment, test_contract]",
+  "outputs": [],
+  "tasks_updated": [
+    "23.1",
+    "23.2",
+    "23.3",
+    "23.4"
+  ],
+  "status": "escalate",
+  "evidence_paths": [],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/027-dev.ui-review.md"
+}

@@ -1,0 +1,12 @@
+{
+  "summary": "dev.ui:verify: V-ui-1/2/4/5 PASS — enterprise features stripped from UI. V-ui-3 FAIL: npm run typecheck errors in lib/store/apis/configApi.ts (RTK TIMEOUT_ERROR shape mismatch, pre-existing, not in our diff). npm run lint PASS (436 pre-existing warnings). npm run build PASS. Unit tests: 214/214 pass; 1 pre-existing vitest transform failure in columns.test.ts (not in our diff). Escalate — base repo type regression blocks track advance.",
+  "outputs": [],
+  "tasks_updated": [
+    "V-ui-3"
+  ],
+  "status": "escalate",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/030-dev.ui-verify-evidence.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/030-dev.ui-verify.md"
+}

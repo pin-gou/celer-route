@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { setPluginFormDirtyState, useAppDispatch, useAppSelector, useUpdatePluginMutation } from "@/lib/store";
 import { PluginType } from "@/lib/types/plugins";
 import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";

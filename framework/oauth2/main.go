@@ -1343,13 +1343,6 @@ func (p *OAuth2Provider) InitiateUserOAuthFlow(ctx context.Context, oauthConfigI
 		sessionID, lookupID string
 	)
 	switch flowMode {
-	case schemas.MCPAuthModeUser:
-		v, _ := ctx.Value(schemas.BifrostContextKeyUserID).(string)
-		if v == "" {
-			return nil, "", fmt.Errorf("user-mode flow requires a user identity in context")
-		}
-		uid = &v
-		lookupID = v
 	case schemas.MCPAuthModeVK:
 		v, _ := ctx.Value(schemas.BifrostContextKeyGovernanceVirtualKeyID).(string)
 		if v == "" {

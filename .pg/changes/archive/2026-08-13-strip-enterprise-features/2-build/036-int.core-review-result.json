@@ -1,0 +1,14 @@
+{
+  "summary": "int.core:review 通过。review_score: 100, p0_failures: []。design.md 后端 4 条契约（27.1-27.4）在 core/ 严格实现：26 个 enterprise-only BifrostContextKey 删除、4 vault hook + VaultStoreWriteEnabled 删除、SSEReaderFactory 注入逻辑删除、enterprise 注释清理。23 个 core/ 变更文件均无 scope creep，go build + go vet 通过，strip 测试与改写测试强断言全通过。disposition: completed。",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/036-int.core-review.md"
+  ],
+  "tasks_updated": [
+    "28.1,28.2,28.3,28.4"
+  ],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/036-int.core-review.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/036-int.core-review.md"
+}

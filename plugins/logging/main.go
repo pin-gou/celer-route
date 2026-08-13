@@ -221,21 +221,13 @@ func applyMCPGovernanceFieldsToEntry(ctx *schemas.BifrostContext, entry *logstor
 	if ctx == nil || entry == nil {
 		return
 	}
-	userID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID)
 	teamID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamID)
 	customerID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID)
-	businessUnitID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceBusinessUnitID)
-	if userID != "" {
-		entry.UserID = &userID
-	}
 	if teamID != "" {
 		entry.TeamID = &teamID
 	}
 	if customerID != "" {
 		entry.CustomerID = &customerID
-	}
-	if businessUnitID != "" {
-		entry.BusinessUnitID = &businessUnitID
 	}
 }
 
@@ -325,106 +317,7 @@ func (p *LoggerPlugin) sleepCtx(d time.Duration) bool {
 }
 
 func (p *LoggerPlugin) scheduleDeferredUsageUpdate(ctx *schemas.BifrostContext, requestID string, usageAlreadyPresent bool) {
-	if usageAlreadyPresent || ctx == nil {
-		return
-	}
-
-	deferredChan, ok := ctx.Value(schemas.BifrostContextKeyDeferredUsage).(<-chan *schemas.BifrostLLMUsage)
-	if !ok || deferredChan == nil {
-		return
-	}
-	// Cap the watcher goroutines themselves. deferredUsageSem below only limits how
-	// many updates touch the DB concurrently; the goroutine is created before it is
-	// acquired and then parks on the channel receive, so without this the live
-	// goroutine count tracks in-flight large-payload requests rather than the limit.
-	select {
-	case p.deferredUsageWatchSem <- struct{}{}:
-	default:
-		if n := p.droppedDeferredUsage.Add(1); n == 1 || n%1000 == 0 {
-			p.logger.Warn("deferred usage update dropped for request %s: %d watchers already parked (%d dropped so far)", requestID, maxDeferredUsageWatchers, n)
-		}
-		return
-	}
-
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer func() { <-p.deferredUsageWatchSem }()
-		// Large-response phase B closes this channel after trailing usage extraction completes.
-		var deferredUsage *schemas.BifrostLLMUsage
-		var chanOpen bool
-		select {
-		case deferredUsage, chanOpen = <-deferredChan:
-		case <-p.ctx.Done():
-			// Plugin is shutting down; stop waiting for trailing usage.
-			return
-		}
-		if !chanOpen || deferredUsage == nil {
-			return
-		}
-
-		// Acquire semaphore — drop if all slots busy to prevent unbounded goroutines
-		// from exhausting DB connections when Postgres is slow
-		select {
-		case p.deferredUsageSem <- struct{}{}:
-			defer func() { <-p.deferredUsageSem }()
-		default:
-			p.droppedDeferredUsage.Add(1)
-			p.logger.Warn("deferred usage update dropped for request %s: semaphore full", requestID)
-			return
-		}
-		usageUpdates := map[string]interface{}{
-			"prompt_tokens":     deferredUsage.PromptTokens,
-			"completion_tokens": deferredUsage.CompletionTokens,
-			"total_tokens":      deferredUsage.TotalTokens,
-		}
-		tempEntry := &logstore.Log{TokenUsageParsed: deferredUsage}
-		if serErr := tempEntry.SerializeFields(); serErr == nil {
-			usageUpdates["token_usage"] = tempEntry.TokenUsage
-			usageUpdates["cached_read_tokens"] = tempEntry.CachedReadTokens
-		}
-
-		// Wait for the batch writer to land the row, then patch usage onto it.
-		// This whole loop holds a deferredUsageSem slot, and dropping is immediate
-		// once the slots are full, so the phase is bounded twice over. The backoff is
-		// short: the previous 2s/4s/8s schedule meant a handful of slow lookups
-		// stalled every deferred update for 14s and dropped the rest. And a single
-		// deadline covers all attempts rather than one per attempt, because the ctx
-		// also covers waiting for a pool connection: a per-attempt budget let a slow
-		// store hold a slot for ~30s and drop everything arriving in that window.
-		retryCtx, cancelRetry := context.WithTimeout(p.ctx, deferredUsageDBTimeout)
-		defer cancelRetry()
-		var found bool
-		for attempt := range deferredUsageRetries {
-			presentResult, findErr := p.store.IsLogEntryPresent(retryCtx, requestID)
-			if findErr != nil {
-				p.logger.Warn("failed to check if log entry is present for request %s: %v", requestID, findErr)
-			} else if presentResult {
-				found = true
-				break
-			}
-			// Budget spent: the remaining attempts would fail instantly, so don't
-			// sleep through backoffs that cannot help.
-			if retryCtx.Err() != nil {
-				break
-			}
-			// Sleep on the error path too, otherwise a DB error burns every retry
-			// in microseconds, exactly when the store needs time to recover.
-			if attempt < deferredUsageRetries-1 && !p.sleepCtx(deferredUsageBackoff<<attempt) {
-				return
-			}
-		}
-		if !found {
-			p.logger.Warn("log entry not found for request %s after %d retries. failed to update deferred usage for large payload request", requestID, deferredUsageRetries)
-			return
-		}
-
-		updCtx, cancel := context.WithTimeout(p.ctx, deferredUsageDBTimeout)
-		defer cancel()
-		if updErr := p.store.Update(updCtx, requestID, usageUpdates); updErr != nil {
-			p.logger.Warn("failed to update deferred usage for request %s: %v", requestID, updErr)
-		}
-	}()
+	// Deferred usage updates are not supported (BifrostContextKeyDeferredUsage deleted in OSS).
 }
 
 // RecalculateCostResult represents summary stats from a cost backfill operation
@@ -960,18 +853,8 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 			initialData.SpeechInput = req.SpeechRequest.Input
 		case schemas.TranscriptionRequest, schemas.TranscriptionStreamRequest:
 			initialData.Params = req.TranscriptionRequest.Params
-			input := req.TranscriptionRequest.Input
-			if input != nil {
-				reqThreshold, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadRequestThreshold).(int64)
-				if reqThreshold > 0 && int64(len(input.File)) > reqThreshold {
-					// Strip binary file content when it exceeds the large payload threshold
-					// to avoid serializing multi-MB audio into the log database.
-					logInput := *input
-					logInput.File = nil
-					initialData.TranscriptionInput = &logInput
-				} else {
-					initialData.TranscriptionInput = input
-				}
+			if req.TranscriptionRequest.Input != nil {
+				initialData.TranscriptionInput = req.TranscriptionRequest.Input
 			}
 		case schemas.ImageGenerationRequest, schemas.ImageGenerationStreamRequest:
 			initialData.Params = req.ImageGenerationRequest.Params
@@ -980,45 +863,15 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 			params := req.ImageEditRequest.Params
 			input := req.ImageEditRequest.Input
 			if input != nil {
-				reqThreshold, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadRequestThreshold).(int64)
-				if reqThreshold > 0 {
-					var totalSize int64
-					for _, img := range input.Images {
-						totalSize += int64(len(img.Image))
-					}
-					if totalSize > reqThreshold {
-						logInput := *input
-						logInput.Images = nil
-						initialData.ImageEditInput = &logInput
-					} else {
-						initialData.ImageEditInput = input
-					}
-					if params != nil && int64(len(params.Mask)) > reqThreshold {
-						logParams := *params
-						logParams.Mask = nil
-						initialData.Params = &logParams
-					} else {
-						initialData.Params = params
-					}
-				} else {
-					initialData.ImageEditInput = input
-					initialData.Params = params
-				}
+				initialData.ImageEditInput = input
+				initialData.Params = params
 			} else {
 				initialData.Params = params
 			}
 		case schemas.ImageVariationRequest:
 			initialData.Params = req.ImageVariationRequest.Params
-			input := req.ImageVariationRequest.Input
-			if input != nil {
-				reqThreshold, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadRequestThreshold).(int64)
-				if reqThreshold > 0 && int64(len(input.Image.Image)) > reqThreshold {
-					logInput := *input
-					logInput.Image = schemas.ImageInput{}
-					initialData.ImageVariationInput = &logInput
-				} else {
-					initialData.ImageVariationInput = input
-				}
+			if req.ImageVariationRequest.Input != nil {
+				initialData.ImageVariationInput = req.ImageVariationRequest.Input
 			}
 		case schemas.VideoGenerationRequest:
 			initialData.Params = req.VideoGenerationRequest.Params
@@ -1163,10 +1016,6 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 	teamName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamName)
 	customerID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID)
 	customerName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerName)
-	userID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID)
-	userName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserName)
-	businessUnitID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceBusinessUnitID)
-	businessUnitName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceBusinessUnitName)
 	numberOfRetries := bifrost.GetIntFromContext(ctx, schemas.BifrostContextKeyNumberOfRetries)
 	attemptTrail, _ := ctx.Value(schemas.BifrostContextKeyAttemptTrail).([]schemas.KeyAttemptRecord)
 
@@ -1317,7 +1166,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 			entry.ServerSideFallbackModel = &m
 		}
 	}
-	applyOutputFieldsToEntry(entry, selectedKeyID, selectedKeyName, virtualKeyID, virtualKeyName, routingRuleID, routingRuleName, selectedPromptID, selectedPromptName, selectedPromptVersion, teamID, teamName, customerID, customerName, userID, userName, businessUnitID, businessUnitName, numberOfRetries, latency, attemptTrail)
+	applyOutputFieldsToEntry(entry, selectedKeyID, selectedKeyName, virtualKeyID, virtualKeyName, routingRuleID, routingRuleName, selectedPromptID, selectedPromptName, selectedPromptVersion, teamID, teamName, customerID, customerName, "", "", "", "", numberOfRetries, latency, attemptTrail)
 	applyResolvedAliasInfo(entry, resolvedKeyAlias)
 	// Attach cluster governance metadata for disconnected node usage recovery
 	if nodeID, _ := p.clusterNodeID.Load().(string); nodeID != "" {
@@ -1329,24 +1178,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 	if rateLimitIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceRateLimitIDs).([]string); ok && len(rateLimitIDs) > 0 {
 		entry.RateLimitIDsParsed = rateLimitIDs
 	}
-	if teamIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceTeamIDs).([]string); ok && len(teamIDs) > 0 {
-		entry.TeamIDsParsed = teamIDs
-	}
-	if teamNames, ok := ctx.Value(schemas.BifrostContextKeyGovernanceTeamNames).([]string); ok && len(teamNames) > 0 {
-		entry.TeamNamesParsed = teamNames
-	}
-	if buIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceBusinessUnitIDs).([]string); ok && len(buIDs) > 0 {
-		entry.BusinessUnitIDsParsed = buIDs
-	}
-	if buNames, ok := ctx.Value(schemas.BifrostContextKeyGovernanceBusinessUnitNames).([]string); ok && len(buNames) > 0 {
-		entry.BusinessUnitNamesParsed = buNames
-	}
-	if customerIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceCustomerIDs).([]string); ok && len(customerIDs) > 0 {
-		entry.CustomerIDsParsed = customerIDs
-	}
-	if customerNames, ok := ctx.Value(schemas.BifrostContextKeyGovernanceCustomerNames).([]string); ok && len(customerNames) > 0 {
-		entry.CustomerNamesParsed = customerNames
-	}
+	
 	entry.MetadataParsed = pending.InitialData.Metadata
 	entry.MetadataParsed = mergeRealtimeMetadata(entry.MetadataParsed, ctx)
 	entry.RoutingEngineLogs = routingEngineLogs

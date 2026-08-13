@@ -79,24 +79,15 @@ func (d RedactionData) HasReplacements() bool {
 }
 
 // RedactionDataFromContext returns the redaction data stored on ctx.
+// OSS deployments never have redaction data, so this always returns false.
 func RedactionDataFromContext(ctx *BifrostContext) (RedactionData, bool) {
-	if ctx == nil {
-		return RedactionData{}, false
-	}
-	data, ok := ctx.Value(BifrostContextKeyRedactionData).(RedactionData)
-	if !ok || !data.HasReplacements() {
-		return RedactionData{}, false
-	}
-	return data, true
+	return RedactionData{}, false
 }
 
 // SetRedactionDataOnContext stores non-empty redaction data on ctx.
+// OSS deployments never have redaction data, so this always returns false.
 func SetRedactionDataOnContext(ctx *BifrostContext, data RedactionData) bool {
-	if ctx == nil || !data.HasReplacements() {
-		return false
-	}
-	ctx.SetValue(BifrostContextKeyRedactionData, data)
-	return true
+	return false
 }
 
 // IsContentAttribute reports whether a span attribute may carry user or model content.

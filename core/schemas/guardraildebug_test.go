@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// TestGuardrailDebugContextRoundTrip verifies typed guardrail debug context storage.
+// TestGuardrailDebugContextRoundTrip verifies that in OSS the guardrail debug
+// surface is a pure no-op: AppendGuardrailJudgeCallOnContext returns false
+// and GuardrailDebugFromContext returns (nil, false).
 func TestGuardrailDebugContextRoundTrip(t *testing.T) {
 	ctx := NewBifrostContext(nil, NoDeadline)
 	call := BifrostGuardrailJudgeCall{
@@ -19,36 +20,25 @@ func TestGuardrailDebugContextRoundTrip(t *testing.T) {
 		TotalTokens:   12,
 	}
 
-	require.True(t, AppendGuardrailJudgeCallOnContext(ctx, call))
-	debug, ok := GuardrailDebugFromContext(ctx)
-	require.True(t, ok)
-	require.Len(t, debug.JudgeCalls, 1)
-	assert.Equal(t, call, debug.JudgeCalls[0])
+	assert.False(t, AppendGuardrailJudgeCallOnContext(ctx, call))
+	_, ok := GuardrailDebugFromContext(ctx)
+	assert.False(t, ok)
 }
 
-// TestGuardrailDebugContextReturnsOwnedSnapshot verifies callers cannot mutate context state.
+// TestGuardrailDebugContextReturnsOwnedSnapshot verifies that in OSS
+// GuardrailDebugFromContext always returns (nil, false).
 func TestGuardrailDebugContextReturnsOwnedSnapshot(t *testing.T) {
 	ctx := NewBifrostContext(nil, NoDeadline)
-	require.True(t, AppendGuardrailJudgeCallOnContext(ctx, BifrostGuardrailJudgeCall{
-		JudgeProvider: OpenAI,
-		JudgeModel:    "gpt-4o-mini",
-		TotalTokens:   10,
-	}))
 
-	first, ok := GuardrailDebugFromContext(ctx)
-	require.True(t, ok)
-	first.JudgeCalls[0].TotalTokens = 999
-
-	second, ok := GuardrailDebugFromContext(ctx)
-	require.True(t, ok)
-	assert.Equal(t, 10, second.JudgeCalls[0].TotalTokens)
+	_, ok := GuardrailDebugFromContext(ctx)
+	assert.False(t, ok)
 }
 
-// TestGuardrailDebugContextClonesUsageDetails verifies nested pricing details cannot alias context state.
+// TestGuardrailDebugContextClonesUsageDetails verifies that in OSS no usage
+// details are ever stored on context.
 func TestGuardrailDebugContextClonesUsageDetails(t *testing.T) {
 	ctx := NewBifrostContext(nil, NoDeadline)
-	citationTokens := 3
-	require.True(t, AppendGuardrailJudgeCallOnContext(ctx, BifrostGuardrailJudgeCall{
+	assert.False(t, AppendGuardrailJudgeCallOnContext(ctx, BifrostGuardrailJudgeCall{
 		JudgeProvider: OpenAI,
 		JudgeModel:    "gpt-4o-mini",
 		PromptTokens:  10,
@@ -57,23 +47,17 @@ func TestGuardrailDebugContextClonesUsageDetails(t *testing.T) {
 		},
 		CompletionTokens: 5,
 		CompletionTokensDetails: &ChatCompletionTokensDetails{
-			CitationTokens: &citationTokens,
+			CitationTokens: func() *int { v := 3; return &v }(),
 		},
 		TotalTokens: 15,
 	}))
 
-	first, ok := GuardrailDebugFromContext(ctx)
-	require.True(t, ok)
-	first.JudgeCalls[0].PromptTokensDetails.CachedWriteTokenDetails.CachedWriteTokens5m = 999
-	*first.JudgeCalls[0].CompletionTokensDetails.CitationTokens = 999
-
-	second, ok := GuardrailDebugFromContext(ctx)
-	require.True(t, ok)
-	assert.Equal(t, 4, second.JudgeCalls[0].PromptTokensDetails.CachedWriteTokenDetails.CachedWriteTokens5m)
-	assert.Equal(t, 3, *second.JudgeCalls[0].CompletionTokensDetails.CitationTokens)
+	_, ok := GuardrailDebugFromContext(ctx)
+	assert.False(t, ok)
 }
 
-// TestAppendGuardrailJudgeCallRejectsEmptyUsage verifies non-billable calls are omitted.
+// TestAppendGuardrailJudgeCallRejectsEmptyUsage verifies that non-billable calls
+// are rejected (which in OSS is always, since no guardrail can be stored).
 func TestAppendGuardrailJudgeCallRejectsEmptyUsage(t *testing.T) {
 	ctx := NewBifrostContext(nil, NoDeadline)
 	assert.False(t, AppendGuardrailJudgeCallOnContext(ctx, BifrostGuardrailJudgeCall{}))

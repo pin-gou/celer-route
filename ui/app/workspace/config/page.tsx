@@ -1,5 +1,5 @@
 import { NoPermissionView } from "@/components/noPermissionView";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 

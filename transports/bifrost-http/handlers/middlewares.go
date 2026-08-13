@@ -643,17 +643,7 @@ func fasthttpToHTTPRequest(ctx *fasthttp.RequestCtx, req *schemas.HTTPRequest) {
 		req.PathParams[keyStr] = valueStr
 	})
 
-	// Skip body copy for large payloads.
-	// Check threshold first (set by RequestThresholdMiddleware before this middleware runs)
-	// because the large-payload-mode flag is only set later inside the handler hook.
-	if threshold, ok := ctx.UserValue(schemas.BifrostContextKeyLargePayloadRequestThreshold).(int64); ok && threshold > 0 {
-		cl := int64(ctx.Request.Header.ContentLength())
-		// Skip body copy when CL exceeds threshold OR CL is unknown (streaming/
-		// chunked, e.g. after streaming decompression deletes the header).
-		if cl > threshold || cl < 0 {
-			return
-		}
-	}
+	// Skip body copy for large payloads (enterprise-only threshold check removed in OSS).
 	if isLargePayload, ok := ctx.UserValue(schemas.BifrostContextKeyLargePayloadMode).(bool); ok && isLargePayload {
 		return
 	}
@@ -716,12 +706,6 @@ func fasthttpResponseToHTTPResponse(ctx *fasthttp.RequestCtx, resp *schemas.HTTP
 	}
 	if isLargeResponse, ok := ctx.UserValue(lib.FastHTTPUserValueLargeResponseMode).(bool); ok && isLargeResponse {
 		return
-	}
-	// Also skip if response Content-Length exceeds the configured response threshold.
-	if threshold, ok := ctx.UserValue(schemas.BifrostContextKeyLargeResponseThreshold).(int64); ok && threshold > 0 {
-		if int64(ctx.Response.Header.ContentLength()) > threshold {
-			return
-		}
 	}
 	body := ctx.Response.Body()
 	if len(body) > 0 {

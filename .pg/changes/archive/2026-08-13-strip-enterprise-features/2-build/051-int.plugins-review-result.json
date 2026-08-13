@@ -1,0 +1,10 @@
+{
+  "summary": "[int.plugins:review] completed review_score:100 p0_failures:[]. design.md plugins 契约 100% 实现 (41.x regression test 锁定 + 42.x enterprise 注释清理 + V-plugins-1 go build OK). 14 变更文件全在 plugins/ root, 6 check 全 PASS. WARN: 3 文件 gofmt 不干净 (modelprovidergovernance_test.go / logging/main.go / enterprisestrip_test.go), gofmt -w 可修, 不阻断 build/vet/test. 12 plugin module go build+vet 通过, governance/logging/otel/telemetry 无 issue.",
+  "outputs": [],
+  "tasks_updated": [],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/051-int.plugins-review.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/051-int.plugins-review.md"
+}

@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRedactionDataContextRoundTrip verifies typed redaction data can be read from context.
+// TestRedactionDataContextRoundTrip verifies that in OSS the redaction data
+// surface is a pure no-op: SetRedactionDataOnContext returns false and
+// RedactionDataFromContext returns (RedactionData{}, false).
 func TestRedactionDataContextRoundTrip(t *testing.T) {
 	ctx := NewBifrostContext(context.Background(), NoDeadline)
 	data := RedactionData{
@@ -24,11 +26,10 @@ func TestRedactionDataContextRoundTrip(t *testing.T) {
 		},
 	}
 
-	require.True(t, SetRedactionDataOnContext(ctx, data))
+	assert.False(t, SetRedactionDataOnContext(ctx, data))
 
-	got, ok := RedactionDataFromContext(ctx)
-	require.True(t, ok)
-	assert.Equal(t, data, got)
+	_, ok := RedactionDataFromContext(ctx)
+	assert.False(t, ok)
 }
 
 // TestRedactionDataCloneCopiesMaps verifies clones do not share mutable map storage.
@@ -59,7 +60,6 @@ func TestRedactionDataCloneCopiesMaps(t *testing.T) {
 // TestRedactionDataFromContextRejectsSerializedValues verifies the handoff remains typed.
 func TestRedactionDataFromContextRejectsSerializedValues(t *testing.T) {
 	ctx := NewBifrostContext(context.Background(), NoDeadline)
-	ctx.SetValue(BifrostContextKeyRedactionData, `{"reversible_mappings":{"EMAIL-1":"alex@example.com"}}`)
 
 	_, ok := RedactionDataFromContext(ctx)
 

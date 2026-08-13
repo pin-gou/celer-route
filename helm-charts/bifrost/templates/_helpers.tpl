@@ -604,183 +604,9 @@ false
 {{- $_ := set $config "auth_config" $authConfig }}
 {{- end }}
 {{- end }}
-{{- /* Cluster Config */ -}}
-{{- if and .Values.bifrost.cluster .Values.bifrost.cluster.enabled }}
-{{- $cluster := dict "enabled" true }}
-{{- if .Values.bifrost.cluster.peers }}
-{{- $_ := set $cluster "peers" .Values.bifrost.cluster.peers }}
-{{- end }}
-{{- if .Values.bifrost.cluster.region }}
-{{- $_ := set $cluster "region" .Values.bifrost.cluster.region }}
-{{- end }}
-{{- if .Values.bifrost.cluster.gossip }}
-{{- $gossip := dict }}
-{{- if .Values.bifrost.cluster.gossip.port }}
-{{- $_ := set $gossip "port" .Values.bifrost.cluster.gossip.port }}
-{{- end }}
-{{- if .Values.bifrost.cluster.gossip.config }}
-{{- $gossipConfig := dict }}
-{{- if .Values.bifrost.cluster.gossip.config.timeoutSeconds }}
-{{- $_ := set $gossipConfig "timeout_seconds" .Values.bifrost.cluster.gossip.config.timeoutSeconds }}
-{{- end }}
-{{- if .Values.bifrost.cluster.gossip.config.successThreshold }}
-{{- $_ := set $gossipConfig "success_threshold" .Values.bifrost.cluster.gossip.config.successThreshold }}
-{{- end }}
-{{- if .Values.bifrost.cluster.gossip.config.failureThreshold }}
-{{- $_ := set $gossipConfig "failure_threshold" .Values.bifrost.cluster.gossip.config.failureThreshold }}
-{{- end }}
-{{- $_ := set $gossip "config" $gossipConfig }}
-{{- end }}
-{{- $_ := set $cluster "gossip" $gossip }}
-{{- end }}
-{{- if .Values.bifrost.cluster.grpc }}
-{{- $grpc := dict }}
-{{- if .Values.bifrost.cluster.grpc.port }}
-{{- $_ := set $grpc "port" .Values.bifrost.cluster.grpc.port }}
-{{- end }}
-{{- if .Values.bifrost.cluster.grpc.dialTimeoutSeconds }}
-{{- $_ := set $grpc "dial_timeout_seconds" .Values.bifrost.cluster.grpc.dialTimeoutSeconds }}
-{{- end }}
-{{- if $grpc }}
-{{- $_ := set $cluster "grpc" $grpc }}
-{{- end }}
-{{- end }}
-{{- if and .Values.bifrost.cluster.discovery .Values.bifrost.cluster.discovery.enabled }}
-{{- $discovery := dict "enabled" true "type" .Values.bifrost.cluster.discovery.type }}
-{{- $serviceName := .Values.bifrost.cluster.discovery.serviceName }}
-{{- if and (not $serviceName) (or (eq .Values.bifrost.cluster.discovery.type "consul") (eq .Values.bifrost.cluster.discovery.type "etcd") (eq .Values.bifrost.cluster.discovery.type "udp")) }}
-{{- fail "ERROR: bifrost.cluster.discovery.serviceName is required for consul/etcd/udp discovery." }}
-{{- end }}
-{{- if $serviceName }}
-{{- $_ := set $discovery "service_name" $serviceName }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.bindPort }}
-{{- $_ := set $discovery "bind_port" .Values.bifrost.cluster.discovery.bindPort }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.dialTimeout }}
-{{- $_ := set $discovery "dial_timeout" .Values.bifrost.cluster.discovery.dialTimeout }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.allowedAddressSpace }}
-{{- $_ := set $discovery "allowed_address_space" .Values.bifrost.cluster.discovery.allowedAddressSpace }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.k8sNamespace }}
-{{- $_ := set $discovery "k8s_namespace" .Values.bifrost.cluster.discovery.k8sNamespace }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.k8sLabelSelector }}
-{{- $_ := set $discovery "k8s_label_selector" .Values.bifrost.cluster.discovery.k8sLabelSelector }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.dnsNames }}
-{{- $_ := set $discovery "dns_names" .Values.bifrost.cluster.discovery.dnsNames }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.udpBroadcastPort }}
-{{- $_ := set $discovery "udp_broadcast_port" .Values.bifrost.cluster.discovery.udpBroadcastPort }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.consulAddress }}
-{{- $_ := set $discovery "consul_address" .Values.bifrost.cluster.discovery.consulAddress }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.etcdEndpoints }}
-{{- $_ := set $discovery "etcd_endpoints" .Values.bifrost.cluster.discovery.etcdEndpoints }}
-{{- end }}
-{{- if .Values.bifrost.cluster.discovery.mdnsService }}
-{{- $_ := set $discovery "mdns_service" .Values.bifrost.cluster.discovery.mdnsService }}
-{{- end }}
-{{- $_ := set $cluster "discovery" $discovery }}
-{{- end }}
-{{- $_ := set $config "cluster_config" $cluster }}
-{{- end }}
-{{- /* SCIM Config */ -}}
-{{- $scimValues := .Values.bifrost.scim }}
-{{- if and $scimValues $scimValues.enabled }}
-{{- $scim := dict "enabled" true }}
-{{- if $scimValues.provider }}
-{{- $_ := set $scim "provider" $scimValues.provider }}
-{{- end }}
-{{- if $scimValues.config }}
-{{- $_ := set $scim "config" $scimValues.config }}
-{{- end }}
-{{- $_ := set $config "scim_config" $scim }}
-{{- end }}
-{{- /* Load Balancer Config */ -}}
-{{- if and .Values.bifrost.loadBalancer .Values.bifrost.loadBalancer.enabled }}
-{{- $lb := dict "enabled" true }}
-{{- if hasKey .Values.bifrost.loadBalancer "directionSelectionEnabled" }}
-{{- $_ := set $lb "direction_selection_enabled" .Values.bifrost.loadBalancer.directionSelectionEnabled }}
-{{- end }}
-{{- if hasKey .Values.bifrost.loadBalancer "routeSelectionEnabled" }}
-{{- $_ := set $lb "route_selection_enabled" .Values.bifrost.loadBalancer.routeSelectionEnabled }}
-{{- end }}
-{{- if hasKey .Values.bifrost.loadBalancer "appendFallbacksToPinned" }}
-{{- $_ := set $lb "append_fallbacks_to_pinned" .Values.bifrost.loadBalancer.appendFallbacksToPinned }}
-{{- end }}
-{{- if hasKey .Values.bifrost.loadBalancer "rerouteFailedDirections" }}
-{{- $_ := set $lb "reroute_failed_directions" .Values.bifrost.loadBalancer.rerouteFailedDirections }}
-{{- end }}
-{{- if hasKey .Values.bifrost.loadBalancer "pruneFailedFallbacks" }}
-{{- $_ := set $lb "prune_failed_fallbacks" .Values.bifrost.loadBalancer.pruneFailedFallbacks }}
-{{- end }}
-{{- if .Values.bifrost.loadBalancer.trackerConfig }}
-{{- $_ := set $lb "tracker_config" .Values.bifrost.loadBalancer.trackerConfig }}
-{{- end }}
-{{- if .Values.bifrost.loadBalancer.bootstrap }}
-{{- $_ := set $lb "bootstrap" .Values.bifrost.loadBalancer.bootstrap }}
-{{- end }}
-{{- $_ := set $config "load_balancer_config" $lb }}
-{{- end }}
-{{- /* Guardrails Config */ -}}
-{{- if .Values.bifrost.guardrails }}
-{{- $guardrails := dict }}
-{{- if .Values.bifrost.guardrails.rules }}
-{{- $rules := list }}
-{{- range .Values.bifrost.guardrails.rules }}
-{{- $rule := dict "id" .id "name" .name "enabled" .enabled "cel_expression" .cel_expression "apply_to" .apply_to }}
-{{- if .description }}{{- $_ := set $rule "description" .description }}{{- end }}
-{{- if hasKey . "target" }}{{- $_ := set $rule "target" .target }}{{- end }}
-{{- if hasKey . "query" }}{{- $_ := set $rule "query" .query }}{{- end }}
-{{- if .sampling_rate }}{{- $_ := set $rule "sampling_rate" .sampling_rate }}{{- end }}
-{{- if .timeout }}{{- $_ := set $rule "timeout" .timeout }}{{- end }}
-{{- if hasKey . "max_turns_to_send" }}{{- $_ := set $rule "max_turns_to_send" .max_turns_to_send }}{{- end }}
-{{- if .evaluation_mode }}{{- $_ := set $rule "evaluation_mode" .evaluation_mode }}{{- end }}
-{{- if hasKey . "stream_replay_event_interval_ms" }}{{- $_ := set $rule "stream_replay_event_interval_ms" .stream_replay_event_interval_ms }}{{- end }}
-{{- if .provider_config_ids }}{{- $_ := set $rule "provider_config_ids" .provider_config_ids }}{{- end }}
-{{- $rules = append $rules $rule }}
-{{- end }}
-{{- $_ := set $guardrails "guardrail_rules" $rules }}
-{{- end }}
-{{- if .Values.bifrost.guardrails.providers }}
-{{- $providers := list }}
-{{- range .Values.bifrost.guardrails.providers }}
-{{- $provider := dict "id" .id "provider_name" .provider_name "policy_name" .policy_name "enabled" .enabled }}
-{{- if .timeout }}{{- $_ := set $provider "timeout" .timeout }}{{- end }}
-{{- if .config }}{{- $_ := set $provider "config" .config }}{{- end }}
-{{- $providers = append $providers $provider }}
-{{- end }}
-{{- $_ := set $guardrails "guardrail_providers" $providers }}
-{{- end }}
-{{- if or $guardrails.guardrail_rules $guardrails.guardrail_providers }}
-{{- $_ := set $config "guardrails_config" $guardrails }}
-{{- end }}
-{{- end }}
 {{- /* Skills Registry */ -}}
 {{- if .Values.bifrost.skillsRegistry }}
 {{- $_ := set $config "skills_registry" .Values.bifrost.skillsRegistry }}
-{{- end }}
-{{- /* Access Profiles (Enterprise) */ -}}
-{{- if .Values.bifrost.accessProfiles }}
-{{- $_ := set $config "access_profiles" .Values.bifrost.accessProfiles }}
-{{- end }}
-{{- /* Alerting */ -}}
-{{- if .Values.bifrost.alerting }}
-{{- if .Values.bifrost.alerting.rules }}
-{{- range .Values.bifrost.alerting.rules }}
-{{- if and (hasKey . "target_type") (not (hasKey . "target_id")) }}
-{{- fail (printf "alerting rule '%s': target_type is set but target_id is missing" .id) }}
-{{- end }}
-{{- if and (hasKey . "target_id") (not (hasKey . "target_type")) }}
-{{- fail (printf "alerting rule '%s': target_id is set but target_type is missing" .id) }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- $_ := set $config "alerting" .Values.bifrost.alerting }}
 {{- end }}
 {{- /* Webhooks */ -}}
 {{- if .Values.bifrost.webhooks }}
@@ -831,45 +657,6 @@ false
 {{- else }}
 {{- $sqliteConfigStore := dict "enabled" true "type" "sqlite" "config" (dict "path" (printf "%s/config.db" .Values.bifrost.appDir)) }}
 {{- $_ := set $config "config_store" $sqliteConfigStore }}
-{{- end }}
-{{- /* Vault Store (enterprise secret management) */ -}}
-{{- if and .Values.storage.configStore.vaultStore .Values.storage.configStore.vaultStore.enabled }}
-{{- $vs := .Values.storage.configStore.vaultStore }}
-{{- $vaultStore := dict "enabled" true "type" $vs.type }}
-{{- if $vs.prefix }}
-{{- $_ := set $vaultStore "prefix" $vs.prefix }}
-{{- end }}
-{{- if $vs.accessMode }}
-{{- $_ := set $vaultStore "access_mode" $vs.accessMode }}
-{{- end }}
-{{- if $vs.aws }}
-{{- $aws := dict }}
-{{- if $vs.aws.region }}{{- $_ := set $aws "region" $vs.aws.region }}{{- end }}
-{{- if $vs.aws.accessKeyId }}{{- $_ := set $aws "access_key_id" $vs.aws.accessKeyId }}{{- end }}
-{{- if $vs.aws.secretAccessKey }}{{- $_ := set $aws "secret_access_key" $vs.aws.secretAccessKey }}{{- end }}
-{{- if $vs.aws.sessionToken }}{{- $_ := set $aws "session_token" $vs.aws.sessionToken }}{{- end }}
-{{- if $vs.aws.roleArn }}{{- $_ := set $aws "role_arn" $vs.aws.roleArn }}{{- end }}
-{{- if $vs.aws.kmsKeyId }}{{- $_ := set $aws "kms_key_id" $vs.aws.kmsKeyId }}{{- end }}
-{{- $_ := set $vaultStore "aws" $aws }}
-{{- end }}
-{{- if $vs.gcp }}
-{{- $gcp := dict }}
-{{- if $vs.gcp.projectId }}{{- $_ := set $gcp "project_id" $vs.gcp.projectId }}{{- end }}
-{{- if $vs.gcp.credentialsJson }}{{- $_ := set $gcp "credentials_json" $vs.gcp.credentialsJson }}{{- end }}
-{{- $_ := set $vaultStore "gcp" $gcp }}
-{{- end }}
-{{- if $vs.hashicorp }}
-{{- $hashicorp := dict }}
-{{- if $vs.hashicorp.address }}{{- $_ := set $hashicorp "address" $vs.hashicorp.address }}{{- end }}
-{{- if $vs.hashicorp.token }}{{- $_ := set $hashicorp "token" $vs.hashicorp.token }}{{- end }}
-{{- if $vs.hashicorp.namespace }}{{- $_ := set $hashicorp "namespace" $vs.hashicorp.namespace }}{{- end }}
-{{- if $vs.hashicorp.mountPath }}{{- $_ := set $hashicorp "mount_path" $vs.hashicorp.mountPath }}{{- end }}
-{{- if $vs.hashicorp.roleId }}{{- $_ := set $hashicorp "role_id" $vs.hashicorp.roleId }}{{- end }}
-{{- if $vs.hashicorp.secretId }}{{- $_ := set $hashicorp "secret_id" $vs.hashicorp.secretId }}{{- end }}
-{{- $_ := set $vaultStore "hashicorp" $hashicorp }}
-{{- end }}
-{{- $cs := index $config "config_store" }}
-{{- $_ := set $cs "vault_store" $vaultStore }}
 {{- end }}
 {{- end }}
 {{- /* Logs Store */ -}}
@@ -1293,9 +1080,6 @@ false
 {{- if .Values.bifrost.plugins.governance.config.required_headers }}
 {{- $_ := set $governanceConfig "required_headers" .Values.bifrost.plugins.governance.config.required_headers }}
 {{- end }}
-{{- if hasKey .Values.bifrost.plugins.governance.config "is_enterprise" }}
-{{- $_ := set $governanceConfig "is_enterprise" .Values.bifrost.plugins.governance.config.is_enterprise }}
-{{- end }}
 {{- $plugin := dict "enabled" true "name" "governance" "config" $governanceConfig }}
 {{- if hasKey .Values.bifrost.plugins.governance "version" }}{{- $_ := set $plugin "version" (.Values.bifrost.plugins.governance.version | int) }}{{- end }}
 {{- $plugins = append $plugins $plugin }}
@@ -1633,95 +1417,6 @@ false
 {{- if $plugins }}
 {{- $_ := set $config "plugins" $plugins }}
 {{- end }}
-{{- /* Audit Logs */ -}}
-{{- if .Values.bifrost.auditLogs }}
-{{- $auditLogs := dict }}
-{{- if hasKey .Values.bifrost.auditLogs "disabled" }}
-{{- $_ := set $auditLogs "disabled" .Values.bifrost.auditLogs.disabled }}
-{{- end }}
-{{- if .Values.bifrost.auditLogs.hmacKey }}
-{{- $_ := set $auditLogs "hmac_key" .Values.bifrost.auditLogs.hmacKey }}
-{{- end }}
-{{- if .Values.bifrost.auditLogs.archiveInterval }}
-{{- $_ := set $auditLogs "archive_interval" .Values.bifrost.auditLogs.archiveInterval }}
-{{- end }}
-{{- if .Values.bifrost.auditLogs.archiveGracePeriod }}
-{{- $_ := set $auditLogs "archive_grace_period" .Values.bifrost.auditLogs.archiveGracePeriod }}
-{{- end }}
-{{- if .Values.bifrost.auditLogs.archiveMaxObjectBytes }}
-{{- $_ := set $auditLogs "archive_max_object_bytes" (int64 .Values.bifrost.auditLogs.archiveMaxObjectBytes) }}
-{{- end }}
-{{- if .Values.bifrost.auditLogs.objectStorage }}
-{{- $aos := .Values.bifrost.auditLogs.objectStorage }}
-{{- $aosConfig := dict "type" $aos.type "bucket" $aos.bucket }}
-{{- if $aos.prefix }}
-{{- $_ := set $aosConfig "prefix" $aos.prefix }}
-{{- end }}
-{{- if $aos.compress }}
-{{- $_ := set $aosConfig "compress" true }}
-{{- end }}
-{{- if eq $aos.type "s3" }}
-{{- if $aos.region }}
-{{- $_ := set $aosConfig "region" $aos.region }}
-{{- end }}
-{{- if $aos.endpoint }}
-{{- $_ := set $aosConfig "endpoint" $aos.endpoint }}
-{{- end }}
-{{- if $aos.accessKeyId }}
-{{- $_ := set $aosConfig "access_key_id" $aos.accessKeyId }}
-{{- end }}
-{{- if $aos.secretAccessKey }}
-{{- $_ := set $aosConfig "secret_access_key" $aos.secretAccessKey }}
-{{- end }}
-{{- if $aos.sessionToken }}
-{{- $_ := set $aosConfig "session_token" $aos.sessionToken }}
-{{- end }}
-{{- if $aos.roleArn }}
-{{- $_ := set $aosConfig "role_arn" $aos.roleArn }}
-{{- end }}
-{{- if $aos.forcePathStyle }}
-{{- $_ := set $aosConfig "force_path_style" true }}
-{{- end }}
-{{- end }}
-{{- if eq $aos.type "gcs" }}
-{{- if $aos.projectId }}
-{{- $_ := set $aosConfig "project_id" $aos.projectId }}
-{{- end }}
-{{- if $aos.credentialsJson }}
-{{- $_ := set $aosConfig "credentials_json" $aos.credentialsJson }}
-{{- end }}
-{{- end }}
-{{- $_ := set $auditLogs "object_storage" $aosConfig }}
-{{- end }}
-{{- if or (hasKey $auditLogs "disabled") $auditLogs.hmac_key $auditLogs.object_storage }}
-{{- $_ := set $config "audit_logs" $auditLogs }}
-{{- end }}
-{{- end }}
-{{- /* Large Payload Optimization */ -}}
-{{- if .Values.bifrost.largePayloadOptimization }}
-{{- $lpo := dict }}
-{{- if hasKey .Values.bifrost.largePayloadOptimization "enabled" }}
-{{- $_ := set $lpo "enabled" .Values.bifrost.largePayloadOptimization.enabled }}
-{{- end }}
-{{- if hasKey .Values.bifrost.largePayloadOptimization "requestThresholdBytes" }}
-{{- $_ := set $lpo "request_threshold_bytes" .Values.bifrost.largePayloadOptimization.requestThresholdBytes }}
-{{- end }}
-{{- if hasKey .Values.bifrost.largePayloadOptimization "responseThresholdBytes" }}
-{{- $_ := set $lpo "response_threshold_bytes" .Values.bifrost.largePayloadOptimization.responseThresholdBytes }}
-{{- end }}
-{{- if hasKey .Values.bifrost.largePayloadOptimization "prefetchSizeBytes" }}
-{{- $_ := set $lpo "prefetch_size_bytes" .Values.bifrost.largePayloadOptimization.prefetchSizeBytes }}
-{{- end }}
-{{- if hasKey .Values.bifrost.largePayloadOptimization "maxPayloadBytes" }}
-{{- $_ := set $lpo "max_payload_bytes" .Values.bifrost.largePayloadOptimization.maxPayloadBytes }}
-{{- end }}
-{{- if hasKey .Values.bifrost.largePayloadOptimization "truncatedLogBytes" }}
-{{- $_ := set $lpo "truncated_log_bytes" .Values.bifrost.largePayloadOptimization.truncatedLogBytes }}
-{{- end }}
-{{- if $lpo }}
-{{- $_ := set $config "large_payload_optimization" $lpo }}
-{{- end }}
-{{- end }}
 {{- /* WebSocket Config */ -}}
 {{- if .Values.bifrost.websocket }}
 {{- $ws := dict }}
@@ -1767,10 +1462,6 @@ false
 {{- if $flags }}
 {{- $_ := set $config "feature_flags" (dict "flags" $flags) }}
 {{- end }}
-{{- end }}
-{{- /* Circuit Breaker Config */ -}}
-{{- if .Values.bifrost.circuitBreakerConfig }}
-{{- $_ := set $config "circuit_breaker_config" .Values.bifrost.circuitBreakerConfig }}
 {{- end }}
 {{- $config | toJson }}
 {{- end }}
@@ -1950,115 +1641,6 @@ Call this template at the beginning of deployment/stateful templates
 {{- end }}
 {{- end }}
 
-{{/* Validate SCIM/SSO config when enabled */}}
-{{- $scimValidation := .Values.bifrost.scim }}
-{{- if and $scimValidation $scimValidation.enabled }}
-{{- if eq $scimValidation.provider "okta" }}
-{{- if not $scimValidation.config.issuerUrl }}
-{{- fail "ERROR: bifrost.scim.config.issuerUrl is required when SCIM provider is Okta. Example: https://your-domain.okta.com/oauth2/default" }}
-{{- end }}
-{{- if not $scimValidation.config.clientId }}
-{{- fail "ERROR: bifrost.scim.config.clientId is required when SCIM provider is Okta." }}
-{{- end }}
-{{- if not $scimValidation.config.clientSecret }}
-{{- fail "ERROR: bifrost.scim.config.clientSecret is required when SCIM provider is Okta." }}
-{{- end }}
-{{- if not $scimValidation.config.apiToken }}
-{{- fail "ERROR: bifrost.scim.config.apiToken is required when SCIM provider is Okta." }}
-{{- end }}
-{{- end }}
-{{- if eq $scimValidation.provider "entra" }}
-{{- if not $scimValidation.config.tenantId }}
-{{- fail "ERROR: bifrost.scim.config.tenantId is required when SCIM provider is Entra (Azure AD)." }}
-{{- end }}
-{{- if not $scimValidation.config.clientId }}
-{{- fail "ERROR: bifrost.scim.config.clientId is required when SCIM provider is Entra (Azure AD)." }}
-{{- end }}
-{{- end }}
-{{- if eq $scimValidation.provider "keycloak" }}
-{{- if not $scimValidation.config.serverUrl }}
-{{- fail "ERROR: bifrost.scim.config.serverUrl is required when SCIM provider is Keycloak. Example: https://keycloak.company.com (must NOT include /realms/{realm})." }}
-{{- end }}
-{{- if not $scimValidation.config.realm }}
-{{- fail "ERROR: bifrost.scim.config.realm is required when SCIM provider is Keycloak." }}
-{{- end }}
-{{- if not $scimValidation.config.clientId }}
-{{- fail "ERROR: bifrost.scim.config.clientId is required when SCIM provider is Keycloak." }}
-{{- end }}
-{{- if not $scimValidation.config.clientSecret }}
-{{- fail "ERROR: bifrost.scim.config.clientSecret is required when SCIM provider is Keycloak." }}
-{{- end }}
-{{- end }}
-{{- if eq $scimValidation.provider "zitadel" }}
-{{- if not $scimValidation.config.domain }}
-{{- fail "ERROR: bifrost.scim.config.domain is required when SCIM provider is Zitadel. Example: my-instance.zitadel.cloud (no scheme)." }}
-{{- end }}
-{{- if not $scimValidation.config.clientId }}
-{{- fail "ERROR: bifrost.scim.config.clientId is required when SCIM provider is Zitadel." }}
-{{- end }}
-{{- end }}
-{{- if eq $scimValidation.provider "google" }}
-{{- if not $scimValidation.config.domain }}
-{{- fail "ERROR: bifrost.scim.config.domain is required when SCIM provider is Google Workspace. Example: company.com" }}
-{{- end }}
-{{- if not $scimValidation.config.clientId }}
-{{- fail "ERROR: bifrost.scim.config.clientId is required when SCIM provider is Google Workspace." }}
-{{- end }}
-{{- end }}
-{{- if eq $scimValidation.provider "generic" }}
-{{- if not $scimValidation.config.issuerUrl }}
-{{- fail "ERROR: bifrost.scim.config.issuerUrl is required when SCIM provider is a generic OIDC provider. Example: https://idp.company.com" }}
-{{- end }}
-{{- if not $scimValidation.config.clientId }}
-{{- fail "ERROR: bifrost.scim.config.clientId is required when SCIM provider is a generic OIDC provider." }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/* Validate cluster config when enabled */}}
-{{- if and .Values.bifrost.cluster .Values.bifrost.cluster.enabled }}
-{{- if not .Values.bifrost.cluster.gossip }}
-{{- fail "ERROR: bifrost.cluster.gossip is required when cluster mode is enabled." }}
-{{- end }}
-{{- if not .Values.bifrost.cluster.gossip.port }}
-{{- fail "ERROR: bifrost.cluster.gossip.port is required when cluster mode is enabled." }}
-{{- end }}
-{{- if not .Values.bifrost.cluster.gossip.config }}
-{{- fail "ERROR: bifrost.cluster.gossip.config is required when cluster mode is enabled." }}
-{{- end }}
-{{- if not .Values.bifrost.cluster.gossip.config.timeoutSeconds }}
-{{- fail "ERROR: bifrost.cluster.gossip.config.timeoutSeconds is required when cluster mode is enabled." }}
-{{- end }}
-{{- if not .Values.bifrost.cluster.gossip.config.successThreshold }}
-{{- fail "ERROR: bifrost.cluster.gossip.config.successThreshold is required when cluster mode is enabled." }}
-{{- end }}
-{{- if not .Values.bifrost.cluster.gossip.config.failureThreshold }}
-{{- fail "ERROR: bifrost.cluster.gossip.config.failureThreshold is required when cluster mode is enabled." }}
-{{- end }}
-{{- if and .Values.bifrost.cluster.discovery .Values.bifrost.cluster.discovery.enabled }}
-{{- if not .Values.bifrost.cluster.discovery.type }}
-{{- fail "ERROR: bifrost.cluster.discovery.type is required when cluster discovery is enabled. Supported types: kubernetes, dns, udp, consul, etcd, mdns" }}
-{{- end }}
-{{- if eq .Values.bifrost.cluster.discovery.type "udp" }}
-{{- if not .Values.bifrost.cluster.discovery.udpBroadcastPort }}
-{{- fail "ERROR: bifrost.cluster.discovery.udpBroadcastPort is required when using udp discovery." }}
-{{- end }}
-{{- if not .Values.bifrost.cluster.discovery.allowedAddressSpace }}
-{{- fail "ERROR: bifrost.cluster.discovery.allowedAddressSpace is required when using udp discovery." }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/* Validate RBAC pod discovery + service account configuration */}}
-{{- if and .Values.rbac .Values.rbac.podDiscovery .Values.rbac.podDiscovery.enabled }}
-{{- if and .Values.bifrost.cluster.enabled .Values.bifrost.cluster.discovery.enabled (eq .Values.bifrost.cluster.discovery.type "kubernetes") }}
-{{- if and (not .Values.serviceAccount.create) (not .Values.serviceAccount.name) }}
-{{- fail "ERROR: rbac.podDiscovery.enabled requires either serviceAccount.create=true or an explicit serviceAccount.name when serviceAccount.create=false." }}
-{{- end }}
-{{- end }}
-{{- end }}
-
 {{/* Validate external Weaviate when vector store type is weaviate */}}
 {{- if and .Values.vectorStore.enabled (eq .Values.vectorStore.type "weaviate") }}
 {{- if .Values.vectorStore.weaviate.external.enabled }}
@@ -2182,45 +1764,6 @@ Call this template at the beginning of deployment/stateful templates
 {{- range $idx, $role := .Values.bifrost.governance.roles }}
 {{- if not $role.name }}
 {{- fail (printf "ERROR: bifrost.governance.roles[%d].name is required." $idx) }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/* Validate guardrails rules */}}
-{{- if .Values.bifrost.guardrails.rules }}
-{{- range $idx, $rule := .Values.bifrost.guardrails.rules }}
-{{- if not $rule.id }}
-{{- fail (printf "ERROR: bifrost.guardrails.rules[%d].id is required." $idx) }}
-{{- end }}
-{{- if not $rule.name }}
-{{- fail (printf "ERROR: bifrost.guardrails.rules[%d].name is required for rule id '%v'." $idx $rule.id) }}
-{{- end }}
-{{- if not (hasKey $rule "enabled") }}
-{{- fail (printf "ERROR: bifrost.guardrails.rules[%d].enabled is required for rule '%s'." $idx $rule.name) }}
-{{- end }}
-{{- if not $rule.cel_expression }}
-{{- fail (printf "ERROR: bifrost.guardrails.rules[%d].cel_expression is required for rule '%s'." $idx $rule.name) }}
-{{- end }}
-{{- if not $rule.apply_to }}
-{{- fail (printf "ERROR: bifrost.guardrails.rules[%d].apply_to is required for rule '%s'. Values: input, output, both" $idx $rule.name) }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/* Validate guardrails providers */}}
-{{- if .Values.bifrost.guardrails.providers }}
-{{- range $idx, $provider := .Values.bifrost.guardrails.providers }}
-{{- if not $provider.id }}
-{{- fail (printf "ERROR: bifrost.guardrails.providers[%d].id is required." $idx) }}
-{{- end }}
-{{- if not $provider.provider_name }}
-{{- fail (printf "ERROR: bifrost.guardrails.providers[%d].provider_name is required for provider id '%v'." $idx $provider.id) }}
-{{- end }}
-{{- if not $provider.policy_name }}
-{{- fail (printf "ERROR: bifrost.guardrails.providers[%d].policy_name is required for provider '%s'." $idx $provider.provider_name) }}
-{{- end }}
-{{- if not (hasKey $provider "enabled") }}
-{{- fail (printf "ERROR: bifrost.guardrails.providers[%d].enabled is required for provider '%s'." $idx $provider.provider_name) }}
 {{- end }}
 {{- end }}
 {{- end }}

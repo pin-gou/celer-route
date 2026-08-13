@@ -8,7 +8,7 @@ import {
 	LIVE_MODELS_SYNC_DISABLED,
 	MIN_LIVE_MODELS_SYNC_INTERVAL,
 } from "@/lib/types/config";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";

@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getErrorMessage } from "@/lib/store";
 import { useListFeatureFlagsQuery, useUpdateFeatureFlagMutation } from "@/lib/store/apis/featureFlagsApi";
 import type { FeatureFlagStatus } from "@/lib/types/featureFlag";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Crown, Lock } from "lucide-react";
 import { toast } from "sonner";
 

@@ -1,0 +1,22 @@
+{
+  "summary": "[final-gate] fail — 12/14 V-* 通过但 V-helm-1 FAIL（helm 资产未剥离且从未验证）触发 P0，G-1 helm-charts enterprise 块未删除, G-2 Makefile cleanup-enterprise 未删除, G-3 mcp-tool-groups e2e 未删除 | 实现完整性 0 硬标记命中, runtime_boot 4 步齐全, gate_score: 81.5, p0_failures: [G-1, G-2, G-3]",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/066-final-gate-gate-report.md"
+  ],
+  "tasks_updated": [],
+  "status": "fail",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/005-dev.core-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/010-dev.framework-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/019-dev.transports-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/024-dev.plugins-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/033-dev.ui-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/038-int.core-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/043-int.framework-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/048-int.transports-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/053-int.plugins-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/058-int.ui-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/065-int.scenario-scenario-execute.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/066-final-gate-gate-report.md"
+}

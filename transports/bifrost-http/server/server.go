@@ -60,13 +60,6 @@ const (
 	DefaultLogOutputStyle = string(schemas.LoggerOutputTypeJSON)
 )
 
-var enterprisePlugins = []string{
-	"datadog",
-	"bigquery",
-	"pubsub",
-	"kafka",
-}
-
 // ServerCallbacks is a interface that defines the callbacks for the server.
 type ServerCallbacks interface {
 	// Plugins callbacks

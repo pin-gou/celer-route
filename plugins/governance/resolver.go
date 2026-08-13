@@ -32,7 +32,7 @@ type EvaluationRequest struct {
 	VirtualKey string                `json:"virtual_key"` // Virtual key value
 	Provider   schemas.ModelProvider `json:"provider"`
 	Model      string                `json:"model"`
-	UserID     string                `json:"user_id,omitempty"` // User ID for user-level governance (enterprise only)
+	UserID     string                `json:"user_id,omitempty"` // User ID for user-level governance
 }
 
 // EvaluationResult contains the complete result of governance evaluation
@@ -188,11 +188,11 @@ func (r *BudgetResolver) EvaluateTeamRequest(ctx *schemas.BifrostContext, teamID
 
 }
 
-// EvaluateUserRequest evaluates user-level rate limits and budgets (enterprise-only)
+// EvaluateUserRequest evaluates user-level rate limits and budgets
 // This runs after provider/model checks but before VK checks
 // Returns DecisionAllow if userID is empty or user has no governance configured
 func (r *BudgetResolver) EvaluateUserRequest(ctx *schemas.BifrostContext, userID string, request *EvaluationRequest) *EvaluationResult {
-	// Skip if no userID (non-enterprise or anonymous request)
+	// Skip if no userID (anonymous request or user governance not configured)
 	if userID == "" {
 		return &EvaluationResult{
 			Decision: DecisionAllow,

@@ -1,0 +1,12 @@
+{
+  "summary": "Task 36.1 confirmed: enterpriseSchemaPaths map entirely deleted from transports/bifrost-http/lib/config_test.go (and all Go files), and TestConfigSchemaSync no longer references it; enterpriseSchemaFields map also deleted. Note: pre-existing OAuth schema sync errors (5 fields at mcp.client_configs) exist at fork base and are unrelated to this change.",
+  "outputs": [
+    "enterpriseSchemaPaths.removed"
+  ],
+  "tasks_updated": [
+    "36.1"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": ""
+}

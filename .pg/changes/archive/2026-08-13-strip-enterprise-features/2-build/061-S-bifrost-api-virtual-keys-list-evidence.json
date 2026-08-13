@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S-bifrost-api-virtual-keys-list",
+  "critical": false,
+  "status": "skip",
+  "type": "api",
+  "steps": [{"phase": "given", "result": "skip"}, {"phase": "when", "result": "skip"}, {"phase": "then", "result": "skip"}],
+  "request_ids": [],
+  "timestamps": {"start": "skip", "end": "skip"},
+  "cleanup_result": "n/a",
+  "skip_reason": "preceding critical=true scenario S-bifrost-api-version-after-strip failed"
+}

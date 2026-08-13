@@ -93,7 +93,6 @@ export const configApi = baseApi.injectEndpoints({
 								error: {
 									status: "TIMEOUT_ERROR",
 									error: "Request timeout",
-									data: { error: { message: "Request timeout" } },
 								},
 							};
 						}
@@ -105,7 +104,6 @@ export const configApi = baseApi.injectEndpoints({
 						error: {
 							status: "FETCH_ERROR",
 							error: String(error),
-							data: { error: { message: "Network error" } },
 						},
 					};
 				}

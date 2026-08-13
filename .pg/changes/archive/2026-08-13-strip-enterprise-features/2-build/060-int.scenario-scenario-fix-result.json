@@ -1,0 +1,21 @@
+{
+  "summary": "design_drift: scenario S-bifrost-api-config-still-works asserts 'response.body matches \"config\":' but actual /api/config response uses key 'client_config' (pre-existing, unchanged by strip-enterprise-features — 0 changes to config.go). Handler has always returned client_config/framework_config/auth_config etc., none matching '\"'\"'\"config\":'\"'\"'\\''. This is scenario assertion mismatch, not code defect. scenario-scenario.yaml must be regenerated.",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/060-int.scenario-fix-1.md"
+  ],
+  "tasks_updated": [
+    "S-bifrost-api-config-still-works"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/060-int.scenario-fix-1.md",
+  "design_drift": {
+    "phase": "scenario-fix",
+    "fix_cycle": 1,
+    "scenario_id": "S-bifrost-api-config-still-works",
+    "location": "scenario-scenario.yaml:then assertion",
+    "reason": "design asserts response.body matches \"config\": but actual API contract uses client_config key (pre-existing, handler unmodified by this change)",
+    "decision": "ACCEPT"
+  },
+  "fix_root_cause": "design_drift"
+}

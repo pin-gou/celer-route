@@ -1,13 +1,11 @@
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const isEnterpriseBuild = fs.existsSync(path.join(__dirname, "app", "enterprise"));
 
 export default defineConfig({
 	plugins: [
@@ -29,25 +27,13 @@ export default defineConfig({
 		tailwindcss(),
 	],
 	resolve: {
-		// Enterprise UI source is symlinked into ./app/enterprise; preserving symlinks
-		// keeps module resolution rooted here so deps like zod / @phosphor-icons/react
-		// resolve against this ui/node_modules rather than the symlink target's tree.
-		preserveSymlinks: true,
 		alias: {
 			"@": path.resolve(__dirname),
-			"@enterprise": isEnterpriseBuild
-				? path.resolve(__dirname, "app", "enterprise")
-				: path.resolve(__dirname, "app", "_fallbacks", "enterprise"),
-			"@schemas": isEnterpriseBuild
-				? path.resolve(__dirname, "app", "enterprise", "lib", "schemas")
-				: path.resolve(__dirname, "app", "_fallbacks", "enterprise", "lib", "schemas"),
 		},
 	},
 	define: {
 		"process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "production"),
-		"process.env.BIFROST_IS_ENTERPRISE": JSON.stringify(isEnterpriseBuild ? "true" : "false"),
 		"process.env.BIFROST_DISABLE_PROFILER": JSON.stringify(process.env.BIFROST_DISABLE_PROFILER ?? ""),
-		"process.env.BIFROST_ENTERPRISE_TRIAL_EXPIRY": JSON.stringify(process.env.ENTERPRISE_TRIAL_EXPIRY ?? ""),
 		"process.env.BIFROST_PORT": JSON.stringify(process.env.BIFROST_PORT ?? ""),
 	},
 	server: {

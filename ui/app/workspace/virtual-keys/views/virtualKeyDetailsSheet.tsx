@@ -2,7 +2,6 @@ import { BudgetOverrideDialog } from "@/components/budgetOverrideDialog";
 import { CopyableId } from "@/components/copyableId";
 import { SheetNavigationButtons } from "@/components/sheetNavigationButtons";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { DottedSeparator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -21,11 +20,8 @@ import {
 	hasActiveBudgetOverride,
 	parseResetPeriod,
 } from "@/lib/utils/governance";
-import ManagedVirtualKeyNotice from "@enterprise/components/access-profiles/managedVirtualKeyNotice";
-import ViewUserDetailsButton from "@enterprise/components/user-groups/viewUserDetailsButton";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { formatDistanceToNow } from "date-fns";
-import { Users } from "lucide-react";
 import { useVirtualKeyUsage } from "../hooks/useVirtualKeyUsage";
 
 function usageBarClass(pct: number, exhausted: boolean) {
@@ -72,8 +68,7 @@ export default function VirtualKeyDetailSheet({
 	hasPrev = false,
 	hasNext = false,
 }: VirtualKeyDetailSheetProps) {
-	const { assignedUsers, isManagedByProfile, managingProfile, hasApRateLimit, displayBudgets, displayRateLimit } =
-		useVirtualKeyUsage(virtualKey);
+	const { isManagedByProfile, displayBudgets, displayRateLimit } = useVirtualKeyUsage(virtualKey);
 	const canUpdateVirtualKeys = useRbac(RbacResource.VirtualKeys, RbacOperation.Update);
 	const [setBudgetOverride] = useSetVirtualKeyBudgetOverrideMutation();
 	const [removeBudgetOverride] = useRemoveVirtualKeyBudgetOverrideMutation();
@@ -139,17 +134,6 @@ export default function VirtualKeyDetailSheet({
 				</SheetHeader>
 
 				<div className="space-y-6 px-8 py-4">
-					<ManagedVirtualKeyNotice isManagedByProfile={isManagedByProfile} managingProfile={managingProfile} />
-
-					{assignedUsers.length > 0 ? (
-						<div className="space-y-1">
-							<Label className="text-sm font-medium">Assigned Users</Label>
-							<div className="flex items-center gap-2">
-								<Users className="text-muted-foreground h-4 w-4" />
-								<span className="text-sm">{assignedUsers.map((u) => u.name || u.email).join(", ")}</span>
-							</div>
-						</div>
-					) : null}
 
 					{/* Basic Information */}
 					<div className="space-y-4">
@@ -475,13 +459,7 @@ export default function VirtualKeyDetailSheet({
 					{/* Budget Information */}
 					<div className="space-y-4">
 						<div className="flex items-center justify-between">
-							<h3 className="font-semibold">
-								Budget Information
-								{isManagedByProfile && managingProfile?.budgets?.length ? (
-									<span className="text-muted-foreground ml-2 text-xs font-normal">(from {managingProfile.name})</span>
-								) : null}
-							</h3>
-							{isManagedByProfile && managingProfile?.user_id ? <ViewUserDetailsButton userId={managingProfile.user_id} /> : null}
+							<h3 className="font-semibold">Budget Information</h3>
 						</div>
 
 						{displayBudgets && displayBudgets.length > 0 ? (
@@ -530,12 +508,7 @@ export default function VirtualKeyDetailSheet({
 
 					{/* Rate Limits */}
 					<div className="space-y-4">
-						<h3 className="font-semibold">
-							Rate Limits
-							{isManagedByProfile && hasApRateLimit ? (
-								<span className="text-muted-foreground ml-2 text-xs font-normal">(from {managingProfile?.name})</span>
-							) : null}
-						</h3>
+						<h3 className="font-semibold">Rate Limits</h3>
 
 						{displayRateLimit ? (
 							<div className="space-y-4">

@@ -2,8 +2,7 @@
 //
 // OSS ships the base set (global + virtual_key) registered at module load.
 // Downstream builds (enterprise) extend the registry by importing their
-// registration module via the @enterprise alias — see
-// ui/app/_fallbacks/enterprise/lib/registrations/modelLimitScopes.ts
+// registration module via the fallback alias — see
 // for the OSS-build fallback.
 //
 // Each entry can supply:

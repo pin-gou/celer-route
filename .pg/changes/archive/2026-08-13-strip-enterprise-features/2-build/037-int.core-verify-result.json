@@ -1,0 +1,10 @@
+{
+  "summary": "int.core track PASS: V-core-1 (go build), V-core-2 (go vet), V-core-3 (go test) all PASS. 2 test failures (TestOverheadEndToEndUnary + TestConfigureDialer_SSRFMultiIPAllFail) confirmed pre-existing by checking base commit 9e93b94 — not caused by strip-enterprise-features. V-transports-2: all enterprise endpoints (/api/rbac, /scim, /alerting, /access-profiles, /business-units) return 404 as expected. bifrost-api (9080) and ui-dev (3008) healthy. V-core-4 skipped per design.md.",
+  "outputs": [],
+  "tasks_updated": [],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/037-int.core.verify-evidence.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/037-int.core-verify.md"
+}

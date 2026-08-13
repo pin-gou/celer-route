@@ -68,7 +68,7 @@ define EXPOSE_ENV
 	fi
 endef
 
-.PHONY: all help dev dev-pulse build-ui build build-cli run run-cli install-air install-pulse clean test test-cli install-ui setup-workspace work-init work-clean docs docker-image docker-run cleanup-enterprise mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner helm-index install-microsocks socks5-proxy install-tinyproxy http-proxy
+.PHONY: all help dev dev-pulse build-ui build build-cli run run-cli install-air install-pulse clean test test-cli install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner helm-index install-microsocks socks5-proxy install-tinyproxy http-proxy
 
 all: help
 
@@ -100,12 +100,7 @@ help: ## Show this help message
 	@$(ECHO) "  PATTERN           Substring pattern to filter tests (alternative to TESTCASE)"
 	@$(ECHO) "  FLOW              E2E test flow to run: providers|virtual-keys (default: all)"
 
-cleanup-enterprise: ## Clean up enterprise directories if present
-	@$(ECHO) "$(GREEN)Cleaning up enterprise...$(NC)"
-	@if [ -d "ui/app/enterprise" ]; then rm -rf ui/app/enterprise; fi
-	@$(ECHO) "$(GREEN)Enterprise cleaned up$(NC)"
-
-install-ui: cleanup-enterprise
+install-ui:
 	@$(USE_NODE); \
 	 which node > /dev/null || ($(ECHO) "$(RED)Error: Node.js is not installed. Please install Node.js first.$(NC)" && exit 1); \
 	 which npm > /dev/null || ($(ECHO) "$(RED)Error: npm is not installed. Please install npm first.$(NC)" && exit 1); \

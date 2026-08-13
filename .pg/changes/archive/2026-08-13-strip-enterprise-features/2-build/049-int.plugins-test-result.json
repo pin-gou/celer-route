@@ -1,0 +1,12 @@
+{
+  "summary": "int.plugins:test task 41.1 确认完成。CheckUserBudget/CheckUserRateLimit 调用站点(store.go:1798,store.go:1871,resolver.go:204,resolver.go:212)均无 enterprise 键污染——函数体仅返回 DecisionAllow,nil 且不引用任何被删 context key。enterprisestrip_test.go 的 TestStrip_UserGovernanceCallSitesNotPollutedByDeletedEnterpriseKeys 对 store/resolver/main/utils/routing/tracker.go 扫描 13 个已删除 enterprise context key 零命中，已通过 int 阶段验证。全仓 plugins 测试 13/13 模块全部 ok。",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/plugins/governance/enterprisestrip_test.go"
+  ],
+  "tasks_updated": [
+    "41.1"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": ""
+}

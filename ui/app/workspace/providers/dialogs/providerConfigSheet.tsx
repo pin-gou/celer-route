@@ -2,7 +2,7 @@ import Provider from "@/components/provider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModelProvider } from "@/lib/types/config";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useEffect, useMemo, useState } from "react";
 import {
 	ApiStructureFormFragment,

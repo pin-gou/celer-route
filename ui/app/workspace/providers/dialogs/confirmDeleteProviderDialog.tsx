@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/alertDialog";
 import { getErrorMessage, useDeleteProviderMutation } from "@/lib/store";
 import { ModelProvider } from "@/lib/types/config";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { AlertDialogTitle } from "@radix-ui/react-alert-dialog";
 import { toast } from "sonner";
 

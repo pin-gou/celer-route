@@ -309,61 +309,45 @@ func TestPreRequestHookMCP_PassthroughRequest_NoStamping(t *testing.T) {
 // Large-payload branch (runPreRequestRouting) applies the same stamping rules
 // ============================================================================
 
-// newLargePayloadCtx returns a ctx that routes PreRequestHook through its large-payload
-// branch: the body streams to the provider unparsed, so the model comes from
-// LargePayloadMetadata instead of the request. The metadata pointer is returned so
-// tests can assert the routed model is propagated (the streaming body rewriter
-// consumes metadata.Model when rewriting the body prefix).
-func newLargePayloadCtx(includeTools, includeClients []string) (*schemas.BifrostContext, *schemas.LargePayloadMetadata) {
-	ctx := newPreRequestCtx(includeTools, includeClients)
-	metadata := &schemas.LargePayloadMetadata{Model: "openai/gpt-4o"}
-	ctx.SetValue(schemas.BifrostContextKeyLargePayloadMetadata, metadata)
-	return ctx, metadata
-}
-
 // Large-payload counterpart of the include-clients opt-in case: with auto-injection
 // disabled, the grant must still be stamped because include-clients triggers injection
 // downstream. The provider-prefixed model must survive routing unchanged.
 func TestPreRequestHookMCP_LargePayload_AutoInjectOff_IncludeClients_StampsGrant(t *testing.T) {
 	p := newPluginForMCPStamping(t, buildVKForMCPStamping([]string{"tool_a", "tool_b"}), true)
-	ctx, metadata := newLargePayloadCtx(nil, []string{"sentry"})
+	ctx := newPreRequestCtx(nil, []string{"sentry"})
 
 	tools := stampedIncludeTools(t, p, ctx, newChatRequest())
 	assert.Equal(t, []string{"sentry-tool_a", "sentry-tool_b"}, tools)
-	assert.Equal(t, "openai/gpt-4o", metadata.Model, "provider-prefixed model must survive routing unchanged")
 }
 
 // Large-payload counterpart of the baseline auto-injection case: no caller filters,
 // auto-injection enabled, full grant stamped.
 func TestPreRequestHookMCP_LargePayload_AutoInjectOn_NoFilters_StampsGrant(t *testing.T) {
 	p := newPluginForMCPStamping(t, buildVKForMCPStamping([]string{"tool_a", "tool_b"}), false)
-	ctx, metadata := newLargePayloadCtx(nil, nil)
+	ctx := newPreRequestCtx(nil, nil)
 
 	tools := stampedIncludeTools(t, p, ctx, newChatRequest())
 	assert.Equal(t, []string{"sentry-tool_a", "sentry-tool_b"}, tools)
-	assert.Equal(t, "openai/gpt-4o", metadata.Model, "provider-prefixed model must survive routing unchanged")
 }
 
 // Large-payload counterpart of the include-clients-only case with auto-injection
 // enabled: the full grant is stamped as the tool-level ceiling.
 func TestPreRequestHookMCP_LargePayload_AutoInjectOn_IncludeClientsOnly_StampsGrant(t *testing.T) {
 	p := newPluginForMCPStamping(t, buildVKForMCPStamping([]string{"tool_a", "tool_b"}), false)
-	ctx, metadata := newLargePayloadCtx(nil, []string{"sentry"})
+	ctx := newPreRequestCtx(nil, []string{"sentry"})
 
 	tools := stampedIncludeTools(t, p, ctx, newChatRequest())
 	assert.Equal(t, []string{"sentry-tool_a", "sentry-tool_b"}, tools)
-	assert.Equal(t, "openai/gpt-4o", metadata.Model, "provider-prefixed model must survive routing unchanged")
 }
 
 // Large-payload pruning with auto-injection disabled: the caller's include-tools list
 // is narrowed against the grant — the toggle never disables grant enforcement.
 func TestPreRequestHookMCP_LargePayload_AutoInjectOff_IncludeToolsPresent_Prunes(t *testing.T) {
 	p := newPluginForMCPStamping(t, buildVKForMCPStamping([]string{"tool_a", "tool_b"}), true)
-	ctx, metadata := newLargePayloadCtx([]string{"sentry-tool_a", "sentry-tool_c"}, nil)
+	ctx := newPreRequestCtx([]string{"sentry-tool_a", "sentry-tool_c"}, nil)
 
 	tools := stampedIncludeTools(t, p, ctx, newChatRequest())
 	assert.Equal(t, []string{"sentry-tool_a"}, tools)
-	assert.Equal(t, "openai/gpt-4o", metadata.Model, "provider-prefixed model must survive routing unchanged")
 }
 
 // Large-payload pruning with auto-injection enabled: granted entries survive,
@@ -371,11 +355,10 @@ func TestPreRequestHookMCP_LargePayload_AutoInjectOff_IncludeToolsPresent_Prunes
 // narrower selection.
 func TestPreRequestHookMCP_LargePayload_IncludeToolsPresent_Prunes(t *testing.T) {
 	p := newPluginForMCPStamping(t, buildVKForMCPStamping([]string{"tool_a", "tool_b"}), false)
-	ctx, metadata := newLargePayloadCtx([]string{"sentry-tool_a", "sentry-tool_c"}, nil)
+	ctx := newPreRequestCtx([]string{"sentry-tool_a", "sentry-tool_c"}, nil)
 
 	tools := stampedIncludeTools(t, p, ctx, newChatRequest())
 	assert.Equal(t, []string{"sentry-tool_a"}, tools)
-	assert.Equal(t, "openai/gpt-4o", metadata.Model, "provider-prefixed model must survive routing unchanged")
 }
 
 // Large-payload counterpart of the both-filters case: the pruned include-tools list is
@@ -385,12 +368,11 @@ func TestPreRequestHookMCP_LargePayload_BothFilters_PrunedListWins(t *testing.T)
 	for _, disabled := range []bool{false, true} {
 		t.Run(fmt.Sprintf("disableAutoToolInject=%v", disabled), func(t *testing.T) {
 			p := newPluginForMCPStamping(t, buildVKForMCPStamping([]string{"tool_a", "tool_b"}), disabled)
-			ctx, metadata := newLargePayloadCtx([]string{"sentry-tool_a"}, []string{"sentry"})
+			ctx := newPreRequestCtx([]string{"sentry-tool_a"}, []string{"sentry"})
 
 			tools := stampedIncludeTools(t, p, ctx, newChatRequest())
 			assert.Equal(t, []string{"sentry-tool_a"}, tools,
 				"pruned caller list must not be overwritten by the grant")
-			assert.Equal(t, "openai/gpt-4o", metadata.Model, "provider-prefixed model must survive routing unchanged")
 		})
 	}
 }
@@ -400,9 +382,8 @@ func TestPreRequestHookMCP_LargePayload_BothFilters_PrunedListWins(t *testing.T)
 // is skipped entirely.
 func TestPreRequestHookMCP_LargePayload_AutoInjectOff_NoFilters_StampsNothing(t *testing.T) {
 	p := newPluginForMCPStamping(t, buildVKForMCPStamping([]string{"tool_a", "tool_b"}), true)
-	ctx, metadata := newLargePayloadCtx(nil, nil)
+	ctx := newPreRequestCtx(nil, nil)
 
 	tools := stampedIncludeTools(t, p, ctx, newChatRequest())
 	assert.Nil(t, tools)
-	assert.Equal(t, "openai/gpt-4o", metadata.Model, "provider-prefixed model must survive routing unchanged")
 }

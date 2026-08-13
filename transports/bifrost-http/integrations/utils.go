@@ -287,19 +287,17 @@ func (g *GenericRouter) tryStreamLargeResponse(ctx *fasthttp.RequestCtx, bifrost
 	}
 	if g.streamLargeResponse(ctx, bifrostCtx) {
 		ctx.SetUserValue(lib.FastHTTPUserValueLargeResponseMode, true)
+		return true
 	}
-	return true
+	// OSS build: large-response streaming is enterprise-only (StreamLargeResponseBody
+	// is a no-op), so the response is NOT handled here — fall through to the normal
+	// buffered serialize → respond path instead of failing the request.
+	return false
 }
 
 // streamLargeResponse streams the large response body directly from the upstream provider to the client.
 // This bypasses the normal serialize → set body path, piping the response bytes unchanged.
 func (g *GenericRouter) streamLargeResponse(ctx *fasthttp.RequestCtx, bifrostCtx *schemas.BifrostContext) bool {
-	// Enterprise hook: wrap the reader with Phase B scanning (e.g., usage extraction
-	// from the full response stream) before streaming to client.
-	if g.largeResponseHook != nil {
-		g.largeResponseHook(ctx, bifrostCtx)
-	}
-
 	if !lib.StreamLargeResponseBody(ctx, bifrostCtx) {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("large response reader not available")
@@ -481,29 +479,9 @@ func isAnthropicAPIKeyAuth(ctx *fasthttp.RequestCtx) bool {
 	return true
 }
 
-// resolveLargePayloadMetadata returns metadata from the sync context key,
-// falling back to a non-blocking read from the deferred channel.
-// If deferred metadata is resolved, it is cached in the sync key for later readers.
+// resolveLargePayloadMetadata always returns nil in OSS (enterprise-only feature).
 func resolveLargePayloadMetadata(bifrostCtx *schemas.BifrostContext) *schemas.LargePayloadMetadata {
-	if bifrostCtx == nil {
-		return nil
-	}
-	if metadata, ok := bifrostCtx.Value(schemas.BifrostContextKeyLargePayloadMetadata).(*schemas.LargePayloadMetadata); ok && metadata != nil {
-		return metadata
-	}
-	ch, ok := bifrostCtx.Value(schemas.BifrostContextKeyDeferredLargePayloadMetadata).(<-chan *schemas.LargePayloadMetadata)
-	if !ok || ch == nil {
-		return nil
-	}
-	select {
-	case metadata := <-ch:
-		if metadata != nil {
-			bifrostCtx.SetValue(schemas.BifrostContextKeyLargePayloadMetadata, metadata)
-		}
-		return metadata
-	default:
-		return nil
-	}
+	return nil
 }
 
 // ParseProviderScopedVideoID parses a provider-scoped video ID in the form "id:provider".

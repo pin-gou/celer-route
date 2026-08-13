@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage, useCreateMCPClientMutation } from "@/lib/store";
 import { CreateMCPClientRequest, SecretVar, MCPAuthType, MCPLibraryEntry, MCPTLSConfig } from "@/lib/types/mcp";
 import { parseArrayFromText } from "@/lib/utils/array";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Globe, Info, KeyRound, Radio, ShieldCheck, Terminal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";

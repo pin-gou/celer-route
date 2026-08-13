@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -229,9 +228,6 @@ func TestCustomOpenAIRerankLargeResponseThresholdReturnsResults(t *testing.T) {
 		},
 	}, testNoopLogger{})
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-	// A tiny threshold would route the structured JSON body onto the large-response
-	// streaming path; rerank must parse it in-process regardless and still return results.
-	ctx.SetValue(schemas.BifrostContextKeyLargeResponseThreshold, int64(1))
 
 	response, bifrostErr := provider.Rerank(ctx, schemas.Key{Value: *schemas.NewSecretVar("test-key")}, &schemas.BifrostRerankRequest{
 		Model: "zerank-2",
@@ -350,7 +346,6 @@ func TestCustomOpenAIRerankMapsSearchUnits(t *testing.T) {
 }
 
 func TestCustomOpenAIRerankLargePayloadStreamsBody(t *testing.T) {
-	streamedBody := `{"model":"zerank-2","query":"stream me","documents":[{"text":"a"},{"text":"b"}]}`
 	var receivedBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -378,12 +373,9 @@ func TestCustomOpenAIRerankLargePayloadStreamsBody(t *testing.T) {
 		},
 	}, testNoopLogger{})
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-	// Simulate the transport staging the request body as a stream (large-payload passthrough):
-	// CheckContextAndGetRequestBody then returns nil jsonData and the handler must stream the
-	// staged reader instead of sending an empty body.
+	// In OSS the large payload passthrough path is removed; the normal JSON
+	// body path is used for rerank.
 	ctx.SetValue(schemas.BifrostContextKeyLargePayloadMode, true)
-	ctx.SetValue(schemas.BifrostContextKeyLargePayloadReader, strings.NewReader(streamedBody))
-	ctx.SetValue(schemas.BifrostContextKeyLargePayloadContentLength, len(streamedBody))
 
 	response, bifrostErr := provider.Rerank(ctx, schemas.Key{Value: *schemas.NewSecretVar("test-key")}, &schemas.BifrostRerankRequest{
 		Model: "zerank-2",
@@ -396,8 +388,8 @@ func TestCustomOpenAIRerankLargePayloadStreamsBody(t *testing.T) {
 	if bifrostErr != nil {
 		t.Fatalf("expected rerank to succeed, got %v", bifrostErr)
 	}
-	if receivedBody != streamedBody {
-		t.Fatalf("expected upstream to receive streamed passthrough body %q, got %q", streamedBody, receivedBody)
+	if receivedBody == "" {
+		t.Fatal("expected upstream to receive a request body")
 	}
 	if response == nil || len(response.Results) != 2 {
 		t.Fatalf("expected two rerank results from passthrough response, got %#v", response)

@@ -3,52 +3,14 @@ package featureflags
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 )
-
-// recordingDelegate captures OnSet invocations so tests can assert delegate
-// fire counts and arguments.
-type recordingDelegate struct {
-	mu    sync.Mutex
-	calls []recordedCall
-}
-
-type recordedCall struct {
-	id        string
-	enabled   bool
-	writtenAt int64
-}
-
-func (d *recordingDelegate) OnSet(id string, enabled bool, writtenAt int64) {
-	d.mu.Lock()
-	d.calls = append(d.calls, recordedCall{id, enabled, writtenAt})
-	d.mu.Unlock()
-}
-
-func (d *recordingDelegate) Calls() []recordedCall {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	out := make([]recordedCall, len(d.calls))
-	copy(out, d.calls)
-	return out
-}
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	resetRegistryForTest()
 	s, err := New(Config{})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	return s
-}
-
-func newEnterpriseTestStore(t *testing.T) *Store {
-	t.Helper()
-	resetRegistryForTest()
-	s, err := New(Config{IsEnterprise: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -104,13 +66,11 @@ func TestIsEnabled_UsesDefault(t *testing.T) {
 	}
 }
 
-func TestSet_OverridesDefaultAndFiresDelegate(t *testing.T) {
+func TestSet_OverridesDefault(t *testing.T) {
 	s := newTestStore(t)
 	if err := Register(FlagDef{ID: "feat.a", DisplayName: "Feature A", Default: false}); err != nil {
 		t.Fatal(err)
 	}
-	d := &recordingDelegate{}
-	s.SetDelegate(d)
 
 	status, err := s.Set(context.Background(), "feat.a", true)
 	if err != nil {
@@ -122,14 +82,6 @@ func TestSet_OverridesDefaultAndFiresDelegate(t *testing.T) {
 	if !s.IsEnabled("feat.a") {
 		t.Error("IsEnabled after Set: want true")
 	}
-
-	calls := d.Calls()
-	if len(calls) != 1 {
-		t.Fatalf("delegate calls = %d, want 1", len(calls))
-	}
-	if calls[0].id != "feat.a" || !calls[0].enabled {
-		t.Errorf("delegate call = %+v, want feat.a/true", calls[0])
-	}
 }
 
 func TestSet_UnregisteredRejected(t *testing.T) {
@@ -137,23 +89,6 @@ func TestSet_UnregisteredRejected(t *testing.T) {
 	_, err := s.Set(context.Background(), "unknown", true)
 	if !errors.Is(err, ErrFlagUnregistered) {
 		t.Errorf("Set(unknown): want ErrFlagUnregistered, got %v", err)
-	}
-}
-
-func TestApplyRemote_DoesNotFireDelegate(t *testing.T) {
-	s := newTestStore(t)
-	if err := Register(FlagDef{ID: "feat.b"}); err != nil {
-		t.Fatal(err)
-	}
-	d := &recordingDelegate{}
-	s.SetDelegate(d)
-
-	s.ApplyRemote("feat.b", true, time.Now().UnixNano())
-	if !s.IsEnabled("feat.b") {
-		t.Error("after ApplyRemote: want enabled")
-	}
-	if calls := d.Calls(); len(calls) != 0 {
-		t.Errorf("delegate calls = %d, want 0 (echo-loop guard)", len(calls))
 	}
 }
 
@@ -306,59 +241,37 @@ func TestSnapshotRestore_DeletesWhenNoPriorEntry(t *testing.T) {
 	}
 }
 
-func TestSnapshotRestore_NoDelegateFire(t *testing.T) {
-	// Rollback must be local-only - re-broadcasting after a single-node
-	// DB failure would create gossip noise.
+// ---------------------------------------------------------------------------
+// Strip enterprise-only: tests that verify the behaviour AFTER the
+// EnterpriseOnly / ErrFlagEnterpriseOnly / SyncDelegate / enterprise-only
+// registry branch have been removed.
+// ---------------------------------------------------------------------------
+
+// TestStrip_IsEnabledReturnsDefaultForAllFlags verifies that after removing
+// the enterprise-only check, IsEnabled returns the default value for every
+// flag without forced-false override.
+func TestStrip_IsEnabledReturnsDefaultForAllFlags(t *testing.T) {
 	s := newTestStore(t)
-	_ = Register(FlagDef{ID: "feat.silent"})
+	MustRegister(FlagDef{ID: "ent.only", Default: true})
 
-	snap, had := s.Snapshot("feat.silent")
-	if _, err := s.Set(context.Background(), "feat.silent", true); err != nil {
-		t.Fatal(err)
-	}
-
-	d := &recordingDelegate{}
-	s.SetDelegate(d)
-	s.Restore("feat.silent", snap, had)
-
-	if calls := d.Calls(); len(calls) != 0 {
-		t.Errorf("Restore must NOT fire delegate, got %d calls", len(calls))
+	if !s.IsEnabled("ent.only") {
+		t.Error("after strip, all flags use their default: want true, got false")
 	}
 }
 
-func TestEnterpriseOnly_InertInOSS(t *testing.T) {
+// TestStrip_SetAcceptsPreviouslyEnterpriseOnly verifies that Set works for
+// every flag, including those that were previously marked EnterpriseOnly.
+func TestStrip_SetAcceptsPreviouslyEnterpriseOnly(t *testing.T) {
 	s := newTestStore(t)
-	_ = Register(FlagDef{ID: "ent.only", DisplayName: "Enterprise Only", EnterpriseOnly: true, Default: true})
+	MustRegister(FlagDef{ID: "ent.only", Default: false})
 
-	// IsEnabled is forced false in OSS even though Default is true.
-	if s.IsEnabled("ent.only") {
-		t.Error("EnterpriseOnly flag must be inert in OSS")
-	}
-
-	// Set is rejected.
-	if _, err := s.Set(context.Background(), "ent.only", true); !errors.Is(err, ErrFlagEnterpriseOnly) {
-		t.Errorf("Set on enterprise-only in OSS: want ErrFlagEnterpriseOnly, got %v", err)
-	}
-
-	// Status surfaces both enterprise_only and locked so the UI can render
-	// a disabled toggle with the right badge.
-	st, err := s.Status("ent.only")
+	// After strip, ErrFlagEnterpriseOnly is gone and Set does not check
+	// EnterpriseOnly.  Any registered flag can be toggled.
+	_, err := s.Set(context.Background(), "ent.only", true)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if !st.EnterpriseOnly || !st.Locked || st.Enabled {
-		t.Errorf("status = %+v, want enterprise_only=true locked=true enabled=false", st)
-	}
-}
-
-func TestEnterpriseOnly_ActiveInEnterprise(t *testing.T) {
-	s := newEnterpriseTestStore(t)
-	_ = Register(FlagDef{ID: "ent.only", EnterpriseOnly: true, Default: false})
-
-	if _, err := s.Set(context.Background(), "ent.only", true); err != nil {
-		t.Fatalf("Set on enterprise-only in enterprise: %v", err)
+		t.Fatalf("after strip, Set must work for all flags: %v", err)
 	}
 	if !s.IsEnabled("ent.only") {
-		t.Error("enterprise-only flag in enterprise build should toggle normally")
+		t.Error("after Set, flag should be enabled")
 	}
 }

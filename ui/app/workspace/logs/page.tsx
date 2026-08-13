@@ -23,7 +23,7 @@ import { useLazyGetLogByIdQuery, useLazyGetLogsQuery } from "@/lib/store/apis/lo
 import type { DisplayLogEntry, LogEntry, LogFilters, Pagination } from "@/lib/types/logs";
 import { dateUtils } from "@/lib/types/logs";
 import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import NumberFlow from "@number-flow/react";
 import { useLocation } from "@tanstack/react-router";
 import { AlertCircle, BarChart, CheckCircle, Clock, DollarSign, Hash, Info } from "lucide-react";

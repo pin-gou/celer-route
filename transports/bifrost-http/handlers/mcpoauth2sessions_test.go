@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	configtables "github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/stretchr/testify/assert"
@@ -48,19 +47,16 @@ func TestRevokeSession(t *testing.T) {
 	newStore := func(row *configtables.TableOAuth2RefreshToken) *mockOAuth2Store {
 		return &mockOAuth2Store{sessionByID: map[string]*configtables.TableOAuth2RefreshToken{row.ID: row}}
 	}
-	revokeCtx := func(id, callerUserID string) *fasthttp.RequestCtx {
+	revokeCtx := func(id string) *fasthttp.RequestCtx {
 		ctx := &fasthttp.RequestCtx{}
 		ctx.SetUserValue("id", id)
-		if callerUserID != "" {
-			ctx.SetUserValue(schemas.BifrostContextKeyUserID, callerUserID)
-		}
 		return ctx
 	}
 
 	t.Run("vk-mode grant revokes without an identity gate", func(t *testing.T) {
 		store := newStore(&configtables.TableOAuth2RefreshToken{ID: "s1", BfMode: "vk", BfSub: "vk-1"})
 		h := newSessionsHandler(store)
-		ctx := revokeCtx("s1", "")
+		ctx := revokeCtx("s1")
 		h.revokeSession(ctx)
 		assert.Equal(t, fasthttp.StatusNoContent, ctx.Response.StatusCode())
 		assert.Contains(t, store.revokedIDs, "s1")
@@ -69,7 +65,7 @@ func TestRevokeSession(t *testing.T) {
 	t.Run("user-mode grant revokes when the caller matches bf_sub", func(t *testing.T) {
 		store := newStore(&configtables.TableOAuth2RefreshToken{ID: "s1", BfMode: "user", BfSub: "user-1"})
 		h := newSessionsHandler(store)
-		ctx := revokeCtx("s1", "user-1")
+		ctx := revokeCtx("s1")
 		h.revokeSession(ctx)
 		assert.Equal(t, fasthttp.StatusNoContent, ctx.Response.StatusCode())
 	})
@@ -82,7 +78,7 @@ func TestRevokeSession(t *testing.T) {
 		// load the row may revoke it, across all modes. Here a non-owner succeeds.
 		store := newStore(&configtables.TableOAuth2RefreshToken{ID: "s1", BfMode: "user", BfSub: "user-1"})
 		h := newSessionsHandler(store)
-		ctx := revokeCtx("s1", "intruder")
+		ctx := revokeCtx("s1")
 		h.revokeSession(ctx)
 		assert.Equal(t, fasthttp.StatusNoContent, ctx.Response.StatusCode())
 		assert.Contains(t, store.revokedIDs, "s1")
@@ -94,7 +90,7 @@ func TestRevokeSession(t *testing.T) {
 		// visibility is actually enforced.
 		store := &mockOAuth2Store{sessionByID: map[string]*configtables.TableOAuth2RefreshToken{}}
 		h := newSessionsHandler(store)
-		ctx := revokeCtx("missing", "")
+		ctx := revokeCtx("missing")
 		h.revokeSession(ctx)
 		assert.Equal(t, fasthttp.StatusNotFound, ctx.Response.StatusCode())
 		assert.Empty(t, store.revokedIDs)
@@ -102,7 +98,7 @@ func TestRevokeSession(t *testing.T) {
 
 	t.Run("empty id returns 400", func(t *testing.T) {
 		h := newSessionsHandler(&mockOAuth2Store{})
-		ctx := revokeCtx("", "")
+		ctx := revokeCtx("")
 		h.revokeSession(ctx)
 		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})

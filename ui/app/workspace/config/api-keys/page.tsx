@@ -1,4 +1,4 @@
-import APIKeysView from "@enterprise/components/api-keys/apiKeysIndexView";
+import APIKeysView from "./views/apiKeysView";
 
 export default function APIKeysPage() {
 	return (

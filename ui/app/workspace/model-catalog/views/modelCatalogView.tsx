@@ -1,6 +1,6 @@
 import { NoPermissionView } from "@/components/noPermissionView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import AttributesTab from "./attributesTab";
 import OverviewTab from "./overviewTab";
 

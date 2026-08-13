@@ -7,7 +7,7 @@ import { parseAsSafeString } from "@/lib/queryParamsParser";
 import { getErrorMessage, useGetMCPClientsQuery, useGetMCPLibraryQuery } from "@/lib/store";
 import type { MCPLibraryEntry } from "@/lib/types/mcp";
 import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ChevronLeft, ChevronRight, LayoutGrid, Library, List, Plus, Search, Settings } from "lucide-react";
 import { parseAsArrayOf, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useCallback, useEffect, useMemo, useState } from "react";

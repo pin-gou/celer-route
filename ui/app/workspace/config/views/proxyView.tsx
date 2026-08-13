@@ -7,12 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { IS_ENTERPRISE } from "@/lib/constants/config";
 import { getErrorMessage, useGetCoreConfigQuery, useUpdateProxyConfigMutation } from "@/lib/store";
 import { DefaultGlobalProxyConfig, GlobalProxyConfig } from "@/lib/types/config";
 import { globalProxyConfigSchema } from "@/lib/types/schemas";
 import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, Info } from "lucide-react";
 import { useEffect } from "react";
@@ -295,7 +294,7 @@ export default function ProxyView() {
 							</div>
 
 							{/* SCIM - Enterprise only */}
-							{IS_ENTERPRISE && (
+							{false && (
 								<div className="flex items-center justify-between rounded-sm border p-4">
 									<div className="space-y-0.5">
 										<div className="flex items-center gap-2">
@@ -342,7 +341,7 @@ export default function ProxyView() {
 								<Switch disabled checked={false} />
 							</div>
 
-							{!IS_ENTERPRISE && (
+							{!false && (
 								<Alert>
 									<Info className="h-4 w-4" />
 									<AlertDescription>SCIM proxy support is available in Bifrost Enterprise.</AlertDescription>

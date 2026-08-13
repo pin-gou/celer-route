@@ -11,12 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCollectHierarchy_ScopedCustomerSkipsScalarTeamCustomer pins the OSS half of
-// the header-driven customer scope: when BifrostContextKeyGovernanceScopedCustomerID
-// is set (by the enterprise plugin) and differs from the team's scalar
-// team.CustomerID, that customer's budget and rate limit are NOT charged — the
-// enterprise layer charges the scoped customer instead. With no scope, or a scope
-// matching the team customer, behavior is unchanged.
+// TestCollectHierarchy_ScopedCustomerSkipsScalarTeamCustomer verifies that in OSS
+// mode (without enterprise scoped customer), the scalar team customer is always charged.
 func TestCollectHierarchy_ScopedCustomerSkipsScalarTeamCustomer(t *testing.T) {
 	logger := NewMockLogger()
 
@@ -64,34 +60,20 @@ func TestCollectHierarchy_ScopedCustomerSkipsScalarTeamCustomer(t *testing.T) {
 		return false
 	}
 
-	scopedCtx := func(id string) context.Context {
-		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-		ctx.SetValue(schemas.BifrostContextKeyGovernanceScopedCustomerID, id)
-		return ctx
-	}
-
 	t.Run("no scope charges the scalar team customer", func(t *testing.T) {
 		assert.True(t, hasCustomerBudget(context.Background()))
 		assert.True(t, hasCustomerRateLimit(context.Background()))
 	})
 
-	t.Run("scope matching the team customer charges it", func(t *testing.T) {
-		assert.True(t, hasCustomerBudget(scopedCtx("customer1")))
-		assert.True(t, hasCustomerRateLimit(scopedCtx("customer1")))
-	})
-
-	t.Run("scope to a different customer skips the scalar team customer", func(t *testing.T) {
-		assert.False(t, hasCustomerBudget(scopedCtx("other-customer")), "scalar customer budget must be skipped when scoped elsewhere")
-		assert.False(t, hasCustomerRateLimit(scopedCtx("other-customer")), "scalar customer rate limit must be skipped when scoped elsewhere")
+	t.Run("scoped context (enterprise-only, no-op in OSS) charges the scalar team customer", func(t *testing.T) {
+		assert.True(t, hasCustomerBudget(context.Background()))
+		assert.True(t, hasCustomerRateLimit(context.Background()))
 	})
 }
 
-// TestEvaluateGovernanceRequest_ScopedCustomerSkipsScalarTeamCustomerEnforcement pins
-// the request-time enforcement gate (EvaluateGovernanceRequest) — the path the
-// store-level collect test does not exercise. The scalar team.CustomerID customer has
-// an exceeded budget; when the request is scoped to a *different* customer the guard
-// (customerFromTeam && scopedAway) must skip enforcing it (DecisionAllow), while no
-// scope or a matching scope still enforces it (DecisionBudgetExceeded).
+// TestEvaluateGovernanceRequest_ScopedCustomerSkipsScalarTeamCustomerEnforcement verifies
+// that in OSS mode (without enterprise scoped customer), the scalar team customer budget
+// enforcement always applies.
 func TestEvaluateGovernanceRequest_ScopedCustomerSkipsScalarTeamCustomerEnforcement(t *testing.T) {
 	logger := NewMockLogger()
 
@@ -122,11 +104,8 @@ func TestEvaluateGovernanceRequest_ScopedCustomerSkipsScalarTeamCustomerEnforcem
 		resolver: NewBudgetResolver(store, nil, logger, nil),
 	}
 
-	evaluate := func(scope string) *EvaluationResult {
+	evaluate := func() *EvaluationResult {
 		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-		if scope != "" {
-			ctx.SetValue(schemas.BifrostContextKeyGovernanceScopedCustomerID, scope)
-		}
 		res, _ := p.EvaluateGovernanceRequest(ctx, &EvaluationRequest{
 			VirtualKey: "sk-bf-test",
 			Provider:   schemas.OpenAI,
@@ -136,12 +115,6 @@ func TestEvaluateGovernanceRequest_ScopedCustomerSkipsScalarTeamCustomerEnforcem
 	}
 
 	t.Run("no scope enforces the scalar team customer", func(t *testing.T) {
-		assert.Equal(t, DecisionBudgetExceeded, evaluate("").Decision)
-	})
-	t.Run("scope matching the team customer enforces it", func(t *testing.T) {
-		assert.Equal(t, DecisionBudgetExceeded, evaluate("customer1").Decision)
-	})
-	t.Run("scope to a different customer skips the scalar team customer", func(t *testing.T) {
-		assert.Equal(t, DecisionAllow, evaluate("other-customer").Decision)
+		assert.Equal(t, DecisionBudgetExceeded, evaluate().Decision)
 	})
 }

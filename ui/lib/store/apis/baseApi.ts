@@ -1,8 +1,5 @@
-import { IS_ENTERPRISE } from "@/lib/constants/config";
 import { BifrostErrorResponse } from "@/lib/types/config";
 import { getApiBaseUrl } from "@/lib/utils/port";
-import { createBaseQueryWithRefresh } from "@enterprise/lib/store/utils/baseQueryWithRefresh";
-import { clearOAuthStorage } from "@enterprise/lib/store/utils/tokenManager";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { getActiveTempToken, getSuppressGlobal401 } from "./tempToken";
 
@@ -28,11 +25,6 @@ export const clearAuthStorage = () => {
 	try {
 		// Clear traditional auth token
 		localStorage.removeItem("bifrost-auth-token");
-
-		// Clear enterprise OAuth tokens using tokenManager
-		if (IS_ENTERPRISE) {
-			clearOAuthStorage();
-		}
 	} catch (error) {
 		console.error("Error clearing auth storage:", error);
 	}
@@ -66,8 +58,8 @@ const baseQuery = fetchBaseQuery({
 	},
 });
 
-// Wrap base query with enterprise refresh logic (or passthrough for non-enterprise)
-const baseQueryWithRefresh = createBaseQueryWithRefresh(baseQuery);
+// Passthrough — enterprise refresh logic is not available in OSS
+const baseQueryWithRefresh = baseQuery;
 
 // Enhanced base query with error handling
 const baseQueryWithErrorHandling: typeof baseQueryWithRefresh = async (args: any, api: any, extraOptions: any) => {
@@ -78,8 +70,8 @@ const baseQueryWithErrorHandling: typeof baseQueryWithRefresh = async (args: any
 	if (result.error) {
 		const error = result.error as any;
 
-		// Handle 401 for non-enterprise (no refresh available)
-		if (error?.status === 401 && !IS_ENTERPRISE) {
+		// Handle 401 (no enterprise refresh available in OSS)
+		if (error?.status === 401) {
 			// When a TempTokenScope wrapper is active, the wrapped page handles
 			// its own 401 display (an "invalid/expired link" view). Skip the
 			// global redirect so the user stays on the page they opened.

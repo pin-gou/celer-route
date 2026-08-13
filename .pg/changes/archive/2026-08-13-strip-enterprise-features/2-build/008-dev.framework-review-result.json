@@ -1,0 +1,17 @@
+{
+  "summary": "[dev.framework:review] completed — review_score: 100, p0_failures: []。framework track 6/6 enabled check 全 PASS：design_alignment、scope_creep（跨边界改动为依赖传播必然）、pattern_consistency、file_location、test_contract、error_wrapping。dev commit 55905ab 删除 FeatureFlags.EnterpriseOnly、ErrFlagEnterpriseOnly、SyncDelegate 接口与 vault callbacks，符合 design.md 第 124-130 行设计契约。gate_score: 100, p0_failures: []",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/008-dev.framework-review.md"
+  ],
+  "tasks_updated": [
+    "8.1",
+    "8.2",
+    "8.3",
+    "8.4"
+  ],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/008-dev.framework-review.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/008-dev.framework-review.md"
+}

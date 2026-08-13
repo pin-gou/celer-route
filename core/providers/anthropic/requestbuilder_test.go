@@ -3,7 +3,6 @@ package anthropic
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"testing"
 	"time"
@@ -616,10 +615,9 @@ func TestBuildAnthropicResponsesRequestBody_ReasoningMaxTokensTooLow(t *testing.
 }
 
 func TestBuildAnthropicResponsesRequestBody_LargePayloadPassthrough(t *testing.T) {
-	t.Run("returns_nil_when_large_payload_enabled", func(t *testing.T) {
+	t.Run("builds_body_normally_without_large_payload_reader", func(t *testing.T) {
 		ctx := schemas.NewBifrostContext(nil, time.Time{})
 		ctx.SetValue(schemas.BifrostContextKeyLargePayloadMode, true)
-		ctx.SetValue(schemas.BifrostContextKeyLargePayloadReader, io.NopCloser(strings.NewReader(`{"model":"claude-sonnet-4-5"}`)))
 
 		request := &schemas.BifrostResponsesRequest{
 			Provider:       schemas.Anthropic,
@@ -633,8 +631,8 @@ func TestBuildAnthropicResponsesRequestBody_LargePayloadPassthrough(t *testing.T
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if result != nil {
-			t.Error("expected nil result when large payload passthrough enabled")
+		if result == nil {
+			t.Error("expected result to be built — large payload passthrough is removed in OSS")
 		}
 	})
 }

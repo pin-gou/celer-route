@@ -1,0 +1,23 @@
+{
+  "summary": "[final-gate] fail — V-helm-1 FAIL（vaultStore 残留 + 从未 helm template 验证）触发 P0; G-1 vaultStore 未删（values.schema.json:2402-2460 + _helpers.tpl:661-698 注入段）; G-2/G-3 已修复（Makefile cleanup-enterprise 删除、mcp-tool-groups 目录删除）; 实现完整性硬标记 0 命中, runtime_boot 4 步齐全, 其余 12/14 V-* PASS, gate_score: 84.1, p0_failures: [G-1]",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/067-final-gate-gate-report.md"
+  ],
+  "tasks_updated": [],
+  "status": "fail",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/005-dev.core-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/010-dev.framework-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/019-dev.transports-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/024-dev.plugins-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/033-dev.ui-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/038-int.core-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/043-int.framework-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/048-int.transports-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/053-int.plugins-gate.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/058-int.ui-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/065-int.scenario-scenario-execute.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/066-final-gate-gate-report.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/067-final-gate-gate-report.md"
+}

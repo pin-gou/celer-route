@@ -408,7 +408,8 @@ func TestInjectJWTContext(t *testing.T) {
 			RegisteredClaims: jwt.RegisteredClaims{Subject: "user-1"}, BfMode: "user",
 		}, nil)
 		require.NoError(t, err)
-		assert.Equal(t, "user-1", bc.Value(schemas.BifrostContextKeyUserID))
+		// User identity is enterprise-only; no key is set in OSS.
+		assert.Nil(t, bc.Value(schemas.BifrostContextKeyVirtualKey))
 	})
 
 	t.Run("vk mode sets the raw vk value and lets governance derive the id", func(t *testing.T) {

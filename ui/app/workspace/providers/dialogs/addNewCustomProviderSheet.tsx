@@ -9,7 +9,7 @@ import { getErrorMessage, useCreateProviderMutation } from "@/lib/store";
 import { BaseProvider, ModelProviderName } from "@/lib/types/config";
 import { allowedRequestsSchema } from "@/lib/types/schemas";
 import { cleanPathOverrides } from "@/lib/utils/validation";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";

@@ -448,7 +448,7 @@ func (l namedPluginsLoader) GetLoadedPluginNames() []string { return l.names }
 // TestGetLoadedPlugins verifies that getLoadedPlugins returns the loader's plugin
 // names under the "plugins" JSON key, locking the response shape the UI depends on.
 func TestGetLoadedPlugins(t *testing.T) {
-	want := []string{"logging", "telemetry", "enterprise-governance"}
+	want := []string{"logging", "telemetry"}
 	h := &PluginsHandler{
 		pluginsLoader: namedPluginsLoader{names: want},
 		configStore:   nil,

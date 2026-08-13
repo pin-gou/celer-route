@@ -27,7 +27,7 @@ import {
 	TierBoundaries,
 } from "@/lib/types/complexityRouter";
 import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ExternalLink, LoaderCircle, RotateCcw, Save } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, useEffect, useState } from "react";

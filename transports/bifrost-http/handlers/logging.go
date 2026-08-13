@@ -164,12 +164,11 @@ func shouldUseFilterDataCache(ctx context.Context, query string) bool {
 // Requests with no user identity (OSS deployments, local-admin sessions) share
 // a single "anon" partition, which is exactly the pre-DAC behaviour.
 func filterDataCacheIdentity(ctx *fasthttp.RequestCtx) string {
-	userID, _ := ctx.UserValue(schemas.BifrostContextKeyUserID).(string)
-	if userID == "" {
-		return "anon"
-	}
 	roleID, _ := ctx.UserValue(schemas.BifrostContextKeyUserRoleID).(uint)
-	return fmt.Sprintf("%s/%d", userID, roleID)
+	if roleID > 0 {
+		return fmt.Sprintf("anon/%d", roleID)
+	}
+	return "anon"
 }
 
 // Filter dimension names accepted by the ?dimensions= query param on
@@ -2093,7 +2092,7 @@ func (h *LoggingHandler) recalculateLogCosts(ctx *fasthttp.RequestCtx) {
 	}
 
 	jobID := uuid.NewString()
-	createdBy, _ := ctx.UserValue(schemas.BifrostContextKeyUserID).(string)
+	createdBy := ""
 	if err := h.sidekiqRunner.Enqueue(ctx, jobID, logging.CostRecalcJobKind, metaJSON, createdBy); err != nil {
 		logger.Error("failed to enqueue recalculate-cost job: %v", err)
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to start recalculation: %v", err))

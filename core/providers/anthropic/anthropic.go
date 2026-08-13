@@ -266,14 +266,7 @@ func completeRequest(
 	}
 
 	requestClient := client
-	responseThreshold, _ := ctx.Value(schemas.BifrostContextKeyLargeResponseThreshold).(int64)
 	isCountTokens := requestType == schemas.CountTokensRequest
-	// Count-tokens responses are always tiny — skip the large-response streaming client so the
-	// response is buffered normally.
-	if responseThreshold > 0 && !isCountTokens {
-		resp.StreamBody = true
-		requestClient = providerUtils.BuildLargeResponseClient(client, responseThreshold)
-	}
 
 	// Send the request
 	latency, bifrostErr, wait := providerUtils.MakeRequestWithContext(ctx, requestClient, req, resp)

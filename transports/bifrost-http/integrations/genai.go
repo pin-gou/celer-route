@@ -1378,15 +1378,6 @@ var embeddingPaths = []string{
 }
 
 func getLargeRequestTypeDetectionThreshold(ctx *fasthttp.RequestCtx) int64 {
-	// Reuse enterprise-configured threshold when available so request-type detection
-	// and large-payload activation make the same decision.
-	// Example failure prevented: transport thinks "small" (parses body) while enterprise
-	// hook already treated it as "large" (stream), causing unnecessary body reads.
-	if sharedCtx, ok := ctx.UserValue(lib.FastHTTPUserValueBifrostContext).(*schemas.BifrostContext); ok && sharedCtx != nil {
-		if threshold, ok := sharedCtx.Value(schemas.BifrostContextKeyLargePayloadRequestThreshold).(int64); ok && threshold > 0 {
-			return threshold
-		}
-	}
 	return schemas.DefaultLargePayloadRequestThresholdBytes
 }
 

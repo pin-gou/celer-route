@@ -9,7 +9,7 @@ import { ModelProvider } from "@/lib/types/config";
 import { proxyOnlyFormSchema, type SecretVar, type ProxyOnlyFormSchema } from "@/lib/types/schemas";
 import { cn } from "@/lib/utils";
 import { toSecretVarFormValue, toOptionalSecretVarPayload } from "@/lib/utils/secretVarForm";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Info } from "lucide-react";
 import { useEffect } from "react";

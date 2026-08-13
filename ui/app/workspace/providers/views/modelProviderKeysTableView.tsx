@@ -24,7 +24,7 @@ import {
 } from "@/lib/store/apis/providersApi";
 import { ModelProvider } from "@/lib/types/config";
 import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { AlertCircle, CheckCircle2, EllipsisIcon, PencilIcon, PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { toast } from "sonner";

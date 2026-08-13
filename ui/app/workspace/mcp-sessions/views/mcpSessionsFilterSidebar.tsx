@@ -18,7 +18,6 @@ import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "rea
 // an enterprise build) before this module's first render. OSS has no user
 // directory, so nothing registers and getUserSearchQuery() stays undefined —
 // the Users filter section renders nothing. See ui/lib/registries/userPicker.tsx.
-import "@enterprise/lib/registrations/userPicker";
 
 const COLLAPSE_STORAGE_KEY = "mcp-sessions-filter-sidebar-collapsed";
 const MCP_CLIENT_PAGE_SIZE = 25;

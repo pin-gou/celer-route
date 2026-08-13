@@ -28,7 +28,7 @@ func TestGovernanceRouteOverridesReplaceTeamFamily(t *testing.T) {
 	h.RegisterRoutesWithOverrides(r, GovernanceRouteOverrides{
 		Teams: &GovernanceTeamRouteOverrides{
 			List: func(ctx *fasthttp.RequestCtx) {
-				ctx.SetBodyString("enterprise")
+				ctx.SetBodyString("override")
 			},
 			Extensions: func(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 				overrideCalls++
@@ -56,8 +56,8 @@ func TestGovernanceRouteOverridesReplaceTeamFamily(t *testing.T) {
 		t.Fatal("canonical Team collection handler was not registered")
 	}
 	handler(ctx)
-	if got := string(ctx.Response.Body()); got != "enterprise" {
-		t.Fatalf("canonical Team handler response = %q, want enterprise override", got)
+	if got := string(ctx.Response.Body()); got != "override" {
+		t.Fatalf("canonical Team handler response = %q, want override", got)
 	}
 }
 

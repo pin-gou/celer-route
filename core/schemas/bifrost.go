@@ -253,15 +253,6 @@ const (
 	BifrostContextKeyGovernanceTeamName                  BifrostContextKey = "bifrost-governance-team-name"           // string (to store the team name (set by bifrost governance plugin - DO NOT SET THIS MANUALLY))
 	BifrostContextKeyGovernanceCustomerID                BifrostContextKey = "bifrost-governance-customer-id"         // string (to store the customer ID (set by bifrost governance plugin - DO NOT SET THIS MANUALLY))
 	BifrostContextKeyGovernanceCustomerName              BifrostContextKey = "bifrost-governance-customer-name"       // string (to store the customer name (set by bifrost governance plugin - DO NOT SET THIS MANUALLY))
-	BifrostContextKeyGovernanceBusinessUnitID            BifrostContextKey = "bifrost-governance-business-unit-id"    // string (to store the business unit ID (set by enterprise governance plugin - DO NOT SET THIS MANUALLY))
-	BifrostContextKeyGovernanceBusinessUnitName          BifrostContextKey = "bifrost-governance-business-unit-name"  // string (to store the business unit name (set by enterprise governance plugin - DO NOT SET THIS MANUALLY))
-	BifrostContextKeyGovernanceTeamIDs                   BifrostContextKey = "bifrost-governance-team-ids"            // []string (all teams a user/AP request belongs to; set by enterprise governance plugin - DO NOT SET THIS MANUALLY)
-	BifrostContextKeyGovernanceTeamNames                 BifrostContextKey = "bifrost-governance-team-names"          // []string (display names, aligned with team-ids; set by enterprise governance plugin - DO NOT SET THIS MANUALLY)
-	BifrostContextKeyGovernanceBusinessUnitIDs           BifrostContextKey = "bifrost-governance-business-unit-ids"   // []string (distinct BUs across the user's teams; set by enterprise governance plugin - DO NOT SET THIS MANUALLY)
-	BifrostContextKeyGovernanceBusinessUnitNames         BifrostContextKey = "bifrost-governance-business-unit-names" // []string (display names, aligned with business-unit-ids; set by enterprise governance plugin - DO NOT SET THIS MANUALLY)
-	BifrostContextKeyGovernanceCustomerIDs               BifrostContextKey = "bifrost-governance-customer-ids"        // []string (distinct customers a user/team request belongs to; set by enterprise governance plugin - DO NOT SET THIS MANUALLY)
-	BifrostContextKeyGovernanceCustomerNames             BifrostContextKey = "bifrost-governance-customer-names"      // []string (display names, aligned with customer-ids; set by enterprise governance plugin - DO NOT SET THIS MANUALLY)
-	BifrostContextKeyGovernanceScopedCustomerID          BifrostContextKey = "bifrost-governance-scoped-customer-id"  // string (resolved customer the request is scoped to via the x-bf-customer-id / x-bf-customer-name header on a team-VK path; set by the enterprise governance plugin - DO NOT SET THIS MANUALLY)
 	BifrostContextKeyGovernanceRoutingRuleID             BifrostContextKey = "bifrost-governance-routing-rule-id"     // string (to store the routing rule ID (set by bifrost governance plugin - DO NOT SET THIS MANUALLY))
 	BifrostContextKeyGovernanceRoutingRuleName           BifrostContextKey = "bifrost-governance-routing-rule-name"   // string (to store the routing rule name (set by bifrost governance plugin - DO NOT SET THIS MANUALLY))
 	BifrostContextKeyRoutingPinnedAPIKeyID               BifrostContextKey = "bifrost-routing-pinned-api-key-id"      // string (provider key ID pinned by a matched routing rule target; resolved against the configured key pool during key selection and takes precedence over a caller-supplied pin (set by bifrost governance plugin - DO NOT SET THIS MANUALLY))
@@ -309,7 +300,6 @@ const (
 	BifrostContextKeyHasEmittedMessageDelta              BifrostContextKey = "bifrost-has-emitted-message-delta"                // bool (tracks whether message_delta was already emitted during streaming - avoids duplicates)
 	BifrostContextKeySkipDBUpdate                        BifrostContextKey = "bifrost-skip-db-update"                           // bool (set by bifrost - DO NOT SET THIS MANUALLY)
 	BifrostContextKeyGovernancePluginName                BifrostContextKey = "governance-plugin-name"                           // string (name of the governance plugin that processed the request - set by bifrost)
-	BifrostContextKeyClusterNodeID                       BifrostContextKey = "bifrost-cluster-node-id"                          // string (cluster node ID for log attribution - set by enterprise server)
 	BifrostContextKeyGovernanceBudgetIDs                 BifrostContextKey = "bifrost-governance-budget-ids"                    // []string (budget IDs applicable to this request - set by governance plugin)
 	BifrostContextKeyGovernanceRateLimitIDs              BifrostContextKey = "bifrost-governance-rate-limit-ids"                // []string (rate limit IDs applicable to this request - set by governance plugin)
 	BifrostContextKeyPromptsPluginName                   BifrostContextKey = "prompts-plugin-name"                              // string (name of the prompts plugin to use - set by bifrost - DO NOT SET THIS MANUALLY))
@@ -345,15 +335,10 @@ const (
 	BifrostContextKeyRoutingAllowedProviders             BifrostContextKey = "bifrost-routing-allowed-providers"                // []ModelProvider; when set, downstream routing layers (enterprise LB, model-catalog-resolver) must intersect their candidate providers with this set. Plugins set this when they have an opinion about which providers are valid for the request — even if they couldn't pick one themselves. Empty slice means "no provider is permitted" (fail-closed).
 	BifrostContextKeyAllowPerRequestStorageOverride      BifrostContextKey = "bifrost-allow-per-request-storage-override"       // bool (set by transport from config — gates whether x-bf-disable-content-logging and x-bf-store-raw-request-response per-request overrides are honored)
 	BifrostContextKeyAllowPerRequestRawOverride          BifrostContextKey = "bifrost-allow-per-request-raw-override"           // bool (set by transport from config — gates whether x-bf-send-back-raw-request and x-bf-send-back-raw-response per-request overrides are honored)
-	BifrostContextKeyGuardrailDebug                      BifrostContextKey = "bifrost-guardrail-debug"                          // *BifrostGuardrailDebug (set by enterprise guardrails plugin - DO NOT SET THIS MANUALLY)
 	BifrostContextKeyCacheDebug                          BifrostContextKey = "bifrost-cache-debug"                              // *BifrostCacheDebug (set by semantic cache plugin - DO NOT SET THIS MANUALLY)
-	BifrostContextKeyRedactionData                       BifrostContextKey = "bifrost-redaction-data"                           // RedactionData (set by enterprise guardrails plugin - DO NOT SET THIS MANUALLY)
 	BifrostContextKeyDisableContentLogging               BifrostContextKey = "x-bf-disable-content-logging"                     // bool (per-request override for content logging; only honored when BifrostContextKeyAllowPerRequestStorageOverride is true. When retain_content_in_object_storage is on, disabled content is still offloaded to object storage as hidden instead of dropped)
 	BifrostContextKeySkipListModelsGovernanceFiltering   BifrostContextKey = "bifrost-skip-list-models-governance-filtering"    // bool (set by bifrost - DO NOT SET THIS MANUALLY))
 	BifrostContextKeySCIMClaims                          BifrostContextKey = "scim_claims"
-	BifrostContextKeyUserID                              BifrostContextKey = "bifrost-user-id"                    // string (to store the user ID (set by enterprise auth middleware - DO NOT SET THIS MANUALLY))
-	BifrostContextKeyUserName                            BifrostContextKey = "bifrost-user-name"                  // string (to store the user name (set by enterprise auth middleware - DO NOT SET THIS MANUALLY))
-	BifrostContextKeyUserEmail                           BifrostContextKey = "bifrost-user-email"                 // string (to store the user email (set by enterprise auth middleware - DO NOT SET THIS MANUALLY))
 	BifrostContextKeyMCPInboundBearer                    BifrostContextKey = "bifrost-mcp-inbound-bearer"         // string (the caller's validated identity-provider token, used as the subject of delegated token exchange; set by the upstream auth layer - DO NOT SET THIS MANUALLY. SECURITY: live credential - never log its value)
 	BifrostContextKeyQueryScope                          BifrostContextKey = "bifrost-query-scope"                // configstore.QueryScope (func that mutates a query; set by upstream wrapper - DO NOT SET THIS MANUALLY)
 	BifrostContextKeyVisibilityFilterProvider            BifrostContextKey = "bifrost-visibility-filter-provider" // DEPRECATED: replaced by BifrostContextKeyQueryScope. Will be removed once all callers migrate.
@@ -366,24 +351,13 @@ const (
 	BifrostContextKeyDroppedUnsupportedTools             BifrostContextKey = "bifrost-dropped-unsupported-tools"          // []string (set by provider request builders — tool type strings silently dropped because the target provider/model doesn't support them)
 	BifrostContextKeyMCPAddedTools                       BifrostContextKey = "bifrost-mcp-added-tools"                    // []string (set by bifrost - DO NOT SET THIS MANUALLY)) - list of tools added to the request by MCP, all the tool are in the format "clientName-toolName"
 	BifrostContextKeyLargePayloadMode                    BifrostContextKey = "bifrost-large-payload-mode"                 // bool (set by bifrost - DO NOT SET THIS MANUALLY)) indicates large payload streaming mode is active
-	BifrostContextKeyLargePayloadReader                  BifrostContextKey = "bifrost-large-payload-reader"               // io.Reader (set by bifrost - DO NOT SET THIS MANUALLY)) upstream reader for large payloads
-	BifrostContextKeyLargePayloadContentLength           BifrostContextKey = "bifrost-large-payload-content-length"       // int (set by bifrost - DO NOT SET THIS MANUALLY)) content length for large payloads
-	BifrostContextKeyLargePayloadContentType             BifrostContextKey = "bifrost-large-payload-content-type"         // string (set by enterprise - DO NOT SET THIS MANUALLY)) original content type for large payload passthrough
-	BifrostContextKeyLargePayloadMetadata                BifrostContextKey = "bifrost-large-payload-metadata"             // *LargePayloadMetadata (set by bifrost - DO NOT SET THIS MANUALLY)) routing metadata for large payloads
-	BifrostContextKeyLargePayloadRequestThreshold        BifrostContextKey = "bifrost-large-payload-request-threshold"    // int64 (set by enterprise - DO NOT SET THIS MANUALLY)) request threshold used by transport heuristics
 	BifrostContextKeyLargeResponseMode                   BifrostContextKey = "bifrost-large-response-mode"                // bool (set by bifrost - DO NOT SET THIS MANUALLY)) indicates large response streaming mode is active
 	BifrostContextKeyLargePayloadRequestPreview          BifrostContextKey = "bifrost-large-payload-request-preview"      // string (set by bifrost - DO NOT SET THIS MANUALLY)) truncated request body preview for logging
 	BifrostContextKeyLargePayloadResponsePreview         BifrostContextKey = "bifrost-large-payload-response-preview"     // string (set by bifrost - DO NOT SET THIS MANUALLY)) truncated response body preview for logging
-	BifrostContextKeyLargeResponseReader                 BifrostContextKey = "bifrost-large-response-reader"              // io.ReadCloser (set by bifrost - DO NOT SET THIS MANUALLY)) upstream reader for large responses
 	BifrostContextKeyLargeResponseContentLength          BifrostContextKey = "bifrost-large-response-content-length"      // int (set by bifrost - DO NOT SET THIS MANUALLY)) content length for large responses
 	BifrostContextKeyLargeResponseContentType            BifrostContextKey = "bifrost-large-response-content-type"        // string (set by bifrost - DO NOT SET THIS MANUALLY)) upstream content type for large responses
 	BifrostContextKeyLargeResponseContentDisposition     BifrostContextKey = "bifrost-large-response-content-disposition" // string (set by bifrost - DO NOT SET THIS MANUALLY)) downstream content disposition for large responses
-	BifrostContextKeyLargeResponseThreshold              BifrostContextKey = "bifrost-large-response-threshold"           // int64 (set by enterprise - DO NOT SET THIS MANUALLY)) threshold for response streaming
-	BifrostContextKeyLargePayloadPrefetchSize            BifrostContextKey = "bifrost-large-payload-prefetch-size"        // int (set by enterprise - DO NOT SET THIS MANUALLY)) prefetch buffer size for metadata extraction from large responses
-	BifrostContextKeyDeferredUsage                       BifrostContextKey = "bifrost-deferred-usage"                     // chan *BifrostLLMUsage (set by provider Phase B — delivers usage after response streaming completes)
 	BifrostContextKeyStreamAccumulatedUsage              BifrostContextKey = "bifrost-stream-accumulated-usage"           // *BifrostLLMUsage handle, set ONCE by a streaming provider and mutated in place as usage arrives; read on cancel/timeout to bill partial usage that the provider already consumed
-	BifrostContextKeyDeferredLargePayloadMetadata        BifrostContextKey = "bifrost-deferred-large-payload-metadata"    // <-chan *LargePayloadMetadata (set by enterprise Phase B request — delivers metadata after body streaming)
-	BifrostContextKeySSEReaderFactory                    BifrostContextKey = "bifrost-sse-reader-factory"                 // *providerUtils.SSEReaderFactory (set by enterprise — replaces default bufio.Scanner SSE readers with streaming readers)
 	BifrostContextKeySessionID                           BifrostContextKey = "bifrost-session-id"                         // string session ID for the request (session stickiness)
 	BifrostContextKeySessionTTL                          BifrostContextKey = "bifrost-session-ttl"                        // time.Duration session TTL for the request (session stickiness)
 	BifrostContextKeyMCPExtraHeaders                     BifrostContextKey = "bifrost-mcp-extra-headers"                  // map[string][]string (these headers are forwarded only to the MCP while tool execution if they are in the allowlist of the MCP client)
@@ -410,7 +384,7 @@ const (
 
 const (
 	// DefaultLargePayloadRequestThresholdBytes is the default request-size heuristic
-	// used by transport guards when no enterprise threshold is present on context.
+	// used by transport guards.
 	DefaultLargePayloadRequestThresholdBytes = 10 * 1024 * 1024 // 10MB
 )
 

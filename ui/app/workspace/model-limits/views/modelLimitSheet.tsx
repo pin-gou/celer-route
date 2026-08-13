@@ -16,7 +16,6 @@ import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
 import { getModelLimitScope, getModelLimitScopes } from "@/lib/registries/modelLimitScopes";
 // Side-effect import: pulls in downstream scope registrations (e.g. enterprise
 // registers "user" + user picker). The OSS-build fallback is an empty module.
-import "@enterprise/lib/registrations/modelLimitScopes";
 import {
 	getErrorMessage,
 	useCreateModelConfigMutation,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/store";
 import { KnownProvider } from "@/lib/types/config";
 import { ModelConfig } from "@/lib/types/governance";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";

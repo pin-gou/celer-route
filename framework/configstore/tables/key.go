@@ -449,18 +449,6 @@ func (k *TableKey) BeforeSave(tx *gorm.DB) error {
 		k.SGLUrl = nil
 	}
 
-	// Store plaintext SecretVar columns into the vault and rewrite them to vault refs.
-	// This must run after the columns are populated (above) and before encryption (below):
-	// encryptSecretVar skips fields that are already vault refs, so vault-owned secrets are
-	// stored as plaintext and never double-protected. The global vault callback skips this
-	// model (see VaultStoreSelfManaged) because that midpoint is only reachable here.
-	if schemas.VaultStoreWriteEnabled() {
-		base := schemas.VaultBasePath(tx.Statement.Table, k.VaultPathKey())
-		if err := schemas.StoreOwnedVaultSecretVars(tx.Statement.Context, base, k); err != nil {
-			return fmt.Errorf("failed to store key secrets to vault: %w", err)
-		}
-	}
-
 	// Encrypt sensitive fields after serialization
 	if encrypt.IsEnabled() {
 		if err := encryptSecretVar(&k.Value); err != nil {

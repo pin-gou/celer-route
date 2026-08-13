@@ -34,7 +34,6 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { PricingFieldSelector } from "./pricingFieldSelector";
 // Side-effect import: registers the enterprise user picker (no-op in OSS builds).
-import "@enterprise/lib/registrations/userPicker";
 
 export const REQUEST_TYPE_GROUPS = [
 	{

@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, useChildMatches, useLocation } from "@tanstack
 import FullPageLoader from "@/components/fullPageLoader";
 import { NoPermissionView } from "@/components/noPermissionView";
 import { useGetCoreConfigQuery } from "@/lib/store";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import ConfigPage from "./page";
 
 function RouteComponent() {

@@ -8,7 +8,7 @@ import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
 import { BaseProvider, ModelProvider } from "@/lib/types/config";
 import { formCustomProviderConfigSchema } from "@/lib/types/schemas";
 import { cleanPathOverrides } from "@/lib/utils/validation";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";

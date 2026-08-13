@@ -1,0 +1,14 @@
+{
+  "summary": "int.core:dev - 企业版功能剥离核心模块实现. 已验证: 27.1 20+ enterprise-only BifrostContextKey 已删除 (仅测试文件保留引用); 27.2 vault 全局 hook 变量与 VaultStoreWriteEnabled 已删除; 27.3 SSEReaderFactory 注入逻辑已删除; 27.4 // enterprise-only / // set by enterprise / // OSS no-op 注释已清理 (生产代码零命中); 27.5 go build ./... 与 go vet ./... 通过. 测试: core/schemas PASS, enterprise+vault strip 测试 PASS, SSE strip 测试 PASS. 仅有 TestConfigureDialer_SSRFMultiIPAllFail 环境相关网络测试失败 (非本次变更导致).",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/core/schemas/bifrost.go",
+    "/home/ubuntu/workspace/my-gateway/core/schemas/vault.go",
+    "/home/ubuntu/workspace/my-gateway/core/providers/utils/sse.go"
+  ],
+  "tasks_updated": [
+    "27.1,27.2,27.3,27.4,27.5"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": ""
+}

@@ -34,29 +34,15 @@ func TestRewriteJSONModelValue(t *testing.T) {
 
 func TestApplyLargePayloadRequestBodyWithModelNormalization(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-	payload := `{"model":"openai/gpt-5","messages":[{"role":"user","content":"hello"}]}`
-	ctx.SetValue(schemas.BifrostContextKeyLargePayloadMode, true)
-	ctx.SetValue(
-		schemas.BifrostContextKeyLargePayloadReader,
-		strings.NewReader(payload),
-	)
-	ctx.SetValue(schemas.BifrostContextKeyLargePayloadContentLength, len(payload))
-	ctx.SetValue(schemas.BifrostContextKeyLargePayloadContentType, "application/json")
-	ctx.SetValue(schemas.BifrostContextKeyLargePayloadMetadata, &schemas.LargePayloadMetadata{
-		Model: "openai/gpt-5",
-	})
 
+	// In OSS, large payload mode is never active, so the function returns false
+	// and leaves the request body unchanged.
 	req := &fasthttp.Request{}
-	if !ApplyLargePayloadRequestBodyWithModelNormalization(ctx, req, schemas.OpenAI) {
-		t.Fatal("expected large payload body to be applied")
+	if ApplyLargePayloadRequestBodyWithModelNormalization(ctx, req, schemas.OpenAI) {
+		t.Fatal("expected large payload body not to be applied in OSS")
 	}
-
-	body := string(req.Body())
-	if strings.Contains(body, "openai/gpt-5") {
-		t.Fatalf("expected rewritten model in body, got: %s", body)
-	}
-	if !strings.Contains(body, `"model":"gpt-5"`) {
-		t.Fatalf("expected normalized model in body, got: %s", body)
+	if len(req.Body()) != 0 {
+		t.Fatalf("expected request body to be empty, got: %s", string(req.Body()))
 	}
 }
 

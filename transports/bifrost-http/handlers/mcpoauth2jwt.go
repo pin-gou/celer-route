@@ -135,7 +135,6 @@ func injectJWTContext(bifrostCtx *schemas.BifrostContext, claims *jwtMCPClaims, 
 	}
 	switch schemas.MCPAuthMode(claims.BfMode) {
 	case schemas.MCPAuthModeUser:
-		bifrostCtx.SetValue(schemas.BifrostContextKeyUserID, sub)
 	case schemas.MCPAuthModeVK:
 		if vk == nil {
 			return fmt.Errorf("VK not provided for vk-mode JWT injection")

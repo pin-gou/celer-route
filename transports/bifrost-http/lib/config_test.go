@@ -17887,20 +17887,6 @@ func getSchemaTypeMappings() []schemaTypeMapping {
 	}
 }
 
-// enterpriseSchemaPaths are schema paths that exist only in enterprise version
-var enterpriseSchemaPaths = map[string]bool{
-	"$schema":                    true,
-	"access_profiles":            true,
-	"alerting":                   true,
-	"audit_logs":                 true,
-	"circuit_breaker_config":     true,
-	"cluster_config":             true,
-	"scim_config":                true,
-	"load_balancer_config":       true,
-	"guardrails_config":          true,
-	"large_payload_optimization": true,
-}
-
 // excludedGoFields are Go struct fields that should not be in the schema (internal use only)
 // These include:
 // - Database/ORM fields (created_at, updated_at, config_hash)
@@ -17956,14 +17942,15 @@ var excludedGoFields = map[string]map[string]bool{
 		"virtual_keys": true, // GORM relation
 	},
 	"tables.TableVirtualKey": {
-		"config_hash":        true,
-		"created_at":         true,
-		"updated_at":         true,
-		"created_by_user_id": true, // DB ownership metadata; set by API/session layer
-		"budgets":            true, // GORM relation (budgets have virtual_key_id FK)
-		"rate_limit":         true, // GORM relation
-		"team":               true, // GORM relation
-		"customer":           true, // GORM relation
+		"config_hash":              true,
+		"created_at":               true,
+		"updated_at":               true,
+		"created_by_user_id":       true, // DB ownership metadata; set by API/session layer
+		"budgets":                  true, // GORM relation (budgets have virtual_key_id FK)
+		"rate_limit":               true, // GORM relation
+		"team":                     true, // GORM relation
+		"customer":                 true, // GORM relation
+		"is_access_profile_managed": true, // Enterprise feature; server-computed field, not in OSS schema
 	},
 	"tables.TableVirtualKeyProviderConfig": {
 		"rate_limit":     true, // GORM relation
@@ -18011,13 +17998,13 @@ var excludedGoFields = map[string]map[string]bool{
 
 // excludedSchemaFields are schema fields that don't exist in Go structs (schema-only documentation)
 var excludedSchemaFields = map[string]map[string]bool{
+	"": {
+		"$schema": true, // Schema meta-field; not in ConfigData
+	},
 	"client": {
 		"allowed_headers": true, // Not in ClientConfig
 	},
-	"governance": {
-		"business_units": true, // Enterprise feature; not in OSS GovernanceConfig
-		"roles":          true, // Enterprise RBAC role bootstrap; not in OSS GovernanceConfig
-	},
+	
 	"auth_config": {
 		"disable_auth_on_inference": true, // Deprecated and ignored; kept in schema for backward-compatible config.json validation. Use enforce_auth_on_inference.
 	},
@@ -18025,12 +18012,9 @@ var excludedSchemaFields = map[string]map[string]bool{
 		"disable_auth_on_inference": true, // Deprecated and ignored; kept in schema for backward-compatible config.json validation. Use enforce_auth_on_inference.
 	},
 	"governance.teams": {
-		"budget_id":        true, // Replaced by budgets[] relationship with team_id FK on TableBudget
-		"business_unit_id": true, // Enterprise feature; not in OSS TableTeam
+		"budget_id": true, // Replaced by budgets[] relationship with team_id FK on TableBudget
 	},
-	"governance.virtual_keys": {
-		"access_profile_id": true, // Enterprise access-profile assignment; not on OSS TableVirtualKey
-	},
+	
 	"governance.virtual_keys.provider_configs": {
 		"keys":    true, // Complex nested type, validated separately
 		"key_ids": true, // Config-file format; handled via custom UnmarshalJSON into allow_all_keys/keys
@@ -18038,9 +18022,7 @@ var excludedSchemaFields = map[string]map[string]bool{
 	"governance.virtual_keys.mcp_configs": {
 		"mcp_client_name": true, // Config-file format; captured via custom UnmarshalJSON and resolved to mcp_client_id at startup
 	},
-	"mcp": {
-		"tool_groups": true, // Enterprise governance feature; not in OSS MCPConfig
-	},
+	
 	"mcp.client_configs": {
 		"websocket_config": true, // Schema documents all connection types
 		"http_config":      true, // Schema documents all connection types
@@ -18213,11 +18195,6 @@ func TestConfigSchemaSync(t *testing.T) {
 	var allErrors []string
 
 	for _, mapping := range mappings {
-		// Skip enterprise-only paths
-		if enterpriseSchemaPaths[mapping.SchemaPath] {
-			continue
-		}
-
 		// Get schema properties at this path
 		schemaProps := getSchemaPropertiesAtPath(schema, mapping.SchemaPath)
 		if schemaProps == nil && mapping.SchemaPath != "" {
@@ -18247,7 +18224,7 @@ func TestConfigSchemaSync(t *testing.T) {
 
 		// Find fields in schema but missing from Go struct
 		for prop := range schemaProps {
-			if !goFields[prop] && !excludedSchema[prop] && !enterpriseSchemaPaths[prop] {
+			if !goFields[prop] && !excludedSchema[prop] {
 				allErrors = append(allErrors, fmt.Sprintf(
 					"[%s] Field '%s' in schema but missing from %s",
 					mapping.SchemaPath, prop, typeName))
@@ -18283,33 +18260,19 @@ func TestConfigSchemaSync(t *testing.T) {
 // TestConfigSchemaSyncTopLevel is a simpler test that only checks top-level properties
 // This is kept for backwards compatibility and as a quick smoke test
 func TestConfigSchemaSyncTopLevel(t *testing.T) {
-	// Enterprise-only features: These fields exist in the JSON schema for documentation
-	// and validation purposes, but are only available in the enterprise version.
-	enterpriseSchemaFields := map[string]bool{
-		"$schema":                    true,
-		"access_profiles":            true,
-		"alerting":                   true,
-		"audit_logs":                 true,
-		"circuit_breaker_config":     true,
-		"cluster_config":             true,
-		"scim_config":                true,
-		"load_balancer_config":       true,
-		"guardrails_config":          true,
-		"large_payload_optimization": true,
-	}
-
 	schema := loadJSONSchema(t)
 	schemaProps, ok := schema["properties"].(map[string]interface{})
 	require.True(t, ok, "JSON schema must have a 'properties' field")
 
 	// Extract JSON tag names from ConfigData struct
 	structProps := getGoStructFields(reflect.TypeOf(ConfigData{}))
+	rootExcluded := excludedSchemaFields[""]
 
 	// Find mismatches
 	var missingInStruct, missingInSchema []string
 
 	for prop := range schemaProps {
-		if !structProps[prop] && !enterpriseSchemaFields[prop] {
+		if !structProps[prop] && !rootExcluded[prop] {
 			missingInStruct = append(missingInStruct, prop)
 		}
 	}
@@ -18337,8 +18300,7 @@ func TestConfigSchemaSyncTopLevel(t *testing.T) {
 				matchedCount++
 			}
 		}
-		t.Logf("Top-level sync validated: %d properties match (%d enterprise-only excluded)",
-			matchedCount, len(enterpriseSchemaFields))
+		t.Logf("Top-level sync validated: %d properties match", matchedCount)
 	}
 }
 

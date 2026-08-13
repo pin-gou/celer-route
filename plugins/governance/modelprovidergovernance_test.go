@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
@@ -2070,7 +2069,6 @@ func TestPostHook_TracksVirtualKeyUsageWhenUserIDPresent(t *testing.T) {
 
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	ctx.SetValue(schemas.BifrostContextKeyVirtualKey, "sk-bf-test")
-	ctx.SetValue(schemas.BifrostContextKeyUserID, "user1")
 	result := &schemas.BifrostResponse{
 		ChatResponse: &schemas.BifrostChatResponse{
 			Model: "gpt-4",
@@ -2115,7 +2113,6 @@ func TestPostHook_SkipVirtualKeyUsageTrackingFlag(t *testing.T) {
 
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	ctx.SetValue(schemas.BifrostContextKeyVirtualKey, "sk-bf-test")
-	ctx.SetValue(schemas.BifrostContextKeyUserID, "user1")
 	ctx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
 	result := &schemas.BifrostResponse{
 		ChatResponse: &schemas.BifrostChatResponse{
@@ -2141,8 +2138,7 @@ func TestPostHook_SkipVirtualKeyUsageTrackingFlag(t *testing.T) {
 	require.True(t, exists)
 	assert.Equal(t, int64(0), updated.TokenCurrentUsage)
 	assert.Equal(t, int64(0), updated.RequestCurrentUsage)
-	assert.Equal(t, "user1", bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID))
-}
+	}
 
 // TestPostMCPHook_TracksVirtualKeyUsageWhenUserIDPresent verifies user
 // attribution does not suppress MCP VK request usage tracking.
@@ -2162,7 +2158,6 @@ func TestPostMCPHook_TracksVirtualKeyUsageWhenUserIDPresent(t *testing.T) {
 
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	ctx.SetValue(schemas.BifrostContextKeyVirtualKey, "sk-bf-test")
-	ctx.SetValue(schemas.BifrostContextKeyUserID, "user1")
 	resp := &schemas.BifrostMCPResponse{
 		ExtraFields: schemas.BifrostMCPResponseExtraFields{
 			MCPRequestType: schemas.MCPRequestTypeExecuteTool,
@@ -2199,7 +2194,6 @@ func TestPostMCPHook_SkipVirtualKeyUsageTrackingFlag(t *testing.T) {
 
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	ctx.SetValue(schemas.BifrostContextKeyVirtualKey, "sk-bf-test")
-	ctx.SetValue(schemas.BifrostContextKeyUserID, "user1")
 	ctx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
 	resp := &schemas.BifrostMCPResponse{
 		ExtraFields: schemas.BifrostMCPResponseExtraFields{
@@ -2217,8 +2211,7 @@ func TestPostMCPHook_SkipVirtualKeyUsageTrackingFlag(t *testing.T) {
 	require.True(t, exists)
 	assert.Equal(t, int64(0), updated.TokenCurrentUsage)
 	assert.Equal(t, int64(0), updated.RequestCurrentUsage)
-	assert.Equal(t, "user1", bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID))
-}
+	}
 
 func TestPostHook_UpdatesModelBudgetUsage_NoVirtualKey(t *testing.T) {
 	logger := NewMockLogger()

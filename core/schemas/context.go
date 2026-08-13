@@ -313,21 +313,18 @@ func (bc *BifrostContext) Value(key any) any {
 }
 
 // AuthMode derives the per-user OAuth lookup mode from current context state.
-// Priority: UserID > VirtualKey > session. Call this at token-lookup time, not
-// in middleware — the governance plugin can inject UserID (via VK→owner
+// Priority: VirtualKey > session. Call this at token-lookup time, not
+// in middleware — the governance plugin can inject VirtualKey (via VK→owner
 // resolution) after middleware runs, and the mode must reflect that.
 //
-// Returns MCPAuthModeNone when no identity column is populated (no user, no
-// VK, no session header), so callers that branch on the returned mode alone
+// Returns MCPAuthModeNone when no identity column is populated (no VK,
+// no session header), so callers that branch on the returned mode alone
 // cannot mistake an unauthenticated request for a session-mode caller.
 //
 // VK check uses BifrostContextKeyGovernanceVirtualKeyID (the resolved VK row
 // ID) rather than BifrostContextKeyVirtualKey (the raw header value) because
 // vk-mode token rows are keyed by the resolved VK ID.
 func (bc *BifrostContext) MCPAuthMode() MCPAuthMode {
-	if userID, ok := bc.Value(BifrostContextKeyUserID).(string); ok && userID != "" {
-		return MCPAuthModeUser
-	}
 	if vkID, ok := bc.Value(BifrostContextKeyGovernanceVirtualKeyID).(string); ok && vkID != "" {
 		return MCPAuthModeVK
 	}
@@ -341,8 +338,8 @@ func (bc *BifrostContext) MCPAuthMode() MCPAuthMode {
 // state by, for the given mode. Mirrors the exact priority MCPAuthMode()
 // uses to derive mode in the first place — call MCPAuthMode() first, then
 // pass its result here to read back the single context value that produced
-// it (user ID for MCPAuthModeUser, the resolved VK row ID for MCPAuthModeVK,
-// the raw session ID for MCPAuthModeSession).
+// it (the resolved VK row ID for MCPAuthModeVK, the raw session ID for
+// MCPAuthModeSession).
 //
 // Used by every resolver that keys persisted state by (mode, identity,
 // mcp_client) — currently per-user OAuth and per-user headers — and by the
@@ -353,10 +350,6 @@ func (bc *BifrostContext) MCPAuthMode() MCPAuthMode {
 // identity" and fall through to their own error path.
 func (bc *BifrostContext) MCPIdentity(mode MCPAuthMode) string {
 	switch mode {
-	case MCPAuthModeUser:
-		if v, _ := bc.Value(BifrostContextKeyUserID).(string); v != "" {
-			return v
-		}
 	case MCPAuthModeVK:
 		if v, _ := bc.Value(BifrostContextKeyGovernanceVirtualKeyID).(string); v != "" {
 			return v

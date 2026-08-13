@@ -37,7 +37,6 @@ const (
 type Config struct {
 	IsVkMandatory         *bool     `json:"is_vk_mandatory"`
 	RequiredHeaders       *[]string `json:"required_headers"` // Pointer to live config slice; changes are reflected immediately without restart
-	IsEnterprise          bool      `json:"is_enterprise"`
 	DisableAutoToolInject *bool     `json:"disable_auto_tool_inject"`
 	RoutingChainMaxDepth  *int      `json:"routing_chain_max_depth"` // Pointer to live config value; changes are reflected immediately without restart
 }
@@ -86,7 +85,6 @@ type GovernancePlugin struct {
 
 	isVkMandatory         *bool
 	requiredHeaders       *[]string // pointer to live config slice; lowercased at check time
-	isEnterprise          bool
 	disableAutoToolInject *bool
 
 	complexityAnalyzer atomic.Pointer[complexity.ComplexityAnalyzer]
@@ -234,7 +232,6 @@ func Init(
 		isVkMandatory:         isVkMandatory,
 		cfgMutex:              sync.RWMutex{},
 		requiredHeaders:       requiredHeaders,
-		isEnterprise:          config != nil && config.IsEnterprise,
 		disableAutoToolInject: disableAutoToolInject,
 		inMemoryStore:         inMemoryStore,
 	}
@@ -330,7 +327,6 @@ func InitFromStore(
 		isVkMandatory:         isVkMandatory,
 		cfgMutex:              sync.RWMutex{},
 		requiredHeaders:       requiredHeaders,
-		isEnterprise:          config != nil && config.IsEnterprise,
 		disableAutoToolInject: disableAutoToolInject,
 	}
 	plugin.storeComplexityAnalyzerConfig(resolveAnalyzerConfigFromStoreOrArg(ctx, logger, configStore, nil))
@@ -728,7 +724,6 @@ func (p *GovernancePlugin) applyRoutingRules(ctx *schemas.BifrostContext, req *s
 
 	routingCtx := &RoutingContext{
 		VirtualKey:               virtualKey,
-		UserID:                   bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID),
 		Provider:                 provider,
 		Model:                    model,
 		RequestType:              requestType,
@@ -945,16 +940,12 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 	}
 	p.cfgMutex.RLock()
 	if !isVirtualKeyValid && !hasDirectKeyAuth(ctx) && evaluationRequest.UserID == "" && p.isVkMandatory != nil && *p.isVkMandatory {
-		message := "virtual key is required. Provide a virtual key via the x-bf-vk header."
-		if p.isEnterprise {
-			message = "authentication is required. Provide a virtual key (x-bf-vk), API key, or user token."
-		}
 		p.cfgMutex.RUnlock()
 		return nil, &schemas.BifrostError{
 			Type:       new("virtual_key_required"),
 			StatusCode: new(401),
 			Error: &schemas.ErrorField{
-				Message: message,
+				Message: "virtual key is required. Provide a virtual key via the x-bf-vk header.",
 			},
 		}
 	}
@@ -1002,7 +993,6 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 	// pointer columns still participate in customer-level enforcement.
 	if !skipBudgetsAndRateLimits && result.Decision == DecisionAllow && hierarchyVK != nil {
 		var customerID string
-		customerFromTeam := false
 		switch {
 		case hierarchyVK.CustomerID != nil:
 			customerID = *hierarchyVK.CustomerID
@@ -1010,18 +1000,10 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 			customerID = hierarchyVK.Customer.ID
 		case hierarchyVK.Team != nil && hierarchyVK.Team.CustomerID != nil:
 			customerID = *hierarchyVK.Team.CustomerID
-			customerFromTeam = true
 		case hierarchyVK.Team != nil && hierarchyVK.Team.Customer != nil:
 			customerID = hierarchyVK.Team.Customer.ID
-			customerFromTeam = true
 		}
-		// When the request is scoped to a specific customer (header-driven, team-VK
-		// path; stamped by the enterprise plugin), skip enforcing the scalar
-		// team.CustomerID customer if it is not the scoped one — the enterprise layer
-		// enforces the scoped customer instead. Mirrors collectBudgetsFromHierarchy.
-		scopedCustomerID, _ := ctx.Value(schemas.BifrostContextKeyGovernanceScopedCustomerID).(string)
-		scopedAway := customerFromTeam && scopedCustomerID != "" && scopedCustomerID != customerID
-		if customerID != "" && !scopedAway {
+		if customerID != "" {
 			result = p.resolver.EvaluateCustomerRequest(ctx, customerID, evaluationRequest)
 		}
 	}
@@ -1041,7 +1023,7 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		}
 	}
 
-	// Step 4: User-level governance (enterprise-only).
+	// Step 4: User-level governance.
 	if !skipBudgetsAndRateLimits && result.Decision == DecisionAllow {
 		result = p.resolver.EvaluateUserRequest(ctx, evaluationRequest.UserID, evaluationRequest)
 	}
@@ -1227,25 +1209,6 @@ func (p *GovernancePlugin) PreRequestHook(ctx *schemas.BifrostContext, req *sche
 
 	stampGovernanceCtxFromVK(ctx, virtualKey)
 
-	// Large-payload mode: the body streams to the provider unparsed, so req.Model is
-	// empty for routes where the model lives in the body (OpenAI/Anthropic chat,
-	// responses, etc.). Route on LargePayloadMetadata.Model — the provider's
-	// streaming body rewriter (ApplyLargePayloadRequestBodyWithModelNormalization)
-	// reads metadata.Model when it rewrites the model field in the body prefix, so
-	// mutating it here is what propagates the routing decision to the upstream call.
-	if metadata, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadMetadata).(*schemas.LargePayloadMetadata); metadata != nil && metadata.Model != "" {
-		newModel, err := p.runPreRequestRouting(ctx, virtualKey, hasRoutingRules, metadata.Model, req.RequestType)
-		if err != nil {
-			return err
-		}
-		if newModel != "" && newModel != metadata.Model {
-			metadata.Model = newModel
-		}
-		_, routedModel := schemas.ParseModelString(metadata.Model, "")
-		p.publishRoutingAllowlist(ctx, virtualKey, routedModel)
-		return nil
-	}
-
 	if hasRoutingRules {
 		if _, err := p.applyRoutingRules(ctx, req, virtualKey); err != nil {
 			return err
@@ -1300,8 +1263,6 @@ func (p *GovernancePlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.
 	}
 	// Extract virtual key using utility functions
 	virtualKeyValue := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyVirtualKey)
-	// Extract user ID for enterprise user-level governance
-	userID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID)
 	// Getting provider and mode from the request
 	provider, model, _ := req.GetRequestFields()
 	// Create request context for evaluation
@@ -1309,7 +1270,7 @@ func (p *GovernancePlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.
 		VirtualKey: virtualKeyValue,
 		Provider:   provider,
 		Model:      model,
-		UserID:     userID,
+		UserID:     "",
 	}
 	// Evaluate governance using common function
 	_, bifrostError := p.EvaluateGovernanceRequest(ctx, evaluationRequest, req.RequestType)
@@ -1344,8 +1305,8 @@ func (p *GovernancePlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 	// Extract governance information
 	virtualKey := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyVirtualKey)
 	requestID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyRequestID)
-	// Extract user ID for enterprise user-level governance
-	userID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID)
+	// User ID for user-level governance (empty in OSS)
+	userID := ""
 
 	if requestType == schemas.ListModelsRequest && result != nil && result.ListModelsResponse != nil && virtualKey != "" {
 		// filter models which are not supported on this virtual key
@@ -1431,13 +1392,10 @@ func (p *GovernancePlugin) PreMCPHook(ctx *schemas.BifrostContext, req *schemas.
 
 	// Extract governance headers and virtual key using utility functions
 	virtualKeyValue := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyVirtualKey)
-	// Extract user ID for enterprise user-level governance
-	userID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyUserID)
-
 	// Create request context for evaluation (MCP requests don't have provider/model)
 	evaluationRequest := &EvaluationRequest{
 		VirtualKey: virtualKeyValue,
-		UserID:     userID,
+		UserID:     "",
 	}
 
 	// Evaluate governance using common function
@@ -1662,7 +1620,7 @@ func (p *GovernancePlugin) Cleanup() error {
 //   - virtualKey: The raw virtual key token of the request (empty string if not present)
 //   - selectedKeyID: The selected provider key ID used for scoped pricing overrides
 //   - requestID: The request ID
-//   - userID: The user ID for enterprise user-level governance (empty string if not present)
+//   - userID: The user ID for user-level governance (empty string if not present)
 //   - isCacheRead: Whether the request is a cache read
 //   - isBatch: Whether the request is a batch request
 //   - isFinalChunk: Whether the request is the final chunk

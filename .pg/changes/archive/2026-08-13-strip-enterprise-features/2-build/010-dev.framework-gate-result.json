@@ -1,0 +1,11 @@
+{
+  "summary": "[dev.framework:gate] pass — 10/10 检查通过, gate_score: 94.25, p0_failures: []",
+  "outputs": [],
+  "tasks_updated": [],
+  "status": "pass",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/009-dev.framework-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/009-dev.framework-verify-evidence.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/010-dev.framework-gate-verify.md"
+}

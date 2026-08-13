@@ -28,15 +28,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { TriStateCheckbox } from "@/components/ui/tristateCheckbox";
 import { useToast } from "@/hooks/use-toast";
 import { useSheetNavigation } from "@/hooks/useSheetNavigation";
-import { IS_ENTERPRISE, MCP_STATUS_COLORS } from "@/lib/constants/config";
+import { MCP_STATUS_COLORS } from "@/lib/constants/config";
 import { VirtualKeySelector } from "@/components/entitySelectors/virtualKeySelector";
 import { getErrorMessage, useGetCoreConfigQuery, useGetVirtualKeysQuery, useUpdateMCPClientMutation } from "@/lib/store";
 import { MCPClient, MCPVKConfig } from "@/lib/types/mcp";
 import { mcpClientUpdateSchema, type MCPClientUpdateSchema } from "@/lib/types/schemas";
 import { parseArrayFromText } from "@/lib/utils/array";
 import { titleCaseFromSnakeCase } from "@/lib/utils/strings";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
-import { useGetSCIMProvidersQuery } from "@enterprise/lib/store/apis/scimApi";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -194,13 +194,8 @@ export default function MCPClientSheet({
 	// Entra's on-behalf-of grant requires use_idp_credentials — see the
 	// Prerequisites warning in docs/mcp/auth/token-exchange.mdx for why a
 	// dedicated exchange app structurally can't work there.
-	const { data: scimProviders } = useGetSCIMProvidersQuery(undefined, { skip: !IS_ENTERPRISE || !supportsTokenExchangeCredentialUpdate });
-	const enabledScimProvider = scimProviders?.find((p) => (p as { enabled?: boolean }).enabled) as { name?: string } | undefined;
-	// Matches the create form's idpConfigured gate: without an enabled
-	// provider there's nothing for use_idp_credentials to resolve against at
-	// runtime, so the picker shouldn't offer that option at all here either.
-	const idpConfigured = !!enabledScimProvider;
-	const isEntraIdp = ["entra", "azure", "azuread"].includes((enabledScimProvider?.name ?? "").toLowerCase());
+	const idpConfigured = false;
+	const isEntraIdp = false;
 
 	const addVKConfig = ({ value: vkId, label }: { value: string; label: string }) => {
 		setLocalVKNames((prev) => ({ ...prev, [vkId]: label }));

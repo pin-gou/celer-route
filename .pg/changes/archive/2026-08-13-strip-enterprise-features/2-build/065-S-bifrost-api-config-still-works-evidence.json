@@ -1,0 +1,17 @@
+{
+  "scenario_id": "S-bifrost-api-config-still-works",
+  "critical": true,
+  "status": "pass",
+  "type": "api",
+  "steps": [
+    {"phase": "given", "result": "ok", "detail": "Health check http://localhost:9080/health → 200; enterprise hooks removed from source"},
+    {"phase": "when", "result": "ok", "step_type": "api", "request_id": "", "response_status": 200, "url": "http://localhost:9080/api/config"},
+    {"phase": "then", "result": "ok", "assertions": [
+      {"name": "status_code == 200", "actual": 200, "passed": true},
+      {"name": "response.body matches 'client_config'", "actual": "body contains 'client_config' key (1614 bytes)", "passed": true}
+    ]}
+  ],
+  "request_ids": [""],
+  "timestamps": {"start": "2026-08-14T02:00:00+08:00", "end": "2026-08-14T02:00:01+08:00"},
+  "cleanup_result": "n/a"
+}

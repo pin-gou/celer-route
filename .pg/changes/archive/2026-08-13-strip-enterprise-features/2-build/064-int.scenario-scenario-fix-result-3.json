@@ -1,0 +1,22 @@
+{
+  "summary": "design_drift: 2 个非 critical scenario 失败均为 scenario-assertion 设计缺陷（非代码缺陷）。S-bifrost-api-no-enterprise-endpoints-registered: teams/customers 是 OSS 保留功能（proposal 明确保留），404 断言有误；S-bifrost-api-routing-rules-list: 路径应为 /api/governance/routing-rules。编排器 escalate 提交 c7565b6 已修正 scenario-scenario.yaml（teams/customers 应 200、routing-rules 补 /governance 前缀）。实测验证：users/alerting→404，teams/customers→200，routing-rules→200 且 body 无 business_unit_id，代码行为与修正后 yaml 完全一致。无代码改动，重跑 scenario-execute 应全部通过。",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/064-int.scenario-fix-3.md"
+  ],
+  "tasks_updated": [
+    "S-bifrost-api-no-enterprise-endpoints-registered",
+    "S-bifrost-api-routing-rules-list"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/064-int.scenario-fix-3.md",
+  "design_drift": {
+    "phase": "scenario-fix",
+    "fix_cycle": 3,
+    "scenario_id": "S-bifrost-api-no-enterprise-endpoints-registered,S-bifrost-api-routing-rules-list",
+    "location": "scenario-scenario.yaml:when/then assertions",
+    "reason": "scenario 文件假设 teams/customers 应 404（实际为 OSS 保留功能 200）且 routing-rules 路径缺 /governance 前缀；已由编排器 escalate 提交 c7565b6 修正，代码行为与修正后契约一致",
+    "decision": "ACCEPT"
+  },
+  "fix_root_cause": "design_drift"
+}

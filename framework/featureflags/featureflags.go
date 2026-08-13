@@ -1,6 +1,6 @@
 // Package featureflags provides a process-wide boolean toggle registry with
 // layered configuration sources (code default, configstore DB, config.json
-// file) and an optional SyncDelegate hook for cluster gossip.
+// file).
 //
 // Precedence (highest wins):
 //
@@ -45,11 +45,6 @@ var (
 	// no code registered it, so toggling has no effect. The caller should
 	// DELETE the stale row instead.
 	ErrFlagUnregistered = errors.New("feature flag has no code registration")
-	// ErrFlagEnterpriseOnly means the flag is marked EnterpriseOnly in
-	// its registration and the current process is running in OSS mode.
-	// Such flags are inert: IsEnabled always returns false and toggling
-	// is rejected.
-	ErrFlagEnterpriseOnly = errors.New("feature flag is enterprise-only")
 )
 
 // FlagStatus is the API/UI-facing snapshot of a single flag. ID is the
@@ -57,16 +52,15 @@ var (
 // the wire lets the UI show the friendly label as the primary text and the
 // id as muted secondary text for debugging.
 type FlagStatus struct {
-	ID             string `json:"id"`
-	DisplayName    string `json:"display_name"`
-	Description    string `json:"description"`
-	Default        bool   `json:"default"`
-	Enabled        bool   `json:"enabled"`
-	Source         Source `json:"source"`
-	Locked         bool   `json:"locked"`
-	Registered     bool   `json:"registered"`
-	EnterpriseOnly bool   `json:"enterprise_only"`
-	UpdatedAt      int64  `json:"updated_at,omitempty"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+	Default     bool   `json:"default"`
+	Enabled     bool   `json:"enabled"`
+	Source      Source `json:"source"`
+	Locked      bool   `json:"locked"`
+	Registered  bool   `json:"registered"`
+	UpdatedAt   int64  `json:"updated_at,omitempty"`
 }
 
 // HydrationRow is the shape produced by configstore.ListFeatureFlags. We
@@ -77,23 +71,8 @@ type HydrationRow struct {
 	UpdatedAt int64
 }
 
-// SyncDelegate is invoked synchronously after a local Set() succeeds.
-// Enterprise's gossip layer implements this and broadcasts each change to
-// peers. ApplyRemote is the inbound path; it deliberately does NOT call the
-// delegate to prevent echo loops.
-type SyncDelegate interface {
-	OnSet(id string, enabled bool, writtenAt int64)
-}
-
 // Config controls Store behavior.
-type Config struct {
-	// IsEnterprise should be true when the binary is the enterprise build.
-	// Flags registered with EnterpriseOnly=true are inert when this is
-	// false: IsEnabled returns false, Set rejects with ErrFlagEnterpriseOnly,
-	// and the UI renders them disabled. Wired from initFeatureFlags by
-	// checking schemas.BifrostContextKeyIsEnterprise on the bootstrap ctx.
-	IsEnterprise bool
-}
+type Config struct{}
 
 type entry struct {
 	enabled   bool
@@ -104,39 +83,21 @@ type entry struct {
 
 // Store holds the per-process effective state for every flag.
 type Store struct {
-	mu           sync.RWMutex
-	entries      map[string]entry
-	delegate     SyncDelegate
-	delegateM    sync.RWMutex
-	isEnterprise bool
+	mu      sync.RWMutex
+	entries map[string]entry
 }
 
 // New creates a Store. Call Hydrate and ApplyFile during bootstrap to load
 // DB and file overrides respectively.
 func New(cfg Config) (*Store, error) {
 	return &Store{
-		entries:      make(map[string]entry),
-		isEnterprise: cfg.IsEnterprise,
+		entries: make(map[string]entry),
 	}, nil
 }
 
-// SetDelegate installs (or replaces) the gossip hook. Safe to call before or
-// after the store has any entries; only future Set() calls are observed.
-func (s *Store) SetDelegate(d SyncDelegate) {
-	s.delegateM.Lock()
-	s.delegate = d
-	s.delegateM.Unlock()
-}
-
 // IsEnabled is the hot-path read. Unregistered/unknown flags return false so
-// guarding code can treat "I don't recognize this id" as "off." Enterprise-
-// only flags always return false in OSS mode regardless of any override,
-// which lets guarding code use the flag uniformly across builds without
-// extra plumbing.
+// guarding code can treat "I don't recognize this id" as "off."
 func (s *Store) IsEnabled(id string) bool {
-	if def, ok := LookupDef(id); ok && def.EnterpriseOnly && !s.isEnterprise {
-		return false
-	}
 	s.mu.RLock()
 	if e, ok := s.entries[id]; ok {
 		s.mu.RUnlock()
@@ -157,9 +118,6 @@ func (s *Store) Set(_ context.Context, id string, enabled bool) (FlagStatus, err
 	if !registered {
 		return FlagStatus{}, fmt.Errorf("%w: %q", ErrFlagUnregistered, id)
 	}
-	if def.EnterpriseOnly && !s.isEnterprise {
-		return FlagStatus{}, fmt.Errorf("%w: %q", ErrFlagEnterpriseOnly, id)
-	}
 
 	now := time.Now().UnixNano()
 
@@ -174,13 +132,6 @@ func (s *Store) Set(_ context.Context, id string, enabled bool) (FlagStatus, err
 		writtenAt: now,
 	}
 	s.mu.Unlock()
-
-	s.delegateM.RLock()
-	d := s.delegate
-	s.delegateM.RUnlock()
-	if d != nil {
-		d.OnSet(id, enabled, now)
-	}
 
 	return s.statusFor(def, registered), nil
 }
@@ -334,27 +285,19 @@ func (s *Store) statusFor(def FlagDef, registered bool) FlagStatus {
 // statusForLocked must be called with s.mu held (read or write).
 func (s *Store) statusForLocked(def FlagDef, registered bool) FlagStatus {
 	status := FlagStatus{
-		ID:             def.ID,
-		DisplayName:    def.DisplayName,
-		Description:    def.Description,
-		Default:        def.Default,
-		Enabled:        def.Default,
-		Source:         SourceDefault,
-		Registered:     registered,
-		EnterpriseOnly: def.EnterpriseOnly,
+		ID:          def.ID,
+		DisplayName: def.DisplayName,
+		Description: def.Description,
+		Default:     def.Default,
+		Enabled:     def.Default,
+		Source:      SourceDefault,
+		Registered:  registered,
 	}
 	if e, ok := s.entries[def.ID]; ok {
 		status.Enabled = e.enabled
 		status.Source = e.source
 		status.Locked = e.fromFile
 		status.UpdatedAt = e.writtenAt
-	}
-	// In OSS mode, enterprise-only flags are forced off and reported as
-	// locked so the UI can render them disabled without needing to look
-	// up the build mode separately.
-	if def.EnterpriseOnly && !s.isEnterprise {
-		status.Enabled = false
-		status.Locked = true
 	}
 	return status
 }

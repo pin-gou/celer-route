@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ModelProvider } from "@/lib/types/config";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { SettingsIcon, Trash } from "lucide-react";
 import { useMemo, useState } from "react";
 import ProviderConfigSheet from "../dialogs/providerConfigSheet";

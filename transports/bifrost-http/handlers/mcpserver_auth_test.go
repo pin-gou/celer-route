@@ -264,13 +264,12 @@ func TestGetMCPServerForRequest_JWTPath(t *testing.T) {
 		})
 		ctx := &fasthttp.RequestCtx{}
 		ctx.Request.Header.Set("Authorization", "Bearer "+raw)
-		ctx.SetUserValue(schemas.BifrostContextKeyUserID, "user-1")
 
 		_, err := h.getMCPServerForRequest(ctx)
 		require.NoError(t, err)
 	})
 
-	t.Run("user JWT with a mismatched session is rejected", func(t *testing.T) {
+	t.Run("user JWT with no dashboard session is accepted in OSS (session check is enterprise-only)", func(t *testing.T) {
 		store := &mockOAuth2Store{signingKey: key}
 		cfg := newTestOAuth2Config(store, configtables.MCPServerAuthModeBoth, false)
 		h := newTestMCPHandler(cfg)
@@ -281,10 +280,14 @@ func TestGetMCPServerForRequest_JWTPath(t *testing.T) {
 		})
 		ctx := &fasthttp.RequestCtx{}
 		ctx.Request.Header.Set("Authorization", "Bearer "+raw)
-		ctx.SetUserValue(schemas.BifrostContextKeyUserID, "someone-else")
 
-		_, err := h.getMCPServerForRequest(ctx)
-		require.Error(t, err)
+		// Dashboard-session ↔ bf_sub matching reads BifrostContextKeyUserID, which
+		// is enterprise-only and never set in OSS — a session mismatch cannot be
+		// detected (or rejected) here. The JWT itself proves identity.
+		res, err := h.getMCPServerForRequest(ctx)
+		require.NoError(t, err)
+		// No identity resolver wired → falls back to the global server.
+		assert.Equal(t, h.globalMCPServer, res.mcpServer)
 	})
 
 	t.Run("session JWT is rejected when auth is enforced", func(t *testing.T) {
@@ -359,7 +362,7 @@ func TestGetMCPServerForRequest_JWTPath(t *testing.T) {
 
 // TestGetMCPServerForRequest_PreAuthenticatedUserPath covers the path where an
 // upstream auth layer has already authenticated the caller as a user and stamped
-// the user id onto the request context (BifrostContextKeyUserID). In headers/both
+// the user id onto the request context. In headers/both
 // modes the request is scoped to the user's representative virtual key, just like
 // a user-mode token; oauth-strict ignores it (Bifrost-issued tokens only).
 func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
@@ -378,7 +381,7 @@ func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
 		configtables.MCPServerAuthModeHeaders,
 		configtables.MCPServerAuthModeBoth,
 	} {
-		t.Run(string(mode)+" mode: stamped user id is scoped to the user's virtual key", func(t *testing.T) {
+		t.Run(string(mode)+" mode: user identity resolution is enterprise-only in OSS", func(t *testing.T) {
 			cfg := newTestOAuth2Config(newStore(), mode, true)
 			h := newTestMCPHandler(cfg)
 			h.identityResolver = &fakeResolver{userVKID: "vk-row-1"}
@@ -386,17 +389,14 @@ func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
 			h.vkMCPServers[activeVK.Value.GetValue()] = vkServer
 
 			ctx := &fasthttp.RequestCtx{}
-			ctx.SetUserValue(schemas.BifrostContextKeyUserID, "user-1")
 
-			res, err := h.getMCPServerForRequest(ctx)
-			require.NoError(t, err)
-			require.NotNil(t, res)
-			// Served the user's scoped VK server, NOT the global (unscoped) one.
-			assert.Equal(t, vkServer, res.mcpServer)
-			assert.NotEqual(t, h.globalMCPServer, res.mcpServer)
-			// Identity stays the user; no VK identity or JWT claims are attributed.
-			assert.Nil(t, res.jwtVK)
-			assert.Nil(t, res.jwtClaims)
+			// No request header can stamp a user id in OSS (BifrostContextKeyUserID
+			// is enterprise-only), so the identity resolver is never consulted. With
+			// auth enforced and no VK credential the request is rejected — the user
+			// is NOT silently scoped to their representative VK.
+			_, err := h.getMCPServerForRequest(ctx)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "virtual key required")
 		})
 	}
 
@@ -406,11 +406,11 @@ func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
 		h.identityResolver = &fakeResolver{userVKID: ""} // no AP-managed VK
 
 		ctx := &fasthttp.RequestCtx{}
-		ctx.SetUserValue(schemas.BifrostContextKeyUserID, "user-1")
 
+		// In OSS the stamped user id is ignored, so "no AP-managed VK" never
+		// resolves — with auth enforced and no header VK the request is rejected.
 		_, err := h.getMCPServerForRequest(ctx)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "no MCP access grant")
 	})
 
 	// A stamped user id wins over any virtual key sent in the request headers: the
@@ -431,19 +431,16 @@ func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
 		h.vkMCPServers["sk-bf-header"] = headerVKServer
 
 		ctx := &fasthttp.RequestCtx{}
-		ctx.SetUserValue(schemas.BifrostContextKeyUserID, "user-1")
 		ctx.Request.Header.Set(string(schemas.BifrostContextKeyVirtualKey), "sk-bf-header")
 
 		res, err := h.getMCPServerForRequest(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, res)
-		assert.Equal(t, userVKServer, res.mcpServer)
-		assert.NotEqual(t, headerVKServer, res.mcpServer)
-		assert.Nil(t, res.jwtVK)
-		assert.Nil(t, res.jwtClaims)
+		// In OSS without user identity, the header VK wins.
+		assert.Equal(t, headerVKServer, res.mcpServer)
 	})
 
-	t.Run("inactive representative virtual key is rejected", func(t *testing.T) {
+	t.Run("inactive representative virtual key is ignored in OSS; request without VK is rejected", func(t *testing.T) {
 		inactiveVK := &configtables.TableVirtualKey{ID: "vk-row-1", Value: *schemas.NewSecretVar("sk-bf-x"), IsActive: new(false)}
 		store := &mockOAuth2Store{
 			signingKey: key,
@@ -454,11 +451,12 @@ func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
 		h.identityResolver = &fakeResolver{userVKID: "vk-row-1"}
 
 		ctx := &fasthttp.RequestCtx{}
-		ctx.SetUserValue(schemas.BifrostContextKeyUserID, "user-1")
 
+		// OSS never consults the resolver, so the inactive representative VK is
+		// not the rejection reason — the request has no VK credential at all.
 		_, err := h.getMCPServerForRequest(ctx)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "inactive")
+		assert.Contains(t, err.Error(), "virtual key required")
 	})
 
 	t.Run("oauth-strict mode ignores the stamped user id", func(t *testing.T) {
@@ -467,10 +465,8 @@ func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
 		h.identityResolver = &fakeResolver{userVKID: "vk-row-1"}
 
 		ctx := &fasthttp.RequestCtx{}
-		ctx.SetUserValue(schemas.BifrostContextKeyUserID, "user-1")
 
-		// No bearer JWT, and header credentials are rejected in oauth-strict: the
-		// user-id check does not run, so this falls through to the strict rejection.
+		// No bearer JWT, and header credentials are rejected in oauth-strict.
 		_, err := h.getMCPServerForRequest(ctx)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "OAuth JWT")
@@ -482,7 +478,6 @@ func TestGetMCPServerForRequest_PreAuthenticatedUserPath(t *testing.T) {
 		// identityResolver is nil (pure OSS, no IdP); enforce=false → anonymous.
 
 		ctx := &fasthttp.RequestCtx{}
-		ctx.SetUserValue(schemas.BifrostContextKeyUserID, "user-1")
 
 		res, err := h.getMCPServerForRequest(ctx)
 		require.NoError(t, err)

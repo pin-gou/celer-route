@@ -3,7 +3,7 @@ import FullPageLoader from "@/components/fullPageLoader";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { parseAsSafeString } from "@/lib/queryParamsParser";
 import { getErrorMessage, useGetVirtualKeysQuery } from "@/lib/store";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -18,9 +18,6 @@ export default function GovernanceVirtualKeysPage() {
 	const [urlState, setUrlState] = useQueryStates(
 		{
 			search: parseAsSafeString.withDefault(""),
-			customer_id: parseAsString.withDefault(""),
-			team_id: parseAsString.withDefault(""),
-			user_id: parseAsString.withDefault(""),
 			offset: parseAsInteger.withDefault(0),
 			sort_by: parseAsString.withDefault(""),
 			order: parseAsString.withDefault(""),
@@ -40,9 +37,6 @@ export default function GovernanceVirtualKeysPage() {
 			limit: PAGE_SIZE,
 			offset: urlState.offset,
 			search: debouncedSearch || undefined,
-			customer_id: urlState.customer_id || undefined,
-			team_id: urlState.team_id || undefined,
-			user_id: urlState.user_id || undefined,
 			sort_by: (urlState.sort_by as "name" | "budget_spent" | "created_at" | "status") || undefined,
 			order: (urlState.order as "asc" | "desc") || undefined,
 		},
@@ -83,18 +77,6 @@ export default function GovernanceVirtualKeysPage() {
 		setUrlState({ search: value || null, offset: 0 });
 	};
 
-	const handleCustomerFilterChange = (value: string) => {
-		setUrlState({ customer_id: value || null, offset: 0 });
-	};
-
-	const handleTeamFilterChange = (value: string) => {
-		setUrlState({ team_id: value || null, offset: 0 });
-	};
-
-	const handleUserFilterChange = (value: string) => {
-		setUrlState({ user_id: value || null, offset: 0 });
-	};
-
 	const handleOffsetChange = (newOffset: number) => {
 		setUrlState({ offset: newOffset });
 	};
@@ -125,12 +107,6 @@ export default function GovernanceVirtualKeysPage() {
 				search={urlState.search}
 				debouncedSearch={debouncedSearch}
 				onSearchChange={handleSearchChange}
-				customerFilter={urlState.customer_id}
-				onCustomerFilterChange={handleCustomerFilterChange}
-				teamFilter={urlState.team_id}
-				onTeamFilterChange={handleTeamFilterChange}
-				userFilter={urlState.user_id}
-				onUserFilterChange={handleUserFilterChange}
 				offset={urlState.offset}
 				limit={PAGE_SIZE}
 				onOffsetChange={handleOffsetChange}

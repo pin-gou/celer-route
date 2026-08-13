@@ -1,4 +1,3 @@
-import { IS_ENTERPRISE } from "@/lib/constants/config";
 import { useGetBrandingQuery } from "@/lib/store/apis/brandingApi";
 import { getApiBaseUrl } from "@/lib/utils/port";
 
@@ -55,7 +54,7 @@ export function useBranding(isDark: boolean): BrandingAssets {
 	// branding surface lives in the enterprise build and the route does not
 	// exist: without this every page load would spend a request on a 404 and
 	// then fall back to the defaults it already has.
-	const { data } = useGetBrandingQuery(undefined, { skip: !IS_ENTERPRISE });
+	const { data } = useGetBrandingQuery(undefined, { skip: true });
 
 	const hasLogo = Boolean(data?.has_logo && data.logo_url);
 	const hasIcon = Boolean(data?.has_icon && data.icon_url);

@@ -646,33 +646,7 @@ func (h *MCPServerHandler) getMCPServerForRequest(ctx *fasthttp.RequestCtx) (*mc
 	// to that user's virtual key — the same representative-VK scoping a user-mode
 	// token gets — so a user authenticated by a bearer token is treated like a
 	// virtual key. oauth-strict accepts only Bifrost-issued tokens and is excluded.
-	if h.identityResolver != nil &&
-		(authMode == tables.MCPServerAuthModeHeaders || authMode == tables.MCPServerAuthModeBoth) {
-		if userID, _ := ctx.UserValue(schemas.BifrostContextKeyUserID).(string); userID != "" {
-			// Dual-credential conflict (IDP token + VK) is handled upstream in the SCIM
-			// InferenceMiddleware before identity is stamped, respecting the operator's
-			// dual_credential_conflict_behavior config. No check needed here.
-			vkID, err := h.identityResolver.ResolveUserVirtualKey(ctx, userID)
-			if err != nil {
-				return nil, err
-			}
-			if vkID == "" {
-				return nil, fmt.Errorf("no MCP access grant for the authenticated user")
-			}
-			vk, err := h.getVirtualKeyByID(ctx, vkID)
-			if err != nil {
-				return nil, err
-			}
-			if !vk.IsActiveValue() {
-				return nil, fmt.Errorf("virtual key is inactive")
-			}
-			vkServer, err := h.ensureVKMCPServerByValue(ctx, vk.Value.GetValue())
-			if err != nil {
-				return nil, err
-			}
-			return &mcpAuthResult{mcpServer: vkServer}, nil
-		}
-	}
+	// User identity resolution is enterprise-only (BifrostContextKeyUserID deleted in OSS).
 
 	// --- JWT path ---
 	if rawJWT := extractBearerJWT(ctx); rawJWT != "" && discoveryEnabled {
@@ -708,19 +682,11 @@ func (h *MCPServerHandler) getMCPServerForRequest(ctx *fasthttp.RequestCtx) (*mc
 			return nil, err
 		}
 
-		// For user-mode JWTs, if a dashboard session is present on the request
-		// (BifrostContextKeyUserID, set by the auth middleware) it must match
-		// bf_sub — a mismatch means the session and the token disagree on
-		// identity. Its absence is not fatal: the JWT itself proves identity, and
-		// initiating a new upstream per-user flow is verified later at the
-		// session-bearing UI step (flowStart → canAccessUserFlow).
-		if schemas.MCPAuthMode(claims.BfMode) == schemas.MCPAuthModeUser {
-			sessionUserID, _ := ctx.UserValue(schemas.BifrostContextKeyUserID).(string)
-			if sessionUserID != "" && sessionUserID != claims.Subject {
-				ctx.Response.Header.Set("WWW-Authenticate", wwwAuthenticateValue(ctx, h.config))
-				return nil, fmt.Errorf("session user does not match the authenticated token")
-			}
-		}
+		// Dashboard-session ↔ bf_sub matching for user-mode JWTs is enterprise-only
+		// (it reads BifrostContextKeyUserID, which OSS does not set). Its absence is
+		// not fatal: the JWT itself proves identity, and initiating a new upstream
+		// per-user flow is verified later at the session-bearing UI step
+		// (flowStart → canAccessUserFlow).
 
 		// Session-mode tokens carry no verified identity. When the operator
 		// requires authentication (EnforceAuthOnInference=true), session-mode

@@ -2,7 +2,6 @@ package integrations
 
 import (
 	"context"
-	"io"
 	"strings"
 	"testing"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/maximhq/bifrost/core/providers/bedrock"
 	"github.com/maximhq/bifrost/core/providers/gemini"
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -310,7 +308,6 @@ func TestTryStreamLargeResponse_AppliesRoutedIdentityHeaders(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	bifrostCtx := newTestBifrostContext()
 	bifrostCtx.SetValue(schemas.BifrostContextKeyLargeResponseMode, true)
-	bifrostCtx.SetValue(schemas.BifrostContextKeyLargeResponseReader, io.NopCloser(strings.NewReader("audio-bytes")))
 
 	extra := schemas.BifrostResponseExtraFields{
 		Provider:          schemas.OpenAI,
@@ -325,11 +322,5 @@ func TestTryStreamLargeResponse_AppliesRoutedIdentityHeaders(t *testing.T) {
 
 	handled := router.tryStreamLargeResponse(ctx, bifrostCtx, extra)
 
-	require.True(t, handled, "large response mode active — call must handle the response")
-	assert.Equal(t, "openai", string(ctx.Response.Header.Peek(lib.HeaderBifrostProvider)))
-	assert.Equal(t, "tts-1", string(ctx.Response.Header.Peek(lib.HeaderBifrostResolvedModel)))
-	assert.Equal(t, string(schemas.SpeechRequest), string(ctx.Response.Header.Peek(lib.HeaderBifrostRequestType)))
-	assert.Equal(t, "openai", string(ctx.Response.Header.Peek(lib.HeaderBifrostRoutingInfoProvider)))
-	assert.Equal(t, "tts-1", string(ctx.Response.Header.Peek(lib.HeaderBifrostRoutingInfoModel)))
-	assert.Equal(t, "openai-key", string(ctx.Response.Header.Peek(lib.HeaderBifrostRoutingInfoKey)))
+	require.False(t, handled, "large response streaming is enterprise-only in OSS")
 }

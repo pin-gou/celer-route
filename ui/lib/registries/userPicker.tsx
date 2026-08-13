@@ -3,9 +3,8 @@
 // OSS has no user directory, so the base build registers nothing and
 // consumers (pricing overrides, routing rules) hide their "User" scope
 // options. Downstream builds (enterprise) register a picker by importing
-// their registration module via the @enterprise alias; see
-// ui/app/_fallbacks/enterprise/lib/registrations/userPicker.ts for the
-// OSS-build fallback.
+// their registration module via the fallback alias; see
+// OSS-build fallback (no-op).
 
 import type { ComponentType } from "react";
 

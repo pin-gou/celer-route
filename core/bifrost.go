@@ -142,16 +142,8 @@ func isLargePayloadPassthrough(ctx *schemas.BifrostContext) bool {
 	if ctx == nil {
 		return false
 	}
-	// Large payload mode intentionally skips JSON->Bifrost input materialization.
-	// Example: a 400MB multipart/audio upload sets Input=nil by design; strict
-	// non-nil validation here would reject valid passthrough requests.
 	isLargePayload, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadMode).(bool)
-	if !isLargePayload {
-		return false
-	}
-	// Verify reader is present (flag and reader are always set together by middleware)
-	reader := ctx.Value(schemas.BifrostContextKeyLargePayloadReader)
-	return reader != nil
+	return isLargePayload
 }
 
 // signalClosing signals the closing of the provider queue.
@@ -6227,39 +6219,6 @@ func executeRequestWithRetries[T any](
 		if customerName, ok := ctx.Value(schemas.BifrostContextKeyGovernanceCustomerName).(string); ok && customerName != "" {
 			tracer.SetAttribute(handle, schemas.AttrCustomerName, customerName) // legacy: gen_ai.* placement of bifrost-internal attr
 			tracer.SetAttribute(handle, schemas.AttrBifrostCustomerName, customerName)
-		}
-		if businessUnitID, ok := ctx.Value(schemas.BifrostContextKeyGovernanceBusinessUnitID).(string); ok && businessUnitID != "" {
-			tracer.SetAttribute(handle, schemas.AttrBifrostBusinessUnitID, businessUnitID)
-		}
-		if businessUnitName, ok := ctx.Value(schemas.BifrostContextKeyGovernanceBusinessUnitName).(string); ok && businessUnitName != "" {
-			tracer.SetAttribute(handle, schemas.AttrBifrostBusinessUnitName, businessUnitName)
-		}
-		if teamIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceTeamIDs).([]string); ok && len(teamIDs) > 0 {
-			tracer.SetAttribute(handle, schemas.AttrBifrostTeamIDs, teamIDs)
-		}
-		if teamNames, ok := ctx.Value(schemas.BifrostContextKeyGovernanceTeamNames).([]string); ok && len(teamNames) > 0 {
-			tracer.SetAttribute(handle, schemas.AttrBifrostTeamNames, teamNames)
-		}
-		if customerIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceCustomerIDs).([]string); ok && len(customerIDs) > 0 {
-			tracer.SetAttribute(handle, schemas.AttrBifrostCustomerIDs, customerIDs)
-		}
-		if customerNames, ok := ctx.Value(schemas.BifrostContextKeyGovernanceCustomerNames).([]string); ok && len(customerNames) > 0 {
-			tracer.SetAttribute(handle, schemas.AttrBifrostCustomerNames, customerNames)
-		}
-		if businessUnitIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceBusinessUnitIDs).([]string); ok && len(businessUnitIDs) > 0 {
-			tracer.SetAttribute(handle, schemas.AttrBifrostBusinessUnitIDs, businessUnitIDs)
-		}
-		if businessUnitNames, ok := ctx.Value(schemas.BifrostContextKeyGovernanceBusinessUnitNames).([]string); ok && len(businessUnitNames) > 0 {
-			tracer.SetAttribute(handle, schemas.AttrBifrostBusinessUnitNames, businessUnitNames)
-		}
-		if userID, ok := ctx.Value(schemas.BifrostContextKeyUserID).(string); ok && userID != "" {
-			tracer.SetAttribute(handle, schemas.AttrBifrostUserID, userID)
-		}
-		if userName, ok := ctx.Value(schemas.BifrostContextKeyUserName).(string); ok && userName != "" {
-			tracer.SetAttribute(handle, schemas.AttrBifrostUserName, userName)
-		}
-		if userEmail, ok := ctx.Value(schemas.BifrostContextKeyUserEmail).(string); ok && userEmail != "" {
-			tracer.SetAttribute(handle, schemas.AttrBifrostUserEmail, userEmail)
 		}
 		if fallbackIndex, ok := ctx.Value(schemas.BifrostContextKeyFallbackIndex).(int); ok {
 			tracer.SetAttribute(handle, schemas.AttrFallbackIndex, fallbackIndex) // legacy: gen_ai.* placement of bifrost-internal attr

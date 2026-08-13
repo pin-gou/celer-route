@@ -1,0 +1,11 @@
+{
+  "summary": "[dev.transports:gate] pass — 5/5 维度通过, gate_score: 92.5, p0_failures: []",
+  "outputs": [],
+  "tasks_updated": [],
+  "status": "pass",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/019-dev.transports-gate-verify.md",
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/018-dev.transports-verify-evidence.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/019-dev.transports-gate.md"
+}

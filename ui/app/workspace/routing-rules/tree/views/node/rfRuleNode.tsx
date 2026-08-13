@@ -91,7 +91,7 @@ export function RFRuleNode({ data }: { data: any }) {
 						className="nodrag nowheel dark:bg-card absolute top-0 left-full z-50 ml-3 min-w-[190px] rounded-lg border-2 bg-white py-1.5 shadow-xl"
 						style={{ borderColor: scopeColor }}
 					>
-						{rule.scope !== "global" && rule.scope_id && (
+						{rule.scope === "virtual_key" && rule.scope_id && (
 							<div className="mb-1 border-b px-3 pb-1.5">
 								<p className="text-muted-foreground text-[10px]">
 									<span className="font-semibold" style={{ color: scopeColor }}>

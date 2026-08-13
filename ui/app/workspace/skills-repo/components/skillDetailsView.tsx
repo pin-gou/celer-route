@@ -18,7 +18,7 @@ import { useGetSkillQuery, useUpdateSkillMutation, useDeleteSkillMutation } from
 import { getErrorMessage } from "@/lib/store/apis/baseApi";
 import { SkillFile, SkillVersionSummary } from "@/lib/types/skills";
 import { validateVersionBump } from "@/lib/validators/skills";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ArrowLeft, Download, MoreHorizontal, Plus, Loader2, Trash2 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/utils/port";
 import { useEffect, useRef, useState } from "react";

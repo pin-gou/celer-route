@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { setSelectedPlugin, useAppDispatch, useAppSelector, useGetPluginsQuery } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ListOrdered, PlusIcon, Puzzle } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { useEffect, useMemo, useState } from "react";

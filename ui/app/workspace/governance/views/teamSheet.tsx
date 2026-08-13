@@ -1,4 +1,3 @@
-import { CustomerSelector } from "@/components/entitySelectors/customerSelector";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -26,7 +25,7 @@ import { getErrorMessage, useCreateTeamMutation, useUpdateTeamMutation } from "@
 import { CreateTeamRequest, Team, UpdateTeamRequest } from "@/lib/types/governance";
 import { budgetSignature, formatCurrency } from "@/lib/utils/governance";
 import { Validator } from "@/lib/utils/validation";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { formatDistanceToNow } from "date-fns";
 import isEqual from "lodash.isequal";
 import { useEffect, useMemo, useState } from "react";
@@ -394,19 +393,11 @@ export default function TeamSheet({ team, onSave, onCancel }: TeamSheetProps) {
 							<div className="space-y-2">
 								<Label htmlFor="customer">Customer (optional)</Label>
 								<div className="flex items-center gap-2" data-testid="team-customer-selector">
-									<CustomerSelector
-										value={formData.customerId}
-										onChange={(value) => updateField("customerId", value)}
-										// The team row embeds its customer, so an existing assignment
-										// renders a name instead of a raw UUID before any fetch.
-										fallbackOption={
-											team?.customer_id
-												? {
-														value: team.customer_id,
-														label: team.customer?.name ?? team.customer_id,
-													}
-												: null
-										}
+									<Input
+										id="customer"
+										value={formData.customerId || ""}
+										placeholder="Enterprise only"
+										disabled
 										className="min-w-0 flex-1"
 									/>
 									{formData.customerId && (

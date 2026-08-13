@@ -8,7 +8,7 @@ import { getErrorMessage, setProviderFormDirtyState, useAppDispatch } from "@/li
 import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
 import { ModelProvider, NetworkConfig } from "@/lib/types/config";
 import { betaHeadersFormSchema, type BetaHeadersFormSchema } from "@/lib/types/schemas";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

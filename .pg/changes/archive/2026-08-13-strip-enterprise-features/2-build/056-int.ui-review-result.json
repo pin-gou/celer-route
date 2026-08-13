@@ -1,0 +1,13 @@
+{
+  "summary": "int.ui:review 通过。6/6 检查项 PASS，review_score=100，threshold=85，disposition=completed。R-1 design_alignment: V-ui-1..5 全部满足（grep @enterprise 零命中、build/lint/typecheck exit 0、12 enterprise 路由目录已删、sidebar IS_ENTERPRISE 零引用）。R-2 scope_creep: 231 个 ui/ 变更均在 root 内，routing-rules scope 收窄/virtual-keys picker 移除与 design 一致。R-3 pattern_consistency: rbac.ts 严格匹配 design 模板，useRbac 兼容 90+ 调用方。R-4 file_location: 全部变更在 ui/ 下。R-5 test_contract: vitest 4/4 passed。R-6 component_props: Vue 3 规则对 React 仓库不适用。无 P0 失败。",
+  "outputs": [],
+  "tasks_updated": [
+    "48.1",
+    "48.2",
+    "48.3",
+    "48.4"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/056-int.ui-review.md"
+}

@@ -21,7 +21,7 @@ import { getErrorMessage, useDeleteTeamMutation } from "@/lib/store";
 import { Team } from "@/lib/types/governance";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/governance";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Edit, MoreHorizontal, Plus, ScrollText, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";

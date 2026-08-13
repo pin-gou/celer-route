@@ -86,9 +86,6 @@ func (h *FeatureFlagsHandler) updateFlag(ctx *fasthttp.RequestCtx) {
 	case errors.Is(err, featureflags.ErrFlagLocked):
 		SendError(ctx, fasthttp.StatusConflict, "Feature flag is locked by config.json / Helm")
 		return
-	case errors.Is(err, featureflags.ErrFlagEnterpriseOnly):
-		SendError(ctx, fasthttp.StatusForbidden, "Feature flag is enterprise-only")
-		return
 	case errors.Is(err, featureflags.ErrFlagUnregistered):
 		SendError(ctx, fasthttp.StatusNotFound, "Feature flag is not registered")
 		return

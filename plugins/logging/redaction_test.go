@@ -8,13 +8,13 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/logstore"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// TestAttachLogRedactionDataCopiesContextValue verifies async log entries carry transient redaction data.
+// TestAttachLogRedactionDataCopiesContextValue verifies async log entries stay
+// redaction-free in the OSS build (SetRedactionDataOnContext is a no-op).
 func TestAttachLogRedactionDataCopiesContextValue(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), time.Time{})
-	schemas.SetRedactionDataOnContext(ctx, schemas.RedactionData{
+	if schemas.SetRedactionDataOnContext(ctx, schemas.RedactionData{
 		LiteralReplacements: schemas.RedactionMapsByPhase{
 			Input:  map[string]string{"alex_rivera@gmail.com": "[EMAIL-1]"},
 			Output: map[string]string{"rivera@example.com": "[EMAIL-2]"},
@@ -22,18 +22,18 @@ func TestAttachLogRedactionDataCopiesContextValue(t *testing.T) {
 		ReversibleMappings: schemas.RedactionMapsByPhase{
 			Input: map[string]string{"EMAIL-1": "alex_rivera@gmail.com"},
 		},
-	})
+	}) {
+		t.Fatal("expected SetRedactionDataOnContext to be a no-op in OSS")
+	}
 	entry := &logstore.Log{}
 
 	attachLogRedactionData(ctx, entry, true)
 
-	require.NotNil(t, entry.RedactionData)
-	assert.Equal(t, map[string]string{"EMAIL-1": "alex_rivera@gmail.com"}, entry.RedactionData.ReversibleMappings.Input)
-	assert.Equal(t, map[string]string{"alex_rivera@gmail.com": "[EMAIL-1]"}, entry.RedactionData.LiteralReplacements.Input)
-	assert.Equal(t, map[string]string{"rivera@example.com": "[EMAIL-2]"}, entry.RedactionData.LiteralReplacements.Output)
+	assert.Nil(t, entry.RedactionData)
 }
 
-// TestAttachLogRedactionDataClonesContextMaps verifies async log entries own their redaction maps.
+// TestAttachLogRedactionDataClonesContextMaps verifies async log entries never
+// accumulate redaction maps in the OSS build.
 func TestAttachLogRedactionDataClonesContextMaps(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), time.Time{})
 	reversibleMappings := map[string]string{"EMAIL-1": "alex_rivera@gmail.com"}
@@ -55,10 +55,7 @@ func TestAttachLogRedactionDataClonesContextMaps(t *testing.T) {
 	inputLiteralReplacements["alex_rivera@gmail.com"] = "[MUTATED]"
 	outputLiteralReplacements["rivera@example.com"] = "[MUTATED]"
 
-	require.NotNil(t, entry.RedactionData)
-	assert.Equal(t, "alex_rivera@gmail.com", entry.RedactionData.ReversibleMappings.Input["EMAIL-1"])
-	assert.Equal(t, "[EMAIL-1]", entry.RedactionData.LiteralReplacements.Input["alex_rivera@gmail.com"])
-	assert.Equal(t, "[EMAIL-2]", entry.RedactionData.LiteralReplacements.Output["rivera@example.com"])
+	assert.Nil(t, entry.RedactionData)
 }
 
 // TestAttachLogRedactionDataSkipsDisabledContentLogging verifies disabled content logging drops sensitive data.
@@ -86,7 +83,8 @@ func TestAttachLogRedactionDataIgnoresMissingContext(t *testing.T) {
 	assert.Nil(t, entry.RedactionData)
 }
 
-// TestAttachMCPLogRedactionDataCopiesContextValue verifies MCP entries receive an owned redaction snapshot.
+// TestAttachMCPLogRedactionDataCopiesContextValue verifies MCP entries never
+// accumulate redaction snapshots in the OSS build (SetRedactionDataOnContext is a no-op).
 func TestAttachMCPLogRedactionDataCopiesContextValue(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), time.Time{})
 	reversibleMappings := map[string]string{"EMAIL-1": "alex_rivera@gmail.com"}
@@ -98,8 +96,7 @@ func TestAttachMCPLogRedactionDataCopiesContextValue(t *testing.T) {
 	attachMCPLogRedactionData(ctx, entry, true)
 	reversibleMappings["EMAIL-1"] = "mutated@example.com"
 
-	require.NotNil(t, entry.RedactionData)
-	assert.Equal(t, "alex_rivera@gmail.com", entry.RedactionData.ReversibleMappings.Input["EMAIL-1"])
+	assert.Nil(t, entry.RedactionData)
 }
 
 // TestAttachMCPLogRedactionDataSkipsUnavailableContent verifies disabled logging and missing inputs never attach sensitive data.

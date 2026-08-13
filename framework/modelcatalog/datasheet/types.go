@@ -219,11 +219,9 @@ func LookupScopesFromContext(ctx *schemas.BifrostContext, provider string) *Look
 	if ctx == nil {
 		return nil
 	}
-	userID, _ := ctx.Value(schemas.BifrostContextKeyUserID).(string)
 	virtualKeyID, _ := ctx.Value(schemas.BifrostContextKeyGovernanceVirtualKeyID).(string)
 	selectedKeyID, _ := ctx.Value(schemas.BifrostContextKeySelectedKeyID).(string)
 	return &LookupScopes{
-		UserID:        userID,
 		VirtualKeyID:  virtualKeyID,
 		SelectedKeyID: selectedKeyID,
 		Provider:      provider,

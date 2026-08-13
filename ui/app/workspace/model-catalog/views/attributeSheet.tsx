@@ -9,7 +9,7 @@ import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
 import { getErrorMessage, ModelDetails, useGetCoreConfigQuery, useUpsertModelCatalogEntriesMutation } from "@/lib/store";
 import { KnownProvider } from "@/lib/types/config";
 import { formatTokenPriceFull } from "@/lib/utils/numbers";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ExternalLink, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

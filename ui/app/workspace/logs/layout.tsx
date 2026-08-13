@@ -1,5 +1,5 @@
 import { NoPermissionView } from "@/components/noPermissionView";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { createFileRoute, Outlet, useChildMatches } from "@tanstack/react-router";
 import LogsPage from "./page";
 

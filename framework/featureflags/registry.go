@@ -18,16 +18,11 @@ import (
 //     text; can be changed without breaking call sites.
 //   - Description is the paragraph-level detail shown under the row.
 //   - Default is the value used when no override (file or DB) is present.
-//   - EnterpriseOnly marks flags that gate enterprise-only features: in
-//     OSS mode such flags are inert (IsEnabled always returns false),
-//     reject Set(), and surface in the UI with the toggle disabled and
-//     an "Enterprise" badge so operators can see the feature exists.
 type FlagDef struct {
-	ID             string
-	DisplayName    string
-	Description    string
-	Default        bool
-	EnterpriseOnly bool
+	ID          string
+	DisplayName string
+	Description string
+	Default     bool
 }
 
 var (

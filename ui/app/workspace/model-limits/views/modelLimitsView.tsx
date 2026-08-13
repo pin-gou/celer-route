@@ -1,7 +1,7 @@
 import FullPageLoader from "@/components/fullPageLoader";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { getErrorMessage, useGetModelConfigsQuery, useGetProvidersQuery } from "@/lib/store";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import ModelLimitsTable from "./modelLimitsTable";

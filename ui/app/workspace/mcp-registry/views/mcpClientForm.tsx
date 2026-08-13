@@ -14,9 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage, useCreateMCPClientMutation } from "@/lib/store";
 import { CreateMCPClientRequest, SecretVar, MCPAuthType, MCPConnectionType, MCPStdioConfig, MCPTLSConfig } from "@/lib/types/mcp";
 import { parseArrayFromText } from "@/lib/utils/array";
-import { IS_ENTERPRISE } from "@/lib/constants/config";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
-import { useGetSCIMProvidersQuery } from "@enterprise/lib/store/apis/scimApi";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+
 import { Info } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -75,16 +74,13 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 	const [createMCPClient] = useCreateMCPClientMutation();
 
 	// Token exchange is backed by the deployment's identity-provider
-	// integration, so the option only renders when one is enabled. The exact
-	// exchange-client requirement is enforced server-side at create; a missing
-	// tokenExchangeClient section surfaces as the create error.
-	const { data: scimProviders } = useGetSCIMProvidersQuery(undefined, { skip: !IS_ENTERPRISE });
-	const enabledScimProvider = scimProviders?.find((p) => (p as { enabled?: boolean }).enabled) as { name?: string } | undefined;
-	const idpConfigured = !!enabledScimProvider;
-	// Entra's on-behalf-of grant requires use_idp_credentials — see the
-	// Prerequisites warning in docs/mcp/auth/token-exchange.mdx for why a
-	// dedicated exchange app structurally can't work there.
-	const isEntraIdp = ["entra", "azure", "azuread"].includes((enabledScimProvider?.name ?? "").toLowerCase());
+	// Enterprise-only: the token-exchange option renders only when an enabled
+	// identity provider is configured. OSS builds never configure one, so the
+	// option stays hidden. The exact exchange-client requirement is enforced
+	// server-side at create; a missing tokenExchangeClient section surfaces as
+	// the create error.
+	const idpConfigured = false;
+	const isEntraIdp = false;
 
 	const [isLoading, setIsLoading] = useState(false);
 	const [argsText, setArgsText] = useState("");
@@ -630,7 +626,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 														<SelectItem value="oauth" data-testid="auth-type-oauth">
 															OAuth 2.0
 														</SelectItem>
-														{IS_ENTERPRISE && idpConfigured && (
+														{false && idpConfigured && (
 															<SelectItem value="token_exchange" data-testid="auth-type-token-exchange">
 																Token Exchange (On-Behalf-Of)
 															</SelectItem>

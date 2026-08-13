@@ -82,7 +82,7 @@ type GovernanceData struct {
 	VirtualKeys  map[string]*configstoreTables.TableVirtualKey  `json:"virtual_keys"`
 	Teams        map[string]*configstoreTables.TableTeam        `json:"teams"`
 	Customers    map[string]*configstoreTables.TableCustomer    `json:"customers"`
-	Users        map[string]*UserGovernance                     `json:"users"` // User-level governance (enterprise-only)
+	Users        map[string]*UserGovernance                     `json:"users"` // User-level governance
 	Budgets      map[string]*configstoreTables.TableBudget      `json:"budgets"`
 	RateLimits   map[string]*configstoreTables.TableRateLimit   `json:"rate_limits"`
 	RoutingRules map[string]*configstoreTables.TableRoutingRule `json:"routing_rules"`
@@ -96,7 +96,7 @@ type BusinessUnitGovernance struct {
 	RateLimitID *string
 }
 
-// UserGovernance holds governance data for a user (enterprise-only)
+// UserGovernance holds governance data for a user
 type UserGovernance struct {
 	BudgetID    *string `json:"budget_id,omitempty"`
 	RateLimitID *string `json:"rate_limit_id,omitempty"`
@@ -201,13 +201,13 @@ type GovernanceStore interface {
 	// Customer-level governance checks
 	CheckCustomerBudget(ctx context.Context, customerID string, request *EvaluationRequest, baselines map[string]float64) (Decision, error)
 	CheckCustomerRateLimit(ctx context.Context, customerID string, request *EvaluationRequest, tokensBaselines map[string]int64, requestsBaselines map[string]int64) (Decision, error)
-	// User governance in-memory operations (enterprise-only, but interface defined here for compatibility)
+	// User governance in-memory operations (interface defined here for compatibility)
 	GetUserGovernance(ctx context.Context, userID string) (*UserGovernance, bool)
 	CreateUserGovernanceInMemory(ctx context.Context, userID string, budget *configstoreTables.TableBudget, rateLimit *configstoreTables.TableRateLimit)
 	UpdateUserGovernanceInMemory(ctx context.Context, userID string, budget *configstoreTables.TableBudget, rateLimit *configstoreTables.TableRateLimit)
 	DeleteUserGovernanceInMemory(ctx context.Context, userID string)
 	CreateUserNameInMemory(ctx context.Context, userID string, userName string)
-	// User-level governance checks (enterprise-only)
+	// User-level governance checks
 	CheckUserBudget(ctx context.Context, userID string, request *EvaluationRequest, baselines map[string]float64) (Decision, error)
 	CheckUserRateLimit(ctx context.Context, userID string, request *EvaluationRequest, tokensBaselines map[string]int64, requestsBaselines map[string]int64) (Decision, error)
 	UpdateUserBudgetUsageInMemory(ctx context.Context, userID string, cost float64) error
@@ -1793,7 +1793,7 @@ func (gs *LocalGovernanceStore) CheckCustomerRateLimit(ctx context.Context, cust
 	return gs.CheckRateLimit(ctx, entityWiseRateLimits, tokensBaselines, requestsBaselines)
 }
 
-// CheckUserBudget checks if user's budget allows the request (enterprise-only)
+// CheckUserBudget checks if user's budget allows the request
 // Community build: silent no-op so user-governance absence never silently denies requests.
 func (gs *LocalGovernanceStore) CheckUserBudget(ctx context.Context, userID string, request *EvaluationRequest, baselines map[string]float64) (Decision, error) {
 	return DecisionAllow, nil
@@ -1866,7 +1866,7 @@ func (gs *LocalGovernanceStore) CheckScopedModelRateLimit(ctx context.Context, s
 	return gs.CheckRateLimit(ctx, entityWiseRateLimits, tokensBaselines, requestsBaselines)
 }
 
-// CheckUserRateLimit checks if user's rate limit allows the request (enterprise-only)
+// CheckUserRateLimit checks if user's rate limit allows the request
 // Community build: silent no-op so user-governance absence never silently denies requests.
 func (gs *LocalGovernanceStore) CheckUserRateLimit(ctx context.Context, userID string, request *EvaluationRequest, tokensBaselines map[string]int64, requestsBaselines map[string]int64) (Decision, error) {
 	return DecisionAllow, nil
@@ -1938,7 +1938,7 @@ func (gs *LocalGovernanceStore) UpdateProviderAndModelBudgetUsageInMemory(ctx co
 	return nil
 }
 
-// UpdateUserBudgetUsageInMemory updates user's budget usage in memory (enterprise-only)
+// UpdateUserBudgetUsageInMemory updates user's budget usage in memory
 // Community build: silent no-op to avoid per-request error spam when a userID is set.
 func (gs *LocalGovernanceStore) UpdateUserBudgetUsageInMemory(ctx context.Context, userID string, cost float64) error {
 	return nil
@@ -2036,7 +2036,7 @@ func (gs *LocalGovernanceStore) UpdateVirtualKeyRateLimitUsageInMemory(ctx conte
 	return nil
 }
 
-// UpdateUserRateLimitUsageInMemory updates user's rate limit usage in memory (enterprise-only)
+// UpdateUserRateLimitUsageInMemory updates user's rate limit usage in memory
 // Community build: silent no-op to avoid per-request error spam when a userID is set.
 func (gs *LocalGovernanceStore) UpdateUserRateLimitUsageInMemory(ctx context.Context, userID string, tokensUsed int64, shouldUpdateTokens bool, shouldUpdateRequests bool) error {
 	return nil
@@ -3219,9 +3219,8 @@ func (gs *LocalGovernanceStore) collectRateLimitsFromHierarchy(ctx context.Conte
 	rateLimitsWithCategories := map[string][]*configstoreTables.TableRateLimit{}
 	seen := map[string]bool{}
 
-	// See collectBudgetsFromHierarchy: when a team-VK request is scoped to a specific
-	// customer, only charge the scalar team.CustomerID customer if it is the scoped one.
-	scopedCustomerID, _ := ctx.Value(schemas.BifrostContextKeyGovernanceScopedCustomerID).(string)
+	// When a team-VK request is scoped, only charge the scalar team.CustomerID customer.
+	scopedCustomerID := ""
 
 	for _, pc := range vk.ProviderConfigs {
 		if pc.RateLimitID != nil && pc.Provider == string(requestedProvider) {
@@ -3317,12 +3316,8 @@ func (gs *LocalGovernanceStore) collectBudgetsFromHierarchy(ctx context.Context,
 	if vk == nil {
 		return nil
 	}
-	// When a team-VK request is scoped to a specific customer (x-bf-customer-id /
-	// x-bf-customer-name header, resolved and stamped by the enterprise plugin),
-	// the scalar team.CustomerID customer is only charged when it is the scoped one;
-	// otherwise the enterprise layer charges the scoped customer instead. Empty key
-	// (the common case / pure-OSS) leaves behavior unchanged.
-	scopedCustomerID, _ := ctx.Value(schemas.BifrostContextKeyGovernanceScopedCustomerID).(string)
+	// Empty (the common case / pure-OSS) leaves behavior unchanged.
+	scopedCustomerID := ""
 	entityWiseBudgets := make(EntityWiseBudgets)
 	// Collect all budgets in hierarchy order using lock-free sync.Map access (Provider Configs → VK → Team → Customer)
 	seen := make(map[string]bool)
@@ -4107,33 +4102,28 @@ func (gs *LocalGovernanceStore) DeleteCustomerInMemory(ctx context.Context, cust
 	gs.customers.Delete(customerID)
 }
 
-// GetUserGovernance retrieves user governance data by user ID (enterprise-only, lock-free)
+// GetUserGovernance retrieves user governance data by user ID (lock-free)
 func (gs *LocalGovernanceStore) GetUserGovernance(ctx context.Context, userID string) (*UserGovernance, bool) {
-	// User governance is part of enterprise
 	return nil, false
 }
 
-// CreateUserGovernanceInMemory adds user governance data to the in-memory store (enterprise-only)
+// CreateUserGovernanceInMemory adds user governance data to the in-memory store
 func (gs *LocalGovernanceStore) CreateUserGovernanceInMemory(ctx context.Context, userID string, budget *configstoreTables.TableBudget, rateLimit *configstoreTables.TableRateLimit) {
-	// NoOp
-	// Available in enterprise
+	// No-op: user governance is not enabled in this build
 }
 
 func (gs *LocalGovernanceStore) CreateUserNameInMemory(ctx context.Context, userID string, userName string) {
-	// NoOp
-	// Available in enterprise
+	// No-op: user governance is not enabled in this build
 }
 
-// UpdateUserGovernanceInMemory updates user governance data in the in-memory store (enterprise-only)
+// UpdateUserGovernanceInMemory updates user governance data in the in-memory store
 func (gs *LocalGovernanceStore) UpdateUserGovernanceInMemory(ctx context.Context, userID string, budget *configstoreTables.TableBudget, rateLimit *configstoreTables.TableRateLimit) {
-	// NoOp
-	// Available in enterprise
+	// No-op: user governance is not enabled in this build
 }
 
-// DeleteUserGovernanceInMemory removes user governance data from the in-memory store (enterprise-only)
+// DeleteUserGovernanceInMemory removes user governance data from the in-memory store
 func (gs *LocalGovernanceStore) DeleteUserGovernanceInMemory(ctx context.Context, userID string) {
-	// NoOp
-	// Available in enterprise
+	// No-op: user governance is not enabled in this build
 }
 
 // UpdateModelConfigInMemory adds or updates a model config in the in-memory store (lock-free)

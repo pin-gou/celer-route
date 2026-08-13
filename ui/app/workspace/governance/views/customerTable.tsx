@@ -21,8 +21,7 @@ import { getErrorMessage, useDeleteCustomerMutation } from "@/lib/store";
 import { Customer, Team } from "@/lib/types/governance";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/governance";
-import { CustomerDetailSheet } from "@enterprise/components/user-groups/sheets/customerDetailSheet";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Edit, MoreHorizontal, Plus, ScrollText, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -212,14 +211,6 @@ export default function CustomersTable({
 					}}
 					customer={editingCustomer}
 					onSuccess={handleCustomerSaved}
-				/>
-
-				<CustomerDetailSheet
-					open={!!viewingCustomer}
-					onOpenChange={(open) => {
-						if (!open) setViewingCustomer(null);
-					}}
-					customer={viewingCustomer}
 				/>
 
 				<div className="flex grow flex-col">

@@ -10,7 +10,7 @@ import { useStoreSync } from "@/hooks/useStoreSync";
 import { WebSocketProvider } from "@/hooks/useWebSocket";
 import { getErrorMessage, ReduxProvider, useGetCoreConfigQuery, useIsAuthEnabledQuery } from "@/lib/store";
 import { BifrostConfig } from "@/lib/types/config";
-import { RbacProvider, useRbacContext } from "@enterprise/lib/contexts/rbacContext";
+import { RbacProvider, useRbacContext } from "@/lib/rbac";
 import { useLocation, useMatches } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { lazy, Suspense, useEffect, useState } from "react";

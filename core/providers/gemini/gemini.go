@@ -641,20 +641,8 @@ func (provider *GeminiProvider) Responses(ctx *schemas.BifrostContext, key schem
 		return nil, err
 	}
 
-	// Check for large payload streaming mode (enterprise-only feature)
-	// In large payload mode, the request body streams directly from the client — skip body conversion
 	var bodyReader io.Reader
-	bodySize := -1
 	var jsonData []byte
-
-	if isLargePayload, ok := ctx.Value(schemas.BifrostContextKeyLargePayloadMode).(bool); ok && isLargePayload {
-		if reader, readerOk := ctx.Value(schemas.BifrostContextKeyLargePayloadReader).(io.Reader); readerOk && reader != nil {
-			bodyReader = reader
-			if contentLength, lenOk := ctx.Value(schemas.BifrostContextKeyLargePayloadContentLength).(int); lenOk {
-				bodySize = contentLength
-			}
-		}
-	}
 
 	// For normal path (no large payload body reader), convert request to bytes
 	if bodyReader == nil {
@@ -675,11 +663,6 @@ func (provider *GeminiProvider) Responses(ctx *schemas.BifrostContext, key schem
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	// Check if enterprise large response detection is enabled
-	if responseThreshold, ok := ctx.Value(schemas.BifrostContextKeyLargeResponseThreshold).(int64); ok && responseThreshold > 0 {
-		return provider.responsesWithLargeResponseDetection(ctx, key, request, jsonData, responseThreshold, bodyReader, bodySize)
 	}
 
 	// Use struct directly for JSON marshaling
@@ -3124,9 +3107,6 @@ func shouldSkipInlineDataForStreamingContext(ctx *schemas.BifrostContext) bool {
 		return false
 	}
 	if isLargePayload, ok := ctx.Value(schemas.BifrostContextKeyLargePayloadMode).(bool); ok && isLargePayload {
-		return true
-	}
-	if responseThreshold, ok := ctx.Value(schemas.BifrostContextKeyLargeResponseThreshold).(int64); ok && responseThreshold > 0 {
 		return true
 	}
 	return false

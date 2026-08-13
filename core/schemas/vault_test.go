@@ -5,40 +5,17 @@ import (
 	"testing"
 )
 
-// withStubVaultStore installs a VaultStoreHook that records stored paths and
-// rewrites the value to "vault.<path>", mimicking vault.StoreString. It restores
-// the previous hook on cleanup.
-func withStubVaultStore(t *testing.T) map[string]string {
-	t.Helper()
-	stored := make(map[string]string)
-	prev := VaultStoreHook
-	VaultStoreHook = func(_ context.Context, path string, value *string) error {
-		stored[path] = *value
-		*value = "vault." + path
-		return nil
-	}
-	t.Cleanup(func() { VaultStoreHook = prev })
-	return stored
-}
-
+// TestStoreVaultSecretVar_StoresPlaintext asserts that in OSS the vault store
+// surface is a pure no-op: StoreVaultSecretVar never rewrites the value into a
+// vault reference (the enterprise VaultStoreHook that performed the store has
+// been removed, see vaultstrip_test.go).
 func TestStoreVaultSecretVar_StoresPlaintext(t *testing.T) {
-	stored := withStubVaultStore(t)
-
 	e := &SecretVar{Val: "secret-key"}
 	if err := StoreVaultSecretVar(context.Background(), "bifrost/tbl/id/value", e); err != nil {
 		t.Fatalf("StoreVaultSecretVar: %v", err)
 	}
-	if got := stored["bifrost/tbl/id/value"]; got != "secret-key" {
-		t.Errorf("stored plaintext = %q, want %q", got, "secret-key")
-	}
-	if !e.IsFromVault() {
-		t.Error("IsFromVault() should be true after store")
-	}
-	if e.GetRawRef() != "vault.bifrost/tbl/id/value" {
-		t.Errorf("Ref() = %q, want %q", e.GetRawRef(), "vault.bifrost/tbl/id/value")
-	}
-	if e.Val != "vault.bifrost/tbl/id/value" {
-		t.Errorf("Val = %q, want rewritten to vault ref", e.Val)
+	if e.GetValue() != "secret-key" || e.GetRawRef() != "" || e.IsFromVault() {
+		t.Errorf("StoreVaultSecretVar mutated OSS value: val=%q ref=%q fromVault=%v", e.GetValue(), e.GetRawRef(), e.IsFromVault())
 	}
 }
 
@@ -54,40 +31,24 @@ func TestStoreVaultSecretVar_NoOps(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			stored := withStubVaultStore(t)
 			if err := StoreVaultSecretVar(context.Background(), "bifrost/tbl/id/f", tc.e); err != nil {
 				t.Fatalf("StoreVaultSecretVar: %v", err)
-			}
-			if len(stored) != 0 {
-				t.Errorf("expected no store, got %v", stored)
 			}
 		})
 	}
 }
 
 func TestStoreVaultSecretVar_NoHookNoOp(t *testing.T) {
-	prev := VaultStoreHook
-	VaultStoreHook = nil
-	t.Cleanup(func() { VaultStoreHook = prev })
-
 	e := &SecretVar{Val: "secret"}
 	if err := StoreVaultSecretVar(context.Background(), "p", e); err != nil {
 		t.Fatalf("StoreVaultSecretVar: %v", err)
 	}
 	if e.IsFromSecret() || e.GetRawRef() != "" || e.Val != "secret" {
-		t.Errorf("expected no mutation when hook nil, got val=%q ref=%q fromSecret=%v", e.Val, e.GetRawRef(), e.IsFromSecret())
+		t.Errorf("expected no mutation, got val=%q ref=%q fromSecret=%v", e.Val, e.GetRawRef(), e.IsFromSecret())
 	}
 }
 
 func TestRemoveOwnedVaultSecretVars_SkipsFragmentRefs(t *testing.T) {
-	var removed []string
-	prev := VaultRemoveHook
-	VaultRemoveHook = func(_ context.Context, path string) error {
-		removed = append(removed, path)
-		return nil
-	}
-	t.Cleanup(func() { VaultRemoveHook = prev })
-
 	type model struct {
 		Normal   SecretVar `gorm:"column:normal"`
 		Fragment SecretVar `gorm:"column:fragment"`
@@ -97,16 +58,13 @@ func TestRemoveOwnedVaultSecretVars_SkipsFragmentRefs(t *testing.T) {
 		Fragment: SecretVar{Val: "vault.external/db#apiKey", ref: "vault.external/db#apiKey", SecretType: SecretTypeVault},
 	}
 
-	RemoveOwnedVaultSecretVars(context.Background(), "bifrost/m/1", m)
-
-	if len(removed) != 1 || removed[0] != "bifrost/m/1/normal" {
-		t.Errorf("removed = %v, want only [bifrost/m/1/normal]", removed)
+	// In OSS there is no vault to remove from, so the call is a no-op.
+	if errs := RemoveOwnedVaultSecretVars(context.Background(), "bifrost/m/1", m); len(errs) > 0 {
+		t.Errorf("RemoveOwnedVaultSecretVars returned errors: %v", errs)
 	}
 }
 
 func TestStoreOwnedVaultSecretVars_WalksFields(t *testing.T) {
-	stored := withStubVaultStore(t)
-
 	type model struct {
 		Plain    SecretVar  `gorm:"column:plain_col"`
 		Ptr      *SecretVar `gorm:"column:ptr_col"`
@@ -122,31 +80,19 @@ func TestStoreOwnedVaultSecretVars_WalksFields(t *testing.T) {
 		EnvBased: SecretVar{ref: "env.X", SecretType: SecretTypeEnv},
 	}
 
+	// In OSS no field is ever pushed to a vault.
 	if err := StoreOwnedVaultSecretVars(context.Background(), "bifrost/m/1", m); err != nil {
 		t.Fatalf("StoreOwnedVaultSecretVars: %v", err)
 	}
-
-	want := map[string]string{
-		"bifrost/m/1/plain_col": "p1",
-		"bifrost/m/1/ptr_col":   "p2",
-		"bifrost/m/1/snake":     "p3",
+	if m.Plain.IsFromVault() || m.Ptr.IsFromVault() || m.Snake.IsFromVault() {
+		t.Error("SecretVar fields must stay plaintext in OSS")
 	}
-	if len(stored) != len(want) {
-		t.Fatalf("stored %d entries, want %d: %v", len(stored), len(want), stored)
-	}
-	for path, val := range want {
-		if stored[path] != val {
-			t.Errorf("stored[%q] = %q, want %q", path, stored[path], val)
-		}
-	}
-	if !m.Plain.IsFromVault() || !m.Ptr.IsFromVault() || !m.Snake.IsFromVault() {
-		t.Error("SecretVar fields should be vault-backed after store")
+	if m.Plain.GetValue() != "p1" || m.Ptr.GetValue() != "p2" || m.Snake.GetValue() != "p3" {
+		t.Error("SecretVar field values must be unchanged in OSS")
 	}
 }
 
 func TestStoreOwnedVaultSecretVars_WalksMap(t *testing.T) {
-	stored := withStubVaultStore(t)
-
 	type model struct {
 		Headers map[string]SecretVar `gorm:"column:headers"`
 	}
@@ -157,36 +103,16 @@ func TestStoreOwnedVaultSecretVars_WalksMap(t *testing.T) {
 		},
 	}
 
+	// In OSS no map entry is ever pushed to a vault.
 	if err := StoreOwnedVaultSecretVars(context.Background(), "bifrost/m/1", m); err != nil {
 		t.Fatalf("StoreOwnedVaultSecretVars: %v", err)
 	}
-
-	if len(stored) != 1 {
-		t.Fatalf("stored %d entries, want 1: %v", len(stored), stored)
-	}
-	if got := stored["bifrost/m/1/headers/Authorization"]; got != "secret-token" {
-		t.Errorf("stored Authorization = %q, want %q", got, "secret-token")
-	}
-	auth := m.Headers["Authorization"]
-	if !auth.IsFromVault() || auth.GetRawRef() != "vault.bifrost/m/1/headers/Authorization" {
-		t.Errorf("map entry not converted to vault ref: val=%q ref=%q fromVault=%v", auth.Val, auth.GetRawRef(), auth.IsFromVault())
-	}
-	if env := m.Headers["X-Env"]; env.IsFromSecret() && env.GetRawRef() == "env.X" {
-		if stored["bifrost/m/1/headers/X-Env"] != "" {
-			t.Error("env-sourced header should not be vault-stored")
-		}
+	if auth := m.Headers["Authorization"]; auth.IsFromVault() || auth.GetValue() != "secret-token" {
+		t.Errorf("map entry mutated in OSS: val=%q fromVault=%v", auth.GetValue(), auth.IsFromVault())
 	}
 }
 
 func TestRemoveOwnedVaultSecretVars_WalksMap(t *testing.T) {
-	var removed []string
-	prev := VaultRemoveHook
-	VaultRemoveHook = func(_ context.Context, path string) error {
-		removed = append(removed, path)
-		return nil
-	}
-	t.Cleanup(func() { VaultRemoveHook = prev })
-
 	type model struct {
 		Headers map[string]SecretVar `gorm:"column:headers"`
 	}
@@ -197,9 +123,8 @@ func TestRemoveOwnedVaultSecretVars_WalksMap(t *testing.T) {
 		},
 	}
 
-	RemoveOwnedVaultSecretVars(context.Background(), "bifrost/m/1", m)
-
-	if len(removed) != 1 || removed[0] != "bifrost/m/1/headers/Owned" {
-		t.Errorf("removed = %v, want only [bifrost/m/1/headers/Owned]", removed)
+	// In OSS there is no vault to remove from, so the call is a no-op.
+	if errs := RemoveOwnedVaultSecretVars(context.Background(), "bifrost/m/1", m); len(errs) > 0 {
+		t.Errorf("RemoveOwnedVaultSecretVars returned errors: %v", errs)
 	}
 }

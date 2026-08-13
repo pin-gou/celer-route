@@ -1,0 +1,14 @@
+{
+  "summary": "[int.framework:review] completed — review_score: 100, p0_failures: []. 6/6 checks PASS (design_alignment/scope_creep/pattern_consistency/file_location/test_contract/error_wrapping). framework enterprise strip aligns with design.md; go build+vet+test pass. WARN cleanups only: stale delegate comments, missing EOF newlines, dead uid var.",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/041-int.framework-review.md"
+  ],
+  "tasks_updated": [
+    "33"
+  ],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/041-int.framework-review.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/041-int.framework-review.md"
+}

@@ -1,0 +1,14 @@
+{
+  "summary": "[dev.ui:fix] completed — 修复 V-ui-3 预存类型回归: configApi.ts 中 getLatestRelease queryFn 的 TIMEOUT_ERROR/FETCH_ERROR 返回包含 data 字段,违反 RTK FetchBaseQueryError 类型契约(data?: undefined),删除两处 data 后 typecheck 退出码 0。lint 退出码 0(436 pre-existing warnings), build 通过(2.09s 产出 out/), vitest 214/214 通过(1 个 pre-existing columns.test.ts 基础设施失败,非本 diff)。V-ui-1/2/4/5 保持 PASS。",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/031-dev.ui-fix-1.md"
+  ],
+  "tasks_updated": [
+    "24.1,24.2,24.4"
+  ],
+  "status": "completed",
+  "evidence_paths": [
+    "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/031-dev.ui-fix-1.md"
+  ],
+  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/031-dev.ui-fix-1.md"
+}

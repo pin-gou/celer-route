@@ -12,9 +12,9 @@ import (
 // TestIsUniqueConstraintError recognizes common database unique-constraint messages.
 func TestIsUniqueConstraintError(t *testing.T) {
 	cases := []string{
-		"UNIQUE constraint failed: enterprise_access_profiles.name",
-		`pq: duplicate key value violates unique constraint "idx_access_profiles_name"`,
-		"Error 1062: Duplicate entry 'profile-a' for key 'enterprise_access_profiles.name'",
+		"UNIQUE constraint failed: some_table.name",
+		`pq: duplicate key value violates unique constraint "idx_some_table_name"`,
+		"Error 1062: Duplicate entry 'profile-a' for key 'some_table.name'",
 	}
 	for _, tc := range cases {
 		if !IsUniqueConstraintError(errors.New(tc)) {
@@ -28,11 +28,11 @@ func TestIsUniqueConstraintError(t *testing.T) {
 
 // TestIsUniqueConstraintError_Identifiers narrows matches to requested fields or indexes.
 func TestIsUniqueConstraintError_Identifiers(t *testing.T) {
-	err := errors.New(`pq: duplicate key value violates unique constraint "idx_access_profiles_name"`)
-	if !IsUniqueConstraintError(err, "idx_access_profiles_name") {
+	err := errors.New(`pq: duplicate key value violates unique constraint "idx_some_table_name"`)
+	if !IsUniqueConstraintError(err, "idx_some_table_name") {
 		t.Fatalf("identifier match returned false")
 	}
-	if IsUniqueConstraintError(err, "enterprise_users.email") {
+	if IsUniqueConstraintError(err, "other_table.email") {
 		t.Fatalf("unrelated identifier matched")
 	}
 }

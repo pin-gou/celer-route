@@ -39,9 +39,9 @@ type SSEStreamTerminator interface {
 }
 
 // SSEStreamEndedOnMarker reports whether r ended on an explicit [DONE] marker.
-// Readers that do not implement SSEStreamTerminator (e.g. an enterprise-injected
-// SSEReaderFactory) return true: with no signal available we assume the stream
-// terminated normally rather than misreport a healthy stream as truncated.
+// Readers that do not implement SSEStreamTerminator return true: with no signal
+// available we assume the stream terminated normally rather than misreport a
+// healthy stream as truncated.
 func SSEStreamEndedOnMarker(r SSEDataReader) bool {
 	if t, ok := r.(SSEStreamTerminator); ok {
 		return t.SawDoneMarker()
@@ -49,35 +49,15 @@ func SSEStreamEndedOnMarker(r SSEDataReader) bool {
 	return true
 }
 
-// SSEReaderFactory creates SSE readers for streaming response processing.
-// Enterprise injects this via BifrostContextKeySSEReaderFactory to replace
-// the default bufio.Scanner-based implementations with streaming readers.
-type SSEReaderFactory struct {
-	NewDataReader  func(reader io.Reader) SSEDataReader
-	NewEventReader func(reader io.Reader) SSEEventReader
-}
-
-// GetSSEDataReader returns an SSEDataReader for the given reader.
-// If enterprise has injected an SSEReaderFactory via context, uses that.
-// Otherwise returns a default implementation wrapping bufio.NewScanner.
+// GetSSEDataReader returns the default bufio.Scanner-backed SSEDataReader for
+// the given reader.
 func GetSSEDataReader(ctx *schemas.BifrostContext, reader io.Reader) SSEDataReader {
-	if ctx != nil {
-		if factory, ok := ctx.Value(schemas.BifrostContextKeySSEReaderFactory).(*SSEReaderFactory); ok && factory != nil && factory.NewDataReader != nil {
-			return factory.NewDataReader(reader)
-		}
-	}
 	return newDefaultSSEDataReader(reader)
 }
 
-// GetSSEEventReader returns an SSEEventReader for the given reader.
-// If enterprise has injected an SSEReaderFactory via context, uses that.
-// Otherwise returns a default implementation wrapping bufio.NewScanner.
+// GetSSEEventReader returns the default bufio.Scanner-backed SSEEventReader for
+// the given reader.
 func GetSSEEventReader(ctx *schemas.BifrostContext, reader io.Reader) SSEEventReader {
-	if ctx != nil {
-		if factory, ok := ctx.Value(schemas.BifrostContextKeySSEReaderFactory).(*SSEReaderFactory); ok && factory != nil && factory.NewEventReader != nil {
-			return factory.NewEventReader(reader)
-		}
-	}
 	return newDefaultSSEEventReader(reader)
 }
 

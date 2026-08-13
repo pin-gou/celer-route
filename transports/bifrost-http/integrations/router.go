@@ -523,56 +523,19 @@ type PassthroughRoute struct {
 	Path   string // full path including the StripPrefix, matched exactly — no wildcard
 }
 
-// LargePayloadHook is called before body parsing to detect and set up large payload streaming.
-// If it returns skipBodyParse=true, the router skips JSON parsing of the request body.
-// The hook is responsible for setting all relevant context keys (BifrostContextKeyLargePayloadMode,
-// BifrostContextKeyLargePayloadReader, BifrostContextKeyLargePayloadContentLength,
-// BifrostContextKeyLargePayloadMetadata) when activating large payload mode.
-type LargePayloadHook func(
-	ctx *fasthttp.RequestCtx,
-	bifrostCtx *schemas.BifrostContext,
-	routeType RouteConfigType,
-) (skipBodyParse bool, err error)
-
-// LargeResponseHook is called before streaming a large response body to the client.
-// Enterprise uses this to wrap the response reader with Phase B scanning (e.g., usage extraction
-// from the full response stream when usage is beyond the Phase A prefetch window).
-// The hook receives the bifrost context with BifrostContextKeyLargeResponseReader already set
-// and may replace the reader on context with a wrapped version.
-type LargeResponseHook func(
-	ctx *fasthttp.RequestCtx,
-	bifrostCtx *schemas.BifrostContext,
-)
-
 // GenericRouter provides a reusable router implementation for all integrations.
 // It handles the common flow of: parse request → convert to Bifrost → execute → convert response.
 // Integration-specific logic is handled through the RouteConfig callbacks and converters.
 type GenericRouter struct {
-	client            *bifrost.Bifrost // Bifrost client for executing requests
-	handlerStore      lib.HandlerStore // Config provider for the router
-	routes            []RouteConfig    // List of route configurations
-	passthroughCfg    *PassthroughConfig
-	logger            schemas.Logger    // Logger for the router
-	largePayloadHook  LargePayloadHook  // Optional: enterprise hook for large payload detection
-	largeResponseHook LargeResponseHook // Optional: enterprise hook for large response scanning
+	client         *bifrost.Bifrost // Bifrost client for executing requests
+	handlerStore   lib.HandlerStore // Config provider for the router
+	routes         []RouteConfig    // List of route configurations
+	passthroughCfg *PassthroughConfig
+	logger         schemas.Logger // Logger for the router
 }
 
 type modelCatalogProvider interface {
 	GetModelCatalog() *modelcatalog.ModelCatalog
-}
-
-// SetLargePayloadHook sets the hook for large payload detection and streaming.
-// This is used by enterprise to inject large payload optimization without
-// embedding the logic in the OSS router.
-func (g *GenericRouter) SetLargePayloadHook(hook LargePayloadHook) {
-	g.largePayloadHook = hook
-}
-
-// SetLargeResponseHook sets the hook for large response scanning.
-// Enterprise uses this to inject Phase B usage extraction into the response stream
-// without embedding scanning logic in the OSS router.
-func (g *GenericRouter) SetLargeResponseHook(hook LargeResponseHook) {
-	g.largeResponseHook = hook
 }
 
 // NewGenericRouter creates a new generic router with the given bifrost client and route configurations.
@@ -715,22 +678,7 @@ func (g *GenericRouter) createHandler(config RouteConfig) fasthttp.RequestHandle
 
 		// Parse request body based on configuration
 		if method != fasthttp.MethodGet && method != fasthttp.MethodHead {
-			// Hook executes before JSON parsing so large requests can remain streaming.
-			isLargePayload := false
-			if g.largePayloadHook != nil {
-				var err error
-				isLargePayload, err = g.largePayloadHook(ctx, bifrostCtx, config.Type)
-				if err != nil {
-					g.sendError(ctx, bifrostCtx, config.ErrorConverter, newBifrostError(err, "large payload detection failed"))
-					return
-				}
-			}
-
-			if isLargePayload {
-				// Large payload mode: body streams directly to provider via
-				// BifrostContextKeyLargePayloadReader. Skip all body parsing
-				// (JSON and multipart) — metadata was already extracted by the hook.
-			} else if config.RequestParser != nil {
+			if config.RequestParser != nil {
 				// Use custom parser (e.g., for multipart/form-data)
 				if err := config.RequestParser(ctx, req); err != nil {
 					ctx.SetConnectionClose()
@@ -754,7 +702,7 @@ func (g *GenericRouter) createHandler(config RouteConfig) fasthttp.RequestHandle
 			// Provider-specific fields (e.g. Bedrock guardrailConfig)
 			// must be nested under "extra_params" in the request body.
 			// Runs after both RequestParser and default JSON paths.
-			if !isLargePayload && bifrostCtx.Value(schemas.BifrostContextKeyPassthroughExtraParams) == true {
+			if bifrostCtx.Value(schemas.BifrostContextKeyPassthroughExtraParams) == true {
 				if rws, ok := req.(RequestWithSettableExtraParams); ok {
 					if rawBody == nil {
 						rawBody = ctx.Request.Body()

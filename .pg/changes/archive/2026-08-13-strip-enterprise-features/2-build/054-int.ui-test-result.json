@@ -1,0 +1,12 @@
+{
+  "summary": "int.ui:test 红 phase 验证通过。现有 enterprise-stripping.test.ts 中 4 个测试（21.1: 无 @enterprise 引用残留/21.2: fallback 目录已删除/21.3: enterprise 路由已删除/21.4: 无 IS_ENTERPRISE 引用）全部 PASS。grep -r '@enterprise' ui/ --include='*.ts' --include='*.tsx' 生产代码零命中。columns.test.ts 的 1 个 pre-existing 基础设施失败（Vite JSX 解析）是 fork 基线的已知问题，与本次变更无关。",
+  "outputs": [
+    "/home/ubuntu/workspace/my-gateway/ui/lib/enterprise-stripping.test.ts"
+  ],
+  "tasks_updated": [
+    "46.1"
+  ],
+  "status": "completed",
+  "evidence_paths": [],
+  "report_path": ""
+}

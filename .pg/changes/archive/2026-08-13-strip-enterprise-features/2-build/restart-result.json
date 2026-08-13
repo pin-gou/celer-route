@@ -1,0 +1,38 @@
+{
+  "status": "pass",
+  "exit_code": 0,
+  "action": "restart_all_instances",
+  "sub_results": [
+    {
+      "spec_role": "ui-dev",
+      "spec_phase": "",
+      "returncode": 0
+    },
+    {
+      "spec_role": "bifrost-api",
+      "spec_phase": "",
+      "returncode": 0
+    },
+    {
+      "spec_role": "bifrost-api",
+      "spec_phase": "",
+      "returncode": 0
+    },
+    {
+      "spec_role": "ui-dev",
+      "spec_phase": "",
+      "returncode": 0
+    },
+    {
+      "spec_role": "bifrost-api",
+      "spec_phase": "",
+      "returncode": 0
+    },
+    {
+      "spec_role": "ui-dev",
+      "spec_phase": "",
+      "returncode": 0
+    }
+  ],
+  "timestamp": "2026-08-13T16:45:57.564790Z"
+}

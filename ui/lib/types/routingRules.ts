@@ -89,18 +89,11 @@ export interface RoutingRuleFormData {
 
 export enum RoutingRuleScope {
 	Global = "global",
-	Team = "team",
-	Customer = "customer",
 	VirtualKey = "virtual_key",
-	// Not part of ROUTING_RULE_SCOPES: the sheet offers it only when a user
-	// picker is registered (builds with a user directory).
-	User = "user",
 }
 
 export const ROUTING_RULE_SCOPES = [
 	{ value: RoutingRuleScope.Global, label: "Global" },
-	{ value: RoutingRuleScope.Team, label: "Team" },
-	{ value: RoutingRuleScope.Customer, label: "Customer" },
 	{ value: RoutingRuleScope.VirtualKey, label: "Virtual Key" },
 ];
 

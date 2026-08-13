@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { RequestHeadersTextarea } from "@/components/ui/requestHeadersTextarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { maximFormSchema, type MaximFormSchema } from "@/lib/types/schemas";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";

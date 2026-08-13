@@ -6,7 +6,7 @@ import { getErrorMessage, setProviderFormDirtyState, useAppDispatch } from "@/li
 import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
 import { ModelProvider } from "@/lib/types/config";
 import { performanceFormSchema, type PerformanceFormSchema } from "@/lib/types/schemas";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { useForm, type Resolver } from "react-hook-form";

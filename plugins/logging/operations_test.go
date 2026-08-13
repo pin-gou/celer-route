@@ -443,16 +443,8 @@ func TestPostLLMHookCancelledStreamLogsCost(t *testing.T) {
 	}) {
 		t.Fatal("expected semantic cache debug to be stored on context")
 	}
-	if !schemas.AppendGuardrailJudgeCallOnContext(ctx, schemas.BifrostGuardrailJudgeCall{
-		JudgeProvider:    schemas.OpenAI,
-		JudgeModel:       "gpt-4o",
-		JudgeRequestType: schemas.ChatCompletionRequest,
-		PromptTokens:     10,
-		CompletionTokens: 5,
-		TotalTokens:      15,
-	}) {
-		t.Fatal("expected guardrail judge call to be stored on context")
-	}
+	// Guardrail judge calls are an enterprise-only surface; in the OSS build
+	// AppendGuardrailJudgeCallOnContext is a no-op, so no judge-call cost is expected.
 
 	const promptTokens, completionTokens = 100, 50
 	statusCode := 499 // client closed request (mid-stream cancel)
@@ -507,10 +499,11 @@ func TestPostLLMHookCancelledStreamLogsCost(t *testing.T) {
 		t.Fatalf("expected a cost to be logged for a cancelled request that consumed tokens (#3357)")
 	}
 	// gpt-4o testdata rates: input 2.5e-6/token, output 1e-5/token.
-	// text-embedding-3-small is 2e-8/token. The cache lookup and the judge call
-	// must both be added even though the stream ended with an error chunk.
+	// text-embedding-3-small is 2e-8/token. The cache lookup must be added even
+	// though the stream ended with an error chunk. No judge-call cost applies in
+	// the OSS build (guardrail judge calls are enterprise-only).
 	want := float64(promptTokens)*2.5e-6 + float64(completionTokens)*1e-5 +
-		float64(embeddingTokens)*2e-8 + float64(10)*2.5e-6 + float64(5)*1e-5
+		float64(embeddingTokens)*2e-8
 	if diff := *entry.Cost - want; diff < -1e-9 || diff > 1e-9 {
 		t.Fatalf("logged cost %v does not match datasheet-computed cost %v", *entry.Cost, want)
 	}
@@ -1078,16 +1071,8 @@ func TestMCPHooksPersistPluginLogs(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	ctx.SetValue(schemas.BifrostContextKeyRequestID, "req-mcp-batch")
 	ctx.SetValue(schemas.BifrostContextKeyMCPLogID, "mcp-batch-flow")
-	ctx.SetValue(schemas.BifrostContextKeyUserID, "user-1")
 	ctx.SetValue(schemas.BifrostContextKeyGovernanceTeamID, "team-1")
 	ctx.SetValue(schemas.BifrostContextKeyGovernanceCustomerID, "customer-1")
-	ctx.SetValue(schemas.BifrostContextKeyGovernanceBusinessUnitID, "bu-1")
-	schemas.SetRedactionDataOnContext(ctx, schemas.RedactionData{
-		ReversibleMappings: schemas.RedactionMapsByPhase{
-			Input:  map[string]string{"EMAIL-1": "private@example.com"},
-			Output: map[string]string{"EMAIL-2": "result@example.com"},
-		},
-	})
 
 	toolName := "docs-search"
 	_, _, err = plugin.PreMCPHook(ctx, &schemas.BifrostMCPRequest{
@@ -1139,11 +1124,10 @@ func TestMCPHooksPersistPluginLogs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PostMCPHook() error = %v", err)
 	}
-	if pendingEntry.RedactionData == nil {
-		t.Fatal("expected PostMCPHook to attach redaction data")
-	}
-	if got := pendingEntry.RedactionData.ReversibleMappings.Output["EMAIL-2"]; got != "result@example.com" {
-		t.Fatalf("output redaction mapping = %q, want %q", got, "result@example.com")
+	// OSS builds never carry redaction data (SetRedactionDataOnContext is a no-op),
+	// so the MCP log entry must not accumulate any.
+	if pendingEntry.RedactionData != nil {
+		t.Fatalf("expected no redaction data in OSS, got %#v", pendingEntry.RedactionData)
 	}
 	if err := plugin.Cleanup(); err != nil {
 		t.Fatalf("Cleanup() error = %v", err)
@@ -1173,7 +1157,7 @@ func TestMCPHooksPersistPluginLogs(t *testing.T) {
 	if got := pluginLogs[guardrailsName]; len(got) != 1 || got[0].Message != "MCP tool arguments redacted" {
 		t.Fatalf("expected guardrails plugin log to be persisted, got %#v", pluginLogs)
 	}
-	assertMCPLogGovernanceFields(t, logEntry, "user-1", "team-1", "customer-1", "bu-1")
+	assertMCPLogGovernanceFields(t, logEntry, "team-1", "customer-1")
 }
 
 // TestPostMCPHookFallbackStampsGovernanceFields verifies fallback MCP logs
@@ -1188,10 +1172,8 @@ func TestPostMCPHookFallbackStampsGovernanceFields(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	ctx.SetValue(schemas.BifrostContextKeyRequestID, "req-mcp-fallback")
 	ctx.SetValue(schemas.BifrostContextKeyMCPLogID, "mcp-fallback-flow")
-	ctx.SetValue(schemas.BifrostContextKeyUserID, "user-fallback")
 	ctx.SetValue(schemas.BifrostContextKeyGovernanceTeamID, "team-fallback")
 	ctx.SetValue(schemas.BifrostContextKeyGovernanceCustomerID, "customer-fallback")
-	ctx.SetValue(schemas.BifrostContextKeyGovernanceBusinessUnitID, "bu-fallback")
 
 	result := `{"answer":"fallback"}`
 	_, _, err = plugin.PostMCPHook(ctx, &schemas.BifrostMCPResponse{
@@ -1217,7 +1199,7 @@ func TestPostMCPHookFallbackStampsGovernanceFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindMCPToolLog() error = %v", err)
 	}
-	assertMCPLogGovernanceFields(t, logEntry, "user-fallback", "team-fallback", "customer-fallback", "bu-fallback")
+	assertMCPLogGovernanceFields(t, logEntry, "team-fallback", "customer-fallback")
 }
 
 // TestCleanupStalePendingMCPLogsPersistsErrorFallback verifies stale pending
@@ -1385,19 +1367,21 @@ func TestPreMCPHookSkipsPrefixedCodemodeTool(t *testing.T) {
 	}
 }
 
-func assertMCPLogGovernanceFields(t *testing.T, logEntry *logstore.MCPToolLog, userID, teamID, customerID, businessUnitID string) {
+func assertMCPLogGovernanceFields(t *testing.T, logEntry *logstore.MCPToolLog, teamID, customerID string) {
 	t.Helper()
-	if logEntry.UserID == nil || *logEntry.UserID != userID {
-		t.Fatalf("expected user_id %q, got %#v", userID, logEntry.UserID)
-	}
+	// User- and business-unit-level governance context keys were stripped from
+	// the OSS build, so those fields must stay nil while team/customer still flow.
 	if logEntry.TeamID == nil || *logEntry.TeamID != teamID {
 		t.Fatalf("expected team_id %q, got %#v", teamID, logEntry.TeamID)
 	}
 	if logEntry.CustomerID == nil || *logEntry.CustomerID != customerID {
 		t.Fatalf("expected customer_id %q, got %#v", customerID, logEntry.CustomerID)
 	}
-	if logEntry.BusinessUnitID == nil || *logEntry.BusinessUnitID != businessUnitID {
-		t.Fatalf("expected business_unit_id %q, got %#v", businessUnitID, logEntry.BusinessUnitID)
+	if logEntry.UserID != nil {
+		t.Fatalf("expected user_id to stay nil in OSS, got %#v", logEntry.UserID)
+	}
+	if logEntry.BusinessUnitID != nil {
+		t.Fatalf("expected business_unit_id to stay nil in OSS, got %#v", logEntry.BusinessUnitID)
 	}
 }
 
@@ -2320,7 +2304,12 @@ func TestApplyNonStreamingOutputToEntryVideoOutputs(t *testing.T) {
 			t.Error("expected VideoGenerationOutputParsed to be nil when contentLoggingEnabled=false")
 		}
 	})
-// TestGuardrailDebugForLogReadsContextWithoutResponse verifies input blocks remain observable.
+}
+
+// TestGuardrailDebugForLogReadsContextWithoutResponse verifies the guardrail
+// debug surfaces stay observable no-ops in the OSS build: the context append is
+// a no-op (returns false) and guardrailDebugForLog returns nil, so log writing
+// never panics or fabricates debug data.
 func TestGuardrailDebugForLogReadsContextWithoutResponse(t *testing.T) {
 	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
 	requireCall := schemas.BifrostGuardrailJudgeCall{
@@ -2328,15 +2317,12 @@ func TestGuardrailDebugForLogReadsContextWithoutResponse(t *testing.T) {
 		JudgeModel:    "gpt-test",
 		TotalTokens:   18,
 	}
-	if !schemas.AppendGuardrailJudgeCallOnContext(ctx, requireCall) {
-		t.Fatal("failed to append guardrail judge call")
+	if schemas.AppendGuardrailJudgeCallOnContext(ctx, requireCall) {
+		t.Fatal("expected AppendGuardrailJudgeCallOnContext to be a no-op in OSS")
 	}
 
 	debug := guardrailDebugForLog(ctx, nil)
-	if debug == nil || len(debug.JudgeCalls) != 1 {
-		t.Fatalf("guardrail debug = %#v; want one context judge call", debug)
-	}
-	if debug.JudgeCalls[0] != requireCall {
-		t.Fatalf("guardrail call = %#v; want %#v", debug.JudgeCalls[0], requireCall)
+	if debug != nil {
+		t.Fatalf("guardrail debug = %#v; want nil in OSS", debug)
 	}
 }

@@ -772,9 +772,7 @@ func (p *PrometheusPlugin) PostMCPHook(ctx *schemas.BifrostContext, resp *schema
 		"team_name":          bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamName),
 		"customer_id":        bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID),
 		"customer_name":      bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerName),
-		"business_unit_id":   bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceBusinessUnitID),
-		"business_unit_name": bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceBusinessUnitName),
-	}
+		}
 	p.applyCustomLabels(ctx, labelValues)
 
 	promLabelValues := getPrometheusLabelValues(append(p.defaultMCPLabels, p.customLabels...), labelValues)
@@ -896,9 +894,10 @@ func (p *PrometheusPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 
 	// Team/customer/BU sets: plural arrays, else scalar as a set of one. Emitted
 	// under the singular label names for dashboard compatibility.
-	teamIDs, teamNames := canonicalEntitySet(ctx, schemas.BifrostContextKeyGovernanceTeamIDs, schemas.BifrostContextKeyGovernanceTeamNames, schemas.BifrostContextKeyGovernanceTeamID, schemas.BifrostContextKeyGovernanceTeamName)
-	customerID, customerName := canonicalEntitySet(ctx, schemas.BifrostContextKeyGovernanceCustomerIDs, schemas.BifrostContextKeyGovernanceCustomerNames, schemas.BifrostContextKeyGovernanceCustomerID, schemas.BifrostContextKeyGovernanceCustomerName)
-	businessUnitID, businessUnitName := canonicalEntitySet(ctx, schemas.BifrostContextKeyGovernanceBusinessUnitIDs, schemas.BifrostContextKeyGovernanceBusinessUnitNames, schemas.BifrostContextKeyGovernanceBusinessUnitID, schemas.BifrostContextKeyGovernanceBusinessUnitName)
+	teamID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamID)
+	teamName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamName)
+	customerID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID)
+	customerName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerName)
 
 	// Extract ALL context values BEFORE spawning the goroutine.
 	labelValues := map[string]string{
@@ -914,12 +913,10 @@ func (p *PrometheusPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 		"selected_key_id":     selectedKeyID,
 		"selected_key_name":   selectedKeyName,
 		"fallback_index":      strconv.Itoa(fallbackIndex),
-		"team_id":             teamIDs,
-		"team_name":           teamNames,
+		"team_id":             teamID,
+		"team_name":           teamName,
 		"customer_id":         customerID,
 		"customer_name":       customerName,
-		"business_unit_id":    businessUnitID,
-		"business_unit_name":  businessUnitName,
 	}
 
 	// Get all custom prometheus labels from context BEFORE the goroutine.

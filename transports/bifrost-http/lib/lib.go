@@ -1,9 +1,6 @@
 package lib
 
 import (
-	"io"
-	"strconv"
-
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -34,43 +31,7 @@ func HasDuplicates[T comparable](items []T) bool {
 }
 
 // StreamLargeResponseBody extracts the large response reader from context and streams
-// it directly to the client. Sets status 200, content-type, and content-length headers.
-// Returns false if the reader is not available (caller should send an error response).
+// it directly to the client. Always returns false in OSS (enterprise-only feature).
 func StreamLargeResponseBody(ctx *fasthttp.RequestCtx, bifrostCtx *schemas.BifrostContext) bool {
-	if bifrostCtx == nil {
-		return false
-	}
-	reader, ok := bifrostCtx.Value(schemas.BifrostContextKeyLargeResponseReader).(io.ReadCloser)
-	if !ok || reader == nil {
-		return false
-	}
-
-	contentLength, _ := bifrostCtx.Value(schemas.BifrostContextKeyLargeResponseContentLength).(int)
-	contentType, _ := bifrostCtx.Value(schemas.BifrostContextKeyLargeResponseContentType).(string)
-	contentDisposition, _ := bifrostCtx.Value(schemas.BifrostContextKeyLargeResponseContentDisposition).(string)
-
-	// Mirror large-response-mode to fasthttp UserValue so post-hook middleware
-	// (which only sees ctx.UserValue, not bifrostCtx) can skip body materialization.
-	ctx.SetUserValue(FastHTTPUserValueLargeResponseMode, true)
-
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	if contentType != "" {
-		ctx.SetContentType(contentType)
-	} else {
-		ctx.SetContentType("application/json")
-	}
-	if contentDisposition != "" {
-		ctx.Response.Header.Set("Content-Disposition", contentDisposition)
-	}
-	// bodySize for SetBodyStream: positive = known size, -1 = unknown (read until EOF).
-	// fasthttp treats 0 as "known empty", so default to -1 when CL is unavailable.
-	bodySize := contentLength
-	if bodySize > 0 {
-		ctx.Response.Header.Set("Content-Length", strconv.Itoa(contentLength))
-	} else {
-		bodySize = -1
-	}
-
-	ctx.Response.SetBodyStream(reader, bodySize)
-	return true
+	return false
 }

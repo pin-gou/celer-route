@@ -11,7 +11,7 @@ import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
 import { ModelDetails, useGetModelDetailsQuery, useGetProvidersQuery } from "@/lib/store";
 import { KnownProvider } from "@/lib/types/config";
 import { formatTokenPriceCompact } from "@/lib/utils/numbers";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ChevronLeft, ChevronRight, Edit, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import AttributeSheet from "./attributeSheet";

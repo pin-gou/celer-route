@@ -26,16 +26,13 @@ import { ModelConfig } from "@/lib/types/governance";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/governance";
 import { getScopeLabel } from "@/lib/utils/labels";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Edit, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import ModelLimitSheet from "./modelLimitSheet";
 import { ModelLimitsEmptyState } from "./modelLimitsEmptyState";
-// Side-effect import: pull in downstream scope registrations (enterprise
-// "user" deep-link, etc.). No-op for OSS builds.
-import "@enterprise/lib/registrations/modelLimitScopes";
 import { PIN_SHADOW_RIGHT } from "@/components/table/columnPinning";
 import { useNavigate } from "@tanstack/react-router";
 

@@ -8,14 +8,12 @@ import { SecretVarInput } from "@/components/ui/secretVarInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { IS_ENTERPRISE } from "@/lib/constants/config";
 import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } from "@/lib/store";
 import { AuthConfig, CoreConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { SecretVar } from "@/lib/types/schemas";
 import { parseArrayFromText } from "@/lib/utils/array";
 import { getPasswordPolicyFailures, validateOrigins } from "@/lib/utils/validation";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
-import { useGetAuthTypeQuery } from "@enterprise/lib/store/apis/scimApi";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -23,11 +21,10 @@ import { toast } from "sonner";
 export default function SecurityView() {
 	const hasSettingsUpdateAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const { data: bifrostConfig } = useGetCoreConfigQuery({ fromDB: true });
-	const { data: authType, isLoading: authTypeLoading, error: authTypeError } = useGetAuthTypeQuery(undefined, { skip: !IS_ENTERPRISE });
 	const config = bifrostConfig?.client_config;
 	const [updateCoreConfig, { isLoading }] = useUpdateCoreConfigMutation();
 	const [localConfig, setLocalConfig] = useState<CoreConfig>(DefaultCoreConfig);
-	const showPasswordSection = !IS_ENTERPRISE || (!authTypeLoading && !authTypeError && authType?.type !== "sso");
+	const showPasswordSection = true;
 	const passwordInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 	const passwordUnchangedRef = useRef(true);
 
@@ -131,7 +128,7 @@ export default function SecurityView() {
 		const serverHeaders = config.allowed_headers?.slice().sort().join(",");
 		const headersChanged = localHeaders !== serverHeaders;
 
-		const enforceAuthOnInferenceChanged = localConfig.enforce_auth_on_inference !== config.enforce_auth_on_inference && IS_ENTERPRISE;
+		const enforceAuthOnInferenceChanged = localConfig.enforce_auth_on_inference !== config.enforce_auth_on_inference && false;
 
 		return originsChanged || headersChanged || enforceAuthOnInferenceChanged;
 	}, [config, localConfig]);
@@ -237,21 +234,6 @@ export default function SecurityView() {
 
 			<div className="space-y-4">
 				{/* Password Protect the Dashboard */}
-				{IS_ENTERPRISE && authTypeLoading ? (
-					<div className="flex items-center justify-center rounded-sm border p-8" data-testid="security-auth-type-loading">
-						<Loader2 className="text-muted-foreground h-5 w-5 animate-spin" aria-hidden />
-						<span className="sr-only">Loading authentication settings</span>
-					</div>
-				) : null}
-				{IS_ENTERPRISE && !authTypeLoading && authTypeError ? (
-					<Alert variant="destructive" data-testid="security-auth-type-error">
-						<AlertTriangle className="h-4 w-4" />
-						<AlertDescription>
-							Could not load authentication type. Dashboard password settings are hidden until this request succeeds.{" "}
-							{getErrorMessage(authTypeError)}
-						</AlertDescription>
-					</Alert>
-				) : null}
 				{showPasswordSection && (
 					<div>
 						<div className="space-y-4 rounded-sm border p-4">
@@ -328,10 +310,10 @@ export default function SecurityView() {
 				<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 					<div className="space-y-0.5">
 						<label htmlFor="enforce-auth-on-inference" className="text-sm font-medium">
-							{IS_ENTERPRISE ? "Enable Auth on Inference" : "Enforce Virtual Keys on Inference"}
+							{false ? "Enable Auth on Inference" : "Enforce Virtual Keys on Inference"}
 						</label>
 						<p className="text-muted-foreground text-sm">
-							{IS_ENTERPRISE
+							{false
 								? "Require authentication (virtual key, API key, or user token) for all inference endpoints."
 								: "Require a virtual key for all inference requests."}{" "}
 							See{" "}
@@ -355,35 +337,6 @@ export default function SecurityView() {
 					/>
 				</div>
 				{/* Dual Credential Conflict Behavior */}
-				{IS_ENTERPRISE && (
-					<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-						<div className="space-y-0.5">
-							<label htmlFor="dual-credential-conflict-behavior" className="text-sm font-medium">
-								Dual Credential Conflict Behavior
-							</label>
-							<p className="text-muted-foreground text-sm">
-								How to handle inference requests that present both an identity provider access token (<b>Authorization: Bearer</b>) and a
-								virtual key (<b>x-bf-vk</b>). <b>Prefer IDP token</b> uses the user token for identity, <b>Prefer virtual key</b> drops the
-								IDP token and authenticates via the virtual key, and <b>Reject request</b> returns a 400 error.
-							</p>
-						</div>
-						<Select
-							value={localConfig.dual_credential_conflict_behavior || "prefer_idp"}
-							onValueChange={(value) =>
-								setLocalConfig((prev) => ({ ...prev, dual_credential_conflict_behavior: value as CoreConfig["dual_credential_conflict_behavior"] }))
-							}
-						>
-							<SelectTrigger id="dual-credential-conflict-behavior" data-testid="dual-credential-conflict-behavior-select" className="w-[180px]">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="prefer_idp">Prefer IDP token</SelectItem>
-								<SelectItem value="prefer_vk">Prefer virtual key</SelectItem>
-								<SelectItem value="error">Reject request</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-				)}
 				{/* Allow Direct API Keys */}
 				<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 					<div className="space-y-0.5">

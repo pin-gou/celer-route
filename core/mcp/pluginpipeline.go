@@ -579,6 +579,4 @@ func setMCPGovernanceSpanAttrs(tracer schemas.Tracer, handle schemas.SpanHandle,
 	setIfPresent(schemas.BifrostContextKeyGovernanceTeamName, schemas.AttrBifrostTeamName)
 	setIfPresent(schemas.BifrostContextKeyGovernanceCustomerID, schemas.AttrBifrostCustomerID)
 	setIfPresent(schemas.BifrostContextKeyGovernanceCustomerName, schemas.AttrBifrostCustomerName)
-	setIfPresent(schemas.BifrostContextKeyGovernanceBusinessUnitID, schemas.AttrBifrostBusinessUnitID)
-	setIfPresent(schemas.BifrostContextKeyGovernanceBusinessUnitName, schemas.AttrBifrostBusinessUnitName)
 }

@@ -9,7 +9,7 @@ import { baseRoutingFields } from "@/lib/config/celFieldsRouting";
 import { getOperatorLabel } from "@/lib/config/celOperatorsRouting";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
-import { useGetCustomerQuery, useGetTeamQuery, useGetVirtualKeyQuery } from "@/lib/store/apis/governanceApi";
+import { useGetVirtualKeyQuery } from "@/lib/store/apis/governanceApi";
 import { RoutingRule } from "@/lib/types/routingRules";
 import { getScopeLabel } from "@/lib/utils/labels";
 import { formatDistanceToNow } from "date-fns";
@@ -40,27 +40,18 @@ function formatRuleValue(value: any): string {
 	return String(value ?? "");
 }
 
-// Resolves a rule's scope_id to a display name. Each scope fetches only the one
-// entity it needs — the rule points at a single id, so pulling the full list to
-// find one name is wasted payload.
+// Resolves a rule's scope_id to a display name. With scope narrowed to
+// virtual_key/global, only virtual_key scope has a resolvable entity.
 function useScopeName(scope: string, scopeId?: string): string | undefined {
-	const { data: teamData } = useGetTeamQuery(scopeId as string, {
-		skip: scope !== "team" || !scopeId,
-	});
-	const { data: customerData } = useGetCustomerQuery(scopeId as string, {
-		skip: scope !== "customer" || !scopeId,
-	});
 	const { data: vkData } = useGetVirtualKeyQuery(scopeId as string, {
 		skip: scope !== "virtual_key" || !scopeId,
 	});
 
 	return useMemo(() => {
 		if (!scopeId) return undefined;
-		if (scope === "team") return teamData?.team?.name;
-		if (scope === "customer") return customerData?.customer?.name;
 		if (scope === "virtual_key") return vkData?.virtual_key?.name;
 		return undefined;
-	}, [scope, scopeId, teamData, customerData, vkData]);
+	}, [scope, scopeId, vkData]);
 }
 
 // ─── copy button ─────────────────────────────────────────────────────────────

@@ -3,8 +3,6 @@
  * Create/Edit form for routing rules
  */
 
-import { CustomerSelector } from "@/components/entitySelectors/customerSelector";
-import { TeamSelector } from "@/components/entitySelectors/teamSelector";
 import { VirtualKeySelector } from "@/components/entitySelectors/virtualKeySelector";
 import { Button } from "@/components/ui/button";
 import { ComboboxSelect } from "@/components/ui/combobox";
@@ -18,7 +16,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
-import { getUserPicker } from "@/lib/registries/userPicker";
 import { getErrorMessage } from "@/lib/store";
 import { useGetAllKeysQuery, useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { useCreateRoutingRuleMutation, useGetRoutingRulesQuery, useUpdateRoutingRuleMutation } from "@/lib/store/apis/routingRulesApi";
@@ -32,14 +29,12 @@ import {
 } from "@/lib/types/routingRules";
 import { validateRateLimitAndBudgetRules, validateRoutingRules } from "@/lib/utils/celConverterRouting";
 import { isValidRuleGroupType, normalizeRoutingRuleGroupQuery } from "@/lib/utils/routingRuleGroupQuery";
-import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
+import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Plus, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { RuleGroupType } from "react-querybuilder";
 import { toast } from "sonner";
-// Side-effect import: registers the enterprise user picker (no-op in OSS builds).
-import "@enterprise/lib/registrations/userPicker";
 
 interface RoutingRuleDialogProps {
 	open: boolean;
@@ -120,9 +115,6 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 	const scope = watch("scope");
 	const scopeId = watch("scope_id");
 
-	// Registered by the downstream build at module load; undefined in builds
-	// without a user directory, which hides the "User" scope option.
-	const UserPicker = getUserPicker();
 	const fallbacks = watch("fallbacks");
 
 	// Get available providers from configured providers, plus any provider already
@@ -218,9 +210,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 
 		// Validate scope_id is required when scope is not global
 		if (data.scope !== "global" && !data.scope_id?.trim()) {
-			toast.error(
-				`${data.scope === "team" ? "Team" : data.scope === "customer" ? "Customer" : data.scope === "user" ? "User" : "Virtual Key"} is required`,
-			);
+			toast.error("Virtual Key is required");
 			return;
 		}
 
@@ -403,7 +393,6 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 												{scopeOption.label}
 											</SelectItem>
 										))}
-										{(UserPicker || scope === "user") && <SelectItem value="user">User</SelectItem>}
 									</SelectContent>
 								</Select>
 							</div>
@@ -432,30 +421,10 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 						{scope !== "global" && (
 							<div className="space-y-2">
 								<Label htmlFor="scope_id">
-									{scope === "team" ? "Team" : scope === "customer" ? "Customer" : scope === "user" ? "User" : "Virtual Key"}{" "}
+									Virtual Key{" "}
 									<span className="text-red-500">*</span>
 								</Label>
-								{/* A rule stores only its scope_id, so there is no name to seed
-								    these with — each selector resolves its own selection. */}
-								{scope === "team" && <TeamSelector value={scopeId || ""} onChange={(value) => setValue("scope_id", value)} />}
-								{scope === "customer" && <CustomerSelector value={scopeId || ""} onChange={(value) => setValue("scope_id", value)} />}
 								{scope === "virtual_key" && <VirtualKeySelector value={scopeId || ""} onChange={(value) => setValue("scope_id", value)} />}
-								{scope === "user" &&
-									(UserPicker ? (
-										<UserPicker value={scopeId || ""} onChange={(value) => setValue("scope_id", value)} />
-									) : (
-										// No user directory in this build: keep a plain input so
-										// existing user-scoped rules remain editable.
-										<Input
-											id="scope_id"
-											data-testid="routing-rule-scope-user-input"
-											placeholder="Governance user ID"
-											value={scopeId || ""}
-											onChange={(e) => setValue("scope_id", e.target.value)}
-										/>
-									))}
-								{/* Teams, customers and virtual keys are all searched lazily inside their
-								    selectors, each of which surfaces its own empty state. */}
 								{errors.scope_id &&<p className="text-destructive text-sm">{errors.scope_id.message}</p>}
 							</div>
 						)}

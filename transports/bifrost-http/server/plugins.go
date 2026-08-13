@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"slices"
 
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/plugins/compat"
@@ -349,10 +348,6 @@ func (s *BifrostHTTPServer) loadCustomPlugins(ctx context.Context) error {
 		// Plugin is enabled - instantiate it
 		plugin, err := InstantiatePlugin(ctx, cfg.Name, cfg.Path, cfg.Config, s.Config)
 		if err != nil {
-			// Skip enterprise plugins silently
-			if slices.Contains(enterprisePlugins, cfg.Name) {
-				continue
-			}
 			logger.Error("failed to load plugin %s: %v", cfg.Name, err)
 			// Use cfg.Name since plugin may be nil when InstantiatePlugin returns an error
 			s.Config.UpdatePluginOverallStatus(cfg.Name, cfg.Name, schemas.PluginStatusError,

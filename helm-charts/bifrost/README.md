@@ -17,16 +17,10 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 
 ### 2.1.34
 
-- Added `bifrost.scim.config.roleResolutionStrategy` (`highestPermissionCount` default, or `order`) to pick a single role when a user matches multiple `attributeRoleMappings` — most-permissioned role vs first match in the list. Passes through into `scim_config.config.roleResolutionStrategy`.
+- Fixed Helm schema validation failure for multi-profile OTEL configs (`bifrost.plugins.otel.config.profiles`), introduced by the `export_timeout` default in 2.1.32.
 
 ### 2.1.33
 
-- Fixed Helm schema validation failure for multi-profile OTEL configs (`bifrost.plugins.otel.config.profiles`), introduced by the `export_timeout` default in 2.1.32.
-
-### 2.1.32
-
-- Extended `bifrost.accessProfiles[].provider_configs[]` with `blacklisted_models` (denylist that wins over `allowed_models`; `["*"]` blocks every model, while an empty or omitted list blocks none), `weight` (load-balancer seed weight; `null` opts out), and `model_budgets[]` (per-model budget groups; each entry requires `model_name` and may carry optional `budgets[]` and a `rate_limit`). These pass through into `access_profiles[].provider_configs[]`.
-- Added `bifrost.scim.config.additionalScopes` (Okta) — an array of extra OAuth scopes requested on top of the base `openid/profile/email/offline_access` set, for Custom Authorization Servers where claims like `groups` are gated behind a scope Bifrost does not request by default. Passes through into `scim_config.config.additionalScopes`.
 - Added `bifrost.framework.pricing.liveModelsSyncInterval` (default `3600` seconds, minimum `60`, `0` disables) to control how often each provider's list-models response is re-fetched in the background. Renders into `framework.pricing.live_models_sync_interval`.
 - Added `storage.configStore.connMaxIdleTime` and `storage.logsStore.connMaxIdleTime` (Go duration, e.g. `5m`) to cap how long an idle PostgreSQL connection is kept before closing, so bursts above `maxIdleConns` stop churning physical connections. Each renders into its store's `conn_max_idle_time`.
 - Added `storage.logsStore.matviewRefreshTimeout` (Go duration, min 30s, max 30m; unset derives 5× the refresh interval, at least 5m) to bound a single materialized-view refresh pass. Renders into `logs_store.matview_refresh_timeout`.
@@ -35,21 +29,15 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 
 ### 2.1.31
 
-- Added `bifrost.guardrails.rules[].stream_replay_event_interval_ms` to configure the delay between buffered events after block-capable output guardrails allow a streaming response; `0` keeps immediate delivery.
-
 ### 2.1.30
 
 - Added `bifrost.client.retainContentInObjectStorage` (default off, commented out) to keep full request/response content in object storage when content logging is disabled — via the global `disableContentLogging` setting or the `x-bf-disable-content-logging` header — instead of dropping it. The content is hidden: the database row stays metadata-only and the UI/API never fetch the payload back, so it is only readable with direct access to the bucket. Requires `storage.logsStore.objectStorage.enabled: true`; without it the content is dropped as before. Renders into `client.retain_content_in_object_storage`.
 - Added top-level `bifrost.webhooks[]` endpoint declarations (name/url/events plus per-endpoint delivery tuning like `include_response`, `max_retries`, retry backoff, timeouts, and `max_concurrent_deliveries`), reconciled by name at startup. Renders directly into the top-level `webhooks` array. Also added `bifrost.client.webhookConfig.deliveryHistoryRetentionDays` (global delivery-history retention), rendering into `client.webhook_config.delivery_history_retention_days`.
-- Added `bifrost.loadBalancer.appendFallbacksToPinned` (default off) to append healthy providers eligible for a request's model as fallbacks behind a pinned provider. Renders into `load_balancer_config.append_fallbacks_to_pinned`.
-- Added audit-log object-storage archival tuning `bifrost.auditLogs.archiveInterval` (default `24h`), `archiveGracePeriod` (default `15m`), and `archiveMaxObjectBytes` (default 128MiB), rendering into `audit_logs.archive_interval` / `archive_grace_period` / `archive_max_object_bytes`.
 - Added `keep_alive_timeout_in_seconds` to provider `network_config` (default 30) to drop idle pooled connections before the upstream closes them. Renders into `network_config.keep_alive_timeout_in_seconds`.
 - Added `use_anthropic_endpoints` to provider keys (deepseek/fireworks/vllm/sgl) and to per-alias configs, routing chat completions and responses through Anthropic-compatible endpoints. Passes through into each key / alias as `use_anthropic_endpoints`.
-- Added SCIM auth-proxy / identity-aware-proxy support via `bifrost.scim.config.authProxy` (shared across all SCIM providers), for deployments fronted by a Zero Trust / ZTNA proxy — Cloudflare Access, a generic OIDC proxy, or AWS ALB. Carries `enabled`, `provider`, `mode` (`login_only`/`full`), the JWKS fields (`issuerUrl`/`jwksUrl`/`audience`/`allowedAudiences`/`headerName`), and the AWS ALB fields (`expectedSigner`/`region`/`publicKeyBaseUrl`), plus `userIdClaim`. Renders into `scim_config.config.authProxy`. (Also synced the field into the source-of-truth `transports/config.schema.json` so the generated config validates at startup.)
 
 ### 2.1.29
 
-- Added `bifrost.scim.config.provisioningToken` and `claimScimAttributes` to the Okta, Entra, SailPoint, and generic OIDC SCIM providers, so inbound SCIM provisioning can be seeded declaratively instead of via the dashboard. Both render into `scim_config.config`. Generate a token with `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='` (supports `env.` prefix).
 - Added `request_headers` to the OTEL plugin config (`bifrost.plugins.otel.config.request_headers` and `profiles[*].request_headers`) to capture request headers as span attributes. Renders into `request_headers`.
 - Added `bifrost.client.dualCredentialConflictBehavior` to control what happens when an inference request presents both an IDP access token and a virtual key (`x-bf-vk`). Accepts `"error"` (reject with 400), `"prefer_vk"` (drop IDP token, use VK), or `"prefer_idp"` (default, IDP token wins). Renders into `client.dual_credential_conflict_behavior`.
 
@@ -73,14 +61,11 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 > and `podSecurityContext.fsGroup: null` (see the OpenShift section under
 > Installation).
 
-- Added `bifrost.auditLogs.objectStorage` for archiving audit events to S3/GCS. Supports `type` (s3/gcs), `bucket`, `prefix`, `compress`, and full S3 credential fields (`region`, `endpoint`, `accessKeyId`, `secretAccessKey`, `sessionToken`, `roleArn`, `forcePathStyle`) and GCS fields (`projectId`, `credentialsJson`). Renders into `audit_logs.object_storage`.
 - Added `bifrost.schemaUrl` to override the generated `config.json` `$schema` location for isolated deployments. It accepts HTTP(S), `file://`, or filesystem paths. When set, it is also exported as `BIFROST_SCHEMA_URL` in the pod; when empty (default), the env var is not injected and the public schema URL is used.
 - Added `force_single_region` to `bifrost.providers.vertex.keys[*].vertex_key_config`. When `true`, skips automatic promotion of multi-region-only models to a multi-region endpoint. Enable for provisioned throughput. Renders into `vertex_key_config.force_single_region`.
-- Added `calendar_aligned` to `bifrost.accessProfiles[*]` (top-level on each profile). Snaps all budget and rate-limit reset windows to calendar boundaries for the profile. Passes through directly into `access_profiles[*].calendar_aligned`.
-- Added `calendar_aligned` to `bifrost.accessProfiles[*].budgets[*]` and `bifrost.accessProfiles[*].provider_configs[*].budgets[*]`. Schema previously blocked this field via `additionalProperties: false`; now parity with `governance.budgets[*].calendar_aligned`.
+- Added `calendar_aligned` to `bifrost.governance.modelConfigs[]`.
 - Added `calendar_aligned` rendering for `bifrost.governance.virtualKeys[*].calendar_aligned`. Was in schema but not rendered into config. Now emits `virtual_keys[*].calendar_aligned` in the generated config.
 - Documented `calendar_aligned` in the `bifrost.governance.budgets[*]` example. Was already schema-supported; now shown in the `values.yaml` commented example.
-- Added `bifrost.alerting` for declarative alert channels and rules. Supports `history_retention_days`, `webhook_network` (`allow_http`, `allow_private_network`), `channels[]` (slack, microsoft_teams, pagerduty, webhook), and `rules[]` (CEL-expression-based, governance-scope-aware). Renders into `alerting`.
 - `postgresql.external.port` now accepts a string in addition to an integer, enabling env-variable substitution via `env.VAR_NAME` references when mounting port from a Kubernetes secret. Renders into `postgres_config.port`.
 - `bifrost.mcp.toolGroups[*].id` — optional integer DB ID for an existing MCP tool group. When set, the reconciler updates the group by ID instead of matching by name. Renders into `mcp.tool_groups[*].id`.
 
@@ -94,11 +79,7 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 
 ### 2.1.25
 
-- Added `bifrost.circuitBreakerConfig`. Renders into `circuit_breaker_config` in the generated config JSON.
-- Extended `bifrost.loadBalancer` with four new behavioural flags: `directionSelectionEnabled`, `routeSelectionEnabled`, `rerouteFailedDirections`, and `pruneFailedFallbacks`. All are optional booleans; omitting a flag preserves the server default rather than forcing a value. Renders into the corresponding config.json fields inside `load_balancer_config`.
-- Added `evaluation_mode` to guardrail rules. Accepts `bundled` (default, evaluate all turns together) or `per_turn` (evaluate each turn independently). Set under `bifrost.guardrails.rules[].evaluation_mode`.
 - Added `group_traces_by_session` to the OTEL and Datadog plugin configs. When `true`, requests sharing the same `x-bf-session-id` header are grouped into a single trace. An inbound W3C `traceparent` always takes priority. Defaults to `false`.
-- Added `storage.configStore.vaultStore` to `values.yaml` with full commented-out examples for all three backends: `aws-secrets-manager`, `gcp-secret-manager`, and `hashicorp-vault`. Set `accessMode: read_and_write` to automatically store plaintext config fields as vault secrets; `read_only` (default) only resolves existing `vault.<path>` references.
 - `dns_names` in cluster discovery config now accepts `env.VAR_NAME` references in addition to literal hostnames, consistent with how other secret-bearing fields work across the chart.
 
 ### 2.1.24
@@ -129,7 +110,6 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 
 ### 2.1.22
 
-- Added `bifrost.governance.roles` array to `values.yaml`, `values.schema.json`, and `_helpers.tpl`. Each role requires a `name` and accepts optional `description`, `dac` (`own-data` | `team-data` | `all-data`, default `all-data`), `access_profile`, and `permissions[]` (`resource` + `operation`).
 - `bifrost.plugins.otel.config` now accepts either the existing single-profile shape or a new `profiles` wrapper (`otelProfilesConfig`) with an array of profiles. Each profile is independently enabled/disabled. A shared `plugin_span_filter` can be set at the top level in either shape.
 - Added `disable_content_logging` to OTEL config (both single-profile and per-profile). When `true`, message content (input/output messages, embeddings, tool definitions, tool call arguments/results) is dropped from exported spans — only metadata (model, tokens, latency) is sent to the collector.
 - Added `otelPluginSpanFilter` (`mode`: `include`/`exclude`, `plugins` array) to the OTEL config schema, available in both single-profile and multi-profile shapes.
@@ -171,14 +151,6 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 - Added `bifrost.framework.pricing.modelParametersUrl` to `values.yaml`, `values.schema.json`, and `_helpers.tpl`, allowing operators to override the URL Bifrost uses to fetch model parameter definitions.
 
 ### 2.1.17
-
-- Added `max_turns_to_send` to guardrail rules. The integer caps how many historical conversation turns are sent to the guardrail provider on apply; the latest message is always included on top, and `0` (default) sends all turns. Wired into `values.schema.json`, `config.schema.json`, and `templates/_helpers.tpl` so it renders into `guardrails_config.guardrail_rules[].max_turns_to_send`.
-- Extended SCIM/SSO support so attribute mappings work for every supported provider, not just Keycloak:
-  - Added `attributeRoleMappings`, `attributeTeamMappings`, and `attributeBusinessUnitMappings` to `bifrost.scim.config` for the Okta and Entra (Azure AD) provider branches. Previously these fields were rejected by `additionalProperties: false` even though the enterprise runtime renders them into `config.json`.
-  - Tightened the existing Keycloak mapping items from the placeholder `{type: object}` to a strict shape (`attribute`, `value`, plus `role`/`team`/`business_unit`, `additionalProperties: false`) so typos surface at `helm template` time. The same strict item shape is applied to Okta, Entra, Zitadel, and Google.
-  - Added two more SCIM providers to the schema enum and provided full config blocks for them: `zitadel` (`domain`, `clientId`, optional `clientSecret`/`projectId`/`audience`, plus service-account fields for Management API access) and `google` (Google Workspace OIDC with `domain`, `clientId`, `credentialMode`, service-account sources, and `adminEmail` for domain-wide delegation).
-  - Added matching `helm template`-time validation in `_helpers.tpl` for Zitadel (requires `domain`, `clientId`) and Google Workspace (requires `domain`, `clientId`).
-  - Documented every new field as commented examples under `bifrost.scim.config` in `values.yaml`.
 
 ### 2.1.16
 
@@ -225,11 +197,7 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 
 ### 2.1.10
 
-- Added `bifrost.cluster.grpc` block for the cluster gRPC counter-sync transport (enterprise):
-  - New values: `bifrost.cluster.grpc.port` (default `10102`) and `bifrost.cluster.grpc.dialTimeoutSeconds` (default `5`).
-  - Rendered into `cluster_config.grpc` (`port`, `dial_timeout_seconds`) by `templates/_helpers.tpl`.
-  - StatefulSet exposes the port as a named `grpc` container port; `service-headless` exposes it as a named service port so peers can dial each other.
-  - Both port additions are guarded by `if .Values.bifrost.cluster.grpc` so values overrides that omit the block render cleanly.
+- Added `mdnsService` description for local network discovery
 
 ### 2.1.9
 
@@ -249,9 +217,6 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 - Added semantic cache Helm layers and examples:
   - Added Redis deployment template for semantic cache.
   - Extended Helm values/schema coverage for semantic cache and client-config examples.
-- Added enterprise/governance Helm support:
-  - Added governance `business_units` support in Helm schema/template rendering.
-  - Added deferred virtual-key/provider-config budget ordering handling in Helm rendering.
 - Added MCP tool-groups support in Helm:
   - Added `mcp.tool_groups` config support with governance bindings.
   - Added camelCase alias compatibility for related Helm config fields.
@@ -381,7 +346,7 @@ Official Helm charts for deploying [Bifrost](https://github.com/maximhq/bifrost)
 ### v2.0.10
 
 - Added missing plugin config properties from Go implementations:
-  - governance: `required_headers`, `is_enterprise`
+  - governance: `required_headers`
   - logging: `disable_content_logging`, `logging_headers`
   - otel: `headers`, `tls_ca_cert`, `insecure`
   - telemetry: `custom_labels`
@@ -592,53 +557,6 @@ needed.
 | `image.pullPolicy` | Image pull policy              | `IfNotPresent`              |
 
 > **Important:** You must specify the `image.tag`. See available tags at [Docker Hub](https://hub.docker.com/r/maximhq/bifrost/tags).
-
-### Enterprise Private Registry
-
-For enterprise customers with private container registries, simply override the `image.repository` with your full registry URL:
-
-```yaml
-# Google Artifact Registry
-image:
-  repository: us-west1-docker.pkg.dev/bifrost-enterprise/your-org/bifrost
-  tag: v1.5.0
-
-# AWS ECR
-image:
-  repository: 123456789.dkr.ecr.us-east-1.amazonaws.com/bifrost
-  tag: v1.5.0
-
-# Azure Container Registry
-image:
-  repository: yourregistry.azurecr.io/bifrost
-  tag: v1.5.0
-
-# Self-hosted registry
-image:
-  repository: registry.yourcompany.com/ai/bifrost
-  tag: v1.5.0
-```
-
-If your private registry requires authentication, configure `imagePullSecrets`:
-
-```yaml
-image:
-  repository: us-west1-docker.pkg.dev/bifrost-enterprise/your-org/bifrost
-  tag: v1.5.0
-
-imagePullSecrets:
-  - name: my-registry-secret
-```
-
-Create the secret beforehand:
-
-```bash
-kubectl create secret docker-registry my-registry-secret \
-  --docker-server=us-west1-docker.pkg.dev \
-  --docker-username=_json_key \
-  --docker-password="$(cat key.json)" \
-  --docker-email=your-email@example.com
-```
 
 ### Storage Configuration
 
