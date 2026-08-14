@@ -168,4 +168,4 @@ stages:
     description: "集成阶段：跑集成测试 + 端到端场景验证，需启动 local 环境"
 
 git:
-  default_branch: master
+  default_branch: main
