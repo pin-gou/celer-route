@@ -294,6 +294,6 @@
      stage=final (常驻, 无 on_conditions)
 -->
 
-- [ ] 22.1 收集所有 stage 的 Gate Assessment
-- [ ] 22.2 检查跨 stage 依赖项
-- [ ] 22.3 输出 Final Gate Assessment
+- [x] 22.1 收集所有 stage 的 Gate Assessment
+- [x] 22.2 检查跨 stage 依赖项
+- [x] 22.3 输出 Final Gate Assessment
