@@ -1284,7 +1284,7 @@ export default function AppSidebar() {
 												className="hover:text-primary text-muted-foreground h-5 w-5"
 												size={22}
 												weight="regular"
-												strokeWidth={item.strokeWidth}
+												
 											/>
 										</div>
 									</a>
