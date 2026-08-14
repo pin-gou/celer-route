@@ -154,6 +154,16 @@ func TestConfigAsStateWarnsOnUnknownProvider(t *testing.T) {
 		t.Fatalf("anthropic override = %v, want 90s", got)
 	}
 
+	// The warning is advisory only — the override is still applied even for
+	// names that are not built-in providers (e.g. custom providers registered
+	// after plugin init).
+	if got := s.effectiveTTLLocked(schemas.ModelProvider("open-ai")); got != 45*time.Second {
+		t.Fatalf("typo'd openai override = %v, want 45s", got)
+	}
+	if got := s.effectiveTTLLocked(schemas.ModelProvider("made-up-provider")); got != 120*time.Second {
+		t.Fatalf("unknown-provider override = %v, want 120s", got)
+	}
+
 	// Two warnings expected (for "open-ai" and "made-up-provider").
 	if !log.contains(`"open-ai"`) {
 		t.Fatalf("expected warning for typo'd provider name, got messages: %v", log.msgs)
