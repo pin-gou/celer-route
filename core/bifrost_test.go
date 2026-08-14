@@ -3188,3 +3188,124 @@ func TestFixedKeyProviderHonoursDeadKeyIDs(t *testing.T) {
 		t.Fatalf("dead key must surface errAllKeysDead regardless of filter outcome, got %v", err)
 	}
 }
+
+// TestIsSyntheticNoEligibleKeysError pins the exact predicate used by both
+// tryRequest (non-streaming) and tryStreamRequest (streaming) to short-circuit
+// PostLLMHooks for the synthetic 503 "no_eligible_keys" error. When the
+// KeyPoolFilter (provider-cooldown) suppresses every eligible key, no provider
+// call is made, so the logging plugin must not record a spurious 0-latency
+// failed request. The predicate must ONLY match the genuine synthetic error and
+// not a real provider 503 (which did reach the provider and should be logged).
+func TestIsSyntheticNoEligibleKeysError(t *testing.T) {
+	status503 := 503
+	status500 := 500
+	noEligible := "no_eligible_keys"
+	upstream := "upstream_error"
+
+	cases := []struct {
+		name string
+		err  *schemas.BifrostError
+		want bool
+	}{
+		{
+			name: "genuine synthetic no_eligible_keys 503",
+			err:  &schemas.BifrostError{StatusCode: &status503, Type: &noEligible},
+			want: true,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "nil status code",
+			err:  &schemas.BifrostError{Type: &noEligible},
+			want: false,
+		},
+		{
+			name: "503 with unrelated type is not synthetic",
+			err:  &schemas.BifrostError{StatusCode: &status503, Type: &upstream},
+			want: false,
+		},
+		{
+			name: "no_eligible_keys on non-503 is not synthetic",
+			err:  &schemas.BifrostError{StatusCode: &status500, Type: &noEligible},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isSyntheticNoEligibleKeysError(tc.err); got != tc.want {
+				t.Fatalf("isSyntheticNoEligibleKeysError() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys is
+// the streaming regression test for the provider-cooldown double-logging bug.
+//
+// When the KeyPoolFilter vetoes every eligible key on a STREAMING request
+// (canRotate=false single-key provider), executeRequestWithRetries must:
+//   - surface exactly the synthetic 503 "no_eligible_keys" error that
+//     isSyntheticNoEligibleKeysError matches (which is what lets
+//     tryStreamRequest skip PostLLMHooks and avoid logging), AND
+//   - never invoke the provider requestHandler — no provider call happened.
+//
+// This is the red-phase guard for the earlier fix: the non-streaming path
+// (tryRequest) gained its short-circuit but the streaming path (tryStreamRequest)
+// did not, so a vetoed streaming request was still handed to PostLLMHooks and
+// the logging plugin recorded a spurious error with 0ms latency.
+func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys(t *testing.T) {
+	config := createTestConfig(1, 10*time.Millisecond, 100*time.Millisecond)
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	logger := NewDefaultLogger(schemas.LogLevelError)
+	ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
+
+	// requestHandler must NOT be reached when every key is vetoed.
+	handlerCalls := int32(0)
+	handler := func(_ schemas.Key) (chan *schemas.BifrostStreamChunk, *schemas.BifrostError) {
+		atomic.AddInt32(&handlerCalls, 1)
+		return make(chan *schemas.BifrostStreamChunk), nil
+	}
+
+	// keyProvider mirrors the fixed-key (canRotate=false) path when the
+	// KeyPoolFilter vetoes the single key: it surfaces errAllKeysFiltered.
+	keyProvider := func(_, _ map[string]bool) (schemas.Key, error) {
+		return schemas.Key{}, fmt.Errorf("%w: provider %s", errAllKeysFiltered, schemas.OpenAI)
+	}
+
+	stream, err := executeRequestWithRetries(
+		ctx,
+		config,
+		handler,
+		keyProvider,
+		schemas.ChatCompletionStreamRequest,
+		schemas.OpenAI,
+		"gpt-4",
+		nil,
+		logger,
+	)
+
+	if err == nil {
+		t.Fatal("expected a 503 no_eligible_keys error when every key is vetoed, got nil")
+	}
+	// Assert the exact shape isSyntheticNoEligibleKeysError relies on — if this
+	// is not a genuine match, tryStreamRequest will not short-circuit and the
+	// logging plugin will still record a spurious failure.
+	if err.StatusCode == nil || *err.StatusCode != 503 {
+		t.Fatalf("expected status 503, got %v", err.StatusCode)
+	}
+	if err.Type == nil || *err.Type != noEligibleKeysErrorType {
+		t.Fatalf("expected type %q, got %v", noEligibleKeysErrorType, err.Type)
+	}
+	if !isSyntheticNoEligibleKeysError(err) {
+		t.Fatal("expected isSyntheticNoEligibleKeysError to be true for the returned error")
+	}
+	if stream != nil {
+		t.Fatal("expected nil stream when every key is vetoed; no provider was called")
+	}
+	if got := atomic.LoadInt32(&handlerCalls); got != 0 {
+		t.Fatalf("provider requestHandler must not be invoked when every key is vetoed, called %d time(s)", got)
+	}
+}

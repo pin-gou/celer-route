@@ -5595,8 +5595,7 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 		// call was made — the error is a synthetic 503 "no_eligible_keys" from
 		// the retry loop. Skip PostLLMHooks so plugins (especially logging)
 		// don't record a spurious failed request with 0ms latency.
-		if bifrostErrVal.StatusCode != nil && *bifrostErrVal.StatusCode == 503 &&
-			bifrostErrVal.Type != nil && *bifrostErrVal.Type == "no_eligible_keys" {
+		if isSyntheticNoEligibleKeysError(&bifrostErrVal) {
 			bifrostErrVal.PopulateExtraFields(req.RequestType, provider, model, model)
 			bifrost.releaseChannelMessage(msg)
 			return nil, &bifrostErrVal
@@ -5914,6 +5913,17 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 		} else {
 			bifrost.logger.Debug("error while executing stream request: %+v", bifrostErrVal)
 		}
+		// When the key pool filter prevents all keys from being selected (e.g.
+		// provider-cooldown plugin suppressing the only key), no actual provider
+		// call was made — the error is a synthetic 503 "no_eligible_keys" from
+		// the retry loop. Skip PostLLMHooks so plugins (especially logging)
+		// don't record a spurious failed request with 0ms latency. Mirrors the
+		// non-streaming short-circuit in tryRequest.
+		if isSyntheticNoEligibleKeysError(&bifrostErrVal) {
+			bifrostErrVal.PopulateExtraFields(req.RequestType, provider, model, model)
+			bifrost.releaseChannelMessage(msg)
+			return nil, &bifrostErrVal
+		}
 		// Marking final chunk
 		ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
 		// On error we will complete post-hooks
@@ -5952,6 +5962,33 @@ var errAllKeysDead = errors.New("all configured keys returned permanent per-key 
 // the KeyPoolFilter hook suppressed all of them. Unlike errAllKeysDead this is a transient
 // condition (the filter/circuit breaker self-heals), so it surfaces as a 503 rather than a 502.
 var errAllKeysFiltered = errors.New("all eligible keys are temporarily suppressed by the key pool filter")
+
+// noEligibleKeysErrorType is the BifrostError.Type value attached to the synthetic
+// 503 error raised by executeRequestWithRetries when the KeyPoolFilter (e.g.
+// provider-cooldown) suppresses every eligible key. Used by
+// isSyntheticNoEligibleKeysError to short-circuit PostLLMHooks for that case so
+// the logging plugin does not record a spurious failed request — no provider
+// call was actually made.
+const noEligibleKeysErrorType = "no_eligible_keys"
+
+// isSyntheticNoEligibleKeysError reports whether the error is the synthetic
+// 503 "no_eligible_keys" BifrostError raised by executeRequestWithRetries when
+// the KeyPoolFilter vetoes every key for the request. Both call sites (tryRequest
+// for non-streaming and tryStreamRequest for streaming) check this to bypass
+// PostLLMHooks, on the rationale that no actual provider call happened and the
+// logging plugin would otherwise record a 0-latency failure.
+func isSyntheticNoEligibleKeysError(err *schemas.BifrostError) bool {
+	if err == nil {
+		return false
+	}
+	if err.StatusCode == nil || *err.StatusCode != 503 {
+		return false
+	}
+	if err.Type == nil || *err.Type != noEligibleKeysErrorType {
+		return false
+	}
+	return true
+}
 
 // executeRequestWithRetries is a generic function that handles common request processing logic.
 // It consolidates retry logic, backoff calculation, error handling, and key rotation.
@@ -6094,7 +6131,7 @@ func executeRequestWithRetries[T any](
 				// because *some* keys happened to be dead.
 				if errors.Is(err, errAllKeysFiltered) {
 					statusCode := 503
-					errType := "no_eligible_keys"
+					errType := noEligibleKeysErrorType
 					return zero, &schemas.BifrostError{
 						IsBifrostError: false,
 						StatusCode:     &statusCode,
