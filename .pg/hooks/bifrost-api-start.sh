@@ -18,6 +18,42 @@ DATA_DIR="$HOOK_DIR/local/data"
 PORT="${BIFROST_START_PORT:-${PG_INSTANCE_PORT:-9080}}"
 HOST="${PG_INSTANCE_HOST:-localhost}"
 
+# 确保 UI 嵌入资源存在 (go:embed all:ui 要求目录含可嵌入文件)
+ensure_ui_embed() {
+    local ui_embed_dir="$PROJECT_ROOT/transports/bifrost-http/ui"
+    local ui_embed_parent="$(dirname "$ui_embed_dir")"
+    local ui_out_dir="$PROJECT_ROOT/ui/out"
+
+    if [[ -f "$ui_embed_dir/index.html" ]]; then
+        # 嵌入目录存在且可用；若 ui/out 产物更新则同步（避免嵌旧版）
+        if [[ -f "$ui_out_dir/index.html" && "$ui_out_dir/index.html" -nt "$ui_embed_dir/index.html" ]]; then
+            echo "检测到更新的 UI 构建产物 (ui/out)，同步到嵌入目录..."
+            rm -rf "$ui_embed_dir"
+            mkdir -p "$ui_embed_parent"
+            cp -r "$ui_out_dir" "$ui_embed_dir"
+        fi
+        return 0
+    fi
+
+    if [[ -f "$ui_out_dir/index.html" ]]; then
+        echo "嵌入目录缺少 UI 资源，使用已有构建产物 ui/out..."
+        rm -rf "$ui_embed_dir"
+        mkdir -p "$ui_embed_parent"
+        cp -r "$ui_out_dir" "$ui_embed_dir"
+        return 0
+    fi
+
+    echo "未找到 UI 构建产物，执行 make build-ui..."
+    (cd "$PROJECT_ROOT" && make build-ui >/dev/null) || return 1
+}
+
+ensure_ui_embed || {
+    pg_fail --category=build_failure --code=PG-E-0800 \
+        --message="UI 嵌入资源准备失败" \
+        --hint="Run 'make build-ui' in project root; check node/npm installation" \
+        --agent-recoverable=true
+}
+
 # 重新构建
 echo "重新构建 bifrost-http..."
 if [[ ! -f "$PROJECT_ROOT/go.work" ]]; then
