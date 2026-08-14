@@ -36,6 +36,12 @@ type PendingLogData struct {
 	RoutingEnginesUsed []string
 	InitialData        *InitialLogData
 	CreatedAt          time.Time // For cleanup of stale entries
+	// TimelineEvents holds the pre_llm stage event built by PreLLMHook (with
+	// the request-start timestamp and 0 offset). PostLLMHook appends the
+	// post_llm event at its final write; both are persisted on the same write
+	// queue entry as the Log row itself, so a timeline marker is never written
+	// without its parent log (and vice versa).
+	TimelineEvents []*logstore.TimelineEvent
 	// LastActivity is the unix-nano timestamp of the most recent PostLLMHook
 	// activity (e.g. each streaming chunk). cleanupStalePendingLogs evicts on
 	// idle time using this value, so long-running streams that keep producing
@@ -49,7 +55,11 @@ type PendingLogData struct {
 type pendingInjectEntries struct {
 	mu        sync.Mutex
 	entries   []*logstore.Log
-	createdAt time.Time
+	// timelineEvents is parallel to entries: entry i's stage events (pre_llm /
+	// post_llm) live at index i. Kept alongside the log so Inject() can hand
+	// them to the write queue with the correct parent log.
+	timelineEvents [][]*logstore.TimelineEvent
+	createdAt      time.Time
 }
 
 // writeQueueEntry is an entry pushed to the batch write queue.
@@ -58,6 +68,10 @@ type writeQueueEntry struct {
 	mcpLog      *logstore.MCPToolLog
 	callback    func(entry *logstore.Log)
 	mcpCallback func(entry *logstore.MCPToolLog)
+	// timelineEvents are the stage markers for entry.log. processBatch persists
+	// them in the same batch cycle as the parent Log row. Writes are best-effort:
+	// a timeline insert failure degrades to a WARN and never fails the log write.
+	timelineEvents []*logstore.TimelineEvent
 }
 
 // batchWriter is the single writer goroutine that drains the write queue
@@ -176,6 +190,25 @@ func (p *LoggerPlugin) processBatch(batch []*writeQueueEntry) {
 			}
 		}
 	}
+
+	// Persist timeline stage events carried by this batch. They are child rows of
+	// the Log entries above and ride the same write cycle so both hit the store
+	// together. A timeline insert failure is never fatal — the log row is the
+	// primary artifact, so we degrade to a WARN (design: 采集失败不阻断主请求).
+	// Duplicate writes are avoided via the idempotent PK (event id is a fresh
+	// UUID per request) and CreateIfNotExists-style semantics handled by the
+	// concrete store — events for the same (log, phase) pair are only ever built
+	// once per request on the final write path.
+	for _, entry := range batch {
+		for _, event := range entry.timelineEvents {
+			if event == nil {
+				continue
+			}
+			if err := p.store.CreateTimelineEvent(p.ctx, event); err != nil {
+				p.logger.Warn("failed to insert timeline event %s for log %s: %v", event.ID, event.LogID, err)
+			}
+		}
+	}
 	if len(mcpLogs) > 0 {
 		if err := p.store.BatchCreateMCPToolLogsIfNotExists(p.ctx, mcpLogs); err != nil {
 			p.logger.Warn("batch insert failed for %d MCP tool logs, falling back to individual inserts: %v", len(mcpLogs), err)
@@ -282,7 +315,7 @@ func (p *LoggerPlugin) cleanupStalePendingLogs() {
 // enqueueLogEntry pushes a complete log entry to the write queue.
 // If the queue is full, the entry is dropped to prevent Postgres slowness
 // from cascading into request handling goroutines.
-func (p *LoggerPlugin) enqueueLogEntry(entry *logstore.Log, callback func(entry *logstore.Log)) {
+func (p *LoggerPlugin) enqueueLogEntry(entry *logstore.Log, callback func(entry *logstore.Log), timelineEvents ...*logstore.TimelineEvent) {
 	if p.closed.Load() {
 		return
 	}
@@ -294,7 +327,7 @@ func (p *LoggerPlugin) enqueueLogEntry(entry *logstore.Log, callback func(entry 
 		}
 	}()
 	select {
-	case p.writeQueue <- &writeQueueEntry{log: entry, callback: callback}:
+	case p.writeQueue <- &writeQueueEntry{log: entry, callback: callback, timelineEvents: timelineEvents}:
 		// enqueued successfully
 	default:
 		p.droppedRequests.Add(1)

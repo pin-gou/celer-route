@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/mcp"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -962,6 +963,22 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 		CreatedAt:          time.Now(),
 		Status:             logStatusProcessing,
 	}
+	// Build the pre_llm stage marker for the request timeline. It is kept in
+	// memory with the pending data and persisted together with the Log row when
+	// PostLLMHook performs its final write — the same write cycle, so a timeline
+	// marker never outlives (or drops) its parent log.
+	pending.TimelineEvents = append(pending.TimelineEvents, &logstore.TimelineEvent{
+		ID:           uuid.NewString(),
+		LogID:        effectiveRequestID,
+		Phase:        "pre_llm",
+		Source:       "plugin_logging",
+		PluginName:   PluginName,
+		Level:        "info",
+		Message:      "pre-llm hook executed",
+		TimeOffsetMS: 0,
+		DurationMS:   0,
+		Timestamp:    createdTimestamp,
+	})
 	// Seed LastActivity so the first idle-eviction check has a baseline even if no
 	// PostLLMHook chunk has fired yet.
 	pending.LastActivity.Store(pending.CreatedAt.UnixNano())
@@ -1229,7 +1246,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		p.applyErrorBillingFromBilledUsage(ctx, entry, bifrostErr.ExtraFields.BilledUsage, requestType)
 		p.applyInternalCallCosts(ctx, entry, guardrailDebug)
 		applyLargePayloadPreviewsToEntry(ctx, entry, contentLoggingEnabled)
-		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil))
+		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
 		p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 		return result, bifrostErr, nil
 	}
@@ -1325,7 +1342,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		if tracer != nil && traceID != "" {
 			tracer.CleanupStreamAccumulator(traceID)
 		}
-		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil))
+		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
 		p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 		return result, bifrostErr, nil
 	}
@@ -1388,7 +1405,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 			Name: *entry.RoutingRuleName,
 		}
 	}
-	p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil))
+	p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
 	p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 	return result, bifrostErr, nil
 }
@@ -1473,7 +1490,9 @@ drainQueue:
 // storeOrEnqueueEntry stores a log entry in pendingLogs keyed by traceID for later
 // retrieval by Inject(), or enqueues directly if no traceID is available (Go SDK path).
 // Multiple entries per traceID are supported (e.g. fallback/retry attempts within the same trace).
-func (p *LoggerPlugin) storeOrEnqueueEntry(ctx *schemas.BifrostContext, entry *logstore.Log, callback func(entry *logstore.Log)) {
+// timelineEvents are the request's stage markers (pre_llm / post_llm) that must ride
+// the same write queue entry as the log.
+func (p *LoggerPlugin) storeOrEnqueueEntry(ctx *schemas.BifrostContext, entry *logstore.Log, callback func(entry *logstore.Log), timelineEvents ...*logstore.TimelineEvent) {
 	policy := p.resolveContentPolicy(ctx)
 	// ContentHidden marks entries whose content the API/UI never serves back —
 	// both the retained-in-object-storage case and the dropped-entirely case.
@@ -1485,17 +1504,22 @@ func (p *LoggerPlugin) storeOrEnqueueEntry(ctx *schemas.BifrostContext, entry *l
 	traceID, _ := ctx.Value(schemas.BifrostContextKeyTraceID).(string)
 	if traceID != "" {
 		// Append to slice for Inject() to pick up — supports multiple attempts per trace
-		existing, loaded := p.pendingLogsToInject.LoadOrStore(traceID, &pendingInjectEntries{entries: []*logstore.Log{entry}, createdAt: time.Now()})
+		existing, loaded := p.pendingLogsToInject.LoadOrStore(traceID, &pendingInjectEntries{
+			entries: []*logstore.Log{entry},
+			timelineEvents: [][]*logstore.TimelineEvent{timelineEvents},
+			createdAt: time.Now(),
+		})
 		if !loaded {
 			return
 		}
 		pending := existing.(*pendingInjectEntries)
 		pending.mu.Lock()
 		pending.entries = append(pending.entries, entry)
+		pending.timelineEvents = append(pending.timelineEvents, timelineEvents)
 		pending.mu.Unlock()
 	} else {
 		// Fallback: no tracing (Go SDK path), enqueue directly
-		p.enqueueLogEntry(entry, callback)
+		p.enqueueLogEntry(entry, callback, timelineEvents...)
 	}
 }
 
@@ -1526,12 +1550,53 @@ func (p *LoggerPlugin) Inject(_ context.Context, trace *schemas.Trace) error {
 	pluginLogsJSON := serializePluginLogs(trace.PluginLogs)
 	p.logger.Debug("Inject: enqueuing %d log entries", len(pending.entries))
 	// Enqueue each log entry (supports multiple attempts per trace)
-	for _, entry := range pending.entries {
+	for i, entry := range pending.entries {
 		entry.PluginLogs = pluginLogsJSON
 		p.logger.Debug("Inject: enqueuing log entry %s", entry.ID)
-		p.enqueueLogEntry(entry, p.makePostWriteCallback(nil))
+		events := timelineEventsForEntry(pending, i)
+		p.enqueueLogEntry(entry, p.makePostWriteCallback(nil), events...)
 	}
 	return nil
+}
+
+// timelineEventsForEntry returns the stage events (pre_llm / post_llm) attached
+// to the i-th log entry of a pendingInjectEntries batch. The events slice is
+// parallel to entries — entry i's markers live at index i. Missing indices
+// (shouldn't happen: events are appended alongside entries under the same
+// mutex) resolve to nil.
+func timelineEventsForEntry(pending *pendingInjectEntries, i int) []*logstore.TimelineEvent {
+	if pending == nil || i < 0 || i >= len(pending.timelineEvents) {
+		return nil
+	}
+	return pending.timelineEvents[i]
+}
+
+// finalTimelineEvents returns the full stage-event set for a request's final
+// log write: the pre_llm marker built by PreLLMHook (carried on pending) plus a
+// freshly built post_llm marker stamped with the completion time and the
+// offset from the request start. The returned slice never mutates pending —
+// PostLLMHook may be called per streaming chunk and pending is only read here.
+// logID is the effective request id (fallback ids override the primary one).
+func (p *LoggerPlugin) finalTimelineEvents(pending *PendingLogData, logID string) []*logstore.TimelineEvent {
+	if pending == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	events := make([]*logstore.TimelineEvent, 0, len(pending.TimelineEvents)+1)
+	events = append(events, pending.TimelineEvents...)
+	events = append(events, &logstore.TimelineEvent{
+		ID:           uuid.NewString(),
+		LogID:        logID,
+		Phase:        "post_llm",
+		Source:       "plugin_logging",
+		PluginName:   PluginName,
+		Level:        "info",
+		Message:      "post-llm hook executed",
+		TimeOffsetMS: float64(now.Sub(pending.Timestamp).Milliseconds()),
+		DurationMS:   0,
+		Timestamp:    now,
+	})
+	return events
 }
 
 // serializePluginLogs groups plugin logs by plugin name for persistence and UI rendering.
