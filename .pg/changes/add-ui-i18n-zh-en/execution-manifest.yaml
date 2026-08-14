@@ -1,0 +1,28 @@
+schema_version: '2026-06-30'
+change: add-ui-i18n-zh-en
+stages:
+- name: dev
+  environment: local
+  tracks:
+  - id: ui
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 1. dev.ui:test - dev 测试先行
+      dev:
+        tasks_md_section: 2. dev.ui:dev - 实现开发
+      review:
+        tasks_md_section: 3. dev.ui:review - 静态代码审查
+      verify:
+        tasks_md_section: 4. dev.ui:verify - dev 集成验证
+      gate:
+        tasks_md_section: 5. dev.ui:gate - dev 门控审查
+final_gate:
+  tasks_md_section: 6. final-gate - 最终门控审查
