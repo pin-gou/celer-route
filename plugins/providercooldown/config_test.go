@@ -256,7 +256,7 @@ func TestPluginCustomQuotaPatternMatches(t *testing.T) {
 	if !plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
 		t.Fatal("custom quota pattern should have triggered cooldown")
 	}
-	if !log.contains("marked key openai/key-1") {
+	if !log.contains("marked key openai/key-1 (name=k-key-1, TTL=") {
 		t.Fatalf("expected Mark log, got messages: %v", log.msgs)
 	}
 }

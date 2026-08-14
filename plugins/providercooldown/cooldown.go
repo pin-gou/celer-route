@@ -303,7 +303,7 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 			} else {
 				c.suppressedCount.Add(1)
 				if logger != nil {
-					logger.Info("[provider-cooldown] suppressed key %s/%s (model=%s)", provider, k.ID, model)
+					logger.Info("[provider-cooldown] suppressed key %s/%s (name=%s, model=%s)", provider, k.ID, k.Name, model)
 				}
 			}
 		}
@@ -519,13 +519,13 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 		return resp, bifrostErr, nil
 	}
 
-	provider, keyID := lastAttemptProviderAndKey(ctx, bifrostErr)
+	provider, keyID, keyName := lastAttemptProviderAndKey(ctx, bifrostErr)
 	if keyID == "" {
 		return resp, bifrostErr, nil
 	}
 	p.State.Mark(provider, keyID)
 	if p.logger != nil {
-		p.logger.Info("[provider-cooldown] marked key %s/%s (TTL=%v)", provider, keyID, p.State.EffectiveTTL(provider))
+		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v)", provider, keyID, keyName, p.State.EffectiveTTL(provider))
 	}
 	return resp, bifrostErr, nil
 }
@@ -614,7 +614,7 @@ func matchesAnyErrorField(err *schemas.BifrostError, patterns []string) bool {
 	return false
 }
 
-// lastAttemptProviderAndKey resolves the (provider, keyID) of the most
+// lastAttemptProviderAndKey resolves the (provider, keyID, keyName) of the most
 // recent failed attempt. Preference order:
 //  1. BifrostError.ExtraFields.RoutingInfo.Provider (set by core right
 //     before invoking post-hooks; survives the round trip through plugins).
@@ -622,8 +622,9 @@ func matchesAnyErrorField(err *schemas.BifrostError, patterns []string) bool {
 //  3. The last KeyAttemptRecord with a non-success outcome (carries keyID).
 //
 // Returns an empty keyID when none can be determined — callers MUST treat
-// that as "do not mark" rather than "mark the whole provider".
-func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (schemas.ModelProvider, string) {
+// that as "do not mark" rather than "mark the whole provider". The keyName is
+// only populated when resolved from a KeyAttemptRecord; otherwise it is empty.
+func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (schemas.ModelProvider, string, string) {
 	var provider schemas.ModelProvider
 	if bifrostErr != nil {
 		if bifrostErr.ExtraFields.RoutingInfo.Provider != "" {
@@ -633,11 +634,11 @@ func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.
 		}
 	}
 	if ctx == nil {
-		return provider, ""
+		return provider, "", ""
 	}
 	trail, ok := ctx.Value(schemas.BifrostContextKeyAttemptTrail).([]schemas.KeyAttemptRecord)
 	if !ok {
-		return provider, ""
+		return provider, "", ""
 	}
 	// Pick the last record that has a KeyID. AttemptTrail is append-only and
 	// ordered, so iterating in reverse finds the most recent attempt.
@@ -646,7 +647,7 @@ func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.
 		if rec.KeyID == "" {
 			continue
 		}
-		return provider, rec.KeyID
+		return provider, rec.KeyID, rec.KeyName
 	}
-	return provider, ""
+	return provider, "", ""
 }

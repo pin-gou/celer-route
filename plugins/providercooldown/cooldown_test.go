@@ -728,7 +728,7 @@ func TestPluginLogsOnMark(t *testing.T) {
 	if !plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
 		t.Fatal("expected (openai, key-1) to be in cooldown")
 	}
-	if !log.contains("marked key openai/key-1") {
+	if !log.contains("marked key openai/key-1 (name=k-key-1, TTL=") {
 		t.Fatalf("expected log about marked key, got %d messages: %v", log.count(), log.msgs)
 	}
 }
@@ -772,7 +772,7 @@ func TestAsFilterLogsSuppressedKeys(t *testing.T) {
 	if len(out) != 1 || out[0].ID != "cold-key" {
 		t.Fatalf("expected only cold-key, got %+v", out)
 	}
-	if !log.contains("suppressed key openai/hot-key") {
+	if !log.contains("suppressed key openai/hot-key (name=hot, model=gpt-4o)") {
 		t.Fatalf("expected suppression log, got %d messages: %v", log.count(), log.msgs)
 	}
 }
@@ -945,7 +945,7 @@ func TestAsFilterLogsSuppressedKeysAtInfo(t *testing.T) {
 	if _, err := filter(nil, schemas.OpenAI, "gpt-4o", keys); err != nil {
 		t.Fatalf("filter: %v", err)
 	}
-	if !log.contains("info [provider-cooldown] suppressed key openai/hot-key") {
+	if !log.contains("info [provider-cooldown] suppressed key openai/hot-key (name=, model=gpt-4o)") {
 		t.Fatalf("expected info-level suppression log, got %d messages: %v", log.count(), log.msgs)
 	}
 }
