@@ -73,6 +73,14 @@ func (r *SSEStreamReader) Close() error {
 	return nil
 }
 
+// CloseNotify returns a channel that is closed when the reader is closed
+// (fasthttp encounters a write error, i.e. client disconnect). Producer
+// goroutines can select on this channel alongside their event sources to
+// detect client disconnect without needing to attempt a write first.
+func (r *SSEStreamReader) CloseNotify() <-chan struct{} {
+	return r.closeCh
+}
+
 // Send delivers a pre-formatted event to the reader. Returns false if the reader
 // has been closed (client disconnected), in which case the producer should stop.
 //

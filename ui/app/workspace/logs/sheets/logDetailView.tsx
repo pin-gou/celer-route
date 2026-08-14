@@ -1,4 +1,6 @@
 import { formatCost, formatLatency } from "@/app/workspace/dashboard/utils/chartUtils";
+import { TimelineDetail } from "@/app/workspace/logs/timeline/views/timelineDetail";
+import { useGetLogTimelineQuery } from "@/lib/store/apis/logsApi";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -699,6 +701,15 @@ export function LogDetailView({
 		} catch {}
 		return 0;
 	})();
+
+	// Timeline data
+	const {
+		data: timelineData,
+		isLoading: timelineLoading,
+		error: timelineError,
+	} = useGetLogTimelineQuery(log.id, {
+		skip: !log?.id,
+	});
 
 	return loading ? (
 		<div className="flex h-full items-center justify-center">
@@ -1790,6 +1801,9 @@ export function LogDetailView({
 							Raw JSON
 						</TabsTrigger>
 					)}
+					<TabsTrigger value="timeline" className="px-3" data-testid="logdetails-tab-timeline">
+						Timeline
+					</TabsTrigger>
 				</TabsList>
 
 				<TabsContent value="messages" className="space-y-4">
@@ -2594,6 +2608,14 @@ export function LogDetailView({
 					{!rawRequest && !rawResponse && !passthroughRequestBody && !passthroughResponseBody && (
 						<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">No raw JSON available.</div>
 					)}
+				</TabsContent>
+
+				<TabsContent value="timeline" className="space-y-3">
+					<TimelineDetail
+						data={timelineData ?? null}
+						isLoading={timelineLoading}
+						error={timelineError ? "Failed to load timeline data" : null}
+					/>
 				</TabsContent>
 			</Tabs>
 		</>

@@ -239,7 +239,7 @@ type Log struct {
 	VideoListOutput         string    `gorm:"type:text" json:"-"`                                                      // JSON serialized *schemas.BifrostVideoListResponse
 	VideoDeleteOutput       string    `gorm:"type:text" json:"-"`                                                      // JSON serialized *schemas.BifrostVideoDeleteResponse
 	CacheDebug              string    `gorm:"type:text" json:"-"`                                                      // JSON serialized *schemas.BifrostCacheDebug
-	GuardrailDebug          string    `gorm:"type:text" json:"-"` // JSON serialized *schemas.BifrostGuardrailDebug
+	GuardrailDebug          string    `gorm:"type:text" json:"-"`                                                      // JSON serialized *schemas.BifrostGuardrailDebug
 	Latency                 *float64  `gorm:"index:idx_logs_latency" json:"latency,omitempty"`
 	TokenUsage              string    `gorm:"type:text" json:"-"`                                                                         // JSON serialized *schemas.LLMUsage
 	Cost                    *float64  `gorm:"index" json:"cost,omitempty"`                                                                // Cost in dollars (total cost of the request - includes cache lookup cost)
@@ -1215,6 +1215,38 @@ func (l *MCPToolLog) DeserializeFields() error {
 		}
 	}
 
+	return nil
+}
+
+// TimelineEvent records a single plugin-pipeline stage point for a request
+// (design.md "新表 timeline_events"). The logging plugin writes one row per
+// hook phase (PreLLMHook / PostLLMHook) as the request flows through the
+// pipeline; the logs timeline view aggregates rows by LogID to render the
+// request's stage timeline. Phase values in this iteration are pre_llm /
+// post_llm and source is "plugin_logging" (the only writer today).
+type TimelineEvent struct {
+	ID           string    `gorm:"primaryKey;type:varchar(255)" json:"id"`                                                  // Event primary key
+	LogID        string    `gorm:"type:varchar(255);column:log_id;index:idx_timeline_events_log_id;not null" json:"log_id"` // Links to the Log row this event belongs to
+	Phase        string    `gorm:"type:varchar(50);index:idx_timeline_events_phase;not null" json:"phase"`                  // pre_llm / post_llm
+	Source       string    `gorm:"type:varchar(100)" json:"source"`                                                         // plugin_logging (this iteration)
+	PluginName   string    `gorm:"type:varchar(255);column:plugin_name" json:"plugin_name"`                                 // Plugin name (source=plugin_log*)
+	Level        string    `gorm:"type:varchar(50)" json:"level"`                                                           // info / warn / error
+	Message      string    `gorm:"type:text" json:"message"`                                                                // Human-readable message
+	TimeOffsetMS float64   `gorm:"column:time_offset_ms" json:"time_offset_ms"`                                             // Offset from request start (ms)
+	DurationMS   float64   `gorm:"column:duration_ms" json:"duration_ms"`                                                   // Phase duration (ms); 0 for instant events
+	Timestamp    time.Time `gorm:"index;not null" json:"timestamp"`                                                         // Event occurrence time
+}
+
+// TableName sets the table name for GORM
+func (TimelineEvent) TableName() string {
+	return "timeline_events"
+}
+
+// BeforeCreate GORM hook to set a sensible timestamp default.
+func (e *TimelineEvent) BeforeCreate(tx *gorm.DB) error {
+	if e.Timestamp.IsZero() {
+		e.Timestamp = time.Now().UTC()
+	}
 	return nil
 }
 

@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -573,10 +577,29 @@ type dashboardLogManager struct {
 	lastMCPFilters         logstore.MCPToolLogSearchFilters
 	lastRecalculateFilters logstore.SearchFilters
 	lastRecalculateContext chan context.Context
+
+	// Timeline test fields
+	log            *logstore.Log
+	timelineEvents []logstore.TimelineEvent
+	failGetLog     bool
+	activeLogs     []*logstore.Log
+	// activeLogStreamCh receives Log status updates for SSE streaming
+	activeLogStreamCh chan *logstore.Log
+	// sseSubscribed is set to true when an SSE subscriber connects
+	sseSubscribed bool
+	// sseDisconnected is set to true when the SSE subscriber disconnects
+	sseDisconnected bool
 }
 
 func (m *dashboardLogManager) GetLog(ctx context.Context, id string) (*logstore.Log, error) {
-	return nil, nil
+	if m.failGetLog {
+		return nil, errors.New("internal error")
+	}
+	if m.log != nil && m.log.ID == id {
+		cp := *m.log
+		return &cp, nil
+	}
+	return nil, logstore.ErrNotFound
 }
 func (m *dashboardLogManager) Search(ctx context.Context, filters *logstore.SearchFilters, pagination *logstore.PaginationOptions) (*logstore.SearchResult, error) {
 	return nil, nil
@@ -760,6 +783,27 @@ func (m *dashboardLogManager) ListUserAgentMappings(ctx context.Context) ([]logs
 	return nil, nil
 }
 
+func (m *dashboardLogManager) ListTimelineEventsByLogID(ctx context.Context, logID string) ([]logstore.TimelineEvent, error) {
+	if m.timelineEvents == nil {
+		return nil, nil
+	}
+	return m.timelineEvents, nil
+}
+
+func (m *dashboardLogManager) GetActiveLogs(ctx context.Context) ([]*logstore.Log, error) {
+	return m.activeLogs, nil
+}
+
+func (m *dashboardLogManager) SubscribeActiveLogStream(ctx context.Context) (<-chan *logstore.Log, error) {
+	m.sseSubscribed = true
+	return m.activeLogStreamCh, nil
+}
+
+func (m *dashboardLogManager) UnsubscribeActiveLogStream(ctx context.Context, ch <-chan *logstore.Log) error {
+	m.sseDisconnected = true
+	return nil
+}
+
 func (m *dashboardLogManager) GetAvailableUserAgents(ctx context.Context, _ int, _ string) ([]string, error) {
 	return nil, nil
 }
@@ -774,4 +818,329 @@ func (m *dashboardLogManager) GetAvailableMCPApps(ctx context.Context, _ int, _ 
 
 func (m *dashboardLogManager) GetAvailableMCPUserAgents(ctx context.Context, _ int, _ string) ([]string, error) {
 	return nil, nil
+}
+
+// ptrFloat64 returns a pointer to the given float64 value.
+func ptrFloat64(v float64) *float64 {
+	return &v
+}
+
+// ---------------------------------------------------------------------------
+// Task 6.1: GetLogTimeline handler tests
+// ---------------------------------------------------------------------------
+
+// TestGetLogTimeline_LogFound verifies that GetLogTimeline returns 200 with
+// the correct JSON structure when the log exists and has timeline events.
+func TestGetLogTimeline_LogFound(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:              "log-test-1",
+			Status:          "success",
+			Provider:        "openai",
+			Model:           "gpt-4",
+			Latency:         ptrFloat64(1234.56),
+			Timestamp:       now,
+			RoutingEngineLogs: `[{"engine":"governance","level":"info","message":"provider=openai attempt=0","timestamp":1700000000000}]`,
+			PluginLogs:        `{"logging":[{"plugin_name":"logging","level":"info","message":"pre-llm hook executed","timestamp":1700000000000}]}`,
+			AttemptTrail:      `[{"attempt":0,"key_id":"key-1","key_name":"Key 1"}]`,
+		},
+		timelineEvents: []logstore.TimelineEvent{
+			{
+				ID:           "event-1",
+				LogID:        "log-test-1",
+				Phase:        "pre_llm",
+				Source:       "plugin_logging",
+				PluginName:   "logging",
+				Level:        "info",
+				Message:      "pre-llm hook executed",
+				TimeOffsetMS: 0.0,
+				DurationMS:   8.2,
+				Timestamp:    now,
+			},
+			{
+				ID:           "event-2",
+				LogID:        "log-test-1",
+				Phase:        "post_llm",
+				Source:       "plugin_logging",
+				PluginName:   "logging",
+				Level:        "info",
+				Message:      "post-llm hook executed",
+				TimeOffsetMS: 1128.0,
+				DurationMS:   6.5,
+				Timestamp:    now.Add(1128 * time.Millisecond),
+			},
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-test-1/timeline")
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-test-1")
+
+	// RED PHASE: getLogTimeline does not exist yet → compile error expected.
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		LogID           string  `json:"log_id"`
+		TotalDurationMs float64 `json:"total_duration_ms"`
+		Events          []struct {
+			TimeOffsetMS float64 `json:"time_ms_offset"`
+			DurationMS   float64 `json:"duration_ms"`
+			Phase        string  `json:"phase"`
+			Source       string  `json:"source"`
+			Message      string  `json:"message"`
+			Level        string  `json:"level"`
+			PluginName   string  `json:"plugin_name"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.LogID != "log-test-1" {
+		t.Fatalf("log_id = %q, want %q", response.LogID, "log-test-1")
+	}
+	if len(response.Events) == 0 {
+		t.Fatal("expected non-empty events array")
+	}
+
+	// At least one event must be a timeline_events source (pre_llm or post_llm)
+	hasTimelineEvent := false
+	for _, e := range response.Events {
+		if e.Source == "plugin_logging" {
+			hasTimelineEvent = true
+			break
+		}
+	}
+	if !hasTimelineEvent {
+		t.Fatal("expected at least one event with source=plugin_logging")
+	}
+}
+
+// TestGetLogTimeline_LogNotFound verifies that GetLogTimeline returns 404
+// with error code "log_not_found" when the log does not exist.
+func TestGetLogTimeline_LogNotFound(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	mgr := &dashboardLogManager{}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/nonexistent/timeline")
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "nonexistent")
+
+	// RED PHASE: getLogTimeline does not exist yet → compile error expected.
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var errResp struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if errResp.Error.Code != "log_not_found" {
+		t.Fatalf("error code = %q, want %q", errResp.Error.Code, "log_not_found")
+	}
+}
+
+// TestGetLogTimeline_InternalError verifies that GetLogTimeline returns 500
+// when the log manager returns an unexpected error.
+func TestGetLogTimeline_InternalError(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	mgr := &dashboardLogManager{failGetLog: true}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-test-1/timeline")
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-test-1")
+
+	// RED PHASE: getLogTimeline does not exist yet → compile error expected.
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %d: %s", got, string(ctx.Response.Body()))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Task 6.2: GetActiveLogStream SSE handler tests
+// ---------------------------------------------------------------------------
+
+// TestGetActiveLogStream_Handshake verifies that the SSE handler sends an
+// active_logs handshake event with the full list of processing logs when a
+// client connects and then pushes incremental log_updated events.
+func TestGetActiveLogStream_Handshake(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	activeLogStreamCh := make(chan *logstore.Log, 10)
+	mgr := &dashboardLogManager{
+		activeLogs: []*logstore.Log{
+			{
+				ID:        "log-active-1",
+				Status:    "processing",
+				Provider:  "openai",
+				Model:     "gpt-4",
+				Timestamp: now,
+				Latency:   nil,
+			},
+		},
+		activeLogStreamCh: activeLogStreamCh,
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	// Use net.Pipe for deterministic in-process SSE streaming testing
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	// Run the handler on one end of the pipe
+	go func() {
+		_ = fasthttp.ServeConn(serverConn, func(ctx *fasthttp.RequestCtx) {
+			h.getActiveLogStream(ctx)
+		})
+	}()
+
+	// Send HTTP request
+	_, err := clientConn.Write([]byte("GET /api/logs/active/stream HTTP/1.1\r\nHost: test\r\n\r\n"))
+	if err != nil {
+		t.Fatalf("failed to write request: %v", err)
+	}
+
+	// Read response — the body is chunked transfer-encoded.
+	readChunk := func(br *bufio.Reader) ([]byte, error) {
+		sizeLine, err := br.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		sizeLine = strings.TrimSpace(sizeLine)
+		var chunkSize int
+		if _, err := fmt.Sscanf(sizeLine, "%x", &chunkSize); err != nil {
+			return nil, fmt.Errorf("parse chunk size %q: %w", sizeLine, err)
+		}
+		if chunkSize == 0 {
+			return nil, nil
+		}
+		chunkData := make([]byte, chunkSize+2)
+		if _, err := io.ReadFull(br, chunkData); err != nil {
+			return nil, err
+		}
+		return chunkData[:chunkSize], nil
+	}
+
+	br := bufio.NewReader(clientConn)
+
+	// Read and skip HTTP response headers
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("failed to read response header: %v", err)
+		}
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+	}
+
+	// Read first chunk: should be the active_logs handshake
+	chunk1, err := readChunk(br)
+	if err != nil {
+		t.Fatalf("failed to read chunk 1 (handshake): %v", err)
+	}
+	if !strings.Contains(string(chunk1), "event: active_logs") {
+		t.Fatalf("expected 'event: active_logs' in handshake chunk, got: %q", chunk1)
+	}
+	if !strings.Contains(string(chunk1), "log-active-1") {
+		t.Fatalf("expected active log ID 'log-active-1' in handshake chunk, got: %q", chunk1)
+	}
+
+	// Push a log_updated event through the channel
+	updatedLog := &logstore.Log{
+		ID:       "log-active-1",
+		Status:   "success",
+		Provider: "openai",
+		Model:    "gpt-4",
+		Latency:  ptrFloat64(1234.0),
+	}
+	activeLogStreamCh <- updatedLog
+
+	// Read second chunk: should be the log_updated event
+	chunk2, err := readChunk(br)
+	if err != nil {
+		t.Fatalf("failed to read chunk 2 (log_updated): %v", err)
+	}
+	if !strings.Contains(string(chunk2), "event: log_updated") {
+		t.Fatalf("expected 'event: log_updated' in chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), "log-active-1") {
+		t.Fatalf("expected log ID in log_updated chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), "success") {
+		t.Fatalf("expected 'success' in log_updated chunk, got: %q", chunk2)
+	}
+
+	// Close the client connection to terminate the streaming
+	clientConn.Close()
+}
+
+// TestGetActiveLogStream_DisconnectCleanup verifies that when the SSE client
+// disconnects, the handler cleans up the subscription and closes the stream.
+func TestGetActiveLogStream_DisconnectCleanup(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	mgr := &dashboardLogManager{
+		activeLogs:        []*logstore.Log{},
+		activeLogStreamCh: make(chan *logstore.Log, 10),
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	// Use net.Pipe for deterministic in-process testing
+	serverConn, clientConn := net.Pipe()
+
+	// Run the handler on one end of the pipe
+	done := make(chan struct{})
+	go func() {
+		_ = fasthttp.ServeConn(serverConn, func(ctx *fasthttp.RequestCtx) {
+			h.getActiveLogStream(ctx)
+		})
+		close(done)
+	}()
+
+	// Send HTTP request
+	_, err := clientConn.Write([]byte("GET /api/logs/active/stream HTTP/1.1\r\nHost: test\r\n\r\n"))
+	if err != nil {
+		t.Fatalf("failed to write request: %v", err)
+	}
+
+	// Close the client connection immediately to trigger disconnect
+	clientConn.Close()
+
+	// Wait for the handler to finish
+	select {
+	case <-done:
+		// Handler exited cleanly
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler did not clean up after client disconnect")
+	}
 }

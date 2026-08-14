@@ -1399,3 +1399,36 @@ export const dateUtils = {
 		return { startTime, endTime };
 	},
 };
+
+// ---------------------------------------------------------------------------
+// Timeline types (GET /api/logs/{id}/timeline)
+// ---------------------------------------------------------------------------
+
+export interface TimelineEvent {
+	time_ms_offset: number;
+	duration_ms: number;
+	phase: string;
+	source: string;
+	message: string;
+	level: string;
+	plugin_name: string;
+}
+
+export interface TimelineResponse {
+	log_id: string;
+	total_duration_ms: number;
+	events: TimelineEvent[];
+}
+
+// ---------------------------------------------------------------------------
+// Active log stream types (SSE: GET /api/logs/active/stream)
+// ---------------------------------------------------------------------------
+
+export interface ActiveLogStreamEvent {
+	id: string;
+	previous_status?: string;
+	status: string;
+	provider?: string;
+	model?: string;
+	latency_ms?: number | null;
+}

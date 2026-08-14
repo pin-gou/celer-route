@@ -20,6 +20,7 @@ import {
 	RecalcJobStatus,
 	RecalculateCostResponse,
 	ThroughputHistogramResponse,
+	TimelineResponse,
 	TokenHistogramResponse,
 } from "@/lib/types/logs";
 import { baseApi } from "./baseApi";
@@ -451,6 +452,12 @@ export const logsApi = baseApi.injectEndpoints({
 			query: (id) => `/logs/${encodeURIComponent(id)}`,
 			providesTags: (result, error, id) => [{ type: "Logs", id }],
 		}),
+
+		// Get timeline events for a specific log
+		getLogTimeline: builder.query<TimelineResponse, string>({
+			query: (id) => `/logs/${encodeURIComponent(id)}/timeline`,
+			providesTags: (result, error, id) => [{ type: "Logs", id }],
+		}),
 	}),
 });
 
@@ -495,4 +502,6 @@ export const {
 	useCancelRecalculateCostJobMutation,
 	useLazyGetLogByIdQuery,
 	useGetLogByIdQuery,
+	useGetLogTimelineQuery,
+	useLazyGetLogTimelineQuery,
 } = logsApi;

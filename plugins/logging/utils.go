@@ -185,6 +185,21 @@ type LogManager interface {
 	CreateUserAgentMapping(ctx context.Context, mapping *logstore.UserAgentMapping) (*logstore.UserAgentMapping, error)
 	UpdateUserAgentMapping(ctx context.Context, id string, mapping *logstore.UserAgentMapping) (*logstore.UserAgentMapping, error)
 	DeleteUserAgentMapping(ctx context.Context, id string) error
+
+	// ListTimelineEventsByLogID returns the plugin-pipeline stage events recorded
+	// for a single log row (timeline_events), ordered for timeline aggregation.
+	ListTimelineEventsByLogID(ctx context.Context, logID string) ([]logstore.TimelineEvent, error)
+
+	// GetActiveLogs returns a snapshot of currently processing log entries.
+	GetActiveLogs(ctx context.Context) ([]*logstore.Log, error)
+
+	// SubscribeActiveLogStream returns a channel that receives Log status updates
+	// (processing→success/error transitions and new processing entries).
+	SubscribeActiveLogStream(ctx context.Context) (<-chan *logstore.Log, error)
+
+	// UnsubscribeActiveLogStream stops the active log stream subscription for the
+	// given channel and cleans up associated resources.
+	UnsubscribeActiveLogStream(ctx context.Context, ch <-chan *logstore.Log) error
 }
 
 // PluginLogManager implements LogManager interface wrapping the plugin
@@ -545,6 +560,26 @@ func (p *PluginLogManager) DeleteMCPToolLogs(ctx context.Context, ids []string) 
 // ListUserAgentMappings returns all custom User-Agent mappings.
 func (p *PluginLogManager) ListUserAgentMappings(ctx context.Context) ([]logstore.UserAgentMapping, error) {
 	return p.plugin.ListUserAgentMappings(ctx)
+}
+
+// ListTimelineEventsByLogID returns the plugin-pipeline stage events for a log row.
+func (p *PluginLogManager) ListTimelineEventsByLogID(ctx context.Context, logID string) ([]logstore.TimelineEvent, error) {
+	return p.plugin.ListTimelineEventsByLogID(ctx, logID)
+}
+
+// GetActiveLogs returns a snapshot of currently processing log entries.
+func (p *PluginLogManager) GetActiveLogs(ctx context.Context) ([]*logstore.Log, error) {
+	return p.plugin.GetActiveLogs(ctx)
+}
+
+// SubscribeActiveLogStream returns a channel that receives Log status updates.
+func (p *PluginLogManager) SubscribeActiveLogStream(ctx context.Context) (<-chan *logstore.Log, error) {
+	return p.plugin.SubscribeActiveLogStream(ctx)
+}
+
+// UnsubscribeActiveLogStream stops the active log stream subscription.
+func (p *PluginLogManager) UnsubscribeActiveLogStream(ctx context.Context, ch <-chan *logstore.Log) error {
+	return p.plugin.UnsubscribeActiveLogStream(ctx, ch)
 }
 
 // CreateUserAgentMapping creates a custom User-Agent mapping through the logging plugin.

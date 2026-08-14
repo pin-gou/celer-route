@@ -1,171 +1,203 @@
 schema: spec-driven
 $schema: .pg/skills/src/runtime/spec/project.schema.json
-
 modules:
   core:
     root: core
     language: go
-    description: "核心引擎：请求排队、provider 生命周期、MCP 集成、推理路由与 fallback"
+    description: 核心引擎：请求排队、provider 生命周期、MCP 集成、推理路由与 fallback
     build: go build ./...
-    lint: go vet ./...
+    lint: cd core && go vet ./...
     test:
       unit: go test ./... -short -count=1
       integration: make test-core
-      mock_integration: "make test-core PROVIDER=mocker"
-
+      mock_integration: make test-core PROVIDER=mocker
   framework:
     root: framework
     language: go
-    description: "数据持久化、流式累加器、向量存储、tracing 等基础设施"
+    description: 数据持久化、流式累加器、向量存储、tracing 等基础设施
     build: go build ./...
-    lint: go vet ./...
+    lint: cd framework && go vet ./...
     test:
       unit: go test ./... -short -count=1
       integration: make test-framework
-
   transports:
     root: transports
     language: go
-    description: "HTTP 网关传输层：27 个 endpoint handler、SDK 兼容层"
+    description: HTTP 网关传输层：27 个 endpoint handler、SDK 兼容层
     build: go build ./...
-    lint: go vet ./...
+    lint: cd transports && go vet ./...
     test:
-      unit: "cd transports/bifrost-http && go test ./... -short -count=1"
+      unit: cd transports/bifrost-http && go test ./... -short -count=1
       integration: make test
-
   cli:
     root: cli
     language: go
-    description: "CLI 工具"
+    description: CLI 工具
     build: go build ./...
-    lint: go vet ./...
+    lint: cd cli && go vet ./...
     test:
       unit: go test ./... -short -count=1
       integration: make test-cli
-
   plugins:
     root: plugins
     language: go
-    description: "9 个 Go plugin 子模块：governance、telemetry、logging、semanticcache、otel 等"
-    build: "for d in */; do (cd \"$d\" && go build ./...); done"
-    lint: "for d in */; do (cd \"$d\" && go vet ./...); done"
+    description: 9 个 Go plugin 子模块：governance、telemetry、logging、semanticcache、otel
+      等
+    build: for d in */; do (cd "$d" && go build ./...); done
+    lint: for d in plugins/*/; do (cd "$d" && go vet ./...); done
     test:
-      unit: "for d in */; do (cd \"$d\" && go test ./... -short -count=1); done"
+      unit: for d in */; do (cd "$d" && go test ./... -short -count=1); done
       integration: make test-plugins
-
   ui:
     root: ui
     language: typescript
-    description: "React + Vite 前端管理界面"
+    description: React + Vite 前端管理界面
     build: npm run build
-    lint: npm run lint
+    lint: cd ui && npm run lint
     test:
       unit: npx vitest run
       e2e: make run-e2e
-
 environments:
   local:
-    description: "本地开发环境：bifrost-http API 服务器 + UI 开发服务器。TBD: 确认端口配置"
+    description: '本地开发环境：bifrost-http API 服务器 + UI 开发服务器。TBD: 确认端口配置'
     prepare_env:
       host: localhost
       script: .pg/hooks/local/prepare.sh
-      description: "启动 bifrost-api 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例"
+      description: 启动 bifrost-api 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
     describe_env:
       script: .pg/hooks/local/describe_env.sh
       timeout_seconds: 30
-      description: "探测 local 环境各角色健康状态与端口可用性，输出 env-description.yaml"
+      description: 探测 local 环境各角色健康状态与端口可用性，输出 env-description.yaml
     roles:
-      - name: bifrost-api
-        instances:
-          - name: bifrost-api-1
-            host: localhost
-            port: 9080
-            description: "bifrost-api 实例端口"
-        actions:
-          start:
-            host: localhost
-            script: .pg/hooks/bifrost-api-start.sh
-          stop:
-            host: localhost
-            script: .pg/hooks/bifrost-api-stop.sh
-          health_check:
-            host: localhost
-            script: .pg/hooks/bifrost-api-health-check.sh
-      - name: ui-dev
-        instances:
-          - name: ui-dev-1
-            host: localhost
-            port: 3008
-            description: "Vite 开发服务器端口"
-        actions:
-          start:
-            host: localhost
-            script: .pg/hooks/ui-dev-start.sh
-          stop:
-            host: localhost
-            script: .pg/hooks/ui-dev-stop.sh
-          health_check:
-            host: localhost
-            script: .pg/hooks/ui-dev-health-check.sh
-
+    - name: bifrost-api
+      instances:
+      - name: bifrost-api-1
+        host: localhost
+        port: 9080
+        description: bifrost-api 实例端口
+      actions:
+        start:
+          host: localhost
+          script: .pg/hooks/bifrost-api-start.sh
+        stop:
+          host: localhost
+          script: .pg/hooks/bifrost-api-stop.sh
+        health_check:
+          host: localhost
+          script: .pg/hooks/bifrost-api-health-check.sh
+    - name: ui-dev
+      instances:
+      - name: ui-dev-1
+        host: localhost
+        port: 3008
+        description: Vite 开发服务器端口
+      actions:
+        start:
+          host: localhost
+          script: .pg/hooks/ui-dev-start.sh
+        stop:
+          host: localhost
+          script: .pg/hooks/ui-dev-stop.sh
+        health_check:
+          host: localhost
+          script: .pg/hooks/ui-dev-health-check.sh
 tracks:
   core:
     type: standard
-    modules: [core]
+    modules:
+    - core
     max_fix_retries: 5
-    description: "Core 引擎开发与测试"
+    description: Core 引擎开发与测试
   framework:
     type: standard
-    modules: [framework]
+    modules:
+    - framework
     max_fix_retries: 5
-    description: "Framework 基础设施开发与测试"
+    description: Framework 基础设施开发与测试
   transports:
     type: standard
-    modules: [transports]
+    modules:
+    - transports
     max_fix_retries: 5
-    description: "HTTP 传输层开发与测试"
+    description: HTTP 传输层开发与测试
   cli:
     type: standard
-    modules: [cli]
+    modules:
+    - cli
     max_fix_retries: 5
-    description: "CLI 工具开发与测试"
+    description: CLI 工具开发与测试
   plugins:
     type: standard
-    modules: [plugins]
+    modules:
+    - plugins
     max_fix_retries: 5
-    description: "Plugin 子模块开发与测试"
+    description: Plugin 子模块开发与测试
   ui:
     type: standard
-    modules: [ui]
+    modules:
+    - ui
     max_fix_retries: 5
-    description: "前端开发与测试"
+    description: 前端开发与测试
   scr:
     type: scenario
-    modules: [core, framework, transports, cli, plugins, ui]
+    modules:
+    - core
+    - framework
+    - transports
+    - cli
+    - plugins
+    - ui
     max_fix_retries: 3
-    description: "端到端场景验证（跨所有模块的集成测试）"
-
+    description: 端到端场景验证（跨所有模块的集成测试）
 stages:
-  - name: dev
-    tracks:
-      - core
-      - framework
-      - transports
-      - cli
-      - plugins
-      - ui
-    gate: all_pass
-    environment:
-      required: true
-    description: "开发阶段"
-
-  - name: int
-    tracks:
-      - scr
-    gate: all_pass
-    environment:
-      required: true
-    description: "集成阶段：跑集成测试 + 端到端场景验证，需启动 local 环境"
-
+- name: dev
+  tracks:
+  - core
+  - framework
+  - transports
+  - cli
+  - plugins
+  - ui
+  gate: all_pass
+  environment:
+    required: true
+  description: 开发阶段
+- name: int
+  tracks:
+  - scr
+  gate: all_pass
+  environment:
+    required: true
+  description: 集成阶段：跑集成测试 + 端到端场景验证，需启动 local 环境
 git:
   default_branch: main
+regression:
+  suite:
+    framework:
+      module: framework
+      test_keys:
+      - unit
+      environment:
+        name: local
+      output_format: go-test
+    transports:
+      module: transports
+      test_keys:
+      - unit
+      environment:
+        name: local
+      output_format: go-test
+    plugins:
+      module: plugins
+      test_keys:
+      - unit
+      environment:
+        name: local
+      output_format: go-test
+    ui:
+      module: ui
+      test_keys:
+      - unit
+      environment:
+        name: local
+      output_format: playwright
