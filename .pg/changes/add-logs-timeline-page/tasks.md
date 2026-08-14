@@ -239,12 +239,12 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 19.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 19.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 19.3 启动服务（如需）
-- [ ] 19.4 验证 V-ui-1：Gantt 总览页面可访问并渲染（浏览器访问 localhost:3008/workspace/logs/timeline，渲染 bar；点击 bar 打开 LogDetailSheet 显示 Timeline 标签页）——来自 design.md「dev ui Verification Criteria」
-- [ ] 19.5 验证 V-ui-2：fallback 链展开为多 bar（构造带 fallback 请求后浏览器查看）——来自 design.md「dev ui Verification Criteria」
-- [ ] 19.6 验证 V-ui-3：npm run build + npm run lint 通过（degraded：若非阻塞降级为 verify 阶段单元级校验）——来自 design.md「dev ui Verification Criteria」
+- [x] 19.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 19.2 执行测试（runner 通过 modules 注入命令）
+- [x] 19.3 启动服务（如需）
+- [x] 19.4 验证 V-ui-1：Gantt 总览页面可访问并渲染（浏览器访问 localhost:3008/workspace/logs/timeline，渲染 bar；点击 bar 打开 LogDetailSheet 显示 Timeline 标签页）——来自 design.md「dev ui Verification Criteria」
+- [x] 19.5 验证 V-ui-2：fallback 链展开为多 bar（构造带 fallback 请求后浏览器查看）——来自 design.md「dev ui Verification Criteria」
+- [x] 19.6 验证 V-ui-3：npm run build + npm run lint 通过（degraded：若非阻塞降级为 verify 阶段单元级校验）——来自 design.md「dev ui Verification Criteria」
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
