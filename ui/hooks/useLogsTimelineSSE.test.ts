@@ -66,7 +66,7 @@ const mockCompletedLog: LogEntry = {
 describe("useLogsTimelineSSE — SSE hook", () => {
 	beforeEach(() => {
 		// Mock EventSource for SSE subscription
-		vi.stubGlobal("EventSource", vi.fn(() => {
+		vi.stubGlobal("EventSource", vi.fn(function() {
 			const listeners: Record<string, Set<(...args: unknown[]) => void>> = {};
 			return {
 				close: vi.fn(),
@@ -101,7 +101,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 
 		// Simulate the handshake event (EventSource fires 'active_logs')
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
-		eventSource._dispatch("active_logs", [mockActiveLog]);
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
 
 		expect(result.current.activeLogs).toHaveLength(1);
 		expect(result.current.activeLogs[0].id).toBe("active-1");
@@ -114,14 +116,18 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
 		// First handshake: one active log
-		eventSource._dispatch("active_logs", [mockActiveLog]);
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
 		expect(result.current.activeLogs).toHaveLength(1);
 
 		// Second handshake: two active logs (simulating a new request arriving)
-		eventSource._dispatch("active_logs", [
-			mockActiveLog,
-			{ ...mockActiveLog, id: "active-2", provider: "anthropic", model: "claude-3" },
-		]);
+		act(() => {
+			eventSource._dispatch("active_logs", [
+				mockActiveLog,
+				{ ...mockActiveLog, id: "active-2", provider: "anthropic", model: "claude-3" },
+			]);
+		});
 		expect(result.current.activeLogs).toHaveLength(2);
 	});
 
@@ -135,21 +141,25 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
 		// Handshake: populate activeLogs
-		eventSource._dispatch("active_logs", [mockActiveLog]);
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
 		expect(result.current.activeLogs[0].status).toBe("processing");
 
-		// Incremental update: log_updated changes status from processing to success
-		eventSource._dispatch("log_updated", {
-			id: "active-1",
-			previous_status: "processing",
-			status: "success",
-			latency_ms: 1234.0,
+		// Incremental update: log_updated changes metadata (model updated) while still processing
+		act(() => {
+			eventSource._dispatch("log_updated", {
+				id: "active-1",
+				previous_status: "processing",
+				status: "processing",
+				latency_ms: 500.0,
+			});
 		});
 
-		// The active log should now be updated
+		// The active log should now be updated with new latency
 		expect(result.current.activeLogs).toHaveLength(1);
-		expect(result.current.activeLogs[0].status).toBe("success");
-		expect(result.current.activeLogs[0].latency).toBe(1234.0);
+		expect(result.current.activeLogs[0].status).toBe("processing");
+		expect(result.current.activeLogs[0].latency).toBe(500.0);
 	});
 
 	it("should add a new log on log_updated when the id does not exist in activeLogs", () => {
@@ -158,14 +168,18 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
 		// Handshake: no active logs
-		eventSource._dispatch("active_logs", []);
+		act(() => {
+			eventSource._dispatch("active_logs", []);
+		});
 
 		// New processing log arrives via log_updated
-		eventSource._dispatch("log_updated", {
-			id: "new-request-1",
-			previous_status: null,
-			status: "processing",
-			latency_ms: null,
+		act(() => {
+			eventSource._dispatch("log_updated", {
+				id: "new-request-1",
+				previous_status: null,
+				status: "processing",
+				latency_ms: null,
+			});
 		});
 
 		expect(result.current.activeLogs).toHaveLength(1);
@@ -179,15 +193,19 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
 		// Handshake: one processing log
-		eventSource._dispatch("active_logs", [mockActiveLog]);
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
 		expect(result.current.activeLogs).toHaveLength(1);
 
 		// Completion: mark as success
-		eventSource._dispatch("log_updated", {
-			id: "active-1",
-			previous_status: "processing",
-			status: "success",
-			latency_ms: 1234.0,
+		act(() => {
+			eventSource._dispatch("log_updated", {
+				id: "active-1",
+				previous_status: "processing",
+				status: "success",
+				latency_ms: 1234.0,
+			});
 		});
 
 		// After completion, the log should be removed from activeLogs (it's no longer active)
@@ -226,7 +244,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
 		// Simulate error event
-		eventSource._dispatch("error", { status: 503, message: "Service Unavailable" });
+		act(() => {
+			eventSource._dispatch("error", { status: 503, message: "Service Unavailable" });
+		});
 
 		expect(result.current.error).toBeTruthy();
 		expect(result.current.isConnected).toBe(false);
