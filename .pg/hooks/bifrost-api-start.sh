@@ -59,7 +59,7 @@ echo "重新构建 bifrost-http..."
 if [[ ! -f "$PROJECT_ROOT/go.work" ]]; then
     (cd "$PROJECT_ROOT" && make setup-workspace >/dev/null 2>&1) || true
 fi
-(cd "$PROJECT_ROOT/transports/bifrost-http" && go build -ldflags="-w -s" -o "$BIFROST_BIN" .) || {
+(cd "$PROJECT_ROOT/transports/bifrost-http" && go build -tags dev -ldflags="-w -s" -o "$BIFROST_BIN" .) || {
     pg_fail --category=build_failure --code=PG-E-0800 \
         --message="bifrost-http 构建失败" \
         --hint="Run 'make setup-workspace && make build LOCAL=1' in project root" \
@@ -81,7 +81,7 @@ if check_port "$PORT"; then
 fi
 
 if ! pid=$(pg_start_bg "$LOG_DIR/bifrost-api.log" "$PID_DIR/bifrost-api.pid" \
-        "BIFROST_PORT=$PORT" "PATH=$PATH" -- \
+        "BIFROST_PORT=$PORT" "BIFROST_UI_DEV=true" "PATH=$PATH" -- \
         "$BIFROST_BIN" -app-dir "$DATA_DIR" -port "$PORT" -host "$HOST" -log-level info -log-style pretty); then
     pg_fail --category=service_start_failure --code=PG-E-0800 \
         --message="启动 bifrost-api 失败" \
