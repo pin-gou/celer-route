@@ -1,0 +1,60 @@
+---
+title: "Internationalization (i18n)"
+description: "Bifrost UI supports multiple languages with a locale switcher"
+---
+
+# Internationalization (i18n)
+
+Bifrost UI supports **English (en)** and **Simplified Chinese (zh-CN)** out of the box.
+
+## Switching Languages
+
+1. Click the **language icon** (<Languages size={16} />) at the bottom of the sidebar, next to the theme toggle
+2. Select your preferred language from the dropdown
+3. The UI updates immediately — no page reload required
+
+Your language preference is saved in `localStorage` and persists across sessions. On first visit, Bifrost automatically detects your browser's language setting and defaults to English if no match is found.
+
+## Currently Supported Languages
+
+| Language | Code | Status |
+|----------|------|--------|
+| English | `en` | ✅ Full support |
+| Simplified Chinese | `zh-CN` | ✅ Full support |
+
+## Translating UI Components
+
+The translation system covers:
+
+- **Sidebar navigation** — all menu items
+- **Dashboard** — page title, tab labels, filter labels
+- **Model Providers** — provider list, status messages, empty states
+- **Governance** — virtual keys table headers, status labels, empty states
+- **Common UI** — action buttons (Save, Cancel, Delete, etc.), pagination, search, toast notifications, confirmation dialogs
+- **Logs** — provider labels, request type labels, status labels
+
+## How to Contribute Translations
+
+### Adding a New Language
+
+1. Create a new directory under `ui/locales/<language-code>/` (e.g., `ui/locales/ja/`)
+2. Copy all 7 namespace files from `ui/locales/en/` and translate the values
+3. Register the new language in `ui/lib/i18n/config.ts`:
+   - Add the import for the new locale's JSON files
+   - Add the locale to the `resources` object
+   - Add the locale code to the `SUPPORTED_LOCALES` array
+   - Add the locale label to the `LOCALE_LABELS` object
+4. Update the `SupportedLocale` type in `ui/lib/i18n/config.ts`
+5. Run the tests to verify key completeness: `npx vitest run src/__tests__/i18n/`
+
+### Updating Existing Translations
+
+Edit the JSON files in `ui/locales/<language-code>/`. Ensure keys stay in sync between all language files — the key completeness test (`src/__tests__/i18n/key-completeness.test.ts`) enforces this in CI.
+
+### Technical Architecture
+
+- **Library**: [react-i18next](https://react.i18next.com/) + [i18next](https://www.i18next.com/)
+- **Language detection**: `i18next-browser-languagedetector` (localStorage > navigator > en fallback)
+- **Namespaces**: 7 namespaces (common, logs, config, governance, providers, dashboard, governance-ui)
+- **Type safety**: Manual type definitions in `ui/lib/i18n/types.ts` provide autocompletion for `t()` calls
+- **Provider**: `I18nProvider` wraps the app in `clientLayout.tsx`

@@ -1,0 +1,46 @@
+{
+  "providers": {
+    "default": { "placeholder": "例如：gpt-4, gpt-3.5-turbo。留空表示所有模型。" },
+    "anthropic": { "placeholder": "例如：claude-3-haiku, claude-2.1" },
+    "azure": { "placeholder": "例如：gpt-4, gpt-35-turbo（必须与别名密钥匹配）" },
+    "bedrock": { "placeholder": "例如：claude-v2, titan-text-express-v1, ai21-j2-mid" },
+    "bedrock_mantle": { "placeholder": "例如：anthropic.claude-opus-4-8, openai.gpt-oss-120b" },
+    "cerebras": { "placeholder": "例如：cerebras-2, cerebras-2-vision" },
+    "cohere": { "placeholder": "例如：command-r, command-r-plus" },
+    "deepseek": { "placeholder": "例如：deepseek-v4-flash, deepseek-v4-pro" },
+    "gemini": { "placeholder": "例如：gemini-1.5-pro, gemini-1.5-flash" },
+    "groq": { "placeholder": "例如：llama3-70b-8192, mixtral-8x7b-32768" },
+    "huggingface": { "placeholder": "例如：sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B" },
+    "mistral": { "placeholder": "例如：mistral-7b-instruct, mixtral-8x7b" },
+    "openrouter": { "placeholder": "例如：openai/gpt-4, anthropic/claude-3-haiku" },
+    "sgl": { "placeholder": "例如：sgl-2, sgl-vision" },
+    "parasail": { "placeholder": "例如：parasail-2, parasail-vision" },
+    "elevenlabs": { "placeholder": "例如：eleven_multilingual_v2, eleven_turbo_v2" },
+    "perplexity": { "placeholder": "例如：sonar-pro, sonar-deep-research" },
+    "ollama": { "placeholder": "例如：llama3.1, llama2" },
+    "opencode_go": { "placeholder": "例如：gpt-5.5, claude-sonnet-4-6" },
+    "opencode_zen": { "placeholder": "例如：gpt-5.5, claude-sonnet-4-6" },
+    "openai": { "placeholder": "例如：gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo" },
+    "vertex": { "placeholder": "例如：gemini-1.5-pro, text-bison, chat-bison" },
+    "nebius": { "placeholder": "例如：openai/gpt-oss-120b, google/gemma-2-9b-it-fast, Qwen/Qwen2.5-VL-72B-Instruct" },
+    "xai": { "placeholder": "例如：grok-4-0709, grok-3-mini, grok-3, grok-2-vision-1212" },
+    "replicate": { "placeholder": "例如：meta/llama3-1-8b-instruct, black-forest-labs/flux-dev" },
+    "vllm": { "placeholder": "例如：Qwen/Qwen3-0.6B, Qwen/Qwen3-1.5B" },
+    "runway": { "placeholder": "例如：gen4_turbo_image_to_video, gen3a_turbo_image_to_video" },
+    "runware": { "placeholder": "例如：runware:100@1, runware:101@1" },
+    "fireworks": { "placeholder": "例如：accounts/fireworks/models/deepseek-v3p2" },
+    "sarvam": { "placeholder": "例如：sarvam-30b, sarvam-105b" },
+    "wafer": { "placeholder": "例如：glm-5.2, kimi-k2.6" }
+  },
+  "mcp": {
+    "status": {
+      "healthy": { "label": "健康" },
+      "error": { "label": "错误" },
+      "unstable": { "label": "不稳定" },
+      "pending_verification": { "label": "待验证" },
+      "disabled": { "label": "已禁用" },
+      "needs_reauth": { "label": "需要重新认证" },
+      "degraded": { "label": "降级" }
+    }
+  }
+}

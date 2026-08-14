@@ -1,3 +1,5 @@
+
+
 // Known provider names array - centralized definition
 export const KnownProvidersNames = [
 	"anthropic",
@@ -154,6 +156,9 @@ export const getProviderLabel = (provider: string): string => {
 	// For custom providers, return the original provider name as is
 	return provider;
 };
+
+// Note: i18n-aware label lookups are handled at the call site using
+// useTranslation('logs') + t() directly, not via getTranslated* helpers.
 
 // ClientApp is the display info for a client application resolved from a raw
 // User-Agent string. `icon`, when set, is a path under /public/images.
@@ -427,3 +432,6 @@ export const RoutingEngineUsedColors = {
 } as const;
 
 export type Status = (typeof Statuses)[number];
+
+// Note: i18n-aware label lookups are handled at the call site using
+// useTranslation('logs') + t() directly, not via getTranslated* helpers.

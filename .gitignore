@@ -258,3 +258,4 @@ tests/e2e/clis/reports
 
 .codegraph
 deploy-yinyue.sh
+deploy-yinyue.md

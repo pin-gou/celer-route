@@ -59,6 +59,8 @@ import { ChevronRight } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCookies } from "react-cookie";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "./LanguageSwitcher/LanguageSwitcher";
 import { ThemeToggle } from "./themeToggle";
 import { Badge } from "./ui/badge";
 import { PromoCardStack } from "./ui/promoCardStack";
@@ -508,6 +510,7 @@ const compareVersions = (v1: string, v2: string): number => {
 };
 
 export default function AppSidebar() {
+	const { t } = useTranslation("common");
 	const pathname = useLocation({ select: (l) => l.pathname });
 	const search = useLocation({ select: (l) => l.searchStr ?? "" });
 	const tsNavigate = useNavigate();
@@ -579,42 +582,42 @@ export default function AppSidebar() {
 	const items = useMemo(
 		() => [
 			{
-				title: "Observability",
+				title: t("nav.observability"),
 				url: "/workspace/logs",
 				icon: Telescope,
 				description: "Request logs & monitoring",
 				hasAccess: hasLogsAccess,
 				subItems: [
 					{
-						title: "Dashboard",
+						title: t("nav.dashboard"),
 						url: "/workspace/dashboard",
 						icon: ChartColumnBig,
 						description: "Dashboard",
 						hasAccess: hasDashboardAccess,
 					},
 					{
-						title: "LLM Logs",
+						title: t("nav.llmLogs"),
 						url: "/workspace/logs",
 						icon: Logs,
 						description: "LLM request logs & monitoring",
 						hasAccess: hasLogsAccess,
 					},
 					{
-						title: "MCP Logs",
+						title: t("nav.mcpLogs"),
 						url: "/workspace/mcp-logs",
 						icon: MCPIcon,
 						description: "MCP tool execution logs",
 						hasAccess: hasMCPLogsAccess,
 					},
 					{
-						title: "Connectors",
+						title: t("nav.connectors"),
 						url: "/workspace/observability",
 						icon: ChevronsLeftRightEllipsis,
 						description: "Log connectors",
 						hasAccess: hasObservabilityAccess,
 					},
 					{
-						title: "Logs Settings",
+						title: t("nav.logsSettings"),
 						url: "/workspace/config/logging",
 						icon: Settings,
 						description: "Logs configuration",
@@ -623,56 +626,56 @@ export default function AppSidebar() {
 				],
 			},
 			{
-				title: "Models",
+				title: t("nav.models"),
 				url: "/workspace/providers",
 				icon: BoxIcon,
 				description: "Configure models",
 				hasAccess: true,
 				subItems: [
 					{
-						title: "Model Catalog",
+						title: t("nav.modelCatalog"),
 						url: "/workspace/model-catalog",
 						icon: LayoutGrid,
 						description: "Overview of providers, keys, and usage",
 						hasAccess: hasModelProvidersAccess,
 					},
 					{
-						title: "Model Providers",
+						title: t("nav.modelProviders"),
 						url: "/workspace/providers",
 						icon: Boxes,
 						description: "Configure models",
 						hasAccess: hasModelProvidersAccess,
 					},
 					{
-						title: "Budgets & Limits",
+						title: t("nav.budgetsAndLimits"),
 						url: "/workspace/model-limits",
 						icon: Wallet,
 						description: "Budgets and rate limits",
 						hasAccess: hasGovernanceLegacyAccess,
 					},
 					{
-						title: "Routing Rules",
+						title: t("nav.routingRules"),
 						url: "/workspace/routing-rules",
 						icon: Network,
 						description: "Intelligent routing rules",
 						hasAccess: hasRoutingRulesAccess,
 					},
 					{
-						title: "Complexity Router",
+						title: t("nav.complexityRouter"),
 						url: "/workspace/complexity-router",
 						icon: GitCompareArrows,
 						description: "Complexity tier routing",
 						hasAccess: hasRoutingRulesAccess,
 					},
 					{
-						title: "Pricing Overrides",
+						title: t("nav.pricingOverrides"),
 						url: "/workspace/custom-pricing/overrides",
 						icon: SlidersHorizontal,
 						description: "Scoped pricing overrides",
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: "Model Settings",
+						title: t("nav.modelSettings"),
 						url: "/workspace/custom-pricing",
 						icon: Settings,
 						description: "Model and routing configuration",
@@ -681,42 +684,42 @@ export default function AppSidebar() {
 				],
 			},
 			{
-				title: "MCP Gateway",
+				title: t("nav.mcpGateway"),
 				icon: MCPIcon,
 				description: "MCP configuration",
 				url: "/workspace/mcp-gateway",
 				hasAccess: hasMCPGatewayAccess,
 				subItems: [
 					{
-						title: "MCP Catalog",
+						title: t("nav.mcpCatalog"),
 						url: "/workspace/mcp-registry",
 						icon: LayoutGrid,
 						description: "MCP tool catalog",
 						hasAccess: hasMCPGatewayAccess,
 					},
 					{
-						title: "MCP Library",
+						title: t("nav.mcpLibrary"),
 						url: "/workspace/mcp-registry/library",
 						icon: Boxes,
 						description: "Install curated MCP servers",
 						hasAccess: hasMCPGatewayAccess,
 					},
 					{
-						title: "Auth Sessions",
+						title: t("nav.authSessions"),
 						url: "/workspace/mcp-sessions",
 						icon: KeyRound,
 						description: "Per-user OAuth sessions",
 						hasAccess: hasMCPGatewayAccess,
 					},
 					{
-						title: "OAuth Grants",
+						title: t("nav.oauthGrants"),
 						url: "/workspace/oauth-grants",
 						icon: ShieldCheck,
 						description: "Downstream OAuth grants",
 						hasAccess: hasMCPGatewayAccess,
 					},
 					{
-						title: "MCP Settings",
+						title: t("nav.mcpSettings"),
 						url: "/workspace/mcp-settings",
 						icon: Settings,
 						description: "MCP configuration",
@@ -725,21 +728,21 @@ export default function AppSidebar() {
 				],
 			},
 			{
-				title: "Plugins",
+				title: t("nav.plugins"),
 				url: "/workspace/plugins",
 				icon: Puzzle,
 				description: "Manage custom plugins",
 				hasAccess: hasPluginsAccess,
 			},
 			{
-				title: "Governance",
+				title: t("nav.governance"),
 				url: "/workspace/governance",
 				icon: Landmark,
 				description: "Virtual keys & access",
 				hasAccess: hasAnyGovernanceAccess,
 				subItems: [
 					{
-						title: "Virtual Keys",
+						title: t("nav.virtualKeys"),
 						url: "/workspace/governance/virtual-keys",
 						icon: KeyRound,
 						description: "Manage virtual keys & access",
@@ -748,7 +751,7 @@ export default function AppSidebar() {
 				],
 			},
 			{
-				title: "Webhooks",
+				title: t("nav.webhooks"),
 				url: "/workspace/webhooks",
 				icon: Webhook,
 				description: "Async job webhook endpoints",
@@ -757,14 +760,14 @@ export default function AppSidebar() {
 			...(isDbConnected
 				? [
 						{
-							title: "Prompt Repository",
+							title: t("nav.promptRepository"),
 							url: "/workspace/prompt-repo",
 							icon: FolderGit,
 							description: "Prompt repository",
 							hasAccess: hasPromptRepositoryAccess,
 						},
 						{
-							title: "Skills Repository",
+							title: t("nav.skillsRepository"),
 							url: "/workspace/skills-repo",
 							icon: BookOpenText,
 							description: "Skills repository",
@@ -773,7 +776,7 @@ export default function AppSidebar() {
 					]
 				: []),
 			{
-				title: "Evals",
+				title: t("nav.evals"),
 				url: "https://www.getmaxim.ai",
 				icon: FlaskConical,
 				isExternal: true,
@@ -781,56 +784,56 @@ export default function AppSidebar() {
 				hasAccess: true,
 			},
 			{
-				title: "Settings",
+				title: t("nav.settings"),
 				url: "/workspace/config",
 				icon: Settings2Icon,
 				description: "Bifrost settings",
 				hasAccess: hasSettingsAccess,
 				subItems: [
 					{
-						title: "Client Settings",
+						title: t("nav.clientSettings"),
 						url: "/workspace/config/client-settings",
 						icon: Settings,
 						description: "Client configuration settings",
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: "Compatibility",
+						title: t("nav.compatibility"),
 						url: "/workspace/config/compatibility",
 						icon: Plug,
 						description: "Compatibility conversion settings",
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: "Caching",
+						title: t("nav.caching"),
 						url: "/workspace/config/caching",
 						icon: DatabaseZap,
 						description: "Caching configuration",
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: "Security",
+						title: t("nav.security"),
 						url: "/workspace/config/security",
 						icon: ShieldCheck,
 						description: "Security settings",
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: "API Keys",
+						title: t("nav.apiKeys"),
 						url: "/workspace/config/api-keys",
 						icon: KeyRound,
 						description: "API keys management",
 						hasAccess: hasAPIKeyAccess,
 					},
 					{
-						title: "Performance Tuning",
+						title: t("nav.performanceTuning"),
 						url: "/workspace/config/performance-tuning",
 						icon: TrendingUp,
 						description: "Performance tuning settings",
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: "Feature Flags",
+						title: t("nav.featureFlags"),
 						url: "/workspace/config/feature-flags",
 						icon: Flag,
 						description: "Toggle feature flags",
@@ -857,6 +860,7 @@ export default function AppSidebar() {
 			hasSkillsRepositoryAccess,
 			hasFeatureFlagsAccess,
 			isDbConnected,
+			t,
 		],
 	);
 
@@ -1345,6 +1349,7 @@ export default function AppSidebar() {
 									</a>
 								))}
 							<ThemeToggle />
+							<LanguageSwitcher />
 							{isAuthEnabled ? (
 								<div>
 									<button

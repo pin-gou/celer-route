@@ -68,6 +68,7 @@ export const ModelPlaceholders = {
 	wafer: "e.g. glm-5.2, kimi-k2.6",
 };
 
+// Note: i18n-aware label lookups are handled at the call site.
 export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	anthropic: true,
 	azure: true,

@@ -1,0 +1,38 @@
+{
+  "title": "Dashboard",
+  "tabs": {
+    "overview": "Overview",
+    "providerUsage": "Provider Usage",
+    "modelRankings": "Model Rankings",
+    "mcpUsage": "MCP usage",
+    "teamRankings": "Team Rankings",
+    "userRankings": "User Rankings",
+    "virtualKeyRankings": "Virtual Key Rankings",
+    "customerRankings": "Customer Rankings",
+    "buRankings": "BU Rankings",
+    "appRankings": "App Rankings"
+  },
+  "filters": {
+    "allTools": "All Tools",
+    "allServers": "All Servers",
+    "dateRange": "Date Range",
+    "period": "Period",
+    "timezone": "Timezone"
+  },
+  "charts": {
+    "volume": "Volume",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "latency": "Latency",
+    "throughput": "Throughput"
+  },
+  "export": {
+    "title": "Export",
+    "pdf": "Export PDF",
+    "csv": "Export CSV"
+  },
+  "empty": {
+    "title": "No data available",
+    "description": "There is no data for the selected time period. Try adjusting your filters or time range."
+  }
+}

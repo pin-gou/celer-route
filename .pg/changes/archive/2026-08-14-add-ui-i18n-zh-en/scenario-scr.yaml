@@ -13,7 +13,7 @@ scenarios:
       - name: 通过 bifrost-api 登录获取 session cookie
         type: api
         method: POST
-        url: http://localhost:9080/api/auth/login
+        url: http://localhost:9080/api/session/login
         body:
           username: admin
           password: bifrost123

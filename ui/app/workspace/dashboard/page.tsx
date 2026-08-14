@@ -11,6 +11,7 @@ import { getRangeForPeriod, TIME_PERIODS } from "@/lib/utils/timeRange";
 import { useLocation } from "@tanstack/react-router";
 import { parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { type ChartType } from "./components/charts/chartTypeToggle";
 import { ModelFilterSelect } from "./components/charts/modelFilterSelect";
 import { ExportPopover } from "./components/exportPopover";
@@ -32,6 +33,8 @@ const nextFrames = () =>
 	});
 
 export default function DashboardPage() {
+	const { t } = useTranslation("dashboard");
+
 	// MCP filter data
 	const { data: mcpFilterData } = useGetMCPAvailableFilterDataQuery();
 
@@ -476,7 +479,7 @@ export default function DashboardPage() {
 				{/* Header */}
 				<div className="flex items-center justify-between p-4">
 					<div className="flex items-center gap-2">
-						<h1 className="text-lg font-semibold">Dashboard</h1>
+						<h1 className="text-lg font-semibold">{t("title")}</h1>
 					</div>
 					<div className="flex items-center gap-2">
 						<ExportPopover
@@ -541,34 +544,34 @@ export default function DashboardPage() {
 						<div className="mb-2 max-w-full overflow-x-auto">
 							<TabsList className="w-max min-w-max">
 								<TabsTrigger className="shrink-0" value="overview" data-testid="dashboard-tab-overview">
-									Overview
+									{t("tabs.overview")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="provider-usage" data-testid="dashboard-tab-provider-usage">
-									Provider Usage
+									{t("tabs.providerUsage")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="rankings" data-testid="dashboard-tab-rankings">
-									Model Rankings
+									{t("tabs.modelRankings")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="mcp" data-testid="dashboard-tab-mcp">
-									MCP usage
+									{t("tabs.mcpUsage")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="team-rankings" data-testid="dashboard-tab-team-rankings">
-									Team Rankings
+									{t("tabs.teamRankings")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="user-rankings" data-testid="dashboard-tab-user-rankings">
-									User Rankings
+									{t("tabs.userRankings")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="virtual-key-rankings" data-testid="dashboard-tab-virtual-key-rankings">
-									Virtual Key Rankings
+									{t("tabs.virtualKeyRankings")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="customer-rankings" data-testid="dashboard-tab-customer-rankings">
-									Customer Rankings
+									{t("tabs.customerRankings")}
 								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="bu-rankings" data-testid="dashboard-tab-bu-rankings">
-									BU Rankings
+									{t("tabs.buRankings")}
 								</TabsTrigger>
 								<TabsTrigger value="app-rankings" data-testid="dashboard-tab-app-rankings">
-									App Rankings
+									{t("tabs.appRankings")}
 								</TabsTrigger>
 							</TabsList>
 						</div>

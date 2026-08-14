@@ -86,10 +86,9 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 // SetTTLOverride) without affecting the source Config.
 //
 // If a logger is provided, AsState logs a warning for each ttl_overrides
-// key whose name does not match any built-in Bifrost provider. The override
-// is still applied, but the warning helps catch typos and reminds the
-// operator that custom providers must be registered before the name is
-// recognized as a built-in.
+// key whose name does not match any known Bifrost provider. A typo
+// (`"open-ai"` instead of `"openai"`) would otherwise be silently ignored
+// and the admin would think their override took effect when it did not.
 func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 	ttl := DefaultCooldownTTL
 	if c.DefaultTTLSeconds > 0 {
@@ -103,8 +102,8 @@ func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 		mp := schemas.ModelProvider(prov)
 		if logger != nil && !schemas.IsKnownProvider(prov) {
 			logger.Warn(
-				"[provider-cooldown] ttl_overrides key %q is not a built-in provider; override still applies — verify %q is the exact provider name used in routing",
-				prov, prov,
+				"[provider-cooldown] ttl_overrides key %q does not match any known provider; override will be silently ignored",
+				prov,
 			)
 		}
 		s.SetTTLOverride(mp, time.Duration(secs)*time.Second)

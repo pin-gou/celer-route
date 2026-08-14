@@ -13,7 +13,6 @@ import { ConfigSettingsPage } from "../../features/config/pages/config-settings.
 import { GovernancePage } from "../../features/governance/pages/governance.page";
 import { MCPAuthConfigPage } from "../../features/mcp-auth-config/pages/mcp-auth-config.page";
 import { MCPSettingsPage } from "../../features/mcp-settings/pages/mcp-settings.page";
-import { MCPToolGroupsPage } from "../../features/mcp-tool-groups/pages/mcp-tool-groups.page";
 import { ModelLimitsPage } from "../../features/model-limits/pages/model-limits.page";
 
 /**
@@ -35,7 +34,6 @@ type BifrostFixtures = {
 	governancePage: GovernancePage;
 	modelLimitsPage: ModelLimitsPage;
 	mcpSettingsPage: MCPSettingsPage;
-	mcpToolGroupsPage: MCPToolGroupsPage;
 	mcpAuthConfigPage: MCPAuthConfigPage;
 };
 
@@ -126,10 +124,6 @@ export const test = base.extend<BifrostFixtures>({
 
 	mcpSettingsPage: async ({ page }, use) => {
 		await use(new MCPSettingsPage(page));
-	},
-
-	mcpToolGroupsPage: async ({ page }, use) => {
-		await use(new MCPToolGroupsPage(page));
 	},
 
 	mcpAuthConfigPage: async ({ page }, use) => {

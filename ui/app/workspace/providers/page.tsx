@@ -22,6 +22,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AddCustomProviderSheet from "./dialogs/addNewCustomProviderSheet";
 import ConfirmDeleteProviderDialog from "./dialogs/confirmDeleteProviderDialog";
@@ -30,6 +31,7 @@ import { AddProviderDropdown } from "./views/addProviderDropdown";
 import { ProvidersEmptyState } from "./views/providersEmptyState";
 
 export default function Providers() {
+	const { t } = useTranslation(["providers", "common"]);
 	const dispatch = useAppDispatch();
 	const navigate = useNavigate();
 	const hasProvidersAccess = useRbac(RbacResource.ModelProvider, RbacOperation.View);
@@ -91,11 +93,12 @@ export default function Providers() {
 					);
 					return;
 				}
-				toast.error("Something went wrong", {
+				toast.error(t("common:toast.error"), {
 					description: `We encountered an error while getting provider config: ${getErrorMessage(err)}`,
 				});
+				return;
 			});
-	}, [provider, isLoadingProviders]);
+		}, [provider, isLoadingProviders]);
 
 	useEffect(() => {
 		if (selectedProvider || configuredProviders.length === 0 || provider) return;
@@ -198,7 +201,7 @@ export default function Providers() {
 							{/* Configured Providers (standard with keys + custom) */}
 							{configuredProviders.length > 0 && (
 								<div className="mb-4">
-									<div className="text-muted-foreground mb-2 text-xs font-medium">Configured Providers</div>
+									<div className="text-muted-foreground mb-2 text-xs font-medium">{t("list.configuredProviders")}</div>
 									{configuredProviders.map((p) => {
 										const isCustom = !ProviderNames.includes(p.name as KnownProvider);
 										const label = isCustom ? p.name : ProviderLabels[p.name as keyof typeof ProviderLabels];
@@ -233,7 +236,7 @@ export default function Providers() {
 												<ProviderStatusBadge status={p.provider_status} />
 												{isCustom && (
 													<Badge variant="secondary" className="text-muted-foreground ml-auto shrink-0 px-1.5 py-0.5 text-[10px] font-bold">
-														CUSTOM
+														{t("common:common.custom")}
 													</Badge>
 												)}
 											</div>
@@ -263,7 +266,7 @@ export default function Providers() {
 			)}
 			{!selectedProvider && (
 				<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
-					<div className="text-muted-foreground text-sm">Select a provider</div>
+					<div className="text-muted-foreground text-sm">{t("list.selectProvider")}</div>
 				</div>
 			)}
 			{!isLoadingProvider && selectedProvider && (
@@ -274,12 +277,13 @@ export default function Providers() {
 }
 
 function ProviderStatusBadge({ status }: { status: ProviderStatus }) {
+	const { t } = useTranslation("providers");
 	return status != "active" ? (
 		<Tooltip>
 			<TooltipTrigger>
 				<AlertCircle className="h-3 w-3" />
 			</TooltipTrigger>
-			<TooltipContent>{status === "error" ? "Provider could not be initialized" : "Provider is deleted"}</TooltipContent>
+			<TooltipContent>{status === "error" ? t("providerStatus.error") : t("providerStatus.deleted")}</TooltipContent>
 		</Tooltip>
 	) : null;
 }
@@ -292,6 +296,7 @@ function KeyDiscoveryFailedBadge({
 		description?: string;
 	};
 }) {
+	const { t } = useTranslation("providers");
 	const providerFailed = provider.status === "list_models_failed";
 
 	if (!providerFailed) return null;
@@ -301,7 +306,7 @@ function KeyDiscoveryFailedBadge({
 			<TooltipTrigger>
 				<AlertCircle className="h-3 w-3" />
 			</TooltipTrigger>
-			<TooltipContent>{provider.description || "Provider model discovery failed."}</TooltipContent>
+			<TooltipContent>{provider.description || t("providerStatus.listModelsFailed")}</TooltipContent>
 		</Tooltip>
 	);
 }

@@ -71,3 +71,4 @@ export const quarterStartMonthOptions = MONTH_ABBREVIATIONS.map((_, index) => ({
 	label: new Date(Date.UTC(2026, index, 1)).toLocaleString("en-US", { month: "long", timeZone: "UTC" }),
 	value: String(index + 1),
 }));
+// Note: i18n-aware label lookups are handled at the call site.

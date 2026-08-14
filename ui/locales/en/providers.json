@@ -1,0 +1,45 @@
+{
+  "page": {
+    "title": "Model Providers",
+    "description": "Configure and manage your AI model providers"
+  },
+  "list": {
+    "configuredProviders": "Configured Providers",
+    "addProvider": "Add Provider",
+    "addCustomProvider": "Add Custom Provider",
+    "selectProvider": "Select a provider",
+    "noProviders": "No providers configured yet",
+    "noProvidersDescription": "Add your first provider to get started with AI model access."
+  },
+  "providerStatus": {
+    "active": "Active",
+    "error": "Provider could not be initialized",
+    "deleted": "Provider is deleted",
+    "listModelsFailed": "Provider model discovery failed.",
+    "keyDiscoveryFailed": "Key discovery failed"
+  },
+  "details": {
+    "networkConfig": "Network Configuration",
+    "performanceConfig": "Performance Configuration",
+    "allowedRequests": "Allowed Requests",
+    "baseUrl": "Base URL",
+    "timeout": "Timeout",
+    "maxRetries": "Max Retries",
+    "concurrency": "Concurrency",
+    "bufferSize": "Buffer Size",
+    "models": "Models",
+    "apiKey": "API Key",
+    "deleteProvider": "Delete Provider",
+    "deleteConfirm": "Are you sure you want to delete this provider?"
+  },
+  "actions": {
+    "configure": "Configure",
+    "delete": "Delete",
+    "save": "Save Configuration",
+    "test": "Test Connection"
+  },
+  "empty": {
+    "title": "No Providers Configured",
+    "description": "Add your first provider to start routing AI model requests through Bifrost."
+  }
+}

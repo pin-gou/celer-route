@@ -125,12 +125,12 @@ export function LanguageSwitcher() {
 ### 前置条件
 
 - Node.js ≥ 18（项目已要求；Vite 8 需要）
-- `npm install` 新增依赖：`i18next`、`react-i18next`、`i18next-browser-languagedetector`、`vite-plugin-i18next-typescript`（devDep）
+- `npm install` 新增依赖：`i18next`、`react-i18next`、`i18next-browser-languagedetector`（类型文件 `types.ts` 手动维护，`vite-plugin-i18next-typescript` 不存在于 npm registry）
 - 无后端服务依赖，无 schema 迁移，无配置变更
 
 ### 影响面
 
-- **修改**：`ui/app/clientLayout.tsx`、`ui/lib/constants/{logs,config,governance}.ts`、`ui/app/workspace/{dashboard,providers,governance}/**/*.tsx`、`ui/components/Sidebar/SidebarUserMenu.tsx`、`ui/package.json`、`ui/vite.config.mts`、`ui/tsconfig.json`
+- **修改**：`ui/app/clientLayout.tsx`、`ui/lib/constants/{logs,config,governance}.ts`、`ui/app/workspace/{dashboard,providers,governance}/**/*.tsx`、`ui/components/Sidebar/SidebarUserMenu.tsx`、`ui/package.json`
 - **新增**：`ui/lib/i18n/`（4 文件）、`ui/locales/{en,zh-CN}/`（14 json）、`ui/components/LanguageSwitcher/`、`ui/__tests__/i18n/`（Vitest）、`tests/e2e/features/i18n/i18n.spec.ts`、`docs/features/i18n.mdx`
 - **不破坏对外 API**：本变更不修改任何 HTTP / gRPC / WebSocket 端点，对 Bifrost API 消费者零影响
 - **TypeScript 类型签名保留**：`ui/lib/constants/*.ts` 中的 `ProviderLabels`、`RequestTypeLabels`、`StatusColors` 等 TS 类型导出（`Record<ProviderName, string>` 等）完整保留；仅其 `value` 字段（运行时字符串）改为 `t('...')` 调用
@@ -172,7 +172,7 @@ export function LanguageSwitcher() {
 | ID | 验证项 | 前置/数据准备 | 方法 | 预期结果 |
 |-----|--------|---------------|------|---------|
 | V-ui-1 | Vitest 键完整性测试 | 无前置；`ui/locales/{en,zh-CN}/*.json` 已生成 | `cd ui && npx vitest run src/__tests__/i18n/` | 所有 namespace 的 key 集合在 en 与 zh-CN 之间完全一致；全局 sanity 测试通过 |
-| V-ui-2 | Vite 生产构建 + TS 类型生成 | 无前置；`vite-plugin-i18next-typescript` 已装 | `cd ui && npm run build` | 构建无报错；`ui/lib/i18n/types.ts` 自动生成 `Resources` / `KeysWithNamespace` 类型；`t('namespace.key')` 调用补全生效 |
+| V-ui-2 | Vite 生产构建 + TS 类型 | 无前置 | `cd ui && npm run build` | 构建无报错；`ui/lib/i18n/types.ts` 手动维护 `Resources` / `KeysWithNamespace` 类型；`t('namespace.key')` 调用补全生效 |
 | V-ui-3 | ui lint 通过 | 无前置 | `cd ui && npm run lint` | 0 errors / 0 warnings（i18n key 引用命名合规） |
 | V-ui-4 | Playwright i18n 切换 E2E | bifrost-api(:9080) + ui-dev(:3008) 已启动；fixture 登录账号已 seed（`config-db` 内 `fixture-keys`） | `make run-e2e FLOW=i18n` | 登录后切到 zh-CN，顶部导航栏出现中文（"仪表板"、"提供商"、"治理"等），关键路由 `/workspace/dashboard` 标题切为中文；切回 en 后全部恢复英文 |
 
@@ -180,7 +180,7 @@ export function LanguageSwitcher() {
 
 | ID | 验证项 | 前置/数据准备 | 方法 | 预期结果 |
 |-----|--------|---------------|------|---------|
-| V-ui-5 | 端到端 scenario：登录 → 切语言 → 跨路由断言翻译 → 切回 → 还原 + 持久化 + 损坏兜底 | bifrost-api(:9080) 与 ui-dev(:3008) 已启动；`config-db` 内 `fixture-keys` 登录账号已 seed；dev stage 全部 V-* 已绿 | scenario-scr.yaml 4 个 Scenario 执行 | critical=true scenario 全绿；S-i18n-persist-across-page-reload 验证刷新后 locale 仍为 zh-CN；S-i18n-corrupted-localStorage-fallback-to-en 验证损坏 localStorage 兜底为 en；浏览器 console 无 error |
+| V-ui-5 | 端到端 scenario：登录 → 切语言 → 跨路由断言翻译 → 切回 → 还原 + 持久化 + 损坏兜底 | bifrost-api(:9080) 与 ui-dev(:3008) 已启动；`config-db` 内 fixture auth 已启用（admin / bifrost123）；dev stage 全部 V-* 已绿 | scenario-scr.yaml 4 个 Scenario 执行 | critical=true scenario 全绿；S-i18n-persist-across-page-reload 验证刷新后 locale 仍为 zh-CN；S-i18n-corrupted-localStorage-fallback-to-en 验证损坏 localStorage 兜底为 en；浏览器 console 无 error |
 
 ## 变更类型判定
 
