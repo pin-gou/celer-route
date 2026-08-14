@@ -1376,7 +1376,10 @@ export default function AppSidebar() {
 						</div>
 					</div>
 					<div className="mx-auto flex flex-col items-center gap-1 group-data-[collapsible=icon]:hidden">
-						<div className="font-mono text-xs">{version ?? ""}</div>
+						<div className="font-mono text-xs">
+							{version ?? ""}
+							{process.env.BUILD_TIME && <span className="text-muted-foreground ml-1">· {new Date(process.env.BUILD_TIME).toLocaleDateString()}</span>}
+						</div>
 					</div>
 				</div>
 			</SidebarContent>

@@ -35,6 +35,7 @@ export default defineConfig({
 		"process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "production"),
 		"process.env.BIFROST_DISABLE_PROFILER": JSON.stringify(process.env.BIFROST_DISABLE_PROFILER ?? ""),
 		"process.env.BIFROST_PORT": JSON.stringify(process.env.BIFROST_PORT ?? ""),
+		"process.env.BUILD_TIME": JSON.stringify(new Date().toISOString()),
 	},
 	server: {
 		port: 3000,
