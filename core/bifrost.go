@@ -394,6 +394,42 @@ func (bifrost *Bifrost) SetKeyPoolFilter(f schemas.KeyPoolFilter) {
 	bifrost.keyPoolFilter.Store(&f)
 }
 
+// newFixedKeyProvider builds a keyProvider closure for the canRotate=false
+// branch (single-key pool, explicit ID/name, or session stickiness). The
+// returned closure honours two veto signals:
+//
+//   - deadKeyIDs[fixedKey.ID]: a permanent per-key failure (401/402/403) on
+//     this request has marked the key dead. Surface errAllKeysDead so the
+//     caller emits 502 upstream_credentials_exhausted instead of burning
+//     retries on the same bad credential.
+//
+//   - The KeyPoolFilter hook (e.g. provider-cooldown) vetoes the key.
+//     Surface errAllKeysFiltered so the caller emits 503 no_eligible_keys,
+//     which lets the configured Fallbacks chain (or governance plugin)
+//     route to another provider rather than retrying the same dead key.
+//
+// If the filter is installed but returns an error, log a warning and fall
+// back to returning fixedKey — the rotating pool follows the same defensive
+// policy (see the rotating-pool branch in the request handler) so the
+// single-key path matches.
+func (bifrost *Bifrost) newFixedKeyProvider(ctx *schemas.BifrostContext, providerKey schemas.ModelProvider, model string, fixedKey schemas.Key) func(usedKeyIDs, deadKeyIDs map[string]bool) (schemas.Key, error) {
+	return func(_, deadKeyIDs map[string]bool) (schemas.Key, error) {
+		if deadKeyIDs[fixedKey.ID] {
+			return schemas.Key{}, errAllKeysDead
+		}
+		if f := bifrost.keyPoolFilter.Load(); f != nil && *f != nil {
+			if filtered, err := (*f)(ctx, providerKey, model, []schemas.Key{fixedKey}); err != nil {
+				if bifrost.logger != nil {
+					bifrost.logger.Warn("key pool filter failed for provider %s, using unfiltered key: %v", providerKey, err)
+				}
+			} else if len(filtered) == 0 {
+				return schemas.Key{}, fmt.Errorf("%w: provider %s", errAllKeysFiltered, providerKey)
+			}
+		}
+		return fixedKey, nil
+	}
+}
+
 // getTracer returns the tracer from atomic storage with type assertion.
 func (bifrost *Bifrost) getTracer() schemas.Tracer {
 	return bifrost.tracer.Load().(*tracerWrapper).tracer
@@ -6747,18 +6783,16 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					if len(supportedKeys) == 0 {
 						// SkipKeySelection path — keyProvider stays nil, zero Key is used.
 					} else if !canRotate {
-						// Fixed key (explicit ID/name, session stickiness): always
-						// return the same key — *unless* it has been marked permanently
-						// dead this request, in which case surface errAllKeysDead so the
-						// caller emits 502 upstream_credentials_exhausted instead of
-						// burning the remaining retries on the same bad credential.
-						fixedKey := supportedKeys[0]
-						keyProvider = func(_, deadKeyIDs map[string]bool) (schemas.Key, error) {
-							if deadKeyIDs[fixedKey.ID] {
-								return schemas.Key{}, errAllKeysDead
-							}
-							return fixedKey, nil
-						}
+						// Fixed key (single-key pool, explicit ID/name, session stickiness).
+						// Always return the same key — *unless* it has been marked
+						// permanently dead this request (errAllKeysDead → 502), *or* the
+						// KeyPoolFilter hook vetoes it (errAllKeysFiltered → 503
+						// no_eligible_keys). The filter call is what lets
+						// provider-cooldown actually take effect on single-key
+						// providers — without it, the filter would never run for
+						// providers configured with a single API key and the same
+						// dead credential would be retried until the deadline.
+						keyProvider = bifrost.newFixedKeyProvider(req.Context, provider.GetProviderKey(), model, supportedKeys[0])
 					} else {
 						// Rotating pool: weighted selection with per-cycle exclusion.
 						// Captures supportedKeys, bifrost.keySelector, provider/model by value.

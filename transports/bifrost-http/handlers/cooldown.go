@@ -19,6 +19,7 @@ type CooldownStateResolver func() *providercooldown.CooldownPlugin
 // provider-cooldown plugin's in-memory cooldown state:
 //
 //	GET    /api/plugins/provider-cooldown/state                    — dump active entries
+//	GET    /api/plugins/provider-cooldown/stats                    — lifetime counters + active count
 //	DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} — manually un-cool a key
 //
 // The handler is safe to wire unconditionally — when the plugin is not
@@ -39,6 +40,7 @@ func NewCooldownHandler(resolve CooldownStateResolver) *CooldownHandler {
 // can inspect or clear cooldown state.
 func (h *CooldownHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	r.GET("/api/plugins/provider-cooldown/state", lib.ChainMiddlewares(h.getState, middlewares...))
+	r.GET("/api/plugins/provider-cooldown/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
 	r.DELETE("/api/plugins/provider-cooldown/state/{provider}/{keyId}", lib.ChainMiddlewares(h.clearKey, middlewares...))
 }
 
@@ -63,6 +65,34 @@ func (h *CooldownHandler) getState(ctx *fasthttp.RequestCtx) {
 		Plugin:  providercooldown.PluginName,
 		Count:   len(entries),
 		Entries: entries,
+	})
+}
+
+// cooldownStatsResponse is the JSON shape returned by GET stats. It pairs
+// the lifetime counters with a point-in-time active count so an operator
+// can spot a healthy steady state ("suppressed_count climbing faster than
+// mark_count" means a filter is constantly vetoing) versus a stuck state
+// ("mark_count grows but suppressed_count stays flat" means the filter
+// was never installed — the classic single-key-provider symptom).
+type cooldownStatsResponse struct {
+	Plugin             string `json:"plugin"`
+	MarkCount          uint64 `json:"mark_count"`
+	SuppressedCount    uint64 `json:"suppressed_count"`
+	CurrentActiveCount int    `json:"current_active_count"`
+}
+
+func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
+	plugin := h.resolve()
+	if plugin == nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "provider-cooldown plugin is not loaded")
+		return
+	}
+	stats := plugin.Stats()
+	SendJSON(ctx, cooldownStatsResponse{
+		Plugin:             providercooldown.PluginName,
+		MarkCount:          stats.MarkCount,
+		SuppressedCount:    stats.SuppressedCount,
+		CurrentActiveCount: stats.CurrentActiveCount,
 	})
 }
 

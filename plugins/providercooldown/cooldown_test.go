@@ -891,3 +891,61 @@ func TestPluginInitIsIdempotent(t *testing.T) {
 		t.Fatalf("re-Init default TTL = %v, want 90s", got)
 	}
 }
+
+// TestStatsCounters covers the lifetime counters surfaced via Stats().
+// This is the read path used by GET /api/plugins/provider-cooldown/stats
+// and is what an operator uses to confirm the filter is actually vetoing
+// keys — production logs at Info level would be too noisy when the
+// feature is in steady-state suppression.
+//
+// Red-phase contract: Mark() increments markCount, AsFilter() increments
+// suppressedCount once per vetoed key per call, and Stats() returns both.
+func TestStatsCounters(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.Mark(schemas.OpenAI, "k1")
+	s.Mark(schemas.OpenAI, "k2")
+	s.Mark(schemas.OpenAI, "k1") // duplicate Mark still counts
+
+	filter := s.AsFilter(nil)
+	keys := []schemas.Key{
+		{ID: "k1", Name: "k1"},
+		{ID: "k2", Name: "k2"},
+		{ID: "k3", Name: "k3"},
+	}
+	if _, err := filter(nil, schemas.OpenAI, "gpt-4o", keys); err != nil {
+		t.Fatalf("filter call 1: %v", err)
+	}
+	if _, err := filter(nil, schemas.OpenAI, "gpt-4o", keys); err != nil {
+		t.Fatalf("filter call 2: %v", err)
+	}
+
+	stats := s.Stats()
+	if got, want := stats.MarkCount, uint64(3); got != want {
+		t.Errorf("MarkCount = %d, want %d", got, want)
+	}
+	if got, want := stats.SuppressedCount, uint64(4); got != want {
+		t.Errorf("SuppressedCount = %d, want %d (2 calls × 2 vetoed keys)", got, want)
+	}
+	if got, want := stats.CurrentActiveCount, 2; got != want {
+		t.Errorf("CurrentActiveCount = %d, want %d", got, want)
+	}
+}
+
+// TestAsFilterLogsSuppressedKeysAtInfo promotes the suppression log line
+// from Debug to Info so operators running with LOG_LEVEL=info can observe
+// filter hits (the previous Debug level made the feature invisible in
+// production unless logging was turned up).
+func TestAsFilterLogsSuppressedKeysAtInfo(t *testing.T) {
+	log := &testLogger{}
+	s := NewCooldownState(30 * time.Minute)
+	s.Mark(schemas.OpenAI, "hot-key")
+
+	filter := s.AsFilter(log)
+	keys := []schemas.Key{{ID: "hot-key"}, {ID: "cold-key"}}
+	if _, err := filter(nil, schemas.OpenAI, "gpt-4o", keys); err != nil {
+		t.Fatalf("filter: %v", err)
+	}
+	if !log.contains("info [provider-cooldown] suppressed key openai/hot-key") {
+		t.Fatalf("expected info-level suppression log, got %d messages: %v", log.count(), log.msgs)
+	}
+}

@@ -50029,6 +50029,145 @@
           }
         }
       ]
+    },
+    {
+      "name": "47. Single-Key Provider-Cooldown (filter must run on canRotate=false path)",
+      "description": "Pins the wire-visible behaviour of the provider-cooldown plugin on providers configured with a single API key. Before the fix, the core key-selection path bypassed KeyPoolFilter whenever the provider pool collapsed to one key (selectKeyFromProviderForModelWithPool returns canRotate=false for single-key pools, and the !canRotate branch of the keyProvider closure did not consult the filter). The result was that quota-exhausted single-key providers kept receiving requests against the same dead credential. After the fix, the !canRotate branch consults the filter via newFixedKeyProvider and surfaces errAllKeysFiltered as 503 no_eligible_keys, letting the configured Fallbacks chain (or governance plugin) route elsewhere. Cases here pin (1) the happy-path wire integrity, (2) the new stats endpoint shape, and (3) the filter rewiring after a plugin reload. Go-level tests in core/bifrost_test.go (TestFixedKeyProvider*) cover the closure in isolation.",
+      "item": [
+        {
+          "name": "provider-cooldown single-key openai chat smoke - filter wired even on canRotate=false",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('provider-cooldown single-key openai chat smoke - wire intact', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.choices && j.choices[0] && j.choices[0].message, 'expected a chat completion response').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Reply with one word.\" }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "provider-cooldown stats endpoint - shape is mark_count + suppressed_count + current_active_count",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('provider-cooldown stats endpoint returns counters', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.ok;",
+                  "  pm.expect(j.plugin, 'expected plugin name').to.eql('provider-cooldown');",
+                  "  pm.expect(typeof j.mark_count, 'mark_count should be numeric').to.eql('number');",
+                  "  pm.expect(typeof j.suppressed_count, 'suppressed_count should be numeric').to.eql('number');",
+                  "  pm.expect(typeof j.current_active_count, 'current_active_count should be numeric').to.eql('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plugins/provider-cooldown/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plugins",
+                "provider-cooldown",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "provider-cooldown single-key after plugin reload - filter still wired on canRotate=false path",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('plugin reload keeps the filter wired on the single-key path', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.choices && j.choices[0] && j.choices[0].message, 'expected a chat completion response').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Reply with one word.\" }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -2,6 +2,7 @@ package bifrost
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -3076,5 +3077,114 @@ func TestExecuteRequestWithRetries_EmptyStreamReturnsClosedChannel(t *testing.T)
 	}
 	if count != 0 {
 		t.Errorf("Expected range over empty stream to yield 0 chunks, got %d", count)
+	}
+}
+
+// TestFixedKeyProviderRespectsKeyPoolFilter pins the contract that the
+// single-key / fixed-key path (canRotate=false) still honours the
+// KeyPoolFilter hook. Without this, providers configured with a single
+// API key (e.g. minimax in the production deployment) would bypass
+// provider-cooldown entirely — the filter would never be consulted and
+// every request would land on the same dead key.
+//
+// Red-phase contract: when a KeyPoolFilter is installed and vetoes the
+// fixed key, the keyProvider closure returns errAllKeysFiltered. The
+// caller (executeRequestWithRetries) translates that into a 503
+// no_eligible_keys response rather than retrying the same dead
+// credential.
+func TestFixedKeyProviderRespectsKeyPoolFilter(t *testing.T) {
+	bifrost := &Bifrost{}
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+
+	var filterCalls int32
+	bifrost.SetKeyPoolFilter(func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, keys []schemas.Key) ([]schemas.Key, error) {
+		atomic.AddInt32(&filterCalls, 1)
+		return nil, nil // veto every key — simulates "the only key is in cooldown"
+	})
+
+	onlyKey := schemas.Key{ID: "solo", Name: "main"}
+	keyProvider := bifrost.newFixedKeyProvider(ctx, schemas.OpenAI, "gpt-4o", onlyKey)
+
+	_, err := keyProvider(nil, nil)
+	if err == nil {
+		t.Fatalf("expected keyProvider to surface filter veto as an error, got nil")
+	}
+	if !errors.Is(err, errAllKeysFiltered) {
+		t.Fatalf("expected errAllKeysFiltered so the caller maps it to 503 no_eligible_keys, got %v", err)
+	}
+	if atomic.LoadInt32(&filterCalls) != 1 {
+		t.Fatalf("filter must have been invoked exactly once on the fixed-key path, got %d", filterCalls)
+	}
+}
+
+// TestFixedKeyProviderPassesThroughWhenFilterAllowsKey ensures the fix
+// does not regress the happy path: a filter that keeps the key in its
+// returned slice must still let the caller proceed.
+func TestFixedKeyProviderPassesThroughWhenFilterAllowsKey(t *testing.T) {
+	bifrost := &Bifrost{}
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+
+	var filterCalls int32
+	bifrost.SetKeyPoolFilter(func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, keys []schemas.Key) ([]schemas.Key, error) {
+		atomic.AddInt32(&filterCalls, 1)
+		return keys, nil // keep all keys
+	})
+
+	onlyKey := schemas.Key{ID: "solo", Name: "main"}
+	keyProvider := bifrost.newFixedKeyProvider(ctx, schemas.OpenAI, "gpt-4o", onlyKey)
+
+	got, err := keyProvider(nil, nil)
+	if err != nil {
+		t.Fatalf("expected no error when filter passes the key through, got %v", err)
+	}
+	if got.ID != "solo" {
+		t.Fatalf("expected the single key to be returned, got %+v", got)
+	}
+	if atomic.LoadInt32(&filterCalls) != 1 {
+		t.Fatalf("filter must have been invoked exactly once, got %d", filterCalls)
+	}
+}
+
+// TestFixedKeyProviderFilterErrorFallsBackToKey covers the same defensive
+// fallback the rotating pool uses: if the filter returns an error, log a
+// warning and proceed with the original key rather than failing the whole
+// request on a plugin-side bug.
+func TestFixedKeyProviderFilterErrorFallsBackToKey(t *testing.T) {
+	bifrost := &Bifrost{}
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+
+	bifrost.SetKeyPoolFilter(func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, _ []schemas.Key) ([]schemas.Key, error) {
+		return nil, fmt.Errorf("simulated plugin bug")
+	})
+
+	onlyKey := schemas.Key{ID: "solo", Name: "main"}
+	keyProvider := bifrost.newFixedKeyProvider(ctx, schemas.OpenAI, "gpt-4o", onlyKey)
+
+	got, err := keyProvider(nil, nil)
+	if err != nil {
+		t.Fatalf("filter errors must not fail the request — expected fallback to the key, got %v", err)
+	}
+	if got.ID != "solo" {
+		t.Fatalf("expected fallback to return the original key, got %+v", got)
+	}
+}
+
+// TestFixedKeyProviderHonoursDeadKeyIDs is the unchanged contract from
+// before the fix: a permanently-dead (401/402/403) key still surfaces
+// errAllKeysDead even when the filter would otherwise allow it.
+func TestFixedKeyProviderHonoursDeadKeyIDs(t *testing.T) {
+	bifrost := &Bifrost{}
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+
+	bifrost.SetKeyPoolFilter(func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, keys []schemas.Key) ([]schemas.Key, error) {
+		return keys, nil
+	})
+
+	onlyKey := schemas.Key{ID: "solo", Name: "main"}
+	keyProvider := bifrost.newFixedKeyProvider(ctx, schemas.OpenAI, "gpt-4o", onlyKey)
+
+	_, err := keyProvider(nil, map[string]bool{"solo": true})
+	if !errors.Is(err, errAllKeysDead) {
+		t.Fatalf("dead key must surface errAllKeysDead regardless of filter outcome, got %v", err)
 	}
 }

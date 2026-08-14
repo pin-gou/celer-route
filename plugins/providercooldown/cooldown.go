@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -56,6 +57,13 @@ type CooldownState struct {
 	// resets quota on a known cadence (e.g. daily) and the default 10 minutes
 	// would cause avoidable fallback churn after the reset.
 	ttlOverrides map[schemas.ModelProvider]time.Duration
+
+	// Lifetime counters surfaced via Stats() so operators can confirm the
+	// filter is actually vetoing keys at the core boundary. Counters are
+	// monotonic across the lifetime of the state — they survive GC and
+	// transient filter reloads, but reset on plugin re-Init.
+	markCount       atomic.Uint64
+	suppressedCount atomic.Uint64
 }
 
 // NewCooldownState returns a CooldownState with the given default TTL.
@@ -131,6 +139,7 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 	c.mu.Lock()
 	c.cooldowns[c.key(provider, keyID)] = time.Now().Add(c.effectiveTTLLocked(provider))
 	c.mu.Unlock()
+	c.markCount.Add(1)
 }
 
 // EffectiveTTL returns the TTL that applies to the given provider, respecting
@@ -207,6 +216,30 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string) b
 	return true
 }
 
+// CooldownStats is the read-only lifetime summary surfaced via Stats() and
+// the GET /api/plugins/provider-cooldown/stats endpoint. MarkCount and
+// SuppressedCount are monotonic counters across the state lifetime;
+// CurrentActiveCount is a point-in-time snapshot of how many (provider, key)
+// pairs are mid-cooldown right now.
+type CooldownStats struct {
+	MarkCount          uint64 `json:"mark_count"`
+	SuppressedCount    uint64 `json:"suppressed_count"`
+	CurrentActiveCount int    `json:"current_active_count"`
+}
+
+// Stats returns the lifetime counters and the current number of active
+// cooldowns. Safe for concurrent use.
+func (c *CooldownState) Stats() CooldownStats {
+	c.mu.RLock()
+	active := len(c.cooldowns)
+	c.mu.RUnlock()
+	return CooldownStats{
+		MarkCount:          c.markCount.Load(),
+		SuppressedCount:    c.suppressedCount.Load(),
+		CurrentActiveCount: active,
+	}
+}
+
 // runGCLocked is the inner GC loop, factored out so tests can drive it with a
 // short interval and the plugin's auto-started GC can use the default. The
 // caller must hold no locks — runGC acquires c.mu itself.
@@ -267,8 +300,11 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 		for _, k := range keys {
 			if !c.IsCoolingDown(provider, k.ID) {
 				out = append(out, k)
-			} else if logger != nil {
-				logger.Debug("[provider-cooldown] suppressed key %s/%s (model=%s)", provider, k.ID, model)
+			} else {
+				c.suppressedCount.Add(1)
+				if logger != nil {
+					logger.Info("[provider-cooldown] suppressed key %s/%s (model=%s)", provider, k.ID, model)
+				}
 			}
 		}
 		return out, nil
@@ -439,6 +475,16 @@ func (p *CooldownPlugin) ClearKey(provider schemas.ModelProvider, keyID string) 
 		return false
 	}
 	return p.State.ClearKey(provider, keyID)
+}
+
+// Stats returns lifetime counters and the current active cooldown count
+// from the loaded State. Returns the zero value when the plugin has no
+// state yet (e.g. called before Init).
+func (p *CooldownPlugin) Stats() CooldownStats {
+	if p.State == nil {
+		return CooldownStats{}
+	}
+	return p.State.Stats()
 }
 
 // PreLLMHook is a no-op. The plugin only needs to act on the failure path.
