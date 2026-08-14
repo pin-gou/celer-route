@@ -28,6 +28,7 @@ import {
 } from "@/lib/types/complexityRouter";
 import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+import { useTranslation } from "react-i18next";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ExternalLink, LoaderCircle, RotateCcw, Save } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, useEffect, useState } from "react";
@@ -241,6 +242,7 @@ function TierSpectrumBar({ boundaries }: { boundaries: TierBoundaries }) {
 }
 
 export default function ComplexityRouterPage() {
+	const { t } = useTranslation("routing");
 	const canUpdate = useRbac(RbacResource.RoutingRules, RbacOperation.Update);
 	const { data, isLoading, isFetching, error, refetch } = useGetComplexityAnalyzerConfigQuery();
 	const [updateConfig, { isLoading: isSaving }] = useUpdateComplexityAnalyzerConfigMutation();
@@ -340,7 +342,7 @@ export default function ComplexityRouterPage() {
 				{/* ── Page header ── */}
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 					<div className="space-y-1.5">
-						<h1 className="text-2xl font-semibold tracking-tight">Complexity Router</h1>
+						<h1 className="text-2xl font-semibold tracking-tight">{t("complexityRouter.title")}</h1>
 						<p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
 							Tune how incoming requests are classified into four tiers. Thresholds and keyword lists feed the{" "}
 							<code className="bg-muted rounded-sm px-1 py-0.5 font-mono text-xs">complexity_tier</code> field that routing rules can

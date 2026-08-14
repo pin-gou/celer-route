@@ -27,6 +27,7 @@ import { WEBHOOK_EVENTS, WebhookEndpoint, WebhookEndpointRequest, WebhookEvent }
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ChevronLeft, ChevronRight, MoreHorizontal, PencilIcon, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { parseAsArrayOf, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -150,6 +151,7 @@ function WebhookActionsMenu({
 }
 
 export default function WebhooksView() {
+	const { t } = useTranslation("webhooks");
 	const hasCreateAccess = useRbac(RbacResource.Governance, RbacOperation.Create);
 	const hasUpdateAccess = useRbac(RbacResource.Governance, RbacOperation.Update);
 	const hasDeleteAccess = useRbac(RbacResource.Governance, RbacOperation.Delete);
@@ -326,7 +328,7 @@ export default function WebhooksView() {
 				<>
 					<div className="flex items-center justify-between">
 						<div>
-							<h2 className="text-lg font-semibold tracking-tight">Webhooks</h2>
+							<h2 className="text-lg font-semibold tracking-tight">{t("page.title")}</h2>
 							<p className="text-muted-foreground text-sm">
 								Register endpoints to receive signed notifications when async inference jobs complete or fail. Pass the endpoint's name in
 								the <code>x-bf-async-webhook</code> header when submitting a job.

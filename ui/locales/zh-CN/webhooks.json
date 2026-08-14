@@ -1,0 +1,27 @@
+{
+  "page": {
+    "title": "Webhooks",
+    "description": "管理 Webhook 端点"
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "createWebhook": "创建 Webhook",
+    "editWebhook": "编辑 Webhook",
+    "deleteWebhook": "删除 Webhook",
+    "webhookName": "Webhook 名称",
+    "url": "URL",
+    "events": "事件",
+    "status": "状态",
+    "secret": "密钥",
+    "lastTriggered": "最后触发",
+    "noWebhooks": "未配置 Webhook",
+    "noWebhooksDesc": "创建您的第一个 Webhook 以开始使用",
+    "active": "活跃",
+    "inactive": "不活跃"
+  },
+  "emptyState": {
+    "title": "Webhook 异步任务完成时通知您",
+    "description": "注册 Webhook 端点，当异步推理作业完成或失败时，Bifrost 会向您发送签名通知，因此您无需轮询结果。"
+  },
+  "permissionDenied": "您没有访问 Webhooks 的权限"
+}

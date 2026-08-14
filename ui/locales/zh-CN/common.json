@@ -79,7 +79,13 @@
     "selectAll": "全选",
     "deselectAll": "取消全选",
     "signOut": "退出登录",
-    "logout": "注销"
+    "logout": "注销",
+    "install": "安装",
+    "uninstall": "卸载",
+    "revoke": "撤销",
+    "restore": "恢复",
+    "activate": "激活",
+    "deactivate": "停用"
   },
   "state": {
     "loading": "加载中...",
@@ -93,7 +99,9 @@
     "noResults": "未找到结果",
     "offline": "您已离线",
     "online": "您已在线",
-    "unsaved": "您有未保存的更改"
+    "unsaved": "您有未保存的更改",
+    "pending": "待处理",
+    "failed": "失败"
   },
   "common": {
     "configuredProviders": "已配置的提供商",
@@ -163,11 +171,20 @@
     "title": "确定吗？",
     "message": "此操作不可撤销。",
     "deleteTitle": "确认删除",
-    "deleteMessage": "确定要删除此项吗？此操作不可撤销。"
+    "deleteMessage": "确定要删除此项吗？此操作不可撤销。",
+    "discard": "放弃更改？",
+    "discardMessage": "您有未保存的更改，放弃后将丢失。"
   },
   "noPermission": {
     "title": "访问被拒绝",
     "message": "您没有权限访问此页面。",
     "entity": "您没有访问 {entity} 的权限。"
+  },
+  "promptRepoEmpty": {
+    "title": "从提示仓库构建、测试和版本化您的提示词",
+    "description": "在此管理提示仓库。为部署对您的提示词进行版本管理。"
+  },
+  "docs": {
+    "title": "文档"
   }
 }

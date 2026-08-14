@@ -5,6 +5,7 @@ import { AuthMode, MCPSessionKind, MCPSessionStatus } from "@/lib/types/mcpSessi
 import { parseAsArrayOf, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useCallback, useEffect, useMemo } from "react";
 import { MCPSessionFilters, MCPSessionsFilterSidebar } from "./views/mcpSessionsFilterSidebar";
+import { useTranslation } from "react-i18next";
 import SessionsTable from "./views/sessionsTable";
 
 // Page size larger than the governance default (25) since session rows are
@@ -12,6 +13,7 @@ import SessionsTable from "./views/sessionsTable";
 const PAGE_SIZE = 50;
 
 export default function MCPSessionsPage() {
+	const { t } = useTranslation("mcp");
 	const [urlState, setUrlState] = useQueryStates(
 		{
 			q: parseAsString.withDefault(""),
@@ -130,7 +132,10 @@ export default function MCPSessionsPage() {
 			<div className="bg-background flex h-full w-full grow gap-3">
 				<MCPSessionsFilterSidebar filters={filters} onFiltersChange={setFilters} />
 				<div className="bg-card h-full w-full overflow-hidden rounded-l-md">
-					<div className="flex h-full flex-col p-4">{table}</div>
+					<div className="flex h-full flex-col p-4">
+						<h1 className="sr-only">{t("sessions.title")}</h1>
+						{table}
+					</div>
 				</div>
 			</div>
 		</div>

@@ -12,6 +12,14 @@ import type governance from "@/locales/en/governance.json";
 import type providers from "@/locales/en/providers.json";
 import type dashboard from "@/locales/en/dashboard.json";
 import type governanceUi from "@/locales/en/governance-ui.json";
+import type mcp from "@/locales/en/mcp.json";
+import type routing from "@/locales/en/routing.json";
+import type skills from "@/locales/en/skills.json";
+import type plugins from "@/locales/en/plugins.json";
+import type observability from "@/locales/en/observability.json";
+import type webhooks from "@/locales/en/webhooks.json";
+import type oauthGrants from "@/locales/en/oauth-grants.json";
+import type modelCatalog from "@/locales/en/model-catalog.json";
 
 export interface Resources {
   common: typeof common;
@@ -21,6 +29,14 @@ export interface Resources {
   providers: typeof providers;
   dashboard: typeof dashboard;
   "governance-ui": typeof governanceUi;
+  mcp: typeof mcp;
+  routing: typeof routing;
+  skills: typeof skills;
+  plugins: typeof plugins;
+  observability: typeof observability;
+  webhooks: typeof webhooks;
+  "oauth-grants": typeof oauthGrants;
+  "model-catalog": typeof modelCatalog;
 }
 
 export type KeysWithNamespace = {

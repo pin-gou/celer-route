@@ -6,7 +6,7 @@ import ObservabilityPage from "./page";
 function RouteComponent() {
 	const hasObservabilityAccess = useRbac(RbacResource.Observability, RbacOperation.View);
 	if (!hasObservabilityAccess) {
-		return <NoPermissionView entity="observability settings" />;
+		return <NoPermissionView entity="observability settings" entityI18nKey="observability:page.title" />;
 	}
 	return <ObservabilityPage />;
 }

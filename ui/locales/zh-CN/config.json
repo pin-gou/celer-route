@@ -1,46 +1,253 @@
 {
+  "page": {
+    "title": "配置"
+  },
   "providers": {
-    "default": { "placeholder": "例如：gpt-4, gpt-3.5-turbo。留空表示所有模型。" },
-    "anthropic": { "placeholder": "例如：claude-3-haiku, claude-2.1" },
-    "azure": { "placeholder": "例如：gpt-4, gpt-35-turbo（必须与别名密钥匹配）" },
-    "bedrock": { "placeholder": "例如：claude-v2, titan-text-express-v1, ai21-j2-mid" },
-    "bedrock_mantle": { "placeholder": "例如：anthropic.claude-opus-4-8, openai.gpt-oss-120b" },
-    "cerebras": { "placeholder": "例如：cerebras-2, cerebras-2-vision" },
-    "cohere": { "placeholder": "例如：command-r, command-r-plus" },
-    "deepseek": { "placeholder": "例如：deepseek-v4-flash, deepseek-v4-pro" },
-    "gemini": { "placeholder": "例如：gemini-1.5-pro, gemini-1.5-flash" },
-    "groq": { "placeholder": "例如：llama3-70b-8192, mixtral-8x7b-32768" },
-    "huggingface": { "placeholder": "例如：sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B" },
-    "mistral": { "placeholder": "例如：mistral-7b-instruct, mixtral-8x7b" },
-    "openrouter": { "placeholder": "例如：openai/gpt-4, anthropic/claude-3-haiku" },
-    "sgl": { "placeholder": "例如：sgl-2, sgl-vision" },
-    "parasail": { "placeholder": "例如：parasail-2, parasail-vision" },
-    "elevenlabs": { "placeholder": "例如：eleven_multilingual_v2, eleven_turbo_v2" },
-    "perplexity": { "placeholder": "例如：sonar-pro, sonar-deep-research" },
-    "ollama": { "placeholder": "例如：llama3.1, llama2" },
-    "opencode_go": { "placeholder": "例如：gpt-5.5, claude-sonnet-4-6" },
-    "opencode_zen": { "placeholder": "例如：gpt-5.5, claude-sonnet-4-6" },
-    "openai": { "placeholder": "例如：gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo" },
-    "vertex": { "placeholder": "例如：gemini-1.5-pro, text-bison, chat-bison" },
-    "nebius": { "placeholder": "例如：openai/gpt-oss-120b, google/gemma-2-9b-it-fast, Qwen/Qwen2.5-VL-72B-Instruct" },
-    "xai": { "placeholder": "例如：grok-4-0709, grok-3-mini, grok-3, grok-2-vision-1212" },
-    "replicate": { "placeholder": "例如：meta/llama3-1-8b-instruct, black-forest-labs/flux-dev" },
-    "vllm": { "placeholder": "例如：Qwen/Qwen3-0.6B, Qwen/Qwen3-1.5B" },
-    "runway": { "placeholder": "例如：gen4_turbo_image_to_video, gen3a_turbo_image_to_video" },
-    "runware": { "placeholder": "例如：runware:100@1, runware:101@1" },
-    "fireworks": { "placeholder": "例如：accounts/fireworks/models/deepseek-v3p2" },
-    "sarvam": { "placeholder": "例如：sarvam-30b, sarvam-105b" },
-    "wafer": { "placeholder": "例如：glm-5.2, kimi-k2.6" }
+    "default": {
+      "placeholder": "例如：gpt-4, gpt-3.5-turbo。留空表示所有模型。"
+    },
+    "anthropic": {
+      "placeholder": "例如：claude-3-haiku, claude-2.1"
+    },
+    "azure": {
+      "placeholder": "例如：gpt-4, gpt-35-turbo（必须与别名密钥匹配）"
+    },
+    "bedrock": {
+      "placeholder": "例如：claude-v2, titan-text-express-v1, ai21-j2-mid"
+    },
+    "bedrock_mantle": {
+      "placeholder": "例如：anthropic.claude-opus-4-8, openai.gpt-oss-120b"
+    },
+    "cerebras": {
+      "placeholder": "例如：cerebras-2, cerebras-2-vision"
+    },
+    "cohere": {
+      "placeholder": "例如：command-r, command-r-plus"
+    },
+    "deepseek": {
+      "placeholder": "例如：deepseek-v4-flash, deepseek-v4-pro"
+    },
+    "gemini": {
+      "placeholder": "例如：gemini-1.5-pro, gemini-1.5-flash"
+    },
+    "groq": {
+      "placeholder": "例如：llama3-70b-8192, mixtral-8x7b-32768"
+    },
+    "huggingface": {
+      "placeholder": "例如：sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B"
+    },
+    "mistral": {
+      "placeholder": "例如：mistral-7b-instruct, mixtral-8x7b"
+    },
+    "openrouter": {
+      "placeholder": "例如：openai/gpt-4, anthropic/claude-3-haiku"
+    },
+    "sgl": {
+      "placeholder": "例如：sgl-2, sgl-vision"
+    },
+    "parasail": {
+      "placeholder": "例如：parasail-2, parasail-vision"
+    },
+    "elevenlabs": {
+      "placeholder": "例如：eleven_multilingual_v2, eleven_turbo_v2"
+    },
+    "perplexity": {
+      "placeholder": "例如：sonar-pro, sonar-deep-research"
+    },
+    "ollama": {
+      "placeholder": "例如：llama3.1, llama2"
+    },
+    "opencode_go": {
+      "placeholder": "例如：gpt-5.5, claude-sonnet-4-6"
+    },
+    "opencode_zen": {
+      "placeholder": "例如：gpt-5.5, claude-sonnet-4-6"
+    },
+    "openai": {
+      "placeholder": "例如：gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo"
+    },
+    "vertex": {
+      "placeholder": "例如：gemini-1.5-pro, text-bison, chat-bison"
+    },
+    "nebius": {
+      "placeholder": "例如：openai/gpt-oss-120b, google/gemma-2-9b-it-fast, Qwen/Qwen2.5-VL-72B-Instruct"
+    },
+    "xai": {
+      "placeholder": "例如：grok-4-0709, grok-3-mini, grok-3, grok-2-vision-1212"
+    },
+    "replicate": {
+      "placeholder": "例如：meta/llama3-1-8b-instruct, black-forest-labs/flux-dev"
+    },
+    "vllm": {
+      "placeholder": "例如：Qwen/Qwen3-0.6B, Qwen/Qwen3-1.5B"
+    },
+    "runway": {
+      "placeholder": "例如：gen4_turbo_image_to_video, gen3a_turbo_image_to_video"
+    },
+    "runware": {
+      "placeholder": "例如：runware:100@1, runware:101@1"
+    },
+    "fireworks": {
+      "placeholder": "例如：accounts/fireworks/models/deepseek-v3p2"
+    },
+    "sarvam": {
+      "placeholder": "例如：sarvam-30b, sarvam-105b"
+    },
+    "wafer": {
+      "placeholder": "例如：glm-5.2, kimi-k2.6"
+    }
   },
   "mcp": {
     "status": {
-      "healthy": { "label": "健康" },
-      "error": { "label": "错误" },
-      "unstable": { "label": "不稳定" },
-      "pending_verification": { "label": "待验证" },
-      "disabled": { "label": "已禁用" },
-      "needs_reauth": { "label": "需要重新认证" },
-      "degraded": { "label": "降级" }
+      "healthy": {
+        "label": "健康"
+      },
+      "error": {
+        "label": "错误"
+      },
+      "unstable": {
+        "label": "不稳定"
+      },
+      "pending_verification": {
+        "label": "待验证"
+      },
+      "disabled": {
+        "label": "已禁用"
+      },
+      "needs_reauth": {
+        "label": "需要重新认证"
+      },
+      "degraded": {
+        "label": "降级"
+      }
     }
-  }
+  },
+  "apiKeys": {
+    "title": "API 密钥",
+    "description": "管理 API 密钥认证",
+    "createKey": "创建 API 密钥",
+    "editKey": "编辑 API 密钥",
+    "deleteKey": "删除 API 密钥",
+    "keyName": "密钥名称",
+    "keyValue": "密钥值",
+    "status": "状态",
+    "created": "创建时间",
+    "lastUsed": "最后使用",
+    "noKeys": "未配置 API 密钥",
+    "active": "活跃",
+    "inactive": "不活跃"
+  },
+  "caching": {
+    "title": "缓存",
+    "description": "配置响应缓存设置",
+    "enableCache": "启用缓存",
+    "ttl": "缓存 TTL",
+    "maxSize": "最大缓存大小",
+    "strategies": "缓存策略",
+    "noConfig": "无缓存配置"
+  },
+  "clientSettings": {
+    "title": "客户端设置",
+    "description": "配置客户端连接设置",
+    "timeout": "客户端超时",
+    "maxRetries": "最大重试次数",
+    "connectionPool": "连接池",
+    "noConfig": "未配置客户端设置"
+  },
+  "compatibility": {
+    "title": "兼容性",
+    "description": "配置 API 兼容性设置",
+    "mode": "兼容模式",
+    "openai": "OpenAI 兼容",
+    "anthropic": "Anthropic 兼容",
+    "bedrock": "Bedrock 兼容",
+    "genai": "Google GenAI 兼容",
+    "noConfig": "未配置兼容性设置"
+  },
+  "featureFlags": {
+    "title": "功能开关",
+    "description": "管理功能开关",
+    "enableFeature": "启用功能",
+    "flagName": "开关名称",
+    "status": "状态",
+    "noFlags": "未配置功能开关"
+  },
+  "largePayload": {
+    "title": "大载荷",
+    "description": "配置大载荷处理",
+    "maxSize": "最大载荷大小",
+    "storage": "存储后端",
+    "noConfig": "无大载荷配置"
+  },
+  "logging": {
+    "title": "日志记录",
+    "description": "配置日志记录设置",
+    "logLevel": "日志级别",
+    "logStore": "日志存储",
+    "retention": "保留期限",
+    "sampling": "采样率",
+    "noConfig": "无日志配置"
+  },
+  "mcpGateway": {
+    "title": "MCP 网关",
+    "description": "配置 MCP 网关设置",
+    "maxDepth": "最大代理深度",
+    "timeout": "工具执行超时",
+    "autoApprove": "自动批准工具",
+    "noConfig": "无 MCP 网关配置"
+  },
+  "observability": {
+    "title": "可观测性",
+    "description": "配置可观测性设置",
+    "tracing": "链路追踪",
+    "metrics": "指标",
+    "exporters": "导出器",
+    "noConfig": "无可观测性配置"
+  },
+  "performanceTuning": {
+    "title": "性能调优",
+    "description": "配置性能调优设置",
+    "concurrency": "并发数",
+    "poolSize": "池大小",
+    "bufferSize": "缓冲区大小",
+    "noConfig": "无性能调优配置"
+  },
+  "pricingConfig": {
+    "title": "定价配置",
+    "description": "配置定价设置",
+    "modelPricing": "模型定价",
+    "customPricing": "自定义定价",
+    "overrides": "定价覆盖",
+    "noConfig": "无定价配置"
+  },
+  "security": {
+    "title": "安全",
+    "description": "配置安全设置",
+    "tls": "TLS 设置",
+    "cors": "CORS 设置",
+    "rateLimiting": "速率限制",
+    "noConfig": "无安全配置"
+  },
+  "customPricing": {
+    "title": "自定义定价",
+    "description": "配置自定义定价覆盖",
+    "addOverride": "添加定价覆盖",
+    "editOverride": "编辑定价覆盖",
+    "deleteOverride": "删除定价覆盖",
+    "model": "模型",
+    "provider": "提供商",
+    "inputPrice": "输入价格",
+    "outputPrice": "输出价格",
+    "noOverrides": "未配置定价覆盖",
+    "noOverridesDesc": "添加您的第一个定价覆盖以开始使用"
+  },
+  "mcpSettings": {
+    "title": "MCP 设置",
+    "description": "配置 MCP 服务器设置",
+    "serverUrl": "服务器 URL",
+    "transport": "传输协议",
+    "timeout": "超时时间",
+    "noSettings": "未配置 MCP 设置"
+  },
+  "routingRules": {}
 }

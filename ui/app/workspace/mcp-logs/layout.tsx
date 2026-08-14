@@ -6,7 +6,7 @@ import MCPLogsPage from "./page";
 function RouteComponent() {
 	const hasViewMCPLogsAccess = useRbac(RbacResource.MCPLogs, RbacOperation.View);
 	if (!hasViewMCPLogsAccess) {
-		return <NoPermissionView entity="mcp logs" />;
+		return <NoPermissionView entity="mcp logs" entityI18nKey="logs:mcpLogs.page" />;
 	}
 	return <MCPLogsPage />;
 }

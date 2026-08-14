@@ -19,6 +19,7 @@ import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import NumberFlow from "@number-flow/react";
 import { useLocation } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle, Clock, DollarSign, Hash } from "lucide-react";
 import { parseAsSafeString } from "@/lib/queryParamsParser";
 import { parseAsArrayOf, parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
@@ -30,6 +31,7 @@ import { MCPLogDetailSheet } from "./views/mcpLogDetailsSheet";
 import { MCPLogsDataTable } from "./views/mcpLogsTable";
 
 export default function MCPLogsPage() {
+	const { t } = useTranslation("logs");
 	const [error, setError] = useState<string | null>(null);
 	const [showEmptyState, setShowEmptyState] = useState(false);
 	const hasCheckedEmptyState = useRef(false);
@@ -293,26 +295,26 @@ export default function MCPLogsPage() {
 	const statCards = useMemo(
 		() => [
 			{
-				title: "Total Executions",
+				title: t("mcpLogs.statCards.totalExecutions"),
 				value: <NumberFlow value={statsData?.total_executions ?? 0} format={COMPACT_NUMBER_FORMAT} />,
 				icon: <Hash className="size-4" />,
 			},
 			{
-				title: "Success Rate",
+				title: t("mcpLogs.statCards.successRate"),
 				value: (
 					<NumberFlow value={statsData?.success_rate ?? 0} format={{ minimumFractionDigits: 2, maximumFractionDigits: 2 }} suffix="%" />
 				),
 				icon: <CheckCircle className="size-4" />,
 			},
 			{
-				title: "Avg Latency",
+				title: t("mcpLogs.statCards.avgLatency"),
 				value: (
 					<NumberFlow value={statsData?.average_latency ?? 0} format={{ minimumFractionDigits: 2, maximumFractionDigits: 2 }} suffix="ms" />
 				),
 				icon: <Clock className="size-4" />,
 			},
 			{
-				title: "Total Cost",
+				title: t("mcpLogs.statCards.totalCost"),
 				value: (
 					<NumberFlow
 						value={statsData?.total_cost ?? 0}
@@ -326,7 +328,7 @@ export default function MCPLogsPage() {
 				icon: <DollarSign className="size-4" />,
 			},
 		],
-		[statsData],
+		[t, statsData],
 	);
 
 	const { data: userAgentMappingsData } = useGetUserAgentMappingsQuery();
@@ -369,14 +371,14 @@ export default function MCPLogsPage() {
 
 	const MCP_COLUMN_LABELS: Record<string, string> = useMemo(
 		() => ({
-			timestamp: "Time",
-			tool_name: "Tool Name",
-			server_label: "Server",
-			latency: "Latency",
-			cost: "Cost",
-			virtual_key: "Virtual Key",
+			timestamp: t("mcpLogs.COLUMN_LABELS.timestamp"),
+			tool_name: t("mcpLogs.COLUMN_LABELS.tool_name"),
+			server_label: t("mcpLogs.COLUMN_LABELS.server_label"),
+			latency: t("mcpLogs.COLUMN_LABELS.latency"),
+			cost: t("mcpLogs.COLUMN_LABELS.cost"),
+			virtual_key: t("mcpLogs.COLUMN_LABELS.virtual_key"),
 		}),
-		[],
+		[t],
 	);
 
 	const selectedLogIndex = useMemo(() => (selectedLogId ? logs.findIndex((l) => l.id === selectedLogId) : -1), [selectedLogId, logs]);
@@ -432,6 +434,7 @@ export default function MCPLogsPage() {
 
 	return (
 		<div className="dark:bg-card bg-white">
+			<h1 className="sr-only">{t("mcpLogs.page")}</h1>
 			{logsIsLoading ? (
 				<FullPageLoader />
 			) : showEmptyState ? (

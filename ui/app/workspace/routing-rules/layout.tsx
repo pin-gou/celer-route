@@ -7,7 +7,7 @@ function RouteComponent() {
 	const hasRoutingRulesAccess = useRbac(RbacResource.RoutingRules, RbacOperation.View);
 	const childMatches = useChildMatches();
 	if (!hasRoutingRulesAccess) {
-		return <NoPermissionView entity="routing rules" />;
+		return <NoPermissionView entity="routing rules" entityI18nKey="routing:page.title" />;
 	}
 	return childMatches.length === 0 ? <RoutingRulesPage /> : <Outlet />;
 }

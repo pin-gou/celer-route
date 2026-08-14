@@ -1,4 +1,7 @@
 {
+  "page": {
+    "title": "治理"
+  },
   "reset": {
     "1m": { "label": "每分钟" },
     "5m": { "label": "每5分钟" },
@@ -38,5 +41,22 @@
     "tokens": "令牌数",
     "perInterval": "每间隔",
     "interval": "间隔"
+  },
+  "modelLimits": {
+    "title": "模型限制",
+    "createLimit": "创建模型限制",
+    "editLimit": "编辑模型限制",
+    "deleteLimit": "删除模型限制",
+    "modelName": "模型名称",
+    "provider": "提供商",
+    "maxRequests": "最大请求数",
+    "maxTokens": "最大令牌数",
+    "tpm": "每分钟令牌数",
+    "rpm": "每分钟请求数",
+    "status": "状态",
+    "noLimits": "未配置模型限制",
+    "noLimitsDesc": "创建您的第一个模型限制以开始使用",
+    "active": "活跃",
+    "inactive": "不活跃"
   }
 }

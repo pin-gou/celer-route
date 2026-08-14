@@ -6,7 +6,7 @@ import CustomPricingPage from "./page";
 function CustomPricingLayout({ children }: { children: React.ReactNode }) {
 	const hasSettingsAccess = useRbac(RbacResource.Settings, RbacOperation.View);
 	if (!hasSettingsAccess) {
-		return <NoPermissionView entity="custom pricing" />;
+		return <NoPermissionView entity="custom pricing" entityI18nKey="config:customPricing.title" />;
 	}
 	return <>{children}</>;
 }

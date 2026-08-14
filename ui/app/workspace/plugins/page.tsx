@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { setSelectedPlugin, useAppDispatch, useAppSelector, useGetPluginsQuery } from "@/lib/store";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ListOrdered, PlusIcon, Puzzle } from "lucide-react";
@@ -11,6 +12,7 @@ import { PluginsEmptyState } from "./views/pluginsEmptyState";
 import PluginsView from "./views/pluginsView";
 
 export default function PluginsPage() {
+	const { t } = useTranslation("plugins");
 	const dispatch = useAppDispatch();
 	const hasCreatePluginAccess = useRbac(RbacResource.Plugins, RbacOperation.Create);
 	const hasUpdatePluginAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
@@ -63,6 +65,7 @@ export default function PluginsPage() {
 
 	return (
 		<div className="mx-auto w-full max-w-7xl">
+			<h1 className="sr-only">{t("page.title")}</h1>
 			<div className="flex flex-row gap-4">
 				<div className="flex min-w-[250px] flex-col gap-2 pb-10">
 					<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">

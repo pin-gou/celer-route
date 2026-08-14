@@ -7,7 +7,7 @@ function RouteComponent() {
 	const hasMCPGatewayAccess = useRbac(RbacResource.MCPGateway, RbacOperation.View);
 	const childMatches = useChildMatches();
 	if (!hasMCPGatewayAccess) {
-		return <NoPermissionView entity="MCP gateway configuration" />;
+		return <NoPermissionView entity="MCP gateway configuration" entityI18nKey="mcp:servers.title" />;
 	}
 	return childMatches.length === 0 ? <MCPServersPage /> : <Outlet />;
 }

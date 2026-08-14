@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Info, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import UserAgentMappingsView from "./userAgentMappingsView";
 
@@ -52,6 +53,7 @@ function headerFilterConfigEqual(a?: GlobalHeaderFilterConfig, b?: GlobalHeaderF
 // Helper to compare large payload configs
 
 export default function ClientSettingsView() {
+	const { t } = useTranslation("config");
 	const hasSettingsUpdateAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const [droppedRequests, setDroppedRequests] = useState<number>(0);
 	const { data: droppedRequestsData } = useGetDroppedRequestsQuery();
@@ -208,8 +210,8 @@ export default function ClientSettingsView() {
 	return (
 		<div className="mx-auto w-full max-w-4xl space-y-6">
 			<div>
-				<h2 className="text-lg font-semibold tracking-tight">Client Settings</h2>
-				<p className="text-muted-foreground text-sm">Configure client behavior and request handling.</p>
+				<h2 className="text-lg font-semibold tracking-tight">{t("page.title")}</h2>
+				<p className="text-muted-foreground text-sm">{t("page.description")}</p>
 			</div>
 
 			<div className="space-y-4">

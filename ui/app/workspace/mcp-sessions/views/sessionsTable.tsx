@@ -40,6 +40,7 @@ import { getErrorMessage, useReauthMCPSessionMutation, useRevokeMCPSessionMutati
 import { MCPSessionRow } from "@/lib/types/mcpSessions";
 import { ExternalLink, Fingerprint, KeyRound, Loader2, MoreHorizontal, Pencil, RefreshCcw, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface SessionsTableProps {
 	sessions: MCPSessionRow[];
@@ -64,6 +65,7 @@ export default function SessionsTable({
 	limit,
 	onOffsetChange,
 }: SessionsTableProps) {
+	const { t } = useTranslation("mcp");
 	const { toast } = useToast();
 	const [reauth, { isLoading: reauthing }] = useReauthMCPSessionMutation();
 	const [revoke, { isLoading: revoking }] = useRevokeMCPSessionMutation();
@@ -136,9 +138,9 @@ export default function SessionsTable({
 
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<div>
-					<h2 className="text-lg font-semibold tracking-tight">MCP Auth Sessions</h2>
+					<h2 className="text-lg font-semibold tracking-tight">{t("sessions.title")}</h2>
 					<p className="text-muted-foreground text-sm">
-						Per-user credentials stored for MCP servers (OAuth tokens and submitted headers), plus any pending authentication flows.
+						{t("sessions.description")}
 					</p>
 				</div>
 			</div>

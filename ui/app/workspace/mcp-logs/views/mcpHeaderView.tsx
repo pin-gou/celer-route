@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useTimezonePreference } from "@/lib/hooks/useTimezonePreference";
 import type { MCPToolLogFilters } from "@/lib/types/logs";
 import { getRangeForPeriod, TIME_PERIODS } from "@/lib/utils/timeRange";
+import { useTranslation } from "react-i18next";
 import { Radio, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -38,6 +39,7 @@ export function McpHeaderView({
 	onToggleColumnVisibility,
 	onResetColumns,
 }: McpHeaderViewProps) {
+	const { t } = useTranslation("logs");
 	const [localSearch, setLocalSearch] = useState(filters.content_search || "");
 	const [timezone, setTimezone] = useTimezonePreference();
 	const [startTime, setStartTime] = useState<Date | undefined>(filters.start_time ? new Date(filters.start_time) : undefined);
@@ -83,7 +85,7 @@ export function McpHeaderView({
 				data-testid="mcp-logs-header-refresh-btn"
 			>
 				<RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-				Refresh
+				{t("action.refresh")}
 			</Button>
 			<Button
 				variant={polling ? "default" : "outline"}
@@ -93,14 +95,14 @@ export function McpHeaderView({
 				data-testid="mcp-logs-header-live-btn"
 			>
 				{polling ? <Radio className="h-4 w-4 animate-pulse" /> : <Radio className="h-4 w-4" />}
-				Live
+				{t("action.live")}
 			</Button>
 			<div className="border-input flex h-7.5 flex-1 items-center gap-2 rounded-sm border">
 				<Search className="mr-0.5 ml-2 size-4" />
 				<Input
 					type="text"
 					className="!h-7 rounded-tl-none rounded-tr-sm rounded-br-sm rounded-bl-none border-none bg-slate-50 shadow-none outline-none focus-visible:ring-0 dark:bg-zinc-900"
-					placeholder="Search MCP logs"
+					placeholder={t("filterLabels.searchMCPLogs")}
 					value={localSearch}
 					onChange={(e) => handleSearchChange(e.target.value)}
 				/>

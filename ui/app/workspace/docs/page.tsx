@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import GradientHeader from "@/components/ui/gradientHeader";
+import { useTranslation } from "react-i18next";
 import { BookOpen, Code, ExternalLink, FileText, GitBranch, Play, Shield, Users, Zap } from "lucide-react";
 
 const docSections = [
@@ -77,11 +78,13 @@ const featuredDocs = [
 ];
 
 export default function DocsPage() {
+	const { t } = useTranslation("common");
 	return (
 		<div className="dark:bg-card bg-white">
 			<div className="mx-auto max-w-7xl">
 				<div className="space-y-8">
 					{/* Header */}
+					<h1 className="sr-only">{t("app.name")} {t("docs.title")}</h1>
 					<div className="space-y-4 text-center">
 						<div className="bg-primary/10 text-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm">
 							<BookOpen className="h-4 w-4" />

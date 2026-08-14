@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight, SquareTerminal } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { usePromptContext } from "../context";
 
 export function EmptyState() {
@@ -32,6 +33,7 @@ export function EmptyState() {
 }
 
 export function PromptsEmptyState() {
+	const { t } = useTranslation("common");
 	const { setPromptSheet, canCreate } = usePromptContext();
 
 	return (
@@ -40,7 +42,7 @@ export function PromptsEmptyState() {
 				<SquareTerminal className="h-[5.5rem] w-[5.5rem]" strokeWidth={1} />
 			</div>
 			<div className="flex flex-col gap-1">
-				<h1 className="text-muted-foreground text-xl font-medium">Build, test, and version your prompts</h1>
+				<h1 className="text-muted-foreground text-xl font-medium">{t("promptRepoEmpty.title")}</h1>
 				<div className="text-muted-foreground mx-auto mt-2 max-w-[600px] text-sm font-normal">
 					{canCreate
 						? "Create prompts, test them with different models and parameters in the playground, and version your changes for deployment."

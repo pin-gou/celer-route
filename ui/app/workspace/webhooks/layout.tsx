@@ -6,7 +6,7 @@ import WebhooksPage from "./page";
 function RouteComponent() {
 	const hasWebhooksAccess = useRbac(RbacResource.Governance, RbacOperation.View);
 	if (!hasWebhooksAccess) {
-		return <NoPermissionView entity="webhooks" />;
+		return <NoPermissionView entity="webhooks" entityI18nKey="webhooks:page.title" />;
 	}
 	return <WebhooksPage />;
 }

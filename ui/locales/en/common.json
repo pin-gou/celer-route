@@ -79,7 +79,13 @@
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
     "signOut": "Sign out",
-    "logout": "Logout"
+    "logout": "Logout",
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "revoke": "Revoke",
+    "restore": "Restore",
+    "activate": "Activate",
+    "deactivate": "Deactivate"
   },
   "state": {
     "loading": "Loading...",
@@ -93,7 +99,9 @@
     "noResults": "No results found",
     "offline": "You are offline",
     "online": "You are online",
-    "unsaved": "You have unsaved changes"
+    "unsaved": "You have unsaved changes",
+    "pending": "Pending",
+    "failed": "Failed"
   },
   "common": {
     "configuredProviders": "Configured Providers",
@@ -163,11 +171,20 @@
     "title": "Are you sure?",
     "message": "This action cannot be undone.",
     "deleteTitle": "Confirm Deletion",
-    "deleteMessage": "Are you sure you want to delete this item? This action cannot be undone."
+    "deleteMessage": "Are you sure you want to delete this item? This action cannot be undone.",
+    "discard": "Discard changes?",
+    "discardMessage": "You have unsaved changes that will be lost if you discard them."
   },
   "noPermission": {
     "title": "Access Denied",
     "message": "You do not have permission to view this page.",
     "entity": "You do not have permission to access {entity}."
+  },
+  "promptRepoEmpty": {
+    "title": "Build, test, and version your prompts in the prompt repository",
+    "description": "Create and manage your prompts from the prompt repository. Version them for deployment."
+  },
+  "docs": {
+    "title": "Docs"
   }
 }

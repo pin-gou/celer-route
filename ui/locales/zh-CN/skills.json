@@ -1,0 +1,24 @@
+{
+  "page": {
+    "title": "技能仓库",
+    "description": "管理和配置 AI 技能"
+  },
+  "skills": {
+    "title": "技能",
+    "installSkill": "安装技能",
+    "editSkill": "编辑技能",
+    "deleteSkill": "删除技能",
+    "skillName": "技能名称",
+    "description": "描述",
+    "version": "版本",
+    "author": "作者",
+    "status": "状态",
+    "noSkills": "未安装技能",
+    "noSkillsDesc": "安装您的第一个技能以开始使用",
+    "active": "活跃",
+    "inactive": "不活跃",
+    "installed": "已安装",
+    "notInstalled": "未安装"
+  },
+  "permissionDenied": "您没有访问技能仓库的权限"
+}

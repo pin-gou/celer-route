@@ -15,7 +15,7 @@ export default function ConfigPage() {
 	}, [hasConfigAccess, navigate]);
 
 	if (!hasConfigAccess) {
-		return <NoPermissionView entity="configuration" />;
+		return <NoPermissionView entity="configuration" entityI18nKey="config:page.title" />;
 	}
 	return null;
 }

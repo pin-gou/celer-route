@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { getErrorMessage, useGetOAuth2GrantsQuery, useRevokeOAuth2GrantMutation } from "@/lib/store";
+import { useTranslation } from "react-i18next";
 import type { OAuth2GrantRow } from "@/lib/store/apis/oauth2SessionsApi";
 import { Loader2, Search } from "lucide-react";
 import { parseAsArrayOf, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
@@ -13,6 +14,7 @@ import RevokeGrantDialog from "./views/revokeGrantDialog";
 const PAGE_SIZE = 50;
 
 export default function OAuthGrantsPage() {
+	const { t } = useTranslation("oauth-grants");
 	const [urlState, setUrlState] = useQueryStates(
 		{
 			q: parseAsString.withDefault(""),
@@ -95,7 +97,7 @@ export default function OAuthGrantsPage() {
 
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<div>
-					<h2 className="text-lg font-semibold tracking-tight">OAuth Grants</h2>
+					<h2 className="text-lg font-semibold tracking-tight">{t("page.title")}</h2>
 					<p className="text-muted-foreground text-sm">
 						Active downstream OAuth grants issued to MCP clients that connected via the OAuth consent flow.
 					</p>

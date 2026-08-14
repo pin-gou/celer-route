@@ -50,5 +50,9 @@
   "empty": {
     "title": "No Virtual Keys",
     "description": "Virtual keys are not configured yet. Create your first virtual key to get started."
+  },
+  "emptyState": {
+    "title": "Virtual keys control access, budgets, and rate limits",
+    "description": "Create virtual keys to assign permissions, spending limits, and usage quotas to teams, customers, or API clients."
   }
 }

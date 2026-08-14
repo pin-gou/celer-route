@@ -6,6 +6,7 @@
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { useGetRoutingRulesQuery } from "@/lib/store/apis/routingRulesApi";
+import { useTranslation } from "react-i18next";
 import { RoutingRule } from "@/lib/types/routingRules";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Link } from "@tanstack/react-router";
@@ -20,6 +21,7 @@ const POLLING_INTERVAL = 5000;
 const PAGE_SIZE = 25;
 
 export function RoutingRulesView() {
+	const { t } = useTranslation("routing");
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingRule, setEditingRule] = useState<RoutingRule | null>(null);
 	const [infoSheetOpen, setInfoSheetOpen] = useState(false);
@@ -117,7 +119,7 @@ export function RoutingRulesView() {
 			{/* Header */}
 			<div className="mb-4 flex items-center justify-between">
 				<div>
-					<h1 className="text-foreground text-lg font-semibold">Routing Rules</h1>
+					<h1 className="text-foreground text-lg font-semibold">{t("page.title")}</h1>
 					<p className="text-muted-foreground text-sm">Manage CEL-based routing rules for intelligent request routing across providers</p>
 				</div>
 				<div className="flex items-center gap-2">

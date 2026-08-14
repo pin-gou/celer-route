@@ -1,0 +1,27 @@
+{
+  "page": {
+    "title": "Plugins",
+    "description": "Manage and configure plugins"
+  },
+  "plugins": {
+    "title": "Plugins",
+    "installPlugin": "Install Plugin",
+    "editPlugin": "Edit Plugin",
+    "deletePlugin": "Delete Plugin",
+    "pluginName": "Plugin Name",
+    "description": "Description",
+    "version": "Version",
+    "status": "Status",
+    "noPlugins": "No plugins installed",
+    "noPluginsDesc": "Install your first plugin to get started",
+    "active": "Active",
+    "inactive": "Inactive",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "emptyState": {
+    "title": "Custom plugins extend Bifrost with your own business logic",
+    "description": "Build and deploy plugins for custom integrations, workflow automation, and AI governance."
+  },
+  "permissionDenied": "You don't have permission to access plugins"
+}

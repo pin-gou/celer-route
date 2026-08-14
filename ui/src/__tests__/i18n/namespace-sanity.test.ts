@@ -12,17 +12,24 @@ const EXPECTED_NAMESPACES = [
   "providers",
   "dashboard",
   "governance-ui",
+  "mcp",
+  "routing",
+  "skills",
+  "plugins",
+  "observability",
+  "webhooks",
+  "oauth-grants",
+  "model-catalog",
 ];
 
 describe("i18n namespace sanity", () => {
   const languages = ["en", "zh-CN"];
 
   it.each(languages)(
-    "should have exactly 7 namespace files for %s",
+    "should have exactly 15 namespace files for %s",
     (lang) => {
       const langDir = path.join(LOCALES_DIR, lang);
 
-      // This assertion will fail in the red phase (locale dirs don't exist yet)
       expect(
         fs.existsSync(langDir),
         `Locale directory for "${lang}" should exist at ${langDir}`
@@ -33,7 +40,10 @@ describe("i18n namespace sanity", () => {
         .filter((f) => f.endsWith(".json"))
         .sort();
 
-      expect(files.length).toBe(7);
+      expect(
+        files.length,
+        `Expected 15 namespace files in ${langDir} but found ${files.length} (TDD red phase — new namespaces not yet created)`
+      ).toBe(15);
 
       // Verify each expected namespace file exists
       for (const ns of EXPECTED_NAMESPACES) {
@@ -70,7 +80,7 @@ describe("i18n namespace sanity", () => {
     expect(enFiles).toEqual(zhFiles);
   });
 
-  it("should only contain the expected 7 namespaces (no extra files)", () => {
+  it("should only contain the expected 15 namespaces (no extra files)", () => {
     const enDir = path.join(LOCALES_DIR, "en");
 
     expect(

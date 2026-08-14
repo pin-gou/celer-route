@@ -13,6 +13,7 @@ import type { LogFilters as LogFiltersType, RecalcJobStatus } from "@/lib/types/
 import { getApiBaseUrl } from "@/lib/utils/port";
 import { getRangeForPeriod, TIME_PERIODS } from "@/lib/utils/timeRange";
 import { Calculator, ListTree, MoreVertical, Radio, RefreshCw, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { RecalculateCostDialog, type RecalculateCostMode } from "./recalculateCostDialog";
@@ -68,6 +69,7 @@ export function LogsHeaderView({
 	onToggleColumnVisibility,
 	onResetColumns,
 }: LogsHeaderViewProps) {
+	const { t } = useTranslation("logs");
 	const [openMoreActionsPopover, setOpenMoreActionsPopover] = useState(false);
 	const [recalcDialogOpen, setRecalcDialogOpen] = useState(false);
 	// Id of the recalculation job to track. Setting it starts polling via the query
@@ -276,7 +278,7 @@ export function LogsHeaderView({
 				disabled={loading}
 			>
 				<RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-				Refresh
+				{t("action.refresh")}
 			</Button>
 			<Button
 				data-testid="logs-live-btn"
@@ -286,7 +288,7 @@ export function LogsHeaderView({
 				onClick={() => onPollToggle(!polling)}
 			>
 				{polling ? <Radio className="h-4 w-4 animate-pulse" /> : <Radio className="h-4 w-4" />}
-				Live
+				{t("action.live")}
 			</Button>
 			<Tooltip>
 				<TooltipTrigger asChild>
@@ -298,7 +300,7 @@ export function LogsHeaderView({
 						onClick={() => onGroupedToggle(!grouped)}
 					>
 						<ListTree className="h-4 w-4" />
-						Group
+						{t("action.group")}
 					</Button>
 				</TooltipTrigger>
 				<TooltipContent sideOffset={6} className="max-w-64">
@@ -313,7 +315,7 @@ export function LogsHeaderView({
 				<Input
 					type="text"
 					className="!h-7 rounded-tl-none rounded-tr-sm rounded-br-sm rounded-bl-none border-none bg-slate-50 shadow-none outline-none focus-visible:ring-0"
-					placeholder="Search logs"
+					placeholder={t("filterLabels.searchLogs")}
 					value={localSearch}
 					onChange={(e) => handleSearchChange(e.target.value)}
 				/>

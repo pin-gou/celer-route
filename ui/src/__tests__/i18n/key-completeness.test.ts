@@ -4,6 +4,24 @@ import path from "path";
 
 const LOCALES_DIR = path.resolve(__dirname, "../../../locales");
 
+const EXPECTED_NAMESPACES = [
+  "common",
+  "logs",
+  "config",
+  "governance",
+  "providers",
+  "dashboard",
+  "governance-ui",
+  "mcp",
+  "routing",
+  "skills",
+  "plugins",
+  "observability",
+  "webhooks",
+  "oauth-grants",
+  "model-catalog",
+];
+
 /**
  * Collect all keys from a JSON object recursively, returning "dot.path" strings.
  */
@@ -24,14 +42,12 @@ function flattenKeys(obj: Record<string, unknown>, prefix = ""): string[] {
 describe("i18n key completeness", () => {
   const languages = ["en", "zh-CN"];
 
-  // Discover all namespace files from the en directory (source of truth for namespace list)
+  // Discover namespace files from the en directory
   const enDir = path.join(LOCALES_DIR, "en");
   let namespaceFiles: string[] = [];
 
   beforeAll(() => {
     if (!fs.existsSync(enDir)) {
-      // Locale files not yet generated — this is expected in the TDD red phase.
-      // The test will fail with a clear message below.
       return;
     }
     namespaceFiles = fs
@@ -50,8 +66,35 @@ describe("i18n key completeness", () => {
     }
   });
 
+  it("should have all 15 expected namespace files in en", () => {
+    const missing: string[] = [];
+    for (const ns of EXPECTED_NAMESPACES) {
+      const nsPath = path.join(LOCALES_DIR, "en", `${ns}.json`);
+      if (!fs.existsSync(nsPath)) {
+        missing.push(ns);
+      }
+    }
+    expect(
+      missing,
+      `Missing en namespace files (TDD red phase — new namespaces not yet created): ${missing.join(", ")}`
+    ).toEqual([]);
+  });
+
+  it("should have all 15 expected namespace files in zh-CN", () => {
+    const missing: string[] = [];
+    for (const ns of EXPECTED_NAMESPACES) {
+      const nsPath = path.join(LOCALES_DIR, "zh-CN", `${ns}.json`);
+      if (!fs.existsSync(nsPath)) {
+        missing.push(ns);
+      }
+    }
+    expect(
+      missing,
+      `Missing zh-CN namespace files (TDD red phase): ${missing.join(", ")}`
+    ).toEqual([]);
+  });
+
   it("should have identical namespace files between en and zh-CN", () => {
-    // If no namespace files found, test is expected to fail (red phase)
     expect(
       namespaceFiles.length,
       "No namespace JSON files found in ui/locales/en/. " +
@@ -99,7 +142,7 @@ describe("i18n key completeness", () => {
       const enPath = path.join(LOCALES_DIR, "en", nsFile);
       const zhPath = path.join(LOCALES_DIR, "zh-CN", nsFile);
 
-      if (!fs.existsSync(zhPath)) continue; // already caught above
+      if (!fs.existsSync(zhPath)) continue;
 
       const enContent = JSON.parse(fs.readFileSync(enPath, "utf-8"));
       const zhContent = JSON.parse(fs.readFileSync(zhPath, "utf-8"));
@@ -107,7 +150,7 @@ describe("i18n key completeness", () => {
       const enKeys = flattenKeys(enContent);
       const zhKeys = flattenKeys(zhContent);
 
-      expect(enKeys.length).toBe(zhKeys.length);
+      expect(enKeys.length, `${nsFile}: en (${enKeys.length}) vs zh-CN (${zhKeys.length}) key count mismatch`).toBe(zhKeys.length);
     }
   });
 });

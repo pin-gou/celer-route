@@ -1,10 +1,12 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
 import { parseAsBoolean, parseAsString, useQueryStates } from "nuqs";
 import { SkillCreateView } from "./components/skillCreatorView";
 import { SkillDetailView } from "./components/skillDetailsView";
 import { SkillsListView } from "./components/skillListView";
 export default function SkillsRepoPage() {
+	const { t } = useTranslation("skills");
 	const [urlState, setUrlState] = useQueryStates(
 		{
 			skillId: parseAsString,
@@ -55,6 +57,7 @@ export default function SkillsRepoPage() {
 	// List view
 	return (
 		<div className="no-padding-parent flex h-[calc(100dvh_-_16px)] w-full flex-col p-4">
+			<h1 className="sr-only">{t("page.title")}</h1>
 			<SkillsListView onSelectSkill={handleSelectSkill} onCreateNew={() => setUrlState({ create: true, skillId: null, edit: false })} />
 		</div>
 	);

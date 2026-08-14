@@ -2,6 +2,7 @@ import FullPageLoader from "@/components/fullPageLoader";
 import { useToast } from "@/hooks/use-toast";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { getErrorMessage, useGetMCPClientsQuery } from "@/lib/store";
+import { useTranslation } from "react-i18next";
 import { parseAsArrayOf, parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useCallback, useEffect, useMemo } from "react";
 import { MCPClientsFilterSidebar, type MCPClientFilters } from "./views/mcpClientsFilterSidebar";
@@ -18,6 +19,7 @@ function resolveBooleanFacet(selected: string[]): boolean | undefined {
 }
 
 export default function MCPServersPage() {
+	const { t } = useTranslation("mcp");
 	const [urlState, setUrlState] = useQueryStates(
 		{
 			search: parseAsString.withDefault(""),
@@ -164,7 +166,10 @@ export default function MCPServersPage() {
 			<div className="bg-background flex h-full w-full grow gap-3">
 				<MCPClientsFilterSidebar filters={filters} onFiltersChange={setFilters} />
 				<div className="bg-card h-full w-full overflow-hidden rounded-l-md">
-					<div className="flex h-full flex-col p-4">{table}</div>
+					<div className="flex h-full flex-col p-4">
+						<h1 className="sr-only">{t("registry.title")}</h1>
+						{table}
+					</div>
 				</div>
 			</div>
 		</div>

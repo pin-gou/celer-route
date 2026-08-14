@@ -17,7 +17,7 @@ function RouteComponent() {
 	const { isLoading } = useGetCoreConfigQuery({ fromDB: true }, { skip: !requiredAccess });
 
 	if (!requiredAccess) {
-		return <NoPermissionView entity="configuration" />;
+		return <NoPermissionView entity="configuration" entityI18nKey="config:page.title" />;
 	}
 
 	if (isLoading) {

@@ -1,4 +1,7 @@
 {
+  "page": {
+    "title": "governance"
+  },
   "reset": {
     "1m": { "label": "Every Minute" },
     "5m": { "label": "Every 5 Minutes" },
@@ -38,5 +41,22 @@
     "tokens": "Tokens",
     "perInterval": "per interval",
     "interval": "Interval"
+  },
+  "modelLimits": {
+    "title": "Model Limits",
+    "createLimit": "Create Model Limit",
+    "editLimit": "Edit Model Limit",
+    "deleteLimit": "Delete Model Limit",
+    "modelName": "Model Name",
+    "provider": "Provider",
+    "maxRequests": "Max Requests",
+    "maxTokens": "Max Tokens",
+    "tpm": "Tokens per Minute",
+    "rpm": "Requests per Minute",
+    "status": "Status",
+    "noLimits": "No model limits configured",
+    "noLimitsDesc": "Create your first model limit to get started",
+    "active": "Active",
+    "inactive": "Inactive"
   }
 }

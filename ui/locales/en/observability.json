@@ -1,0 +1,21 @@
+{
+  "page": {
+    "title": "Observability",
+    "description": "Monitor and configure observability settings"
+  },
+  "settings": {
+    "title": "Observability Settings",
+    "logging": "Logging",
+    "tracing": "Tracing",
+    "metrics": "Metrics",
+    "alerts": "Alerts",
+    "logStore": "Log Store",
+    "logStoreDesc": "Configure where logs are stored",
+    "retention": "Retention Period",
+    "sampling": "Sampling Rate",
+    "exporters": "Exporters",
+    "noConfig": "No observability configuration",
+    "noConfigDesc": "Configure your observability settings to get started"
+  },
+  "permissionDenied": "You don't have permission to access observability settings"
+}

@@ -6,7 +6,7 @@ import MCPLibraryPage from "./page";
 function RouteComponent() {
 	const hasMCPGatewayAccess = useRbac(RbacResource.MCPGateway, RbacOperation.View);
 	if (!hasMCPGatewayAccess) {
-		return <NoPermissionView entity="MCP gateway library" />;
+		return <NoPermissionView entity="MCP gateway library" entityI18nKey="mcp:servers.library" />;
 	}
 	return <MCPLibraryPage />;
 }
