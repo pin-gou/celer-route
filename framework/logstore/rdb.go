@@ -4398,6 +4398,27 @@ func (s *RDBLogStore) CreateMCPToolLog(ctx context.Context, entry *MCPToolLog) e
 	return s.db.WithContext(ctx).Create(entry).Error
 }
 
+// CreateTimelineEvent inserts a timeline event row for a request phase. Writes
+// use the unscoped DB: timeline events are child rows of a Log, and row
+// visibility is enforced on the parent Log lookup, not on the events table
+// (which carries no owner columns).
+func (s *RDBLogStore) CreateTimelineEvent(ctx context.Context, event *TimelineEvent) error {
+	return s.db.WithContext(ctx).Create(event).Error
+}
+
+// ListTimelineEventsByLogID returns all timeline events attached to a log row,
+// ordered by time_offset_ms ascending so consumers render the phase timeline in
+// request order. An unknown log_id yields an empty slice, not an error. Reads
+// use the unscoped DB for the same reason as CreateTimelineEvent.
+func (s *RDBLogStore) ListTimelineEventsByLogID(ctx context.Context, logID string) ([]TimelineEvent, error) {
+	var events []TimelineEvent
+	if err := s.db.WithContext(ctx).Where("log_id = ?", logID).
+		Order("time_offset_ms ASC").Find(&events).Error; err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
 // BatchCreateMCPToolLogsIfNotExists inserts multiple MCP tool log entries in a single transaction.
 // Uses ON CONFLICT DO NOTHING for idempotency.
 func (s *RDBLogStore) BatchCreateMCPToolLogsIfNotExists(ctx context.Context, entries []*MCPToolLog) error {

@@ -154,6 +154,10 @@ type LogStore interface {
 	FindWebhookDeliveryByID(ctx context.Context, id string) (*WebhookDelivery, error)
 	SearchWebhookDeliveries(ctx context.Context, endpointID string, pagination PaginationOptions) (*WebhookDeliverySearchResult, error)
 	DeleteExpiredWebhookDeliveries(ctx context.Context) (int64, error)
+
+	// Timeline Event methods
+	CreateTimelineEvent(ctx context.Context, event *TimelineEvent) error
+	ListTimelineEventsByLogID(ctx context.Context, logID string) ([]TimelineEvent, error)
 }
 
 // NewLogStore creates a new log store based on the configuration.

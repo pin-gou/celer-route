@@ -1571,3 +1571,16 @@ func (h *HybridLogStore) SearchWebhookDeliveries(ctx context.Context, endpointID
 func (h *HybridLogStore) DeleteExpiredWebhookDeliveries(ctx context.Context) (int64, error) {
 	return h.inner.DeleteExpiredWebhookDeliveries(ctx)
 }
+
+// Timeline Event methods — delegated directly. Timeline events are metadata-only
+// rows (a short message plus phase/offset fields), never offload candidates.
+
+// CreateTimelineEvent appends a plugin-pipeline stage event for a request.
+func (h *HybridLogStore) CreateTimelineEvent(ctx context.Context, event *TimelineEvent) error {
+	return h.inner.CreateTimelineEvent(ctx, event)
+}
+
+// ListTimelineEventsByLogID returns the staged events for one log row.
+func (h *HybridLogStore) ListTimelineEventsByLogID(ctx context.Context, logID string) ([]TimelineEvent, error) {
+	return h.inner.ListTimelineEventsByLogID(ctx, logID)
+}

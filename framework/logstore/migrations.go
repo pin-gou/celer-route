@@ -295,6 +295,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"logs_recreate_matviews_with_app_column"}, run: migrationRecreateMatViewsWithUserAgentColumn},
 	{IDs: []string{"mcp_tool_logs_add_endpoint_columns"}, run: migrationAddEndpointColumnsToMCPToolLogs},
 	{IDs: []string{"mcp_tool_logs_add_plugin_logs_column"}, run: migrationAddMCPPluginLogsColumn},
+	{IDs: []string{"timeline_events_init"}, run: migrationCreateTimelineEventsTable},
 }
 
 // areThereAnyPendingMigrations returns true if there are any pending migrations to be applied.
@@ -1106,6 +1107,55 @@ func migrationCreateMCPToolLogsTable(ctx context.Context, db *gorm.DB, logger sc
 	err := m.Migrate()
 	if err != nil {
 		return fmt.Errorf("error while creating mcp_tool_logs table: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationCreateTimelineEventsTable creates the timeline_events table that
+// backs the request timeline view (design.md "新表 timeline_events"). One row
+// per plugin-pipeline stage point (pre_llm / post_llm), linked to its Log row
+// via log_id (indexed for the by-log_id read). Forward-only: the table grows
+// with request volume, so retention/archival is a follow-up concern.
+func migrationCreateTimelineEventsTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "timeline_events_init"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&TimelineEvent{}) {
+				logger.Info("[logstore] %s: creating table TimelineEvent", migrationName)
+				if err := migrator.CreateTable(&TimelineEvent{}); err != nil {
+					return err
+				}
+			}
+
+			// The by-log_id read relies on this index; make sure it exists even
+			// when the table pre-dates this migration (e.g. schema drift).
+			if !migrator.HasIndex(&TimelineEvent{}, "idx_timeline_events_log_id") {
+				logger.Info("[logstore] %s: creating index idx_timeline_events_log_id on TimelineEvent", migrationName)
+				if err := migrator.CreateIndex(&TimelineEvent{}, "idx_timeline_events_log_id"); err != nil {
+					return fmt.Errorf("failed to create index on log_id: %w", err)
+				}
+			}
+
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			logger.Info("[logstore] %s: dropping table TimelineEvent", migrationName)
+			if err := migrator.DropTable(&TimelineEvent{}); err != nil {
+				return err
+			}
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while creating timeline_events table: %s", err.Error())
 	}
 	return nil
 }

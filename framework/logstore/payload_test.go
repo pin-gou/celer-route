@@ -51,7 +51,7 @@ func TestExtractPayload_RoundTrip(t *testing.T) {
 	}
 
 	payload := ExtractPayload(log)
-	assert.Equal(t, len(payloadFields)+1, len(payload), "payload map should have all payload fields plus metadata")
+	assert.Equal(t, len(payloadFields)+7, len(payload), "payload map should have all payload fields plus 6 index fields plus metadata")
 	assert.Equal(t, `[{"role":"user","content":"hello"}]`, payload["input_history"])
 	assert.Equal(t, `{"role":"assistant","content":"world"}`, payload["output_message"])
 	assert.Equal(t, `{"judge_calls":[{"total_tokens":18}]}`, payload["guardrail_debug"])
