@@ -366,16 +366,20 @@ export const createColumns = (
 		{
 			accessorKey: "model",
 			header: "Model",
-			size: 190,
+			size: 220,
 			cell: ({ row }) => {
 				const provider = row.original.provider as ProviderName | undefined;
 				const model = row.original.model;
+				const keyName = row.original.selected_key_name;
 				return (
 					<div className="flex min-w-0 items-center gap-2">
 						{provider ? <RenderProviderIcon provider={provider as ProviderIconType} size="xs" /> : null}
 						<div className="flex min-w-0 flex-col leading-tight">
 							<span className="truncate font-mono text-[12px]">{model || "N/A"}</span>
-							<span className="text-muted-foreground truncate text-[10.5px]">{provider ? getProviderLabel(provider) : "N/A"}</span>
+							<span className="text-muted-foreground truncate text-[10.5px]">
+								{provider ? getProviderLabel(provider) : "N/A"}
+								{keyName ? <span className="text-muted-foreground/60"> · {keyName}</span> : null}
+							</span>
 						</div>
 					</div>
 				);
@@ -420,6 +424,24 @@ export const createColumns = (
 						<div className="relative h-1.5 w-[56px] overflow-hidden rounded-sm bg-zinc-200 dark:bg-zinc-700">
 							<div className={cn("absolute inset-y-0 left-0 rounded-sm opacity-85", tone)} style={{ width: `${pct}%` }} />
 						</div>
+					</div>
+				);
+			},
+		},
+		{
+			accessorKey: "tps",
+			header: "TPS",
+			size: 90,
+			cell: ({ row }) => {
+				const { latency, token_usage } = row.original;
+				const total = token_usage?.total_tokens;
+				if (latency == null || latency <= 0 || !total) {
+					return <div className="pl-4 font-mono text-xs">N/A</div>;
+				}
+				const tps = (total / latency) * 1000;
+				return (
+					<div className="pl-4 font-mono text-[12px] tabular-nums">
+						{tps >= 100 ? Math.round(tps).toLocaleString() : tps.toFixed(1)} t/s
 					</div>
 				);
 			},

@@ -934,6 +934,10 @@ export function LogDetailView({
 										log.token_usage.completion_tokens_details?.reasoning_tokens
 											? ` · reasoning ${formatCompactNumber(log.token_usage.completion_tokens_details.reasoning_tokens)}`
 											: ""
+									}${
+										log.latency != null && log.latency > 0 && log.token_usage.total_tokens
+											? ` · ${((log.token_usage.total_tokens / log.latency) * 1000).toFixed(1)} tok/s`
+											: ""
 									}`
 								: "—"
 						}
