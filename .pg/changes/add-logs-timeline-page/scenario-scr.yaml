@@ -1,0 +1,179 @@
+scenarios:
+- scenario_id: S-chat-generates-timeline-events
+  critical: true
+  description: 发起一次 chat 请求，验证产生 Log 主记录 + timeline_events 阶段事件（V-framework-1 / V-framework-2）
+  given:
+  - bifrost-api 已启动于 {env.business_systems[name=bifrost-api].endpoints[1].url}
+  - config-db 已种子化 {env.data_resources[name=config-db].state.status}=seeded（含 provider/key/routing-rule）
+  - logs-db 已就绪 {env.data_resources[name=logs-db].state.status}=empty
+  - timeline_events 表已在 logs-db 中创建（AutoMigrate）
+  covers: [V-framework-1, V-framework-2]
+  when:
+  - name: 发起一次 chat 请求（走 routing-rule + provider）
+    type: api
+    method: POST
+    url: /v1/chat/completions
+    body: '{"model":"qwen-max","messages":[{"role":"user","content":"hi"}]}'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.id matches '^chatcmpl-'
+  and:
+  - name: 清理测试产生的 log（可选）
+    action: db DELETE timeline_events WHERE phase='pre_llm' AND phase='post_llm'
+  evidence:
+  - 2-build/<report_seq>-S-chat-generates-timeline-events-evidence.json
+- scenario_id: S-fallback-chain-expands-bars
+  critical: true
+  description: 构造一个带 fallback 链的请求，验证同一原始请求的多次 fallback 实例产生多条 timeline 事件 + Gantt 多 bar（V-ui-2）
+  given:
+  - fixture-routing-rules 含 fallback 链 {env.data_resources[name=fixture-routing-rules].state.status}=seeded
+  - fixture-providers 含多个可路由 provider {env.data_resources[name=fixture-providers].state.status}=seeded
+  - bifrost-api 可访问 {env.business_systems[name=bifrost-api].endpoints[1].url}
+  covers: [V-ui-2, V-framework-2]
+  when:
+  - name: 发送 chat 请求触发主 provider 失败 + fallback 成功
+    type: api
+    method: POST
+    url: /v1/chat/completions
+    body: '{"model":"cfg-fallback-test","messages":[{"role":"user","content":"trigger fallback"}]}'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - timelines 数据中同一 ParentRequestID 下存在 >1 条不同 fallback_index 的记录
+  and:
+  - name: 清理 demo 数据
+    action: db DELETE FROM timeline_events
+  evidence:
+  - 2-build/<report_seq>-S-fallback-chain-expands-bars-evidence.json
+- scenario_id: S-timeline-api-returns-events
+  critical: true
+  description: 调用 GET /api/logs/{id}/timeline，验证返回结构化阶段事件列表（V-transports-1）
+  given:
+  - 存在一条带 timeline_events 的 log_id（延续 S-chat-generates 产生）
+  - bifrost-api 可访问 {env.business_systems[name=bifrost-api].endpoints[1].url}
+  covers: [V-transports-1]
+  when:
+  - name: 获取该 log 的时间线事件
+    type: api
+    method: GET
+    url: /api/logs/{S-chat-generates 产生的 log id}/timeline
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.events length >= 2
+  - response.events[0].phase == 'pre_llm' or response.events[0].phase == 'post_llm'
+  - response.log_id exists
+  and:
+  - name: 无（只读）
+    action: db SELECT 1
+  evidence:
+  - 2-build/<report_seq>-S-timeline-api-returns-events-evidence.json
+- scenario_id: S-active-stream-sse-push
+  critical: false
+  description: 订阅 /api/logs/active/stream SSE，验证活跃请求从 processing→success 的状态推送（V-transports-2）
+  given:
+  - bifrost-api 支持 SSE {env.business_systems[name=bifrost-api].endpoints[1].url}
+  - 有一个在途 chat 请求（processing 状态）或即将发起
+  covers: [V-transports-2]
+  when:
+  - name: 建立 SSE 订阅
+    type: api
+    method: GET
+    url: /api/logs/active/stream
+    expect_status: 200
+  - name: 订阅期间发起一个 chat 请求
+    type: api
+    method: POST
+    url: /v1/chat/completions
+    body: '{"model":"stream-test","messages":[{"role":"user","content":"hi"}]}'
+    expect_status: 200
+  then:
+  - SSE 首帧为 event=active_logs（全量握手）
+  - 后续收到 event=log_updated，payload.status 从 processing 变为 success
+  - 断开订阅后服务端关闭 stream 不报错
+  and:
+  - name: 清理连接
+    action: db DELETE FROM timeline_events WHERE phase='pre_llm'
+  evidence:
+  - 2-build/<report_seq>-S-active-stream-sse-push-evidence.json
+- scenario_id: S-timeline-ui-gantt-render
+  critical: false
+  description: 浏览器访问 /workspace/logs/timeline，验证 Gantt 渲染 + 点击 bar 展开 Timeline 详情（V-ui-1）
+  given:
+  - ui-dev 运行于 {env.runtime_environment[name=localhost].config.ports[1].port}（ui-dev-1）
+  - logs 目录存在可渲染的时间线数据
+  covers: [V-ui-1]
+  when:
+  - name: 打开 Gantt 总览页
+    type: browser
+    action: navigate
+    url: "{env.runtime_environment[name=localhost].config.ports[1].port}/workspace/logs/timeline"
+    expect_status: 200
+  - name: 点击第一条 bar 展开详情
+    type: browser
+    action: click
+    selector: "[data-testid=timeline-gantt-container] .timeline-bar"
+    expect_status: 200
+  then:
+  - 页面渲染出横向 Gantt bar（data-testid=timeline-gantt-container）
+  - 点击 bar 后 LogDetailSheet 弹出且显示 Timeline 标签页
+  - 控制台无未捕获 error
+  and:
+  - name: 记录截图
+    action: screenshot 2-build/<report_seq>-S-timeline-ui-gantt-render.png
+  evidence:
+  - 2-build/<report_seq>-S-timeline-ui-gantt-render-evidence.json
+- scenario_id: S-timeline-api-not-found
+  critical: false
+  description: 调用 GET /api/logs/{nonexist}/timeline 返回 404（negative 路径，V-transports-1）
+  given:
+  - bifrost-api 可访问 {env.business_systems[name=bifrost-api].endpoints[1].url}
+  covers: [V-transports-1]
+  when:
+  - name: 用不存在的 log id 调用 timeline
+    type: api
+    method: GET
+    url: /api/logs/nonexistent-id/timeline
+    expect_status: 404
+  then:
+  - status_code == 404
+  - response.error.code == 'log_not_found'
+  and:
+  - name: 无（只读）
+    action: db SELECT 1
+  evidence:
+  - 2-build/<report_seq>-S-timeline-api-not-found-evidence.json
+- scenario_id: S-cross-module-feedback-loop
+  critical: false
+  description: 跨模块反馈闭环——发请求→产生 timeline_events→/timeline 可读→Gantt 可渲染（V-scr-1）
+  given:
+  - bifrost-api 运行于 {env.business_systems[name=bifrost-api].endpoints[1].url}
+  - ui-dev 运行于 {env.runtime_environment[name=localhost].config.ports[1].port}
+  - logs-db 就绪 {env.data_resources[name=logs-db].state.status}=empty
+  covers: [V-scr-1]
+  when:
+  - name: 订阅 SSE 流
+    type: api
+    method: GET
+    url: /api/logs/active/stream
+    expect_status: 200
+  - name: 发出一次 chat 请求
+    type: api
+    method: POST
+    url: /v1/chat/completions
+    body: '{"model":"qwen-max","messages":[{"role":"user","content":"hi"}]}'
+    expect_status: 200
+  then:
+  - SSE active_logs 事件出现该请求 id
+  - GET /api/logs/{该 id}/timeline 返回非空 events
+  - 浏览器 timeline 页渲染该请求 bar（截图见 evidence）
+  and:
+  - name: 清理本轮产生的 timeline 事件
+    action: db DELETE FROM timeline_events
+  evidence:
+  - 2-build/<report_seq>-S-cross-module-feedback-loop-evidence.json
+_meta:
+  change: add-logs-timeline-page
+  track_id: scr
+  schema_version: v3.10
