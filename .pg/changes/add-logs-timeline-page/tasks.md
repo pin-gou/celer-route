@@ -107,11 +107,11 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 9.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 9.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 9.3 启动服务（如需）
-- [ ] 9.4 验证 V-transports-1：`GET /api/logs/{id}/timeline` 返回结构化事件（已有带阶段事件的 log，curl 校验 events[] 含 timeline_events + RoutingEngineLogs + PluginLogs + AttemptTrail 聚合）——来自 design.md「dev transports Verification Criteria」
-- [ ] 9.5 验证 V-transports-2：`GET /api/logs/active/stream` SSE 推送（订阅期间发请求，收到 active_logs 握手 + processing→success 的 log_updated）——来自 design.md「dev transports Verification Criteria」
+- [x] 9.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 9.2 执行测试（runner 通过 modules 注入命令）
+- [x] 9.3 启动服务（如需）
+- [x] 9.4 验证 V-transports-1：`GET /api/logs/{id}/timeline` 返回结构化事件（已有带阶段事件的 log，curl 校验 events[] 含 timeline_events + RoutingEngineLogs + PluginLogs + AttemptTrail 聚合）——来自 design.md「dev transports Verification Criteria」
+- [x] 9.5 验证 V-transports-2：`GET /api/logs/active/stream` SSE 推送（订阅期间发请求，收到 active_logs 握手 + processing→success 的 log_updated）——来自 design.md「dev transports Verification Criteria」
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
