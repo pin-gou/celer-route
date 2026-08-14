@@ -14,6 +14,7 @@
     "settings": "设置",
     "dashboard": "仪表板",
     "llmLogs": "LLM 日志",
+    "timeline": "时间线",
     "mcpLogs": "MCP 日志",
     "connectors": "连接器",
     "logsSettings": "日志设置",

@@ -15,6 +15,7 @@ import {
 	LayoutGrid,
 	LogOut,
 	Logs,
+	History,
 	Network,
 	PanelLeftClose,
 	PanelLeftOpen,
@@ -190,6 +191,8 @@ const SidebarItemView = ({
 		if (url === "/workspace/custom-pricing" || url === "/workspace/adaptive-routing") return pathname === url;
 		// Avoid double-highlighting with "/workspace/mcp-registry/library"
 		if (url === "/workspace/mcp-registry") return !pathname.startsWith("/workspace/mcp-registry/library") && pathname.startsWith(url);
+		// Avoid double-highlighting LLM Logs when Timeline sub-route is active
+		if (url === "/workspace/logs") return !pathname.startsWith("/workspace/logs/timeline") && pathname.startsWith(url);
 		return pathname.startsWith(url);
 	};
 	const isAnySubItemActive =
@@ -557,6 +560,13 @@ export default function AppSidebar() {
 						hasAccess: hasLogsAccess,
 					},
 					{
+						title: t("nav.timeline"),
+						url: "/workspace/logs/timeline",
+						icon: History,
+						description: "Request timeline & Gantt chart",
+						hasAccess: hasLogsAccess,
+					},
+					{
 						title: t("nav.mcpLogs"),
 						url: "/workspace/mcp-logs",
 						icon: MCPIcon,
@@ -878,6 +888,10 @@ export default function AppSidebar() {
 		const newExpandedItems = new Set<string>();
 		const isRouteMatch = (url: string) => {
 			if (url === "/workspace/custom-pricing" || url === "/workspace/adaptive-routing") return pathname === url;
+			// Avoid double-highlighting with "/workspace/mcp-registry/library"
+			if (url === "/workspace/mcp-registry") return !pathname.startsWith("/workspace/mcp-registry/library") && pathname.startsWith(url);
+			// Avoid double-highlighting LLM Logs when Timeline sub-route is active
+			if (url === "/workspace/logs") return !pathname.startsWith("/workspace/logs/timeline") && pathname.startsWith(url);
 			return pathname.startsWith(url);
 		};
 		items.forEach((item) => {
@@ -1019,6 +1033,8 @@ export default function AppSidebar() {
 		if (url === "/" && pathname === "/") return true;
 		// Avoid double-highlighting with "/workspace/custom-pricing/overrides"
 		if (url === "/workspace/custom-pricing") return pathname === url;
+		// Avoid double-highlighting LLM Logs when Timeline sub-route is active
+		if (url === "/workspace/logs") return !pathname.startsWith("/workspace/logs/timeline") && pathname.startsWith(url);
 		if (url !== "/" && pathname.startsWith(url)) {
 			if (url === "/workspace/config" && configExceptions.some((e) => pathname.startsWith(e))) {
 				return false;

@@ -14,6 +14,7 @@
     "settings": "Settings",
     "dashboard": "Dashboard",
     "llmLogs": "LLM Logs",
+    "timeline": "Timeline",
     "mcpLogs": "MCP Logs",
     "connectors": "Connectors",
     "logsSettings": "Logs Settings",
