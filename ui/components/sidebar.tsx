@@ -3,7 +3,6 @@ import {
 	BookOpenText,
 	Boxes,
 	BoxIcon,
-	BugIcon,
 	ChartColumnBig,
 	ChevronsLeftRightEllipsis,
 	DatabaseZap,
@@ -53,7 +52,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useBranding } from "@/lib/hooks/useBranding";
 import { useGetCoreConfigQuery, useGetLatestReleaseQuery, useGetVersionQuery, useLogoutMutation } from "@/lib/store";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { BooksIcon, DiscordLogoIcon, GithubLogoIcon } from "@phosphor-icons/react";
+import { GithubLogoIcon } from "@phosphor-icons/react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -65,8 +64,6 @@ import { ThemeToggle } from "./themeToggle";
 import { Badge } from "./ui/badge";
 import { PromoCardStack } from "./ui/promoCardStack";
 
-// Cookie name for dismissing production setup card
-const PRODUCTION_SETUP_DISMISSED_COOKIE = "bifrost_production_setup_dismissed";
 // Closing the "setup checklist incomplete" promo card only snoozes that card
 // for a day — separate from the widget's own hidden/snoozed cookies, so it
 // doesn't affect whether the floating widget itself reappears on next nav.
@@ -96,52 +93,11 @@ const MCPIcon = ({ className }: { className?: string }) => (
 // External links
 const externalLinks = [
 	{
-		title: "Discord Server",
-		url: "https://discord.gg/exN5KAydbU",
-		icon: DiscordLogoIcon,
-	},
-	{
 		title: "GitHub Repository",
-		url: "https://github.com/maximhq/bifrost",
+		url: "https://github.com/pin-gou/pg-gateway",
 		icon: GithubLogoIcon,
 	},
-	{
-		title: "Report a bug",
-		url: "https://github.com/maximhq/bifrost/issues/new?title=[Bug Report]&labels=bug&type=bug&projects=maximhq/1",
-		icon: BugIcon,
-		strokeWidth: 1.5,
-	},
-	{
-		title: "Full Documentation",
-		url: "https://docs.getbifrost.ai",
-		icon: BooksIcon,
-		strokeWidth: 1,
-	},
 ];
-
-// Base promotional card (memoized outside component to prevent recreation)
-const productionSetupHelpCard = {
-	id: "production-setup",
-	title: "Need help with production setup?",
-	description: (
-		<>
-			We offer help with production setup including custom integrations and dedicated support.
-			<br />
-			<br />
-			Book a demo with our team{" "}
-			<a
-				href="https://calendly.com/maximai/bifrost-demo?utm_source=bfd_sdbr"
-				target="_blank"
-				className="text-primary font-medium underline"
-				rel="noopener noreferrer"
-			>
-				here
-			</a>
-			.
-		</>
-	),
-	dismissible: true,
-};
 
 // Sidebar item interface
 interface SidebarItem {
@@ -525,12 +481,10 @@ export default function AppSidebar() {
 	const [focusedIndex, setFocusedIndex] = useState(-1);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 	const [cookies, setCookie, removeCookie] = useCookies([
-		PRODUCTION_SETUP_DISMISSED_COOKIE,
 		HIDDEN_UNTIL_NAV_COOKIE,
 		REMIND_LATER_COOKIE,
 		ONBOARDING_CARD_DISMISSED_COOKIE,
 	]);
-	const isProductionSetupDismissed = !!cookies[PRODUCTION_SETUP_DISMISSED_COOKIE];
 	const isOnboardingCardDismissed = !!cookies[ONBOARDING_CARD_DISMISSED_COOKIE];
 	const { data: latestRelease } = useGetLatestReleaseQuery(undefined, {
 		skip: !mounted, // Only fetch after component is mounted
@@ -1148,17 +1102,12 @@ export default function AppSidebar() {
 				dismissible: true,
 			});
 		}
-		// Only show after mounted to ensure cookie is properly hydrated and avoid flash
-		if (mounted && !isProductionSetupDismissed) {
-			cards.push(productionSetupHelpCard);
-		}
 		return cards;
 	}, [
 		coreConfig?.restart_required,
 		showNewReleaseBanner,
 		latestRelease,
 		newReleaseImage,
-		isProductionSetupDismissed,
 		mounted,
 		showOnboardingResumeCard,
 		onboardingSteps.length,
@@ -1187,14 +1136,6 @@ export default function AppSidebar() {
 
 	const handlePromoDismiss = useCallback(
 		(cardId: string) => {
-			if (cardId === "production-setup") {
-				const expiryDate = new Date();
-				expiryDate.setDate(expiryDate.getDate() + 7);
-				setCookie(PRODUCTION_SETUP_DISMISSED_COOKIE, "true", {
-					path: "/",
-					expires: expiryDate,
-				});
-			}
 			if (cardId === "onboarding-incomplete") {
 				// If the widget itself is snoozed via "Remind me later", align the
 				// card's dismissal to that same date — otherwise the card would
