@@ -156,18 +156,12 @@ stages:
       - ui
     gate: all_pass
     environment:
-      required: false
-    description: "开发阶段：跑单元测试，无需启动环境"
+      required: true
+    description: "开发阶段"
 
   - name: int
     tracks:
-      - core
-      - framework
-      - transports
-      - cli
-      - plugins
-      - ui
-      - scenario
+      - scr
     gate: all_pass
     environment:
       required: true
