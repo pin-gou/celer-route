@@ -17,7 +17,7 @@
 
 | track_id | enabled | mode | reason |
 |---|---|---|---|
-| scenario | **false** | explicit | 本次变更纯 ui 单模块零后端改动；无新 API 端点；无跨模块联调场景。 |
+| scr | **true** | explicit | i18n 切换涉及前端交互端到端验证；含 ui track V-* 需浏览器断言；登录态通过 bifrost-api fixture 提供 api 步骤。 |
 
 ## stage 级
 

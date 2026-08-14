@@ -1,4 +1,4 @@
-> - **environment 选择**：dev → local
+> - **environment 选择**：dev → local，int → local
 
 ## 1. dev.ui:test - dev 测试先行
 
@@ -21,22 +21,22 @@
 
 - [ ] 2.1 在 `ui/package.json` 新增依赖：`i18next`、`react-i18next`、`i18next-browser-languagedetector`（runtime），`vite-plugin-i18next-typescript`（devDependency）；执行 `npm install`
 - [ ] 2.2 在 `ui/vite.config.mts` 集成 `vite-plugin-i18next-typescript` 插件，配置 typescriptOptions 输出至 `ui/lib/i18n/types.ts`
-- [ ] 2.3 创建 `ui/locales/en/{common,logs,config,governance,providers,dashboard,governance-ui}.json` 七个 namespace 文件，填充英文初始值（common 必填 dashboard / providers / governance 等高频 key）
+- [ ] 2.3 创建 `ui/locales/en/{common,logs,config,governance,providers,dashboard,governance-ui}.json` 七个 namespace 文件，填充英文初始值
 - [ ] 2.4 创建 `ui/locales/zh-CN/` 七个对应 namespace 文件，填充中文翻译
-- [ ] 2.5 创建 `ui/lib/i18n/config.ts`：导出 i18next init 配置（resources、fallback lng=en、detection order=localStorage>navigator>en、ns=common 等 7 个、defaultNS=common、react.useSuspense=false、interpolation.escapeValue=react 自带防 XSS）
-- [ ] 2.6 创建 `ui/lib/i18n/I18nProvider.tsx`：`<I18nextProvider i18n={i18nInstance}>{children}</I18nextProvider>` 包装组件，对外暴露 `<I18nProvider>`
-- [ ] 2.7 创建 `ui/lib/i18n/useLocale.ts`：导出 `useLocale()` hook（基于 `i18next` 的 `useTranslation` + 自定义 `setLocale` 写 localStorage + 跨 tab `storage` 事件监听）；try/catch 兜底损坏 localStorage
+- [ ] 2.5 创建 `ui/lib/i18n/config.ts`：导出 i18next init 配置（resources、fallback lng=en、detection order=localStorage>navigator>en、ns=common 等 7 个、defaultNS=common、react.useSuspense=false）
+- [ ] 2.6 创建 `ui/lib/i18n/I18nProvider.tsx`：`<I18nextProvider i18n={i18nInstance}>{children}</I18nextProvider>` 包装组件
+- [ ] 2.7 创建 `ui/lib/i18n/useLocale.ts`：导出 `useLocale()` hook（基于 i18next useTranslation + 自定义 setLocale 写 localStorage + 跨 tab storage 事件监听）；try/catch 兜底损坏 localStorage
 - [ ] 2.8 修改 `ui/app/clientLayout.tsx`：在 `ProgressProvider` 之前插入 `<I18nProvider>` 包装
-- [ ] 2.9 创建 `ui/components/LanguageSwitcher/LanguageSwitcher.tsx`：基于 Radix `DropdownMenu`，列出 `availableLocales`；挂入 `SidebarUserMenu.tsx`（或同级用户菜单组件）的 "Sign out" `<DropdownMenuItem>` 之前
-- [ ] 2.10 迁移 `ui/lib/constants/logs.ts`：`ProviderLabels` / `RequestTypeLabels` / `StatusColors` / `RequestTypeColors` 的 value 由英文 string 改为 `t('logs.providers.openai.label')` 等调用；保留 TS 类型签名 `Record<ProviderName, string>` 完整
-- [ ] 2.11 迁移 `ui/lib/constants/config.ts`：`ModelPlaceholders` 等用户可见字符串 value 改 `t('config.providers.openai.placeholder')` 调用；保留 TS 类型
+- [ ] 2.9 创建 `ui/components/LanguageSwitcher/LanguageSwitcher.tsx`：基于 Radix DropdownMenu；挂入用户菜单组件的 "Sign out" 项之前
+- [ ] 2.10 迁移 `ui/lib/constants/logs.ts`：`ProviderLabels` / `RequestTypeLabels` / `StatusColors` / `RequestTypeColors` 的 value 由英文 string 改为 `t('logs.providers.openai.label')` 等调用；保留 TS 类型签名
+- [ ] 2.11 迁移 `ui/lib/constants/config.ts`：`ModelPlaceholders` 等 value 改 `t('config.providers.openai.placeholder')` 调用；保留 TS 类型
 - [ ] 2.12 迁移 `ui/lib/constants/governance.ts`：`resetDurationLabels` 等 value 改 `t('governance.reset.1h.label')` 调用；保留 TS 类型
-- [ ] 2.13 翻译 dashboard 路由表层：`ui/app/workspace/dashboard/` 内路由标题、tab、组件内部文案（图表标题、统计卡片标签、空状态提示）；`useTranslation('dashboard')`
-- [ ] 2.14 翻译 providers 路由表层：`ui/app/workspace/providers/` 内 provider 列表/详情/路由规则等组件的表头、操作按钮、tooltip、空状态；`useTranslation('providers')`
+- [ ] 2.13 翻译 dashboard 路由表层：`ui/app/workspace/dashboard/` 内路由标题、tab、组件内部文案；`useTranslation('dashboard')`
+- [ ] 2.14 翻译 providers 路由表层：`ui/app/workspace/providers/` 内 provider 列表/详情/路由规则组件的表头、操作按钮、tooltip、空状态；`useTranslation('providers')`
 - [ ] 2.15 翻译 governance 路由表层：`ui/app/workspace/governance/` + `virtual-keys/` 子路由的表头、按钮、空状态；`useTranslation('governance-ui')` + `useTranslation('governance')`
-- [ ] 2.16 翻译全局共享组件：顶部导航栏 (`Sidebar` / `Topbar`)、命令面板 (`CommandPalette`)、Toaster (sonner)、通用确认对话框 (Radix `AlertDialog`)、通用按钮 (`Button`)、通用空状态 (`EmptyState`)；`useTranslation('common')`
-- [ ] 2.17 创建 `docs/features/i18n.mdx`：简述当前支持的语言、如何在用户菜单切换、如何贡献翻译（如何新增 namespace、如何新增 key）
-- [ ] 2.18 全量 `rg "from.*constants/(logs|config|governance)"` 扫一遍，验证所有 import 仍能找到对应类型导出（迁移值不破坏类型推导链）
+- [ ] 2.16 翻译全局共享组件：顶部导航栏、命令面板、Toaster (sonner)、通用确认对话框、通用按钮、通用空状态；`useTranslation('common')`
+- [ ] 2.17 创建 `docs/features/i18n.mdx`：简述当前支持的语言、如何在用户菜单切换、如何贡献翻译
+- [ ] 2.18 全量 `rg "from.*constants/(logs|config|governance)"` 扫一遍，验证所有 import 仍能找到对应类型导出
 
 ## 3. dev.ui:review - 静态代码审查
 
@@ -79,12 +79,36 @@
 
 - 无
 
-## 6. final-gate - 最终门控审查
+## 6. int.scr:scenario-execute - 真机场景执行
+
+<!-- on_conditions_eval:
+     stage=int (常驻, 无 on_conditions)
+     track=scr (常驻, 无 on_conditions)
+-->
+
+#### 步骤组 1：scenario-scr.yaml 读取
+
+- [ ] 6.1 确认 `.pg/changes/add-ui-i18n-zh-en/scenario-scr.yaml` 存在且每个 Scenario 含 6 段（scenario_id / critical / given / when / then / evidence；and 可选）
+- [ ] 6.2 校验 scenario_id 全局唯一、critical 字段为 bool
+
+#### 步骤组 2：执行
+
+- [ ] 6.3 按 scenario_id 排序：先 critical=true，后 critical=false
+- [ ] 6.4 串行执行每个 Scenario 的 given → when → then → and（cleanup）
+- [ ] 6.5 按 when[].type 分派执行方式：
+  - type=api（默认）：使用 curl 等 HTTP 工具执行 API 请求
+  - type=browser：加载 `pg-browser-testing-with-devtools` SKILL，使用 Chrome DevTools MCP 工具执行浏览器交互
+- [ ] 6.6 产出结构化 JSON 证据到 `2-build/<report_seq>-<scenario_id>-evidence.json`（<report_seq> 与本 phase 主报告共享同一 seq，由 dispatch_file 注入；加 seq 前缀避免多次 execute 派遣覆盖同 scenario 的历史 evidence）
+- [ ] 6.7 browser 场景截图存到 `2-build/<report_seq>-<scenario_id>-screenshot.png`
+- [ ] 6.8 critical=true FAIL → 立即停止后续 Scenario，全部标记 SKIPPED → record(scenario-execute, "escalate")
+- [ ] 6.9 全部通过 / scenario-execute agent 写盘报告到 `2-build/<seq>-scenario-execute.md`
+
+## 7. final-gate - 最终门控审查
 
 <!-- on_conditions_eval:
      stage=final (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 收集所有 stage 的 Gate Assessment
-- [ ] 6.2 检查跨 stage 依赖项
-- [ ] 6.3 输出 Final Gate Assessment
+- [ ] 7.1 收集所有 stage 的 Gate Assessment
+- [ ] 7.2 检查跨 stage 依赖项
+- [ ] 7.3 输出 Final Gate Assessment

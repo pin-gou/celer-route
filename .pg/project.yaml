@@ -139,7 +139,7 @@ tracks:
     modules: [ui]
     max_fix_retries: 5
     description: "前端开发与测试"
-  scenario:
+  scr:
     type: scenario
     modules: [core, framework, transports, cli, plugins, ui]
     max_fix_retries: 3

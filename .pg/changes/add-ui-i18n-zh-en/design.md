@@ -155,6 +155,7 @@ export function LanguageSwitcher() {
 | V-ui-2 Vite 生产构建 + i18n TS 类型生成器 | ✅ | `npm run build` | n/a |
 | V-ui-3 ui lint 通过 | ✅ | `npm run lint` | n/a |
 | V-ui-4 Playwright i18n 切换 E2E | ✅ | `make run-e2e FLOW=i18n` | n/a（依赖 `runtime_environment[name=localhost]` 的 9080+3008 端口由 int stage 启动；fixture 登录账号由 `data_resources[name=config-db]` 提供，capability `sample_dataset` 已声明） |
+| V-ui-5 端到端 scenario（int stage 真机执行） | ✅ | scenario-scr.yaml 执行 | n/a（scenario-execute agent 在 int stage 自动通过 `restart_all_instances` env-action 保证 9080+3008 可达；fixture 登录账号同上） |
 
 所有 4 条 V-* 均为 `verifiable`，无需降级处理。详见 `.pg/changes/add-ui-i18n-zh-en/0-define/define-summary.yaml`。
 
@@ -175,6 +176,12 @@ export function LanguageSwitcher() {
 | V-ui-3 | ui lint 通过 | 无前置 | `cd ui && npm run lint` | 0 errors / 0 warnings（i18n key 引用命名合规） |
 | V-ui-4 | Playwright i18n 切换 E2E | bifrost-api(:9080) + ui-dev(:3008) 已启动；fixture 登录账号已 seed（`config-db` 内 `fixture-keys`） | `make run-e2e FLOW=i18n` | 登录后切到 zh-CN，顶部导航栏出现中文（"仪表板"、"提供商"、"治理"等），关键路由 `/workspace/dashboard` 标题切为中文；切回 en 后全部恢复英文 |
 
+### int scr Verification Criteria
+
+| ID | 验证项 | 前置/数据准备 | 方法 | 预期结果 |
+|-----|--------|---------------|------|---------|
+| V-ui-5 | 端到端 scenario：登录 → 切语言 → 跨路由断言翻译 → 切回 → 还原 + 持久化 + 损坏兜底 | bifrost-api(:9080) 与 ui-dev(:3008) 已启动；`config-db` 内 `fixture-keys` 登录账号已 seed；dev stage 全部 V-* 已绿 | scenario-scr.yaml 4 个 Scenario 执行 | critical=true scenario 全绿；S-i18n-persist-across-page-reload 验证刷新后 locale 仍为 zh-CN；S-i18n-corrupted-localStorage-fallback-to-en 验证损坏 localStorage 兜底为 en；浏览器 console 无 error |
+
 ## 变更类型判定
 
 | track | 是否影响 | 理由 |
@@ -185,14 +192,14 @@ export function LanguageSwitcher() {
 | cli | ❌ | 不涉及 CLI |
 | plugins | ❌ | 不涉及 Go plugin |
 | ui | ✅ | `clientLayout.tsx` 注入 Provider；新增 `ui/lib/i18n/` 与 `ui/locales/`；`ui/lib/constants/*Labels` 值迁移；dashboard / providers / governance 三大路由表层翻译；用户菜单新增语言切换；新增 Vitest + Playwright 测试 |
-| scenario | ❌（暂不启用 scenario track） | 决策依据见 on-conditions-eval.md `scenario_tracks_decision` 段 |
+| scenario | ✅（启用 `scr` track，int stage） | 决策依据见 on-conditions-eval.md `scenario_tracks_decision` 段 |
 
 **affected_tracks**：`[ui]`
 
 **scenario track 启用决策**：
 
-- 跨 role 协作验证? 否——本次变更纯 ui 单模块，bifrost-api 后端 0 改动，仅需登录态 fixture
+- 跨 role 协作验证? 是——登录态由 bifrost-api(:9080) 提供 api 步骤，浏览器切换与断言由 ui-dev(:3008) 提供 browser 步骤
 - 新 API 端点? 否——i18n 不引入新 HTTP 端点
-- 跨模块联调? 否——无 backend / agent / frontend 跨模块调用链
+- 跨模块联调? 是——前端 i18n 切换 + 后端 fixture 登录态 + localStorage 持久化属于跨层联调
 
-→ **scenario track 禁用**，scenario-ui.yaml 不生成；V-ui-4 由 Playwright E2E 在 `tasks.md` 的 `track:ui verify` 章节覆盖（不依赖 scenario track）。
+→ **`scr` scenario track 启用**，在 `int` stage 由 scenario-execute agent 真机执行 `scenario-scr.yaml`；scenario-scr.yaml 至少包含 3 个 Scenario（覆盖 happy / negative / ui-smoke 维度）。
