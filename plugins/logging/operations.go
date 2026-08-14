@@ -1365,6 +1365,41 @@ func (p *LoggerPlugin) ListUserAgentMappings(ctx context.Context) ([]logstore.Us
 	return p.store.ListUserAgentMappings(ctx, false)
 }
 
+// ListTimelineEventsByLogID returns the plugin-pipeline stage events for a log row.
+func (p *LoggerPlugin) ListTimelineEventsByLogID(ctx context.Context, logID string) ([]logstore.TimelineEvent, error) {
+	return p.store.ListTimelineEventsByLogID(ctx, logID)
+}
+
+// GetActiveLogs returns a snapshot of currently processing log entries.
+func (p *LoggerPlugin) GetActiveLogs(ctx context.Context) ([]*logstore.Log, error) {
+	filters := logstore.SearchFilters{
+		Status: []string{"processing"},
+	}
+	result, err := p.store.SearchLogs(ctx, filters, logstore.PaginationOptions{Limit: 100, SortBy: "timestamp", Order: "desc"})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || len(result.Logs) == 0 {
+		return nil, nil
+	}
+	logs := make([]*logstore.Log, len(result.Logs))
+	for i := range result.Logs {
+		logs[i] = &result.Logs[i]
+	}
+	return logs, nil
+}
+
+// SubscribeActiveLogStream returns a channel that receives Log status updates.
+// This is a no-op in the base plugin; the enterprise layer may override.
+func (p *LoggerPlugin) SubscribeActiveLogStream(ctx context.Context) (<-chan *logstore.Log, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+// UnsubscribeActiveLogStream stops the active log stream subscription.
+func (p *LoggerPlugin) UnsubscribeActiveLogStream(ctx context.Context, ch <-chan *logstore.Log) error {
+	return nil
+}
+
 // CreateUserAgentMapping validates, stores, and activates a custom User-Agent mapping.
 func (p *LoggerPlugin) CreateUserAgentMapping(ctx context.Context, mapping *logstore.UserAgentMapping) (*logstore.UserAgentMapping, error) {
 	if err := validateUserAgentMapping(mapping); err != nil {

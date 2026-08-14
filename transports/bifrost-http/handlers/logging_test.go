@@ -780,6 +780,27 @@ func (m *dashboardLogManager) ListUserAgentMappings(ctx context.Context) ([]logs
 	return nil, nil
 }
 
+func (m *dashboardLogManager) ListTimelineEventsByLogID(ctx context.Context, logID string) ([]logstore.TimelineEvent, error) {
+	if m.timelineEvents == nil {
+		return nil, nil
+	}
+	return m.timelineEvents, nil
+}
+
+func (m *dashboardLogManager) GetActiveLogs(ctx context.Context) ([]*logstore.Log, error) {
+	return m.activeLogs, nil
+}
+
+func (m *dashboardLogManager) SubscribeActiveLogStream(ctx context.Context) (<-chan *logstore.Log, error) {
+	m.sseSubscribed = true
+	return m.activeLogStreamCh, nil
+}
+
+func (m *dashboardLogManager) UnsubscribeActiveLogStream(ctx context.Context, ch <-chan *logstore.Log) error {
+	m.sseDisconnected = true
+	return nil
+}
+
 func (m *dashboardLogManager) GetAvailableUserAgents(ctx context.Context, _ int, _ string) ([]string, error) {
 	return nil, nil
 }
