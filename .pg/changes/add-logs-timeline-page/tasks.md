@@ -41,11 +41,11 @@
      track=framework (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 4.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 4.3 启动服务（如需）
-- [ ] 4.4 验证 V-framework-1：timeline_events 表存在且 schema 正确（检查 logs.db 表结构 + AutoMigrate 无报错）——来自 design.md「dev framework Verification Criteria」
-- [ ] 4.5 验证 V-framework-2：plugin 阶段点采集写入事件（查 timeline_events 按 log_id 过滤，存在 pre_llm/post_llm 各至少 1 条）——来自 design.md「dev framework Verification Criteria」
+- [x] 4.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 4.2 执行测试（runner 通过 modules 注入命令）
+- [x] 4.3 启动服务（如需）
+- [x] 4.4 验证 V-framework-1：timeline_events 表存在且 schema 正确（检查 logs.db 表结构 + AutoMigrate 无报错）——来自 design.md「dev framework Verification Criteria」
+- [x] 4.5 验证 V-framework-2：plugin 阶段点采集写入事件（查 timeline_events 按 log_id 过滤，存在 pre_llm/post_llm 各至少 1 条）——来自 design.md「dev framework Verification Criteria」
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
