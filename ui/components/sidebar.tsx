@@ -1,53 +1,34 @@
 import {
 	ArrowUpRight,
-	BadgeCheck,
 	BookOpenText,
-	BookUser,
 	Boxes,
 	BoxIcon,
 	BugIcon,
-	Building,
-	Building2,
 	ChartColumnBig,
 	ChevronsLeftRightEllipsis,
-	CircuitBoard,
-	Construction,
 	DatabaseZap,
 	Flag,
 	FlaskConical,
 	FolderGit,
-	Gavel,
 	GitCompareArrows,
-	Hexagon,
-	History,
 	KeyRound,
 	Landmark,
-	LaptopMinimalCheck,
 	LayoutGrid,
 	LogOut,
 	Logs,
-	Megaphone,
 	Network,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Plug,
 	Puzzle,
-	ScrollText,
 	Search,
-	SearchCheck,
 	Settings,
 	Settings2Icon,
 	ShieldCheck,
-	Shuffle,
-	Siren,
 	SlidersHorizontal,
 	Telescope,
-	ToolCase,
 	TrendingUp,
-	UserRoundCheck,
-	Users,
 	Wallet,
-	WalletCards,
 	Webhook,
 } from "lucide-react";
 
@@ -277,14 +258,15 @@ const SidebarItemView = ({
 
 	const isHighlighted = !hasSubItems && highlightedUrl === item.url;
 
-	const buttonClassName = `group/nav-item relative h-7.5 cursor-pointer rounded-sm border px-3 transition-all duration-200 ${isHighlighted
-		? "bg-sidebar-accent text-accent-foreground border-primary/20"
-		: isActive || isAnySubItemActive
-			? "bg-sidebar-accent text-primary border-primary/20"
-			: item.hasAccess
-				? "hover:bg-sidebar-accent hover:text-accent-foreground border-transparent text-slate-500 dark:text-zinc-400"
-				: "hover:bg-destructive/5 hover:text-muted-foreground text-muted-foreground cursor-not-allowed border-transparent"
-		} `;
+	const buttonClassName = `group/nav-item relative h-7.5 cursor-pointer rounded-sm border px-3 transition-all duration-200 ${
+		isHighlighted
+			? "bg-sidebar-accent text-accent-foreground border-primary/20"
+			: isActive || isAnySubItemActive
+				? "bg-sidebar-accent text-primary border-primary/20"
+				: item.hasAccess
+					? "hover:bg-sidebar-accent hover:text-accent-foreground border-transparent text-slate-500 dark:text-zinc-400"
+					: "hover:bg-destructive/5 hover:text-muted-foreground text-muted-foreground cursor-not-allowed border-transparent"
+	} `;
 
 	const innerContent = (
 		<div className="flex w-full items-center justify-between">
@@ -435,14 +417,15 @@ const SidebarItemView = ({
 						const isSubItemActive = subItem.queryParam ? pathname === subItem.url : isRouteMatch(subItem.url);
 						const isSubItemHighlighted = highlightedUrl ? subItemHref.startsWith(highlightedUrl) : false;
 						const SubItemIcon = subItem.icon;
-						const subItemClassName = `h-7 cursor-pointer rounded-sm px-2 transition-all duration-200 ${isSubItemHighlighted
-							? "bg-sidebar-accent text-accent-foreground"
-							: isSubItemActive
-								? "bg-sidebar-accent text-primary font-medium"
-								: subItem.hasAccess === false
-									? "hover:bg-destructive/5 hover:text-muted-foreground text-muted-foreground cursor-not-allowed border-transparent"
-									: "hover:bg-sidebar-accent hover:text-accent-foreground text-slate-500 dark:text-zinc-400"
-							}`;
+						const subItemClassName = `h-7 cursor-pointer rounded-sm px-2 transition-all duration-200 ${
+							isSubItemHighlighted
+								? "bg-sidebar-accent text-accent-foreground"
+								: isSubItemActive
+									? "bg-sidebar-accent text-primary font-medium"
+									: subItem.hasAccess === false
+										? "hover:bg-destructive/5 hover:text-muted-foreground text-muted-foreground cursor-not-allowed border-transparent"
+										: "hover:bg-sidebar-accent hover:text-accent-foreground text-slate-500 dark:text-zinc-400"
+						}`;
 						const subInner = (
 							<div className="flex w-full items-center gap-2">
 								{SubItemIcon && <SubItemIcon className={`h-3.5 w-3.5 ${isSubItemActive ? "text-primary" : "text-muted-foreground"}`} />}
@@ -551,49 +534,20 @@ export default function AppSidebar() {
 	});
 	const hasLogsAccess = useRbac(RbacResource.Logs, RbacOperation.View);
 	const hasObservabilityAccess = useRbac(RbacResource.Observability, RbacOperation.View);
-	// Alerting is currently surfaced under the existing governance permission
-	// until enterprise alerting gets its own RBAC resource.
-	const hasAlertingAccess = useRbac(RbacResource.Governance, RbacOperation.View);
 	const hasDashboardAccess = useRbac(RbacResource.Dashboard, RbacOperation.View);
 	const hasModelProvidersAccess = useRbac(RbacResource.ModelProvider, RbacOperation.View);
 	const hasMCPGatewayAccess = useRbac(RbacResource.MCPGateway, RbacOperation.View);
-	const hasMCPToolGroupsAccess = useRbac(RbacResource.MCPToolGroups, RbacOperation.View);
 	const hasMCPLogsAccess = useRbac(RbacResource.MCPLogs, RbacOperation.View);
 	const hasPluginsAccess = useRbac(RbacResource.Plugins, RbacOperation.View);
-	const hasUsersAccess = useRbac(RbacResource.Users, RbacOperation.View);
-	const hasUserProvisioningAccess = useRbac(RbacResource.UserProvisioning, RbacOperation.View);
-	const hasAuditLogsAccess = useRbac(RbacResource.AuditLogs, RbacOperation.View);
-	const hasCustomersAccess = useRbac(RbacResource.Customers, RbacOperation.View);
-	const hasTeamsAccess = useRbac(RbacResource.Teams, RbacOperation.View);
-	const hasBusinessUnitsAccess = useRbac(RbacResource.UserProvisioning, RbacOperation.View);
-	const hasRbacAccess = useRbac(RbacResource.RBAC, RbacOperation.View);
 	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
 	const hasGovernanceLegacyAccess = useRbac(RbacResource.Governance, RbacOperation.View);
 	const hasRoutingRulesAccess = useRbac(RbacResource.RoutingRules, RbacOperation.View);
-	const hasGuardrailsProvidersAccess = useRbac(RbacResource.GuardrailsProviders, RbacOperation.View);
-	const hasGuardrailsConfigAccess = useRbac(RbacResource.GuardrailsConfig, RbacOperation.View);
-	const hasCircuitBreakerAccess = useRbac(RbacResource.CircuitBreaker, RbacOperation.View);
-	const hasClusterConfigAccess = useRbac(RbacResource.Cluster, RbacOperation.View);
-	const isAdaptiveRoutingAllowed = useRbac(RbacResource.AdaptiveRouter, RbacOperation.View);
 	const hasSettingsAccess = useRbac(RbacResource.Settings, RbacOperation.View);
 	const hasFeatureFlagsAccess = useRbac(RbacResource.FeatureFlags, RbacOperation.View);
 	const hasAPIKeyAccess = useRbac(RbacResource.APIKeys, RbacOperation.View);
 	const hasPromptRepositoryAccess = useRbac(RbacResource.PromptRepository, RbacOperation.View);
 	const hasSkillsRepositoryAccess = useRbac(RbacResource.SkillsRepository, RbacOperation.View);
-	const hasDevicesAccess = useRbac(RbacResource.Devices, RbacOperation.View);
-	const hasInventoryAccess = useRbac(RbacResource.Inventory, RbacOperation.View);
-	const hasEdgeConfigAccess = useRbac(RbacResource.EdgeConfig, RbacOperation.View);
-	const hasAnyEdgeControlAccess = hasDevicesAccess || hasInventoryAccess || hasEdgeConfigAccess;
-	const hasAccessProfilesAccess = useRbac(RbacResource.AccessProfiles, RbacOperation.View);
-	const hasAnyGovernanceAccess =
-		hasVirtualKeysAccess ||
-		hasTeamsAccess ||
-		hasUsersAccess ||
-		hasCustomersAccess ||
-		hasBusinessUnitsAccess ||
-		hasRbacAccess ||
-		hasAccessProfilesAccess ||
-		hasGovernanceLegacyAccess;
+	const hasAnyGovernanceAccess = hasVirtualKeysAccess;
 	const { data: coreConfig } = useGetCoreConfigQuery({});
 	const isDbConnected = coreConfig?.is_db_connected ?? false;
 	const envLabel = coreConfig?.env_label ?? null;
@@ -711,13 +665,6 @@ export default function AppSidebar() {
 						hasAccess: hasRoutingRulesAccess,
 					},
 					{
-						title: "Circuit Breaker",
-						url: "/workspace/circuit-breaker",
-						icon: CircuitBoard,
-						description: "Automatic fallback when primary endpoints fail",
-						hasAccess: hasCircuitBreakerAccess,
-					},
-					{
 						title: "Pricing Overrides",
 						url: "/workspace/custom-pricing/overrides",
 						icon: SlidersHorizontal,
@@ -738,7 +685,7 @@ export default function AppSidebar() {
 				icon: MCPIcon,
 				description: "MCP configuration",
 				url: "/workspace/mcp-gateway",
-				hasAccess: hasMCPGatewayAccess || hasMCPToolGroupsAccess,
+				hasAccess: hasMCPGatewayAccess,
 				subItems: [
 					{
 						title: "MCP Catalog",
@@ -753,13 +700,6 @@ export default function AppSidebar() {
 						icon: Boxes,
 						description: "Install curated MCP servers",
 						hasAccess: hasMCPGatewayAccess,
-					},
-					{
-						title: "Tool Groups",
-						url: "/workspace/mcp-tool-groups",
-						icon: ToolCase,
-						description: "Tool Groups",
-						hasAccess: hasMCPToolGroupsAccess,
 					},
 					{
 						title: "Auth Sessions",
@@ -792,40 +732,10 @@ export default function AppSidebar() {
 				hasAccess: hasPluginsAccess,
 			},
 			{
-				title: "Alerting",
-				url: "/workspace/alerting",
-				icon: Siren,
-				description: "Manage alert channels, rules, and history",
-				hasAccess: hasAlertingAccess,
-				subItems: [
-					{
-						title: "Channels",
-						url: "/workspace/alerting/channels",
-						icon: Megaphone,
-						description: "Configure notification channels",
-						hasAccess: hasAlertingAccess,
-					},
-					{
-						title: "Rules",
-						url: "/workspace/alerting/rules",
-						icon: Gavel,
-						description: "Define alerting rules",
-						hasAccess: hasAlertingAccess,
-					},
-					{
-						title: "History",
-						url: "/workspace/alerting/history",
-						icon: History,
-						description: "Review alert delivery history",
-						hasAccess: hasAlertingAccess,
-					},
-				],
-			},
-			{
 				title: "Governance",
 				url: "/workspace/governance",
 				icon: Landmark,
-				description: "Virtual keys, users, teams, customers & roles",
+				description: "Virtual keys & access",
 				hasAccess: hasAnyGovernanceAccess,
 				subItems: [
 					{
@@ -834,85 +744,6 @@ export default function AppSidebar() {
 						icon: KeyRound,
 						description: "Manage virtual keys & access",
 						hasAccess: hasVirtualKeysAccess,
-					},
-					{
-						title: "Users",
-						url: "/workspace/governance/users",
-						icon: Users,
-						description: "Manage users",
-						hasAccess: hasUsersAccess,
-					},
-					{
-						title: "Teams",
-						url: "/workspace/governance/teams",
-						icon: Building,
-						description: "Manage teams",
-						hasAccess: hasTeamsAccess,
-					},
-					{
-						title: "Business Units",
-						url: "/workspace/governance/business-units",
-						icon: Building2,
-						description: "Manage business units",
-						hasAccess: hasBusinessUnitsAccess,
-					},
-					{
-						title: "Customers",
-						url: "/workspace/governance/customers",
-						icon: WalletCards,
-						description: "Manage customers",
-						hasAccess: hasCustomersAccess,
-					},
-					{
-						title: "User Provisioning",
-						url: "/workspace/scim",
-						icon: BookUser,
-						description: "User management and provisioning",
-						hasAccess: hasUserProvisioningAccess,
-					},
-					{
-						title: "Roles & Permissions",
-						url: "/workspace/governance/rbac",
-						icon: UserRoundCheck,
-						description: "User roles and permissions",
-						hasAccess: hasRbacAccess,
-					},
-					{
-						title: "Access Profiles",
-						url: "/workspace/governance/access-profiles",
-						icon: ShieldCheck,
-						description: "Manage access profiles for roles",
-						hasAccess: hasAccessProfilesAccess,
-					},
-					{
-						title: "Audit Logs",
-						url: "/workspace/audit-logs",
-						icon: ScrollText,
-						description: "Audit logs and compliance",
-						hasAccess: hasAuditLogsAccess,
-					},
-				],
-			},
-			{
-				title: "Guardrails",
-				url: "/workspace/guardrails",
-				icon: Construction,
-				description: "Guardrails configuration",
-				hasAccess: hasGuardrailsConfigAccess || hasGuardrailsProvidersAccess,
-				subItems: [
-					{
-						title: "Rules",
-						url: "/workspace/guardrails/configuration",
-						icon: SearchCheck,
-						description: "Guardrail rules",
-						hasAccess: hasGuardrailsConfigAccess,
-					},
-					{
-						title: "Providers",
-						url: "/workspace/guardrails/providers",
-						icon: Boxes,
-						description: "Guardrail providers configuration",
-						hasAccess: hasGuardrailsProvidersAccess,
 					},
 				],
 			},
@@ -923,83 +754,23 @@ export default function AppSidebar() {
 				description: "Async job webhook endpoints",
 				hasAccess: hasGovernanceLegacyAccess,
 			},
-			{
-				title: "Edge Control",
-				icon: Hexagon,
-				description: "Edge device management",
-				url: "/workspace/edge-control",
-				hasAccess: hasAnyEdgeControlAccess,
-				subItems: [
-					{
-						title: "Devices",
-						url: "/workspace/edge-control/devices",
-						icon: LaptopMinimalCheck,
-						description: "Manage edge devices",
-						hasAccess: hasDevicesAccess,
-					},
-					{
-						title: "Approvals",
-						url: "/workspace/edge-control/inventory",
-						icon: BadgeCheck,
-						description: "Approve apps and MCP servers",
-						hasAccess: hasInventoryAccess,
-					},
-					{
-						title: "Edge Settings",
-						url: "/workspace/edge-control/config",
-						icon: Settings,
-						description: "Edge settings",
-						hasAccess: hasEdgeConfigAccess,
-					},
-				],
-			},
-			{
-				title: "Cluster Config",
-				url: "/workspace/cluster",
-				icon: Network,
-				description: "Manage Bifrost cluster",
-				hasAccess: hasClusterConfigAccess,
-			},
-			{
-				title: "Adaptive Routing",
-				url: "/workspace/adaptive-routing",
-				icon: Shuffle,
-				description: "Manage adaptive routing",
-				hasAccess: isAdaptiveRoutingAllowed,
-				subItems: [
-					{
-						title: "Dashboard",
-						url: "/workspace/adaptive-routing",
-						icon: ChartColumnBig,
-						description: "Adaptive routing metrics",
-						hasAccess: isAdaptiveRoutingAllowed,
-					},
-					{
-						title: "Settings",
-						url: "/workspace/adaptive-routing/settings",
-						icon: Settings,
-						description: "Adaptive routing settings",
-						hasAccess: isAdaptiveRoutingAllowed,
-					},
-				],
-			},
 			...(isDbConnected
 				? [
-					{
-						title: "Prompt Repository",
-						url: "/workspace/prompt-repo",
-						icon: FolderGit,
-						description: "Prompt repository",
-						hasAccess: hasPromptRepositoryAccess,
-					},
-					{
-						title: "Skills Repository",
-						url: "/workspace/skills-repo",
-						icon: BookOpenText,
-						description: "Skills repository",
-						hasAccess: hasSkillsRepositoryAccess,
-					},
-				]
+						{
+							title: "Prompt Repository",
+							url: "/workspace/prompt-repo",
+							icon: FolderGit,
+							description: "Prompt repository",
+							hasAccess: hasPromptRepositoryAccess,
+						},
+						{
+							title: "Skills Repository",
+							url: "/workspace/skills-repo",
+							icon: BookOpenText,
+							description: "Skills repository",
+							hasAccess: hasSkillsRepositoryAccess,
+						},
+					]
 				: []),
 			{
 				title: "Evals",
@@ -1014,7 +785,7 @@ export default function AppSidebar() {
 				url: "/workspace/config",
 				icon: Settings2Icon,
 				description: "Bifrost settings",
-				hasAccess: hasSettingsAccess || hasAuditLogsAccess || hasUserProvisioningAccess,
+				hasAccess: hasSettingsAccess,
 				subItems: [
 					{
 						title: "Client Settings",
@@ -1072,38 +843,19 @@ export default function AppSidebar() {
 			hasLogsAccess,
 			hasAPIKeyAccess,
 			hasObservabilityAccess,
-			hasAlertingAccess,
 			hasDashboardAccess,
 			hasModelProvidersAccess,
 			hasMCPGatewayAccess,
-			hasMCPToolGroupsAccess,
 			hasMCPLogsAccess,
 			hasPluginsAccess,
-			hasUsersAccess,
-			hasUserProvisioningAccess,
-			hasAuditLogsAccess,
-			hasCustomersAccess,
-			hasTeamsAccess,
-			hasBusinessUnitsAccess,
-			hasRbacAccess,
 			hasVirtualKeysAccess,
 			hasGovernanceLegacyAccess,
 			hasAnyGovernanceAccess,
 			hasRoutingRulesAccess,
-			hasGuardrailsProvidersAccess,
-			hasGuardrailsConfigAccess,
-			hasCircuitBreakerAccess,
-			hasClusterConfigAccess,
-			isAdaptiveRoutingAllowed,
 			hasSettingsAccess,
 			hasPromptRepositoryAccess,
 			hasSkillsRepositoryAccess,
-			hasAccessProfilesAccess,
 			hasFeatureFlagsAccess,
-			hasDevicesAccess,
-			hasInventoryAccess,
-			hasEdgeConfigAccess,
-			hasAnyEdgeControlAccess,
 			isDbConnected,
 		],
 	);
@@ -1143,7 +895,7 @@ export default function AppSidebar() {
 			.filter(Boolean) as SidebarItem[];
 	}, [accessibleItems, searchQuery]);
 
-const { data: version } = useGetVersionQuery();
+	const { data: version } = useGetVersionQuery();
 	const { resolvedTheme } = useTheme();
 	const [logout] = useLogoutMutation();
 
@@ -1479,13 +1231,7 @@ const { data: version } = useGetVersionQuery();
 						{/* max-w caps an unusually wide uploaded logo so it cannot push the
 						    collapse button out of the header; object-contain preserves its
 						    aspect ratio within that box. */}
-						<img
-							className="h-[22px] w-auto max-w-[150px] object-contain"
-							src={logoSrc}
-							alt={logoAlt}
-							width={70}
-							height={70}
-						/>
+						<img className="h-[22px] w-auto max-w-[150px] object-contain" src={logoSrc} alt={logoAlt} width={70} height={70} />
 					</Link>
 					<button
 						onClick={toggleSidebar}
@@ -1502,14 +1248,7 @@ const { data: version } = useGetVersionQuery();
 					className="hidden w-full cursor-pointer flex-col items-center gap-2 py-2 group-data-[collapsible=icon]:flex"
 					onClick={toggleSidebar}
 				>
-					<img
-						className="h-[22px] w-auto object-contain"
-						src={iconSrc}
-						alt={logoAlt}
-						width={22}
-						height={22}
-						style={{ width: 18 }}
-					/>
+					<img className="h-[22px] w-auto object-contain" src={iconSrc} alt={logoAlt} width={22} height={22} style={{ width: 18 }} />
 				</div>
 			</SidebarHeader>
 			{envLabel && (

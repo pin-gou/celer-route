@@ -276,9 +276,9 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 		const submitPromise =
 			isEditing && editingRule
 				? updateRoutingRule({
-					id: editingRule.id,
-					data: payload,
-				}).unwrap()
+						id: editingRule.id,
+						data: payload,
+					}).unwrap()
 				: createRoutingRule(payload).unwrap();
 
 		submitPromise
@@ -421,11 +421,10 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 						{scope !== "global" && (
 							<div className="space-y-2">
 								<Label htmlFor="scope_id">
-									Virtual Key{" "}
-									<span className="text-red-500">*</span>
+									Virtual Key <span className="text-red-500">*</span>
 								</Label>
 								{scope === "virtual_key" && <VirtualKeySelector value={scopeId || ""} onChange={(value) => setValue("scope_id", value)} />}
-								{errors.scope_id &&<p className="text-destructive text-sm">{errors.scope_id.message}</p>}
+								{errors.scope_id && <p className="text-destructive text-sm">{errors.scope_id.message}</p>}
 							</div>
 						)}
 

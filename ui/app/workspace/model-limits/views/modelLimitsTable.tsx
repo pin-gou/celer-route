@@ -347,9 +347,7 @@ export default function ModelLimitsTable({
 							{modelConfigs.length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={7} className="h-24 text-center">
-										<span className="text-muted-foreground text-sm">
-											{isLoading ? "Loading limits..." : "No matching limits found."}
-										</span>
+										<span className="text-muted-foreground text-sm">{isLoading ? "Loading limits..." : "No matching limits found."}</span>
 									</TableCell>
 								</TableRow>
 							) : (

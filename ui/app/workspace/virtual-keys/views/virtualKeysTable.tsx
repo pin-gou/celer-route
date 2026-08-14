@@ -691,10 +691,7 @@ export default function VirtualKeysTable({
 
 						{hasActiveFilters && (
 							<p className="text-muted-foreground text-xs">
-								Filters applied:{" "}
-								{[debouncedSearch && `search "${debouncedSearch}"`]
-									.filter(Boolean)
-									.join(", ")}
+								Filters applied: {[debouncedSearch && `search "${debouncedSearch}"`].filter(Boolean).join(", ")}
 							</p>
 						)}
 
@@ -789,7 +786,6 @@ export default function VirtualKeysTable({
 							data-testid="vk-search-input"
 						/>
 					</div>
-
 				</div>
 
 				<div className="mb-2 min-h-0 grow overflow-hidden rounded-sm border">

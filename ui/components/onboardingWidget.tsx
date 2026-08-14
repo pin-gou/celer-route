@@ -364,11 +364,7 @@ export default function OnboardingWidget() {
 						}}
 					>
 						<PopoverTrigger asChild>
-							<button
-								type="button"
-								data-testid="onboarding-later"
-								className="text-muted-foreground hover:text-foreground py-2 text-center"
-							>
+							<button type="button" data-testid="onboarding-later" className="text-muted-foreground hover:text-foreground py-2 text-center">
 								Remind me later
 							</button>
 						</PopoverTrigger>

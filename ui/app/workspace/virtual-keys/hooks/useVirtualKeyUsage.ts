@@ -29,5 +29,13 @@ export function useVirtualKeyUsage(vk: VirtualKey | null | undefined): {
 			displayRateLimit?.request_max_limit != null &&
 			displayRateLimit.request_current_usage >= displayRateLimit.request_max_limit);
 
-	return { assignedUsers: [], isManagedByProfile, managingProfile: undefined, hasApRateLimit: false, displayBudgets, displayRateLimit, isExhausted };
+	return {
+		assignedUsers: [],
+		isManagedByProfile,
+		managingProfile: undefined,
+		hasApRateLimit: false,
+		displayBudgets,
+		displayRateLimit,
+		isExhausted,
+	};
 }

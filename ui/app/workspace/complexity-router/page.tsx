@@ -521,7 +521,7 @@ export default function ComplexityRouterPage() {
 				)}
 
 				{/* ── Action footer ── */}
-				<div className="bg-card sticky bottom-0 flex flex-wrap items-center justify-end gap-2.5 border-t py-4 z-10">
+				<div className="bg-card sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2.5 border-t py-4">
 					<Button
 						data-testid="complexity-router-restore-defaults-button"
 						type="button"

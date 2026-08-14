@@ -140,13 +140,7 @@ export default function ClientSettingsView() {
 		if (coreConfigSaved) {
 			toast.success("Client settings updated successfully.");
 		}
-	}, [
-		bifrostConfig,
-		hasSecurityHeaderError,
-		hasCoreConfigChanges,
-		localConfig,
-		updateCoreConfig,
-	]);
+	}, [bifrostConfig, hasSecurityHeaderError, hasCoreConfigChanges, localConfig, updateCoreConfig]);
 
 	// Header filter list handlers
 	const handleAddAllowlistHeader = useCallback(() => {

@@ -89,8 +89,8 @@ export function ProxyFormFragment({ provider }: ProxyFormFragmentProps) {
 				<Alert>
 					<Info className="h-4 w-4" />
 					<AlertDescription>
-						Applies to HTTP requests and WebSocket-based Realtime/Responses connections. WebRTC-based Realtime
-						sessions use a separate media path not covered by this proxy.
+						Applies to HTTP requests and WebSocket-based Realtime/Responses connections. WebRTC-based Realtime sessions use a separate media
+						path not covered by this proxy.
 					</AlertDescription>
 				</Alert>
 				<div className="space-y-4">

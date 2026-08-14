@@ -12,7 +12,17 @@ import { ScrollArea } from "@/components/ui/scrollArea";
 import { getUserSearchQuery } from "@/lib/registries/userPicker";
 import { useGetVirtualKeysQuery } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Fingerprint, KeyRound, LoaderCircle, PanelLeftClose, PanelLeftOpen, RotateCcw, Search, UserRound } from "lucide-react";
+import {
+	ChevronDown,
+	Fingerprint,
+	KeyRound,
+	LoaderCircle,
+	PanelLeftClose,
+	PanelLeftOpen,
+	RotateCcw,
+	Search,
+	UserRound,
+} from "lucide-react";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 // Side-effect import: registers the enterprise user search hook (if this is
 // an enterprise build) before this module's first render. OSS has no user
@@ -81,10 +91,7 @@ export function OAuthGrantsFilterSidebar({ filters, onFiltersChange }: SidebarPr
 		});
 	}, []);
 
-	const activeFilterCount = useMemo(
-		() => filters.mode.length + filters.virtual_key_id.length + filters.user_id.length,
-		[filters],
-	);
+	const activeFilterCount = useMemo(() => filters.mode.length + filters.virtual_key_id.length + filters.user_id.length, [filters]);
 
 	const handleReset = useCallback(() => {
 		onFiltersChange(EMPTY_FILTERS);

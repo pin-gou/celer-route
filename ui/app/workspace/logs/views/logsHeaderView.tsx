@@ -303,7 +303,8 @@ export function LogsHeaderView({
 				</TooltipTrigger>
 				<TooltipContent sideOffset={6} className="max-w-64">
 					Groups fallback attempts and linked requests under the original root request. Expand any row to view the complete request chain.
-					<br /><br />
+					<br />
+					<br />
 					This grouped view may load more slowly than the flat view for very large log tables.
 				</TooltipContent>
 			</Tooltip>

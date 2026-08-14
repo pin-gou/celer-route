@@ -31,12 +31,7 @@ export function ModelLimitsEmptyState({ onAddClick, canCreate = true }: ModelLim
 					>
 						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
 					</Button>
-					<Button
-						aria-label="Add your first limit"
-						onClick={onAddClick}
-						disabled={!canCreate}
-						data-testid="model-limits-button-create"
-					>
+					<Button aria-label="Add your first limit" onClick={onAddClick} disabled={!canCreate} data-testid="model-limits-button-create">
 						Add Limit
 					</Button>
 				</div>

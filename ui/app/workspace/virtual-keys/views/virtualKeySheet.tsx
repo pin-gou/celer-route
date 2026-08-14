@@ -109,33 +109,32 @@ const mcpConfigSchema = z.object({
 });
 
 // Main form schema
-const formSchema = z
-	.object({
-		name: z.string().min(1, "Virtual key name is required"),
-		description: z.string().optional(),
-		providerConfigs: z.array(providerConfigSchema).optional(),
-		mcpConfigs: z.array(mcpConfigSchema).optional(),
-		isActive: z.boolean(),
-		expiresAt: z.string().nullable().optional(), // ISO 8601 datetime-local string, or null to clear
-		// Budget
-		budgetCalendarAligned: z.boolean(),
-		budgets: z
-			.array(
-				z.object({
-					id: z.string().optional(),
-					max_limit: z.number().nonnegative().optional(),
-					reset_duration: z.string(),
-					reset_config: z.object({ quarter_start_month: z.number().int().min(1).max(12).optional() }).optional(),
-				}),
-			)
-			.optional(),
-		// Token limits
-		tokenMaxLimit: z.number().int().nonnegative().optional(),
-		tokenResetDuration: z.string().optional(),
-		// Request limits
-		requestMaxLimit: z.number().int().nonnegative().optional(),
-		requestResetDuration: z.string().optional(),
-	});
+const formSchema = z.object({
+	name: z.string().min(1, "Virtual key name is required"),
+	description: z.string().optional(),
+	providerConfigs: z.array(providerConfigSchema).optional(),
+	mcpConfigs: z.array(mcpConfigSchema).optional(),
+	isActive: z.boolean(),
+	expiresAt: z.string().nullable().optional(), // ISO 8601 datetime-local string, or null to clear
+	// Budget
+	budgetCalendarAligned: z.boolean(),
+	budgets: z
+		.array(
+			z.object({
+				id: z.string().optional(),
+				max_limit: z.number().nonnegative().optional(),
+				reset_duration: z.string(),
+				reset_config: z.object({ quarter_start_month: z.number().int().min(1).max(12).optional() }).optional(),
+			}),
+		)
+		.optional(),
+	// Token limits
+	tokenMaxLimit: z.number().int().nonnegative().optional(),
+	tokenResetDuration: z.string().optional(),
+	// Request limits
+	requestMaxLimit: z.number().int().nonnegative().optional(),
+	requestResetDuration: z.string().optional(),
+});
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -302,11 +301,11 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 					})),
 					rate_limit: config.rate_limit
 						? {
-							token_max_limit: config.rate_limit.token_max_limit ?? undefined,
-							token_reset_duration: config.rate_limit.token_reset_duration,
-							request_max_limit: config.rate_limit.request_max_limit ?? undefined,
-							request_reset_duration: config.rate_limit.request_reset_duration,
-						}
+								token_max_limit: config.rate_limit.token_max_limit ?? undefined,
+								token_reset_duration: config.rate_limit.token_reset_duration,
+								request_max_limit: config.rate_limit.request_max_limit ?? undefined,
+								request_reset_duration: config.rate_limit.request_reset_duration,
+							}
 						: undefined,
 				})) || [],
 			mcpConfigs:
@@ -318,18 +317,18 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 			isActive: virtualKey?.is_active ?? true,
 			expiresAt: virtualKey?.expires_at
 				? (() => {
-					const d = new Date(virtualKey.expires_at);
-					return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-				})()
+						const d = new Date(virtualKey.expires_at);
+						return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+					})()
 				: null,
 			budgets:
 				virtualKey?.budgets && virtualKey.budgets.length > 0
 					? virtualKey.budgets.map((b) => ({
-						id: b.id,
-						max_limit: b.max_limit,
-						reset_duration: b.reset_duration ?? "1M",
-						reset_config: b.reset_config,
-					}))
+							id: b.id,
+							max_limit: b.max_limit,
+							reset_duration: b.reset_duration ?? "1M",
+							reset_config: b.reset_config,
+						}))
 					: [],
 			budgetCalendarAligned: virtualKey?.calendar_aligned ?? false,
 			tokenMaxLimit: virtualKey?.rate_limit?.token_max_limit ?? undefined,
@@ -1328,127 +1327,127 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 									) : null}
 
 									{/* Rate Limiting Configuration */}
-								<div className="space-y-4">
-									<div className="flex items-center justify-between gap-2">
-										<Label className="text-sm font-medium">Rate Limiting Configuration</Label>
-										{isEditing && (virtualKey?.rate_limit || watchedTokenMaxLimit || watchedRequestMaxLimit) && (
-											<Button
-												type="button"
-												variant="ghost"
-												size="sm"
-												onClick={clearVirtualKeyRateLimits}
-												data-testid="vk-rate-limit-reset-button"
-											>
-												<RotateCcw className="h-4 w-4" />
-												Reset
-											</Button>
-										)}
-									</div>
-
-									<FormField
-										control={form.control}
-										name="tokenMaxLimit"
-										render={({ field }) => (
-											<FormItem>
-												<NumberAndSelect
-													id="tokenMaxLimit"
-													labelClassName="font-normal"
-													label="Maximum Tokens"
-													value={field.value}
-													selectValue={form.watch("tokenResetDuration") || "1h"}
-													onChangeNumber={(value) => {
-														field.onChange(value);
-													}}
-													onChangeSelect={(value) =>
-														form.setValue("tokenResetDuration", value, {
-															shouldDirty: true,
-														})
-													}
-													options={resetDurationOptions}
-												/>
-												<FormMessage />
-											</FormItem>
-										)}
-									/>
-
-									<FormField
-										control={form.control}
-										name="requestMaxLimit"
-										render={({ field }) => (
-											<FormItem>
-												<NumberAndSelect
-													id="requestMaxLimit"
-													labelClassName="font-normal"
-													label="Maximum Requests"
-													value={field.value}
-													selectValue={form.watch("requestResetDuration") || "1h"}
-													onChangeNumber={(value) => {
-														field.onChange(value);
-													}}
-													onChangeSelect={(value) =>
-														form.setValue("requestResetDuration", value, {
-															shouldDirty: true,
-														})
-													}
-													options={resetDurationOptions}
-												/>
-												<FormMessage />
-											</FormItem>
-										)}
-									/>
-								</div>
-								{/* Calendar alignment — VK-wide setting that applies to both budgets and rate limits */}
-								{showCalendarAlignToggle && (
-									<div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
-										<div className="space-y-0.5">
-											<Label htmlFor="vk-budget-calendar-aligned-toggle" className="text-sm font-normal">
-												Align to calendar cycle
-											</Label>
-											<p id="vk-budget-calendar-aligned-description" className="text-muted-foreground text-xs">
-												Reset budgets and rate limits at the start of each period (e.g. 1st of month) instead of rolling from creation date.
-												Applies to durations of a day or longer.
-											</p>
+									<div className="space-y-4">
+										<div className="flex items-center justify-between gap-2">
+											<Label className="text-sm font-medium">Rate Limiting Configuration</Label>
+											{isEditing && (virtualKey?.rate_limit || watchedTokenMaxLimit || watchedRequestMaxLimit) && (
+												<Button
+													type="button"
+													variant="ghost"
+													size="sm"
+													onClick={clearVirtualKeyRateLimits}
+													data-testid="vk-rate-limit-reset-button"
+												>
+													<RotateCcw className="h-4 w-4" />
+													Reset
+												</Button>
+											)}
 										</div>
-										<Switch
-											id="vk-budget-calendar-aligned-toggle"
-											aria-describedby="vk-budget-calendar-aligned-description"
-											checked={watchedBudgetCalendarAligned}
-											onCheckedChange={handleCalendarAlignedChange}
-											data-testid="vk-budget-calendar-aligned-toggle"
+
+										<FormField
+											control={form.control}
+											name="tokenMaxLimit"
+											render={({ field }) => (
+												<FormItem>
+													<NumberAndSelect
+														id="tokenMaxLimit"
+														labelClassName="font-normal"
+														label="Maximum Tokens"
+														value={field.value}
+														selectValue={form.watch("tokenResetDuration") || "1h"}
+														onChangeNumber={(value) => {
+															field.onChange(value);
+														}}
+														onChangeSelect={(value) =>
+															form.setValue("tokenResetDuration", value, {
+																shouldDirty: true,
+															})
+														}
+														options={resetDurationOptions}
+													/>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+
+										<FormField
+											control={form.control}
+											name="requestMaxLimit"
+											render={({ field }) => (
+												<FormItem>
+													<NumberAndSelect
+														id="requestMaxLimit"
+														labelClassName="font-normal"
+														label="Maximum Requests"
+														value={field.value}
+														selectValue={form.watch("requestResetDuration") || "1h"}
+														onChangeNumber={(value) => {
+															field.onChange(value);
+														}}
+														onChangeSelect={(value) =>
+															form.setValue("requestResetDuration", value, {
+																shouldDirty: true,
+															})
+														}
+														options={resetDurationOptions}
+													/>
+													<FormMessage />
+												</FormItem>
+											)}
 										/>
 									</div>
-								)}
+									{/* Calendar alignment — VK-wide setting that applies to both budgets and rate limits */}
+									{showCalendarAlignToggle && (
+										<div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
+											<div className="space-y-0.5">
+												<Label htmlFor="vk-budget-calendar-aligned-toggle" className="text-sm font-normal">
+													Align to calendar cycle
+												</Label>
+												<p id="vk-budget-calendar-aligned-description" className="text-muted-foreground text-xs">
+													Reset budgets and rate limits at the start of each period (e.g. 1st of month) instead of rolling from creation
+													date. Applies to durations of a day or longer.
+												</p>
+											</div>
+											<Switch
+												id="vk-budget-calendar-aligned-toggle"
+												aria-describedby="vk-budget-calendar-aligned-description"
+												checked={watchedBudgetCalendarAligned}
+												onCheckedChange={handleCalendarAlignedChange}
+												data-testid="vk-budget-calendar-aligned-toggle"
+											/>
+										</div>
+									)}
 
-								{/* Warning dialog shown when enabling calendar alignment on an existing VK */}
-								<AlertDialog open={showCalendarAlignWarning} onOpenChange={setShowCalendarAlignWarning}>
-									<AlertDialogContent>
-										<AlertDialogHeader>
-											<AlertDialogTitle>Reset budget and rate-limit usage?</AlertDialogTitle>
-											<AlertDialogDescription>
-												Enabling calendar alignment will reset budget usage to <span className="font-semibold">$0.00</span> and
-												token/request rate-limit counters to <span className="font-semibold">0</span> for this virtual key, then snap each
-												reset date to the start of its current period (e.g. start of day, week, month, or year). The usage reset cannot be
-												undone, but calendar alignment can be turned off later. This will take effect when you save.
-											</AlertDialogDescription>
-										</AlertDialogHeader>
-										<AlertDialogFooter>
-											<AlertDialogCancel data-testid="vk-calendar-align-cancel-btn">Cancel</AlertDialogCancel>
-											<AlertDialogAction
-												data-testid="vk-calendar-align-enable-btn"
-												onClick={() => {
-													form.setValue("budgetCalendarAligned", true, {
-														shouldDirty: true,
-													});
-													setShowCalendarAlignWarning(false);
-												}}
-											>
-												Enable Calendar Alignment
-											</AlertDialogAction>
-										</AlertDialogFooter>
-									</AlertDialogContent>
-								</AlertDialog>
+									{/* Warning dialog shown when enabling calendar alignment on an existing VK */}
+									<AlertDialog open={showCalendarAlignWarning} onOpenChange={setShowCalendarAlignWarning}>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle>Reset budget and rate-limit usage?</AlertDialogTitle>
+												<AlertDialogDescription>
+													Enabling calendar alignment will reset budget usage to <span className="font-semibold">$0.00</span> and
+													token/request rate-limit counters to <span className="font-semibold">0</span> for this virtual key, then snap each
+													reset date to the start of its current period (e.g. start of day, week, month, or year). The usage reset cannot be
+													undone, but calendar alignment can be turned off later. This will take effect when you save.
+												</AlertDialogDescription>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel data-testid="vk-calendar-align-cancel-btn">Cancel</AlertDialogCancel>
+												<AlertDialogAction
+													data-testid="vk-calendar-align-enable-btn"
+													onClick={() => {
+														form.setValue("budgetCalendarAligned", true, {
+															shouldDirty: true,
+														});
+														setShowCalendarAlignWarning(false);
+													}}
+												>
+													Enable Calendar Alignment
+												</AlertDialogAction>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog>
 								</div>
-								</fieldset>
+							</fieldset>
 						</div>
 						<AlertDialog open={showRotateWarning} onOpenChange={setShowRotateWarning}>
 							<AlertDialogContent>

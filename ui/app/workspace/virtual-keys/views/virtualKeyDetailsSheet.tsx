@@ -134,7 +134,6 @@ export default function VirtualKeyDetailSheet({
 				</SheetHeader>
 
 				<div className="space-y-6 px-8 py-4">
-
 					{/* Basic Information */}
 					<div className="space-y-4">
 						<h3 className="font-semibold">Basic Information</h3>

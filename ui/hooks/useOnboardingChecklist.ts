@@ -48,9 +48,7 @@ export function useOnboardingChecklist({ skip = false }: { skip?: boolean } = {}
 		skip: shouldSkipChecklistQueries,
 	});
 
-	const checklistReady =
-		bifrostConfig !== undefined &&
-		allKeys !== undefined;
+	const checklistReady = bifrostConfig !== undefined && allKeys !== undefined;
 
 	const skippedIds = useMemo<string[]>(() => {
 		return parseSkippedIds(bifrostConfig?.metadata?.[METADATA_SKIPPED_KEY]);
@@ -69,8 +67,7 @@ export function useOnboardingChecklist({ skip = false }: { skip?: boolean } = {}
 				title: "Restrict CORS origins",
 				route: "/workspace/config/security",
 				section: "Security",
-				complete:
-					allowedOrigins.some((origin) => origin.trim().length > 0) && allowedOrigins.every((origin) => origin.trim() !== "*"),
+				complete: allowedOrigins.some((origin) => origin.trim().length > 0) && allowedOrigins.every((origin) => origin.trim() !== "*"),
 			},
 			{
 				id: "dashboard-auth",

@@ -80,9 +80,7 @@ describe("21.2 — fallbacks/enterprise directory deleted", () => {
 
 describe("21.3 — enterprise workspace routes removed", () => {
 	test("none of the enterprise workspace directories exist", () => {
-		const existingDirs = ENTERPRISE_WORKSPACE_DIRS
-			.filter((d) => existsSync(path.join(WORKSPACE, d)))
-			.map((d) => `ui/app/workspace/${d}`);
+		const existingDirs = ENTERPRISE_WORKSPACE_DIRS.filter((d) => existsSync(path.join(WORKSPACE, d))).map((d) => `ui/app/workspace/${d}`);
 
 		expect(existingDirs, `Enterprise workspace dirs still exist:\n  ${existingDirs.join("\n  ")}`).toEqual([]);
 	});
