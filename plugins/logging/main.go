@@ -479,6 +479,8 @@ type LoggerPlugin struct {
 	recoveredBatch               []*writeQueueEntry    // batchWriter parks its in-memory batch here before exiting; safe to read after batchWriterDone closes (happens-before)
 	userAgentMappings            atomic.Value          // []compiledUserAgentMapping, read from request hot paths
 	userAgentMappingMu           sync.Mutex            // serializes user-agent mapping write+reload sequences to keep the cache consistent
+	activeLogSubscribers         map[string]chan *logstore.Log // Subscription channels for /api/logs/active/stream SSE (keyed by subscriber UUID)
+	activeLogSubMu               sync.RWMutex                  // guards activeLogSubscribers
 }
 
 // Init creates new logger plugin with given log store
@@ -537,6 +539,7 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, logsStore 
 				return &UpdateLogData{}
 			},
 		},
+		activeLogSubscribers: make(map[string]chan *logstore.Log),
 	}
 
 	// Prewarm the pools for better performance at startup

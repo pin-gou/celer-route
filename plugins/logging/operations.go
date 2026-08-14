@@ -371,21 +371,23 @@ func (p *LoggerPlugin) updateLogEntry(
 
 // makePostWriteCallback creates a callback function for use after the batch writer commits.
 // It receives the already-inserted entry directly (no DB re-read needed).
+// After the callback fires, it notifies SSE subscribers of the log update.
 func (p *LoggerPlugin) makePostWriteCallback(enrichFn func(*logstore.Log)) func(entry *logstore.Log) {
 	return func(entry *logstore.Log) {
-		p.mu.Lock()
-		callback := p.logCallback
-		p.mu.Unlock()
-		if callback == nil {
-			return
-		}
 		if entry == nil {
 			return
 		}
 		if enrichFn != nil {
 			enrichFn(entry)
 		}
-		callback(p.ctx, entry)
+		p.mu.Lock()
+		callback := p.logCallback
+		p.mu.Unlock()
+		if callback != nil {
+			callback(p.ctx, entry)
+		}
+		// Notify SSE subscribers of the log status update (processing→success/error etc.)
+		p.notifyActiveLogSubscribers(entry)
 	}
 }
 
@@ -1389,15 +1391,55 @@ func (p *LoggerPlugin) GetActiveLogs(ctx context.Context) ([]*logstore.Log, erro
 	return logs, nil
 }
 
-// SubscribeActiveLogStream returns a channel that receives Log status updates.
-// This is a no-op in the base plugin; the enterprise layer may override.
+// SubscribeActiveLogStream returns a channel that receives Log status updates
+// (processing→success/error transitions and new processing entries).
+// The channel is automatically cleaned up when ctx is cancelled (client disconnect).
 func (p *LoggerPlugin) SubscribeActiveLogStream(ctx context.Context) (<-chan *logstore.Log, error) {
-	return nil, fmt.Errorf("not implemented")
+	ch := make(chan *logstore.Log, 64)
+	id := uuid.NewString()
+	p.activeLogSubMu.Lock()
+	p.activeLogSubscribers[id] = ch
+	p.activeLogSubMu.Unlock()
+	// Auto-cleanup on client disconnect
+	go func() {
+		<-ctx.Done()
+		p.activeLogSubMu.Lock()
+		if sub, ok := p.activeLogSubscribers[id]; ok {
+			delete(p.activeLogSubscribers, id)
+			close(sub)
+		}
+		p.activeLogSubMu.Unlock()
+	}()
+	return ch, nil
 }
 
-// UnsubscribeActiveLogStream stops the active log stream subscription.
+// UnsubscribeActiveLogStream stops the active log stream subscription for the
+// given channel and cleans up associated resources.
 func (p *LoggerPlugin) UnsubscribeActiveLogStream(ctx context.Context, ch <-chan *logstore.Log) error {
+	p.activeLogSubMu.Lock()
+	defer p.activeLogSubMu.Unlock()
+	for id, sub := range p.activeLogSubscribers {
+		if sub == ch {
+			delete(p.activeLogSubscribers, id)
+			close(sub)
+			return nil
+		}
+	}
 	return nil
+}
+
+// notifyActiveLogSubscribers broadcasts a log entry to all active SSE subscribers.
+// Non-blocking: if a subscriber's buffer is full, the update is dropped.
+func (p *LoggerPlugin) notifyActiveLogSubscribers(entry *logstore.Log) {
+	p.activeLogSubMu.RLock()
+	defer p.activeLogSubMu.RUnlock()
+	for _, ch := range p.activeLogSubscribers {
+		select {
+		case ch <- entry:
+		default:
+			// Subscriber buffer full; drop this update
+		}
+	}
 }
 
 // CreateUserAgentMapping validates, stores, and activates a custom User-Agent mapping.

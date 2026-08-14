@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -993,6 +996,7 @@ func TestGetActiveLogStream_Handshake(t *testing.T) {
 	SetLogger(&mockLogger{})
 
 	now := time.Now()
+	activeLogStreamCh := make(chan *logstore.Log, 10)
 	mgr := &dashboardLogManager{
 		activeLogs: []*logstore.Log{
 			{
@@ -1004,35 +1008,100 @@ func TestGetActiveLogStream_Handshake(t *testing.T) {
 				Latency:   nil,
 			},
 		},
-		activeLogStreamCh: make(chan *logstore.Log, 10),
+		activeLogStreamCh: activeLogStreamCh,
 	}
 	h := &LoggingHandler{logManager: mgr}
 
-	var req fasthttp.Request
-	req.SetRequestURI("/api/logs/active/stream")
+	// Use net.Pipe for deterministic in-process SSE streaming testing
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
 
-	ctx := &fasthttp.RequestCtx{}
-	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	// Run the handler on one end of the pipe
+	go func() {
+		_ = fasthttp.ServeConn(serverConn, func(ctx *fasthttp.RequestCtx) {
+			h.getActiveLogStream(ctx)
+		})
+	}()
 
-	// RED PHASE: getActiveLogStream does not exist yet → compile error expected.
-	h.getActiveLogStream(ctx)
-
-	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	// Send HTTP request
+	_, err := clientConn.Write([]byte("GET /api/logs/active/stream HTTP/1.1\r\nHost: test\r\n\r\n"))
+	if err != nil {
+		t.Fatalf("failed to write request: %v", err)
 	}
 
-	contentType := string(ctx.Response.Header.ContentType())
-	if !strings.Contains(contentType, "text/event-stream") {
-		t.Fatalf("expected content-type text/event-stream, got %q", contentType)
+	// Read response — the body is chunked transfer-encoded.
+	readChunk := func(br *bufio.Reader) ([]byte, error) {
+		sizeLine, err := br.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		sizeLine = strings.TrimSpace(sizeLine)
+		var chunkSize int
+		if _, err := fmt.Sscanf(sizeLine, "%x", &chunkSize); err != nil {
+			return nil, fmt.Errorf("parse chunk size %q: %w", sizeLine, err)
+		}
+		if chunkSize == 0 {
+			return nil, nil
+		}
+		chunkData := make([]byte, chunkSize+2)
+		if _, err := io.ReadFull(br, chunkData); err != nil {
+			return nil, err
+		}
+		return chunkData[:chunkSize], nil
 	}
 
-	body := string(ctx.Response.Body())
-	if !strings.Contains(body, "event: active_logs") {
-		t.Fatalf("expected SSE event 'active_logs' in response body:\n%s", body)
+	br := bufio.NewReader(clientConn)
+
+	// Read and skip HTTP response headers
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("failed to read response header: %v", err)
+		}
+		if strings.TrimSpace(line) == "" {
+			break
+		}
 	}
-	if !strings.Contains(body, "log-active-1") {
-		t.Fatalf("expected active log ID 'log-active-1' in SSE response:\n%s", body)
+
+	// Read first chunk: should be the active_logs handshake
+	chunk1, err := readChunk(br)
+	if err != nil {
+		t.Fatalf("failed to read chunk 1 (handshake): %v", err)
 	}
+	if !strings.Contains(string(chunk1), "event: active_logs") {
+		t.Fatalf("expected 'event: active_logs' in handshake chunk, got: %q", chunk1)
+	}
+	if !strings.Contains(string(chunk1), "log-active-1") {
+		t.Fatalf("expected active log ID 'log-active-1' in handshake chunk, got: %q", chunk1)
+	}
+
+	// Push a log_updated event through the channel
+	updatedLog := &logstore.Log{
+		ID:       "log-active-1",
+		Status:   "success",
+		Provider: "openai",
+		Model:    "gpt-4",
+		Latency:  ptrFloat64(1234.0),
+	}
+	activeLogStreamCh <- updatedLog
+
+	// Read second chunk: should be the log_updated event
+	chunk2, err := readChunk(br)
+	if err != nil {
+		t.Fatalf("failed to read chunk 2 (log_updated): %v", err)
+	}
+	if !strings.Contains(string(chunk2), "event: log_updated") {
+		t.Fatalf("expected 'event: log_updated' in chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), "log-active-1") {
+		t.Fatalf("expected log ID in log_updated chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), "success") {
+		t.Fatalf("expected 'success' in log_updated chunk, got: %q", chunk2)
+	}
+
+	// Close the client connection to terminate the streaming
+	clientConn.Close()
 }
 
 // TestGetActiveLogStream_DisconnectCleanup verifies that when the SSE client
@@ -1046,21 +1115,32 @@ func TestGetActiveLogStream_DisconnectCleanup(t *testing.T) {
 	}
 	h := &LoggingHandler{logManager: mgr}
 
-	var req fasthttp.Request
-	req.SetRequestURI("/api/logs/active/stream")
+	// Use net.Pipe for deterministic in-process testing
+	serverConn, clientConn := net.Pipe()
 
-	ctx := &fasthttp.RequestCtx{}
-	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	// Run the handler on one end of the pipe
+	done := make(chan struct{})
+	go func() {
+		_ = fasthttp.ServeConn(serverConn, func(ctx *fasthttp.RequestCtx) {
+			h.getActiveLogStream(ctx)
+		})
+		close(done)
+	}()
 
-	// RED PHASE: getActiveLogStream does not exist yet → compile error expected.
-	h.getActiveLogStream(ctx)
+	// Send HTTP request
+	_, err := clientConn.Write([]byte("GET /api/logs/active/stream HTTP/1.1\r\nHost: test\r\n\r\n"))
+	if err != nil {
+		t.Fatalf("failed to write request: %v", err)
+	}
 
-	// After the handler returns, the subscription should be cleaned up.
-	// The mock should reflect that the SSE subscriber disconnected.
-	// (The exact assertion depends on the implementation; this validates
-	//  the contract that disconnect triggers cleanup.)
-	if !mgr.sseDisconnected {
-		t.Log("expected sseDisconnected to be true after handler returns; " +
-			"this is a TDD red phase placeholder assertion")
+	// Close the client connection immediately to trigger disconnect
+	clientConn.Close()
+
+	// Wait for the handler to finish
+	select {
+	case <-done:
+		// Handler exited cleanly
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler did not clean up after client disconnect")
 	}
 }

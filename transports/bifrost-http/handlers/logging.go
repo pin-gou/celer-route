@@ -3083,6 +3083,9 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 
 // getActiveLogStream handles GET /api/logs/active/stream (SSE) - Pushes active
 // log status changes to clients using Server-Sent Events.
+// The stream sends an initial active_logs handshake, then pushes log_updated
+// events for status transitions (processing→success/error). The connection
+// remains open until the client disconnects.
 func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("text/event-stream")
 	ctx.Response.Header.Set("Cache-Control", "no-cache")
@@ -3090,10 +3093,7 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 	ctx.Response.Header.Set("X-Accel-Buffering", "no")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 
-	// Write initial handshake event: full list of processing logs.
-	// In production, this first event is flushed before the SSE subscription loop
-	// starts; the response is written directly to the body buffer so tests can
-	// verify the initial payload.
+	// Get initial handshake snapshot of processing logs
 	activeLogs, err := h.logManager.GetActiveLogs(ctx)
 	if err != nil {
 		logger.Error("failed to get active logs for SSE: %v", err)
@@ -3120,38 +3120,51 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 		})
 	}
 
-	handshakeData, _ := sonic.Marshal(entries)
-	body := fmt.Sprintf("event: active_logs\ndata: %s\n\n", handshakeData)
-
 	// Subscribe to the log stream for incremental updates
 	ch, subErr := h.logManager.SubscribeActiveLogStream(ctx)
 	if subErr != nil {
 		logger.Warn("active log stream not available, SSE will only send initial snapshot: %v", subErr)
+		handshakeData, _ := sonic.Marshal(entries)
+		body := fmt.Sprintf("event: active_logs\ndata: %s\n\n", handshakeData)
 		ctx.SetBodyString(body)
 		return
 	}
 	defer h.logManager.UnsubscribeActiveLogStream(ctx, ch)
 
-	// Try to read one incremental update from the channel (non-blocking with
-	// short timeout). In a real deployment this would be a long-lived loop;
-	// the test expects the initial handshake in the body, so we close the
-	// stream after the first event for test compatibility.
-	select {
-	case updatedLog, ok := <-ch:
-		if ok {
-			updateData, _ := sonic.Marshal(map[string]interface{}{
-				"id":              updatedLog.ID,
-				"previous_status": "processing",
-				"status":          updatedLog.Status,
-				"latency_ms":      updatedLog.Latency,
-			})
-			body += fmt.Sprintf("event: log_updated\ndata: %s\n\n", updateData)
-		}
-	case <-time.After(10 * time.Millisecond):
-		// No update available within the short window; return what we have.
-	}
+	// Use SSEStreamReader for long-lived streaming
+	reader := lib.NewSSEStreamReader()
+	ctx.Response.SetBodyStream(reader, -1)
 
-	ctx.SetBodyString(body)
+	go func() {
+		defer reader.Done()
+
+		// Send initial handshake event
+		handshakeData, _ := sonic.Marshal(entries)
+		if !reader.SendEvent("active_logs", handshakeData) {
+			return
+		}
+
+		// Loop: push incremental log_updated events until client disconnects
+		for {
+			select {
+			case updatedLog, ok := <-ch:
+				if !ok {
+					return
+				}
+				updateData, _ := sonic.Marshal(map[string]interface{}{
+					"id":              updatedLog.ID,
+					"previous_status": "processing",
+					"status":          updatedLog.Status,
+					"latency_ms":      updatedLog.Latency,
+				})
+				if !reader.SendEvent("log_updated", updateData) {
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 // tryParseRoutingEngineLogsJSON attempts to parse routing engine logs as a JSON array.
