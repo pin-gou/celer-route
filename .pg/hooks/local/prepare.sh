@@ -30,6 +30,27 @@ echo "  binary:   $BIFROST_BIN"
 
 mkdir -p "$DATA_DIR"
 
+# 构建 UI 产物（如缺失，供 go:embed 使用）
+if [[ ! -d "$PROJECT_ROOT/transports/bifrost-http/ui" ]]; then
+    echo "构建 UI 产物..."
+    if [[ ! -d "$PROJECT_ROOT/ui/node_modules" ]]; then
+        echo "  → 安装 UI 依赖..."
+        (cd "$PROJECT_ROOT/ui" && npm ci --prefer-offline) || {
+            echo "WARN: 安装 UI 依赖失败，尝试创建空 UI 目录以继续构建"
+            mkdir -p "$PROJECT_ROOT/transports/bifrost-http/ui"
+        }
+    fi
+    if [[ -d "$PROJECT_ROOT/ui/node_modules" ]]; then
+        (cd "$PROJECT_ROOT/ui" && npm run build && npm run copy-build) || {
+            echo "WARN: UI 构建失败，尝试创建空 UI 目录以继续构建"
+            mkdir -p "$PROJECT_ROOT/transports/bifrost-http/ui"
+        }
+    fi
+    if [[ -d "$PROJECT_ROOT/transports/bifrost-http/ui" ]]; then
+        echo "  → UI 产物就绪"
+    fi
+fi
+
 # 构建 binary（如缺失）
 if [[ ! -x "$BIFROST_BIN" ]]; then
     echo "构建 bifrost-http binary..."
