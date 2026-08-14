@@ -153,6 +153,15 @@ func (p *LoggerPlugin) safeProcessBatch(batch []*writeQueueEntry) {
 	p.processBatch(batch)
 }
 
+// maxBatchSizeForStore limits the number of log entries sent in a single
+// BatchCreateIfNotExists call. This avoids SQLite's "too many SQL variables"
+// limit (default 999, which is exceeded by 500+ Log entries due to the struct's
+// many columns). The value is well below the empirically-determined failure
+// threshold (~400 for Log, tested with the full Log struct). Postgres handles
+// larger batches natively, but this small size adds negligible overhead and
+// keeps the code path uniform across dialects.
+const maxBatchSizeForStore = 100
+
 // processBatch executes a batch of log entries in a single database transaction.
 func (p *LoggerPlugin) processBatch(batch []*writeQueueEntry) {
 	if len(batch) == 0 {
@@ -172,19 +181,31 @@ func (p *LoggerPlugin) processBatch(batch []*writeQueueEntry) {
 	}
 
 	if len(logs) > 0 {
-		if err := p.store.BatchCreateIfNotExists(p.ctx, logs); err != nil {
-			p.logger.Warn("batch insert failed for %d entries, falling back to individual inserts: %v", len(logs), err)
-			// Individual fallback — isolate the bad entry instead of losing the whole batch
-			for _, log := range logs {
-				if err := p.store.BatchCreateIfNotExists(p.ctx, []*logstore.Log{log}); err != nil {
-					p.logger.Warn("individual insert failed for log %s, retrying without payload fields: %v", log.ID, err)
-					// Last resort: strip the parsed payload fields (one of them
-					// failed serialization) and keep the scalar row — a log
-					// without content beats a silently dropped request.
-					stripUnserializablePayloads(log)
+		// Split into chunks to avoid SQLite's variable limit. Each chunk is
+		// inserted in a single BatchCreateIfNotExists call; individual-insert
+		// fallback is only used when a chunk genuinely fails (e.g. serialization
+		// error), not because the batch was too large for the dialect.
+		chunkSize := maxBatchSizeForStore
+		for i := 0; i < len(logs); i += chunkSize {
+			end := i + chunkSize
+			if end > len(logs) {
+				end = len(logs)
+			}
+			chunk := logs[i:end]
+			if err := p.store.BatchCreateIfNotExists(p.ctx, chunk); err != nil {
+				p.logger.Warn("batch insert failed for %d entries, falling back to individual inserts: %v", len(chunk), err)
+				// Individual fallback — isolate the bad entry instead of losing the whole batch
+				for _, log := range chunk {
 					if err := p.store.BatchCreateIfNotExists(p.ctx, []*logstore.Log{log}); err != nil {
-						p.logger.Warn("payload-stripped insert failed for log %s: %v", log.ID, err)
-						p.droppedRequests.Add(1)
+						p.logger.Warn("individual insert failed for log %s, retrying without payload fields: %v", log.ID, err)
+						// Last resort: strip the parsed payload fields (one of them
+						// failed serialization) and keep the scalar row — a log
+						// without content beats a silently dropped request.
+						stripUnserializablePayloads(log)
+						if err := p.store.BatchCreateIfNotExists(p.ctx, []*logstore.Log{log}); err != nil {
+							p.logger.Warn("payload-stripped insert failed for log %s: %v", log.ID, err)
+							p.droppedRequests.Add(1)
+						}
 					}
 				}
 			}
@@ -210,12 +231,21 @@ func (p *LoggerPlugin) processBatch(batch []*writeQueueEntry) {
 		}
 	}
 	if len(mcpLogs) > 0 {
-		if err := p.store.BatchCreateMCPToolLogsIfNotExists(p.ctx, mcpLogs); err != nil {
-			p.logger.Warn("batch insert failed for %d MCP tool logs, falling back to individual inserts: %v", len(mcpLogs), err)
-			for _, log := range mcpLogs {
-				if err := p.store.BatchCreateMCPToolLogsIfNotExists(p.ctx, []*logstore.MCPToolLog{log}); err != nil {
-					p.logger.Warn("individual insert failed for MCP tool log %s: %v", log.ID, err)
-					p.droppedRequests.Add(1)
+		// Split into chunks for the same SQLite variable-limit reason as logs above.
+		chunkSize := maxBatchSizeForStore
+		for i := 0; i < len(mcpLogs); i += chunkSize {
+			end := i + chunkSize
+			if end > len(mcpLogs) {
+				end = len(mcpLogs)
+			}
+			chunk := mcpLogs[i:end]
+			if err := p.store.BatchCreateMCPToolLogsIfNotExists(p.ctx, chunk); err != nil {
+				p.logger.Warn("batch insert failed for %d MCP tool logs, falling back to individual inserts: %v", len(chunk), err)
+				for _, log := range chunk {
+					if err := p.store.BatchCreateMCPToolLogsIfNotExists(p.ctx, []*logstore.MCPToolLog{log}); err != nil {
+						p.logger.Warn("individual insert failed for MCP tool log %s: %v", log.ID, err)
+						p.droppedRequests.Add(1)
+					}
 				}
 			}
 		}
