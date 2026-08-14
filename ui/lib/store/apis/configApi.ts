@@ -66,11 +66,11 @@ export const configApi = baseApi.injectEndpoints({
 			}),
 		}),
 
-		// Get latest release from public site
+		// Get latest release from GitHub Releases API
 		getLatestRelease: builder.query<LatestReleaseResponse, void>({
 			queryFn: async (_arg, { signal }) => {
 				try {
-					const response = await axios.get("https://getbifrost.ai/latest-release", {
+					const response = await axios.get("https://api.github.com/repos/pin-gou/pg-gateway/releases/latest", {
 						timeout: 3000, // 3 second timeout
 						signal,
 						headers: {
@@ -81,8 +81,8 @@ export const configApi = baseApi.injectEndpoints({
 					});
 					const data = response.data as any;
 					const normalized: LatestReleaseResponse = {
-						name: data.name ?? data.tag ?? data.version ?? "",
-						changelogUrl: data.changelogUrl ?? data.changelog_url ?? "",
+						name: data.tag_name ?? "",
+						changelogUrl: data.html_url ?? "",
 					};
 					return { data: normalized };
 				} catch (error) {
@@ -108,7 +108,7 @@ export const configApi = baseApi.injectEndpoints({
 					};
 				}
 			},
-			keepUnusedDataFor: 300, // Cache for 5 minutes (seconds)
+			keepUnusedDataFor: 86400, // Cache for 24 hours
 		}),
 		// Update core configuration
 		updateCoreConfig: builder.mutation<null, BifrostConfig>({
