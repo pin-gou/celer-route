@@ -115,7 +115,8 @@ export function TimelineDetail({ data, isLoading, error }: TimelineDetailProps) 
 		);
 	}
 
-	const { log_id, total_duration_ms, events } = data;
+	const { log_id, total_duration_ms } = data;
+		const events = data.events ?? [];
 
 	return (
 		<div className="space-y-3" data-testid="timeline-detail">

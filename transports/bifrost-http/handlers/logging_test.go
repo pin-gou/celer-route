@@ -962,6 +962,58 @@ func TestGetLogTimeline_LogNotFound(t *testing.T) {
 	}
 }
 
+// TestGetLogTimeline_EmptyEvents verifies that GetLogTimeline returns `"events":[]`
+// (not null) when a log has no timeline events, routing engine logs, plugin logs,
+// or attempt trail. A nil Go slice marshals to JSON null, which crashes the frontend
+// TimelineDetail component (`events.length` on null).
+func TestGetLogTimeline_EmptyEvents(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:              "log-empty-1",
+			Status:          "error",
+			Provider:        "minimax",
+			Model:           "test-model",
+			Latency:         ptrFloat64(5000.0),
+			Timestamp:       now,
+			RoutingEngineLogs: "",
+			PluginLogs:        "",
+			AttemptTrail:      "",
+		},
+		// timelineEvents is nil — no events in the timeline_events table
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-empty-1/timeline")
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-empty-1")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	// Unmarshal events as raw JSON to distinguish [] from null
+	var raw struct {
+		Events json.RawMessage `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &raw); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(raw.Events) == 0 {
+		t.Fatal("events field is null/empty in JSON — expected non-null empty array '[]'")
+	}
+	if string(raw.Events) != "[]" {
+		t.Fatalf("events JSON = %s, want '[]' (empty array, not null)", string(raw.Events))
+	}
+}
+
 // TestGetLogTimeline_InternalError verifies that GetLogTimeline returns 500
 // when the log manager returns an unexpected error.
 func TestGetLogTimeline_InternalError(t *testing.T) {

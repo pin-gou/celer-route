@@ -2980,7 +2980,7 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var events []timelineEvent
+	events := make([]timelineEvent, 0)
 
 	// 1. Timeline events from the timeline_events table
 	timelineEvents, err := h.logManager.ListTimelineEventsByLogID(ctx, id)

@@ -277,4 +277,24 @@ describe("TimelineDetail — detail panel events list", () => {
 
 		expect(screen.getByText(/Failed to load timeline/i)).toBeTruthy();
 	});
+
+	// -----------------------------------------------------------------------
+	// Malformed API payload — backend may serialize a nil events slice as null
+	// -----------------------------------------------------------------------
+
+	it("should not throw when the API returns events: null (e.g. a request with no events recorded)", () => {
+		// Regression: GET /api/logs/{id}/timeline returned `"events": null` when a
+		// log had no timeline events recorded, and `events.length` crashed with
+		// "Cannot read properties of null (reading 'length')".
+		const dataWithNullEvents: TimelineResponse = {
+			log_id: "error-log-null-events",
+			total_duration_ms: 136024,
+			events: null as unknown as TimelineEvent[],
+		};
+
+		render(<TimelineDetail data={dataWithNullEvents} />);
+
+		expect(screen.getByTestId("timeline-detail")).toBeTruthy();
+		expect(screen.getByText(/no events recorded/i)).toBeTruthy();
+	});
 });
