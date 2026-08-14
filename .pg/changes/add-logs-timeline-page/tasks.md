@@ -171,10 +171,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 14.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 14.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 14.3 启动服务（如需）
-- [ ] 14.4 验证 V-framework-2：plugin 阶段点采集（plugins/logging Pre/Post hook 写入 timeline_events，与 Log 主记录关联正确）——覆盖 plugins 采集，来自 design.md「dev framework Verification Criteria」
+- [x] 14.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 14.2 执行测试（runner 通过 modules 注入命令）
+- [x] 14.3 启动服务（如需）
+- [x] 14.4 验证 V-framework-2：plugin 阶段点采集（plugins/logging Pre/Post hook 写入 timeline_events，与 Log 主记录关联正确）——覆盖 plugins 采集，来自 design.md「dev framework Verification Criteria」
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
