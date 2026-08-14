@@ -148,9 +148,9 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 12.1 在 `plugins/logging` 的 PreLLMHook 内新增 timeline_events 采集：begin 时间戳 → 写入 phase=pre_llm 事件
-- [ ] 12.2 在 `plugins/logging` 的 PostLLMHook 内新增 timeline_events 采集：end 时间戳 + 总耗时 → 写入 phase=post_llm 事件（与 Log 主记录同一事务）
-- [ ] 12.3 golang 编译通过（plugins 模块）；确认采集失败降级为 WARN 不阻断主请求
+- [x] 12.1 在 `plugins/logging` 的 PreLLMHook 内新增 timeline_events 采集：begin 时间戳 → 写入 phase=pre_llm 事件
+- [x] 12.2 在 `plugins/logging` 的 PostLLMHook 内新增 timeline_events 采集：end 时间戳 + 总耗时 → 写入 phase=post_llm 事件（与 Log 主记录同一事务）
+- [x] 12.3 golang 编译通过（plugins 模块）；确认采集失败降级为 WARN 不阻断主请求
 
 ## 13. dev.plugins:review - 静态代码审查
 
