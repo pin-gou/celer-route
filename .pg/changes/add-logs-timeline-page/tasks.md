@@ -227,10 +227,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 18.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 18.2 review agent 对 git diff feat/pg/add-logs-timeline-page 做静态审查
-- [ ] 18.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 18.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 18.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 18.2 review agent 对 git diff feat/pg/add-logs-timeline-page 做静态审查
+- [x] 18.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 18.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 ## 19. dev.ui:verify - dev 集成验证
 
