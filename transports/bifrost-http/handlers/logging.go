@@ -3129,13 +3129,18 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 		ctx.SetBodyString(body)
 		return
 	}
-	defer h.logManager.UnsubscribeActiveLogStream(ctx, ch)
 
 	// Use SSEStreamReader for long-lived streaming
 	reader := lib.NewSSEStreamReader()
 	ctx.Response.SetBodyStream(reader, -1)
 
 	go func() {
+		// Unsubscribe when the goroutine exits (client disconnect or server shutdown).
+		// NOTE: This must NOT be a defer on the outer handler function — the handler
+		// returns immediately after spawning this goroutine, so a handler-level defer
+		// would remove the subscriber from the map before any log_updated events arrive.
+		// Moving it here ensures the subscription lives for the duration of the SSE stream.
+		defer h.logManager.UnsubscribeActiveLogStream(ctx, ch)
 		defer reader.Done()
 
 		// Send initial handshake event
@@ -3160,7 +3165,9 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 				if !reader.SendEvent("log_updated", updateData) {
 					return
 				}
-			case <-ctx.Done():
+			case <-reader.CloseNotify():
+				// Client disconnected — fasthttp calls Close() on the reader,
+				// which closes closeCh. Exit cleanly.
 				return
 			}
 		}
