@@ -1,0 +1,15 @@
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+WORKDIR /app
+RUN apk upgrade --no-cache && apk add --no-cache musl libgcc ca-certificates zlib
+COPY bifrost-http/main .
+COPY transports/docker-entrypoint.sh .
+ARG ARG_APP_PORT=8080 ARG_APP_HOST=0.0.0.0 ARG_LOG_LEVEL=info ARG_LOG_STYLE=json ARG_APP_DIR=/app/data
+ENV APP_PORT=$ARG_APP_PORT APP_HOST=$ARG_APP_HOST LOG_LEVEL=$ARG_LOG_LEVEL LOG_STYLE=$ARG_LOG_STYLE APP_DIR=$ARG_APP_DIR
+ENV GOGC="" GOMEMLIMIT=""
+RUN mkdir -p "$APP_DIR/logs" && adduser -D -s /bin/sh appuser && chown -R appuser:appuser /app && chown -R appuser:0 "$APP_DIR" && { [ "$APP_DIR" = "/app" ] || chmod -R g=rwX "$APP_DIR"; } && chmod +x /app/docker-entrypoint.sh
+USER 1000:0
+VOLUME ["${APP_DIR}"]
+EXPOSE $APP_PORT
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:${APP_PORT}/health || exit 1
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/app/main"]
