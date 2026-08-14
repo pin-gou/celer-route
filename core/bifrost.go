@@ -5590,6 +5590,17 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 		}
 		return resp, nil
 	case bifrostErrVal := <-msg.Err:
+		// When the key pool filter prevents all keys from being selected (e.g.
+		// provider-cooldown plugin suppressing the only key), no actual provider
+		// call was made — the error is a synthetic 503 "no_eligible_keys" from
+		// the retry loop. Skip PostLLMHooks so plugins (especially logging)
+		// don't record a spurious failed request with 0ms latency.
+		if bifrostErrVal.StatusCode != nil && *bifrostErrVal.StatusCode == 503 &&
+			bifrostErrVal.Type != nil && *bifrostErrVal.Type == "no_eligible_keys" {
+			bifrostErrVal.PopulateExtraFields(req.RequestType, provider, model, model)
+			bifrost.releaseChannelMessage(msg)
+			return nil, &bifrostErrVal
+		}
 		bifrostErrPtr := &bifrostErrVal
 		resp, bifrostErrPtr = pipeline.RunPostLLMHooks(msg.Context, nil, bifrostErrPtr, pluginCount)
 		if bifrostErrPtr != nil {

@@ -398,6 +398,7 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 // IsQuotaExhausted. Custom patterns EXTEND the built-in list (they do not
 // replace it), but both are subject to the same status-code gate — a 402
 // never triggers cooldown even if a custom pattern matches its message.
+// Patterns are matched against the error's message, code, and type fields.
 func (p *CooldownPlugin) isQuotaExhausted(err *schemas.BifrostError) bool {
 	if err == nil {
 		return false
@@ -414,13 +415,7 @@ func (p *CooldownPlugin) isQuotaExhausted(err *schemas.BifrostError) bool {
 	if !statusCodeAllowsQuota(err) {
 		return false
 	}
-	msg := strings.ToLower(err.GetErrorString())
-	for _, sub := range p.quotaPatterns {
-		if strings.Contains(msg, sub) {
-			return true
-		}
-	}
-	return false
+	return matchesAnyErrorField(err, p.quotaPatterns)
 }
 
 // startGC launches the background GC goroutine on State. Idempotent within
@@ -541,8 +536,8 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 // failure that the retry loop already routes around via deadKeyIDs.
 //
 // Recognised signals:
-//   - HTTP 429 is treated as quota only when the rendered message matches
-//     one of the known quota-exhaustion substrings (insufficient_quota,
+//   - HTTP 429 is treated as quota when the error's message, code, or type
+//     matches one of the known quota-exhaustion substrings (insufficient_quota,
 //     quota exceeded, billing, payment required, usage limit). Generic
 //     "rate limit" / "too many requests" messages are intentionally NOT
 //     treated as quota — they self-heal and over-cooling them would
@@ -583,10 +578,37 @@ func IsQuotaExhausted(err *schemas.BifrostError) bool {
 	if !statusCodeAllowsQuota(err) {
 		return false
 	}
+	return matchesAnyErrorField(err, quotaExhaustedSubstrings)
+}
+
+// matchesAnyErrorField checks whether any of the given patterns appear in the
+// error's message, code, or type fields. All comparisons are case-insensitive
+// using strings.Contains. Providers often signal quota exhaustion in the code
+// or type field (e.g. "insufficient_quota") while the message is a
+// human-readable sentence that doesn't contain the same keywords.
+func matchesAnyErrorField(err *schemas.BifrostError, patterns []string) bool {
 	msg := strings.ToLower(err.GetErrorString())
-	for _, sub := range quotaExhaustedSubstrings {
+	for _, sub := range patterns {
 		if strings.Contains(msg, sub) {
 			return true
+		}
+	}
+	if err.Error != nil {
+		if err.Error.Code != nil {
+			code := strings.ToLower(*err.Error.Code)
+			for _, sub := range patterns {
+				if strings.Contains(code, sub) {
+					return true
+				}
+			}
+		}
+		if err.Error.Type != nil {
+			typ := strings.ToLower(*err.Error.Type)
+			for _, sub := range patterns {
+				if strings.Contains(typ, sub) {
+					return true
+				}
+			}
 		}
 	}
 	return false
