@@ -434,11 +434,11 @@ export const createColumns = (
 			size: 90,
 			cell: ({ row }) => {
 				const { latency, token_usage } = row.original;
-				const total = token_usage?.total_tokens;
-				if (latency == null || latency <= 0 || !total) {
+				const output = token_usage?.completion_tokens;
+				if (latency == null || latency <= 0 || !output) {
 					return <div className="pl-4 font-mono text-xs">N/A</div>;
 				}
-				const tps = (total / latency) * 1000;
+				const tps = (output / latency) * 1000;
 				return (
 					<div className="pl-4 font-mono text-[12px] tabular-nums">
 						{tps >= 100 ? Math.round(tps).toLocaleString() : tps.toFixed(1)} t/s
