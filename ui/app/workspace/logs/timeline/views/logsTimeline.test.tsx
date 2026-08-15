@@ -15,6 +15,14 @@ import { LogsTimeline } from "./logsTimeline";
 import type { LogsTimelineProps } from "./logsTimeline";
 import type { LogEntry } from "@/lib/types/logs";
 
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+		i18n: { language: "en", options: { ns: [] }, services: {} },
+	}),
+	Trans: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 // Polyfill ResizeObserver for jsdom
 globalThis.ResizeObserver = class {
 	observe() {}
@@ -270,7 +278,7 @@ describe("LogsTimeline — Gantt component", () => {
 
 	it("should show empty state when no logs provided", () => {
 		render(<LogsTimeline {...defaultProps} logs={[]} />);
-		expect(screen.getByText(/No requests in this time range/i)).toBeTruthy();
+		expect(screen.getByText("timeline.page.empty")).toBeTruthy();
 	});
 
 	// -----------------------------------------------------------------------

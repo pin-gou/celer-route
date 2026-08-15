@@ -12,6 +12,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -55,24 +56,24 @@ function getLevelRowClass(level: string): string {
 	}
 }
 
-function getLevelBadge(level: string) {
+function getLevelBadge(level: string, t: (key: string) => string) {
 	switch (level) {
 		case "warn":
 			return (
 				<Badge variant="outline" className="border-yellow-300 bg-yellow-50 text-yellow-700 dark:border-yellow-600 dark:bg-yellow-950 dark:text-yellow-300">
-					warn
+					{t("timeline.detail.warn")}
 				</Badge>
 			);
 		case "error":
 			return (
 				<Badge variant="outline" className="border-red-300 bg-red-50 text-red-700 dark:border-red-600 dark:bg-red-950 dark:text-red-300">
-					error
+					{t("timeline.detail.error")}
 				</Badge>
 			);
 		default:
 			return (
 				<Badge variant="outline" className="border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-400">
-					info
+					{t("timeline.detail.info")}
 				</Badge>
 			);
 	}
@@ -91,6 +92,8 @@ function formatMs(ms: number, decimals: number = 1): string {
 // ---------------------------------------------------------------------------
 
 export function TimelineDetail({ data, isLoading, error }: TimelineDetailProps) {
+	const { t } = useTranslation("logs");
+
 	if (isLoading) {
 		return (
 			<div data-testid="timeline-loading" className="flex items-center justify-center py-12">
@@ -122,20 +125,20 @@ export function TimelineDetail({ data, isLoading, error }: TimelineDetailProps) 
 		<div className="space-y-3" data-testid="timeline-detail">
 			{/* Header */}
 			<div className="flex items-center justify-between rounded-sm border bg-muted/30 px-4 py-2">
-				<div className="flex items-center gap-2 text-sm">
-					<span className="text-muted-foreground">Log ID:</span>
-					<code className="font-mono text-xs">{log_id}</code>
-				</div>
-				<div className="text-sm font-medium tabular-nums">
-					Total: {total_duration_ms.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ms
+<div className="flex items-center gap-2 text-sm">
+						<span className="text-muted-foreground">{t("timeline.detail.logId")}</span>
+						<code className="font-mono text-xs">{log_id}</code>
+					</div>
+					<div className="text-sm font-medium tabular-nums">
+						{t("timeline.detail.total")} {total_duration_ms.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ms
 				</div>
 			</div>
 
 			{/* Events list */}
 			{events.length === 0 ? (
-				<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">
-					No events recorded for this request.
-				</div>
+<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">
+						{t("timeline.detail.noEvents")}
+					</div>
 			) : (
 				<div className="space-y-1">
 					{events.map((event, idx) => {
@@ -179,7 +182,7 @@ export function TimelineDetail({ data, isLoading, error }: TimelineDetailProps) 
 								<div className="min-w-0 flex-1 truncate">{event.message}</div>
 
 								{/* Level badge */}
-								<div className="shrink-0">{getLevelBadge(event.level)}</div>
+								<div className="shrink-0">{getLevelBadge(event.level, t)}</div>
 							</div>
 						);
 					})}

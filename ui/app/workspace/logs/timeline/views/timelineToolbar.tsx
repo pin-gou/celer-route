@@ -4,6 +4,8 @@
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Minus, Plus, RefreshCw, RotateCcw } from "lucide-react";
 
 export type TimelineMode = "follow" | "live" | "pan";
@@ -20,12 +22,6 @@ export interface TimelineToolbarProps {
 	className?: string;
 }
 
-const MODE_DESCRIPTIONS: Record<TimelineMode, string> = {
-	follow: "Scrolling with time — NOW line stays at 75%",
-	live: "Live updates — NOW line snaps close to the right edge",
-	pan: "Free exploration — drag to pan through the visible window",
-};
-
 export function TimelineToolbar({
 	mode,
 	onModeChange,
@@ -37,6 +33,14 @@ export function TimelineToolbar({
 	totalCount,
 	className,
 }: TimelineToolbarProps) {
+	const { t } = useTranslation("logs");
+
+	const modeDescriptions = useMemo((): Record<TimelineMode, string> => ({
+		follow: t("timeline.toolbar.followDesc"),
+		live: t("timeline.toolbar.liveDesc"),
+		pan: t("timeline.toolbar.panDesc"),
+	}), [t]);
+
 	return (
 		<div className="flex flex-col gap-1">
 			<div data-testid="timeline-toolbar" className={cn("flex items-center gap-2", className)}>
@@ -51,7 +55,7 @@ export function TimelineToolbar({
 						)}
 						onClick={() => onModeChange("follow")}
 					>
-						Follow
+						{t("timeline.toolbar.follow")}
 					</button>
 					<button
 						type="button"
@@ -62,7 +66,7 @@ export function TimelineToolbar({
 						)}
 						onClick={() => onModeChange("live")}
 					>
-						Live
+						{t("timeline.toolbar.live")}
 					</button>
 					<button
 						type="button"
@@ -73,14 +77,14 @@ export function TimelineToolbar({
 						)}
 						onClick={() => onModeChange("pan")}
 					>
-						Pan
+						{t("timeline.toolbar.pan")}
 					</button>
 				</div>
 
 				{/* Refresh */}
 				<Button variant="ghost" size="sm" data-testid="timeline-refresh-button" onClick={onRefresh} className="gap-1.5">
 					<RefreshCw className="h-3.5 w-3.5" />
-					<span className="text-xs">Refresh</span>
+					<span className="text-xs">{t("timeline.toolbar.refresh")}</span>
 				</Button>
 
 				{/* Zoom controls */}
@@ -109,7 +113,7 @@ export function TimelineToolbar({
 				{/* Reset */}
 				<Button variant="ghost" size="sm" data-testid="timeline-reset-button" onClick={onReset} className="gap-1.5">
 					<RotateCcw className="h-3.5 w-3.5" />
-					<span className="text-xs">Reset</span>
+					<span className="text-xs">{t("timeline.toolbar.reset")}</span>
 				</Button>
 
 				{/* Spacer */}
@@ -117,13 +121,13 @@ export function TimelineToolbar({
 
 				{/* Visible / total count */}
 				<span className="text-muted-foreground font-mono text-[10px] tabular-nums" data-testid="timeline-count">
-					{visibleCount} visible / {totalCount} total
+					{visibleCount} {t("timeline.toolbar.visible")} / {totalCount} {t("timeline.toolbar.total")}
 				</span>
 			</div>
 
 			{/* Mode description */}
 			<div className="text-muted-foreground text-[10px] italic" data-testid="timeline-mode-description">
-				{MODE_DESCRIPTIONS[mode]}
+				{modeDescriptions[mode]}
 			</div>
 		</div>
 	);

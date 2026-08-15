@@ -9,6 +9,7 @@ import { formatCost } from "@/app/workspace/dashboard/utils/chartUtils";
 import type { LogEntry } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import type { TimelineMode } from "./timelineToolbar";
 
 // ---------------------------------------------------------------------------
@@ -196,6 +197,7 @@ export function LogsTimeline({
 	onModeChange,
 	className,
 }: LogsTimelineProps) {
+	const { t } = useTranslation("logs");
 	const [tooltipLog, setTooltipLog] = useState<LogEntry | null>(null);
 	const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 	const [tooltipAbove, setTooltipAbove] = useState(true);
@@ -555,7 +557,7 @@ export function LogsTimeline({
 
 					{/* Empty state */}
 					{bars.length === 0 && (
-						<div className="text-muted-foreground flex h-full items-center justify-center text-sm">No requests in this time range.</div>
+						<div className="text-muted-foreground flex h-full items-center justify-center text-sm">{t("timeline.page.empty")}</div>
 					)}
 				</div>
 

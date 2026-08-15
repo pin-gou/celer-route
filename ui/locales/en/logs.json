@@ -424,6 +424,44 @@
     "noMetadataKeys": "No metadata keys",
     "use": "Use"
   },
+  "timeline": {
+    "page": {
+      "title": "Request Timeline",
+      "refreshing": "Refreshing...",
+      "activeRequest": "active request",
+      "activeRequests": "active requests",
+      "empty": "No requests in this time range."
+    },
+    "toolbar": {
+      "follow": "Follow",
+      "live": "Live",
+      "pan": "Pan",
+      "followDesc": "Scrolling with time — NOW line stays at 75%",
+      "liveDesc": "Live updates — NOW line snaps close to the right edge",
+      "panDesc": "Free exploration — drag to pan through the visible window",
+      "refresh": "Refresh",
+      "reset": "Reset",
+      "visible": "visible",
+      "total": "total"
+    },
+    "legend": {
+      "success": "Success",
+      "error": "Error",
+      "processing": "Processing",
+      "other": "Other",
+      "minute": "minute",
+      "hour": "hour",
+      "day": "day"
+    },
+    "detail": {
+      "logId": "Log ID:",
+      "total": "Total:",
+      "noEvents": "No events recorded for this request.",
+      "info": "info",
+      "warn": "warn",
+      "error": "error"
+    }
+  },
   "toast": {
     "logsRefreshed": "Logs refreshed",
     "logsRefreshFailed": "Failed to refresh logs",

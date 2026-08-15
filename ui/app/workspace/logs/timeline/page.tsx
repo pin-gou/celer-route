@@ -5,6 +5,7 @@
 import { useGetLogsQuery } from "@/lib/store";
 import type { LogEntry } from "@/lib/types/logs";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogsTimeline } from "./views/logsTimeline";
 import { TimelineToolbar, type TimelineMode } from "./views/timelineToolbar";
@@ -34,6 +35,7 @@ const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 8;
 
 export default function TimelinePage() {
+	const { t } = useTranslation("logs");
 	const navigate = useNavigate();
 	const hasDeleteAccess = useRbac(RbacResource.Logs, RbacOperation.Delete);
 	const hasRevealAccess = useRbac(RbacResource.Logs, RbacOperation.Reveal);
@@ -226,12 +228,12 @@ export default function TimelinePage() {
 	}, []);
 
 	const handleReset = useCallback(() => {
+		setZoom(1);
+		setMode("follow");
 		setPanOffsetMs(0);
 		setLiveBaseMs(Date.now());
-		if (mode === "follow") {
-			setNowMs(Date.now());
-		}
-	}, [mode]);
+		setNowMs(Date.now());
+	}, []);
 
 	const handleDragPan = useCallback((offsetMs: number) => {
 		setPanOffsetMs(offsetMs);
@@ -249,7 +251,7 @@ export default function TimelinePage() {
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<h1 className="text-lg font-semibold" data-testid="timeline-page-title">
-					Request Timeline
+					{t("timeline.page.title")}
 				</h1>
 				<TimelineLegend />
 			</div>
@@ -275,13 +277,13 @@ export default function TimelinePage() {
 					<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
 					<span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
 				</span>
-				{activeLogs.length} active request{activeLogs.length !== 1 ? "s" : ""}
+				{activeLogs.length} {t(activeLogs.length === 1 ? "timeline.page.activeRequest" : "timeline.page.activeRequests")}
 			</div>
 
 			{/* Loading indicator */}
 			{isFetching && (
 				<div className="text-muted-foreground text-xs" data-testid="timeline-loading-indicator">
-					Refreshing...
+					{t("timeline.page.refreshing")}
 				</div>
 			)}
 

@@ -424,6 +424,44 @@
     "noMetadataKeys": "无元数据键",
     "use": "使用"
   },
+  "timeline": {
+    "page": {
+      "title": "请求时间线",
+      "refreshing": "刷新中...",
+      "activeRequest": "个活跃请求",
+      "activeRequests": "个活跃请求",
+      "empty": "此时间范围内没有请求。"
+    },
+    "toolbar": {
+      "follow": "跟随",
+      "live": "实时",
+      "pan": "平移",
+      "followDesc": "随时间滚动 — NOW 线保持在 75%",
+      "liveDesc": "实时更新 — NOW 线靠近右侧边缘",
+      "panDesc": "自由探索 — 拖动以平移可见窗口",
+      "refresh": "刷新",
+      "reset": "重置",
+      "visible": "可见",
+      "total": "总计"
+    },
+    "legend": {
+      "success": "成功",
+      "error": "错误",
+      "processing": "处理中",
+      "other": "其他",
+      "minute": "分钟",
+      "hour": "小时",
+      "day": "天"
+    },
+    "detail": {
+      "logId": "日志 ID：",
+      "total": "总计：",
+      "noEvents": "此请求未记录事件。",
+      "info": "信息",
+      "warn": "警告",
+      "error": "错误"
+    }
+  },
   "toast": {
     "logsRefreshed": "日志已刷新",
     "logsRefreshFailed": "刷新日志失败",
