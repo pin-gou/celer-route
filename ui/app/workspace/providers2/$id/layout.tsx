@@ -1,7 +1,8 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import ProviderDetailPage from "./page";
 
 function RouteComponent() {
-	return <Outlet />;
+	return <ProviderDetailPage />;
 }
 
 export const Route = createFileRoute("/workspace/providers2/$id")({
