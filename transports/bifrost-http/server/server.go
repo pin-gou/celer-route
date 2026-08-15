@@ -1783,6 +1783,13 @@ func (s *BifrostHTTPServer) DeletePricingOverride(ctx context.Context, id string
 // rolls back the lot. After a successful commit the in-memory pricing cache
 // is reloaded once. Enterprise overrides this method to broadcast a peer
 // reload after commit.
+//
+// An entry with a non-empty Mode seeds a missing pricing row (INSERT ON
+// CONFLICT on (model, provider, mode), so the datasheet sync's
+// additional_attributes exclusion still applies afterward) before writing the
+// attributes — that is how a model that was never discovered by a provider key
+// gets registered. When Mode is empty and the row is missing, the batch is
+// rejected like before.
 func (s *BifrostHTTPServer) UpsertModelPricingAttributes(ctx context.Context, entries []handlers.ModelPricingAttributesEntry) error {
 	if s.Config == nil || s.Config.ModelCatalog == nil {
 		return fmt.Errorf("model catalog not initialized")
@@ -1797,8 +1804,26 @@ func (s *BifrostHTTPServer) UpsertModelPricingAttributes(ctx context.Context, en
 			if err != nil {
 				return err
 			}
-			if rows == 0 {
+			if rows > 0 {
+				continue
+			}
+			// No pricing row for (model, provider). Seed one only when an
+			// explicit mode was given — that signals a deliberate custom-model
+			// registration rather than a typo in a provider/model pair.
+			if strings.TrimSpace(e.Mode) == "" {
 				missing = append(missing, fmt.Sprintf("%s/%s", e.Provider, e.Model))
+				continue
+			}
+			if err := s.Config.ConfigStore.UpsertModelPrices(ctx, &tables.TableModelPricing{
+				Model:        e.Model,
+				Provider:     e.Provider,
+				Mode:         strings.TrimSpace(e.Mode),
+				IsDeprecated: false,
+			}, tx); err != nil {
+				return err
+			}
+			if _, err := s.Config.ConfigStore.UpsertModelPricingAttributes(ctx, e.Model, e.Provider, e.AdditionalAttributes, tx); err != nil {
+				return err
 			}
 		}
 		if len(missing) > 0 {

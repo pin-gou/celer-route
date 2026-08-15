@@ -47,6 +47,7 @@ export interface ModelDetails {
 	cache_creation_input_token_cost?: number;
 	cache_read_input_token_cost?: number;
 	architecture?: unknown;
+	is_deprecated?: boolean;
 	additional_attributes?: Record<string, string>;
 	accessible_by_keys?: string[];
 }
@@ -58,10 +59,13 @@ export interface ListModelDetailsResponse {
 
 // ModelPricingAttributesEntry is the body element for PUT /api/models/catalog.
 // (model, provider) is the natural key on governance_model_pricing. An empty
-// or omitted additional_attributes clears the column for that row.
+// or omitted additional_attributes clears the column for that row. When the
+// pricing row does not exist yet, an explicit `mode` seeds one so the model can
+// be registered without having been discovered by a provider key first.
 export interface ModelPricingAttributesEntry {
 	model: string;
 	provider: string;
+	mode?: string;
 	additional_attributes?: Record<string, string>;
 }
 
@@ -107,6 +111,20 @@ export interface ModelDatasheetResponse {
 export interface ListBaseModelsResponse {
 	models: string[];
 	total: number;
+}
+
+// TestModelsResponse is the response of POST /api/providers/{provider}/test-models.
+// Each entry is a single model probe performed on the server with bounded
+// concurrency; failures in one model never abort the rest.
+export interface TestModelResult {
+	model: string;
+	success: boolean;
+	latency_ms?: number;
+	error?: string;
+}
+
+export interface TestModelsResponse {
+	results: TestModelResult[];
 }
 
 type UpdateProviderMutationArg = UpdateProviderRequest & { name: ModelProviderName };
@@ -499,6 +517,20 @@ export const providersApi = baseApi.injectEndpoints({
 				body: key_id ? { model, key_id } : { model },
 			}),
 		}),
+
+		// Test multiple models in one request via a bounded-concurrency pass on
+		// the server. Each probe runs the full inference pipeline (so every call
+		// is recorded in the LLM logs) and results are returned in request order.
+		testProviderModels: builder.mutation<
+			TestModelsResponse,
+			{ provider: string; models: string[] }
+		>({
+			query: ({ provider, models }) => ({
+				url: `/providers/${encodeURIComponent(provider)}/test-models`,
+				method: "POST",
+				body: { models },
+			}),
+		}),
 	}),
 });
 
@@ -532,4 +564,5 @@ export const {
 	useUpsertModelCatalogEntriesMutation,
 	useBatchUpdateProviderKeysMutation,
 	useTestProviderModelMutation,
+	useTestProviderModelsMutation,
 } = providersApi;

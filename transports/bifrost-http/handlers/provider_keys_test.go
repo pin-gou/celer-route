@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -382,6 +384,58 @@ func TestRefreshProviderModels_UnknownProviderReturns404(t *testing.T) {
 	}
 	if len(mgr.refreshProviderCalls) != 0 {
 		t.Fatalf("expected no upstream refresh for an unknown provider, got %v", mgr.refreshProviderCalls)
+	}
+}
+
+// test-models (batch) endpoint validation tests -------------------------------
+
+func TestTestProviderModels_EmptyModels(t *testing.T) {
+	h := &ProviderHandler{client: &bifrost.Bifrost{}}
+	ctx := newTestRequestCtx(`{"models":[]}`)
+	ctx.SetUserValue("provider", "openai")
+	h.testProviderModels(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("status got %d, want 400; body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+}
+
+func TestTestProviderModels_AllEmptyAfterDedup(t *testing.T) {
+	h := &ProviderHandler{client: &bifrost.Bifrost{}}
+	ctx := newTestRequestCtx(`{"models":["", "  ", "\t"]}`)
+	ctx.SetUserValue("provider", "openai")
+	h.testProviderModels(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("status got %d, want 400; body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+}
+
+func TestTestProviderModels_TooMany(t *testing.T) {
+	models := make([]string, maxTestModelsPerBatch+1)
+	for i := range models {
+		models[i] = fmt.Sprintf("model-%d", i)
+	}
+	body, _ := json.Marshal(TestModelsRequest{Models: models})
+
+	h := &ProviderHandler{client: &bifrost.Bifrost{}}
+	ctx := newTestRequestCtx(string(body))
+	ctx.SetUserValue("provider", "openai")
+	h.testProviderModels(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("status got %d, want 400; body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+}
+
+func TestTestProviderModels_NilClient(t *testing.T) {
+	h := &ProviderHandler{}
+	ctx := newTestRequestCtx(`{"models":["gpt-4"]}`)
+	ctx.SetUserValue("provider", "openai")
+	h.testProviderModels(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusInternalServerError {
+		t.Fatalf("status got %d, want 500; body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
 	}
 }
 

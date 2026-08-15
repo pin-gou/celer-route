@@ -22,6 +22,7 @@ import (
 	governanceplugin "github.com/maximhq/bifrost/plugins/governance"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
+	"golang.org/x/sync/errgroup"
 )
 
 // ModelsManager defines the interface for managing provider models
@@ -51,10 +52,14 @@ type ModelsManager interface {
 var ErrRefreshInProgress = errors.New("model refresh already in progress for this provider")
 
 // ModelPricingAttributesEntry is the wire shape for PUT /api/models/catalog.
-// (model, provider) is the natural key on governance_model_pricing.
+// (model, provider) is the natural key on governance_model_pricing. When the
+// pricing row does not exist yet, an explicit Mode seeds one (so a model not
+// discovered by a provider key can still be registered); otherwise everything
+// except AdditionalAttributes is ignored for an existing row.
 type ModelPricingAttributesEntry struct {
 	Model                string            `json:"model"`
 	Provider             string            `json:"provider"`
+	Mode                 string            `json:"mode,omitempty"`
 	AdditionalAttributes map[string]string `json:"additional_attributes,omitempty"`
 }
 
@@ -213,6 +218,7 @@ func (h *ProviderHandler) RegisterRoutes(r *router.Router, middlewares ...schema
 	r.POST("/api/providers/{provider}/refresh-models", lib.ChainMiddlewares(h.refreshProviderModels, middlewares...))
 	r.POST("/api/providers/{provider}/keys/{key_id}/refresh-models", lib.ChainMiddlewares(h.refreshProviderKeyModels, middlewares...))
 	r.POST("/api/providers/{provider}/test-model", lib.ChainMiddlewares(h.testProviderModel, middlewares...))
+	r.POST("/api/providers/{provider}/test-models", lib.ChainMiddlewares(h.testProviderModels, middlewares...))
 	r.GET("/api/keys", lib.ChainMiddlewares(h.listKeys, middlewares...))
 	r.GET("/api/models", lib.ChainMiddlewares(h.listModels, middlewares...))
 	r.GET("/api/models/details", lib.ChainMiddlewares(h.listModelDetails, middlewares...))
@@ -1582,8 +1588,8 @@ func (h *ProviderHandler) upsertModelCatalogEntries(ctx *fasthttp.RequestCtx) {
 
 // TestModelRequest is the body of POST /api/providers/{provider}/test-model.
 type TestModelRequest struct {
-	Model  string  `json:"model"`
-	KeyID  string  `json:"key_id,omitempty"`
+	Model string `json:"model"`
+	KeyID string `json:"key_id,omitempty"`
 }
 
 // TestModelResponse is the body returned by the test-model endpoint.
@@ -1681,4 +1687,167 @@ func (h *ProviderHandler) testProviderModel(ctx *fasthttp.RequestCtx) {
 		Success:   true,
 		LatencyMs: latencyMs,
 	})
+}
+
+// maxTestModelsPerBatch bounds the number of models a single test-models
+// request may probe. Each model runs through the full inference pipeline, so
+// the cap keeps a mis-specified request from fanning out an unbounded number
+// of upstream calls.
+const maxTestModelsPerBatch = 50
+
+// TestModelsRequest is the body of POST /api/providers/{provider}/test-models.
+type TestModelsRequest struct {
+	Models []string `json:"models"`
+}
+
+// TestModelResult is a single entry in TestModelsResponse.Results.
+type TestModelResult struct {
+	Model     string `json:"model"`
+	Success   bool   `json:"success"`
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// TestModelsResponse is the body returned by the test-models endpoint.
+type TestModelsResponse struct {
+	Results []TestModelResult `json:"results"`
+}
+
+// testProviderModels handles POST /api/providers/{provider}/test-models.
+// It probes up to maxTestModelsPerBatch models in one request. Each model runs
+// through the same chat-completion pipeline as the single test-model endpoint
+// (so every probe is recorded in the LLM logs and classified per-provider),
+// but the calls execute with bounded concurrency and failures in one model do
+// not abort the rest. Results are returned in request order.
+func (h *ProviderHandler) testProviderModels(ctx *fasthttp.RequestCtx) {
+	provider, err := getProviderFromCtx(ctx)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid provider: %v", err))
+		return
+	}
+	if h.client == nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "Bifrost client is not available")
+		return
+	}
+
+	var payload TestModelsRequest
+	if err := sonic.Unmarshal(ctx.PostBody(), &payload); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	if len(payload.Models) == 0 {
+		SendError(ctx, fasthttp.StatusBadRequest, "models is required")
+		return
+	}
+	if len(payload.Models) > maxTestModelsPerBatch {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("too many models: maximum %d per request", maxTestModelsPerBatch))
+		return
+	}
+
+	// Deduplicate while preserving order so repeated ids are probed once.
+	seen := make(map[string]struct{}, len(payload.Models))
+	models := make([]string, 0, len(payload.Models))
+	for _, model := range payload.Models {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		if _, dup := seen[model]; dup {
+			continue
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
+	if len(models) == 0 {
+		SendError(ctx, fasthttp.StatusBadRequest, "models is required")
+		return
+	}
+
+	results := make([]TestModelResult, len(models))
+	testConcurrency := 5
+	if testConcurrency > len(models) {
+		testConcurrency = len(models)
+	}
+
+	modelCh := make(chan int)
+	g, bfCtx := errgroup.WithContext(context.Background())
+	for w := 0; w < testConcurrency; w++ {
+		g.Go(func() error {
+			for idx := range modelCh {
+				results[idx] = h.testOneModel(ctx, provider, models[idx])
+			}
+			return nil
+		})
+	}
+	g.Go(func() error {
+		defer close(modelCh)
+		for idx := range models {
+			select {
+			case modelCh <- idx:
+			case <-bfCtx.Done():
+				return bfCtx.Err()
+			}
+		}
+		return nil
+	})
+	_ = g.Wait()
+
+	SendJSON(ctx, TestModelsResponse{Results: results})
+}
+
+// testOneModel runs a single minimal chat-completion probe. Mirrors the single
+// model test endpoint (skip budget/rate-limit checks and VK usage tracking so
+// tests never affect quotas or stats) and always returns a result, never an
+// error — failures are captured in the TestModelResult itself.
+func (h *ProviderHandler) testOneModel(ctx *fasthttp.RequestCtx, provider schemas.ModelProvider, model string) TestModelResult {
+	// The fasthttp request context is safe to share across model workers (each
+	// probe gets its own cancellable BifrostContext child), and keeps request
+	// values — request ID, headers — visible to the plugin pipeline exactly as
+	// the single model test does.
+	bfCtx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
+	defer bfCtx.Cancel()
+	bfCtx.SetValue(schemas.BifrostContextKeySkipBudgetAndRateLimits, true)
+	bfCtx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
+
+	hi := "hi"
+	content := &schemas.ChatMessageContent{ContentStr: &hi}
+	msg := schemas.ChatMessage{
+		Role:    schemas.ChatMessageRoleUser,
+		Content: content,
+	}
+	maxTokens := 1
+	chatReq := &schemas.BifrostChatRequest{
+		Provider: provider,
+		Model:    model,
+		Input:    []schemas.ChatMessage{msg},
+		Params: &schemas.ChatParameters{
+			MaxCompletionTokens: &maxTokens,
+		},
+	}
+
+	start := time.Now()
+	resp, bifrostErr := h.client.ChatCompletionRequest(bfCtx, chatReq)
+	latencyMs := time.Since(start).Milliseconds()
+
+	if bifrostErr != nil {
+		return TestModelResult{
+			Model:     model,
+			Success:   false,
+			LatencyMs: latencyMs,
+			Error:     bifrostErr.Error.Message,
+		}
+	}
+	if resp == nil {
+		return TestModelResult{
+			Model:     model,
+			Success:   false,
+			LatencyMs: latencyMs,
+			Error:     "empty response from provider",
+		}
+	}
+	return TestModelResult{
+		Model:     model,
+		Success:   true,
+		LatencyMs: latencyMs,
+	}
 }

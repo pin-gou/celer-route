@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/maximhq/bifrost/plugins/governance"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"gorm.io/gorm"
 )
 
 // reloadVirtualKeyConfigStore provides the persistence calls used by ReloadVirtualKey.
@@ -1154,5 +1156,76 @@ func TestMarshalPluginConfig_WithComplexType(t *testing.T) {
 	}
 	if result.Nested.Name != "nested-config" {
 		t.Errorf("Expected nested name=nested-config, got %s", result.Nested.Name)
+	}
+}
+
+// upsertTestConfigStore is a ConfigStore stub sized to UpsertModelPricingAttributes:
+// it reports no existing pricing rows, so the create-when-missing branch runs.
+type upsertTestConfigStore struct {
+	configstore.ConfigStore
+	upsertModelPricesCalled *configstoreTables.TableModelPricing
+}
+
+func (m *upsertTestConfigStore) ExecuteTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return fn(nil)
+}
+
+func (m *upsertTestConfigStore) UpsertModelPricingAttributes(_ context.Context, _, _ string, _ map[string]string, _ ...*gorm.DB) (int64, error) {
+	return 0, nil
+}
+
+func (m *upsertTestConfigStore) UpsertModelPrices(_ context.Context, pricing *configstoreTables.TableModelPricing, _ ...*gorm.DB) error {
+	copy := *pricing
+	m.upsertModelPricesCalled = &copy
+	return nil
+}
+
+func TestUpsertModelPricingAttributes_SeedsMissingRowWhenModeSet(t *testing.T) {
+	store := &upsertTestConfigStore{}
+	server := &BifrostHTTPServer{
+		Config: &lib.Config{
+			ModelCatalog: modelcatalog.NewTestCatalog(nil),
+			ConfigStore:  store,
+		},
+	}
+
+	// Mode set → missing pricing row is seeded via UpsertModelPrices, then the
+	// attribute write is retried. Success proves the create branch (not the old
+	// "missing row" error), and the seeded row carries model/provider/mode.
+	err := server.UpsertModelPricingAttributes(context.Background(), []handlers.ModelPricingAttributesEntry{
+		{Model: "custom-model-1", Provider: "openai", Mode: "chat", AdditionalAttributes: map[string]string{"source": "manual"}},
+	})
+	if err != nil {
+		t.Fatalf("Expected no error when seeding a missing pricing row, got: %v", err)
+	}
+	if store.upsertModelPricesCalled == nil {
+		t.Fatal("Expected UpsertModelPrices to have seeded the missing pricing row")
+	}
+	seeded := store.upsertModelPricesCalled
+	if seeded.Model != "custom-model-1" || seeded.Provider != "openai" || seeded.Mode != "chat" {
+		t.Fatalf("Unexpected seeded pricing row: %+v", seeded)
+	}
+}
+
+func TestUpsertModelPricingAttributes_RejectsMissingRowWithoutMode(t *testing.T) {
+	store := &upsertTestConfigStore{}
+	server := &BifrostHTTPServer{
+		Config: &lib.Config{
+			ModelCatalog: modelcatalog.NewTestCatalog(nil),
+			ConfigStore:  store,
+		},
+	}
+
+	err := server.UpsertModelPricingAttributes(context.Background(), []handlers.ModelPricingAttributesEntry{
+		{Model: "unknown-model", Provider: "openai"},
+	})
+	if err == nil {
+		t.Fatal("Expected an error for a missing pricing row without an explicit mode")
+	}
+	if !strings.Contains(err.Error(), "no pricing row") {
+		t.Fatalf("Expected 'no pricing row' error, got: %v", err)
+	}
+	if store.upsertModelPricesCalled != nil {
+		t.Fatal("Expected no pricing row to be seeded without an explicit mode")
 	}
 }
