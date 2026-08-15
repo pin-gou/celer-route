@@ -51,6 +51,12 @@ import {
   customProviderNameSchema,
   azureKeyConfigSchema,
   networkFormConfigSchema,
+  vertexKeyConfigSchema,
+  bedrockKeyConfigSchema,
+  vllmKeyConfigSchema,
+  ollamaKeyConfigSchema,
+  proxyFormConfigSchema,
+  s3BucketConfigSchema,
 } from "@/lib/types/schemas";
 
 describe("schemas.ts Zod 校验消息 i18n", () => {
@@ -65,19 +71,19 @@ describe("schemas.ts Zod 校验消息 i18n", () => {
 
     expect(result.success).toBe(false);
     const message = result.error!.issues[0].message;
-    // dev 后 message 应为 t("validation.fieldRequired", { field: "自定义提供方名称" }) → "自定义提供方名称 为必填项"
-    expect(message).toContain("为必填项");
+    // dev 后 message 应为 t("validation.fieldRequired", { field: "Custom provider name" }) → "Custom provider name 为必填项"
+    expect(message).toBe("Custom provider name 为必填项");
   });
 
-  it("azureKeyConfigSchema endpoint refine 错误消息应为中文（端点为必填项）", () => {
+  it("azureKeyConfigSchema endpoint refine 错误消息应为中文（Endpoint 为必填项）", () => {
     // 输入：空对象 → endpoint 未设置 → refine 失败（path=["endpoint"]）
     const result = azureKeyConfigSchema.safeParse({});
 
     expect(result.success).toBe(false);
     const endpointIssue = result.error!.issues.find((i) => i.path[0] === "endpoint");
     expect(endpointIssue).toBeDefined();
-    // dev 后 message 应为 t("validation.fieldRequired", { field: "端点" }) → "端点为必填项"
-    expect(endpointIssue!.message).toContain("为必填项");
+    // dev 后 message 应为 t("validation.fieldRequired", { field: "Endpoint" }) → "Endpoint 为必填项"
+    expect(endpointIssue!.message).toBe("Endpoint 为必填项");
     expect(endpointIssue!.message).not.toContain("required");
   });
 
@@ -93,8 +99,61 @@ describe("schemas.ts Zod 校验消息 i18n", () => {
 
     expect(result.success).toBe(false);
     const messages = (result.error?.issues ?? []).map((i) => i.message);
-    // dev 后必须存在中文 URL 错误消息
+    // dev 后必须存在中文 URL 错误消息（z.config customError 或 .url() 内联 message）
     expect(messages.some((m) => m.includes("URL 格式无效"))).toBe(true);
+  });
+
+  it("vertexKeyConfigSchema refine 错误消息应为中文（Project ID 为必填项）", () => {
+    const result = vertexKeyConfigSchema.safeParse({});
+    expect(result.success).toBe(false);
+    const projectIdIssue = result.error!.issues.find((i) => i.path[0] === "project_id");
+    expect(projectIdIssue).toBeDefined();
+    expect(projectIdIssue!.message).toBe("Project ID 为必填项");
+  });
+
+  it("bedrockKeyConfigSchema refine 错误消息应为中文（Region 为必填项）", () => {
+    const result = bedrockKeyConfigSchema.safeParse({});
+    expect(result.success).toBe(false);
+    const regionIssue = result.error!.issues.find((i) => i.path[0] === "region");
+    expect(regionIssue).toBeDefined();
+    expect(regionIssue!.message).toBe("Region 为必填项");
+  });
+
+  it("vllmKeyConfigSchema model_name .min(1) 错误消息应为中文（Model name 为必填项）", () => {
+    // vllmKeyConfigSchema is an object — parse { model_name: "" } to trigger .min(1) on model_name
+    const result = vllmKeyConfigSchema.safeParse({ model_name: "" });
+    expect(result.success).toBe(false);
+    const modelNameIssue = result.error!.issues.find((i) => i.path[0] === "model_name");
+    expect(modelNameIssue).toBeDefined();
+    expect(modelNameIssue!.message).toBe("Model name 为必填项");
+  });
+
+  it("ollamaKeyConfigSchema url refine 错误消息应为中文（Server URL 为必填项）", () => {
+    const result = ollamaKeyConfigSchema.safeParse({});
+    expect(result.success).toBe(false);
+    const urlIssue = result.error!.issues.find((i) => i.path[0] === "url");
+    expect(urlIssue).toBeDefined();
+    expect(urlIssue!.message).toBe("Server URL 为必填项");
+  });
+
+  it("s3BucketConfigSchema bucket_name .min(1) 错误消息应为中文", () => {
+    const result = s3BucketConfigSchema.safeParse({ bucket_name: "", prefix: "" });
+    expect(result.success).toBe(false);
+    const bucketIssue = result.error!.issues.find((i) => i.path[0] === "bucket_name");
+    expect(bucketIssue).toBeDefined();
+    expect(bucketIssue!.message).toBe("Bucket name 为必填项");
+  });
+
+  it("proxyFormConfigSchema .url() refine 错误消息应为中文（URL 格式无效）", () => {
+    // proxyFormConfigSchema has url: secretVarSchema.optional() — pass a non-URL value
+    const result = proxyFormConfigSchema.safeParse({
+      type: "http",
+      url: { type: "plain_text", value: "not-a-url" },
+    });
+    expect(result.success).toBe(false);
+    const urlIssue = result.error!.issues.find((i) => i.path[0] === "url");
+    expect(urlIssue).toBeDefined();
+    expect(urlIssue!.message).toBe("URL 格式无效");
   });
 
   it("有值输入应通过校验（反向控制：翻译接入不改变有效语义）", () => {

@@ -91,8 +91,14 @@ const noUnlocalizedTextRule = {
         // Skip if this is a member of a call expression (e.g., t("..."))
         if (node.parent && node.parent.type === "CallExpression") {
           const callee = node.parent.callee;
+          // Skip t("...") calls — already wrapped
           if (callee && callee.type === "Identifier" && callee.name === "t") {
-            return; // Already wrapped in t() call
+            return;
+          }
+          // Skip toast.success("..."), toast.error("...") etc — the
+          // CallExpression visitor handles these to avoid double-reporting
+          if (callee && callee.type === "MemberExpression" && callee.object && callee.object.type === "Identifier" && callee.object.name === "toast") {
+            return;
           }
         }
 

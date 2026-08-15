@@ -3,6 +3,10 @@
     "title": "模型目录",
     "description": "浏览和管理 AI 模型"
   },
+  "tabs": {
+    "overview": "概览",
+    "models": "模型"
+  },
   "catalog": {
     "title": "模型目录",
     "searchModels": "搜索模型...",

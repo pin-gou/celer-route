@@ -50,6 +50,19 @@
     "keyUpdated": "API key updated successfully",
     "keyDeleted": "API key deleted successfully",
     "modelsRefreshed": "Models refreshed successfully",
-    "connectionTested": "Connection test successful"
-  }
+    "connectionTested": "Connection test successful",
+    "keysEnabled": "Enabled {{count}} keys for {{provider}}",
+    "keysDisabled": "Disabled {{count}} keys for {{provider}}",
+    "noKeysToToggle": "No API keys to toggle for {{provider}}",
+    "failedToggleKeys": "Failed to toggle keys for {{provider}}",
+    "modelDiscoveryTriggered": "Model discovery triggered for {{provider}}",
+    "modelDiscoveryRunning": "Model discovery already running for {{provider}}",
+    "quickTestFailed": "Quick test failed for {{provider}}",
+    "failedToAddProvider": "Failed to add provider"
+  },
+  "providers2": {
+    "pageTitle": "Providers (New)"
+  },
+  "failedToLoad": "Failed to load providers",
+  "noMatchFilters": "No providers match your filters"
 }

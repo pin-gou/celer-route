@@ -3,6 +3,10 @@
     "title": "Model Catalog",
     "description": "Browse and manage AI models"
   },
+  "tabs": {
+    "overview": "Overview",
+    "models": "Models"
+  },
   "catalog": {
     "title": "Model Catalog",
     "searchModels": "Search models...",

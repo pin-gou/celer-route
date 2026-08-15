@@ -19,10 +19,10 @@ export default function ModelCatalogView() {
 			<Tabs defaultValue="overview" className="flex min-h-0 grow flex-col gap-4">
 				<TabsList className="shrink-0">
 					<TabsTrigger value="overview" data-testid="model-catalog-tab-overview">
-						Overview
+						{t("tabs.overview")}
 					</TabsTrigger>
 					<TabsTrigger value="attributes" data-testid="model-catalog-tab-attributes">
-						Models
+						{t("tabs.models")}
 					</TabsTrigger>
 				</TabsList>
 				<TabsContent value="overview" className="min-h-0 overflow-auto">
