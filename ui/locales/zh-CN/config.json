@@ -1,6 +1,17 @@
 {
   "page": {
-    "title": "配置"
+    "title": "配置",
+    "performanceTuning": "性能调优",
+    "pricingConfig": "定价配置",
+    "featureFlags": "功能开关",
+    "logsSettings": "日志设置",
+    "compatibility": "兼容性",
+    "clientSettings": "客户端设置",
+    "caching": "缓存",
+    "security": "安全设置",
+    "mcpGateway": "MCP 网关",
+    "observability": "可观测性",
+    "largePayload": "大载荷"
   },
   "providers": {
     "default": {
@@ -250,11 +261,53 @@
     "noSettings": "未配置 MCP 设置"
   },
   "routingRules": {},
+  "actions": {
+    "saveChanges": "保存更改",
+    "saving": "保存中...",
+    "syncing": "同步中...",
+    "forceSyncNow": "立即强制同步"
+  },
+  "descriptions": {
+    "performanceTuning": "配置性能相关设置。",
+    "initialPoolSize": "初始连接池大小。",
+    "maxRequestBodySize": "请求体的最大大小（MB）。",
+    "pricingConfig": "配置自定义定价数据表和同步间隔。",
+    "pricingDatasheetUrl": "自定义定价数据表的 URL。留空使用默认定价。",
+    "featureFlags": "切换进程内功能开关。开关在代码中声明；也可以通过 config.json 或 Helm 设置，此时会显示为锁定状态。",
+    "logsSettings": "配置请求和响应的日志记录设置。",
+    "compatibility": "配置请求转换和兼容性回退。"
+  },
+  "fields": {
+    "initialPoolSize": "初始池大小",
+    "maxRequestBodySize": "最大请求体大小 (MB)",
+    "pricingDatasheetUrl": "定价数据表 URL",
+    "flag": "开关",
+    "enabled": "已启用"
+  },
+  "state": {
+    "noFeatureFlags": "未找到功能开关。",
+    "loading": "正在加载功能开关...",
+    "loadFailed": "加载功能开关失败"
+  },
+  "restart": {
+    "description": "这些设置需要重启 Bifrost 服务才能生效。当前连接将继续使用现有设置直到重启。",
+    "warning": "需要重启 Bifrost 才能使更改生效。"
+  },
   "toast": {
     "settingsSaved": "设置保存成功",
     "settingsSaveFailed": "保存设置失败",
     "settingsLoaded": "设置加载成功",
     "resetConfig": "配置重置成功",
-    "configExported": "配置导出成功"
+    "configExported": "配置导出成功",
+    "configNotLoaded": "配置未加载",
+    "logRetentionDaysMin": "日志保留天数至少为 1 天",
+    "loggingUpdated": "日志配置更新成功。",
+    "poolSizePositive": "初始池大小必须为正数。",
+    "maxBodySizePositive": "最大请求体大小必须为正数。",
+    "performanceUpdated": "性能设置更新成功。",
+    "pricingUpdated": "定价配置更新成功。",
+    "pricingSynced": "定价同步成功。",
+    "compatibilityUpdated": "兼容性设置更新成功。",
+    "observabilityUpdated": "可观测性设置更新成功。"
   }
 }

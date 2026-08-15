@@ -4,9 +4,11 @@ import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } f
 import { CompatConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export default function CompatibilityView() {
+	const { t } = useTranslation("config");
 	const hasSettingsUpdateAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const { data: bifrostConfig } = useGetCoreConfigQuery({ fromDB: true });
 	const config = bifrostConfig?.client_config?.compat;
@@ -37,7 +39,7 @@ export default function CompatibilityView() {
 
 	const handleSave = useCallback(async () => {
 		if (!bifrostConfig) {
-			toast.error("Configuration not loaded");
+			toast.error(t("toast.configNotLoaded"));
 			return;
 		}
 
@@ -49,18 +51,18 @@ export default function CompatibilityView() {
 					compat: localCompatConfig,
 				},
 			}).unwrap();
-			toast.success("Compatibility settings updated successfully.");
+			toast.success(t("toast.compatibilityUpdated"));
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		}
-	}, [bifrostConfig, localCompatConfig, updateCoreConfig]);
+	}, [bifrostConfig, localCompatConfig, updateCoreConfig, t]);
 
 	return (
 		<div className="mx-auto w-full max-w-4xl space-y-6">
 			<div>
-				<h2 className="text-lg font-semibold tracking-tight">Compatibility</h2>
+				<h2 className="text-lg font-semibold tracking-tight">{t("page.compatibility")}</h2>
 				<p className="text-muted-foreground text-sm">
-					Configure request conversions and compatibility fallbacks.{" "}
+					{t("descriptions.compatibility")}{" "}
 					<a
 						className="text-primary underline"
 						href="https://docs.getbifrost.ai/features/compat-plugin"
