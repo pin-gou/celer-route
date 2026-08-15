@@ -158,20 +158,20 @@
 
 #### 步骤组 1：scenario-scr.yaml 读取
 
-- [ ] 11.1 确认 `.pg/changes/redesign-providers-pages/scenario-scr.yaml` 存在且每个 Scenario 含 6 段（scenario_id / critical / given / when / then / evidence；and 可选）
-- [ ] 11.2 校验 scenario_id 全局唯一、critical 字段为 bool
+- [x] 11.1 确认 `.pg/changes/redesign-providers-pages/scenario-scr.yaml` 存在且每个 Scenario 含 6 段（scenario_id / critical / given / when / then / evidence；and 可选）
+- [x] 11.2 校验 scenario_id 全局唯一、critical 字段为 bool
 
 #### 步骤组 2：执行
 
-- [ ] 11.3 按 scenario_id 排序：先 critical=true，后 critical=false
-- [ ] 11.4 串行执行每个 Scenario 的 given → when → then → and（cleanup）
-- [ ] 11.5 按 when[].type 分派执行方式：
+- [x] 11.3 按 scenario_id 排序：先 critical=true，后 critical=false
+- [x] 11.4 串行执行每个 Scenario 的 given → when → then → and（cleanup）
+- [x] 11.5 按 when[].type 分派执行方式：
   - type=api（默认）：使用 curl 等 HTTP 工具执行 API 请求
   - type=browser：加载 `pg-browser-testing-with-devtools` SKILL，使用 Chrome DevTools MCP 工具执行浏览器交互
-- [ ] 11.6 产出结构化 JSON 证据到 `2-build/<report_seq>-<scenario_id>-evidence.json`（<report_seq> 与本 phase 主报告共享同一 seq，由 dispatch_file 注入；加 seq 前缀避免多次 execute 派遣覆盖同 scenario 的历史 evidence）
-- [ ] 11.7 browser 场景截图存到 `2-build/<report_seq>-<scenario_id>-screenshot.png`
-- [ ] 11.8 critical=true FAIL → 立即停止后续 Scenario，全部标记 SKIPPED → record(scenario-execute, "escalate")
-- [ ] 11.9 全部通过 / scenario-execute agent 写盘报告到 `2-build/<seq>-scenario-execute.md`
+- [x] 11.6 产出结构化 JSON 证据到 `2-build/<report_seq>-<scenario_id>-evidence.json`（<report_seq> 与本 phase 主报告共享同一 seq，由 dispatch_file 注入；加 seq 前缀避免多次 execute 派遣覆盖同 scenario 的历史 evidence）
+- [x] 11.7 browser 场景截图存到 `2-build/<report_seq>-<scenario_id>-screenshot.png`
+- [x] 11.8 critical=true FAIL → 立即停止后续 Scenario，全部标记 SKIPPED → record(scenario-execute, "escalate")
+- [x] 11.9 全部通过 / scenario-execute agent 写盘报告到 `2-build/<seq>-scenario-execute.md`
 
 ## 12. final-gate - 最终门控审查
 
