@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
 	// Per-test mutable holders for query hook data
 	stateData: [] as Array<{ provider: string; keyId: string; expireAt: string; reason: string }>,
 	statsData: { markCount: 0, suppressedCount: 0, activeCount: 0 },
+	providersData: [] as Array<{ name: string }>,
 }));
 
 vi.mock("@/lib/store/apis/pluginsApi", async (importOriginal) => {
@@ -50,6 +51,14 @@ vi.mock("@/lib/store/apis/pluginsApi", async (importOriginal) => {
 		useGetCooldownStatsQuery: () => ({ data: { stats: mocks.statsData }, isLoading: false }),
 		useUnfreezeCooldownMutation: () => [mocks.unfreeze, { isLoading: false }],
 		useGetPluginsQuery: () => ({ data: [], isLoading: false }),
+	};
+});
+
+vi.mock("@/lib/store/apis/providersApi", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/store/apis/providersApi")>();
+	return {
+		...actual,
+		useGetProvidersQuery: () => ({ data: mocks.providersData, isLoading: false }),
 	};
 });
 
@@ -84,6 +93,8 @@ const mockPlugin: Plugin = {
 	},
 };
 
+const DEFAULT_PROVIDERS = [{ name: "openai" }, { name: "anthropic" }, { name: "gemini" }];
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -94,6 +105,7 @@ describe("ProvidercooldownFragment — 3-field form rendering (task 11.1)", () =
 		mocks.unfreeze.mockReset();
 		mocks.stateData = [];
 		mocks.statsData = { markCount: 0, suppressedCount: 0, activeCount: 0 };
+		mocks.providersData = [];
 	});
 
 	// -----------------------------------------------------------------------
@@ -112,6 +124,10 @@ describe("ProvidercooldownFragment — 3-field form rendering (task 11.1)", () =
 
 		const overrideValue = screen.getByTestId("providercooldown-field-ttl-overrides-value-openai") as HTMLInputElement;
 		expect(overrideValue.value).toBe("300");
+
+		// The provider is selectable via a dropdown trigger (not a free-text input)
+		const providerSelect = screen.getByTestId("providercooldown-field-ttl-overrides-provider-openai");
+		expect(providerSelect).toBeTruthy();
 	});
 
 	it("renders quota_patterns list editor with configured patterns", () => {
@@ -232,6 +248,7 @@ describe("EnabledSwitch — toggle triggers mutation (task 11.1)", () => {
 describe("ConfigForm — submit triggers mutation with 3-field config (task 11.1)", () => {
 	beforeEach(() => {
 		mocks.updatePlugin.mockReset();
+		mocks.providersData = [];
 	});
 
 	it("submits the 3-field config through useUpdatePluginMutation", async () => {
@@ -260,5 +277,130 @@ describe("ConfigForm — submit triggers mutation with 3-field config (task 11.1
 				}),
 			);
 		});
+	});
+});
+
+describe("ConfigForm — TTL overrides provider dropdown", () => {
+	beforeEach(() => {
+		mocks.updatePlugin.mockReset();
+		mocks.providersData = DEFAULT_PROVIDERS;
+	});
+
+	it("lists configured providers in the dropdown", () => {
+		render(<ProvidercooldownFragment plugin={mockPlugin} />);
+
+		// override "openai" row exists (from mockPlugin config)
+		const trigger = screen.getByTestId("providercooldown-field-ttl-overrides-provider-openai");
+		expect(trigger).toBeTruthy();
+
+		// Open the select
+		fireEvent.click(trigger);
+
+		const options = screen.getAllByRole("option");
+		const optionLabels = options.map((o) => o.textContent);
+		expect(optionLabels).toContain("OpenAI");
+		expect(optionLabels).toContain("Anthropic");
+		expect(optionLabels).toContain("Gemini");
+	});
+
+	it("excludes providers already used in other rows from the dropdown", () => {
+		const pluginWithTwoOverrides: Plugin = {
+			...mockPlugin,
+			config: {
+				...mockPlugin.config,
+				ttl_overrides: { openai: 300, anthropic: 200 },
+			},
+		};
+		render(<ProvidercooldownFragment plugin={pluginWithTwoOverrides} />);
+
+		// Open the openai row — this row's options exclude "anthropic"
+		const openaiTrigger = screen.getByTestId("providercooldown-field-ttl-overrides-provider-openai");
+		fireEvent.click(openaiTrigger);
+
+		const options = screen.getAllByRole("option");
+		const optionLabels = options.map((o) => o.textContent);
+		expect(optionLabels).toContain("OpenAI");
+		expect(optionLabels).not.toContain("Anthropic");
+		expect(optionLabels).toContain("Gemini");
+	});
+
+	it("changing the provider renames the override and preserves its TTL", async () => {
+		render(<ConfigForm plugin={mockPlugin} />);
+
+		// Open the openai row select
+		const openaiTrigger = screen.getByTestId("providercooldown-field-ttl-overrides-provider-openai");
+		fireEvent.click(openaiTrigger);
+
+		// Click "Anthropic" option
+		const anthropicOption = screen.getByRole("option", { name: "Anthropic" });
+		fireEvent.click(anthropicOption);
+
+		// The openai row should be gone, anthropic row should appear with TTL 300
+		expect(screen.queryByTestId("providercooldown-field-ttl-overrides-provider-openai")).toBeNull();
+		const anthropicValue = screen.getByTestId("providercooldown-field-ttl-overrides-value-anthropic") as HTMLInputElement;
+		expect(anthropicValue.value).toBe("300");
+
+		// Submit the form and verify the renamed override
+		const saveBtn = screen.getByRole("button", { name: /save/i });
+		fireEvent.click(saveBtn);
+
+		await waitFor(() => {
+			expect(mocks.updatePlugin).toHaveBeenCalledWith(
+				expect.objectContaining({
+					data: expect.objectContaining({
+						config: expect.objectContaining({
+							ttl_overrides: { anthropic: 300 },
+						}),
+					}),
+				}),
+			);
+		});
+	});
+
+	it("disables Add Override when all configured providers already have an override", () => {
+		const pluginWithAllUsed: Plugin = {
+			...mockPlugin,
+			config: {
+				...mockPlugin.config,
+				ttl_overrides: { openai: 300, anthropic: 200, gemini: 100 },
+			},
+		};
+		render(<ProvidercooldownFragment plugin={pluginWithAllUsed} />);
+
+		const addBtn = screen.getByRole("button", { name: /add override/i });
+		expect((addBtn as HTMLButtonElement).disabled).toBe(true);
+
+		// hint text shown
+		expect(screen.getByText(/all configured providers already have an override/i)).toBeTruthy();
+	});
+
+	it("Add Override adds the first unconfigured provider", () => {
+		// providersData = [openai, anthropic, gemini]; existing override: openai
+		// First available = anthropic (first in order not used)
+		mocks.providersData = DEFAULT_PROVIDERS;
+		render(<ProvidercooldownFragment plugin={mockPlugin} />);
+
+		const addBtn = screen.getByRole("button", { name: /add override/i });
+		fireEvent.click(addBtn);
+
+		// anthropic row should appear with TTL 300
+		const anthropicValue = screen.getByTestId("providercooldown-field-ttl-overrides-value-anthropic") as HTMLInputElement;
+		expect(anthropicValue.value).toBe("300");
+	});
+
+	it("shows hint when no providers are configured", () => {
+		mocks.providersData = [];
+		render(<ProvidercooldownFragment plugin={mockPlugin} />);
+
+		// Stale entry still renders (openai is not in the configured list but kept as stale)
+		const trigger = screen.getByTestId("providercooldown-field-ttl-overrides-provider-openai");
+		expect(trigger).toBeTruthy();
+
+		// "No providers configured yet" hint shown
+		expect(screen.getByText(/no providers configured yet/i)).toBeTruthy();
+
+		// Add Override disabled
+		const addBtn = screen.getByRole("button", { name: /add override/i });
+		expect((addBtn as HTMLButtonElement).disabled).toBe(true);
 	});
 });

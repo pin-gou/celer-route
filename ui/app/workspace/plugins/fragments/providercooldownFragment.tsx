@@ -1,24 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import {
-	PROVIDER_COOLDOWN_PLUGIN,
-	providerCooldownConfigSchema,
-	type Plugin,
-} from "@/lib/types/plugins";
+import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
+import { ProviderLabels } from "@/lib/constants/logs";
+import { PROVIDER_COOLDOWN_PLUGIN, providerCooldownConfigSchema, type Plugin } from "@/lib/types/plugins";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import {
-	useGetCooldownStateQuery,
-	useGetCooldownStatsQuery,
-	useUnfreezeCooldownMutation,
-} from "@/lib/store/apis/pluginsApi";
+import { useGetCooldownStateQuery, useGetCooldownStatsQuery, useUnfreezeCooldownMutation } from "@/lib/store/apis/pluginsApi";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,9 +46,7 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 		<div className="flex flex-row items-center justify-between rounded-lg border p-4">
 			<div className="space-y-0.5">
 				<label className="text-sm font-medium">Enable Provider Cooldown</label>
-				<p className="text-muted-foreground text-sm">
-					Automatically cool down providers that return quota errors
-				</p>
+				<p className="text-muted-foreground text-sm">Automatically cool down providers that return quota errors</p>
 			</div>
 			<Switch
 				data-testid="providercooldown-enabled-switch"
@@ -72,6 +65,7 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 export function ConfigForm({ plugin }: { plugin: Plugin }) {
 	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
 	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
+	const { data: providers = [] } = useGetProvidersQuery();
 
 	const pluginConfig = (plugin.config || {}) as Record<string, any>;
 
@@ -95,6 +89,20 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 
 	const ttlOverrides = form.watch("ttl_overrides") || {};
 	const ttlOverrideKeys = Object.keys(ttlOverrides);
+	const usedProviders = new Set(ttlOverrideKeys);
+	const availableProviders = providers.filter((p) => !usedProviders.has(p.name));
+	const firstAvailableProvider = availableProviders[0]?.name;
+	const allProvidersConsumed = ttlOverrideKeys.length > 0 && availableProviders.length === 0;
+
+	const renameOverride = (from: string, to: string) => {
+		const next = { ...ttlOverrides };
+		const ttl = next[from];
+		delete next[from];
+		next[to] = ttl;
+		form.setValue("ttl_overrides", next, { shouldValidate: true, shouldDirty: true });
+	};
+
+	const providerLabel = (name: string) => ProviderLabels[name as keyof typeof ProviderLabels] ?? name;
 
 	const onSubmit = async (values: ProviderCooldownFormValues) => {
 		if (!hasUpdateAccess) return;
@@ -152,63 +160,81 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 				{/* ttl_overrides */}
 				<FormItem>
 					<FormLabel>TTL Overrides</FormLabel>
-					<p className="text-muted-foreground mb-2 text-xs">
-						Per-provider TTL overrides (seconds)
-					</p>
+					<p className="text-muted-foreground mb-2 text-xs">Per-provider TTL overrides (seconds)</p>
 					<FormControl>
 						<div className="space-y-2">
-							{ttlOverrideKeys.length === 0 && (
-								<p className="text-muted-foreground text-sm">No overrides configured</p>
+							{ttlOverrideKeys.length === 0 && <p className="text-muted-foreground text-sm">No overrides configured</p>}
+							{ttlOverrideKeys.map((providerKey) => {
+								const otherKeys = ttlOverrideKeys.filter((k) => k !== providerKey);
+								const otherSet = new Set<string>(otherKeys);
+								const rowOptionNames: string[] = providers.map((p) => p.name).filter((name) => !otherSet.has(name));
+								if (!rowOptionNames.includes(providerKey)) {
+									rowOptionNames.push(providerKey);
+								}
+								return (
+									<div key={providerKey} className="flex items-center gap-2">
+										<Select value={providerKey} onValueChange={(next) => renameOverride(providerKey, next)}>
+											<SelectTrigger className="w-1/3" data-testid={`providercooldown-field-ttl-overrides-provider-${providerKey}`}>
+												<SelectValue placeholder="Select provider" />
+											</SelectTrigger>
+											<SelectContent>
+												{rowOptionNames.map((name) => (
+													<SelectItem key={name} value={name}>
+														{providerLabel(name)}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										<Input
+											data-testid={`providercooldown-field-ttl-overrides-value-${providerKey}`}
+											type="number"
+											min={1}
+											placeholder="TTL seconds"
+											value={ttlOverrides[providerKey]}
+											onChange={(e) => {
+												const num = e.target.valueAsNumber;
+												if (Number.isNaN(num)) return;
+												form.setValue(
+													"ttl_overrides",
+													{ ...ttlOverrides, [providerKey]: num },
+													{ shouldValidate: true, shouldDirty: true },
+												);
+											}}
+										/>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											onClick={() => {
+												form.setValue(
+													"ttl_overrides",
+													Object.fromEntries(Object.entries(ttlOverrides).filter(([k]) => k !== providerKey)) as Record<string, number>,
+													{ shouldValidate: true, shouldDirty: true },
+												);
+											}}
+										>
+											<Trash2Icon className="h-4 w-4" />
+										</Button>
+									</div>
+								);
+							})}
+							{allProvidersConsumed && providers.length > 0 && (
+								<p className="text-muted-foreground text-xs">All configured providers already have an override</p>
 							)}
-							{ttlOverrideKeys.map((providerKey) => (
-								<div key={providerKey} className="flex items-center gap-2">
-									<Input
-										className="w-1/3"
-										value={providerKey}
-										disabled
-										placeholder="Provider name"
-									/>
-									<Input
-										data-testid={`providercooldown-field-ttl-overrides-value-${providerKey}`}
-										type="number"
-										min={1}
-										placeholder="TTL seconds"
-										value={ttlOverrides[providerKey]}
-										onChange={(e) => {
-											const num = e.target.valueAsNumber;
-											if (Number.isNaN(num)) return;
-											form.setValue(
-												"ttl_overrides",
-												{ ...ttlOverrides, [providerKey]: num },
-												{ shouldValidate: true },
-											);
-										}}
-									/>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											form.setValue(
-												"ttl_overrides",
-												Object.fromEntries(
-													Object.entries(ttlOverrides).filter(([k]) => k !== providerKey),
-												) as Record<string, number>,
-												{ shouldValidate: true },
-											);
-										}}
-									>
-										<Trash2Icon className="h-4 w-4" />
-									</Button>
-								</div>
-							))}
+							{providers.length === 0 && <p className="text-muted-foreground text-xs">No providers configured yet</p>}
 							<Button
 								type="button"
 								variant="outline"
 								size="sm"
+								disabled={!firstAvailableProvider}
 								onClick={() => {
-									const key = `provider-${Date.now()}`;
-									form.setValue("ttl_overrides", { ...ttlOverrides, [key]: 300 }, { shouldValidate: true });
+									if (firstAvailableProvider) {
+										form.setValue(
+											"ttl_overrides",
+											{ ...ttlOverrides, [firstAvailableProvider]: 300 },
+											{ shouldValidate: true, shouldDirty: true },
+										);
+									}
 								}}
 							>
 								<PlusIcon className="mr-1 h-3 w-3" />
@@ -222,9 +248,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 				{/* quota_patterns */}
 				<FormItem>
 					<FormLabel>Quota Patterns</FormLabel>
-					<p className="text-muted-foreground mb-2 text-xs">
-						Error message patterns that trigger cooldown (at least 1 required)
-					</p>
+					<p className="text-muted-foreground mb-2 text-xs">Error message patterns that trigger cooldown (at least 1 required)</p>
 					<FormControl>
 						<div className="space-y-2">
 							{quotaFields.map((field, index) => (
@@ -239,12 +263,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 													placeholder="e.g. insufficient_quota"
 													{...innerField}
 												/>
-												<Button
-													type="button"
-													variant="ghost"
-													size="sm"
-													onClick={() => removeQuota(index)}
-												>
+												<Button type="button" variant="ghost" size="sm" onClick={() => removeQuota(index)}>
 													<Trash2Icon className="h-4 w-4" />
 												</Button>
 											</>
@@ -252,12 +271,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 									/>
 								</div>
 							))}
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={() => appendQuota("")}
-							>
+							<Button type="button" variant="outline" size="sm" onClick={() => appendQuota("")}>
 								<PlusIcon className="mr-1 h-3 w-3" />
 								Add Pattern
 							</Button>
@@ -268,10 +282,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 
 				{/* Save button */}
 				<div className="flex justify-end">
-					<Button
-						type="submit"
-						disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess}
-					>
+					<Button type="submit" disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess}>
 						{isLoading ? "Saving..." : "Save Configuration"}
 					</Button>
 				</div>
@@ -313,24 +324,15 @@ export function MonitoringPanel() {
 		<div className="space-y-6">
 			{/* Stats cards */}
 			<div className="grid grid-cols-3 gap-4">
-				<div
-					data-testid="providercooldown-stats-mark"
-					className="rounded-lg border p-4 text-center"
-				>
+				<div data-testid="providercooldown-stats-mark" className="rounded-lg border p-4 text-center">
 					<div className="text-2xl font-bold">{stats.markCount}</div>
 					<div className="text-muted-foreground text-xs">Total Marked</div>
 				</div>
-				<div
-					data-testid="providercooldown-stats-suppressed"
-					className="rounded-lg border p-4 text-center"
-				>
+				<div data-testid="providercooldown-stats-suppressed" className="rounded-lg border p-4 text-center">
 					<div className="text-2xl font-bold">{stats.suppressedCount}</div>
 					<div className="text-muted-foreground text-xs">Suppressed Requests</div>
 				</div>
-				<div
-					data-testid="providercooldown-stats-active"
-					className="rounded-lg border p-4 text-center"
-				>
+				<div data-testid="providercooldown-stats-active" className="rounded-lg border p-4 text-center">
 					<div className="text-2xl font-bold">{stats.activeCount}</div>
 					<div className="text-muted-foreground text-xs">Currently Active</div>
 				</div>
@@ -340,9 +342,7 @@ export function MonitoringPanel() {
 			<div>
 				<h4 className="mb-2 text-sm font-medium">Active Cooldown State</h4>
 				{entries.length === 0 ? (
-					<p className="text-muted-foreground py-4 text-center text-sm">
-						No keys are currently in cooldown
-					</p>
+					<p className="text-muted-foreground py-4 text-center text-sm">No keys are currently in cooldown</p>
 				) : (
 					<div className="space-y-2">
 						{entries.map((entry) => (
