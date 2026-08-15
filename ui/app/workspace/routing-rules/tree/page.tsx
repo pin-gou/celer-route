@@ -13,8 +13,8 @@ export default function RoutingTreePage() {
 	// Static `metadata` export is not locale-aware; replicate its effect here so the
 	// document title and meta description follow the active language.
 	useEffect(() => {
-		document.title = t("routing.tree.pageTitle");
-		const description = t("routing.tree.pageDescription");
+		document.title = t("tree.pageTitle");
+		const description = t("tree.pageDescription");
 		let meta = document.querySelector('meta[name="description"]');
 		if (!meta) {
 			meta = document.createElement("meta");

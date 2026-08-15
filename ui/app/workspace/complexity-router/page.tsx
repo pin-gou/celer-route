@@ -67,8 +67,8 @@ function buildBoundaryFields(t: (key: string, opts?: Record<string, unknown>) =>
 	return [
 		{
 			key: "simple_medium",
-			label: t("routing.complexityRouter.simpleToMedium"),
-			description: t("routing.complexityRouter.validation.simpleAbove"),
+			label: t("complexityRouter.simpleToMedium"),
+			description: t("complexityRouter.validation.simpleAbove"),
 			fromTier: "SIMPLE",
 			toTier: "MEDIUM",
 			fromColor: P1,
@@ -76,8 +76,8 @@ function buildBoundaryFields(t: (key: string, opts?: Record<string, unknown>) =>
 		},
 		{
 			key: "medium_complex",
-			label: t("routing.complexityRouter.mediumToComplex"),
-			description: t("routing.complexityRouter.validation.mediumAbove"),
+			label: t("complexityRouter.mediumToComplex"),
+			description: t("complexityRouter.validation.mediumAbove"),
 			fromTier: "MEDIUM",
 			toTier: "COMPLEX",
 			fromColor: P2,
@@ -85,8 +85,8 @@ function buildBoundaryFields(t: (key: string, opts?: Record<string, unknown>) =>
 		},
 		{
 			key: "complex_reasoning",
-			label: t("routing.complexityRouter.complexToReasoning"),
-			description: t("routing.complexityRouter.validation.complexAbove"),
+			label: t("complexityRouter.complexToReasoning"),
+			description: t("complexityRouter.validation.complexAbove"),
 			fromTier: "COMPLEX",
 			toTier: "REASONING",
 			fromColor: P3,
@@ -97,9 +97,9 @@ function buildBoundaryFields(t: (key: string, opts?: Record<string, unknown>) =>
 
 function buildBoundaryField(t: (key: string, opts?: Record<string, unknown>) => string) {
 	return z
-		.number({ error: t("routing.complexityRouter.validation.enterNumberBetweenZeroAndOne") })
-		.gt(0, t("routing.complexityRouter.validation.mustBeGreaterThanZero"))
-		.lt(1, t("routing.complexityRouter.validation.mustBeLessThanOne"));
+		.number({ error: t("complexityRouter.validation.enterNumberBetweenZeroAndOne") })
+		.gt(0, t("complexityRouter.validation.mustBeGreaterThanZero"))
+		.lt(1, t("complexityRouter.validation.mustBeLessThanOne"));
 }
 
 function buildAnalyzerConfigSchema(t: (key: string, opts?: Record<string, unknown>) => string) {
@@ -115,7 +115,7 @@ function buildAnalyzerConfigSchema(t: (key: string, opts?: Record<string, unknow
 				if (Number.isFinite(data.medium_complex) && Number.isFinite(data.simple_medium) && data.medium_complex <= data.simple_medium) {
 					ctx.addIssue({
 						code: "custom",
-						message: t("routing.complexityRouter.validation.mustBeGreaterThanSimpleMedium"),
+						message: t("complexityRouter.validation.mustBeGreaterThanSimpleMedium"),
 						path: ["medium_complex"],
 					});
 				}
@@ -126,16 +126,16 @@ function buildAnalyzerConfigSchema(t: (key: string, opts?: Record<string, unknow
 				) {
 					ctx.addIssue({
 						code: "custom",
-						message: t("routing.complexityRouter.validation.mustBeGreaterThanMediumComplex"),
+						message: t("complexityRouter.validation.mustBeGreaterThanMediumComplex"),
 						path: ["complex_reasoning"],
 					});
 				}
 			}),
 		keywords: z.object({
-			simple_keywords: z.array(z.string()).min(1, t("routing.complexityRouter.validation.simpleKeywordsCannotBeEmpty")),
-			code_keywords: z.array(z.string()).min(1, t("routing.complexityRouter.validation.codeKeywordsCannotBeEmpty")),
-			technical_keywords: z.array(z.string()).min(1, t("routing.complexityRouter.validation.technicalKeywordsCannotBeEmpty")),
-			reasoning_keywords: z.array(z.string()).min(1, t("routing.complexityRouter.validation.reasoningKeywordsCannotBeEmpty")),
+			simple_keywords: z.array(z.string()).min(1, t("complexityRouter.validation.simpleKeywordsCannotBeEmpty")),
+			code_keywords: z.array(z.string()).min(1, t("complexityRouter.validation.codeKeywordsCannotBeEmpty")),
+			technical_keywords: z.array(z.string()).min(1, t("complexityRouter.validation.technicalKeywordsCannotBeEmpty")),
+			reasoning_keywords: z.array(z.string()).min(1, t("complexityRouter.validation.reasoningKeywordsCannotBeEmpty")),
 		}),
 	});
 }
@@ -306,7 +306,7 @@ export default function ComplexityRouterPage() {
 			.unwrap()
 			.then((defaults) => {
 				reset(defaults);
-				toast.success(t("routing.complexityRouter.resetToDefaults"), { position: "top-right" });
+				toast.success(t("complexityRouter.resetToDefaults"), { position: "top-right" });
 			})
 			.catch((err) => {
 				setSubmitError(getErrorMessage(err));
@@ -320,7 +320,7 @@ export default function ComplexityRouterPage() {
 			.unwrap()
 			.then((res) => {
 				reset(res);
-				toast.success(t("routing.complexityRouter.configSaved"), { position: "top-right" });
+				toast.success(t("complexityRouter.configSaved"), { position: "top-right" });
 			})
 			.catch((err) => {
 				setSubmitError(getErrorMessage(err));
@@ -345,7 +345,7 @@ export default function ComplexityRouterPage() {
 	if (!data) {
 		return (
 			<div className="mx-auto w-full max-w-7xl space-y-4 px-14 pt-8">
-				<p className="text-muted-foreground font-mono text-sm">{t("routing.complexityRouter.configUnavailable")}</p>
+				<p className="text-muted-foreground font-mono text-sm">{t("complexityRouter.configUnavailable")}</p>
 				<Button data-testid="complexity-router-fetch-retry-button" type="button" variant="outline" size="sm" onClick={() => refetch()}>
 					{t("common.action.retry")}
 				</Button>
@@ -363,19 +363,19 @@ export default function ComplexityRouterPage() {
 				{/* ── Page header ── */}
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 					<div className="space-y-1.5">
-						<h1 className="text-2xl font-semibold tracking-tight">{t("routing.complexityRouter.title")}</h1>
+						<h1 className="text-2xl font-semibold tracking-tight">{t("complexityRouter.title")}</h1>
 						<p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
-							{t("routing.complexityRouter.headerDescription")}{" "}
+							{t("complexityRouter.headerDescription")}{" "}
 							<code className="bg-muted rounded-sm px-1 py-0.5 font-mono text-xs">
-								{t("routing.complexityRouter.headerDescriptionCode")}
+								{t("complexityRouter.headerDescriptionCode")}
 							</code>{" "}
-							{t("routing.complexityRouter.headerDescriptionSuffix")}
+							{t("complexityRouter.headerDescriptionSuffix")}
 						</p>
 					</div>
 					<Button asChild variant="outline" size="sm" className="w-fit shrink-0" data-testid="complexity-router-docs-link">
 						<a href={"https://docs.getbifrost.ai/features/governance/complexity-router"} target="_blank" rel="noopener noreferrer">
 							<ExternalLink className="size-3.5" />
-							{t("routing.complexityRouter.docsLink")}
+							{t("complexityRouter.docsLink")}
 						</a>
 					</Button>
 				</div>
@@ -384,7 +384,7 @@ export default function ComplexityRouterPage() {
 				<div className="bg-card space-y-4 rounded-sm border p-5">
 					<div className="flex items-center justify-between">
 						<p className="text-muted-foreground font-mono text-xs font-semibold tracking-widest uppercase">
-							{t("routing.complexityRouter.complexitySpectrum")}
+							{t("complexityRouter.complexitySpectrum")}
 						</p>
 						<div className="flex items-center gap-4">
 							{Object.values(TIER_PALETTE).map(({ color, name }) => (
@@ -400,7 +400,7 @@ export default function ComplexityRouterPage() {
 
 				{/* ── Tier Boundaries ── */}
 				<div className="space-y-3">
-					<h2 className="text-sm font-semibold">{t("routing.complexityRouter.tierBoundaries")}</h2>
+					<h2 className="text-sm font-semibold">{t("complexityRouter.tierBoundaries")}</h2>
 
 					<div className="grid gap-3 md:grid-cols-3">
 						{boundaryFields.map(({ key, label, description, fromTier, toTier, fromColor, toColor }) => {
@@ -408,18 +408,18 @@ export default function ComplexityRouterPage() {
 							const inputId = `boundary-${key}`;
 							const errorId = `${inputId}-error`;
 							const { onChange, ...boundaryInputProps } = register(`tier_boundaries.${key}`, {
-								required: t("routing.complexityRouter.validation.enterNumberBetweenZeroAndOne"),
+								required: t("complexityRouter.validation.enterNumberBetweenZeroAndOne"),
 								setValueAs: boundaryValueAsNumber,
 								validate: (value) => {
-									if (!Number.isFinite(value)) return t("routing.complexityRouter.validation.enterNumberBetweenZeroAndOne");
-									if (value <= 0) return t("routing.complexityRouter.validation.mustBeGreaterThanZero");
-									if (value >= 1) return t("routing.complexityRouter.validation.mustBeLessThanOne");
+									if (!Number.isFinite(value)) return t("complexityRouter.validation.enterNumberBetweenZeroAndOne");
+									if (value <= 0) return t("complexityRouter.validation.mustBeGreaterThanZero");
+									if (value >= 1) return t("complexityRouter.validation.mustBeLessThanOne");
 									const { simple_medium, medium_complex } = liveBoundaries;
 									if (key === "medium_complex" && Number.isFinite(simple_medium) && value <= simple_medium) {
-										return t("routing.complexityRouter.validation.mustBeGreaterThanSimpleMedium");
+										return t("complexityRouter.validation.mustBeGreaterThanSimpleMedium");
 									}
 									if (key === "complex_reasoning" && Number.isFinite(medium_complex) && value <= medium_complex) {
-										return t("routing.complexityRouter.validation.mustBeGreaterThanMediumComplex");
+										return t("complexityRouter.validation.mustBeGreaterThanMediumComplex");
 									}
 									return true;
 								},
@@ -487,8 +487,8 @@ export default function ComplexityRouterPage() {
 				{/* ── Keyword Lists ── */}
 				<div className="space-y-3">
 					<div className="flex items-baseline gap-2.5">
-						<h2 className="text-sm font-semibold">{t("routing.complexityRouter.keywordLists")}</h2>
-						<span className="text-muted-foreground text-xs">{t("routing.complexityRouter.keywordListsDescription")}</span>
+						<h2 className="text-sm font-semibold">{t("complexityRouter.keywordLists")}</h2>
+						<span className="text-muted-foreground text-xs">{t("complexityRouter.keywordListsDescription")}</span>
 					</div>
 
 					<div className="grid gap-3 md:grid-cols-2">
@@ -512,8 +512,8 @@ export default function ComplexityRouterPage() {
 													<span className="text-muted-foreground font-mono text-[11px] tabular-nums">
 														{field.value.length}{" "}
 														{field.value.length === 1
-															? t("routing.complexityRouter.entry")
-															: t("routing.complexityRouter.entries")}
+															? t("complexityRouter.entry")
+															: t("complexityRouter.entries")}
 													</span>
 												</div>
 												<p className="text-muted-foreground text-xs leading-relaxed">{description}</p>
@@ -523,7 +523,7 @@ export default function ComplexityRouterPage() {
 													onValueChange={field.onChange}
 													collapsedTagLimit={KEYWORD_COLLAPSED_LIMIT}
 													expandButtonTestId={`complexity-router-keywords-${testIdPart(key)}-expand-button`}
-													placeholder={t("routing.complexityRouter.typeKeywordPlaceholder")}
+													placeholder={t("complexityRouter.typeKeywordPlaceholder")}
 													aria-invalid={fieldError ? true : undefined}
 													aria-describedby={fieldError ? errorId : undefined}
 													className={cn(fieldError && "border-destructive")}
@@ -563,7 +563,7 @@ export default function ComplexityRouterPage() {
 						disabled={!canUpdate || isSaving || isResetting}
 					>
 						{isResetting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-						{t("routing.complexityRouter.restoreDefaults")}
+						{t("complexityRouter.restoreDefaults")}
 					</Button>
 					<Button
 						data-testid="complexity-router-discard-changes-button"
@@ -573,7 +573,7 @@ export default function ComplexityRouterPage() {
 						onClick={handleDiscard}
 						disabled={!isDirty || isSaving || isResetting || isFetching}
 					>
-						{t("routing.complexityRouter.discardChanges")}
+						{t("complexityRouter.discardChanges")}
 					</Button>
 					<Button
 						data-testid="complexity-router-save-changes-button"
@@ -582,7 +582,7 @@ export default function ComplexityRouterPage() {
 						disabled={!canUpdate || !isDirty || isSaving || isResetting || (isSubmitted && hasErrors)}
 					>
 						{isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-						{isSaving ? t("routing.complexityRouter.saving") : t("routing.complexityRouter.saveChanges")}
+						{isSaving ? t("complexityRouter.saving") : t("complexityRouter.saveChanges")}
 					</Button>
 				</div>
 			</form>
@@ -590,8 +590,8 @@ export default function ComplexityRouterPage() {
 			<AlertDialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>{t("routing.complexityRouter.restoreDefaultsTitle")}</AlertDialogTitle>
-						<AlertDialogDescription>{t("routing.complexityRouter.restoreDefaultsDescription")}</AlertDialogDescription>
+						<AlertDialogTitle>{t("complexityRouter.restoreDefaultsTitle")}</AlertDialogTitle>
+						<AlertDialogDescription>{t("complexityRouter.restoreDefaultsDescription")}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel
@@ -609,7 +609,7 @@ export default function ComplexityRouterPage() {
 							}}
 							disabled={!canUpdate || isResetting}
 						>
-							{t("routing.complexityRouter.restoreDefaults")}
+							{t("complexityRouter.restoreDefaults")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
