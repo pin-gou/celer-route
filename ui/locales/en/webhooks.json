@@ -23,5 +23,11 @@
     "title": "Webhooks notify you when async jobs finish",
     "description": "Register webhook endpoints and Bifrost will send a signed notification whenever an async inference job completes or fails, so you don't have to poll for results."
   },
-  "permissionDenied": "You don't have permission to access webhooks"
+  "permissionDenied": "You don't have permission to access webhooks",
+  "toast": {
+    "webhookCreated": "Webhook created successfully",
+    "webhookUpdated": "Webhook updated successfully",
+    "webhookDeleted": "Webhook deleted successfully",
+    "deliveryTested": "Test delivery sent"
+  }
 }

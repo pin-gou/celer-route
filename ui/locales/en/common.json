@@ -169,6 +169,30 @@
     "warning": "Please be careful",
     "copied": "Copied to clipboard"
   },
+  "validation": {
+    "required": "This field is required",
+    "fieldRequired": "{{field}} is required",
+    "urlInvalid": "Must be a valid URL",
+    "emailInvalid": "Must be a valid email",
+    "numberExpected": "Must be a valid number",
+    "textExpected": "Must be a valid text value",
+    "booleanExpected": "Must be true or false",
+    "expectedType": "Expected {{expected}}, received {{received}}",
+    "minNumber": "Must be at least {{n}}",
+    "maxNumber": "Must be at most {{n}}",
+    "minLength": "Must be at least {{n}} characters",
+    "maxLength": "Must be at most {{n}} characters",
+    "maxCharacters": "Must be at most {{n}} characters",
+    "oneItemRequired": "At least one item is required",
+    "integerExpected": "Must be a whole number",
+    "rangeOutOfBounds": "{{field}} must be between {{min}} and {{max}}",
+    "notAllowed": "Not allowed",
+    "invalidFormat": "Invalid format",
+    "duplicateNotAllowed": "Duplicate entries are not allowed",
+    "wildcardConflict": "Wildcard '*' cannot be combined with other entries",
+    "budgetAmountPositive": "Additional budget must be greater than 0",
+    "cyclesWholePositive": "Reset cycles must be a positive whole number"
+  },
   "confirm": {
     "title": "Are you sure?",
     "message": "This action cannot be undone.",
@@ -188,5 +212,20 @@
   },
   "docs": {
     "title": "Docs"
+  },
+  "sidebar": {
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "searchNav": "Search sidebar navigation",
+    "searchPlaceholder": "Search...",
+    "logout": "Logout",
+    "githubRepo": "GitHub Repository",
+    "restartRequired": "Restart Required",
+    "restartReason": "Configuration changes require a server restart to take effect.",
+    "setupIncomplete": "Setup checklist incomplete",
+    "setupStepsLeft": "{{n}} setup step(s) left. Not completing these steps keeps your Bifrost setup vulnerable.",
+    "resumeSetup": "Resume setup",
+    "viewReleaseNotes": "View release notes",
+    "releaseAvailable": "{{name}} is now available."
   }
 }

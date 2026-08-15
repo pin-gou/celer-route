@@ -47,5 +47,12 @@
   "routingRules": {
     "emptyTitle": "路由规则使用 CEL 条件来分发请求",
     "emptyDescription": "创建基于 CEL 的规则，按模型、提供商、预算或自定义属性路由请求。控制每个请求由哪个提供商或模型处理。"
+  },
+  "toast": {
+    "ruleCreated": "路由规则创建成功",
+    "ruleUpdated": "路由规则更新成功",
+    "ruleDeleted": "路由规则删除成功",
+    "ruleEnabled": "路由规则已启用",
+    "ruleDisabled": "路由规则已禁用"
   }
 }

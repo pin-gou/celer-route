@@ -94,7 +94,7 @@ const MCPIcon = ({ className }: { className?: string }) => (
 // External links
 const externalLinks = [
 	{
-		title: "GitHub Repository",
+		title: "sidebar.githubRepo",
 		url: "https://github.com/pin-gou/pg-gateway",
 		icon: GithubLogoIcon,
 	},
@@ -1046,10 +1046,10 @@ export default function AppSidebar() {
 		if (coreConfig?.restart_required?.required) {
 			cards.push({
 				id: "restart-required",
-				title: "Restart Required",
+				title: t("sidebar.restartRequired"),
 				description: (
 					<div className="text-xs text-amber-700 dark:text-amber-300/80">
-						{coreConfig.restart_required.reason || "Configuration changes require a server restart to take effect."}
+						{coreConfig.restart_required.reason || t("sidebar.restartReason")}
 					</div>
 				),
 				dismissible: false,
@@ -1062,12 +1062,11 @@ export default function AppSidebar() {
 			const remainingSteps = onboardingSteps.length - onboardingDoneCount;
 			cards.push({
 				id: "onboarding-incomplete",
-				title: "Setup checklist incomplete",
+				title: t("sidebar.setupIncomplete"),
 				description: (
 					<div className="flex h-full flex-col gap-2 text-xs text-amber-700 dark:text-amber-300/80">
 						<p>
-							{remainingSteps} setup step{remainingSteps === 1 ? "" : "s"} left. Not completing these steps keeps your Bifrost setup
-							vulnerable.
+							{t("sidebar.setupStepsLeft", { n: String(remainingSteps) })}
 						</p>
 						<button
 							type="button"
@@ -1075,7 +1074,7 @@ export default function AppSidebar() {
 							data-testid="onboarding-resume-btn"
 							className="text-primary mt-auto self-start pb-1 font-medium underline"
 						>
-							Resume setup
+							{t("sidebar.resumeSetup")}
 						</button>
 					</div>
 				),
@@ -1086,7 +1085,7 @@ export default function AppSidebar() {
 		if (showNewReleaseBanner && latestRelease) {
 			cards.push({
 				id: "new-release",
-				title: `${latestRelease.name} is now available.`,
+				title: t("sidebar.releaseAvailable", { name: latestRelease.name }),
 				description: (
 					<div className="flex h-full flex-col gap-2">
 						<img src={newReleaseImage} alt="Bifrost" className="h-[95px] rounded-md object-cover" />
@@ -1096,7 +1095,7 @@ export default function AppSidebar() {
 							rel="noopener noreferrer"
 							className="text-primary mt-auto pb-1 font-medium underline"
 						>
-							View release notes
+							{t("sidebar.viewReleaseNotes")}
 						</a>
 					</div>
 				),
@@ -1105,6 +1104,7 @@ export default function AppSidebar() {
 		}
 		return cards;
 	}, [
+		t,
 		coreConfig?.restart_required,
 		showNewReleaseBanner,
 		latestRelease,
@@ -1184,7 +1184,7 @@ export default function AppSidebar() {
 						type="button"
 						data-testid="sidebar-collapse-btn"
 						className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-						aria-label="Collapse sidebar"
+						aria-label={t("sidebar.collapse")}
 					>
 						<PanelLeftClose className="h-4 w-4" />
 					</button>
@@ -1220,8 +1220,8 @@ export default function AppSidebar() {
 					<input
 						ref={searchInputRef}
 						type="text"
-						aria-label="Search sidebar navigation"
-						placeholder="Search..."
+						aria-label={t("sidebar.searchNav")}
+						placeholder={t("sidebar.searchPlaceholder")}
 						value={searchQuery}
 						onChange={(e) => {
 							setSearchQuery(e.target.value);
@@ -1278,7 +1278,7 @@ export default function AppSidebar() {
 										target="_blank"
 										rel="noopener noreferrer"
 										className="group flex w-full items-center justify-between"
-										title={item.title}
+										title={t(item.title)}
 									>
 										<div className="flex items-center space-x-3">
 											<item.icon className="hover:text-primary text-muted-foreground h-5 w-5" size={22} weight="regular" />
@@ -1293,7 +1293,7 @@ export default function AppSidebar() {
 										className="hover:text-primary text-muted-foreground flex cursor-pointer items-center space-x-3 p-0.5"
 										onClick={handleLogout}
 										type="button"
-										aria-label="Logout"
+										aria-label={t("sidebar.logout")}
 									>
 										<LogOut className="hover:text-primary text-muted-foreground h-4 w-4" size={20} strokeWidth={2} />
 									</button>
@@ -1305,7 +1305,7 @@ export default function AppSidebar() {
 									type="button"
 									data-testid="sidebar-expand-btn"
 									className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex cursor-pointer items-center justify-center rounded-md transition-colors"
-									aria-label="Expand sidebar"
+									aria-label={t("sidebar.expand")}
 								>
 									<PanelLeftOpen className="h-4 w-4" />
 								</button>

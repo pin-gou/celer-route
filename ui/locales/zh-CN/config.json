@@ -249,5 +249,12 @@
     "timeout": "超时时间",
     "noSettings": "未配置 MCP 设置"
   },
-  "routingRules": {}
+  "routingRules": {},
+  "toast": {
+    "settingsSaved": "设置保存成功",
+    "settingsSaveFailed": "保存设置失败",
+    "settingsLoaded": "设置加载成功",
+    "resetConfig": "配置重置成功",
+    "configExported": "配置导出成功"
+  }
 }

@@ -34,5 +34,11 @@
   "empty": {
     "title": "No data available",
     "description": "There is no data for the selected time period. Try adjusting your filters or time range."
+  },
+  "toast": {
+    "exportStarted": "Export started",
+    "exportFailed": "Export failed",
+    "exportCompleted": "Export completed",
+    "dataRefreshed": "Dashboard data refreshed"
   }
 }

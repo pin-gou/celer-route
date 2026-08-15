@@ -23,5 +23,12 @@
     "title": "Custom plugins extend Bifrost with your own business logic",
     "description": "Build and deploy plugins for custom integrations, workflow automation, and AI governance."
   },
-  "permissionDenied": "You don't have permission to access plugins"
+  "permissionDenied": "You don't have permission to access plugins",
+  "toast": {
+    "pluginAdded": "Plugin added successfully",
+    "pluginUpdated": "Plugin updated successfully",
+    "pluginDeleted": "Plugin deleted successfully",
+    "pluginEnabled": "Plugin enabled",
+    "pluginDisabled": "Plugin disabled"
+  }
 }

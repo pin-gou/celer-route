@@ -53,5 +53,11 @@
   "permissionDenied": "You don't have permission to access MCP Gateway",
   "registry": {
     "title": "MCP Registry"
+  },
+  "toast": {
+    "clientAdded": "MCP client added successfully",
+    "clientUpdated": "MCP client updated successfully",
+    "clientDeleted": "MCP client deleted successfully",
+    "syncTriggered": "Sync triggered successfully"
   }
 }

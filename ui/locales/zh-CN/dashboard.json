@@ -34,5 +34,11 @@
   "empty": {
     "title": "暂无数据",
     "description": "所选时间段内没有数据。请尝试调整筛选条件或时间范围。"
+  },
+  "toast": {
+    "exportStarted": "导出已开始",
+    "exportFailed": "导出失败",
+    "exportCompleted": "导出完成",
+    "dataRefreshed": "仪表盘数据已刷新"
   }
 }

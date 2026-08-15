@@ -9,7 +9,7 @@
       "avgLatency": "平均延迟",
       "totalCost": "总成本"
     },
-    "COLUMN_LABELS": {
+    "column_labels": {
       "timestamp": "时间",
       "tool_name": "工具名称",
       "server_label": "服务器",
@@ -59,7 +59,7 @@
     "in": "入",
     "out": "出"
   },
-  "COLUMN_LABELS": {
+  "column_labels": {
     "timestamp": "时间",
     "request_type": "类型",
     "input": "消息",
@@ -374,5 +374,34 @@
     "core": {
       "label": "核心"
     }
+  },
+  "filterSidebar": {
+    "showFilters": "显示筛选器",
+    "hideFilters": "隐藏筛选器",
+    "status": "状态",
+    "provider": "提供商",
+    "model": "模型",
+    "virtualKey": "虚拟密钥",
+    "stopReason": "停止原因",
+    "app": "应用",
+    "alias": "别名",
+    "rule": "规则",
+    "engine": "引擎",
+    "user": "用户",
+    "team": "团队",
+    "customer": "客户",
+    "businessUnit": "业务单元",
+    "key": "密钥",
+    "metadata": "元数据",
+    "searchPlaceholder": "搜索 {{label}}",
+    "searchOrAdd": "搜索或添加 {{label}}",
+    "searchAndAdd": "搜索或添加 {{label}}"
+  },
+  "toast": {
+    "logsRefreshed": "日志已刷新",
+    "logsRefreshFailed": "刷新日志失败",
+    "exportStarted": "导出已开始",
+    "exportFailed": "导出失败",
+    "exportCompleted": "导出完成"
   }
 }

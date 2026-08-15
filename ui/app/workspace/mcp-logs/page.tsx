@@ -371,12 +371,12 @@ export default function MCPLogsPage() {
 
 	const MCP_COLUMN_LABELS: Record<string, string> = useMemo(
 		() => ({
-			timestamp: t("mcpLogs.COLUMN_LABELS.timestamp"),
-			tool_name: t("mcpLogs.COLUMN_LABELS.tool_name"),
-			server_label: t("mcpLogs.COLUMN_LABELS.server_label"),
-			latency: t("mcpLogs.COLUMN_LABELS.latency"),
-			cost: t("mcpLogs.COLUMN_LABELS.cost"),
-			virtual_key: t("mcpLogs.COLUMN_LABELS.virtual_key"),
+			timestamp: t("mcpLogs.column_labels.timestamp"),
+			tool_name: t("mcpLogs.column_labels.tool_name"),
+			server_label: t("mcpLogs.column_labels.server_label"),
+			latency: t("mcpLogs.column_labels.latency"),
+			cost: t("mcpLogs.column_labels.cost"),
+			virtual_key: t("mcpLogs.column_labels.virtual_key"),
 		}),
 		[t],
 	);

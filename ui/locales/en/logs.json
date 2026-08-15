@@ -9,7 +9,7 @@
       "avgLatency": "Avg Latency",
       "totalCost": "Total Cost"
     },
-    "COLUMN_LABELS": {
+    "column_labels": {
       "timestamp": "Time",
       "tool_name": "Tool Name",
       "server_label": "Server",
@@ -59,7 +59,7 @@
     "in": "in",
     "out": "out"
   },
-  "COLUMN_LABELS": {
+  "column_labels": {
     "timestamp": "Time",
     "request_type": "Type",
     "input": "Message",
@@ -374,5 +374,34 @@
     "core": {
       "label": "Core"
     }
+  },
+  "filterSidebar": {
+    "showFilters": "Show filters",
+    "hideFilters": "Hide filters",
+    "status": "Status",
+    "provider": "Provider",
+    "model": "Model",
+    "virtualKey": "Virtual Key",
+    "stopReason": "Stop Reason",
+    "app": "App",
+    "alias": "Alias",
+    "rule": "Rule",
+    "engine": "Engine",
+    "user": "User",
+    "team": "Team",
+    "customer": "Customer",
+    "businessUnit": "Business Unit",
+    "key": "Key",
+    "metadata": "Metadata",
+    "searchPlaceholder": "Search {{label}}",
+    "searchOrAdd": "Search or add a {{label}}",
+    "searchAndAdd": "Search or add a {{label}}"
+  },
+  "toast": {
+    "logsRefreshed": "Logs refreshed",
+    "logsRefreshFailed": "Failed to refresh logs",
+    "exportStarted": "Export started",
+    "exportFailed": "Export failed",
+    "exportCompleted": "Export completed"
   }
 }

@@ -10,6 +10,7 @@
 		"copy-build": "rm -rf ../transports/bifrost-http/ui && cp -r out ../transports/bifrost-http/ui",
 		"start": "vite preview",
 		"lint": "oxlint",
+		"i18n:check": "node ui/scripts/i18n-key-diff.mjs",
 		"format": "oxfmt",
 		"format:check": "oxfmt --check",
 		"format:enterprise": "oxfmt app/enterprise/"

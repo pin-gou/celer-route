@@ -41,5 +41,15 @@
   "empty": {
     "title": "未配置提供商",
     "description": "添加您的第一个提供商，开始通过 Bifrost 路由 AI 模型请求。"
+  },
+  "toast": {
+    "providerAdded": "提供商添加成功",
+    "providerUpdated": "提供商更新成功",
+    "providerDeleted": "提供商删除成功",
+    "keyAdded": "API 密钥添加成功",
+    "keyUpdated": "API 密钥更新成功",
+    "keyDeleted": "API 密钥删除成功",
+    "modelsRefreshed": "模型刷新成功",
+    "connectionTested": "连接测试成功"
   }
 }

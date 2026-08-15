@@ -249,5 +249,12 @@
     "timeout": "Timeout",
     "noSettings": "No MCP settings configured"
   },
-  "routingRules": {}
+  "routingRules": {},
+  "toast": {
+    "settingsSaved": "Settings saved successfully",
+    "settingsSaveFailed": "Failed to save settings",
+    "settingsLoaded": "Settings loaded successfully",
+    "resetConfig": "Configuration reset successfully",
+    "configExported": "Configuration exported successfully"
+  }
 }

@@ -47,5 +47,12 @@
   "routingRules": {
     "emptyTitle": "Routing rules direct requests using CEL conditions",
     "emptyDescription": "Create CEL-based rules to route requests by model, provider, budget, or custom attributes. Control which provider or model handles each request."
+  },
+  "toast": {
+    "ruleCreated": "Routing rule created successfully",
+    "ruleUpdated": "Routing rule updated successfully",
+    "ruleDeleted": "Routing rule deleted successfully",
+    "ruleEnabled": "Routing rule enabled",
+    "ruleDisabled": "Routing rule disabled"
   }
 }

@@ -23,5 +23,11 @@
     "title": "Webhook 异步任务完成时通知您",
     "description": "注册 Webhook 端点，当异步推理作业完成或失败时，Bifrost 会向您发送签名通知，因此您无需轮询结果。"
   },
-  "permissionDenied": "您没有访问 Webhooks 的权限"
+  "permissionDenied": "您没有访问 Webhooks 的权限",
+  "toast": {
+    "webhookCreated": "Webhook 创建成功",
+    "webhookUpdated": "Webhook 更新成功",
+    "webhookDeleted": "Webhook 删除成功",
+    "deliveryTested": "测试投递已发送"
+  }
 }
