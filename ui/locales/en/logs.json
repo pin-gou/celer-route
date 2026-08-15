@@ -9,7 +9,7 @@
       "avgLatency": "Avg Latency",
       "totalCost": "Total Cost"
     },
-    "COLUMN_LABELS": {
+    "column_labels": {
       "timestamp": "Time",
       "tool_name": "Tool Name",
       "server_label": "Server",
@@ -59,7 +59,7 @@
     "in": "in",
     "out": "out"
   },
-  "COLUMN_LABELS": {
+  "column_labels": {
     "timestamp": "Time",
     "request_type": "Type",
     "input": "Message",
@@ -374,5 +374,61 @@
     "core": {
       "label": "Core"
     }
+  },
+  "filterSidebar": {
+    "title": "Filters",
+    "showFilters": "Show filters",
+    "hideFilters": "Hide filters",
+    "reset": "Reset",
+    "status": "Status",
+    "provider": "Provider",
+    "providers": "Providers",
+    "type": "Type",
+    "model": "Model",
+    "models": "Models",
+    "alias": "Alias",
+    "aliases": "Aliases",
+    "app": "App",
+    "selectedKey": "Selected Key",
+    "selectedKeys": "Selected Keys",
+    "virtualKey": "Virtual Key",
+    "virtualKeys": "Virtual Keys",
+    "stopReason": "Stop Reason",
+    "routingEngine": "Routing Engine",
+    "routingEngines": "Routing Engines",
+    "routingRule": "Routing Rule",
+    "routingRules": "Routing Rules",
+    "session": "Session",
+    "user": "User",
+    "users": "Users",
+    "team": "Team",
+    "teams": "Teams",
+    "customer": "Customer",
+    "customers": "Customers",
+    "businessUnit": "Business Unit",
+    "businessUnits": "Business Units",
+    "cost": "Cost",
+    "localCaching": "Local Caching",
+    "metadata": "Metadata",
+    "showMissingCostOnly": "Show missing cost only",
+    "directCache": "Direct cache",
+    "semanticCache": "Semantic cache",
+    "parentRequestId": "Parent request ID",
+    "parentRequestIdPlaceholder": "Parent request ID",
+    "searchPlaceholder": "Search {{label}}",
+    "searchOrAdd": "Search or add a {{label}}",
+    "searchAndAdd": "Search or add a {{label}}",
+    "searchMetadata": "Search metadata...",
+    "customValue": "Custom value...",
+    "noResults": "No results",
+    "noMetadataKeys": "No metadata keys",
+    "use": "Use"
+  },
+  "toast": {
+    "logsRefreshed": "Logs refreshed",
+    "logsRefreshFailed": "Failed to refresh logs",
+    "exportStarted": "Export started",
+    "exportFailed": "Export failed",
+    "exportCompleted": "Export completed"
   }
 }

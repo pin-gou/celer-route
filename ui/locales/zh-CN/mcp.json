@@ -53,5 +53,11 @@
   "permissionDenied": "您没有访问 MCP 网关的权限",
   "registry": {
     "title": "MCP 注册"
+  },
+  "toast": {
+    "clientAdded": "MCP 客户端添加成功",
+    "clientUpdated": "MCP 客户端更新成功",
+    "clientDeleted": "MCP 客户端删除成功",
+    "syncTriggered": "同步已触发"
   }
 }

@@ -23,5 +23,12 @@
     "title": "自定义插件可扩展 Bifrost，添加您自己的业务逻辑",
     "description": "构建和部署插件，用于自定义集成、工作流自动化和 AI 治理。"
   },
-  "permissionDenied": "您没有访问插件的权限"
+  "permissionDenied": "您没有访问插件的权限",
+  "toast": {
+    "pluginAdded": "插件添加成功",
+    "pluginUpdated": "插件更新成功",
+    "pluginDeleted": "插件删除成功",
+    "pluginEnabled": "插件已启用",
+    "pluginDisabled": "插件已禁用"
+  }
 }

@@ -54,5 +54,11 @@
   "emptyState": {
     "title": "Virtual keys control access, budgets, and rate limits",
     "description": "Create virtual keys to assign permissions, spending limits, and usage quotas to teams, customers, or API clients."
+  },
+  "toast": {
+    "created": "Created successfully",
+    "updated": "Updated successfully",
+    "deleted": "Deleted successfully",
+    "resetStarted": "Usage reset started"
   }
 }

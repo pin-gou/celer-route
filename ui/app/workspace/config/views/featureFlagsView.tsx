@@ -7,9 +7,11 @@ import { useListFeatureFlagsQuery, useUpdateFeatureFlagMutation } from "@/lib/st
 import type { FeatureFlagStatus } from "@/lib/types/featureFlag";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Crown, Lock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export default function FeatureFlagsView() {
+	const { t } = useTranslation("config");
 	const hasUpdateAccess = useRbac(RbacResource.FeatureFlags, RbacOperation.Update);
 	const { data, isLoading, isError, error } = useListFeatureFlagsQuery();
 	const [updateFeatureFlag] = useUpdateFeatureFlagMutation();
@@ -28,30 +30,29 @@ export default function FeatureFlagsView() {
 	return (
 		<div className="w-full space-y-4">
 			<div>
-				<h2 className="text-lg font-semibold tracking-tight">Feature Flags</h2>
+				<h2 className="text-lg font-semibold tracking-tight">{t("page.featureFlags")}</h2>
 				<p className="text-muted-foreground text-sm">
-					Toggle in-process feature flags. Flags are declared in code; values can also be set via{" "}
-					<code className="text-xs">config.json</code> or Helm, in which case they appear here as locked.
+					{t("descriptions.featureFlags")}
 				</p>
 			</div>
 
-			{isLoading && <p className="text-muted-foreground text-sm">Loading feature flags...</p>}
-			{isError && <p className="text-sm text-red-500">Failed to load feature flags: {getErrorMessage(error)}</p>}
+			{isLoading && <p className="text-muted-foreground text-sm">{t("state.loading")}</p>}
+			{isError && <p className="text-sm text-red-500">{t("state.loadFailed")}: {getErrorMessage(error)}</p>}
 
 			{!isLoading && !isError && (
 				<div className="overflow-auto rounded-sm border">
 					<Table data-testid="feature-flags-table">
 						<TableHeader>
 							<TableRow className="bg-muted/50">
-								<TableHead className="font-semibold">Flag</TableHead>
-								<TableHead className="w-px text-right font-semibold">Enabled</TableHead>
+								<TableHead className="font-semibold">{t("fields.flag")}</TableHead>
+								<TableHead className="w-px text-right font-semibold">{t("fields.enabled")}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{flags.length === 0 ? (
 								<TableRow data-testid="feature-flags-table-empty-state">
 									<TableCell colSpan={2} className="h-24 text-center">
-										<span className="text-muted-foreground text-sm">No feature flags found.</span>
+										<span className="text-muted-foreground text-sm">{t("state.noFeatureFlags")}</span>
 									</TableCell>
 								</TableRow>
 							) : (

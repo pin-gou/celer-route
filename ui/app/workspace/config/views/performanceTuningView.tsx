@@ -6,9 +6,11 @@ import { CoreConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export default function PerformanceTuningView() {
+	const { t } = useTranslation("config");
 	const hasSettingsUpdateAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const { data: bifrostConfig } = useGetCoreConfigQuery({ fromDB: true });
 	const config = bifrostConfig?.client_config;
@@ -65,38 +67,37 @@ export default function PerformanceTuningView() {
 			const maxBodySize = Number.parseInt(localValues.max_request_body_size_mb);
 
 			if (isNaN(poolSize) || poolSize <= 0) {
-				toast.error("Initial pool size must be a positive number.");
+				toast.error(t("toast.poolSizePositive"));
 				return;
 			}
 
 			if (isNaN(maxBodySize) || maxBodySize <= 0) {
-				toast.error("Max request body size must be a positive number.");
+				toast.error(t("toast.maxBodySizePositive"));
 				return;
 			}
 
 			if (!bifrostConfig) {
-				toast.error("Configuration not loaded. Please refresh and try again.");
+				toast.error(t("toast.configNotLoaded"));
 				return;
 			}
 			await updateCoreConfig({ ...bifrostConfig, client_config: localConfig }).unwrap();
-			toast.success("Performance settings updated successfully.");
+			toast.success(t("toast.performanceUpdated"));
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		}
-	}, [bifrostConfig, localConfig, localValues, updateCoreConfig]);
+	}, [bifrostConfig, localConfig, localValues, updateCoreConfig, t]);
 
 	return (
 		<div className="mx-auto w-full max-w-4xl space-y-4">
 			<div>
-				<h2 className="text-lg font-semibold tracking-tight">Performance Tuning</h2>
-				<p className="text-muted-foreground text-sm">Configure performance-related settings.</p>
+				<h2 className="text-lg font-semibold tracking-tight">{t("page.performanceTuning")}</h2>
+				<p className="text-muted-foreground text-sm">{t("descriptions.performanceTuning")}</p>
 			</div>
 
 			<Alert variant="destructive">
 				<AlertTriangle className="h-4 w-4" />
 				<AlertDescription>
-					These settings require a Bifrost service restart to take effect. Current connections will continue with existing settings until
-					restart.
+					{t("restart.description")}
 				</AlertDescription>
 			</Alert>
 
@@ -106,9 +107,9 @@ export default function PerformanceTuningView() {
 					<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 						<div className="space-y-0.5">
 							<label htmlFor="initial-pool-size" className="text-sm font-medium">
-								Initial Pool Size
+								{t("fields.initialPoolSize")}
 							</label>
-							<p className="text-muted-foreground text-sm">The initial connection pool size.</p>
+							<p className="text-muted-foreground text-sm">{t("descriptions.initialPoolSize")}</p>
 						</div>
 						<Input
 							id="initial-pool-size"
@@ -127,9 +128,9 @@ export default function PerformanceTuningView() {
 					<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 						<div className="space-y-0.5">
 							<label htmlFor="max-request-body-size-mb" className="text-sm font-medium">
-								Max Request Body Size (MB)
+								{t("fields.maxRequestBodySize")}
 							</label>
-							<p className="text-muted-foreground text-sm">Maximum size of request body in megabytes.</p>
+							<p className="text-muted-foreground text-sm">{t("descriptions.maxRequestBodySize")}</p>
 						</div>
 						<Input
 							id="max-request-body-size-mb"
@@ -145,7 +146,7 @@ export default function PerformanceTuningView() {
 			</div>
 			<div className="flex justify-end pt-2">
 				<Button onClick={handleSave} disabled={!hasChanges || isLoading || !hasSettingsUpdateAccess}>
-					{isLoading ? "Saving..." : "Save Changes"}
+					{isLoading ? t("actions.saving") : t("actions.saveChanges")}
 				</Button>
 			</div>
 		</div>

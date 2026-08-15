@@ -3,6 +3,10 @@
     "title": "Model Catalog",
     "description": "Browse and manage AI models"
   },
+  "tabs": {
+    "overview": "Overview",
+    "models": "Models"
+  },
   "catalog": {
     "title": "Model Catalog",
     "searchModels": "Search models...",
@@ -22,5 +26,11 @@
     "audio": "Audio",
     "video": "Video"
   },
-  "permissionDenied": "You don't have permission to access the model catalog"
+  "permissionDenied": "You don't have permission to access the model catalog",
+  "toast": {
+    "catalogRefreshed": "Model catalog refreshed successfully",
+    "catalogRefreshFailed": "Failed to refresh model catalog",
+    "modelUpdated": "Model updated successfully",
+    "attributeSaved": "Attribute saved successfully"
+  }
 }

@@ -502,7 +502,7 @@ export default function DashboardPage() {
 												setUrlState({ mcp_tool_names: value });
 											}
 										}}
-										placeholder="All Tools"
+										placeholder={t("filters.allTools")}
 										data-testid="dashboard-mcp-tool-filter"
 									/>
 								)}
@@ -517,7 +517,7 @@ export default function DashboardPage() {
 												setUrlState({ mcp_server_labels: value });
 											}
 										}}
-										placeholder="All Servers"
+										placeholder={t("filters.allServers")}
 										data-testid="dashboard-mcp-server-filter"
 									/>
 								)}

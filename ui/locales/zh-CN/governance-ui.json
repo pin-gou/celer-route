@@ -54,5 +54,11 @@
   "emptyState": {
     "title": "虚拟密钥控制访问权限、预算和速率限制",
     "description": "创建虚拟密钥，为团队、客户或 API 客户端分配权限、支出限制和使用配额。"
+  },
+  "toast": {
+    "created": "创建成功",
+    "updated": "更新成功",
+    "deleted": "删除成功",
+    "resetStarted": "用量重置已开始"
   }
 }

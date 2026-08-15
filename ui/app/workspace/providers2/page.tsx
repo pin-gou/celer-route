@@ -9,6 +9,7 @@ import {
 import { ModelProviderName } from "@/lib/types/config";
 import { useRbac, RbacOperation, RbacResource } from "@/lib/rbac";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AddCustomProviderSheet from "@/app/workspace/providers/dialogs/addNewCustomProviderSheet";
 import { AddProviderDropdown } from "@/app/workspace/providers/views/addProviderDropdown";
@@ -17,6 +18,7 @@ import { ProviderFilters, type FilterState } from "./views/ProviderFilters";
 import { useProviders2Data } from "./views/useProviders2Data";
 
 export default function Providers2Page() {
+	const { t } = useTranslation("providers");
 	const { groupedProviders, isLoading, error, refetch } = useProviders2Data();
 	const [batchUpdateKeys] = useBatchUpdateProviderKeysMutation();
 	const [getProviderKeys] = useLazyGetProviderKeysQuery();
@@ -73,7 +75,7 @@ export default function Providers2Page() {
 			const keyIds = keys.map((k) => k.id);
 			if (keyIds.length === 0) {
 				setKeysEnabledMap((prev) => ({ ...prev, [providerName]: previouslyEnabled }));
-				toast.info(`No API keys to toggle for ${providerName}`);
+				toast.info(t("toast.noKeysToToggle", { provider: providerName }));
 				return;
 			}
 			const result = await batchUpdateKeys({
@@ -82,24 +84,26 @@ export default function Providers2Page() {
 				enabled: nextEnabled,
 			}).unwrap();
 			toast.success(
-				nextEnabled ? `Enabled ${result.updated} keys for ${providerName}` : `Disabled ${result.updated} keys for ${providerName}`,
+				nextEnabled
+					? t("toast.keysEnabled", { count: result.updated, provider: providerName })
+					: t("toast.keysDisabled", { count: result.updated, provider: providerName }),
 			);
 			refetch();
 		} catch (err: any) {
 			setKeysEnabledMap((prev) => ({ ...prev, [providerName]: previouslyEnabled }));
-			toast.error(`Failed to ${nextEnabled ? "enable" : "disable"} keys for ${providerName}`);
+			toast.error(t("toast.failedToggleKeys", { provider: providerName }));
 		}
 	};
 
 	const handleQuickTest = async (providerName: string) => {
 		try {
 			await refreshProviderModels(providerName).unwrap();
-			toast.success(`Model discovery triggered for ${providerName}`);
+			toast.success(t("toast.modelDiscoveryTriggered", { provider: providerName }));
 		} catch (err: any) {
 			if (err?.status === 409) {
-				toast.info(`Model discovery already running for ${providerName}`);
+				toast.info(t("toast.modelDiscoveryRunning", { provider: providerName }));
 			} else {
-				toast.error(`Quick test failed for ${providerName}`);
+				toast.error(t("toast.quickTestFailed", { provider: providerName }));
 			}
 		}
 	};
@@ -109,7 +113,7 @@ export default function Providers2Page() {
 			await createProvider({ provider: name as ModelProviderName }).unwrap();
 		} catch (err: any) {
 			if (err?.status === 409) return;
-			toast.error("Failed to add provider", {
+			toast.error(t("toast.failedToAddProvider"), {
 				description: getErrorMessage(err),
 			});
 		}
@@ -127,7 +131,7 @@ export default function Providers2Page() {
 		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 p-6">
 			{/* Page heading */}
 			<div data-testid="providers2-page-heading" className="sr-only">
-				Providers (New)
+				{t("providers2.pageTitle")}
 			</div>
 			{/* Toolbar */}
 			<div className="flex items-center justify-between gap-4">
@@ -150,7 +154,7 @@ export default function Providers2Page() {
 			<div className="flex-1 overflow-y-auto">
 				{filteredGroups.length === 0 ? (
 					<div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-						{error ? "Failed to load providers" : "No providers match your filters"}
+						{error ? t("failedToLoad") : t("noMatchFilters")}
 					</div>
 				) : (
 					filteredGroups.map((group) => (

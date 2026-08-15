@@ -15,6 +15,8 @@
   "filters": {
     "allTools": "所有工具",
     "allServers": "所有服务器",
+    "allModels": "所有模型",
+    "allProviders": "所有提供商",
     "dateRange": "日期范围",
     "period": "时段",
     "timezone": "时区"
@@ -24,15 +26,30 @@
     "tokens": "词元数",
     "cost": "成本",
     "latency": "延迟",
-    "throughput": "吞吐量"
+    "throughput": "吞吐量",
+    "cacheRate": "输入词元中被提供商缓存的占比",
+    "cacheRateInfo": "关于外部缓存命中率的更多信息",
+    "cacheRateTooltip": "这反映的是提供商层面的缓存，而非 Bifrost 语义缓存命中。",
+    "cached": "已缓存",
+    "input": "输入"
   },
   "export": {
     "title": "导出",
-    "pdf": "导出 PDF",
-    "csv": "导出 CSV"
+    "exporting": "导出中...",
+    "pdf": "PDF",
+    "csv": "CSV",
+    "thisTab": "当前标签页 ({tab})",
+    "allTabs": "所有标签页",
+    "poweredBy": "技术支持"
   },
   "empty": {
     "title": "暂无数据",
     "description": "所选时间段内没有数据。请尝试调整筛选条件或时间范围。"
+  },
+  "toast": {
+    "exportStarted": "导出已开始",
+    "exportFailed": "导出失败",
+    "exportCompleted": "导出完成",
+    "dataRefreshed": "仪表盘数据已刷新"
   }
 }

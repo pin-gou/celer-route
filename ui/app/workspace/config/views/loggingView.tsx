@@ -8,9 +8,11 @@ import { CoreConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { parseArrayFromText } from "@/lib/utils/array";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export default function LoggingView() {
+	const { t } = useTranslation("config");
 	const hasSettingsUpdateAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const { data: bifrostConfig } = useGetCoreConfigQuery({ fromDB: true });
 	const config = bifrostConfig?.client_config;
@@ -56,29 +58,29 @@ export default function LoggingView() {
 
 	const handleSave = useCallback(async () => {
 		if (!bifrostConfig) {
-			toast.error("Configuration not loaded");
+			toast.error(t("toast.configNotLoaded"));
 			return;
 		}
 
 		// Validate log retention days
 		if (localConfig.log_retention_days < 1) {
-			toast.error("Log retention days must be at least 1 day");
+			toast.error(t("toast.logRetentionDaysMin"));
 			return;
 		}
 
 		try {
 			await updateCoreConfig({ ...bifrostConfig, client_config: localConfig }).unwrap();
-			toast.success("Logging configuration updated successfully.");
+			toast.success(t("toast.loggingUpdated"));
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		}
-	}, [bifrostConfig, localConfig, updateCoreConfig]);
+	}, [bifrostConfig, localConfig, updateCoreConfig, t]);
 
 	return (
 		<div className="mx-auto w-full max-w-4xl space-y-4 py-6">
 			<div>
-				<h2 className="text-lg font-semibold tracking-tight">Logs Settings</h2>
-				<p className="text-muted-foreground text-sm">Configure logging settings for requests and responses.</p>
+				<h2 className="text-lg font-semibold tracking-tight">{t("page.logsSettings")}</h2>
+				<p className="text-muted-foreground text-sm">{t("descriptions.logsSettings")}</p>
 			</div>
 
 			<div className="space-y-4">

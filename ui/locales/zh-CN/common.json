@@ -163,11 +163,35 @@
     "showing": "显示",
     "to": "至"
   },
-  "toast": {
+"toast": {
     "success": "操作成功完成",
-    "error": "出了点问题",
-    "warning": "请谨慎操作",
+    "error": "出错了",
+    "warning": "请小心",
     "copied": "已复制到剪贴板"
+  },
+  "validation": {
+    "required": "此字段为必填项",
+    "fieldRequired": "{{field}} 为必填项",
+    "urlInvalid": "URL 格式无效",
+    "emailInvalid": "邮箱格式无效",
+    "numberExpected": "必须是有效数字",
+    "textExpected": "必须是有效的文本值",
+    "booleanExpected": "必须为 true 或 false",
+    "expectedType": "应为 {{expected}}，实际为 {{received}}",
+    "minNumber": "必须至少为 {{n}}",
+    "maxNumber": "必须最多为 {{n}}",
+    "minLength": "至少需要 {{n}} 个字符",
+    "maxLength": "最多 {{n}} 个字符",
+    "maxCharacters": "最多 {{n}} 个字符",
+    "oneItemRequired": "至少需要一项",
+    "integerExpected": "必须是整数",
+    "rangeOutOfBounds": "{{field}} 必须在 {{min}} 到 {{max}} 之间",
+    "notAllowed": "不允许",
+    "invalidFormat": "格式无效",
+    "duplicateNotAllowed": "不允许重复条目",
+    "wildcardConflict": "通配符 '*' 不能与其他条目组合",
+    "budgetAmountPositive": "额外预算必须大于 0",
+    "cyclesWholePositive": "重置周期必须为正整数"
   },
   "confirm": {
     "title": "确定吗？",
@@ -188,5 +212,20 @@
   },
   "docs": {
     "title": "文档"
+  },
+  "sidebar": {
+    "collapse": "收起侧边栏",
+    "expand": "展开侧边栏",
+    "searchNav": "搜索侧边栏导航",
+    "searchPlaceholder": "搜索...",
+    "logout": "退出登录",
+    "githubRepo": "GitHub 仓库",
+    "restartRequired": "需要重启",
+    "restartReason": "配置变更需要重启服务器才能生效。",
+    "setupIncomplete": "设置清单未完成",
+    "setupStepsLeft": "还剩 {{n}} 步设置未完成。不完成这些步骤将使您的 Bifrost 设置存在风险。",
+    "resumeSetup": "继续设置",
+    "viewReleaseNotes": "查看发布说明",
+    "releaseAvailable": "{{name}} 现已可用。"
   }
 }

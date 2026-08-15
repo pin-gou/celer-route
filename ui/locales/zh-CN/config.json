@@ -1,6 +1,17 @@
 {
   "page": {
-    "title": "配置"
+    "title": "配置",
+    "performanceTuning": "性能调优",
+    "pricingConfig": "定价配置",
+    "featureFlags": "功能开关",
+    "logsSettings": "日志设置",
+    "compatibility": "兼容性",
+    "clientSettings": "客户端设置",
+    "caching": "缓存",
+    "security": "安全设置",
+    "mcpGateway": "MCP 网关",
+    "observability": "可观测性",
+    "largePayload": "大载荷"
   },
   "providers": {
     "default": {
@@ -202,7 +213,16 @@
     "tracing": "链路追踪",
     "metrics": "指标",
     "exporters": "导出器",
-    "noConfig": "无可观测性配置"
+    "noConfig": "无可观测性配置",
+    "fields": {
+      "prometheusLabels": "Prometheus 标签"
+    },
+    "descriptions": {
+      "prometheusLabels": "逗号分隔的自定义标签列表，将添加到 Prometheus 指标中。"
+    },
+    "placeholder": {
+      "prometheusLabels": "teamId, projectId, environment"
+    }
   },
   "performanceTuning": {
     "title": "性能调优",
@@ -249,5 +269,135 @@
     "timeout": "超时时间",
     "noSettings": "未配置 MCP 设置"
   },
-  "routingRules": {}
+  "routingRules": {},
+  "proxy": {
+    "title": "代理设置",
+    "description": "配置出站请求的全局代理设置。",
+    "enableProxy": "启用代理",
+    "enableProxyDesc": "为出站 HTTP 请求启用全局代理。",
+    "configSection": "代理配置",
+    "type": "代理类型",
+    "typePlaceholder": "选择类型",
+    "typeHttp": "HTTP / HTTPS",
+    "typeSocks5": "SOCKS5",
+    "typeTcp": "TCP",
+    "comingSoon": "即将推出",
+    "typeDescription": "选择代理协议类型。目前仅支持 HTTP 代理。",
+    "unsupportedType": "{type} 代理暂不支持。请使用 HTTP 代理。",
+    "url": "代理 URL",
+    "urlPlaceholder": "http://proxy.example.com:8080",
+    "urlDescription": "代理服务器的完整 URL，包括协议和端口。",
+    "authSection": "认证（可选）",
+    "username": "用户名",
+    "usernamePlaceholder": "代理用户名",
+    "password": "密码",
+    "passwordPlaceholder": "代理密码",
+    "advancedSection": "高级设置",
+    "noProxyHosts": "无需代理的主机",
+    "noProxyPlaceholder": "localhost, 127.0.0.1, .internal.example.com",
+    "noProxyDesc": "逗号分隔的主机列表，这些主机应绕过代理。",
+    "timeout": "连接超时（秒）",
+    "timeoutPlaceholder": "30",
+    "timeoutDesc": "建立代理连接的超时时间。0 表示无超时。默认值为 60 秒。",
+    "caCert": "CA 证书 (PEM)（可选）",
+    "caCertPlaceholder": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----",
+    "caCertDesc": "PEM 编码的 CA 证书，用于信任通过 SSL 拦截代理的 TLS 连接。",
+    "skipTlsVerify": "跳过 TLS 验证",
+    "skipTlsVerifyDesc": "禁用 HTTPS 代理的 TLS 证书验证。不建议在生产环境中使用。",
+    "enableFor": "为以下功能启用代理",
+    "enableForDesc": "选择哪些组件应使用代理进行出站请求。",
+    "scim": "SCIM",
+    "scimDesc": "使用代理进行 SCIM 目录同步请求。",
+    "inference": "推理",
+    "inferenceDesc": "使用代理向模型提供商发送 LLM 推理请求。",
+    "api": "API",
+    "apiDesc": "使用代理进行外部 API 调用和 Webhook。",
+    "scimEnterprise": "SCIM 代理支持在 Bifrost Enterprise 中可用。",
+    "noPermission": "您没有权限更新设置",
+    "enterprise": "企业版"
+  },
+  "modelSettings": {
+    "title": "模型设置",
+    "description": "配置定价和路由行为。",
+    "fields": {
+      "modelParamsUrl": "模型参数 URL",
+      "pricingSyncInterval": "定价同步间隔（小时）",
+      "modelDiscoveryInterval": "模型发现间隔（分钟）",
+      "routingChainMaxDepth": "路由链最大深度"
+    },
+    "descriptions": {
+      "modelParamsUrl": "自定义模型参数数据表的 URL。留空使用默认值。",
+      "pricingSyncInterval": "从数据表 URL 同步定价数据的频率。",
+      "modelDiscoveryInterval": "每个提供商的模型列表在后台重新获取的频率，使提供商新提供的模型无需重启即可使用。设置为 0 关闭，仅从提供商页面刷新。",
+      "modelDiscoveryOff": "后台发现已关闭。模型列表仅在启动时、密钥更改时以及手动刷新时更新。",
+      "routingChainMaxDepth": "每个请求的最大链式路由规则评估次数。防止循环规则定义导致无限循环。"
+    },
+    "placeholder": {
+      "pricingUrl": "https://example.com/pricing.json",
+      "modelParamsUrl": "https://example.com/model-parameters.json"
+    },
+    "validation": {
+      "urlPrefix": "URL 必须以 http://、https:// 或 file:// 开头",
+      "pricingSyncRequired": "定价同步间隔为必填项",
+      "pricingSyncMin": "同步间隔必须至少为 1 小时",
+      "pricingSyncMax": "同步间隔不能超过 8760 小时（1 年）",
+      "modelDiscoveryRequired": "模型发现间隔为必填项",
+      "modelDiscoveryMin": "间隔必须为 0（禁用）或至少 {n} 分钟",
+      "modelDiscoveryMax": "间隔不能超过 1440 分钟（24 小时）",
+      "routingDepthRequired": "路由链最大深度为必填项",
+      "routingDepthMin": "必须至少为 1",
+      "routingDepthMax": "不能超过 100"
+    }
+  },
+  "actions": {
+    "saveChanges": "保存更改",
+    "saving": "保存中...",
+    "syncing": "同步中...",
+    "forceSyncNow": "立即强制同步"
+  },
+  "descriptions": {
+    "performanceTuning": "配置性能相关设置。",
+    "initialPoolSize": "初始连接池大小。",
+    "maxRequestBodySize": "请求体的最大大小（MB）。",
+    "pricingConfig": "配置自定义定价数据表和同步间隔。",
+    "pricingDatasheetUrl": "自定义定价数据表的 URL。留空使用默认定价。",
+    "featureFlags": "切换进程内功能开关。开关在代码中声明；也可以通过 config.json 或 Helm 设置，此时会显示为锁定状态。",
+    "logsSettings": "配置请求和响应的日志记录设置。",
+    "compatibility": "配置请求转换和兼容性回退。"
+  },
+  "fields": {
+    "initialPoolSize": "初始池大小",
+    "maxRequestBodySize": "最大请求体大小 (MB)",
+    "pricingDatasheetUrl": "定价数据表 URL",
+    "flag": "开关",
+    "enabled": "已启用"
+  },
+  "state": {
+    "noFeatureFlags": "未找到功能开关。",
+    "loading": "正在加载功能开关...",
+    "loadFailed": "加载功能开关失败"
+  },
+  "restart": {
+    "description": "这些设置需要重启 Bifrost 服务才能生效。当前连接将继续使用现有设置直到重启。",
+    "warning": "需要重启 Bifrost 才能使更改生效。"
+  },
+  "toast": {
+    "settingsSaved": "设置保存成功",
+    "settingsSaveFailed": "保存设置失败",
+    "settingsLoaded": "设置加载成功",
+    "resetConfig": "配置重置成功",
+    "configExported": "配置导出成功",
+    "configNotLoaded": "配置未加载",
+    "logRetentionDaysMin": "日志保留天数至少为 1 天",
+    "loggingUpdated": "日志配置更新成功。",
+    "poolSizePositive": "初始池大小必须为正数。",
+    "maxBodySizePositive": "最大请求体大小必须为正数。",
+    "performanceUpdated": "性能设置更新成功。",
+    "pricingUpdated": "定价配置更新成功。",
+    "pricingSynced": "定价同步成功。",
+    "compatibilityUpdated": "兼容性设置更新成功。",
+    "observabilityUpdated": "可观测性设置更新成功。",
+    "proxyUpdated": "代理配置更新成功。",
+    "modelSettingsUpdated": "模型设置更新成功。"
+  }
 }

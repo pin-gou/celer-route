@@ -3,6 +3,7 @@ import type { TokenHistogramResponse } from "@/lib/types/logs";
 import { formatCompactNumber } from "@/lib/utils/numbers";
 import { Info } from "lucide-react";
 import { memo, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { ChartErrorBoundary } from "./chartErrorBoundary";
 import { GaugeNeedle, getGaugeGeometry, useGaugeSize } from "./gaugeUtils";
@@ -14,6 +15,7 @@ interface ExternalCacheTokenMeterChartProps {
 const METER_COLORS = { cached: "#06b6d4", input: "#3b82f6" };
 
 function ExternalCacheTokenMeterChartImpl({ data }: ExternalCacheTokenMeterChartProps) {
+	const { t } = useTranslation("dashboard");
 	const { ref, width, height } = useGaugeSize();
 
 	const { percentage, totalCachedRead, totalPromptTokens } = useMemo(() => {
@@ -43,7 +45,7 @@ function ExternalCacheTokenMeterChartImpl({ data }: ExternalCacheTokenMeterChart
 		<ChartErrorBoundary resetKey={`${data?.buckets?.length ?? 0}-${totalCachedRead}-${totalPromptTokens}`}>
 			<div className="grid h-full grid-rows-[104px_auto] items-start overflow-hidden pt-8">
 				<div ref={ref} className="relative h-full w-full grow">
-					{!hasData && <div className="text-muted-foreground flex h-full items-center justify-center text-sm">No data available</div>}
+					{!hasData && <div className="text-muted-foreground flex h-full items-center justify-center text-sm">{t("empty.title")}</div>}
 					{hasData && gaugeGeometry && (
 						<>
 							<ResponsiveContainer width="100%" height="100%">
@@ -77,30 +79,30 @@ function ExternalCacheTokenMeterChartImpl({ data }: ExternalCacheTokenMeterChart
 						<div className="flex shrink-0 flex-col items-center pt-1 leading-none">
 							<div className="text-muted-foreground text-3xl font-semibold tracking-tight">{percentage.toFixed(1)}%</div>
 							<div className="mt-1 flex items-center gap-1 text-[11px] text-zinc-400">
-								<span>of input tokens cached by provider</span>
+								<span>{t("charts.cacheRate")}</span>
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<button
 											type="button"
 											data-testid="external-cache-meter-info-btn"
 											className="text-zinc-500 transition-colors hover:text-zinc-300"
-											aria-label="More information about external cache hit rate"
+											aria-label={t("charts.cacheRateInfo")}
 										>
 											<Info className="h-3 w-3" />
 										</button>
 									</TooltipTrigger>
-									<TooltipContent side="top">This reflects provider-level caching, not Bifrost semantic cache hits.</TooltipContent>
+									<TooltipContent side="top">{t("charts.cacheRateTooltip")}</TooltipContent>
 								</Tooltip>
 							</div>
 						</div>
 						<div className="flex shrink-0 flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-2 text-[11px] leading-none">
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: METER_COLORS.cached }} />
-								<span className="text-primary">Cached: {formatCompactNumber(totalCachedRead)}</span>
+								<span className="text-primary">{t("charts.cached")}: {formatCompactNumber(totalCachedRead)}</span>
 							</span>
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: METER_COLORS.input }} />
-								<span className="text-muted-foreground">Input: {formatCompactNumber(totalPromptTokens)}</span>
+								<span className="text-muted-foreground">{t("charts.input")}: {formatCompactNumber(totalPromptTokens)}</span>
 							</span>
 						</div>
 					</div>

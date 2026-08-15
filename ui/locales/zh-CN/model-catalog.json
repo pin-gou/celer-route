@@ -3,6 +3,10 @@
     "title": "模型目录",
     "description": "浏览和管理 AI 模型"
   },
+  "tabs": {
+    "overview": "概览",
+    "models": "模型"
+  },
   "catalog": {
     "title": "模型目录",
     "searchModels": "搜索模型...",
@@ -22,5 +26,11 @@
     "audio": "音频",
     "video": "视频"
   },
-  "permissionDenied": "您没有访问模型目录的权限"
+  "permissionDenied": "您没有访问模型目录的权限",
+  "toast": {
+    "catalogRefreshed": "模型目录刷新成功",
+    "catalogRefreshFailed": "刷新模型目录失败",
+    "modelUpdated": "模型更新成功",
+    "attributeSaved": "属性保存成功"
+  }
 }

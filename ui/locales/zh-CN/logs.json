@@ -9,7 +9,7 @@
       "avgLatency": "平均延迟",
       "totalCost": "总成本"
     },
-    "COLUMN_LABELS": {
+    "column_labels": {
       "timestamp": "时间",
       "tool_name": "工具名称",
       "server_label": "服务器",
@@ -59,7 +59,7 @@
     "in": "入",
     "out": "出"
   },
-  "COLUMN_LABELS": {
+  "column_labels": {
     "timestamp": "时间",
     "request_type": "类型",
     "input": "消息",
@@ -374,5 +374,61 @@
     "core": {
       "label": "核心"
     }
+  },
+  "filterSidebar": {
+    "title": "筛选器",
+    "showFilters": "显示筛选器",
+    "hideFilters": "隐藏筛选器",
+    "reset": "重置",
+    "status": "状态",
+    "provider": "提供商",
+    "providers": "提供商",
+    "type": "类型",
+    "model": "模型",
+    "models": "模型",
+    "alias": "别名",
+    "aliases": "别名",
+    "app": "应用",
+    "selectedKey": "已选密钥",
+    "selectedKeys": "已选密钥",
+    "virtualKey": "虚拟密钥",
+    "virtualKeys": "虚拟密钥",
+    "stopReason": "停止原因",
+    "routingEngine": "路由引擎",
+    "routingEngines": "路由引擎",
+    "routingRule": "路由规则",
+    "routingRules": "路由规则",
+    "session": "会话",
+    "user": "用户",
+    "users": "用户",
+    "team": "团队",
+    "teams": "团队",
+    "customer": "客户",
+    "customers": "客户",
+    "businessUnit": "业务单元",
+    "businessUnits": "业务单元",
+    "cost": "成本",
+    "localCaching": "本地缓存",
+    "metadata": "元数据",
+    "showMissingCostOnly": "仅显示缺失成本",
+    "directCache": "直接缓存",
+    "semanticCache": "语义缓存",
+    "parentRequestId": "父请求 ID",
+    "parentRequestIdPlaceholder": "父请求 ID",
+    "searchPlaceholder": "搜索 {{label}}",
+    "searchOrAdd": "搜索或添加 {{label}}",
+    "searchAndAdd": "搜索或添加 {{label}}",
+    "searchMetadata": "搜索元数据...",
+    "customValue": "自定义值...",
+    "noResults": "无结果",
+    "noMetadataKeys": "无元数据键",
+    "use": "使用"
+  },
+  "toast": {
+    "logsRefreshed": "日志已刷新",
+    "logsRefreshFailed": "刷新日志失败",
+    "exportStarted": "导出已开始",
+    "exportFailed": "导出失败",
+    "exportCompleted": "导出完成"
   }
 }

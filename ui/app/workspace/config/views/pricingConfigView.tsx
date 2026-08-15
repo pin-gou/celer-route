@@ -5,6 +5,7 @@ import { getErrorMessage, useForcePricingSyncMutation, useGetCoreConfigQuery, us
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 interface PricingFormData {
@@ -14,6 +15,7 @@ interface PricingFormData {
 }
 
 export default function PricingConfigView() {
+	const { t } = useTranslation("config");
 	const hasSettingsUpdateAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const { data: bifrostConfig } = useGetCoreConfigQuery({ fromDB: true });
 	const config = bifrostConfig?.framework_config;
@@ -70,7 +72,7 @@ export default function PricingConfigView() {
 					model_parameters_url: data.model_parameters_url,
 				},
 			}).unwrap();
-			toast.success("Pricing configuration updated successfully.");
+			toast.success(t("toast.pricingUpdated"));
 			reset(data);
 		} catch (error) {
 			toast.error(getErrorMessage(error));
@@ -80,7 +82,7 @@ export default function PricingConfigView() {
 	const handleForceSync = async () => {
 		try {
 			await forcePricingSync().unwrap();
-			toast.success("Pricing synced successfully.");
+			toast.success(t("toast.pricingSynced"));
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		}
@@ -90,16 +92,16 @@ export default function PricingConfigView() {
 		<div className="mx-auto w-full max-w-7xl space-y-4" data-testid="pricing-config-view">
 			<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 				<div>
-					<h2 className="text-lg font-semibold tracking-tight">Pricing Configuration</h2>
-					<p className="text-muted-foreground text-sm">Configure custom pricing datasheet and sync intervals.</p>
+					<h2 className="text-lg font-semibold tracking-tight">{t("page.pricingConfig")}</h2>
+					<p className="text-muted-foreground text-sm">{t("descriptions.pricingConfig")}</p>
 				</div>
 
 				<div className="space-y-4">
 					{/* Pricing Datasheet URL */}
 					<div className="space-y-2 rounded-sm border p-4">
 						<div className="space-y-0.5">
-							<Label htmlFor="pricing-datasheet-url">Pricing Datasheet URL</Label>
-							<p className="text-muted-foreground text-sm">URL to a custom pricing datasheet. Leave empty to use default pricing.</p>
+							<Label htmlFor="pricing-datasheet-url">{t("fields.pricingDatasheetUrl")}</Label>
+							<p className="text-muted-foreground text-sm">{t("descriptions.pricingDatasheetUrl")}</p>
 						</div>
 						<Input
 							id="pricing-datasheet-url"
@@ -189,10 +191,10 @@ export default function PricingConfigView() {
 						disabled={isForceSyncing || !hasSettingsUpdateAccess}
 						data-testid="pricing-force-sync-btn"
 					>
-						{isForceSyncing ? "Syncing..." : "Force Sync Now"}
+						{isForceSyncing ? t("actions.syncing") : t("actions.forceSyncNow")}
 					</Button>
 					<Button type="submit" disabled={!hasChanges || isLoading || !hasSettingsUpdateAccess} data-testid="pricing-save-btn">
-						{isLoading ? "Saving..." : "Save Changes"}
+						{isLoading ? t("actions.saving") : t("actions.saveChanges")}
 					</Button>
 				</div>
 			</form>
