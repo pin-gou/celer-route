@@ -7,10 +7,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 1.1 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestListProvidersAggregatedFields` 用例：mock 一个 provider + 3 keys + 5 models + 当日 100 条 logs（含 3 条错误），断言 `GET /api/providers` 响应中 `keys_count=3`、`models_count=5`、`keys_health_status`、`today_requests=100`、`today_errors=3`、`last_used_at`、`last_error_at`、`uptime`、`avg_latency_ms` 字段全部存在且值正确（红）
-- [ ] 1.2 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestBatchUpdateProviderKeys` 用例 happy path：mock provider 含 3 keys，POST `{"key_ids":[k1,k2,k3],"enabled":true}` 断言响应 200 + `updated=3`，DB 内 3 个 key 全部 `enabled=true`（红）
-- [ ] 1.3 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestBatchUpdateProviderKeys_RollbackOnMissing` 用例：mock provider 含 3 keys，POST 包含不存在 key_id "k-bad"，断言响应 400 + `missing_key_ids:["k-bad"]`，且 DB 内**没有任何** key 被更新（事务回滚验证，红）
-- [ ] 1.4 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestProviderResponse_BackwardCompat` 用例：解析 fixture providers（来自 `.pg/hooks/local/data/config.db`）的响应，断言所有原有字段（`name` / `network_config` / `provider_status` 等）仍存在，且 9 个新字段**缺省时为 zero value**（不破坏现有 wire 契约，红）
+- [x] 1.1 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestListProvidersAggregatedFields` 用例：mock 一个 provider + 3 keys + 5 models + 当日 100 条 logs（含 3 条错误），断言 `GET /api/providers` 响应中 `keys_count=3`、`models_count=5`、`keys_health_status`、`today_requests=100`、`today_errors=3`、`last_used_at`、`last_error_at`、`uptime`、`avg_latency_ms` 字段全部存在且值正确（红）
+- [x] 1.2 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestBatchUpdateProviderKeys` 用例 happy path：mock provider 含 3 keys，POST `{"key_ids":[k1,k2,k3],"enabled":true}` 断言响应 200 + `updated=3`，DB 内 3 个 key 全部 `enabled=true`（红）
+- [x] 1.3 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestBatchUpdateProviderKeys_RollbackOnMissing` 用例：mock provider 含 3 keys，POST 包含不存在 key_id "k-bad"，断言响应 400 + `missing_key_ids:["k-bad"]`，且 DB 内**没有任何** key 被更新（事务回滚验证，红）
+- [x] 1.4 编写单元测试：`transports/bifrost-http/handlers/providers_test.go` 新增 `TestProviderResponse_BackwardCompat` 用例：解析 fixture providers（来自 `.pg/hooks/local/data/config.db`）的响应，断言所有原有字段（`name` / `network_config` / `provider_status` 等）仍存在，且 9 个新字段**缺省时为 zero value**（不破坏现有 wire 契约，红）
 
 ## 2. dev.transports:dev - 实现开发
 
