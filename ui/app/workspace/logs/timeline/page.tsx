@@ -267,18 +267,16 @@ export default function TimelinePage() {
 			/>
 
 			{/* Active connections indicator */}
-			{activeLogs.length > 0 && (
-				<div
-					data-testid="timeline-active-count"
-					className="flex items-center gap-2 rounded-sm border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
-				>
-					<span className="relative flex h-2 w-2">
-						<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-						<span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
-					</span>
-					{activeLogs.length} active request{activeLogs.length !== 1 ? "s" : ""}
-				</div>
-			)}
+			<div
+				data-testid="timeline-active-count"
+				className="flex items-center gap-2 rounded-sm border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
+			>
+				<span className="relative flex h-2 w-2">
+					<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+					<span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+				</span>
+				{activeLogs.length} active request{activeLogs.length !== 1 ? "s" : ""}
+			</div>
 
 			{/* Loading indicator */}
 			{isFetching && (
