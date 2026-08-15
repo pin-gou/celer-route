@@ -53,8 +53,8 @@
     "userSuccessRate": "用户成功率",
     "userSuccessRateDesc": "最终用户感知的成功率。将回退链视为一次请求。",
     "avgLatency": "平均延迟",
-    "totalTokens": "总令牌数",
-    "totalTokensDesc": "使用的总令牌数，分为输入（提示词）和输出（完成）令牌。",
+    "totalTokens": "总词元数",
+    "totalTokensDesc": "使用的总词元数，分为输入（提示词）和输出（完成）词元。",
     "totalCost": "总成本",
     "in": "入",
     "out": "出"
@@ -67,7 +67,7 @@
     "model": "模型",
     "app": "应用",
     "latency": "延迟",
-    "tokens": "令牌",
+    "tokens": "词元",
     "cost": "成本",
     "virtual_key": "虚拟密钥",
     "routing_rule": "路由规则",
@@ -263,7 +263,7 @@
       "label": "视频混剪"
     },
     "count_tokens": {
-      "label": "计数令牌"
+      "label": "计数词元"
     },
     "compaction": {
       "label": "压缩"

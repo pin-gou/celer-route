@@ -21,7 +21,7 @@
   },
   "charts": {
     "volume": "请求量",
-    "tokens": "令牌数",
+    "tokens": "词元数",
     "cost": "成本",
     "latency": "延迟",
     "throughput": "吞吐量"

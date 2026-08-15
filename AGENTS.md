@@ -15,63 +15,112 @@ GitHub: `maximhq/bifrost`
 ```
 bifrost/
 ├── core/                           # Go core library — the engine
-│   ├── bifrost.go                  # Main struct, request queuing, provider lifecycle (~3.4K lines)
-│   ├── inference.go                # Inference routing, fallbacks, streaming dispatch (~1.9K lines)
-│   ├── mcp.go                     # MCP integration entry point
-│   ├── schemas/                   # ALL shared Go types — 41 files
-│   │   ├── bifrost.go             # BifrostConfig, ModelProvider enum, RequestType enum, context keys
-│   │   ├── provider.go            # Provider interface (30+ methods), NetworkConfig, ProviderConfig
-│   │   ├── plugin.go              # LLMPlugin, MCPPlugin, HTTPTransportPlugin, ObservabilityPlugin
-│   │   ├── context.go             # BifrostContext (custom context.Context with mutable values)
-│   │   ├── chatcompletions.go     # Chat completion request/response types
-│   │   ├── responses.go           # OpenAI Responses API types
-│   │   ├── embedding.go           # Embedding types
-│   │   ├── images.go              # Image generation types
-│   │   ├── batch.go               # Batch operation types
-│   │   ├── files.go               # File management types
-│   │   ├── mcp.go                 # MCP types
-│   │   ├── trace.go               # Tracer interface
-│   │   └── logger.go              # Logger interface
-│   ├── providers/                 # 20+ provider implementations
-│   │   ├── openai/                # Reference implementation (largest, most complete)
-│   │   ├── anthropic/             # Non-OpenAI-compatible example
-│   │   ├── bedrock/               # AWS event-stream protocol
-│   │   ├── gemini/                # Google-specific API shape
-│   │   ├── groq/                  # OpenAI-compatible (minimal, delegates to openai/)
-│   │   └── utils/                 # Shared: HTTP client, SSE parsing, error handling, scanner pool
-│   ├── pool/                      # Generic Pool[T] — dual-mode (prod: sync.Pool, debug: full tracking)
-│   │   ├── pool_prod.go           # Zero-overhead sync.Pool wrapper (default build)
-│   │   └── pool_debug.go          # Double-release/use-after-release/leak detection (-tags pooldebug)
-│   ├── mcp/                       # MCP protocol implementation
-│   │   ├── agent.go               # Agent orchestration loop (multi-turn tool calling)
-│   │   ├── clientmanager.go       # MCP client lifecycle management
-│   │   ├── toolmanager.go         # Tool registration, discovery, filtering
-│   │   ├── healthmonitor.go       # Client health monitoring
-│   │   └── codemode/starlark/     # Starlark sandbox for code-mode execution
+│   ├── bifrost.go                  # Main struct, request queuing, provider lifecycle
+│   ├── inference.go                # Inference routing, fallbacks, streaming dispatch
+│   ├── encryptedreasoning.go       # Encrypted reasoning support
+│   ├── mcp.go                      # MCP integration entry point
+│   ├── schemas/                    # ALL shared Go types — 101 files
+│   │   ├── bifrost.go              # BifrostConfig, ModelProvider enum, RequestType enum, context keys
+│   │   ├── provider.go             # Provider interface (30+ methods), NetworkConfig, ProviderConfig
+│   │   ├── plugin.go               # LLMPlugin, MCPPlugin, HTTPTransportPlugin, ObservabilityPlugin
+│   │   ├── context.go              # BifrostContext (custom context.Context with mutable values)
+│   │   ├── chatcompletions.go      # Chat completion request/response types
+│   │   ├── responses.go            # OpenAI Responses API types
+│   │   ├── embedding.go            # Embedding types
+│   │   ├── images.go               # Image generation types
+│   │   ├── batch.go                # Batch operation types
+│   │   ├── files.go                # File management types
+│   │   ├── containers.go           # Container types
+│   │   ├── mcp.go                  # MCP types
+│   │   ├── realtime.go             # WebRTC/Realtime types
+│   │   ├── trace.go                # Tracer interface
+│   │   ├── logger.go               # Logger interface
+│   │   ├── redaction.go            # Redaction utilities
+│   │   ├── vault.go                # Vault/secret types
+│   │   ├── websocket.go            # WebSocket types
+│   │   └── ... (count_tokens, enrichment, guardraildebug, mux, oauth, ocr, pagination, passthrough, rerank, secretvar, speech, textcompletions, videos, etc.)
+│   ├── providers/                  # 30 provider implementations
+│   │   ├── openai/                 # Reference implementation (largest, most complete)
+│   │   ├── anthropic/              # Non-OpenAI-compatible example
+│   │   ├── bedrock/                # AWS event-stream protocol
+│   │   ├── gemini/                 # Google-specific API shape
+│   │   ├── groq/                   # OpenAI-compatible (minimal, delegates to openai/)
+│   │   ├── deepseek/               # DeepSeek provider
+│   │   ├── fireworks/              # Fireworks AI provider
+│   │   ├── mistral/                # Mistral AI provider
+│   │   ├── vertex/                 # Vertex AI provider
+│   │   ├── vllm/                   # vLLM provider
+│   │   ├── wafer/                  # Wafer provider
+│   │   ├── opencode/               # Opencode provider
+│   │   ├── elevenlabs/             # ElevenLabs (speech)
+│   │   ├── runware/                # Runware (image generation)
+│   │   ├── runway/                 # Runway (video generation)
+│   │   ├── sarvam/                 # Sarvam AI provider
+│   │   └── utils/                  # Shared: HTTP client, SSE parsing, error handling, scanner pool
+│   ├── mcp/                        # MCP protocol implementation
+│   │   ├── agent.go                # Agent orchestration loop (multi-turn tool calling)
+│   │   ├── clientmanager.go        # MCP client lifecycle management
+│   │   ├── toolmanager.go          # Tool registration, discovery, filtering
+│   │   ├── healthmonitor.go        # Client health monitoring
+│   │   ├── connectionchecker.go    # Connection health checking
+│   │   ├── codemode/               # Code mode execution (Starlark sandbox)
+│   │   ├── credstore/              # Credential storage
+│   │   └── utils/                  # MCP utilities
+│   ├── network/                    # HTTP client, multipart, SSRF protection
+│   ├── keyselectors/               # Key selection strategies (weighted random)
 │   └── internal/
-│       ├── llmtests/              # LLM integration test infra (48 files, scenario-based)
-│       └── mcptests/              # MCP/Agent test infra (40+ files, mock-based)
+│       ├── llmtests/               # LLM integration test infra (scenario-based)
+│       └── mcptests/               # MCP/Agent test infra (mock-based)
 │
 ├── framework/                     # Data persistence, streaming, ecosystem utilities
 │   ├── configstore/               # Config storage backends (file, postgres)
 │   ├── logstore/                  # Log storage backends (file, postgres)
 │   ├── vectorstore/               # Vector storage (Weaviate, Qdrant, Redis, Pinecone)
 │   ├── streaming/                 # Streaming accumulator, delta copying, response marshaling
-│   │   ├── accumulator.go         # Chunk accumulation into full response (~24KB)
-│   │   ├── chat.go                # Chat stream handling (~17KB)
-│   │   └── responses.go           # Response stream marshaling (~35KB)
+│   │   ├── accumulator.go         # Chunk accumulation into full response
+│   │   ├── chat.go                # Chat stream handling
+│   │   └── responses.go           # Response stream marshaling
 │   ├── modelcatalog/              # Model metadata registry
 │   ├── tracing/                   # Distributed tracing helpers
-│   └── encrypt/                   # Encryption utilities
+│   ├── encrypt/                   # Encryption utilities
+│   ├── oauth2/                    # OAuth2 helpers
+│   ├── webhooks/                  # Webhook dispatch
+│   ├── kvstore/                   # Key-value store abstraction
+│   ├── lrucache/                  # LRU cache
+│   ├── migrator/                  # Database migration utilities
+│   ├── routing/                   # Routing rule evaluation
+│   ├── sidekiq/                   # Background job processing
+│   ├── featureflags/              # Feature flag system
+│   ├── mcp_headers/               # MCP header utilities
+│   ├── mcpcatalog/                # MCP catalog
+│   ├── envutils/                  # Environment utilities
+│   ├── plugins/                   # Shared plugin utilities
+│   ├── postgresconn/              # Postgres connection management
+│   ├── queryscope/                # Query scoping
+│   ├── temptoken/                 # Temporary token management
+│   └── objectstore/               # Object storage abstraction
+│
+├── cli/                           # CLI tool (separate go module)
+│   └── internal/
+│       ├── apis/                  # API client
+│       ├── app/                   # App commands
+│       ├── config/                # Config management
+│       ├── harness/               # Provider harness commands
+│       ├── installer/             # Installation
+│       ├── mcp/                   # MCP commands
+│       ├── runtime/               # Runtime management
+│       ├── secrets/               # Secrets management
+│       ├── ui/                    # CLI UI
+│       └── update/                # Update commands
 │
 ├── transports/
-│   ├── config.schema.json         # JSON Schema — THE source of truth for config.json (~2700 lines)
+│   ├── config.schema.json         # JSON Schema — THE source of truth for config.json
 │   └── bifrost-http/              # HTTP gateway transport
-│       ├── server/                # Server lifecycle, route registration
-│       ├── handlers/              # 27 HTTP endpoint handlers
-│       │   ├── inference.go       # Chat/text completions, responses API (~109KB)
+│       ├── main.go                # Entry point
+│       ├── handlers/              # 92 HTTP endpoint handlers
+│       │   ├── inference.go       # Chat/text completions, responses API
 │       │   ├── mcpinference.go    # MCP tool execution
-│       │   ├── governance.go      # Virtual keys, teams, customers, budgets (~100KB)
+│       │   ├── governance.go      # Virtual keys, teams, customers, budgets
 │       │   ├── providers.go       # Provider CRUD, key management
 │       │   ├── mcp.go             # MCP client registry management
 │       │   ├── logging.go         # Log queries, stats, histograms
@@ -82,17 +131,39 @@ bifrost/
 │       │   ├── health.go          # Health checks
 │       │   ├── mcpserver.go       # MCP server (SSE/streamable HTTP)
 │       │   ├── websocket.go       # WebSocket handler
-│       │   ├── devpprof.go        # Pool debug profiler endpoint (~23KB)
-│       │   └── middlewares.go     # Middleware definitions
-│       ├── lib/                   # ChainMiddlewares, config, context conversion
-│       └── integrations/          # SDK compatibility layers
-│           ├── openai.go          # OpenAI SDK drop-in compatibility
-│           ├── anthropic.go       # Anthropic SDK compatibility
-│           ├── bedrock.go         # AWS Bedrock SDK compatibility
-│           ├── genai.go           # Google GenAI SDK compatibility
-│           ├── langchain.go       # LangChain compatibility
-│           ├── litellm.go         # LiteLLM compatibility
-│           └── pydanticai.go      # PydanticAI compatibility
+│       │   ├── devpprof.go        # Pool debug profiler
+│       │   ├── middlewares.go     # Middleware definitions
+│       │   ├── mcpoauth2*.go      # MCP OAuth2 flow
+│       │   ├── mcpsessions.go     # MCP session management
+│       │   ├── mcpheaders.go      # MCP per-user headers
+│       │   ├── realtime*.go       # WebRTC/Realtime handlers
+│       │   ├── skills*.go         # Skills serving
+│       │   ├── webhooks.go        # Webhook management
+│       │   ├── prompts.go         # Prompt management
+│       │   ├── temptokens.go      # Temp token management
+│       │   ├── cooldown.go        # Provider cooldown
+│       │   ├── featureflags.go    # Feature flags
+│       │   ├── pricing_override.go # Pricing overrides
+│       │   ├── list_models_vk.go  # Model listing per virtual key
+│       │   └── ui.go              # UI serving
+│       ├── lib/                   # ChainMiddlewares, config, context conversion, validators, errors
+│       ├── integrations/          # SDK compatibility layers
+│       │   ├── openai.go          # OpenAI SDK drop-in compatibility
+│       │   ├── anthropic.go       # Anthropic SDK compatibility
+│       │   ├── bedrock.go         # AWS Bedrock SDK compatibility
+│       │   ├── genai.go           # Google GenAI SDK compatibility
+│       │   ├── langchain.go       # LangChain compatibility
+│       │   ├── litellm.go         # LiteLLM compatibility
+│       │   ├── pydanticai.go      # PydanticAI compatibility
+│       │   ├── cohere.go          # Cohere SDK compatibility
+│       │   ├── cursor.go          # Cursor SDK compatibility
+│       │   ├── passthrough.go     # Passthrough integration
+│       │   └── router.go          # Router integration
+│       ├── server/                # Server lifecycle, route registration, OAuth2
+│       ├── profiling/             # Profiling utilities
+│       ├── tests/                 # Transport-level tests
+│       ├── ui/                    # Embedded UI assets
+│       └── websocket/             # WebSocket handling
 │
 ├── plugins/                       # Go plugins — each has own go.mod
 │   ├── governance/                # Budget, rate limiting, virtual keys, routing, RBAC
@@ -103,26 +174,95 @@ bifrost/
 │   ├── mocker/                    # Mock responses for testing
 │   ├── jsonparser/                # JSON extraction utilities
 │   ├── maxim/                     # Maxim observability
-│   └── compat/                    # LiteLLM SDK compatibility (HTTP transport)
+│   ├── compat/                    # LiteLLM SDK compatibility (HTTP transport)
+│   ├── prompts/                   # Prompt management
+│   ├── providercooldown/          # Provider cooldown management
+│   └── modelcatalogresolver/      # Model catalog resolver
 │
 ├── ui/                            # React + vite web interface
-│   ├── app/workspace/             # Feature pages (20+ workspace sections)
+│   ├── app/                       # Routes & pages
+│   │   ├── workspace/             # Feature pages (23 workspace sections)
+│   │   ├── login/                 # Login page
+│   │   ├── oauth/                 # OAuth pages
+│   │   └── pprof/                 # pprof UI
 │   ├── components/                # Shared React components
-│   └── lib/                       # Constants, utilities, types
+│   │   ├── ui/                    # Core design system (70 components)
+│   │   ├── entitySelectors/       # Entity picker components
+│   │   ├── filters/               # Filter sidebar components
+│   │   ├── table/                 # Table components
+│   │   ├── chat/                  # Chat components (ImageMessage)
+│   │   └── prompts/               # Prompt components
+│   ├── hooks/                     # Custom React hooks (13 hooks)
+│   ├── lib/                       # Utilities, helpers, shared logic
+│   │   ├── i18n/                  # i18n infrastructure (provider, config, hook, types)
+│   │   ├── constants/             # Constants (config, icons, logs)
+│   │   ├── store/                 # Redux store (slices, apis, hooks)
+│   │   ├── types/                 # TypeScript types (14 files)
+│   │   ├── utils/                 # Utility functions (22 files)
+│   │   ├── schemas/               # Zod validation schemas
+│   │   ├── validators/            # Custom validators
+│   │   ├── registries/            # Runtime registries (OSS/enterprise)
+│   │   ├── hooks/                 # Lib-level hooks (branding, timezone, table)
+│   │   ├── config/                # Config helpers (CEL fields, operators)
+│   │   ├── message/               # Message utilities
+│   │   └── markdown/              # Markdown rendering (code plugin)
+│   └── locales/                   # i18n locale files
+│       ├── en/                    # English locale (15 JSON files)
+│       └── zh-CN/                 # Simplified Chinese locale (15 JSON files)
 │
-├── tests/e2e/                     # Playwright E2E tests
-│   ├── core/                      # Fixtures, page objects, helpers, API actions
-│   └── features/                  # Per-feature test suites
+├── tests/                         # Test infrastructure
+│   ├── e2e/                       # Playwright E2E tests
+│   │   ├── api/                   # API test collections (provider harness)
+│   │   ├── core/                  # Fixtures, page objects, helpers
+│   │   ├── features/              # Per-feature test suites
+│   │   └── clis/                  # CLI tests
+│   ├── integrations/              # SDK integration tests
+│   │   ├── python/                # Python SDK tests
+│   │   └── typescript/            # TypeScript SDK tests
+│   ├── async/                     # Async test helpers
+│   ├── governance/                # Governance-specific tests
+│   ├── semanticcache/             # Semantic cache tests
+│   ├── scripts/                   # Test scripts
+│   ├── cmd/                       # Test seed commands
+│   └── docker-compose.yml         # Test backing services
 │
-├── docs/                          # Mintlify MDX documentation
-│   ├── docs.json                  # Navigation config
-│   ├── media/                     # Screenshots (ui-*.png naming convention)
-│   └── (architecture|features|providers|mcp|plugins|enterprise|...)
+├── docs/                          # Documentation
+│   └── features/                  # Feature documentation (MDX)
 │
-├── .claude/skills/                # Claude Code skill definitions (4 skills)
-├── go.work                        # Go workspace — requires Go 1.26.1
-├── Makefile                       # Build, test, dev commands (1300+ lines)
-└── terraform/                     # Infrastructure as Code
+├── helm-charts/                   # Kubernetes Helm charts
+│   ├── bifrost/                   # Bifrost Helm chart
+│   └── index.yaml                 # Chart index
+│
+├── examples/                      # Example configurations
+│   ├── configs/                   # Config examples
+│   ├── dockers/                   # Docker examples
+│   ├── k8s/                       # Kubernetes examples
+│   ├── mcps/                      # MCP examples
+│   ├── plugins/                   # Plugin examples
+│   └── webhooks/                  # Webhook examples
+│
+├── nix/                           # Nix flake modules
+│   ├── devshells/                 # Development shells
+│   ├── modules/                   # NixOS modules
+│   └── packages/                  # Nix packages
+│
+├── scripts/                       # Utility scripts
+│   └── realtime-test/             # Realtime test scripts
+│
+├── community/                     # Community resources
+│   └── mcp-library/               # MCP server library
+│
+├── recipes/                       # Deployment recipes (ECS, Fly, k8s)
+│
+├── cmd/                           # Auxiliary commands
+│   └── e2eseed/                   # E2E seed data command
+│
+├── terraform/                     # Infrastructure as Code
+├── .claude/skills/                # Claude Code skill definitions (13 skills)
+├── go.work                        # Go workspace — requires Go 1.26.6
+├── Makefile                       # Build, test, dev commands
+├── config.json                    # Default config file (empty template)
+└── pulse.yaml                     # Build pipeline config
 ```
 
 ---
@@ -731,6 +871,34 @@ Systematically address unresolved PR review comments. Uses GraphQL to get unreso
 - **Pool names**: Descriptive string passed to `pool.New()` (e.g., `"channel-message"`, `"response-stream"`).
 - **Context keys**: Use `BifrostContextKey` type. Custom plugins should define their own key types to avoid collisions.
 - **Go filenames**: No underscores. The only permitted underscore is the `_test.go` suffix. Examples: `pluginpipeline.go`, `pluginpipeline_test.go` — never `plugin_pipeline.go` or `plugin_pipeline_race_test.go`. Concatenate words (lowercase, no separators) for multi-word filenames.
+
+---
+
+## i18n (Internationalization)
+
+Locale files live in `ui/locales/<lang>/` as flat JSON key-value files. Currently only `zh-CN/` (Simplified Chinese) and `en/` (English) exist.
+
+### Key Conventions
+
+- **LLM token → 词元, 不/not 令牌.** The correct Chinese translation for "token" in the LLM context (model tokens, token count, token usage) is **词元**, not 令牌. 令牌 is reserved for auth/security tokens (OAuth, API keys, session tokens).
+- **Auth token → 令牌.** When translating "token" in an authentication context (OAuth token, access token, refresh token), use **令牌**.
+- **Context matters when translating.** The same English word "token" maps to different Chinese terms depending on the domain. Always check the surrounding context.
+
+### Files and Domains
+
+| File | LLM token (词元) | Auth token (令牌) |
+|------|-----------------|-------------------|
+| `logs.json` | `tokens`, `totalTokens`, `totalTokensDesc`, `count_tokens` | — |
+| `dashboard.json` | `tokens` (chart label) | — |
+| `governance.json` | `tokens`, `maxTokens`, `tpm` | — |
+| `mcp.json` | — | `OAuth 令牌` |
+
+### Adding New Locale Entries
+
+- Add new keys to the corresponding feature file under `ui/locales/<lang>/`.
+- Always add both `en/` and `zh-CN/` entries.
+- Key names follow `snake_case` matching the English locale file.
+- Verify with `grep 令牌 ui/locales/zh-CN/` to catch accidental LLM→令牌 mis-translations before committing.
 
 # Frontend Code Guidelines & Patterns
 
