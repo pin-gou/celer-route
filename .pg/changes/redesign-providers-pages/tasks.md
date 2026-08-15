@@ -76,11 +76,11 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 编写组件单元测试：`ui/app/workspace/providers2/views/ProviderCard.test.tsx` 新增测试：mock 1 个 active provider 数据，断言卡片渲染 Provider 图标 + 名称 + 健康度 Badge + "X keys" + "Y models" + "Z reqs" + Toggle + Quick test 按钮（红）
-- [ ] 6.2 编写组件单元测试：`ui/app/workspace/providers2/views/ProviderFilters.test.tsx` 新增测试：输入搜索词 + 切换健康度 chip，断言 `onChange` 回调被正确触发且过滤参数符合预期（红）
-- [ ] 6.3 编写组件单元测试：`ui/app/workspace/providers2/[id]/views/OverviewTab.test.tsx` 新增测试：mock provider 数据，断言 6 个内联编辑 fragment（Network/Proxy/Performance/Governance/Beta Headers/OpenAI Config）全部渲染（红）
-- [ ] 6.4 编写 Playwright e2e spec：`tests/e2e/features/providers2/providers2-list.spec.ts` 新增用例：访问 `/workspace/providers2`，断言 5 个 fixture provider 分组卡片可见 + 名称搜索能过滤 + 健康度 chip 能切换（红）
-- [ ] 6.5 编写 Playwright e2e spec：`tests/e2e/features/providers2/providers2-detail.spec.ts` 新增用例：访问 `/workspace/providers2/openai`，依次点击 6 个 Tab，断言每个 Tab 切换后内容区更新且无 console.error（红）
+- [x] 6.1 编写组件单元测试：`ui/app/workspace/providers2/views/ProviderCard.test.tsx` 新增测试：mock 1 个 active provider 数据，断言卡片渲染 Provider 图标 + 名称 + 健康度 Badge + "X keys" + "Y models" + "Z reqs" + Toggle + Quick test 按钮（红）
+- [x] 6.2 编写组件单元测试：`ui/app/workspace/providers2/views/ProviderFilters.test.tsx` 新增测试：输入搜索词 + 切换健康度 chip，断言 `onChange` 回调被正确触发且过滤参数符合预期（红）
+- [x] 6.3 编写组件单元测试：`ui/app/workspace/providers2/[id]/views/OverviewTab.test.tsx` 新增测试：mock provider 数据，断言 6 个内联编辑 fragment（Network/Proxy/Performance/Governance/Beta Headers/OpenAI Config）全部渲染（红）
+- [x] 6.4 编写 Playwright e2e spec：`tests/e2e/features/providers2/providers2-list.spec.ts` 新增用例：访问 `/workspace/providers2`，断言 5 个 fixture provider 分组卡片可见 + 名称搜索能过滤 + 健康度 chip 能切换（红）
+- [x] 6.5 编写 Playwright e2e spec：`tests/e2e/features/providers2/providers2-detail.spec.ts` 新增用例：访问 `/workspace/providers2/openai`，依次点击 6 个 Tab，断言每个 Tab 切换后内容区更新且无 console.error（红）
 
 ## 7. dev.ui:dev - 实现开发
 
