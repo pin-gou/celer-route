@@ -483,31 +483,18 @@ export default function AppSidebar() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [focusedIndex, setFocusedIndex] = useState(-1);
 	const searchInputRef = useRef<HTMLInputElement>(null);
-	const [cookies, setCookie, removeCookie] = useCookies([
-		HIDDEN_UNTIL_NAV_COOKIE,
-		REMIND_LATER_COOKIE,
-		ONBOARDING_CARD_DISMISSED_COOKIE,
-	]);
+	const [cookies, setCookie, removeCookie] = useCookies([HIDDEN_UNTIL_NAV_COOKIE, REMIND_LATER_COOKIE, ONBOARDING_CARD_DISMISSED_COOKIE]);
 	const isOnboardingCardDismissed = !!cookies[ONBOARDING_CARD_DISMISSED_COOKIE];
 	const { data: latestRelease } = useGetLatestReleaseQuery(undefined, {
 		skip: !mounted, // Only fetch after component is mounted
 	});
 	const hasLogsAccess = useRbac(RbacResource.Logs, RbacOperation.View);
-	const hasObservabilityAccess = useRbac(RbacResource.Observability, RbacOperation.View);
 	const hasDashboardAccess = useRbac(RbacResource.Dashboard, RbacOperation.View);
 	const hasModelProvidersAccess = useRbac(RbacResource.ModelProvider, RbacOperation.View);
-	const hasMCPGatewayAccess = useRbac(RbacResource.MCPGateway, RbacOperation.View);
-	const hasMCPLogsAccess = useRbac(RbacResource.MCPLogs, RbacOperation.View);
 	const hasPluginsAccess = useRbac(RbacResource.Plugins, RbacOperation.View);
-	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
-	const hasGovernanceLegacyAccess = useRbac(RbacResource.Governance, RbacOperation.View);
 	const hasRoutingRulesAccess = useRbac(RbacResource.RoutingRules, RbacOperation.View);
 	const hasSettingsAccess = useRbac(RbacResource.Settings, RbacOperation.View);
-	const hasFeatureFlagsAccess = useRbac(RbacResource.FeatureFlags, RbacOperation.View);
 	const hasAPIKeyAccess = useRbac(RbacResource.APIKeys, RbacOperation.View);
-	const hasPromptRepositoryAccess = useRbac(RbacResource.PromptRepository, RbacOperation.View);
-	const hasSkillsRepositoryAccess = useRbac(RbacResource.SkillsRepository, RbacOperation.View);
-	const hasAnyGovernanceAccess = hasVirtualKeysAccess;
 	const { data: coreConfig } = useGetCoreConfigQuery({});
 	const isDbConnected = coreConfig?.is_db_connected ?? false;
 	const envLabel = coreConfig?.env_label ?? null;
@@ -571,14 +558,14 @@ export default function AppSidebar() {
 						url: "/workspace/mcp-logs",
 						icon: MCPIcon,
 						description: "MCP tool execution logs",
-						hasAccess: hasMCPLogsAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.connectors"),
 						url: "/workspace/observability",
 						icon: ChevronsLeftRightEllipsis,
 						description: "Log connectors",
-						hasAccess: hasObservabilityAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.logsSettings"),
@@ -622,7 +609,7 @@ export default function AppSidebar() {
 						url: "/workspace/model-limits",
 						icon: Wallet,
 						description: "Budgets and rate limits",
-						hasAccess: hasGovernanceLegacyAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.routingRules"),
@@ -643,7 +630,7 @@ export default function AppSidebar() {
 						url: "/workspace/custom-pricing/overrides",
 						icon: SlidersHorizontal,
 						description: "Scoped pricing overrides",
-						hasAccess: hasSettingsAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.modelSettings"),
@@ -659,42 +646,42 @@ export default function AppSidebar() {
 				icon: MCPIcon,
 				description: "MCP configuration",
 				url: "/workspace/mcp-gateway",
-				hasAccess: hasMCPGatewayAccess,
+				hasAccess: false, // hidden
 				subItems: [
 					{
 						title: t("nav.mcpCatalog"),
 						url: "/workspace/mcp-registry",
 						icon: LayoutGrid,
 						description: "MCP tool catalog",
-						hasAccess: hasMCPGatewayAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.mcpLibrary"),
 						url: "/workspace/mcp-registry/library",
 						icon: Boxes,
 						description: "Install curated MCP servers",
-						hasAccess: hasMCPGatewayAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.authSessions"),
 						url: "/workspace/mcp-sessions",
 						icon: KeyRound,
 						description: "Per-user OAuth sessions",
-						hasAccess: hasMCPGatewayAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.oauthGrants"),
 						url: "/workspace/oauth-grants",
 						icon: ShieldCheck,
 						description: "Downstream OAuth grants",
-						hasAccess: hasMCPGatewayAccess,
+						hasAccess: false, // hidden
 					},
 					{
 						title: t("nav.mcpSettings"),
 						url: "/workspace/mcp-settings",
 						icon: Settings,
 						description: "MCP configuration",
-						hasAccess: hasMCPGatewayAccess,
+						hasAccess: false, // hidden
 					},
 				],
 			},
@@ -710,14 +697,14 @@ export default function AppSidebar() {
 				url: "/workspace/governance",
 				icon: Landmark,
 				description: "Virtual keys & access",
-				hasAccess: hasAnyGovernanceAccess,
+				hasAccess: false, // hidden
 				subItems: [
 					{
 						title: t("nav.virtualKeys"),
 						url: "/workspace/governance/virtual-keys",
 						icon: KeyRound,
 						description: "Manage virtual keys & access",
-						hasAccess: hasVirtualKeysAccess,
+						hasAccess: false, // hidden
 					},
 				],
 			},
@@ -726,7 +713,7 @@ export default function AppSidebar() {
 				url: "/workspace/webhooks",
 				icon: Webhook,
 				description: "Async job webhook endpoints",
-				hasAccess: hasGovernanceLegacyAccess,
+				hasAccess: false, // hidden
 			},
 			...(isDbConnected
 				? [
@@ -735,14 +722,14 @@ export default function AppSidebar() {
 							url: "/workspace/prompt-repo",
 							icon: FolderGit,
 							description: "Prompt repository",
-							hasAccess: hasPromptRepositoryAccess,
+							hasAccess: false, // hidden
 						},
 						{
 							title: t("nav.skillsRepository"),
 							url: "/workspace/skills-repo",
 							icon: BookOpenText,
 							description: "Skills repository",
-							hasAccess: hasSkillsRepositoryAccess,
+							hasAccess: false, // hidden
 						},
 					]
 				: []),
@@ -752,7 +739,7 @@ export default function AppSidebar() {
 				icon: FlaskConical,
 				isExternal: true,
 				description: "Evaluations",
-				hasAccess: true,
+				hasAccess: false, // hidden
 			},
 			{
 				title: t("nav.settings"),
@@ -808,7 +795,7 @@ export default function AppSidebar() {
 						url: "/workspace/config/feature-flags",
 						icon: Flag,
 						description: "Toggle feature flags",
-						hasAccess: hasFeatureFlagsAccess,
+						hasAccess: false, // hidden
 					},
 				],
 			},
@@ -816,20 +803,11 @@ export default function AppSidebar() {
 		[
 			hasLogsAccess,
 			hasAPIKeyAccess,
-			hasObservabilityAccess,
 			hasDashboardAccess,
 			hasModelProvidersAccess,
-			hasMCPGatewayAccess,
-			hasMCPLogsAccess,
 			hasPluginsAccess,
-			hasVirtualKeysAccess,
-			hasGovernanceLegacyAccess,
-			hasAnyGovernanceAccess,
 			hasRoutingRulesAccess,
 			hasSettingsAccess,
-			hasPromptRepositoryAccess,
-			hasSkillsRepositoryAccess,
-			hasFeatureFlagsAccess,
 			isDbConnected,
 			t,
 		],
@@ -1303,12 +1281,7 @@ export default function AppSidebar() {
 										title={item.title}
 									>
 										<div className="flex items-center space-x-3">
-											<item.icon
-												className="hover:text-primary text-muted-foreground h-5 w-5"
-												size={22}
-												weight="regular"
-												
-											/>
+											<item.icon className="hover:text-primary text-muted-foreground h-5 w-5" size={22} weight="regular" />
 										</div>
 									</a>
 								))}
@@ -1342,7 +1315,14 @@ export default function AppSidebar() {
 					<div className="mx-auto flex flex-col items-center gap-1 group-data-[collapsible=icon]:hidden">
 						<div className="font-mono text-xs">
 							{version ?? ""}
-							{process.env.BUILD_TIME && <span className="text-muted-foreground ml-1">· {new Date(process.env.BUILD_TIME).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", "")}</span>}
+							{process.env.BUILD_TIME && (
+								<span className="text-muted-foreground ml-1">
+									·{" "}
+									{new Date(process.env.BUILD_TIME)
+										.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
+										.replace(":", "")}
+								</span>
+							)}
 						</div>
 					</div>
 				</div>
