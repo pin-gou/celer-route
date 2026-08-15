@@ -129,10 +129,31 @@ type ProviderStats struct {
 	AvgLatencyMs     int
 }
 
+// LogAgg holds the log-derived aggregation values for a single provider, as
+// returned by ProviderLogStats.AggregateAllProviderLogStats for every provider
+// in a batch.
+type LogAgg struct {
+	TodayRequests int
+	TodayErrors   int
+	LastUsedAt    string
+	LastErrorAt   string
+	AvgLatencyMs  int
+}
+
 // ProviderLogStats provides per-provider request-log aggregation.
 // The production implementation queries the logs store; tests provide a mock.
 type ProviderLogStats interface {
+	// AggregateProviderLogStats returns the log-derived aggregates for a single
+	// provider (today requests/errors, last success/error timestamps, 24h avg
+	// latency). Used by the single-provider detail path.
 	AggregateProviderLogStats(ctx context.Context, providerName schemas.ModelProvider) (todayRequests int, todayErrors int, lastUsedAt string, lastErrorAt string, avgLatencyMs int, err error)
+	// AggregateAllProviderLogStats returns the log-derived aggregates for every
+	// requested provider in one batch call. List handlers must call this once
+	// instead of looping over AggregateProviderLogStats, so a providers list
+	// never degrades into a per-provider store-round-trip loop (N+1). The
+	// implementation owns all store queries; callers must not fall back to
+	// per-provider loops.
+	AggregateAllProviderLogStats(ctx context.Context, providerNames []schemas.ModelProvider) (map[schemas.ModelProvider]LogAgg, error)
 }
 
 // ListProvidersResponse represents the response for listing all providers
@@ -1340,22 +1361,44 @@ func (h *ProviderHandler) applyProviderStats(response *ProviderResponse, stats P
 // Keys/models/health come from the in-memory store; log-derived fields come from
 // the optional ProviderLogStats source (nil when no logs store is configured).
 func (h *ProviderHandler) aggregateProviderStats(ctx context.Context, providerName schemas.ModelProvider) (ProviderStats, error) {
-	stats, err := h.computeProviderStats(ctx, providerName)
+	stats, err := h.computeProviderStats(ctx, providerName, nil)
 	if err != nil {
-		return ProviderStats{}, err
+		return ProviderStats{}, fmt.Errorf("aggregate stats for provider %s: %w", providerName, err)
 	}
 	return stats, nil
 }
 
-// aggregateAllProviderStats computes stats for every configured provider in one
-// batch pass, writing the results into the provided map. It is the listProviders
-// entrypoint so that a providers list never degrades into a per-provider query
-// loop (N+1).
+// aggregateAllProviderStats computes stats for every configured provider via a
+// single batch call to the ProviderLogStats source, writing results into the
+// provided map. It is the listProviders entrypoint so that a providers list
+// never degrades into a per-provider query loop (N+1): the batch call is the
+// single chokepoint for logstore round trips.
 func (h *ProviderHandler) aggregateAllProviderStats(ctx context.Context, providers map[schemas.ModelProvider]configstore.ProviderConfig, out map[schemas.ModelProvider]ProviderStats) error {
+	providerNames := make([]schemas.ModelProvider, 0, len(providers))
 	for providerName := range providers {
-		stats, err := h.computeProviderStats(ctx, providerName)
+		providerNames = append(providerNames, providerName)
+	}
+
+	// Batch-fetch log-derived stats for all providers at once.
+	var logAggs map[schemas.ModelProvider]LogAgg
+	if h.logStats != nil {
+		var err error
+		logAggs, err = h.logStats.AggregateAllProviderLogStats(ctx, providerNames)
 		if err != nil {
-			return err
+			return fmt.Errorf("batch aggregate log stats for %d providers: %w", len(providerNames), err)
+		}
+	}
+
+	// Per-provider pass: in-memory stats (keys, models, health) only —
+	// log-derived fields already resolved from the batch above.
+	for _, providerName := range providerNames {
+		var logAgg *LogAgg
+		if la, ok := logAggs[providerName]; ok {
+			logAgg = &la
+		}
+		stats, err := h.computeProviderStats(ctx, providerName, logAgg)
+		if err != nil {
+			return fmt.Errorf("aggregate stats for provider %s: %w", providerName, err)
 		}
 		out[providerName] = stats
 	}
@@ -1366,7 +1409,11 @@ func (h *ProviderHandler) aggregateAllProviderStats(ctx context.Context, provide
 //   - keys count + health from the in-memory provider config
 //   - models count from the models manager
 //   - request/error/latency aggregates from the optional logs source
-func (h *ProviderHandler) computeProviderStats(ctx context.Context, providerName schemas.ModelProvider) (ProviderStats, error) {
+//
+// When batchLogAgg is non-nil the log-derived fields are read from the
+// pre-fetched batch result; otherwise (single-provider detail path) a direct
+// AggregateProviderLogStats call is made.
+func (h *ProviderHandler) computeProviderStats(ctx context.Context, providerName schemas.ModelProvider, batchLogAgg *LogAgg) (ProviderStats, error) {
 	var stats ProviderStats
 
 	// Keys count + health status
@@ -1389,16 +1436,25 @@ func (h *ProviderHandler) computeProviderStats(ctx context.Context, providerName
 
 	// Log-derived aggregates
 	if h.logStats != nil {
-		todayRequests, todayErrors, lastUsedAt, lastErrorAt, avgLatencyMs, err := h.logStats.AggregateProviderLogStats(ctx, providerName)
-		if err != nil {
-			return ProviderStats{}, err
+		if batchLogAgg != nil {
+			stats.TodayRequests = batchLogAgg.TodayRequests
+			stats.TodayErrors = batchLogAgg.TodayErrors
+			stats.LastUsedAt = batchLogAgg.LastUsedAt
+			stats.LastErrorAt = batchLogAgg.LastErrorAt
+			stats.AvgLatencyMs = batchLogAgg.AvgLatencyMs
+			stats.Uptime = computeUptime(batchLogAgg.TodayRequests, batchLogAgg.TodayErrors)
+		} else {
+			todayRequests, todayErrors, lastUsedAt, lastErrorAt, avgLatencyMs, err := h.logStats.AggregateProviderLogStats(ctx, providerName)
+			if err != nil {
+				return ProviderStats{}, fmt.Errorf("aggregate log stats for provider %s: %w", providerName, err)
+			}
+			stats.TodayRequests = todayRequests
+			stats.TodayErrors = todayErrors
+			stats.LastUsedAt = lastUsedAt
+			stats.LastErrorAt = lastErrorAt
+			stats.AvgLatencyMs = avgLatencyMs
+			stats.Uptime = computeUptime(todayRequests, todayErrors)
 		}
-		stats.TodayRequests = todayRequests
-		stats.TodayErrors = todayErrors
-		stats.LastUsedAt = lastUsedAt
-		stats.LastErrorAt = lastErrorAt
-		stats.AvgLatencyMs = avgLatencyMs
-		stats.Uptime = computeUptime(todayRequests, todayErrors)
 	} else {
 		// No logs source configured: treat as empty data (healthy ratio = 1).
 		stats.Uptime = 1

@@ -1464,6 +1464,78 @@ func TestListProvidersAggregatedFields(t *testing.T) {
 	}
 }
 
+// TestListProviders_UsesBatchLogStatsAggregation verifies that the providers
+// list path aggregates log stats through a single AggregateAllProviderLogStats
+// batch call — never falling back to a per-provider AggregateProviderLogStats
+// loop (the design.md performance contract forbids the N+1 pattern).
+func TestListProviders_UsesBatchLogStatsAggregation(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	singleCalls, batchCalls := 0, 0
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.OpenAI:    {Keys: []schemas.Key{{ID: "key-1", Enabled: ptr(true)}}},
+				schemas.Anthropic: {Keys: []schemas.Key{{ID: "key-2", Enabled: ptr(true)}}},
+			},
+		},
+		modelsManager: &mockModelsManager{
+			filtered: map[schemas.ModelProvider][]string{
+				schemas.OpenAI:    {"gpt-4o"},
+				schemas.Anthropic: {"claude-3-5-sonnet"},
+			},
+		},
+		logStats: &mockProviderLogStats{
+			todayRequests:   50,
+			todayErrors:     2,
+			lastUsedAt:      "2026-08-15T01:42:00Z",
+			lastErrorAt:     "2026-08-15T00:15:22Z",
+			avgLatencyMs:    200,
+			singleCallCount: &singleCalls,
+			batchCallCount:  &batchCalls,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("GET")
+	ctx.Request.SetRequestURI("/api/providers")
+
+	h.listProviders(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+
+	// Exactly one batch call for the whole provider set; no per-provider loop.
+	if batchCalls != 1 {
+		t.Fatalf("expected exactly 1 AggregateAllProviderLogStats call, got %d", batchCalls)
+	}
+	if singleCalls != 0 {
+		t.Fatalf("expected 0 per-provider AggregateProviderLogStats calls, got %d (N+1 loop)", singleCalls)
+	}
+
+	var resp ListProvidersResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Total != 2 {
+		t.Fatalf("expected total=2, got %d", resp.Total)
+	}
+
+	// Both providers received the batch-derived values.
+	for _, p := range resp.Providers {
+		if p.TodayRequests != 50 || p.TodayErrors != 2 {
+			t.Fatalf("provider %s: expected batch stats (today_requests=50, today_errors=2), got (%d, %d)",
+				p.Name, p.TodayRequests, p.TodayErrors)
+		}
+		if p.LastUsedAt == "" || p.LastErrorAt == "" || p.AvgLatencyMs != 200 {
+			t.Fatalf("provider %s: expected non-empty timestamps and avg_latency_ms=200, got %#v", p.Name, p)
+		}
+	}
+}
+
 // TestBatchUpdateProviderKeys verifies the happy path of POST /api/providers/{provider}/keys/batch:
 // mock provider with 3 keys, POST {"key_ids":[...], "enabled":true} returns 200 + updated=3,
 // and all 3 keys are enabled in the DB.
@@ -1759,11 +1831,37 @@ type mockProviderLogStats struct {
 	lastErrorAt   string
 	avgLatencyMs  int
 	err           error
+	// When non-nil, tracks which method was called (for test assertions).
+	singleCallCount *int
+	batchCallCount  *int
 }
 
 func (m *mockProviderLogStats) AggregateProviderLogStats(_ context.Context, _ schemas.ModelProvider) (int, int, string, string, int, error) {
+	if m.singleCallCount != nil {
+		*m.singleCallCount++
+	}
 	if m.err != nil {
 		return 0, 0, "", "", 0, m.err
 	}
 	return m.todayRequests, m.todayErrors, m.lastUsedAt, m.lastErrorAt, m.avgLatencyMs, nil
+}
+
+func (m *mockProviderLogStats) AggregateAllProviderLogStats(_ context.Context, providerNames []schemas.ModelProvider) (map[schemas.ModelProvider]LogAgg, error) {
+	if m.batchCallCount != nil {
+		*m.batchCallCount++
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	out := make(map[schemas.ModelProvider]LogAgg, len(providerNames))
+	for _, p := range providerNames {
+		out[p] = LogAgg{
+			TodayRequests: m.todayRequests,
+			TodayErrors:   m.todayErrors,
+			LastUsedAt:    m.lastUsedAt,
+			LastErrorAt:   m.lastErrorAt,
+			AvgLatencyMs:  m.avgLatencyMs,
+		}
+	}
+	return out, nil
 }
