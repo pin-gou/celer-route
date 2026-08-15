@@ -251,6 +251,6 @@
      stage=final (常驻, 无 on_conditions)
 -->
 
-- [ ] 17.1 收集所有 stage 的 Gate Assessment
-- [ ] 17.2 检查跨 stage 依赖项
-- [ ] 17.3 输出 Final Gate Assessment
+- [x] 17.1 收集所有 stage 的 Gate Assessment
+- [x] 17.2 检查跨 stage 依赖项
+- [x] 17.3 输出 Final Gate Assessment
