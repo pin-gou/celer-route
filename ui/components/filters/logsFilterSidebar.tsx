@@ -11,6 +11,7 @@ import type { LogFilters } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import { ChevronDown, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search } from "lucide-react";
 import { Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const COLLAPSE_STORAGE_KEY = "logs-filter-sidebar-collapsed";
 
@@ -24,6 +25,7 @@ interface LogsSidebarProps {
 }
 
 export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps) {
+	const { t } = useTranslation("logs");
 	const [collapsed, setCollapsed] = useState(false);
 
 	// Load persisted collapsed state on mount
@@ -65,16 +67,17 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 
 	// Collapsed: thin rail with vertical "Filters" label — whole rail is clickable to expand
 	if (collapsed) {
+		const showFiltersLabel = t("logs.filterSidebar.showFilters");
 		return (
 			<button
 				type="button"
 				onClick={toggleCollapsed}
 				className="bg-card group flex h-full w-10 shrink-0 cursor-pointer flex-col items-center gap-3 rounded-r-md py-4 text-sm font-medium"
-				title="Show filters"
-				aria-label="Show filters"
+				title={showFiltersLabel}
+				aria-label={showFiltersLabel}
 			>
 				<PanelLeftOpen className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
-				<span className="rotate-180 select-none [writing-mode:vertical-rl]">Filters</span>
+				<span className="rotate-180 select-none [writing-mode:vertical-rl]">{t("logs.filterSidebar.title")}</span>
 				{activeFilterCount > 0 && (
 					<span className="bg-primary/10 text-primary flex size-6 items-center justify-center rounded-full text-xs font-medium">
 						{activeFilterCount}
@@ -88,15 +91,22 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 		<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
 			{/* Header */}
 			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
-				<span className="text-sm font-semibold">Filters</span>
+				<span className="text-sm font-semibold">{t("logs.filterSidebar.title")}</span>
 				<div className="flex items-center gap-1">
 					{activeFilterCount > 0 && (
 						<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
 							<RotateCcw className="size-3" />
-							Reset
+							{t("logs.filterSidebar.reset")}
 						</Button>
 					)}
-					<Button variant="ghost" size="icon" className="size-7" onClick={toggleCollapsed} title="Hide filters" aria-label="Hide filters">
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-7"
+						onClick={toggleCollapsed}
+						title={t("logs.filterSidebar.hideFilters")}
+						aria-label={t("logs.filterSidebar.hideFilters")}
+					>
 						<PanelLeftClose className="size-4" />
 					</Button>
 				</div>
@@ -280,6 +290,7 @@ function SearchableCheckboxList({
 	onSearch?: (query: string) => void;
 	fetching?: boolean;
 }) {
+	const { t } = useTranslation("logs");
 	const [query, setQuery] = useState("");
 	const normalized = query.trim().toLowerCase();
 	const filtered = normalized ? items.filter((item) => item.label.toLowerCase().includes(normalized)) : items;
@@ -345,7 +356,7 @@ function SearchableCheckboxList({
 				/>
 			))}
 			{filtered.length === 0 && !showAddCustom && (
-				<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">No results</div>
+				<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">{t("logs.filterSidebar.noResults")}</div>
 			)}
 			{showAddCustom && (
 				<button
@@ -356,7 +367,7 @@ function SearchableCheckboxList({
 				>
 					<Plus className="text-muted-foreground size-3.5 shrink-0" />
 					<span className="truncate">
-						Use <span className="font-medium">&quot;{trimmed}&quot;</span>
+						{t("logs.filterSidebar.use")} <span className="font-medium">&quot;{trimmed}&quot;</span>
 					</span>
 				</button>
 			)}
@@ -369,9 +380,10 @@ function SearchableCheckboxList({
 // ---------------------------------------------------------------------------
 
 function StatusFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.status || []).length > 0;
 	return (
-		<FilterSection title="Status" defaultOpen={defaultOpen || hasActive} testId="status-filter-toggle">
+		<FilterSection title={t("logs.filterSidebar.status")} defaultOpen={defaultOpen || hasActive} testId="status-filter-toggle">
 			{Statuses.map((status) => (
 				<CheckboxFilterItem
 					key={status}
@@ -395,6 +407,7 @@ function StatusFilter({ filters, onFiltersChange, defaultOpen }: FilterComponent
 // ---------------------------------------------------------------------------
 
 function StopReasonFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.stop_reasons || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -416,7 +429,7 @@ function StopReasonFilter({ filters, onFiltersChange, defaultOpen }: FilterCompo
 
 	return (
 		<FilterSection
-			title="Stop Reason"
+			title={t("logs.filterSidebar.stopReason")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -424,7 +437,7 @@ function StopReasonFilter({ filters, onFiltersChange, defaultOpen }: FilterCompo
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search or add a stop reason"
+				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.stopReason") })}
 				items={items}
 				allowCustom
 				isSelected={(reason) => (filters.stop_reasons || []).includes(reason)}
@@ -446,6 +459,7 @@ function StopReasonFilter({ filters, onFiltersChange, defaultOpen }: FilterCompo
 // ---------------------------------------------------------------------------
 
 function AppFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.apps || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -466,7 +480,7 @@ function AppFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPro
 
 	return (
 		<FilterSection
-			title="App"
+			title={t("logs.filterSidebar.app")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -474,7 +488,7 @@ function AppFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPro
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search apps"
+				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.app") })}
 				items={items}
 				isSelected={(appName) => selectedSet.has(appName)}
 				onToggle={(appName) => {
@@ -494,6 +508,7 @@ function AppFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPro
 // ---------------------------------------------------------------------------
 
 function ProvidersFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.providers || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -505,7 +520,7 @@ function ProvidersFilter({ filters, onFiltersChange, defaultOpen }: FilterCompon
 
 	return (
 		<FilterSection
-			title="Providers"
+			title={t("logs.filterSidebar.providers")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -513,7 +528,7 @@ function ProvidersFilter({ filters, onFiltersChange, defaultOpen }: FilterCompon
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search providers"
+				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.providers") })}
 				items={availableProviders.map((p) => ({ key: p.name, label: p.name }))}
 				isSelected={(name) => (filters.providers || []).includes(name)}
 				onToggle={(name) => {
@@ -532,9 +547,10 @@ function ProvidersFilter({ filters, onFiltersChange, defaultOpen }: FilterCompon
 // ---------------------------------------------------------------------------
 
 function TypeFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.objects || []).length > 0;
 	return (
-		<FilterSection title="Type" defaultOpen={defaultOpen || hasActive} testId="type-filter-toggle">
+		<FilterSection title={t("logs.filterSidebar.type")} defaultOpen={defaultOpen || hasActive} testId="type-filter-toggle">
 			{RequestTypes.map((type) => {
 				const label = RequestTypeLabels[type as keyof typeof RequestTypeLabels] ?? type;
 				return (
@@ -560,6 +576,7 @@ function TypeFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 // ---------------------------------------------------------------------------
 
 function ModelsFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.models || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -581,7 +598,7 @@ function ModelsFilter({ filters, onFiltersChange, defaultOpen }: FilterComponent
 
 	return (
 		<FilterSection
-			title="Models"
+			title={t("logs.filterSidebar.models")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -589,7 +606,7 @@ function ModelsFilter({ filters, onFiltersChange, defaultOpen }: FilterComponent
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search or add a model"
+				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.model") })}
 				items={items}
 				allowCustom
 				isSelected={(model) => (filters.models || []).includes(model)}
@@ -611,6 +628,7 @@ function ModelsFilter({ filters, onFiltersChange, defaultOpen }: FilterComponent
 // ---------------------------------------------------------------------------
 
 function AliasesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.aliases || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -632,7 +650,7 @@ function AliasesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponen
 
 	return (
 		<FilterSection
-			title="Aliases"
+			title={t("logs.filterSidebar.aliases")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -640,7 +658,7 @@ function AliasesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponen
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search or add an alias"
+				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.alias") })}
 				items={items}
 				allowCustom
 				isSelected={(alias) => (filters.aliases || []).includes(alias)}
@@ -662,6 +680,7 @@ function AliasesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponen
 // ---------------------------------------------------------------------------
 
 function SelectedKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.selected_key_ids || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -695,7 +714,7 @@ function SelectedKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 
 	return (
 		<FilterSection
-			title="Selected Keys"
+			title={t("logs.filterSidebar.selectedKeys")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -703,7 +722,7 @@ function SelectedKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search keys"
+				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.key") })}
 				items={dedup(availableSelectedKeys).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -720,6 +739,7 @@ function SelectedKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 // ---------------------------------------------------------------------------
 
 function VirtualKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.virtual_key_ids || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -753,7 +773,7 @@ function VirtualKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterComp
 
 	return (
 		<FilterSection
-			title="Virtual Keys"
+			title={t("logs.filterSidebar.virtualKeys")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -761,7 +781,7 @@ function VirtualKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterComp
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search virtual keys"
+				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.virtualKeys") })}
 				items={dedup(availableVirtualKeys).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -778,6 +798,7 @@ function VirtualKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterComp
 // ---------------------------------------------------------------------------
 
 function RoutingEnginesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.routing_engine_used || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -794,7 +815,7 @@ function RoutingEnginesFilter({ filters, onFiltersChange, defaultOpen }: FilterC
 
 	return (
 		<FilterSection
-			title="Routing Engines"
+			title={t("logs.filterSidebar.routingEngines")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -802,7 +823,7 @@ function RoutingEnginesFilter({ filters, onFiltersChange, defaultOpen }: FilterC
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search engines"
+				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.engine") })}
 				items={availableRoutingEngines.map((engine) => ({
 					key: engine,
 					label: RoutingEngineUsedLabels[engine as keyof typeof RoutingEngineUsedLabels] ?? engine,
@@ -826,6 +847,7 @@ function RoutingEnginesFilter({ filters, onFiltersChange, defaultOpen }: FilterC
 // ---------------------------------------------------------------------------
 
 function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.routing_rule_ids || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -859,7 +881,7 @@ function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 
 	return (
 		<FilterSection
-			title="Routing Rules"
+			title={t("logs.filterSidebar.routingRules")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -867,7 +889,7 @@ function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search rules"
+				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.rule") })}
 				items={dedup(availableRoutingRules).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -884,15 +906,16 @@ function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 // ---------------------------------------------------------------------------
 
 function SessionFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = !!filters.parent_request_id;
 	return (
-		<FilterSection title="Session" defaultOpen={defaultOpen || hasActive} testId="session-filter-toggle">
+		<FilterSection title={t("logs.filterSidebar.session")} defaultOpen={defaultOpen || hasActive} testId="session-filter-toggle">
 			<div className="relative">
 				<Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
 				<Input
 					value={filters.parent_request_id || ""}
 					onChange={(e) => onFiltersChange({ ...filters, parent_request_id: e.target.value })}
-					placeholder="Parent request ID"
+					placeholder={t("logs.filterSidebar.parentRequestIdPlaceholder")}
 					className="h-8 border-0 pl-8 text-sm"
 					data-testid="session-filter-input"
 					autoFocus
@@ -907,6 +930,7 @@ function SessionFilter({ filters, onFiltersChange, defaultOpen }: FilterComponen
 // ---------------------------------------------------------------------------
 
 function UserFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.user_ids || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -928,7 +952,7 @@ function UserFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 
 	return (
 		<FilterSection
-			title="User"
+			title={t("logs.filterSidebar.user")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -936,7 +960,7 @@ function UserFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search or add a user"
+				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.user") })}
 				items={items}
 				allowCustom
 				isSelected={(id) => (filters.user_ids || []).includes(id)}
@@ -958,6 +982,7 @@ function UserFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 // ---------------------------------------------------------------------------
 
 function TeamFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.team_ids || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -991,7 +1016,7 @@ function TeamFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 
 	return (
 		<FilterSection
-			title="Teams"
+			title={t("logs.filterSidebar.teams")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -999,7 +1024,7 @@ function TeamFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search or add a team"
+				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.team") })}
 				items={dedup(availableTeams).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -1016,6 +1041,7 @@ function TeamFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 // ---------------------------------------------------------------------------
 
 function CustomerFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.customer_ids || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -1049,7 +1075,7 @@ function CustomerFilter({ filters, onFiltersChange, defaultOpen }: FilterCompone
 
 	return (
 		<FilterSection
-			title="Customers"
+			title={t("logs.filterSidebar.customers")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -1057,7 +1083,7 @@ function CustomerFilter({ filters, onFiltersChange, defaultOpen }: FilterCompone
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search or add a customer"
+				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.customer") })}
 				items={dedup(availableCustomers).map((name) => ({ key: name, label: name }))}
 				allowCustom
 				isSelected={isSelected}
@@ -1075,6 +1101,7 @@ function CustomerFilter({ filters, onFiltersChange, defaultOpen }: FilterCompone
 // ---------------------------------------------------------------------------
 
 function BusinessUnitFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = (filters.business_unit_ids || []).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const searchInputRef = useAutoFocusOnOpen(opened);
@@ -1108,7 +1135,7 @@ function BusinessUnitFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 
 	return (
 		<FilterSection
-			title="Business Units"
+			title={t("logs.filterSidebar.businessUnits")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -1116,7 +1143,7 @@ function BusinessUnitFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder="Search or add a business unit"
+				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.businessUnit") })}
 				items={dedup(availableBusinessUnits).map((name) => ({ key: name, label: name }))}
 				allowCustom
 				isSelected={isSelected}
@@ -1134,11 +1161,12 @@ function BusinessUnitFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 // ---------------------------------------------------------------------------
 
 function CostFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = !!filters.missing_cost_only;
 	return (
-		<FilterSection title="Cost" defaultOpen={defaultOpen || hasActive} testId="cost-filter-toggle">
+		<FilterSection title={t("logs.filterSidebar.cost")} defaultOpen={defaultOpen || hasActive} testId="cost-filter-toggle">
 			<CheckboxFilterItem
-				label="Show missing cost only"
+				label={t("logs.filterSidebar.showMissingCostOnly")}
 				checked={!!filters.missing_cost_only}
 				onCheckedChange={(checked) => onFiltersChange({ ...filters, missing_cost_only: !!checked })}
 				testId="cost-filter-missing-only-checkbox"
@@ -1151,16 +1179,19 @@ function CostFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 // LocalCachingFilter – filter by semantic-cache hit type (direct / semantic)
 // ---------------------------------------------------------------------------
 
-const LocalCachingOptions: { key: string; label: string }[] = [
-	{ key: "direct", label: "Direct cache" },
-	{ key: "semantic", label: "Semantic cache" },
-];
-
 function LocalCachingFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
+	const localCachingOptions: { key: string; label: string }[] = useMemo(
+		() => [
+			{ key: "direct", label: t("logs.filterSidebar.directCache") },
+			{ key: "semantic", label: t("logs.filterSidebar.semanticCache") },
+		],
+		[t],
+	);
 	const hasActive = (filters.cache_hit_types || []).length > 0;
 	return (
-		<FilterSection title="Local Caching" defaultOpen={defaultOpen || hasActive} testId="local-caching-filter-toggle">
-			{LocalCachingOptions.map((option) => (
+		<FilterSection title={t("logs.filterSidebar.localCaching")} defaultOpen={defaultOpen || hasActive} testId="local-caching-filter-toggle">
+			{localCachingOptions.map((option) => (
 				<CheckboxFilterItem
 					key={option.key}
 					label={option.label}
@@ -1182,6 +1213,7 @@ function LocalCachingFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 // ---------------------------------------------------------------------------
 
 function MetadataFilters({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const { t } = useTranslation("logs");
 	const hasActive = !!filters.metadata_filters && Object.keys(filters.metadata_filters).length > 0;
 	const [opened, setOpened] = useState(defaultOpen || hasActive);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -1222,14 +1254,14 @@ function MetadataFilters({ filters, onFiltersChange, defaultOpen }: FilterCompon
 
 	return (
 		<FilterSection
-			title="Metadata"
+			title={t("logs.filterSidebar.metadata")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
 			testId="metadata-filter-toggle"
 		>
 			{isEmpty ? (
-				<div className="text-muted-foreground px-3 py-2 text-xs">No metadata keys</div>
+				<div className="text-muted-foreground px-3 py-2 text-xs">{t("logs.filterSidebar.noMetadataKeys")}</div>
 			) : (
 				<>
 					<div className="relative border-b">
@@ -1241,13 +1273,13 @@ function MetadataFilters({ filters, onFiltersChange, defaultOpen }: FilterCompon
 						<Input
 							value={searchQuery}
 							onChange={(e) => setSearchQuery(e.target.value)}
-							placeholder="Search metadata..."
+							placeholder={t("logs.filterSidebar.searchMetadata")}
 							className="h-8 border-0 pl-8 text-xs"
 							data-testid="metadata-search-input"
 						/>
 					</div>
 					{entries.length === 0 && !isFetching && (
-						<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">No results</div>
+						<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">{t("logs.filterSidebar.noResults")}</div>
 					)}
 					{entries.map(([metadataKey, values]) => (
 						<div key={metadataKey} data-testid={`metadata-${metadataKey}-filter-group`}>
@@ -1267,7 +1299,7 @@ function MetadataFilters({ filters, onFiltersChange, defaultOpen }: FilterCompon
 							<div className="px-3 py-2.5">
 								<Input
 									className="placeholder:text-muted-foreground h-7 w-full rounded border bg-transparent px-2 text-sm"
-									placeholder="Custom value..."
+									placeholder={t("logs.filterSidebar.customValue")}
 									value={
 										customInputs[metadataKey] ??
 										(filters.metadata_filters?.[metadataKey] && !values.includes(filters.metadata_filters[metadataKey])
