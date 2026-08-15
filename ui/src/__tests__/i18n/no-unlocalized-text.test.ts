@@ -15,6 +15,7 @@
  * tests 将转为绿 phase。
  */
 
+import { describe, it, expect } from "vitest";
 import { RuleTester } from "oxlint/plugins-dev";
 
 // ─── 未来规则模块 ───────────────────────────────────────────────
@@ -29,6 +30,9 @@ import { RuleTester } from "oxlint/plugins-dev";
 // deno-fmt-ignore
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { rules as noUnlocalizedTextRules } from "../../scripts/eslint-plugin-localized-text";
+// Cast to `any` for oxlint's RuleTester — the ESLint-format rule is compatible at runtime
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const noUnlocalizedTextRule = noUnlocalizedTextRules["no-unlocalized-text"] as any;
 
 // ─── 测试用例 ──────────────────────────────────────────────────
 
@@ -43,7 +47,7 @@ describe("eslint.no-unlocalized-text", () => {
   });
 
   it("should flag bare English string literal 'Save' as error", () => {
-    const result = ruleTester.run("no-unlocalized-text", noUnlocalizedTextRules["no-unlocalized-text"], {
+    const result = ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
       valid: [],
       invalid: [
         {
@@ -58,7 +62,7 @@ describe("eslint.no-unlocalized-text", () => {
   });
 
   it("should NOT flag t('common:action.save') as error", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRules["no-unlocalized-text"], {
+    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
       valid: [
         `const label = t("common:action.save");`,
       ],
@@ -68,7 +72,7 @@ describe("eslint.no-unlocalized-text", () => {
   });
 
   it("should respect eslint-disable-next-line exemption", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRules["no-unlocalized-text"], {
+    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
       valid: [
         `// eslint-disable-next-line no-unlocalized-text\nconst label = "Save";`,
       ],
@@ -77,7 +81,7 @@ describe("eslint.no-unlocalized-text", () => {
   });
 
   it("should flag bare JSX text content", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRules["no-unlocalized-text"], {
+    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
       valid: [],
       invalid: [
         {
@@ -89,7 +93,7 @@ describe("eslint.no-unlocalized-text", () => {
   });
 
   it("should NOT flag JSX with t() call", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRules["no-unlocalized-text"], {
+    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
       valid: [
         `export function Button() { return <button>{t("common:action.save")}</button>; }`,
       ],
@@ -98,7 +102,7 @@ describe("eslint.no-unlocalized-text", () => {
   });
 
   it("should flag toast.success('Done') as error", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRules["no-unlocalized-text"], {
+    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
       valid: [],
       invalid: [
         {
@@ -110,7 +114,7 @@ describe("eslint.no-unlocalized-text", () => {
   });
 
   it("should NOT flag toast.success(t('...'))", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRules["no-unlocalized-text"], {
+    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
       valid: [
         `toast.success(t("common:action.save"));`,
       ],
