@@ -2738,7 +2738,7 @@
           },
           "name": {
             "type": "string",
-            "description": "Name of the plugin (built-in: telemetry, prompts, logging, governance, maxim, semantic_cache, otel, or custom plugin name)"
+            "description": "Name of the plugin (built-in: telemetry, prompts, logging, governance, maxim, semantic_cache, otel, provider-cooldown, or custom plugin name)"
           },
           "config": {
             "type": "object",
@@ -3416,9 +3416,55 @@
                 }
               }
             }
+          },
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "provider-cooldown"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "config": {
+                "type": "object",
+                "description": "Configuration for the provider-cooldown plugin (cooldown TTLs, provider overrides, quota exhaustion patterns)",
+                "properties": {
+                  "default_ttl_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Default cooldown TTL in seconds applied to any provider without a ttl_overrides entry"
+                  },
+                  "ttl_overrides": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Per-provider cooldown TTL overrides in seconds (key: provider name, value: TTL in seconds)"
+                  },
+                  "quota_patterns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "description": "Additional lower-case substrings treated as quota exhaustion (extends built-in patterns)"
+                  }
+                },
+                "required": [
+                  "default_ttl_seconds",
+                  "ttl_overrides",
+                  "quota_patterns"
+                ],
+                "additionalProperties": false
+              }
+            }
           }
-        ],
-        "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
       }
     },
     "websocket": {

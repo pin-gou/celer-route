@@ -286,15 +286,24 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	// after this builtin and never get a chance to pick the provider first).
 	s.Config.SetPluginOrderInfo(modelcatalogresolver.PluginName, schemas.Ptr(schemas.PluginPlacementPostBuiltin), schemas.Ptr(math.MaxInt))
 
-	// 10. Provider cooldown (if enabled in config.json).
+	// 10. Provider cooldown (default-on: absent config.json entry is treated as enabled).
 	// The plugin runs as an LLMPlugin (PostLLMHook marks quota-exhausted (provider, key)
 	// pairs in an in-memory map) and exposes its key-pool filter via s.KeyPoolFilter,
 	// which the server consumes at the bifrost core boundary. Both must be wired for
 	// the feature to take effect: the LLMPlugin records events, the filter applies them.
+	//
+	// Default-on semantics: no entry in PluginConfigs, or an explicit entry with
+	// enabled=true, both result in the plugin being loaded. Only an explicit
+	// enabled=false disables the plugin. This matches telemetry's default-on behavior
+	// (see plugin #1 above).
 	cooldownCfg := s.getPluginConfig(providercooldown.PluginName)
-	if cooldownCfg != nil && cooldownCfg.Enabled {
+	if cooldownCfg == nil || cooldownCfg.Enabled {
 		plugin := providercooldown.NewPlugin(logger)
-		if err := plugin.Init(cooldownCfg.Config); err != nil {
+		var cfg any
+		if cooldownCfg != nil {
+			cfg = cooldownCfg.Config
+		}
+		if err := plugin.Init(cfg); err != nil {
 			s.Config.UpdatePluginOverallStatus(providercooldown.PluginName, providercooldown.PluginName,
 				schemas.PluginStatusError,
 				[]string{fmt.Sprintf("provider-cooldown init failed: %v", err)}, []schemas.PluginType{})
@@ -311,6 +320,9 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 		s.KeyPoolFilter = plugin.State.AsFilter(logger)
 	} else {
 		s.markPluginDisabled(providercooldown.PluginName)
+		// When explicitly disabled, ensure KeyPoolFilter is nil so no stale
+		// filter from a previous reload leaks through.
+		s.KeyPoolFilter = nil
 	}
 	s.Config.SetPluginOrderInfo(providercooldown.PluginName, builtinPlacement, schemas.Ptr(9))
 
