@@ -65,7 +65,7 @@ scenarios:
   - 2-build/<report_seq>-S-put-config-persists-evidence.json
 - scenario_id: S-stats-default-empty
   critical: false
-  description: GET /api/plugins/provider-cooldown/stats 初始为 markCount=0, suppressedCount=0, activeCount=0
+  description: GET /api/plugins/provider-cooldown/stats 初始为 mark_count=0, suppressed_count=0, current_active_count=0
   given:
   - '# env: bifrost-api 启动后无任何 LLM 调用发生过'
   - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
@@ -80,9 +80,10 @@ scenarios:
     expect_status: 200
   then:
   - status_code == 200
-  - response.body.stats.markCount == 0
-  - response.body.stats.suppressedCount == 0
-  - response.body.stats.activeCount == 0
+  - response.body.mark_count == 0
+  - response.body.suppressed_count == 0
+  - response.body.current_active_count == 0
+  - response.body.plugin == provider-cooldown
   evidence:
   - 2-build/<report_seq>-S-stats-default-empty-evidence.json
 - scenario_id: S-state-default-empty
@@ -101,7 +102,9 @@ scenarios:
     expect_status: 200
   then:
   - status_code == 200
-  - response.body.state == []
+  - response.body.entries == []
+  - response.body.count == 0
+  - response.body.plugin == provider-cooldown
   evidence:
   - 2-build/<report_seq>-S-state-default-empty-evidence.json
 - scenario_id: S-disabled-loading-skip
@@ -128,11 +131,11 @@ scenarios:
     action: HTTP DELETE /api/plugins/provider-cooldown 删除显式 entry 恢复默认开启
   evidence:
   - 2-build/<report_seq>-S-disabled-loading-skip-evidence.json
-- scenario_id: S-unfreeze-endpoint
+- scenario_id: S-unfreeze-endpoint-404
   critical: false
-  description: DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} 返回 200 + provider/keyId
+  description: DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} 当条目不存在时返回 404
   given:
-  - '# env: bifrost-api 启动后 (用于验证 endpoint 路由 + 鉴权 + 404 路径)'
+  - '# env: bifrost-api 启动后，无 cooldown 条目存在'
   - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
   covers:
   - V-ui-3
@@ -141,13 +144,12 @@ scenarios:
     type: api
     method: DELETE
     url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins/provider-cooldown/state/nonexistent-provider/nonexistent-key'
-    expect_status: 200
+    expect_status: 404
   then:
-  - status_code == 200
-  - response.body.provider == nonexistent-provider
-  - response.body.keyId == nonexistent-key
+  - status_code == 404
+  - response.body.error.message contains No active cooldown
   evidence:
-  - 2-build/<report_seq>-S-unfreeze-endpoint-evidence.json
+  - 2-build/<report_seq>-S-unfreeze-endpoint-404-evidence.json
 - scenario_id: S-plugins-list-include
   critical: false
   description: GET /api/plugins/builtins 返回的列表包含 provider-cooldown

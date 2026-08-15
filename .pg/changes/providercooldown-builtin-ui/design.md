@@ -114,12 +114,14 @@ UI 监控面板
 
 ```json
 {
-  "state": [
+  "plugin": "provider-cooldown",
+  "count": 0,
+  "entries": [
     {
       "provider": "openai",
-      "keyId": "key-abc-123",
-      "expireAt": "2026-08-15T18:00:00Z",
-      "reason": "quota_exhausted"
+      "key_id": "key-abc-123",
+      "expires_at": "2026-08-15T18:00:00Z",
+      "remaining": 300000000000
     }
   ]
 }
@@ -129,11 +131,10 @@ UI 监控面板
 
 ```json
 {
-  "stats": {
-    "markCount": 12,
-    "suppressedCount": 8,
-    "activeCount": 3
-  }
+  "plugin": "provider-cooldown",
+  "mark_count": 12,
+  "suppressed_count": 8,
+  "current_active_count": 3
 }
 ```
 
@@ -141,9 +142,9 @@ UI 监控面板
 
 ```json
 {
-  "message": "key unfrozen",
+  "message": "Cooldown cleared",
   "provider": "openai",
-  "keyId": "key-abc-123"
+  "key_id": "key-abc-123"
 }
 ```
 
@@ -151,7 +152,7 @@ UI 监控面板
 |--------|----------|--------|
 | 200 | 成功 | 0 |
 | 400 | config schema 校验失败（default_ttl_seconds 非正数等） | INVALID_CONFIG |
-| 404 | DELETE 时指定 provider/keyId 不存在 | NOT_FOUND |
+| 404 | DELETE 时指定 provider/keyId 不存在（`No active cooldown for this (provider, key)`） | NOT_FOUND |
 | 403 | 启用 auth bypass 时建 custom plugin | AUTH_BYPASS_REQUIRED |
 
 ## 数据模型
