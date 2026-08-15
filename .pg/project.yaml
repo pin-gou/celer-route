@@ -201,3 +201,8 @@ regression:
       environment:
         name: local
       output_format: playwright
+verify_merge:
+  skip_tests_if_no_conflict: true
+  stale_diff_gate: true
+  max_branch_staleness: 10
+  auto_rebase_stale: true
