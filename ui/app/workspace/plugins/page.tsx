@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { setSelectedPlugin, useAppDispatch, useAppSelector, useGetPluginsQuery } from "@/lib/store";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -19,7 +20,8 @@ export default function PluginsPage() {
 	const { data: plugins, isLoading } = useGetPluginsQuery();
 	const selectedPlugin = useAppSelector((state) => state.plugin.selectedPlugin);
 	const [selectedPluginId, setSelectedPluginId] = useQueryState("plugin");
-	const customPlugins = useMemo(() => plugins?.filter((plugin) => plugin.isCustom), [plugins]);
+	const allPlugins = useMemo(() => plugins ?? [], [plugins]);
+	const hasCustomPlugins = useMemo(() => allPlugins.some((plugin) => plugin.isCustom), [allPlugins]);
 	const [isSheetOpen, setIsSheetOpen] = useState(false);
 	const [isSequenceSheetOpen, setIsSequenceSheetOpen] = useState(false);
 
@@ -33,22 +35,22 @@ export default function PluginsPage() {
 
 	useEffect(() => {
 		if (!selectedPluginId) return;
-		const plugin = customPlugins?.find((plugin) => plugin.name === selectedPluginId);
+		const plugin = allPlugins?.find((plugin) => plugin.name === selectedPluginId);
 		if (plugin) {
 			dispatch(setSelectedPlugin(plugin));
 		}
-	}, [selectedPluginId, customPlugins]);
+	}, [selectedPluginId, allPlugins]);
 
 	useEffect(() => {
 		if (selectedPluginId) return;
 		if (!selectedPlugin) {
-			setSelectedPluginId(customPlugins?.[0]?.name ?? "");
+			setSelectedPluginId(allPlugins?.[0]?.name ?? "");
 			return;
 		}
 		setSelectedPluginId(selectedPlugin?.name ?? "");
-	}, [customPlugins]);
+	}, [allPlugins]);
 
-	if (customPlugins?.length === 0 && !isLoading) {
+	if (allPlugins?.length === 0 && !isLoading) {
 		return (
 			<div className="mx-auto w-full max-w-7xl">
 				<PluginsEmptyState onCreateClick={handleAddNew} canCreate={hasCreatePluginAccess} />
@@ -71,7 +73,7 @@ export default function PluginsPage() {
 					<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
 						<div className="mb-4">
 							<div className="text-muted-foreground mb-2 text-xs font-medium">Plugins</div>
-							{customPlugins?.map((plugin) => (
+							{allPlugins.map((plugin) => (
 								<button
 									type="button"
 									key={plugin.name}
@@ -90,6 +92,11 @@ export default function PluginsPage() {
 									<div className="flex min-w-0 flex-row items-center gap-2">
 										<Puzzle className="text-muted-foreground size-3.5 shrink-0" />
 										<span className="truncate">{plugin.name}</span>
+										{!plugin.isCustom && (
+											<Badge variant="secondary" className="text-muted-foreground h-4 px-1 text-[10px] leading-none font-normal">
+												built-in
+											</Badge>
+										)}
 									</div>
 									<div
 										className={cn(
@@ -115,7 +122,7 @@ export default function PluginsPage() {
 									<PlusIcon className="h-4 w-4" />
 									<div className="text-xs">Install New Plugin</div>
 								</Button>
-								{customPlugins && customPlugins.length > 0 && (
+								{hasCustomPlugins && (
 									<Button
 										variant="outline"
 										size="sm"
@@ -134,7 +141,7 @@ export default function PluginsPage() {
 				</div>
 				<PluginsView
 					onDelete={() => {
-						setSelectedPluginId(customPlugins?.[0]?.name ?? "");
+						setSelectedPluginId(allPlugins?.[0]?.name ?? "");
 					}}
 					onCreate={(pluginName) => {
 						setSelectedPluginId(pluginName ?? "");
