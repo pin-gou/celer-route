@@ -70,7 +70,13 @@ export function getPort(): string {
  * Get the base URL for API calls (includes protocol and host)
  */
 export function getApiBaseUrl(): string {
-	// 开发/生产模式一致使用相对路径，开发时由 vite proxy 转发到后端
+	// 开发/生产模式一致使用相对路径，开发时由 vite proxy 转发到后端。
+	// 浏览器环境返回同源绝对 URL：与相对路径行为完全一致（vite proxy、cookie
+	// 均不受影响），但能保证 RTK fetchBaseQuery 内部 `new Request(...)` 在任何
+	// 环境（含 jsdom 测试，其 Request 为 undici 实现、无法解析相对 URL）都能解析。
+	if (typeof window !== "undefined") {
+		return `${window.location.origin}/api`;
+	}
 	return "/api";
 }
 

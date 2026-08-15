@@ -70,12 +70,11 @@ interface UnfreezeCooldownResponse {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-const jsonResponse = (body: unknown) => ({
-	ok: true,
-	status: 200,
-	json: async () => body,
-	text: async () => JSON.stringify(body),
-});
+const jsonResponse = (body: unknown) =>
+	new Response(JSON.stringify(body), {
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+	});
 
 const stateBody: CooldownStateResponse = {
 	state: [
