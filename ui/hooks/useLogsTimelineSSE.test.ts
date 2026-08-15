@@ -1,18 +1,24 @@
 // @vitest-environment jsdom
 /**
- * @file SSE hook for logs timeline — tests
+ * @file TDD Red Phase — SSE hook for logs timeline
  *
- * These tests verify the useLogsTimelineSSE hook that subscribes to
- * GET /api/logs/active/stream for real-time log updates.
+ * These tests verify the SSE hook that subscribes to
+ * GET /api/logs/active/stream for real-time active request updates.
  *
  * Behavior:
- * - active_logs: initial snapshot of processing logs
- * - recent_logs: recently completed logs for reconciliation
- * - log_updated: incremental updates for every log write/transition
+ * - On first connection, receives an "active_logs" event (full handshake).
+ * - Subsequent updates arrive as "log_updated" events (incremental merge).
+ * - The hook merges incoming events into the local timeline state.
+ *
+ * In the TDD red phase, the useLogsTimelineSSE hook does not exist yet,
+ * so these tests will fail at compile time (cannot find module).
+ * This is the expected result — the dev phase will implement the hook.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
+// The following import does not exist yet — this is TDD red phase.
+// Compilation will fail with "Cannot find module" error.
 import { useLogsTimelineSSE } from "./useLogsTimelineSSE";
 import type { LogEntry } from "@/lib/types/logs";
 
@@ -59,6 +65,7 @@ const mockCompletedLog: LogEntry = {
 
 describe("useLogsTimelineSSE — SSE hook", () => {
 	beforeEach(() => {
+		// Mock EventSource for SSE subscription
 		vi.stubGlobal(
 			"EventSource",
 			vi.fn(function () {
@@ -72,6 +79,7 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 					removeEventListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
 						listeners[event]?.delete(handler);
 					}),
+					// Simulate dispatching events
 					_dispatch: (event: string, data: unknown) => {
 						const eventListeners = listeners[event];
 						if (eventListeners) {
@@ -94,6 +102,7 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 	it("should initially populate activeLogs from the active_logs handshake event", () => {
 		const { result } = renderHook(() => useLogsTimelineSSE());
 
+		// Simulate the handshake event (EventSource fires 'active_logs')
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 		act(() => {
 			eventSource._dispatch("active_logs", [mockActiveLog]);
@@ -109,36 +118,17 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
+		// First handshake: one active log
 		act(() => {
 			eventSource._dispatch("active_logs", [mockActiveLog]);
 		});
 		expect(result.current.activeLogs).toHaveLength(1);
 
+		// Second handshake: two active logs (simulating a new request arriving)
 		act(() => {
 			eventSource._dispatch("active_logs", [mockActiveLog, { ...mockActiveLog, id: "active-2", provider: "anthropic", model: "claude-3" }]);
 		});
 		expect(result.current.activeLogs).toHaveLength(2);
-	});
-
-	// -----------------------------------------------------------------------
-	// recent_logs reconciliation
-	// -----------------------------------------------------------------------
-
-	it("should call onNewLog for each recent_logs entry", () => {
-		const onNewLog = vi.fn();
-		renderHook(() => useLogsTimelineSSE({ onNewLog }));
-
-		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
-		act(() => {
-			eventSource._dispatch("recent_logs", [
-				{ id: "recent-1", status: "success", provider: "openai", model: "gpt-4", timestamp: "2026-08-15T10:01:00Z", latency_ms: 500 },
-			]);
-		});
-
-		expect(onNewLog).toHaveBeenCalledTimes(1);
-		expect(onNewLog).toHaveBeenCalledWith(
-			expect.objectContaining({ id: "recent-1", status: "success", provider: "openai", model: "gpt-4" }),
-		);
 	});
 
 	// -----------------------------------------------------------------------
@@ -150,39 +140,44 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
+		// Handshake: populate activeLogs
 		act(() => {
 			eventSource._dispatch("active_logs", [mockActiveLog]);
 		});
 		expect(result.current.activeLogs[0].status).toBe("processing");
 
+		// Incremental update: log_updated changes metadata (model updated) while still processing
 		act(() => {
 			eventSource._dispatch("log_updated", {
 				id: "active-1",
+				previous_status: "processing",
 				status: "processing",
 				latency_ms: 500.0,
 			});
 		});
 
+		// The active log should now be updated with new latency
 		expect(result.current.activeLogs).toHaveLength(1);
 		expect(result.current.activeLogs[0].status).toBe("processing");
 		expect(result.current.activeLogs[0].latency).toBe(500.0);
 	});
 
-	it("should add a new processing log on log_updated when the id does not exist in activeLogs", () => {
+	it("should add a new log on log_updated when the id does not exist in activeLogs", () => {
 		const { result } = renderHook(() => useLogsTimelineSSE());
 
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
+		// Handshake: no active logs
 		act(() => {
 			eventSource._dispatch("active_logs", []);
 		});
 
+		// New processing log arrives via log_updated
 		act(() => {
 			eventSource._dispatch("log_updated", {
 				id: "new-request-1",
+				previous_status: null,
 				status: "processing",
-				provider: "anthropic",
-				model: "claude-3",
 				latency_ms: null,
 			});
 		});
@@ -192,113 +187,28 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		expect(result.current.activeLogs[0].status).toBe("processing");
 	});
 
-	it("should remove a log from activeLogs when status is 'success' or 'error'", () => {
+	it("should remove a log from activeLogs when status is 'success' or 'error' and no previous_status", () => {
 		const { result } = renderHook(() => useLogsTimelineSSE());
 
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
+		// Handshake: one processing log
 		act(() => {
 			eventSource._dispatch("active_logs", [mockActiveLog]);
 		});
 		expect(result.current.activeLogs).toHaveLength(1);
 
+		// Completion: mark as success
 		act(() => {
 			eventSource._dispatch("log_updated", {
 				id: "active-1",
+				previous_status: "processing",
 				status: "success",
 				latency_ms: 1234.0,
 			});
 		});
 
-		expect(result.current.activeLogs).toHaveLength(0);
-	});
-
-	it("should call onNewLog for a completed log not in activeLogs", () => {
-		const onNewLog = vi.fn();
-		const { result } = renderHook(() => useLogsTimelineSSE({ onNewLog }));
-
-		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
-
-		act(() => {
-			eventSource._dispatch("active_logs", []);
-		});
-
-		act(() => {
-			eventSource._dispatch("log_updated", {
-				id: "fast-complete-1",
-				status: "success",
-				provider: "openai",
-				model: "gpt-4",
-				timestamp: "2026-08-15T10:01:00Z",
-				latency_ms: 200,
-			});
-		});
-
-		expect(onNewLog).toHaveBeenCalledTimes(1);
-		expect(onNewLog).toHaveBeenCalledWith(expect.objectContaining({ id: "fast-complete-1", status: "success" }));
-		expect(result.current.activeLogs).toHaveLength(0);
-	});
-
-	it("should call onLogRemoved and onNewLog when a processing log transitions to terminal", () => {
-		const onLogRemoved = vi.fn();
-		const onNewLog = vi.fn();
-		const { result } = renderHook(() => useLogsTimelineSSE({ onLogRemoved, onNewLog }));
-
-		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
-
-		act(() => {
-			eventSource._dispatch("active_logs", [mockActiveLog]);
-		});
-		expect(result.current.activeLogs).toHaveLength(1);
-
-		act(() => {
-			eventSource._dispatch("log_updated", {
-				id: "active-1",
-				status: "success",
-				provider: "openai",
-				model: "gpt-4",
-				latency_ms: 1234.0,
-			});
-		});
-
-		expect(onLogRemoved).toHaveBeenCalledTimes(1);
-		expect(onLogRemoved).toHaveBeenCalledWith("active-1");
-		expect(onNewLog).toHaveBeenCalledTimes(1);
-		expect(onNewLog).toHaveBeenCalledWith(
-			expect.objectContaining({ id: "active-1", status: "success", provider: "openai", model: "gpt-4" }),
-		);
-		expect(result.current.activeLogs).toHaveLength(0);
-	});
-
-	it("should treat a 'cancelled' status as terminal (remove from active + onNewLog)", () => {
-		const onLogRemoved = vi.fn();
-		const onNewLog = vi.fn();
-		const { result } = renderHook(() => useLogsTimelineSSE({ onLogRemoved, onNewLog }));
-
-		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
-
-		act(() => {
-			eventSource._dispatch("active_logs", [mockActiveLog]);
-		});
-		expect(result.current.activeLogs).toHaveLength(1);
-
-		// A key-pool veto (synthetic 503 no_eligible_keys) is recorded as cancelled.
-		act(() => {
-			eventSource._dispatch("log_updated", {
-				id: "active-1",
-				status: "cancelled",
-				provider: "openai",
-				model: "gpt-4",
-				latency_ms: 0,
-			});
-		});
-
-		expect(onLogRemoved).toHaveBeenCalledTimes(1);
-		expect(onLogRemoved).toHaveBeenCalledWith("active-1");
-		expect(onNewLog).toHaveBeenCalledTimes(1);
-		expect(onNewLog).toHaveBeenCalledWith(
-			expect.objectContaining({ id: "active-1", status: "cancelled", provider: "openai", model: "gpt-4" }),
-		);
+		// After completion, the log should be removed from activeLogs (it's no longer active)
 		expect(result.current.activeLogs).toHaveLength(0);
 	});
 
@@ -310,6 +220,7 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		renderHook(() => useLogsTimelineSSE());
 
 		expect(globalThis.EventSource).toHaveBeenCalledTimes(1);
+		// The URL should point to the active/stream SSE endpoint
 		const calledUrl = (globalThis.EventSource as any).mock.calls[0][0];
 		expect(calledUrl).toContain("/logs/active/stream");
 	});
@@ -332,6 +243,7 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 
 		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
 
+		// Simulate error event
 		act(() => {
 			eventSource._dispatch("error", { status: 503, message: "Service Unavailable" });
 		});

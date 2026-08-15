@@ -424,6 +424,17 @@ export interface ModelProvider extends ModelProviderConfig {
 	name: ModelProviderName;
 	provider_status: ProviderStatus;
 	config_hash?: string; // Present when config is synced from config.json
+
+	// Aggregate fields from ProviderResponse (read-only, computed server-side)
+	keys_count?: number;
+	models_count?: number;
+	keys_health_status?: string;
+	today_requests?: number;
+	today_errors?: number;
+	last_used_at?: string;
+	last_error_at?: string;
+	uptime?: number;
+	avg_latency_ms?: number;
 }
 
 // ListProvidersResponse matching Go's ListProvidersResponse

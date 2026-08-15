@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
@@ -11,12 +13,171 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
+	"gorm.io/gorm"
 )
 
 // ListProviderKeysResponse represents the response for listing keys for a provider.
 type ListProviderKeysResponse struct {
 	Keys  []schemas.Key `json:"keys"`
 	Total int           `json:"total"`
+}
+
+// BatchUpdateProviderKeysRequest is the body of POST /api/providers/{provider}/keys/batch.
+type BatchUpdateProviderKeysRequest struct {
+	KeyIDs  []string `json:"key_ids"`
+	Enabled bool     `json:"enabled"`
+}
+
+// BatchUpdateProviderKeysResponse is the success body of the batch keys endpoint.
+type BatchUpdateProviderKeysResponse struct {
+	Updated int      `json:"updated"`
+	KeyIDs  []string `json:"key_ids"`
+}
+
+// BatchUpdateProviderKeysErrorResponse is the 4xx body of the batch keys endpoint.
+type BatchUpdateProviderKeysErrorResponse struct {
+	Error         string   `json:"error"`
+	Message       string   `json:"message"`
+	MissingKeyIDs []string `json:"missing_key_ids"`
+}
+
+// batchUpdateRequestMaxKeyIDs caps the batch keys payload size so a single
+// request can never mount an unbounded UPDATE.
+const batchUpdateRequestMaxKeyIDs = 500
+
+// batchUpdateProviderKeys handles POST /api/providers/{provider}/keys/batch.
+// It toggles the enabled flag of many keys atomically: every key_id in the
+// payload must belong to the provider, otherwise the request fails with 400
+// and (when a DB store is present) the transaction is rolled back so no key is
+// partially updated.
+func (h *ProviderHandler) batchUpdateProviderKeys(ctx *fasthttp.RequestCtx) {
+	provider, err := getProviderFromCtx(ctx)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid provider: %v", err))
+		return
+	}
+
+	var payload BatchUpdateProviderKeysRequest
+	if err := sonic.Unmarshal(ctx.PostBody(), &payload); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	if len(payload.KeyIDs) == 0 {
+		SendError(ctx, fasthttp.StatusBadRequest, "key_ids must not be empty")
+		return
+	}
+	if len(payload.KeyIDs) > batchUpdateRequestMaxKeyIDs {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("key_ids exceeds the maximum of %d keys", batchUpdateRequestMaxKeyIDs))
+		return
+	}
+
+	providerConfig, err := h.inMemoryStore.GetProviderConfigRaw(provider)
+	if err != nil {
+		if errors.Is(err, lib.ErrNotFound) {
+			SendError(ctx, fasthttp.StatusNotFound, "Provider not found")
+			return
+		}
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get provider config: %v", err))
+		return
+	}
+
+	if providerConfig.CustomProviderConfig != nil && providerConfig.CustomProviderConfig.IsKeyLess {
+		SendError(ctx, fasthttp.StatusBadRequest, "Cannot update keys on a keyless provider")
+		return
+	}
+
+	// Validate every requested key_id belongs to the provider; collect the missing ones.
+	validIDs := make(map[string]bool, len(providerConfig.Keys))
+	for _, key := range providerConfig.Keys {
+		validIDs[key.ID] = true
+	}
+	var missingKeyIDs []string
+	seen := make(map[string]bool, len(payload.KeyIDs))
+	for _, keyID := range payload.KeyIDs {
+		if seen[keyID] {
+			continue
+		}
+		seen[keyID] = true
+		if !validIDs[keyID] {
+			missingKeyIDs = append(missingKeyIDs, keyID)
+		}
+	}
+	if len(missingKeyIDs) > 0 {
+		SendJSONWithStatus(ctx, BatchUpdateProviderKeysErrorResponse{
+			Error:         "batch_update_failed",
+			Message:       fmt.Sprintf("key_ids [%s] not found for provider %s", strings.Join(missingKeyIDs, ", "), provider),
+			MissingKeyIDs: missingKeyIDs,
+		}, fasthttp.StatusBadRequest)
+		return
+	}
+
+	// Build the per-key updates (preserve every other field).
+	enabled := payload.Enabled
+	type keyUpdate struct {
+		keyID string
+		key   schemas.Key
+	}
+	updates := make([]keyUpdate, 0, len(payload.KeyIDs))
+	seen = make(map[string]bool, len(payload.KeyIDs))
+	for _, keyID := range payload.KeyIDs {
+		if seen[keyID] {
+			continue
+		}
+		seen[keyID] = true
+		idx := slices.IndexFunc(providerConfig.Keys, func(k schemas.Key) bool { return k.ID == keyID })
+		if idx < 0 {
+			continue // validated above; defensive
+		}
+		updatedKey := providerConfig.Keys[idx]
+		updatedKey.Enabled = &enabled
+		updates = append(updates, keyUpdate{keyID: keyID, key: updatedKey})
+	}
+
+	// Persist atomically when a DB store is present: all updates run inside one
+	// transaction, so any failure rolls back every key.
+	if h.dbStore != nil {
+		if err := h.dbStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
+			for _, update := range updates {
+				if err := h.dbStore.UpdateProviderKey(ctx, provider, update.keyID, update.key, tx); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			logger.Error("Batch update failed for provider %s (%d keys): %v", provider, len(updates), err)
+			SendError(ctx, fasthttp.StatusInternalServerError, "Failed to batch update keys")
+			return
+		}
+	}
+
+	// Mirror the change into the in-memory store.
+	h.inMemoryStore.Mu.Lock()
+	inMemoryConfig, ok := h.inMemoryStore.Providers[provider]
+	if ok {
+		copiedKeys := make([]schemas.Key, len(inMemoryConfig.Keys))
+		copy(copiedKeys, inMemoryConfig.Keys)
+		for i := range copiedKeys {
+			if seen[copiedKeys[i].ID] {
+				copiedKeys[i].Enabled = &enabled
+			}
+		}
+		inMemoryConfig.Keys = copiedKeys
+		h.inMemoryStore.Providers[provider] = inMemoryConfig
+	}
+	h.inMemoryStore.Mu.Unlock()
+
+	// Reload the runtime provider so the new enabled flags take effect in
+	// request routing (no-op when no client is configured).
+	if clientErr := h.inMemoryStore.ReloadProviderInClient(provider); clientErr != nil {
+		logger.Warn("Failed to reload provider %s after batch key update: %v", provider, clientErr)
+	}
+
+	logger.Info("Batch updated %d keys for provider %s (enabled=%v)", len(updates), provider, enabled)
+	keyIDs := make([]string, 0, len(updates))
+	for _, update := range updates {
+		keyIDs = append(keyIDs, update.keyID)
+	}
+	SendJSON(ctx, BatchUpdateProviderKeysResponse{Updated: len(keyIDs), KeyIDs: keyIDs})
 }
 
 func (h *ProviderHandler) listProviderKeys(ctx *fasthttp.RequestCtx) {

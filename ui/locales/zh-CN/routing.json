@@ -1,51 +1,51 @@
 {
-  "page": {
-    "title": "路由规则",
-    "description": "配置模型请求的路由规则"
-  },
-  "rules": {
-    "title": "路由规则",
-    "createRule": "创建规则",
-    "editRule": "编辑规则",
-    "deleteRule": "删除规则",
-    "ruleName": "规则名称",
-    "priority": "优先级",
-    "status": "状态",
-    "condition": "条件",
-    "target": "目标",
-    "noRules": "无路由规则",
-    "noRulesDesc": "创建您的第一个路由规则以开始使用",
-    "active": "活跃",
-    "inactive": "不活跃"
-  },
-  "tree": {
-    "title": "路由树",
-    "view": "树形视图",
-    "source": "来源",
-    "condition": "条件",
-    "action": "操作",
-    "edge": "边",
-    "node": "节点"
-  },
-  "complexityRouter": {
-    "title": "复杂度路由",
-    "description": "根据复杂度层级路由请求",
-    "tiers": "层级",
-    "tierName": "层级名称",
-    "boundary": "边界",
-    "transition": "转换",
-    "simple": "简单",
-    "medium": "中等",
-    "complex": "复杂",
-    "simpleBoundary": "简单边界",
-    "mediumBoundary": "中等边界",
-    "complexBoundary": "复杂边界",
-    "simpleToMedium": "简单 → 中等",
-    "mediumToComplex": "中等 → 复杂"
-  },
-  "permissionDenied": "您没有访问路由规则的权限",
-  "routingRules": {
-    "emptyTitle": "路由规则使用 CEL 条件来分发请求",
-    "emptyDescription": "创建基于 CEL 的规则，按模型、提供商、预算或自定义属性路由请求。控制每个请求由哪个提供商或模型处理。"
-  }
+	"page": {
+		"title": "路由规则",
+		"description": "配置模型请求的路由规则"
+	},
+	"rules": {
+		"title": "路由规则",
+		"createRule": "创建规则",
+		"editRule": "编辑规则",
+		"deleteRule": "删除规则",
+		"ruleName": "规则名称",
+		"priority": "优先级",
+		"status": "状态",
+		"condition": "条件",
+		"target": "目标",
+		"noRules": "无路由规则",
+		"noRulesDesc": "创建您的第一个路由规则以开始使用",
+		"active": "活跃",
+		"inactive": "不活跃"
+	},
+	"tree": {
+		"title": "路由树",
+		"view": "树形视图",
+		"source": "来源",
+		"condition": "条件",
+		"action": "操作",
+		"edge": "边",
+		"node": "节点"
+	},
+	"complexityRouter": {
+		"title": "复杂度路由",
+		"description": "根据复杂度层级路由请求",
+		"tiers": "层级",
+		"tierName": "层级名称",
+		"boundary": "边界",
+		"transition": "转换",
+		"simple": "简单",
+		"medium": "中等",
+		"complex": "复杂",
+		"simpleBoundary": "简单边界",
+		"mediumBoundary": "中等边界",
+		"complexBoundary": "复杂边界",
+		"simpleToMedium": "简单 → 中等",
+		"mediumToComplex": "中等 → 复杂"
+	},
+	"permissionDenied": "您没有访问路由规则的权限",
+	"routingRules": {
+		"emptyTitle": "路由规则使用 CEL 条件来分发请求",
+		"emptyDescription": "创建基于 CEL 的规则，按模型、提供商、预算或自定义属性路由请求。控制每个请求由哪个提供商或模型处理。"
+	}
 }

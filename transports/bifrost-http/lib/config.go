@@ -6506,6 +6506,17 @@ func (c *Config) SetBifrostClient(client *bifrost.Bifrost) {
 	c.client = client
 }
 
+// ReloadProviderInClient reloads a single provider into the runtime client so
+// key/config changes persisted outside the lib.Config mutation methods (e.g. the
+// batch keys endpoint, which writes through the DB store atomically) take effect
+// in request routing. No-op when no client is configured (unit tests).
+func (c *Config) ReloadProviderInClient(provider schemas.ModelProvider) error {
+	if c == nil || c.client == nil {
+		return nil
+	}
+	return c.client.UpdateProvider(provider)
+}
+
 // GetMCPClient gets an MCP client configuration from the configuration.
 // This method is called when an MCP client is reconnected via the HTTP API.
 //

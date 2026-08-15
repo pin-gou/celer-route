@@ -1,38 +1,38 @@
 {
-  "title": "仪表板",
-  "tabs": {
-    "overview": "概览",
-    "providerUsage": "提供商用量",
-    "modelRankings": "模型排名",
-    "mcpUsage": "MCP 用量",
-    "teamRankings": "团队排名",
-    "userRankings": "用户排名",
-    "virtualKeyRankings": "虚拟密钥排名",
-    "customerRankings": "客户排名",
-    "buRankings": "业务单元排名",
-    "appRankings": "应用排名"
-  },
-  "filters": {
-    "allTools": "所有工具",
-    "allServers": "所有服务器",
-    "dateRange": "日期范围",
-    "period": "时段",
-    "timezone": "时区"
-  },
-  "charts": {
-    "volume": "请求量",
-    "tokens": "词元数",
-    "cost": "成本",
-    "latency": "延迟",
-    "throughput": "吞吐量"
-  },
-  "export": {
-    "title": "导出",
-    "pdf": "导出 PDF",
-    "csv": "导出 CSV"
-  },
-  "empty": {
-    "title": "暂无数据",
-    "description": "所选时间段内没有数据。请尝试调整筛选条件或时间范围。"
-  }
+	"title": "仪表板",
+	"tabs": {
+		"overview": "概览",
+		"providerUsage": "提供商用量",
+		"modelRankings": "模型排名",
+		"mcpUsage": "MCP 用量",
+		"teamRankings": "团队排名",
+		"userRankings": "用户排名",
+		"virtualKeyRankings": "虚拟密钥排名",
+		"customerRankings": "客户排名",
+		"buRankings": "业务单元排名",
+		"appRankings": "应用排名"
+	},
+	"filters": {
+		"allTools": "所有工具",
+		"allServers": "所有服务器",
+		"dateRange": "日期范围",
+		"period": "时段",
+		"timezone": "时区"
+	},
+	"charts": {
+		"volume": "请求量",
+		"tokens": "令牌数",
+		"cost": "成本",
+		"latency": "延迟",
+		"throughput": "吞吐量"
+	},
+	"export": {
+		"title": "导出",
+		"pdf": "导出 PDF",
+		"csv": "导出 CSV"
+	},
+	"empty": {
+		"title": "暂无数据",
+		"description": "所选时间段内没有数据。请尝试调整筛选条件或时间范围。"
+	}
 }

@@ -139,9 +139,7 @@ export default function SessionsTable({
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<div>
 					<h2 className="text-lg font-semibold tracking-tight">{t("sessions.title")}</h2>
-					<p className="text-muted-foreground text-sm">
-						{t("sessions.description")}
-					</p>
+					<p className="text-muted-foreground text-sm">{t("sessions.description")}</p>
 				</div>
 			</div>
 

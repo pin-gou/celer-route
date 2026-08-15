@@ -1,57 +1,57 @@
 {
-  "page": {
-    "title": "MCP Gateway",
-    "description": "Manage MCP servers, clients, and configurations"
-  },
-  "clients": {
-    "title": "MCP Clients",
-    "addClient": "Add Client",
-    "editClient": "Edit Client",
-    "deleteClient": "Delete Client",
-    "clientName": "Client Name",
-    "clientType": "Client Type",
-    "status": "Status",
-    "lastActive": "Last Active",
-    "noClients": "No clients configured",
-    "noClientsDesc": "Add your first MCP client to get started"
-  },
-  "servers": {
-    "title": "MCP Servers",
-    "addServer": "Add Server",
-    "editServer": "Edit Server",
-    "deleteServer": "Delete Server",
-    "serverName": "Server Name",
-    "serverUrl": "Server URL",
-    "transport": "Transport",
-    "status": "Status",
-    "tools": "Tools",
-    "noServers": "No servers configured",
-    "noServersDesc": "Add your first MCP server to get started",
-    "library": "Server Library",
-    "browseLibrary": "Browse Library",
-    "installServer": "Install Server",
-    "uninstallServer": "Uninstall Server"
-  },
-  "sessions": {
-    "title": "MCP Sessions",
-    "sessionId": "Session ID",
-    "status": "Status",
-    "created": "Created",
-    "expires": "Expires",
-    "noSessions": "No active sessions",
-    "noSessionsDesc": "Sessions will appear here when clients connect",
-    "description": "Per-user credentials stored for MCP servers (OAuth tokens and submitted headers), plus any pending authentication flows."
-  },
-  "settings": {
-    "title": "MCP Settings",
-    "autoApprove": "Auto-Approve Tools",
-    "maxDepth": "Max Agent Depth",
-    "timeout": "Tool Execution Timeout",
-    "agentMode": "Agent Mode",
-    "agentModeDesc": "Enable autonomous tool execution for pre-approved tools"
-  },
-  "permissionDenied": "You don't have permission to access MCP Gateway",
-  "registry": {
-    "title": "MCP Registry"
-  }
+	"page": {
+		"title": "MCP Gateway",
+		"description": "Manage MCP servers, clients, and configurations"
+	},
+	"clients": {
+		"title": "MCP Clients",
+		"addClient": "Add Client",
+		"editClient": "Edit Client",
+		"deleteClient": "Delete Client",
+		"clientName": "Client Name",
+		"clientType": "Client Type",
+		"status": "Status",
+		"lastActive": "Last Active",
+		"noClients": "No clients configured",
+		"noClientsDesc": "Add your first MCP client to get started"
+	},
+	"servers": {
+		"title": "MCP Servers",
+		"addServer": "Add Server",
+		"editServer": "Edit Server",
+		"deleteServer": "Delete Server",
+		"serverName": "Server Name",
+		"serverUrl": "Server URL",
+		"transport": "Transport",
+		"status": "Status",
+		"tools": "Tools",
+		"noServers": "No servers configured",
+		"noServersDesc": "Add your first MCP server to get started",
+		"library": "Server Library",
+		"browseLibrary": "Browse Library",
+		"installServer": "Install Server",
+		"uninstallServer": "Uninstall Server"
+	},
+	"sessions": {
+		"title": "MCP Sessions",
+		"sessionId": "Session ID",
+		"status": "Status",
+		"created": "Created",
+		"expires": "Expires",
+		"noSessions": "No active sessions",
+		"noSessionsDesc": "Sessions will appear here when clients connect",
+		"description": "Per-user credentials stored for MCP servers (OAuth tokens and submitted headers), plus any pending authentication flows."
+	},
+	"settings": {
+		"title": "MCP Settings",
+		"autoApprove": "Auto-Approve Tools",
+		"maxDepth": "Max Agent Depth",
+		"timeout": "Tool Execution Timeout",
+		"agentMode": "Agent Mode",
+		"agentModeDesc": "Enable autonomous tool execution for pre-approved tools"
+	},
+	"permissionDenied": "You don't have permission to access MCP Gateway",
+	"registry": {
+		"title": "MCP Registry"
+	}
 }

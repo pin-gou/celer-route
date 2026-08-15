@@ -59,7 +59,10 @@ function getLevelBadge(level: string) {
 	switch (level) {
 		case "warn":
 			return (
-				<Badge variant="outline" className="border-yellow-300 bg-yellow-50 text-yellow-700 dark:border-yellow-600 dark:bg-yellow-950 dark:text-yellow-300">
+				<Badge
+					variant="outline"
+					className="border-yellow-300 bg-yellow-50 text-yellow-700 dark:border-yellow-600 dark:bg-yellow-950 dark:text-yellow-300"
+				>
 					warn
 				</Badge>
 			);
@@ -71,7 +74,10 @@ function getLevelBadge(level: string) {
 			);
 		default:
 			return (
-				<Badge variant="outline" className="border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-400">
+				<Badge
+					variant="outline"
+					className="border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-400"
+				>
 					info
 				</Badge>
 			);
@@ -116,12 +122,12 @@ export function TimelineDetail({ data, isLoading, error }: TimelineDetailProps) 
 	}
 
 	const { log_id, total_duration_ms } = data;
-		const events = data.events ?? [];
+	const events = data.events ?? [];
 
 	return (
 		<div className="space-y-3" data-testid="timeline-detail">
 			{/* Header */}
-			<div className="flex items-center justify-between rounded-sm border bg-muted/30 px-4 py-2">
+			<div className="bg-muted/30 flex items-center justify-between rounded-sm border px-4 py-2">
 				<div className="flex items-center gap-2 text-sm">
 					<span className="text-muted-foreground">Log ID:</span>
 					<code className="font-mono text-xs">{log_id}</code>
@@ -139,41 +145,25 @@ export function TimelineDetail({ data, isLoading, error }: TimelineDetailProps) 
 			) : (
 				<div className="space-y-1">
 					{events.map((event, idx) => {
-						const testIdLevel =
-							event.level === "warn" ? "warn" : event.level === "error" ? "error" : "info";
+						const testIdLevel = event.level === "warn" ? "warn" : event.level === "error" ? "error" : "info";
 						return (
 							<div
 								key={`${event.phase}-${idx}`}
 								data-testid={`timeline-event-row-${testIdLevel}`}
-								className={cn(
-									"flex items-start gap-3 rounded-sm px-3 py-2 text-xs",
-									getLevelRowClass(event.level),
-								)}
+								className={cn("flex items-start gap-3 rounded-sm px-3 py-2 text-xs", getLevelRowClass(event.level))}
 							>
 								{/* Time offset */}
-								<div className="w-20 shrink-0 font-mono tabular-nums text-muted-foreground">
-									{formatMs(event.time_ms_offset)}
-								</div>
+								<div className="text-muted-foreground w-20 shrink-0 font-mono tabular-nums">{formatMs(event.time_ms_offset)}</div>
 
 								{/* Duration */}
-								<div className="w-20 shrink-0 font-mono tabular-nums text-muted-foreground">
-									{formatMs(event.duration_ms)}
-								</div>
+								<div className="text-muted-foreground w-20 shrink-0 font-mono tabular-nums">{formatMs(event.duration_ms)}</div>
 
 								{/* Phase */}
-								<div className="w-24 shrink-0 font-medium">
-									{event.phase}
-								</div>
+								<div className="w-24 shrink-0 font-medium">{event.phase}</div>
 
 								{/* Source */}
-								<div className="w-28 shrink-0 text-muted-foreground">
-									{event.source}
-								</div>
-								{event.plugin_name && (
-									<div className="w-20 shrink-0 font-medium text-foreground">
-										{event.plugin_name}
-									</div>
-								)}
+								<div className="text-muted-foreground w-28 shrink-0">{event.source}</div>
+								{event.plugin_name && <div className="text-foreground w-20 shrink-0 font-medium">{event.plugin_name}</div>}
 
 								{/* Message */}
 								<div className="min-w-0 flex-1 truncate">{event.message}</div>

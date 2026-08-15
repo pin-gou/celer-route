@@ -1,253 +1,253 @@
 {
-  "page": {
-    "title": "configuration"
-  },
-  "providers": {
-    "default": {
-      "placeholder": "e.g. gpt-4, gpt-3.5-turbo. Leave blank for all models."
-    },
-    "anthropic": {
-      "placeholder": "e.g. claude-3-haiku, claude-2.1"
-    },
-    "azure": {
-      "placeholder": "e.g. gpt-4, gpt-35-turbo (must match alias keys)"
-    },
-    "bedrock": {
-      "placeholder": "e.g. claude-v2, titan-text-express-v1, ai21-j2-mid"
-    },
-    "bedrock_mantle": {
-      "placeholder": "e.g. anthropic.claude-opus-4-8, openai.gpt-oss-120b"
-    },
-    "cerebras": {
-      "placeholder": "e.g. cerebras-2, cerebras-2-vision"
-    },
-    "cohere": {
-      "placeholder": "e.g. command-r, command-r-plus"
-    },
-    "deepseek": {
-      "placeholder": "e.g. deepseek-v4-flash, deepseek-v4-pro"
-    },
-    "gemini": {
-      "placeholder": "e.g. gemini-1.5-pro, gemini-1.5-flash"
-    },
-    "groq": {
-      "placeholder": "e.g. llama3-70b-8192, mixtral-8x7b-32768"
-    },
-    "huggingface": {
-      "placeholder": "e.g. sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B"
-    },
-    "mistral": {
-      "placeholder": "e.g. mistral-7b-instruct, mixtral-8x7b"
-    },
-    "openrouter": {
-      "placeholder": "e.g. openai/gpt-4, anthropic/claude-3-haiku"
-    },
-    "sgl": {
-      "placeholder": "e.g. sgl-2, sgl-vision"
-    },
-    "parasail": {
-      "placeholder": "e.g. parasail-2, parasail-vision"
-    },
-    "elevenlabs": {
-      "placeholder": "e.g. eleven_multilingual_v2, eleven_turbo_v2"
-    },
-    "perplexity": {
-      "placeholder": "e.g. sonar-pro, sonar-deep-research"
-    },
-    "ollama": {
-      "placeholder": "e.g. llama3.1, llama2"
-    },
-    "opencode_go": {
-      "placeholder": "e.g. gpt-5.5, claude-sonnet-4-6"
-    },
-    "opencode_zen": {
-      "placeholder": "e.g. gpt-5.5, claude-sonnet-4-6"
-    },
-    "openai": {
-      "placeholder": "e.g. gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo"
-    },
-    "vertex": {
-      "placeholder": "e.g. gemini-1.5-pro, text-bison, chat-bison"
-    },
-    "nebius": {
-      "placeholder": "e.g. openai/gpt-oss-120b, google/gemma-2-9b-it-fast, Qwen/Qwen2.5-VL-72B-Instruct"
-    },
-    "xai": {
-      "placeholder": "e.g. grok-4-0709, grok-3-mini, grok-3, grok-2-vision-1212"
-    },
-    "replicate": {
-      "placeholder": "e.g. meta/llama3-1-8b-instruct, black-forest-labs/flux-dev"
-    },
-    "vllm": {
-      "placeholder": "e.g. Qwen/Qwen3-0.6B, Qwen/Qwen3-1.5B"
-    },
-    "runway": {
-      "placeholder": "e.g. gen4_turbo_image_to_video, gen3a_turbo_image_to_video"
-    },
-    "runware": {
-      "placeholder": "e.g. runware:100@1, runware:101@1"
-    },
-    "fireworks": {
-      "placeholder": "e.g. accounts/fireworks/models/deepseek-v3p2"
-    },
-    "sarvam": {
-      "placeholder": "e.g. sarvam-30b, sarvam-105b"
-    },
-    "wafer": {
-      "placeholder": "e.g. glm-5.2, kimi-k2.6"
-    }
-  },
-  "mcp": {
-    "status": {
-      "healthy": {
-        "label": "Healthy"
-      },
-      "error": {
-        "label": "Error"
-      },
-      "unstable": {
-        "label": "Unstable"
-      },
-      "pending_verification": {
-        "label": "Pending Verification"
-      },
-      "disabled": {
-        "label": "Disabled"
-      },
-      "needs_reauth": {
-        "label": "Needs Reauth"
-      },
-      "degraded": {
-        "label": "Degraded"
-      }
-    }
-  },
-  "apiKeys": {
-    "title": "API Keys",
-    "description": "Manage API keys for authentication",
-    "createKey": "Create API Key",
-    "editKey": "Edit API Key",
-    "deleteKey": "Delete API Key",
-    "keyName": "Key Name",
-    "keyValue": "Key Value",
-    "status": "Status",
-    "created": "Created",
-    "lastUsed": "Last Used",
-    "noKeys": "No API keys configured",
-    "active": "Active",
-    "inactive": "Inactive"
-  },
-  "caching": {
-    "title": "Caching",
-    "description": "Configure response caching settings",
-    "enableCache": "Enable Cache",
-    "ttl": "Cache TTL",
-    "maxSize": "Max Cache Size",
-    "strategies": "Cache Strategies",
-    "noConfig": "No caching configuration"
-  },
-  "clientSettings": {
-    "title": "Client Settings",
-    "description": "Configure client connection settings",
-    "timeout": "Client Timeout",
-    "maxRetries": "Max Retries",
-    "connectionPool": "Connection Pool",
-    "noConfig": "No client settings configured"
-  },
-  "compatibility": {
-    "title": "Compatibility",
-    "description": "Configure API compatibility settings",
-    "mode": "Compatibility Mode",
-    "openai": "OpenAI Compatible",
-    "anthropic": "Anthropic Compatible",
-    "bedrock": "Bedrock Compatible",
-    "genai": "Google GenAI Compatible",
-    "noConfig": "No compatibility settings configured"
-  },
-  "featureFlags": {
-    "title": "Feature Flags",
-    "description": "Manage feature flags",
-    "enableFeature": "Enable Feature",
-    "flagName": "Flag Name",
-    "status": "Status",
-    "noFlags": "No feature flags configured"
-  },
-  "largePayload": {
-    "title": "Large Payload",
-    "description": "Configure large payload handling",
-    "maxSize": "Max Payload Size",
-    "storage": "Storage Backend",
-    "noConfig": "No large payload configuration"
-  },
-  "logging": {
-    "title": "Logging",
-    "description": "Configure logging settings",
-    "logLevel": "Log Level",
-    "logStore": "Log Store",
-    "retention": "Retention Period",
-    "sampling": "Sampling Rate",
-    "noConfig": "No logging configuration"
-  },
-  "mcpGateway": {
-    "title": "MCP Gateway",
-    "description": "Configure MCP gateway settings",
-    "maxDepth": "Max Agent Depth",
-    "timeout": "Tool Execution Timeout",
-    "autoApprove": "Auto-Approve Tools",
-    "noConfig": "No MCP gateway configuration"
-  },
-  "observability": {
-    "title": "Observability",
-    "description": "Configure observability settings",
-    "tracing": "Tracing",
-    "metrics": "Metrics",
-    "exporters": "Exporters",
-    "noConfig": "No observability configuration"
-  },
-  "performanceTuning": {
-    "title": "Performance Tuning",
-    "description": "Configure performance tuning settings",
-    "concurrency": "Concurrency",
-    "poolSize": "Pool Size",
-    "bufferSize": "Buffer Size",
-    "noConfig": "No performance tuning configuration"
-  },
-  "pricingConfig": {
-    "title": "Pricing Configuration",
-    "description": "Configure pricing settings",
-    "modelPricing": "Model Pricing",
-    "customPricing": "Custom Pricing",
-    "overrides": "Pricing Overrides",
-    "noConfig": "No pricing configuration"
-  },
-  "security": {
-    "title": "Security",
-    "description": "Configure security settings",
-    "tls": "TLS Settings",
-    "cors": "CORS Settings",
-    "rateLimiting": "Rate Limiting",
-    "noConfig": "No security configuration"
-  },
-  "customPricing": {
-    "title": "Custom Pricing",
-    "description": "Configure custom pricing overrides",
-    "addOverride": "Add Pricing Override",
-    "editOverride": "Edit Pricing Override",
-    "deleteOverride": "Delete Pricing Override",
-    "model": "Model",
-    "provider": "Provider",
-    "inputPrice": "Input Price",
-    "outputPrice": "Output Price",
-    "noOverrides": "No pricing overrides configured",
-    "noOverridesDesc": "Add your first pricing override to get started"
-  },
-  "mcpSettings": {
-    "title": "MCP Settings",
-    "description": "Configure MCP server settings",
-    "serverUrl": "Server URL",
-    "transport": "Transport",
-    "timeout": "Timeout",
-    "noSettings": "No MCP settings configured"
-  },
-  "routingRules": {}
+	"page": {
+		"title": "configuration"
+	},
+	"providers": {
+		"default": {
+			"placeholder": "e.g. gpt-4, gpt-3.5-turbo. Leave blank for all models."
+		},
+		"anthropic": {
+			"placeholder": "e.g. claude-3-haiku, claude-2.1"
+		},
+		"azure": {
+			"placeholder": "e.g. gpt-4, gpt-35-turbo (must match alias keys)"
+		},
+		"bedrock": {
+			"placeholder": "e.g. claude-v2, titan-text-express-v1, ai21-j2-mid"
+		},
+		"bedrock_mantle": {
+			"placeholder": "e.g. anthropic.claude-opus-4-8, openai.gpt-oss-120b"
+		},
+		"cerebras": {
+			"placeholder": "e.g. cerebras-2, cerebras-2-vision"
+		},
+		"cohere": {
+			"placeholder": "e.g. command-r, command-r-plus"
+		},
+		"deepseek": {
+			"placeholder": "e.g. deepseek-v4-flash, deepseek-v4-pro"
+		},
+		"gemini": {
+			"placeholder": "e.g. gemini-1.5-pro, gemini-1.5-flash"
+		},
+		"groq": {
+			"placeholder": "e.g. llama3-70b-8192, mixtral-8x7b-32768"
+		},
+		"huggingface": {
+			"placeholder": "e.g. sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B"
+		},
+		"mistral": {
+			"placeholder": "e.g. mistral-7b-instruct, mixtral-8x7b"
+		},
+		"openrouter": {
+			"placeholder": "e.g. openai/gpt-4, anthropic/claude-3-haiku"
+		},
+		"sgl": {
+			"placeholder": "e.g. sgl-2, sgl-vision"
+		},
+		"parasail": {
+			"placeholder": "e.g. parasail-2, parasail-vision"
+		},
+		"elevenlabs": {
+			"placeholder": "e.g. eleven_multilingual_v2, eleven_turbo_v2"
+		},
+		"perplexity": {
+			"placeholder": "e.g. sonar-pro, sonar-deep-research"
+		},
+		"ollama": {
+			"placeholder": "e.g. llama3.1, llama2"
+		},
+		"opencode_go": {
+			"placeholder": "e.g. gpt-5.5, claude-sonnet-4-6"
+		},
+		"opencode_zen": {
+			"placeholder": "e.g. gpt-5.5, claude-sonnet-4-6"
+		},
+		"openai": {
+			"placeholder": "e.g. gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo"
+		},
+		"vertex": {
+			"placeholder": "e.g. gemini-1.5-pro, text-bison, chat-bison"
+		},
+		"nebius": {
+			"placeholder": "e.g. openai/gpt-oss-120b, google/gemma-2-9b-it-fast, Qwen/Qwen2.5-VL-72B-Instruct"
+		},
+		"xai": {
+			"placeholder": "e.g. grok-4-0709, grok-3-mini, grok-3, grok-2-vision-1212"
+		},
+		"replicate": {
+			"placeholder": "e.g. meta/llama3-1-8b-instruct, black-forest-labs/flux-dev"
+		},
+		"vllm": {
+			"placeholder": "e.g. Qwen/Qwen3-0.6B, Qwen/Qwen3-1.5B"
+		},
+		"runway": {
+			"placeholder": "e.g. gen4_turbo_image_to_video, gen3a_turbo_image_to_video"
+		},
+		"runware": {
+			"placeholder": "e.g. runware:100@1, runware:101@1"
+		},
+		"fireworks": {
+			"placeholder": "e.g. accounts/fireworks/models/deepseek-v3p2"
+		},
+		"sarvam": {
+			"placeholder": "e.g. sarvam-30b, sarvam-105b"
+		},
+		"wafer": {
+			"placeholder": "e.g. glm-5.2, kimi-k2.6"
+		}
+	},
+	"mcp": {
+		"status": {
+			"healthy": {
+				"label": "Healthy"
+			},
+			"error": {
+				"label": "Error"
+			},
+			"unstable": {
+				"label": "Unstable"
+			},
+			"pending_verification": {
+				"label": "Pending Verification"
+			},
+			"disabled": {
+				"label": "Disabled"
+			},
+			"needs_reauth": {
+				"label": "Needs Reauth"
+			},
+			"degraded": {
+				"label": "Degraded"
+			}
+		}
+	},
+	"apiKeys": {
+		"title": "API Keys",
+		"description": "Manage API keys for authentication",
+		"createKey": "Create API Key",
+		"editKey": "Edit API Key",
+		"deleteKey": "Delete API Key",
+		"keyName": "Key Name",
+		"keyValue": "Key Value",
+		"status": "Status",
+		"created": "Created",
+		"lastUsed": "Last Used",
+		"noKeys": "No API keys configured",
+		"active": "Active",
+		"inactive": "Inactive"
+	},
+	"caching": {
+		"title": "Caching",
+		"description": "Configure response caching settings",
+		"enableCache": "Enable Cache",
+		"ttl": "Cache TTL",
+		"maxSize": "Max Cache Size",
+		"strategies": "Cache Strategies",
+		"noConfig": "No caching configuration"
+	},
+	"clientSettings": {
+		"title": "Client Settings",
+		"description": "Configure client connection settings",
+		"timeout": "Client Timeout",
+		"maxRetries": "Max Retries",
+		"connectionPool": "Connection Pool",
+		"noConfig": "No client settings configured"
+	},
+	"compatibility": {
+		"title": "Compatibility",
+		"description": "Configure API compatibility settings",
+		"mode": "Compatibility Mode",
+		"openai": "OpenAI Compatible",
+		"anthropic": "Anthropic Compatible",
+		"bedrock": "Bedrock Compatible",
+		"genai": "Google GenAI Compatible",
+		"noConfig": "No compatibility settings configured"
+	},
+	"featureFlags": {
+		"title": "Feature Flags",
+		"description": "Manage feature flags",
+		"enableFeature": "Enable Feature",
+		"flagName": "Flag Name",
+		"status": "Status",
+		"noFlags": "No feature flags configured"
+	},
+	"largePayload": {
+		"title": "Large Payload",
+		"description": "Configure large payload handling",
+		"maxSize": "Max Payload Size",
+		"storage": "Storage Backend",
+		"noConfig": "No large payload configuration"
+	},
+	"logging": {
+		"title": "Logging",
+		"description": "Configure logging settings",
+		"logLevel": "Log Level",
+		"logStore": "Log Store",
+		"retention": "Retention Period",
+		"sampling": "Sampling Rate",
+		"noConfig": "No logging configuration"
+	},
+	"mcpGateway": {
+		"title": "MCP Gateway",
+		"description": "Configure MCP gateway settings",
+		"maxDepth": "Max Agent Depth",
+		"timeout": "Tool Execution Timeout",
+		"autoApprove": "Auto-Approve Tools",
+		"noConfig": "No MCP gateway configuration"
+	},
+	"observability": {
+		"title": "Observability",
+		"description": "Configure observability settings",
+		"tracing": "Tracing",
+		"metrics": "Metrics",
+		"exporters": "Exporters",
+		"noConfig": "No observability configuration"
+	},
+	"performanceTuning": {
+		"title": "Performance Tuning",
+		"description": "Configure performance tuning settings",
+		"concurrency": "Concurrency",
+		"poolSize": "Pool Size",
+		"bufferSize": "Buffer Size",
+		"noConfig": "No performance tuning configuration"
+	},
+	"pricingConfig": {
+		"title": "Pricing Configuration",
+		"description": "Configure pricing settings",
+		"modelPricing": "Model Pricing",
+		"customPricing": "Custom Pricing",
+		"overrides": "Pricing Overrides",
+		"noConfig": "No pricing configuration"
+	},
+	"security": {
+		"title": "Security",
+		"description": "Configure security settings",
+		"tls": "TLS Settings",
+		"cors": "CORS Settings",
+		"rateLimiting": "Rate Limiting",
+		"noConfig": "No security configuration"
+	},
+	"customPricing": {
+		"title": "Custom Pricing",
+		"description": "Configure custom pricing overrides",
+		"addOverride": "Add Pricing Override",
+		"editOverride": "Edit Pricing Override",
+		"deleteOverride": "Delete Pricing Override",
+		"model": "Model",
+		"provider": "Provider",
+		"inputPrice": "Input Price",
+		"outputPrice": "Output Price",
+		"noOverrides": "No pricing overrides configured",
+		"noOverridesDesc": "Add your first pricing override to get started"
+	},
+	"mcpSettings": {
+		"title": "MCP Settings",
+		"description": "Configure MCP server settings",
+		"serverUrl": "Server URL",
+		"transport": "Transport",
+		"timeout": "Timeout",
+		"noSettings": "No MCP settings configured"
+	},
+	"routingRules": {}
 }

@@ -34,75 +34,91 @@ import webhooks_zh from "@/locales/zh-CN/webhooks.json";
 import oauthGrants_zh from "@/locales/zh-CN/oauth-grants.json";
 import modelCatalog_zh from "@/locales/zh-CN/model-catalog.json";
 
-const NS = ["common", "logs", "config", "governance", "providers", "dashboard", "governance-ui", "mcp", "routing", "skills", "plugins", "observability", "webhooks", "oauth-grants", "model-catalog"] as const;
+const NS = [
+	"common",
+	"logs",
+	"config",
+	"governance",
+	"providers",
+	"dashboard",
+	"governance-ui",
+	"mcp",
+	"routing",
+	"skills",
+	"plugins",
+	"observability",
+	"webhooks",
+	"oauth-grants",
+	"model-catalog",
+] as const;
 
 export const SUPPORTED_LOCALES = ["en", "zh-CN"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export const LOCALE_LABELS: Record<SupportedLocale, string> = {
-  en: "English",
-  "zh-CN": "简体中文",
+	en: "English",
+	"zh-CN": "简体中文",
 };
 
 export const DEFAULT_NS = "common";
 
 export const resources = {
-  en: {
-    common: common_en,
-    logs: logs_en,
-    config: config_en,
-    governance: governance_en,
-    providers: providers_en,
-    dashboard: dashboard_en,
-    "governance-ui": governanceUi_en,
-    mcp: mcp_en,
-    routing: routing_en,
-    skills: skills_en,
-    plugins: plugins_en,
-    observability: observability_en,
-    webhooks: webhooks_en,
-    "oauth-grants": oauthGrants_en,
-    "model-catalog": modelCatalog_en,
-  },
-  "zh-CN": {
-    common: common_zh,
-    logs: logs_zh,
-    config: config_zh,
-    governance: governance_zh,
-    providers: providers_zh,
-    dashboard: dashboard_zh,
-    "governance-ui": governanceUi_zh,
-    mcp: mcp_zh,
-    routing: routing_zh,
-    skills: skills_zh,
-    plugins: plugins_zh,
-    observability: observability_zh,
-    webhooks: webhooks_zh,
-    "oauth-grants": oauthGrants_zh,
-    "model-catalog": modelCatalog_zh,
-  },
+	en: {
+		common: common_en,
+		logs: logs_en,
+		config: config_en,
+		governance: governance_en,
+		providers: providers_en,
+		dashboard: dashboard_en,
+		"governance-ui": governanceUi_en,
+		mcp: mcp_en,
+		routing: routing_en,
+		skills: skills_en,
+		plugins: plugins_en,
+		observability: observability_en,
+		webhooks: webhooks_en,
+		"oauth-grants": oauthGrants_en,
+		"model-catalog": modelCatalog_en,
+	},
+	"zh-CN": {
+		common: common_zh,
+		logs: logs_zh,
+		config: config_zh,
+		governance: governance_zh,
+		providers: providers_zh,
+		dashboard: dashboard_zh,
+		"governance-ui": governanceUi_zh,
+		mcp: mcp_zh,
+		routing: routing_zh,
+		skills: skills_zh,
+		plugins: plugins_zh,
+		observability: observability_zh,
+		webhooks: webhooks_zh,
+		"oauth-grants": oauthGrants_zh,
+		"model-catalog": modelCatalog_zh,
+	},
 } as const;
 
 i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources,
-    fallbackLng: "en",
-    ns: NS,
-    defaultNS: DEFAULT_NS,
-    interpolation: {
-      escapeValue: false, // React already escapes values
-    },
-    detection: {
-      order: ["localStorage", "navigator", "htmlTag"],
-      lookupLocalStorage: "bifrost.locale",
-      caches: ["localStorage"],
-    },
-    react: {
-      useSuspense: false,
-    },
-    returnObjects: false,
-  });
+	.use(LanguageDetector)
+	.use(initReactI18next)
+	.init({
+		resources,
+		fallbackLng: "en",
+		ns: NS,
+		defaultNS: DEFAULT_NS,
+		interpolation: {
+			escapeValue: false, // React already escapes values
+		},
+		detection: {
+			order: ["localStorage", "navigator", "htmlTag"],
+			lookupLocalStorage: "bifrost.locale",
+			caches: ["localStorage"],
+		},
+		react: {
+			useSuspense: false,
+		},
+		returnObjects: false,
+	});
 
 export default i18n;

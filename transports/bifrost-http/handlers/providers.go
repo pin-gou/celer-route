@@ -64,16 +64,21 @@ type ProviderHandler struct {
 	inMemoryStore *lib.Config
 	client        *bifrost.Bifrost
 	modelsManager ModelsManager
+	logStats      ProviderLogStats
 }
 
 // NewProviderHandler creates a new provider handler instance
 func NewProviderHandler(modelsManager ModelsManager, inMemoryStore *lib.Config, client *bifrost.Bifrost) *ProviderHandler {
-	return &ProviderHandler{
+	h := &ProviderHandler{
 		dbStore:       inMemoryStore.ConfigStore,
 		inMemoryStore: inMemoryStore,
 		client:        client,
 		modelsManager: modelsManager,
 	}
+	if inMemoryStore != nil && inMemoryStore.LogsStore != nil {
+		h.logStats = newLogStatsFromLogStore(inMemoryStore.LogsStore)
+	}
+	return h
 }
 
 type ProviderStatus = string
@@ -99,6 +104,56 @@ type ProviderResponse struct {
 	Status                   string                           `json:"status,omitempty"`                 // Operational status (e.g., list_models_failed)
 	Description              string                           `json:"description,omitempty"`            // Error/status description
 	ConfigHash               string                           `json:"config_hash,omitempty"`            // Hash of config.json version, used for change detection
+	// Read-only aggregation fields (populated on list/get)
+	KeysCount        int     `json:"keys_count,omitempty"`         // Number of keys for this provider
+	ModelsCount      int     `json:"models_count,omitempty"`       // Number of models for this provider
+	KeysHealthStatus string  `json:"keys_health_status,omitempty"` // "healthy", "degraded", or "unknown"
+	TodayRequests    int     `json:"today_requests,omitempty"`     // Today's request count
+	TodayErrors      int     `json:"today_errors,omitempty"`       // Today's error count
+	LastUsedAt       string  `json:"last_used_at,omitempty"`       // Last successful request time (RFC3339)
+	LastErrorAt      string  `json:"last_error_at,omitempty"`      // Last error time (RFC3339)
+	Uptime           float64 `json:"uptime,omitempty"`             // 24h health ratio (0-1)
+	AvgLatencyMs     int     `json:"avg_latency_ms,omitempty"`     // 24h average latency in ms
+}
+
+// ProviderStats holds the computed aggregation values for a single provider.
+type ProviderStats struct {
+	KeysCount        int
+	ModelsCount      int
+	KeysHealthStatus string
+	TodayRequests    int
+	TodayErrors      int
+	LastUsedAt       string
+	LastErrorAt      string
+	Uptime           float64
+	AvgLatencyMs     int
+}
+
+// LogAgg holds the log-derived aggregation values for a single provider, as
+// returned by ProviderLogStats.AggregateAllProviderLogStats for every provider
+// in a batch.
+type LogAgg struct {
+	TodayRequests int
+	TodayErrors   int
+	LastUsedAt    string
+	LastErrorAt   string
+	AvgLatencyMs  int
+}
+
+// ProviderLogStats provides per-provider request-log aggregation.
+// The production implementation queries the logs store; tests provide a mock.
+type ProviderLogStats interface {
+	// AggregateProviderLogStats returns the log-derived aggregates for a single
+	// provider (today requests/errors, last success/error timestamps, 24h avg
+	// latency). Used by the single-provider detail path.
+	AggregateProviderLogStats(ctx context.Context, providerName schemas.ModelProvider) (todayRequests int, todayErrors int, lastUsedAt string, lastErrorAt string, avgLatencyMs int, err error)
+	// AggregateAllProviderLogStats returns the log-derived aggregates for every
+	// requested provider in one batch call. List handlers must call this once
+	// instead of looping over AggregateProviderLogStats, so a providers list
+	// never degrades into a per-provider store-round-trip loop (N+1). The
+	// implementation owns all store queries; callers must not fall back to
+	// per-provider loops.
+	AggregateAllProviderLogStats(ctx context.Context, providerNames []schemas.ModelProvider) (map[schemas.ModelProvider]LogAgg, error)
 }
 
 // ListProvidersResponse represents the response for listing all providers
@@ -145,6 +200,7 @@ func (h *ProviderHandler) RegisterRoutes(r *router.Router, middlewares ...schema
 	r.GET("/api/providers/{provider}/keys/{key_id}", lib.ChainMiddlewares(h.getProviderKey, middlewares...))
 	r.POST("/api/providers", lib.ChainMiddlewares(h.addProvider, middlewares...))
 	r.POST("/api/providers/{provider}/keys", lib.ChainMiddlewares(h.createProviderKey, middlewares...))
+	r.POST("/api/providers/{provider}/keys/batch", lib.ChainMiddlewares(h.batchUpdateProviderKeys, middlewares...))
 	r.PUT("/api/providers/{provider}", lib.ChainMiddlewares(h.updateProvider, middlewares...))
 	r.PUT("/api/providers/{provider}/keys/{key_id}", lib.ChainMiddlewares(h.updateProviderKey, middlewares...))
 	r.DELETE("/api/providers/{provider}", lib.ChainMiddlewares(h.deleteProvider, middlewares...))
@@ -178,11 +234,24 @@ func (h *ProviderHandler) listProviders(ctx *fasthttp.RequestCtx) {
 		providers = h.inMemoryStore.Providers
 		h.inMemoryStore.Mu.RUnlock()
 	}
-	providersInClient, err := h.client.GetConfiguredProviders()
-	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get providers from client: %v", err))
+
+	providersInClient := []schemas.ModelProvider{}
+	if h.client != nil {
+		var err error
+		providersInClient, err = h.client.GetConfiguredProviders()
+		if err != nil {
+			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get providers from client: %v", err))
+			return
+		}
+	}
+
+	// Batch-aggregate stats for all providers in one pass (no per-provider loops).
+	statsByProvider := map[schemas.ModelProvider]ProviderStats{}
+	if ctxErr := h.aggregateAllProviderStats(ctx, providers, statsByProvider); ctxErr != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to aggregate provider stats: %v", ctxErr))
 		return
 	}
+
 	providerResponses := []ProviderResponse{}
 
 	for providerName, provider := range providers {
@@ -192,7 +261,9 @@ func (h *ProviderHandler) listProviders(ctx *fasthttp.RequestCtx) {
 		if slices.Contains(providersInClient, providerName) {
 			providerStatus = ProviderStatusActive
 		}
-		providerResponses = append(providerResponses, h.getProviderResponseFromConfig(providerName, *config, providerStatus))
+		response := h.getProviderResponseFromConfig(providerName, *config, providerStatus)
+		h.applyProviderStats(&response, statsByProvider[providerName])
+		providerResponses = append(providerResponses, response)
 	}
 	// Sort providers alphabetically
 	sort.Slice(providerResponses, func(i, j int) bool {
@@ -214,10 +285,13 @@ func (h *ProviderHandler) getProvider(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	providersInClient, err := h.client.GetConfiguredProviders()
-	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get providers from client: %v", err))
-		return
+	providersInClient := []schemas.ModelProvider{}
+	if h.client != nil {
+		providersInClient, err = h.client.GetConfiguredProviders()
+		if err != nil {
+			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get providers from client: %v", err))
+			return
+		}
 	}
 
 	var config *configstore.ProviderConfig
@@ -250,6 +324,13 @@ func (h *ProviderHandler) getProvider(ctx *fasthttp.RequestCtx) {
 	}
 
 	response := h.getProviderResponseFromConfig(provider, *redactedConfig, providerStatus)
+
+	stats, statsErr := h.aggregateProviderStats(ctx, provider)
+	if statsErr != nil {
+		logger.Warn("Failed to aggregate stats for provider %s: %v", provider, statsErr)
+	} else {
+		h.applyProviderStats(&response, stats)
+	}
 
 	SendJSON(ctx, response)
 }
@@ -1258,6 +1339,155 @@ func (h *ProviderHandler) getProviderResponseFromConfig(provider schemas.ModelPr
 		Description:              config.Description,
 		ConfigHash:               config.ConfigHash,
 	}
+}
+
+// applyProviderStats copies an aggregation result onto a ProviderResponse.
+func (h *ProviderHandler) applyProviderStats(response *ProviderResponse, stats ProviderStats) {
+	if response == nil {
+		return
+	}
+	response.KeysCount = stats.KeysCount
+	response.ModelsCount = stats.ModelsCount
+	response.KeysHealthStatus = stats.KeysHealthStatus
+	response.TodayRequests = stats.TodayRequests
+	response.TodayErrors = stats.TodayErrors
+	response.LastUsedAt = stats.LastUsedAt
+	response.LastErrorAt = stats.LastErrorAt
+	response.Uptime = stats.Uptime
+	response.AvgLatencyMs = stats.AvgLatencyMs
+}
+
+// aggregateProviderStats computes the aggregation fields for a single provider.
+// Keys/models/health come from the in-memory store; log-derived fields come from
+// the optional ProviderLogStats source (nil when no logs store is configured).
+func (h *ProviderHandler) aggregateProviderStats(ctx context.Context, providerName schemas.ModelProvider) (ProviderStats, error) {
+	stats, err := h.computeProviderStats(ctx, providerName, nil)
+	if err != nil {
+		return ProviderStats{}, fmt.Errorf("aggregate stats for provider %s: %w", providerName, err)
+	}
+	return stats, nil
+}
+
+// aggregateAllProviderStats computes stats for every configured provider via a
+// single batch call to the ProviderLogStats source, writing results into the
+// provided map. It is the listProviders entrypoint so that a providers list
+// never degrades into a per-provider query loop (N+1): the batch call is the
+// single chokepoint for logstore round trips.
+func (h *ProviderHandler) aggregateAllProviderStats(ctx context.Context, providers map[schemas.ModelProvider]configstore.ProviderConfig, out map[schemas.ModelProvider]ProviderStats) error {
+	providerNames := make([]schemas.ModelProvider, 0, len(providers))
+	for providerName := range providers {
+		providerNames = append(providerNames, providerName)
+	}
+
+	// Batch-fetch log-derived stats for all providers at once.
+	var logAggs map[schemas.ModelProvider]LogAgg
+	if h.logStats != nil {
+		var err error
+		logAggs, err = h.logStats.AggregateAllProviderLogStats(ctx, providerNames)
+		if err != nil {
+			return fmt.Errorf("batch aggregate log stats for %d providers: %w", len(providerNames), err)
+		}
+	}
+
+	// Per-provider pass: in-memory stats (keys, models, health) only —
+	// log-derived fields already resolved from the batch above.
+	for _, providerName := range providerNames {
+		var logAgg *LogAgg
+		if la, ok := logAggs[providerName]; ok {
+			logAgg = &la
+		}
+		stats, err := h.computeProviderStats(ctx, providerName, logAgg)
+		if err != nil {
+			return fmt.Errorf("aggregate stats for provider %s: %w", providerName, err)
+		}
+		out[providerName] = stats
+	}
+	return nil
+}
+
+// computeProviderStats derives the nine aggregation fields for one provider:
+//   - keys count + health from the in-memory provider config
+//   - models count from the models manager
+//   - request/error/latency aggregates from the optional logs source
+//
+// When batchLogAgg is non-nil the log-derived fields are read from the
+// pre-fetched batch result; otherwise (single-provider detail path) a direct
+// AggregateProviderLogStats call is made.
+func (h *ProviderHandler) computeProviderStats(ctx context.Context, providerName schemas.ModelProvider, batchLogAgg *LogAgg) (ProviderStats, error) {
+	var stats ProviderStats
+
+	// Keys count + health status
+	var providerConfig *configstore.ProviderConfig
+	if h.inMemoryStore != nil {
+		cfg, err := h.inMemoryStore.GetProviderConfigRaw(providerName)
+		if err == nil && cfg != nil {
+			providerConfig = cfg
+		}
+	}
+	if providerConfig != nil {
+		stats.KeysCount = len(providerConfig.Keys)
+		stats.KeysHealthStatus = computeKeysHealthStatus(providerConfig.Keys)
+	}
+
+	// Models count
+	if h.modelsManager != nil {
+		stats.ModelsCount = len(h.modelsManager.GetModelsForProvider(providerName))
+	}
+
+	// Log-derived aggregates
+	if h.logStats != nil {
+		if batchLogAgg != nil {
+			stats.TodayRequests = batchLogAgg.TodayRequests
+			stats.TodayErrors = batchLogAgg.TodayErrors
+			stats.LastUsedAt = batchLogAgg.LastUsedAt
+			stats.LastErrorAt = batchLogAgg.LastErrorAt
+			stats.AvgLatencyMs = batchLogAgg.AvgLatencyMs
+			stats.Uptime = computeUptime(batchLogAgg.TodayRequests, batchLogAgg.TodayErrors)
+		} else {
+			todayRequests, todayErrors, lastUsedAt, lastErrorAt, avgLatencyMs, err := h.logStats.AggregateProviderLogStats(ctx, providerName)
+			if err != nil {
+				return ProviderStats{}, fmt.Errorf("aggregate log stats for provider %s: %w", providerName, err)
+			}
+			stats.TodayRequests = todayRequests
+			stats.TodayErrors = todayErrors
+			stats.LastUsedAt = lastUsedAt
+			stats.LastErrorAt = lastErrorAt
+			stats.AvgLatencyMs = avgLatencyMs
+			stats.Uptime = computeUptime(todayRequests, todayErrors)
+		}
+	} else {
+		// No logs source configured: treat as empty data (healthy ratio = 1).
+		stats.Uptime = 1
+	}
+
+	return stats, nil
+}
+
+// computeKeysHealthStatus aggregates per-key list-models failure flags.
+// Any key flagged list_models_failed marks the provider "degraded"; a provider
+// with no keys is "unknown"; otherwise "healthy".
+func computeKeysHealthStatus(keys []schemas.Key) string {
+	if len(keys) == 0 {
+		return "unknown"
+	}
+	for _, key := range keys {
+		if key.Status == schemas.KeyStatusListModelsFailed {
+			return "degraded"
+		}
+	}
+	return "healthy"
+}
+
+// computeUptime returns the 24h health ratio. Empty data defaults to 1.
+func computeUptime(todayRequests, todayErrors int) float64 {
+	if todayRequests == 0 {
+		return 1
+	}
+	uptime := 1 - float64(todayErrors)/float64(todayRequests)
+	if uptime < 0 {
+		return 0
+	}
+	return uptime
 }
 
 func getProviderFromCtx(ctx *fasthttp.RequestCtx) (schemas.ModelProvider, error) {

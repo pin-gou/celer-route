@@ -1363,3 +1363,505 @@ func TestListModels_KeyBlacklistIsCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+// TestListProvidersAggregatedFields verifies that GET /api/providers returns the 9 new
+// aggregation fields (keys_count, models_count, keys_health_status, today_requests,
+// today_errors, last_used_at, last_error_at, uptime, avg_latency_ms) with correct values.
+func TestListProvidersAggregatedFields(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	provider := schemas.OpenAI
+	keys := []schemas.Key{
+		{ID: "key-1", Enabled: ptr(true)},
+		{ID: "key-2", Enabled: ptr(true)},
+		{ID: "key-3", Enabled: ptr(true)},
+	}
+	models := []string{"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "o1-preview", "o1-mini"}
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				provider: {
+					Keys: keys,
+				},
+			},
+		},
+		modelsManager: &mockModelsManager{
+			filtered: map[schemas.ModelProvider][]string{
+				provider: models,
+			},
+			unfiltered: map[schemas.ModelProvider][]string{
+				provider: models,
+			},
+		},
+		// Mock the logs store so the today_* / last_* / avg_latency aggregates are
+		// deterministic: 100 today requests, 3 errors, known timestamps, 312ms avg.
+		logStats: &mockProviderLogStats{
+			todayRequests: 100,
+			todayErrors:   3,
+			lastUsedAt:    "2026-08-15T01:42:00Z",
+			lastErrorAt:   "2026-08-15T00:15:22Z",
+			avgLatencyMs:  312,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("GET")
+	ctx.Request.SetRequestURI("/api/providers")
+
+	h.listProviders(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+
+	var resp ListProvidersResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if resp.Total != 1 {
+		t.Fatalf("expected total=1, got %d", resp.Total)
+	}
+	if len(resp.Providers) != 1 {
+		t.Fatalf("expected 1 provider, got %d", len(resp.Providers))
+	}
+
+	p := resp.Providers[0]
+	if p.Name != provider {
+		t.Fatalf("expected provider name %q, got %q", provider, p.Name)
+	}
+
+	// Assert the 9 new aggregation fields.
+	// These fields do not exist yet on ProviderResponse — this is the TDD red phase.
+	if p.KeysCount != 3 {
+		t.Fatalf("expected keys_count=3, got %d", p.KeysCount)
+	}
+	if p.ModelsCount != 5 {
+		t.Fatalf("expected models_count=5, got %d", p.ModelsCount)
+	}
+	if p.KeysHealthStatus != "healthy" {
+		t.Fatalf("expected keys_health_status=\"healthy\", got %q", p.KeysHealthStatus)
+	}
+	if p.TodayRequests != 100 {
+		t.Fatalf("expected today_requests=100, got %d", p.TodayRequests)
+	}
+	if p.TodayErrors != 3 {
+		t.Fatalf("expected today_errors=3, got %d", p.TodayErrors)
+	}
+	if p.LastUsedAt == "" {
+		t.Fatalf("expected non-empty last_used_at")
+	}
+	if p.LastErrorAt == "" {
+		t.Fatalf("expected non-empty last_error_at")
+	}
+	if p.Uptime < 0 || p.Uptime > 1 {
+		t.Fatalf("expected uptime in [0,1], got %f", p.Uptime)
+	}
+	if p.AvgLatencyMs <= 0 {
+		t.Fatalf("expected positive avg_latency_ms, got %d", p.AvgLatencyMs)
+	}
+}
+
+// TestListProviders_UsesBatchLogStatsAggregation verifies that the providers
+// list path aggregates log stats through a single AggregateAllProviderLogStats
+// batch call — never falling back to a per-provider AggregateProviderLogStats
+// loop (the design.md performance contract forbids the N+1 pattern).
+func TestListProviders_UsesBatchLogStatsAggregation(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	singleCalls, batchCalls := 0, 0
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.OpenAI:    {Keys: []schemas.Key{{ID: "key-1", Enabled: ptr(true)}}},
+				schemas.Anthropic: {Keys: []schemas.Key{{ID: "key-2", Enabled: ptr(true)}}},
+			},
+		},
+		modelsManager: &mockModelsManager{
+			filtered: map[schemas.ModelProvider][]string{
+				schemas.OpenAI:    {"gpt-4o"},
+				schemas.Anthropic: {"claude-3-5-sonnet"},
+			},
+		},
+		logStats: &mockProviderLogStats{
+			todayRequests:   50,
+			todayErrors:     2,
+			lastUsedAt:      "2026-08-15T01:42:00Z",
+			lastErrorAt:     "2026-08-15T00:15:22Z",
+			avgLatencyMs:    200,
+			singleCallCount: &singleCalls,
+			batchCallCount:  &batchCalls,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("GET")
+	ctx.Request.SetRequestURI("/api/providers")
+
+	h.listProviders(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+
+	// Exactly one batch call for the whole provider set; no per-provider loop.
+	if batchCalls != 1 {
+		t.Fatalf("expected exactly 1 AggregateAllProviderLogStats call, got %d", batchCalls)
+	}
+	if singleCalls != 0 {
+		t.Fatalf("expected 0 per-provider AggregateProviderLogStats calls, got %d (N+1 loop)", singleCalls)
+	}
+
+	var resp ListProvidersResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Total != 2 {
+		t.Fatalf("expected total=2, got %d", resp.Total)
+	}
+
+	// Both providers received the batch-derived values.
+	for _, p := range resp.Providers {
+		if p.TodayRequests != 50 || p.TodayErrors != 2 {
+			t.Fatalf("provider %s: expected batch stats (today_requests=50, today_errors=2), got (%d, %d)",
+				p.Name, p.TodayRequests, p.TodayErrors)
+		}
+		if p.LastUsedAt == "" || p.LastErrorAt == "" || p.AvgLatencyMs != 200 {
+			t.Fatalf("provider %s: expected non-empty timestamps and avg_latency_ms=200, got %#v", p.Name, p)
+		}
+	}
+}
+
+// TestBatchUpdateProviderKeys verifies the happy path of POST /api/providers/{provider}/keys/batch:
+// mock provider with 3 keys, POST {"key_ids":[...], "enabled":true} returns 200 + updated=3,
+// and all 3 keys are enabled in the DB.
+// This test is expected to fail at compile time because batchUpdateProviderKeys and
+// BatchUpdateProviderKeysResponse do not exist yet (TDD red phase).
+func TestBatchUpdateProviderKeys(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	keys := []schemas.Key{
+		{ID: "k1", Enabled: ptr(false)},
+		{ID: "k2", Enabled: ptr(false)},
+		{ID: "k3", Enabled: ptr(false)},
+	}
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.OpenAI: {Keys: keys},
+			},
+		},
+		modelsManager: &mockModelsManager{},
+	}
+
+	body, err := sonic.Marshal(BatchUpdateProviderKeysRequest{
+		KeyIDs:  []string{"k1", "k2", "k3"},
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal request body: %v", err)
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetRequestURI("/api/providers/openai/keys/batch")
+	ctx.Request.SetBody(body)
+	ctx.SetUserValue("provider", string(schemas.OpenAI))
+
+	h.batchUpdateProviderKeys(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+
+	var resp BatchUpdateProviderKeysResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if resp.Updated != 3 {
+		t.Fatalf("expected updated=3, got %d", resp.Updated)
+	}
+	if len(resp.KeyIDs) != 3 {
+		t.Fatalf("expected 3 key_ids, got %d", len(resp.KeyIDs))
+	}
+
+	// Verify all 3 keys are now enabled=true in the in-memory store.
+	cfg, err := h.inMemoryStore.GetProviderConfigRaw(schemas.OpenAI)
+	if err != nil {
+		t.Fatalf("failed to get provider config: %v", err)
+	}
+	for _, keyID := range []string{"k1", "k2", "k3"} {
+		found := false
+		for _, k := range cfg.Keys {
+			if k.ID == keyID {
+				found = true
+				if k.Enabled == nil || !*k.Enabled {
+					t.Fatalf("key %s should be enabled=true, got %v", keyID, k.Enabled)
+				}
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("key %s not found in store", keyID)
+		}
+	}
+}
+
+// TestBatchUpdateProviderKeys_RollbackOnMissing verifies that POST /api/providers/{provider}/keys/batch
+// with a non-existent key_id returns 400 + missing_key_ids, and the transaction rolls back so
+// no key is updated.
+// This test is expected to fail at compile time because the batch types and handler do not
+// exist yet (TDD red phase).
+func TestBatchUpdateProviderKeys_RollbackOnMissing(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	keys := []schemas.Key{
+		{ID: "k1", Enabled: ptr(false)},
+		{ID: "k2", Enabled: ptr(false)},
+		{ID: "k3", Enabled: ptr(false)},
+	}
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.OpenAI: {Keys: keys},
+			},
+		},
+		modelsManager: &mockModelsManager{},
+	}
+
+	// Request includes "k-bad" which does not exist in the provider.
+	body, err := sonic.Marshal(BatchUpdateProviderKeysRequest{
+		KeyIDs:  []string{"k1", "k2", "k3", "k-bad"},
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal request body: %v", err)
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetRequestURI("/api/providers/openai/keys/batch")
+	ctx.Request.SetBody(body)
+	ctx.SetUserValue("provider", string(schemas.OpenAI))
+
+	h.batchUpdateProviderKeys(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+
+	var errResp BatchUpdateProviderKeysErrorResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &errResp); err != nil {
+		t.Fatalf("failed to unmarshal error response: %v", err)
+	}
+
+	if len(errResp.MissingKeyIDs) != 1 || errResp.MissingKeyIDs[0] != "k-bad" {
+		t.Fatalf("expected missing_key_ids=[\"k-bad\"], got %v", errResp.MissingKeyIDs)
+	}
+
+	// Verify transaction rollback: no key was updated (all remain disabled).
+	cfg, err := h.inMemoryStore.GetProviderConfigRaw(schemas.OpenAI)
+	if err != nil {
+		t.Fatalf("failed to get provider config: %v", err)
+	}
+	for _, k := range cfg.Keys {
+		if k.Enabled != nil && *k.Enabled {
+			t.Fatalf("key %s should remain disabled after rollback, got enabled=true", k.ID)
+		}
+	}
+}
+
+// TestProviderResponse_BackwardCompat verifies that the existing ProviderResponse wire
+// contract is not broken by the 9 new aggregation fields. It unmarshals a fixture JSON
+// response (containing only the original fields) into ListProvidersResponse and asserts
+// all original fields are correctly parsed, and the 9 new fields default to zero values
+// (omitempty compatibility).
+// This test is expected to fail at compile time because the 9 new fields do not exist
+// on ProviderResponse yet (TDD red phase).
+func TestProviderResponse_BackwardCompat(t *testing.T) {
+	// A fixture JSON representing a provider response with only the original fields.
+	// This matches the wire format before the 9 aggregation fields are added.
+	fixtureJSON := `{
+		"providers": [
+			{
+				"name": "openai",
+				"network_config": {
+					"base_url": "https://api.openai.com",
+					"max_conns_per_host": 5000,
+					"max_idle_conn_duration": "30s"
+				},
+				"concurrency_and_buffer_size": {
+					"concurrency": 1000,
+					"buffer_size": 5000
+				},
+				"proxy_config": null,
+				"send_back_raw_request": false,
+				"send_back_raw_response": false,
+				"store_raw_request_response": false,
+				"custom_provider_config": null,
+				"openai_config": null,
+				"provider_status": "active",
+				"status": "",
+				"description": "OpenAI production provider",
+				"config_hash": "abc123"
+			},
+			{
+				"name": "anthropic",
+				"network_config": {
+					"base_url": "https://api.anthropic.com",
+					"max_conns_per_host": 5000,
+					"max_idle_conn_duration": "30s"
+				},
+				"concurrency_and_buffer_size": {
+					"concurrency": 500,
+					"buffer_size": 2500
+				},
+				"proxy_config": null,
+				"send_back_raw_request": false,
+				"send_back_raw_response": false,
+				"store_raw_request_response": false,
+				"custom_provider_config": null,
+				"openai_config": null,
+				"provider_status": "active",
+				"status": "list_models_failed",
+				"description": "Anthropic provider",
+				"config_hash": "def456"
+			}
+		],
+		"total": 2
+	}`
+
+	var resp ListProvidersResponse
+	if err := json.Unmarshal([]byte(fixtureJSON), &resp); err != nil {
+		t.Fatalf("failed to unmarshal fixture JSON: %v", err)
+	}
+
+	if resp.Total != 2 {
+		t.Fatalf("expected total=2, got %d", resp.Total)
+	}
+	if len(resp.Providers) != 2 {
+		t.Fatalf("expected 2 providers, got %d", len(resp.Providers))
+	}
+
+	// Assert all original fields are still present and correctly parsed.
+	p := resp.Providers[0]
+	if p.Name != schemas.OpenAI {
+		t.Fatalf("expected name=openai, got %q", p.Name)
+	}
+	if p.NetworkConfig.BaseURL != "https://api.openai.com" {
+		t.Fatalf("expected network_config.base_url, got %q", p.NetworkConfig.BaseURL)
+	}
+	if p.ConcurrencyAndBufferSize.Concurrency != 1000 {
+		t.Fatalf("expected concurrency=1000, got %d", p.ConcurrencyAndBufferSize.Concurrency)
+	}
+	if p.ProviderStatus != ProviderStatusActive {
+		t.Fatalf("expected provider_status=active, got %q", p.ProviderStatus)
+	}
+	if p.ConfigHash != "abc123" {
+		t.Fatalf("expected config_hash=abc123, got %q", p.ConfigHash)
+	}
+
+	// Assert the 9 new fields default to zero values when absent from the wire.
+	// These fields have `omitempty` JSON tags and should be zero-valued when missing.
+	if p.KeysCount != 0 {
+		t.Fatalf("expected keys_count=0 (zero value when absent), got %d", p.KeysCount)
+	}
+	if p.ModelsCount != 0 {
+		t.Fatalf("expected models_count=0 (zero value when absent), got %d", p.ModelsCount)
+	}
+	if p.KeysHealthStatus != "" {
+		t.Fatalf("expected keys_health_status=\"\" (zero value when absent), got %q", p.KeysHealthStatus)
+	}
+	if p.TodayRequests != 0 {
+		t.Fatalf("expected today_requests=0 (zero value when absent), got %d", p.TodayRequests)
+	}
+	if p.TodayErrors != 0 {
+		t.Fatalf("expected today_errors=0 (zero value when absent), got %d", p.TodayErrors)
+	}
+	if p.LastUsedAt != "" {
+		t.Fatalf("expected last_used_at=\"\" (zero value when absent), got %q", p.LastUsedAt)
+	}
+	if p.LastErrorAt != "" {
+		t.Fatalf("expected last_error_at=\"\" (zero value when absent), got %q", p.LastErrorAt)
+	}
+	if p.Uptime != 0 {
+		t.Fatalf("expected uptime=0 (zero value when absent), got %f", p.Uptime)
+	}
+	if p.AvgLatencyMs != 0 {
+		t.Fatalf("expected avg_latency_ms=0 (zero value when absent), got %d", p.AvgLatencyMs)
+	}
+
+	// Same checks for the second provider to ensure consistency.
+	p2 := resp.Providers[1]
+	if p2.Name != schemas.Anthropic {
+		t.Fatalf("expected name=anthropic, got %q", p2.Name)
+	}
+	if p2.ProviderStatus != ProviderStatusActive {
+		t.Fatalf("expected provider_status=active, got %q", p2.ProviderStatus)
+	}
+	if p2.Status != "list_models_failed" {
+		t.Fatalf("expected status=list_models_failed, got %q", p2.Status)
+	}
+	if p2.KeysCount != 0 {
+		t.Fatalf("expected keys_count=0 (zero value when absent), got %d", p2.KeysCount)
+	}
+	if p2.AvgLatencyMs != 0 {
+		t.Fatalf("expected avg_latency_ms=0 (zero value when absent), got %d", p2.AvgLatencyMs)
+	}
+}
+
+// ptr returns a pointer to the given value. Useful for *bool literals in test setup.
+func ptr[T any](v T) *T { return &v }
+
+// mockProviderLogStats implements ProviderLogStats with fixed values, letting the
+// handler tests exercise the aggregated fields without a real logs store.
+type mockProviderLogStats struct {
+	todayRequests int
+	todayErrors   int
+	lastUsedAt    string
+	lastErrorAt   string
+	avgLatencyMs  int
+	err           error
+	// When non-nil, tracks which method was called (for test assertions).
+	singleCallCount *int
+	batchCallCount  *int
+}
+
+func (m *mockProviderLogStats) AggregateProviderLogStats(_ context.Context, _ schemas.ModelProvider) (int, int, string, string, int, error) {
+	if m.singleCallCount != nil {
+		*m.singleCallCount++
+	}
+	if m.err != nil {
+		return 0, 0, "", "", 0, m.err
+	}
+	return m.todayRequests, m.todayErrors, m.lastUsedAt, m.lastErrorAt, m.avgLatencyMs, nil
+}
+
+func (m *mockProviderLogStats) AggregateAllProviderLogStats(_ context.Context, providerNames []schemas.ModelProvider) (map[schemas.ModelProvider]LogAgg, error) {
+	if m.batchCallCount != nil {
+		*m.batchCallCount++
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	out := make(map[schemas.ModelProvider]LogAgg, len(providerNames))
+	for _, p := range providerNames {
+		out[p] = LogAgg{
+			TodayRequests: m.todayRequests,
+			TodayErrors:   m.todayErrors,
+			LastUsedAt:    m.lastUsedAt,
+			LastErrorAt:   m.lastErrorAt,
+			AvgLatencyMs:  m.avgLatencyMs,
+		}
+	}
+	return out, nil
+}
