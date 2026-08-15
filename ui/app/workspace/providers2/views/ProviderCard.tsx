@@ -18,6 +18,7 @@ export interface ProviderCardProvider {
 	uptime: number;
 	avg_latency_ms: number;
 	keys_health_status: string;
+	keys_enabled: boolean;
 	custom_provider_config?: { base_provider_type?: string } | null;
 }
 
@@ -102,11 +103,6 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 				<span data-testid="providers2-card-models-count">{provider.models_count} models</span>
 				<span data-testid="providers2-card-today-requests">{provider.today_requests} reqs</span>
 				<span data-testid="providers2-card-today-errors">{provider.today_errors} err</span>
-				{provider.last_error_at && (
-					<span data-testid="providers2-card-last-error" className="text-red-500">
-						last err: {formatLastError(provider.last_error_at)}
-					</span>
-				)}
 			</div>
 
 			{/* Actions row */}
@@ -117,7 +113,10 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 							variant="outline"
 							size="sm"
 							data-testid="providers2-card-quick-test"
-							onClick={(e) => { e.stopPropagation(); onQuickTest(); }}
+							onClick={(e) => {
+								e.stopPropagation();
+								onQuickTest();
+							}}
 							className="h-7 gap-1 text-xs"
 						>
 							<PlayIcon className="h-3 w-3" />
@@ -127,9 +126,22 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 					<TooltipContent>Quick test: POST /refresh-models</TooltipContent>
 				</Tooltip>
 				<div className="ml-auto">
-					<Switch data-testid="providers2-card-toggle" checked={true} onCheckedChange={() => onToggle()} onClick={(e) => e.stopPropagation()} className="h-5 w-9" />
+					<Switch
+						data-testid="providers2-card-toggle"
+						checked={provider.keys_enabled}
+						onCheckedChange={() => onToggle()}
+						onClick={(e) => e.stopPropagation()}
+						className="h-5 w-9"
+					/>
 				</div>
 			</div>
+
+			{/* Last error row — below actions so cards are consistent height */}
+			{provider.last_error_at && (
+				<div className="text-xs text-red-500">
+					<span data-testid="providers2-card-last-error">last err: {formatLastError(provider.last_error_at)}</span>
+				</div>
+			)}
 		</div>
 	);
 }

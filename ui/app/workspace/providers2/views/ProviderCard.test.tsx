@@ -33,6 +33,7 @@ const mockProvider: ProviderCardProps["provider"] = {
 	uptime: 0.998,
 	avg_latency_ms: 312,
 	keys_health_status: "healthy",
+	keys_enabled: true,
 };
 
 const mockOnToggle = vi.fn();

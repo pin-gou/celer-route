@@ -108,6 +108,7 @@ type ProviderResponse struct {
 	KeysCount        int     `json:"keys_count,omitempty"`         // Number of keys for this provider
 	ModelsCount      int     `json:"models_count,omitempty"`       // Number of models for this provider
 	KeysHealthStatus string  `json:"keys_health_status,omitempty"` // "healthy", "degraded", or "unknown"
+	KeysEnabled      bool    `json:"keys_enabled"`                 // Whether any key is enabled for this provider
 	TodayRequests    int     `json:"today_requests,omitempty"`     // Today's request count
 	TodayErrors      int     `json:"today_errors,omitempty"`       // Today's error count
 	LastUsedAt       string  `json:"last_used_at,omitempty"`       // Last successful request time (RFC3339)
@@ -121,6 +122,7 @@ type ProviderStats struct {
 	KeysCount        int
 	ModelsCount      int
 	KeysHealthStatus string
+	KeysEnabled      bool
 	TodayRequests    int
 	TodayErrors      int
 	LastUsedAt       string
@@ -1349,6 +1351,7 @@ func (h *ProviderHandler) applyProviderStats(response *ProviderResponse, stats P
 	response.KeysCount = stats.KeysCount
 	response.ModelsCount = stats.ModelsCount
 	response.KeysHealthStatus = stats.KeysHealthStatus
+	response.KeysEnabled = stats.KeysEnabled
 	response.TodayRequests = stats.TodayRequests
 	response.TodayErrors = stats.TodayErrors
 	response.LastUsedAt = stats.LastUsedAt
@@ -1427,6 +1430,7 @@ func (h *ProviderHandler) computeProviderStats(ctx context.Context, providerName
 	if providerConfig != nil {
 		stats.KeysCount = len(providerConfig.Keys)
 		stats.KeysHealthStatus = computeKeysHealthStatus(providerConfig.Keys)
+		stats.KeysEnabled = computeKeysEnabled(providerConfig.Keys)
 	}
 
 	// Models count
@@ -1476,6 +1480,18 @@ func computeKeysHealthStatus(keys []schemas.Key) string {
 		}
 	}
 	return "healthy"
+}
+
+// computeKeysEnabled reports whether the provider serves traffic: true when any
+// key is enabled (nil Enabled means enabled by default). A provider with no
+// keys defaults to true like computeUptime's empty-data default.
+func computeKeysEnabled(keys []schemas.Key) bool {
+	for _, key := range keys {
+		if key.Enabled == nil || *key.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // computeUptime returns the 24h health ratio. Empty data defaults to 1.

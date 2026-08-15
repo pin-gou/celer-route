@@ -429,6 +429,7 @@ export interface ModelProvider extends ModelProviderConfig {
 	keys_count?: number;
 	models_count?: number;
 	keys_health_status?: string;
+	keys_enabled?: boolean;
 	today_requests?: number;
 	today_errors?: number;
 	last_used_at?: string;

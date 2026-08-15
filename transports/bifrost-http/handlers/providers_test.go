@@ -1444,6 +1444,9 @@ func TestListProvidersAggregatedFields(t *testing.T) {
 	if p.KeysHealthStatus != "healthy" {
 		t.Fatalf("expected keys_health_status=\"healthy\", got %q", p.KeysHealthStatus)
 	}
+	if !p.KeysEnabled {
+		t.Fatalf("expected keys_enabled=true when all keys are enabled, got %v", p.KeysEnabled)
+	}
 	if p.TodayRequests != 100 {
 		t.Fatalf("expected today_requests=100, got %d", p.TodayRequests)
 	}
@@ -1816,6 +1819,120 @@ func TestProviderResponse_BackwardCompat(t *testing.T) {
 	}
 	if p2.AvgLatencyMs != 0 {
 		t.Fatalf("expected avg_latency_ms=0 (zero value when absent), got %d", p2.AvgLatencyMs)
+	}
+}
+
+// TestComputeKeysEnabled verifies computeKeysEnabled for all key states:
+// all enabled, some disabled, all disabled, empty, and nil Enabled.
+func TestComputeKeysEnabled(t *testing.T) {
+	tests := []struct {
+		name string
+		keys []schemas.Key
+		want bool
+	}{
+		{
+			name: "all keys enabled",
+			keys: []schemas.Key{
+				{ID: "k1", Enabled: ptr(true)},
+				{ID: "k2", Enabled: ptr(true)},
+			},
+			want: true,
+		},
+		{
+			name: "some keys disabled",
+			keys: []schemas.Key{
+				{ID: "k1", Enabled: ptr(true)},
+				{ID: "k2", Enabled: ptr(false)},
+			},
+			want: true,
+		},
+		{
+			name: "all keys disabled",
+			keys: []schemas.Key{
+				{ID: "k1", Enabled: ptr(false)},
+				{ID: "k2", Enabled: ptr(false)},
+			},
+			want: false,
+		},
+		{
+			name: "empty keys",
+			keys: []schemas.Key{},
+			want: false,
+		},
+		{
+			name: "nil Enabled (default enabled)",
+			keys: []schemas.Key{
+				{ID: "k1", Enabled: nil},
+				{ID: "k2", Enabled: nil},
+			},
+			want: true,
+		},
+		{
+			name: "mixed nil and disabled",
+			keys: []schemas.Key{
+				{ID: "k1", Enabled: nil},
+				{ID: "k2", Enabled: ptr(false)},
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeKeysEnabled(tt.keys)
+			if got != tt.want {
+				t.Fatalf("computeKeysEnabled(%q) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestListProvidersAggregatedFields_DisabledKeys verifies that keys_enabled=false
+// when all keys are disabled.
+func TestListProvidersAggregatedFields_DisabledKeys(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	provider := schemas.OpenAI
+	keys := []schemas.Key{
+		{ID: "key-1", Enabled: ptr(false)},
+		{ID: "key-2", Enabled: ptr(false)},
+		{ID: "key-3", Enabled: ptr(false)},
+	}
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				provider: {
+					Keys: keys,
+				},
+			},
+		},
+		modelsManager: &mockModelsManager{},
+		logStats:      &mockProviderLogStats{},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("GET")
+	ctx.Request.SetRequestURI("/api/providers")
+
+	h.listProviders(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+
+	var resp ListProvidersResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if len(resp.Providers) == 0 {
+		t.Fatalf("expected at least 1 provider")
+	}
+
+	p := resp.Providers[0]
+	if p.KeysEnabled {
+		t.Fatalf("expected keys_enabled=false when all keys are disabled, got true")
 	}
 }
 

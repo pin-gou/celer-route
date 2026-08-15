@@ -1,7 +1,11 @@
 import FullPageLoader from "@/components/fullPageLoader";
 import { ProviderNames } from "@/lib/constants/logs";
 import { getErrorMessage, useCreateProviderMutation } from "@/lib/store";
-import { useRefreshProviderModelsMutation } from "@/lib/store/apis/providersApi";
+import {
+	useBatchUpdateProviderKeysMutation,
+	useLazyGetProviderKeysQuery,
+	useRefreshProviderModelsMutation,
+} from "@/lib/store/apis/providersApi";
 import { ModelProviderName } from "@/lib/types/config";
 import { useRbac, RbacOperation, RbacResource } from "@/lib/rbac";
 import { useMemo, useState } from "react";
@@ -14,17 +18,28 @@ import { useProviders2Data } from "./views/useProviders2Data";
 
 export default function Providers2Page() {
 	const { groupedProviders, isLoading, error, refetch } = useProviders2Data();
+	const [batchUpdateKeys] = useBatchUpdateProviderKeysMutation();
+	const [getProviderKeys] = useLazyGetProviderKeysQuery();
 	const [refreshProviderModels] = useRefreshProviderModelsMutation();
 	const [showCustomProviderSheet, setShowCustomProviderSheet] = useState(false);
 	const [createProvider] = useCreateProviderMutation();
 	const hasCreateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Create);
 
-	const existingInSidebar = useMemo(
-		() => new Set(groupedProviders.flatMap((g) => g.providers.map((p) => p.name))),
-		[groupedProviders],
-	);
+	const [keysEnabledMap, setKeysEnabledMap] = useState<Record<string, boolean>>({});
+
+	const existingInSidebar = useMemo(() => new Set(groupedProviders.flatMap((g) => g.providers.map((p) => p.name))), [groupedProviders]);
 
 	const knownProviders = useMemo(() => ProviderNames.map((name) => ({ name })), []);
+
+	const providerEnabledLookup = useMemo(() => {
+		const lookup: Record<string, boolean> = {};
+		for (const group of groupedProviders) {
+			for (const p of group.providers) {
+				lookup[p.name] = p.keys_enabled;
+			}
+		}
+		return lookup;
+	}, [groupedProviders]);
 
 	const [filters, setFilters] = useState<FilterState>({
 		search: "",
@@ -33,27 +48,46 @@ export default function Providers2Page() {
 
 	const filteredGroups = groupedProviders
 		.map((group) => {
-			const filtered = group.providers.filter((p) => {
-				// Search filter
-				if (filters.search && !p.name.toLowerCase().includes(filters.search.toLowerCase())) {
-					return false;
-				}
-				// Health filter
-				if (filters.health === "active" && p.provider_status !== "active") return false;
-				if (filters.health === "error" && p.provider_status !== "error") return false;
-				return true;
-			});
+			const filtered = group.providers
+				.filter((p) => {
+					// Search filter
+					if (filters.search && !p.name.toLowerCase().includes(filters.search.toLowerCase())) {
+						return false;
+					}
+					// Health filter
+					if (filters.health === "active" && p.provider_status !== "active") return false;
+					if (filters.health === "error" && p.provider_status !== "error") return false;
+					return true;
+				})
+				.map((p) => ({ ...p, keys_enabled: keysEnabledMap[p.name] ?? p.keys_enabled }));
 			return { ...group, providers: filtered };
 		})
 		.filter((g) => g.providers.length > 0);
 
 	const handleToggle = async (providerName: string) => {
-		// Toggle all keys for the provider — uses batch endpoint
+		const previouslyEnabled = keysEnabledMap[providerName] ?? providerEnabledLookup[providerName] ?? true;
+		const nextEnabled = !previouslyEnabled;
+		setKeysEnabledMap((prev) => ({ ...prev, [providerName]: nextEnabled }));
 		try {
-			await refreshProviderModels(providerName).unwrap();
-			toast.success(`Keys refreshed for ${providerName}`);
+			const keys = await getProviderKeys(providerName).unwrap();
+			const keyIds = keys.map((k) => k.id);
+			if (keyIds.length === 0) {
+				setKeysEnabledMap((prev) => ({ ...prev, [providerName]: previouslyEnabled }));
+				toast.info(`No API keys to toggle for ${providerName}`);
+				return;
+			}
+			const result = await batchUpdateKeys({
+				provider: providerName,
+				key_ids: keyIds,
+				enabled: nextEnabled,
+			}).unwrap();
+			toast.success(
+				nextEnabled ? `Enabled ${result.updated} keys for ${providerName}` : `Disabled ${result.updated} keys for ${providerName}`,
+			);
+			refetch();
 		} catch (err: any) {
-			toast.error(`Failed to toggle keys for ${providerName}`);
+			setKeysEnabledMap((prev) => ({ ...prev, [providerName]: previouslyEnabled }));
+			toast.error(`Failed to ${nextEnabled ? "enable" : "disable"} keys for ${providerName}`);
 		}
 	};
 

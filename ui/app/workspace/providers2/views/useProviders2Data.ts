@@ -45,6 +45,7 @@ export function useProviders2Data() {
 				uptime: p.uptime ?? 1,
 				avg_latency_ms: p.avg_latency_ms ?? 0,
 				keys_health_status: p.keys_health_status ?? "unknown",
+				keys_enabled: p.keys_enabled ?? true,
 				custom_provider_config: p.custom_provider_config,
 			};
 			groups.get(family)!.push(cardProvider);
