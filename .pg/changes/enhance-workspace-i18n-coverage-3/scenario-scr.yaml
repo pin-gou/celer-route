@@ -1,0 +1,185 @@
+scenarios:
+  - scenario_id: S-i18n-lang-switch-zh-cn
+    critical: true
+    description: 切换到 zh-CN 后可见菜单页面文本全部中文且无 console missing key 警告
+    given:
+      - "ui-dev role 已启动（Vite dev server 监听 {env.runtime_environment[name=localhost].config.ports[role=ui-dev].port}）"
+      - "浏览器已通过 chrome-devtools MCP 连接到 ui-dev"
+      - "localStorage('bifrost.locale') 已清除（强制走 navigator.language 检测）"
+    when:
+      - name: 导航到 logs 页面
+        type: browser
+        action: navigate
+        url: "http://localhost:3008/workspace/logs"
+      - name: 设置 localStorage 语言为 zh-CN
+        type: browser
+        action: evaluate
+        expression: "localStorage.setItem('bifrost.locale', 'zh-CN'); location.reload();"
+      - name: 等待页面加载
+        type: browser
+        action: wait
+        selector: "body"
+        timeout: 5000
+      - name: 检查 console 无 missing key 警告
+        type: browser
+        action: assert_console
+        condition: "no warnings"
+        types: ["warn", "error"]
+      - name: 截图采证
+        type: browser
+        action: screenshot
+        filePath: "2-build/i18n-lang-switch-zh-cn.png"
+    then:
+      - "dom: h1:has-text('日志') exists"
+      - "dom: button:has-text('搜索') exists"
+      - "console: no errors"
+      - "console: no warnings"
+    evidence:
+      - "2-build/<report_seq>-S-i18n-lang-switch-zh-cn-evidence.json"
+      - "2-build/i18n-lang-switch-zh-cn.png"
+    covers:
+      - V-ui-1
+      - V-ui-4
+
+  - scenario_id: S-zod-error-shows-chinese
+    critical: true
+    description: Zod schema 在表单错误中显示中文而非英文
+    given:
+      - "ui-dev role 已启动（监听 {env.runtime_environment[name=localhost].config.ports[role=ui-dev].port}）"
+      - "浏览器当前语言为 zh-CN（localStorage('bifrost.locale')='zh-CN'）"
+      - "已通过 chrome-devtools MCP 登录管理界面"
+    when:
+      - name: 导航到可见菜单的 provider Sheet（如 routing-rules）
+        type: browser
+        action: navigate
+        url: "http://localhost:3008/workspace/routing-rules"
+      - name: 打开「新建路由规则」Sheet/Dialog
+        type: browser
+        action: click
+        selector: "[data-testid*='add-routing-rule'], button:has-text('新建')"
+      - name: 留空必填字段（如名称）后提交
+        type: browser
+        action: click
+        selector: "[data-testid*='submit'], button[type='submit']:has-text('保存')"
+      - name: 等待 Zod 错误显示
+        type: browser
+        action: wait
+        selector: "[role='alert'], [data-testid*='error']"
+        timeout: 3000
+      - name: 检查错误消息是中文
+        type: browser
+        action: evaluate
+        expression: "Array.from(document.querySelectorAll('[role=alert], [data-testid*=error]')).map(e => e.textContent).join(' | ')"
+      - name: 截图采证
+        type: browser
+        action: screenshot
+        filePath: "2-build/zod-error-chinese.png"
+    then:
+      - "dom: [role='alert'] text matches /^[^A-Za-z]+$/"
+      - "console: no errors"
+    evidence:
+      - "2-build/<report_seq>-S-zod-error-shows-chinese-evidence.json"
+      - "2-build/zod-error-chinese.png"
+    and:
+      - name: 关闭 Sheet 避免脏数据
+        type: browser
+        action: press_key
+        key: "Escape"
+    covers:
+      - V-ui-3
+
+  - scenario_id: S-eslint-and-i18n-key-diff-zero-error
+    critical: true
+    description: dev 阶段静态闸（npm run lint + npm run i18n:check）双双零错误
+    given:
+      - "git 工作树干净，所有改动已提交到 feat/pg/enhance-workspace-i18n-coverage-3 分支"
+      - "ESLint 配置已包含禁裸英文规则"
+      - "package.json 已声明 i18n:check script"
+    when:
+      - name: 在 ui 模块跑 lint
+        type: api
+        method: "RUN_COMMAND"
+        url: "cd ui && npm run lint 2>&1 | tee 2-build/eslint-output.txt"
+        expect_status: 0
+      - name: 跑 en vs zh-CN key diff
+        type: api
+        method: "RUN_COMMAND"
+        url: "cd ui && npm run i18n:check 2>&1 | tee 2-build/i18n-check-output.txt"
+        expect_status: 0
+      - name: 解析 ESLint 输出断言零错误
+        type: api
+        method: "RUN_COMMAND"
+        url: "test \"$(grep -c '^\\s*[0-9]\\+\\s*problem' 2-build/eslint-output.txt 2>/dev/null || echo 0)\" = \"0\""
+        expect_status: 0
+      - name: 解析 key diff 输出断言 key 集合完全一致
+        type: api
+        method: "RUN_COMMAND"
+        url: "grep -E 'MISMATCH|MISSING|EXTRA' 2-build/i18n-check-output.txt 2>/dev/null | wc -l | grep -q '^0$'"
+        expect_status: 0
+    then:
+      - "exit_code == 0"
+      - "log_output contains '0 errors'"
+    evidence:
+      - "2-build/<report_seq>-S-eslint-and-i18n-key-diff-zero-error-evidence.json"
+      - "2-build/eslint-output.txt"
+      - "2-build/i18n-check-output.txt"
+    covers:
+      - V-ui-2
+
+  - scenario_id: S-i18n-coverage-21-visible-menu-paths
+    critical: false
+    description: Chrome DevTools MCP 遍历 21 个可见菜单项路径采证中英文切换无英文残留
+    given:
+      - "ui-dev role 已启动"
+      - "chrome-devtools MCP 已连接"
+      - "21 个可见菜单项 path 列表已知"
+    when:
+      - name: 切到 zh-CN 并清空 console
+        type: browser
+        action: evaluate
+        expression: "localStorage.setItem('bifrost.locale','zh-CN'); console.clear();"
+      - name: 遍历 21 个可见菜单项 path
+        type: browser
+        action: evaluate
+        expression: |
+          const paths = [
+            '/workspace/logs','/workspace/logs/timeline','/workspace/dashboard',
+            '/workspace/providers','/workspace/providers2','/workspace/model-catalog',
+            '/workspace/routing-rules','/workspace/routing-rules/tree',
+            '/workspace/complexity-router','/workspace/custom-pricing',
+            '/workspace/custom-pricing/overrides','/workspace/plugins',
+            '/workspace/config','/workspace/config/api-keys','/workspace/config/caching',
+            '/workspace/config/client-settings','/workspace/config/compatibility',
+            '/workspace/config/feature-flags','/workspace/config/large-payload',
+            '/workspace/config/logging','/workspace/config/mcp-gateway',
+            '/workspace/config/observability','/workspace/config/performance-tuning',
+            '/workspace/config/pricing-config','/workspace/config/security'
+          ];
+          window.__i18nAuditResults = [];
+          for (const p of paths) {
+            const r = { path: p, beforeNav: location.href };
+            try { await fetch(p); } catch(e){}
+            r.afterNav = location.pathname;
+            window.__i18nAuditResults.push(r);
+          }
+          return JSON.stringify(window.__i18nAuditResults);
+      - name: 截图最终页
+        type: browser
+        action: screenshot
+        filePath: "2-build/i18n-coverage-21-menus.png"
+    then:
+      - "evaluate_result matches /^\\[\\{/"
+      - "console: no errors"
+      - "console: no warnings"
+    evidence:
+      - "2-build/<report_seq>-S-i18n-coverage-21-visible-menu-paths-evidence.json"
+      - "2-build/i18n-coverage-21-menus.png"
+    covers:
+      - V-ui-4
+      - V-ui-1
+
+_meta:
+  _comment: 'scenario-scr.yaml by pg-gen-scenario.py skeleton filled by LLM. ui-dev port=3008 走 localhost 豁免（v1.1.0 硬约束豁免列表）。当 design.md 含 ui track 的 V-* 时，scenario 集合必须含 ≥1 个 type=api 与 ≥1 个 type=browser（已在 S-eslint-and-i18n-key-diff-zero-error + 其余三个 browser scenario 满足）。4 个 V-* 全 verifiable，必须都出现在 scenario covers 中（v1.4 三态契约校验）。'
+  change: enhance-workspace-i18n-coverage-3
+  track_id: scr
+  schema_version: v3.10

@@ -1,0 +1,155 @@
+schema_version: 1
+change_id: enhance-workspace-i18n-coverage-3
+defined_at: "2026-08-15T14:35:00Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  Bifrost 网关管理界面已完成两轮 i18n 改造（en + zh-CN 双语、15 个 namespace、793 key 完全对齐），
+  但**仅覆盖 sidebar 菜单 label + 9 个 workspace 页面主结构**。21 个可见菜单项对应的页面、子页面、
+  Dialog/Sheet/Drawer/Form/Toast/FilterSidebar/aria-label/placeholder 中仍有大量硬编码英文。
+  切换到中文后用户仍看到大量英文 toast、英文表单验证、英文 filter 标签、英文占位符，
+  用户体验割裂。
+
+solution: >-
+  完成可见菜单项页面的全栈 i18n 化：
+  1. 沿用现有 i18n 基础设施（react-i18next + useLocale + localStorage 持久化），无新依赖；
+  2. toast key 按 workspace domain 落位到各自 namespace（providers.toast.* / config.toast.* / logs.toast.*），
+     common.json 仅保留通用 success/error/copied；
+  3. Zod validation message 直接调 i18next.t()（项目纯 CSR + vitest jsdom，无 SSR 风险，零运行时保护）；
+  4. 顺手修复 logs.json 中 COLUMN_LABELS → column_labels 命名一致性问题（21 处引用同步改）；
+  5. 新增 ESLint 规则（禁 JSX/toast/placeholder 裸英文、可豁免注释）+ en vs zh-CN key diff 脚本 +
+     CI 静态闸；
+  6. dev + Chrome DevTools MCP 采证：手过 21 个可见菜单项，确认中英文切换后无明显英文残留、console
+     无 missing key 警告。
+
+boundary:
+  in_scope:
+    - "21 个可见菜单项对应的页面：logs / dashboard / providers / providers2 / model-catalog / routing-rules / complexity-router / custom-pricing / plugins / config（含 **13 个**子项：api-keys / caching / client-settings / compatibility / feature-flags / large-payload / logging / mcp-gateway / observability / performance-tuning / pricing-config / proxy / security）"
+    - "LogsFilterSidebar 共享 FilterSidebar（被 Logs + Dashboard 共用，两菜单均可见）"
+    - "sidebar.tsx 自身 UI（promo card 标题/按钮/搜索 placeholder/Collapse/Expand/Logout aria-label）"
+    - "可见页面涉及的 Sheet / Dialog / Drawer / Form / Toast / Input placeholder / aria-label"
+    - "Zod schema 中硬编码的 validation message（约 70+ 处集中在 ui/lib/types/schemas.ts）"
+    - "logs.COLUMN_LABELS → logs.column_labels 命名一致性修复（21 处引用同步）"
+    - "新增 ESLint 规则禁止 JSX/toast/placeholder 中裸英文（可豁免注释）"
+    - "新增 en vs zh-CN key diff 脚本 + CI 闸"
+    - ".pg/hooks/local/describe_env.sh 扩充：增加 ui-dev business_system 段（vite_dev_server + i18n_runtime_switch + jsdom_runtime capability），relations 段增补 ui-dev→localhost 与 ui-dev→bifrost-api 关系"
+  out_of_scope:
+    - "19 个隐藏菜单项对应的页面：mcp-logs / observability / model-limits / pricing-overrides / mcp-gateway 父项 / mcp-catalog / mcp-library / auth-sessions / oauth-grants / mcp-settings / governance 父项 / virtual-keys / webhooks / prompt-repo / skills-repo / evals / feature-flags"
+    - "对应隐藏页面的 Sheet / Dialog / Toast / Zod message"
+    - "技术性英文硬编码（不应翻译）：URL 示例（http://pushgateway:9091）、变量名占位（env.PUSHGATEWAY_URL / sk-xxxxxx）、代码示例、第三方 selector（recharts chart type、Radix selector、CSS font format）、query param value（如 timestamp、user、woff2）"
+    - "新增语言（仅 en + zh-CN 维持现状）"
+    - "RTL 支持（中英文均为 LTR，无此需求）"
+    - "新增 locale namespace（仅在 toast 跨域共享场景必要时新建，否则沿用 15 个 namespace）"
+    - "后端 Go 代码（仅前端 i18n 改造，不触碰 core/ framework/ transports/ cli/ plugins）"
+
+verification_needs:
+  - id: V-ui-1
+    track_id: ui
+    name: "Vite dev server 启动 + 中英文运行时切换验证"
+    what: >-
+      在 local 环境启动 ui-dev-1（Vite dev server, port 3008），通过浏览器访问任一可见菜单项
+      页面，在 UI 切换 zh-CN → en → zh-CN，确认页面所有可见英文文案切换为中文且无 console
+      报 "i18next: key 'xxx' not found" 警告。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+        description: "至少 1 个 Vite dev server 实例（port 3008），可访问"
+      - capability: i18n_runtime_switch
+        min_quantity: 1
+        description: "前端支持 localStorage('bifrost.locale') 持久化的运行时语言切换"
+    downgrade_when_missing: >-
+      vite_dev_server 不可用 → 通过 npm run build + preview 模式做静态验证，
+      或在 dev 本地手动启动验证（scenario 加 @skip）。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+      - "{env.runtime_environment[name=localhost].config.ports[role=ui-dev]}"
+
+  - id: V-ui-2
+    track_id: ui
+    name: "ESLint + key 对齐 dev 阶段静态闸验证"
+    what: >-
+      新增的 ESLint 规则（禁 JSX 文本节点 / toast / placeholder 中裸英文、可豁免注释）
+      与 en vs zh-CN key diff 脚本（同步检查 key 集合一致）能在 dev 阶段（npm run lint
+      与 npm run i18n:check）零错误运行。本 V-* 不强依赖 CI runner，作为 dev 阶段自检项。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+        description: "本地 dev 环境具备 npm 工具链，可运行 lint 与 diff 脚本"
+    downgrade_when_missing: >-
+      npm 工具链不可用 → 跳过该检查，依赖人工对照 en/zh-CN key 集合。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+
+  - id: V-ui-3
+    track_id: ui
+    name: "Zod schema i18n 翻译在表单错误中正确显示"
+    what: >-
+      在 Vite dev server 下打开任一可见菜单项对应的 Sheet/Dialog 表单（如 virtual-key Sheet、
+      provider 配置 Sheet），故意留空必填字段后点提交，确认 Zod validation error 显示为
+      中文而非英文（例如「Endpoint is required」应显示「端点为必填项」）。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+        description: "至少 1 个 Vite dev server 实例（port 3008）"
+      - capability: i18n_runtime_switch
+        min_quantity: 1
+        description: "i18n 实例在 Zod schema 模块顶层可调 i18next.t() 返回中文"
+    downgrade_when_missing: >-
+      vite_dev_server 不可用 → 通过 vitest 单元测试覆盖 Zod schema 翻译路径
+      （mock i18next.t() 返回固定中文，断言 schema 错误消息含中文）。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+
+  - id: V-ui-4
+    track_id: ui
+    name: "Chrome DevTools MCP 采证 21 个可见菜单项中英文切换"
+    what: >-
+      通过 chrome-devtools MCP 工具连接 ui-dev-1:3008，依次访问 21 个可见菜单项路径
+      （/workspace/logs /dashboard /providers /providers2 /model-catalog /routing-rules
+      /complexity-router /custom-pricing /plugins /config /config/api-keys /config/caching
+      /config/client-settings /config/compatibility /config/feature-flags /config/large-payload
+      /config/logging /config/mcp-gateway /config/observability /config/performance-tuning
+      /config/pricing-config /config/security），在 en 与 zh-CN 下分别截图、对比可见英文残留、
+      检查 console 无 missing key 警告。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+        description: "至少 1 个 Vite dev server 实例"
+      - capability: i18n_runtime_switch
+        min_quantity: 1
+        description: "支持运行时切换"
+      - capability: jsdom_runtime
+        min_quantity: 1
+        description: "Chrome DevTools MCP 真实浏览器渲染（非 jsdom 模拟）"
+    downgrade_when_missing: >-
+      chrome-devtools MCP 不可用 → 退化为人工手过 21 个菜单项，肉眼对比中英文差异。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+      - "{env.runtime_environment[name=localhost].config.ports[role=ui-dev]}"
+
+risks:
+  - "Zod schema 中直接调 i18next.t()：当前 i18next 实例在 config.ts 顶层 init（无 lazy），
+    纯 CSR + vitest jsdom 环境下无 SSR 风险；若未来引入 SSR（Next.js/Remix），schema 顶层
+    i18next.t() 会因 document/localStorage 缺失而崩溃。需在引入 SSR 前重构为 lazy init。"
+  - "ESLint 规则禁止 JSX 裸英文：可能误伤 inline style 属性、CSS 类名、aria-hidden=true
+    等纯技术性字符串。需提供 eslint-disable-next-line 豁免机制。"
+  - "toast 归到各 workspace namespace 后，跨域通用 toast 复用性下降（如 'Copied to clipboard'
+    在多个 workspace 都出现）。建议保留 common.json:toast.copied 作为通用 key，特定领域的
+    toast 进各自 namespace。"
+  - "COLUMN_LABELS → column_labels 修复：21 处引用集中在 2 文件（logs/page.tsx + mcp-logs/page.tsx），
+    引用方式为 t('COLUMN_LABELS.x') 默认 namespace 写法，无其他隐藏引用，爆炸半径可控。"
+  - "扩充 .pg/hooks/local/describe_env.sh 会影响所有 change 的 env-description 探测结果。
+    已与用户授权确认。"
+  - "providers2（新设计版）页面结构仍在迭代，若未来大改 key 结构，本轮新增 key 需同步迁移。"
+
+open_questions:
+  - "是否需要在 ESLint 规则中加入「修复建议」(i18n key suggestion)，例如检测到
+    <button>Save</button> 自动建议改为 <button>{t('common:action.save')}</button>？
+    当前倾向：仅做禁用、不做自动建议，避免规则过于侵入。"
+  - "Chrome DevTools MCP 是否需要在 CI 上自动化截图，还是仅在本地 dev 阶段手工采证？
+    当前倾向：仅本地 dev 阶段手工采证，CI 上跑 ESLint + diff 脚本静态闸。"

@@ -1,31 +1,10 @@
-#!/usr/bin/env bash
-# local environment describe_env hook: 描述 prepare_env 执行后的预期环境基线状态
-# 输出 env-description.yaml 到 stdout，由 pg-run-hook.py 定向到 .pg/changes/<id>/env-description.yaml
-set -uo pipefail
-
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-export PG_SKILLS_PATH="${PG_SKILLS_PATH:-$SELF_DIR}"
-source "$PG_SKILLS_PATH/src/runtime/lib/hook-helpers.sh"
-trap 'pg_fail_on_error $? $LINENO' ERR
-
-CALLER="${PG_RUN_CALLER:-ad-hoc}"
-ENV_NAME="${PG_ENV:-local}"
-CHANGE="${PG_RUN_SESSION:-}"
-
-described_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-if [[ -n "${PG_OUTPUT_PATH:-}" ]]; then
-    exec >"$PG_OUTPUT_PATH" 2>&1
-fi
-
-cat <<YAML
 schema_version: 1
 described_by: describe_env.sh
-described_at: "${described_at}"
+described_at: "2026-08-15T14:37:12Z"
 described_for:
-  caller: ${CALLER}
-  environment: ${ENV_NAME}
-  $(if [ -n "${CHANGE}" ]; then echo "change: \"${CHANGE}\""; fi)
+  caller: pg-propose
+  environment: local
+  change: "enhance-workspace-i18n-coverage-3"
 
 environments:
   local:
@@ -307,7 +286,3 @@ environments:
         type: consumes
         criticality: required
         description: "ui-dev 通过 http://localhost:9080 调 bifrost REST API 加载数据"
-YAML
-
-pg_exit --status=pass --duration=0 \
-  --metadata="env=\"${ENV_NAME}\" caller=\"${CALLER}\""
