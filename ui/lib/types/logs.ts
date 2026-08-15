@@ -1431,4 +1431,5 @@ export interface ActiveLogStreamEvent {
 	model?: string;
 	timestamp?: string;
 	latency_ms?: number | null;
+	token_usage?: LLMUsage | null;
 }

@@ -19,7 +19,7 @@ const BAR_HEIGHT = 28;
 const LANE_GAP = 4;
 const LANE_HEIGHT = BAR_HEIGHT + LANE_GAP;
 const AXIS_HEIGHT = 32;
-const MIN_BAR_WIDTH = 3;
+const MIN_BAR_WIDTH = 10;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 8;
 const ZOOM_FACTOR = 1.25;
@@ -78,7 +78,7 @@ function getStatusColor(status: string): string {
 	}
 }
 
-function allocateLanes(logs: LogEntry[]): Map<string, number> {
+function allocateLanes(logs: LogEntry[], laneGapMs: number = 0): Map<string, number> {
 	const laneMap = new Map<string, number>();
 	const laneEndTimes: number[] = [];
 	const sorted = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -86,7 +86,10 @@ function allocateLanes(logs: LogEntry[]): Map<string, number> {
 		const start = new Date(log.timestamp).getTime();
 		// Processing logs are still running — they occupy their lane until
 		// Infinity so no other log can overlap them.
-		const end = log.status === "processing" ? Infinity : start + (log.latency ?? 0);
+		// laneGapMs accounts for the visual minWidth — bars that are close
+		// together in time but visually overlapping due to MIN_BAR_WIDTH
+		// get separate lanes so they don't stack on top of each other.
+		const end = log.status === "processing" ? Infinity : start + (log.latency ?? 0) + laneGapMs;
 		let assigned = false;
 		for (let i = 0; i < laneEndTimes.length; i++) {
 			if (start >= laneEndTimes[i]) {
@@ -195,6 +198,7 @@ export function LogsTimeline({
 }: LogsTimelineProps) {
 	const [tooltipLog, setTooltipLog] = useState<LogEntry | null>(null);
 	const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+	const [tooltipAbove, setTooltipAbove] = useState(true);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const [canvasWidth, setCanvasWidth] = useState(1200);
@@ -271,7 +275,8 @@ export function LogsTimeline({
 	);
 
 	// Lanes
-	const laneMap = useMemo(() => allocateLanes(visibleLogs), [visibleLogs]);
+	const laneGapMs = (MIN_BAR_WIDTH / canvasWidth) * rangeDuration;
+	const laneMap = useMemo(() => allocateLanes(visibleLogs, laneGapMs), [visibleLogs, laneGapMs]);
 	const maxLane = useMemo(() => (laneMap.size > 0 ? Math.max(...laneMap.values()) : 0), [laneMap]);
 
 	// Bar positions
@@ -280,26 +285,32 @@ export function LogsTimeline({
 			visibleLogs.map((log) => {
 				const logStart = new Date(log.timestamp).getTime();
 				const isProcessing = log.status === "processing";
-				// Processing bars: left edge at start time, right edge anchored to NOW.
 				// Completed bars: normal position from start + latency.
-				const leftPct = Math.max(0, ((logStart - timeStart) / rangeDuration) * 100);
+				// Processing bars: right edge anchored to the NOW line, extending
+				// leftward (into the past) by the elapsed time. MIN_BAR_WIDTH also
+				// extends left, so a just-started bar appears AT the NOW line instead
+				// of poking past it to the right.
+				// leftPct/widthPct are intentionally NOT clamped to the canvas — bars
+				// may extend past the left/right edges and are clipped by overflow-hidden.
 				const elapsedPct = isProcessing
 					? Math.max(0, ((nowMs - logStart) / rangeDuration) * 100)
 					: rangeDuration > 0
 						? ((log.latency ?? 0) / rangeDuration) * 100
 						: 0;
 				const widthPct = Math.max((MIN_BAR_WIDTH / canvasWidth) * 100, elapsedPct);
+				const plainLeftPct = ((logStart - timeStart) / rangeDuration) * 100;
+				const leftPct = isProcessing ? nowLineX - widthPct : plainLeftPct;
 				const lane = laneMap.get(log.id) ?? 0;
 				return {
 					log,
 					lane,
-					leftPct: Math.min(leftPct, 100),
-					widthPct: Math.min(widthPct, 100 - leftPct),
+					leftPct,
+					widthPct,
 					statusColor: getStatusColor(log.status),
 					isProcessing,
 				};
 			}),
-		[visibleLogs, timeStart, rangeDuration, laneMap, canvasWidth, nowMs],
+		[visibleLogs, timeStart, rangeDuration, laneMap, canvasWidth, nowMs, nowLineX],
 	);
 
 	const contentHeight = Math.max((maxLane + 1) * LANE_HEIGHT + 20, 200);
@@ -308,9 +319,15 @@ export function LogsTimeline({
 		setTooltipLog(log);
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		const containerRect = containerRef.current?.getBoundingClientRect();
+		if (!containerRect) return;
+		const x = rect.left - containerRect.left + rect.width / 2;
+		const barTop = rect.top - containerRect.top;
+		// ~60px estimated tooltip height; if tooltip above would overflow, flip below
+		const canShowAbove = barTop > 60;
+		setTooltipAbove(canShowAbove);
 		setTooltipPos({
-			x: rect.left - (containerRect?.left ?? 0) + rect.width / 2,
-			y: rect.top - (containerRect?.top ?? 0) - 8,
+			x,
+			y: canShowAbove ? barTop - 8 : rect.bottom - containerRect.top + 8,
 		});
 	}, []);
 
@@ -443,7 +460,10 @@ export function LogsTimeline({
 			<div
 				ref={canvasRef}
 				data-testid="timeline-canvas"
-				className={cn("relative h-full select-none", dragStateRef.current?.moved ? "cursor-grabbing" : mode === "pan" ? "cursor-grab" : "")}
+				className={cn(
+					"relative h-full select-none overflow-hidden",
+					dragStateRef.current?.moved ? "cursor-grabbing" : mode === "pan" ? "cursor-grab" : "",
+				)}
 				style={{ touchAction: "none" }}
 				onMouseDown={handleMouseDown}
 				onMouseMove={handleMouseMove}
@@ -514,6 +534,7 @@ export function LogsTimeline({
 							style={{
 								left: `${bar.leftPct}%`,
 								width: `${bar.widthPct}%`,
+								transition: bar.isProcessing ? undefined : "width 0.5s ease",
 								top: `${AXIS_HEIGHT + bar.lane * LANE_HEIGHT + 2}px`,
 								height: `${BAR_HEIGHT}px`,
 								minWidth: `${MIN_BAR_WIDTH}px`,
@@ -555,7 +576,7 @@ export function LogsTimeline({
 					style={{
 						left: tooltipPos.x,
 						top: tooltipPos.y,
-						transform: "translate(-50%, -100%)",
+						transform: tooltipAbove ? "translate(-50%, -100%)" : "translate(-50%, 0)",
 					}}
 				>
 					<div className="flex items-center gap-2 font-medium">
@@ -575,6 +596,15 @@ export function LogsTimeline({
 						</span>
 						<span>{tooltipLog.cost != null ? formatCost(tooltipLog.cost) : "—"}</span>
 					</div>
+					{tooltipLog.token_usage && (
+						<div className="text-muted-foreground mt-1 flex gap-3">
+							<span>Input: {tooltipLog.token_usage.prompt_tokens.toLocaleString()}</span>
+							<span>Output: {tooltipLog.token_usage.completion_tokens.toLocaleString()}</span>
+							{tooltipLog.status !== "processing" && tooltipLog.latency != null && tooltipLog.latency > 0 && (
+								<span>TPS: {(tooltipLog.token_usage.completion_tokens / (tooltipLog.latency / 1000)).toFixed(1)}/s</span>
+							)}
+						</div>
+					)}
 				</div>
 			)}
 		</div>

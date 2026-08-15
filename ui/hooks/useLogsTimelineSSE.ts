@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { ActiveLogStreamEvent, LogEntry } from "@/lib/types/logs";
+import type { ActiveLogStreamEvent, LogEntry, LLMUsage } from "@/lib/types/logs";
 import { getApiBaseUrl } from "@/lib/utils/port";
 
 export interface ActiveLogEntry {
@@ -21,6 +21,7 @@ export interface ActiveLogEntry {
 	model?: string;
 	latency?: number | null;
 	timestamp?: string;
+	token_usage?: LLMUsage | null;
 }
 
 export interface UseLogsTimelineSSEOptions {
@@ -44,6 +45,7 @@ function toActiveEntry(log: LogEntry): ActiveLogEntry {
 		model: log.model,
 		latency: log.latency,
 		timestamp: log.timestamp,
+		token_usage: log.token_usage,
 	};
 }
 
@@ -55,6 +57,7 @@ function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
 		model: update.model,
 		latency: update.latency_ms ?? null,
 		timestamp: update.timestamp,
+		token_usage: update.token_usage ?? null,
 	};
 }
 

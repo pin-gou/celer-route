@@ -82,7 +82,7 @@ func (p *LoggerPlugin) batchWriter() {
 	writerConfig := p.writerConfig
 	batchInterval, err := time.ParseDuration(writerConfig.BatchInterval)
 	if err != nil {
-		batchInterval = 5 * time.Second
+		batchInterval = 1 * time.Second
 	}
 
 	batch := make([]*writeQueueEntry, 0, writerConfig.MaxBatchSize)

@@ -2118,9 +2118,9 @@
             },
             "batch_interval": {
               "type": "string",
-              "description": "Maximum time to wait before flushing a partial batch as a Go duration string (default: 5s)",
+              "description": "Maximum time to wait before flushing a partial batch as a Go duration string (default: 1s)",
               "pattern": "^[1-9][0-9]*(ns|us|\u00b5s|ms|s|m|h)$",
-              "default": "5s"
+              "default": "1s"
             },
             "max_batch_bytes": {
               "type": "integer",

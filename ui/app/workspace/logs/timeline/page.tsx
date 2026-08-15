@@ -75,6 +75,7 @@ export default function TimelinePage() {
 			input_history: [],
 			responses_input_history: [],
 			created_at: entry.timestamp ?? new Date().toISOString(),
+			token_usage: entry.token_usage ?? undefined,
 		};
 		setExtraLogs((prev) => {
 			const idx = prev.findIndex((l) => l.id === entry.id);

@@ -3075,9 +3075,9 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 	}
 
 	SendJSON(ctx, map[string]interface{}{
-		"log_id":             id,
-		"total_duration_ms":  totalDurationMs,
-		"events":             events,
+		"log_id":            id,
+		"total_duration_ms": totalDurationMs,
+		"events":            events,
 	})
 }
 
@@ -3087,6 +3087,7 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 //  1. active_logs — initial snapshot of currently processing logs
 //  2. recent_logs — recently completed logs (last 30 s) for quick reconciliation
 //  3. log_updated — incremental updates for every log write/transition
+//
 // The connection remains open until the client disconnects.
 func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("text/event-stream")
@@ -3104,21 +3105,23 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 	}
 
 	type activeLogEntry struct {
-		ID        string   `json:"id"`
-		Status    string   `json:"status"`
-		Provider  string   `json:"provider"`
-		Model     string   `json:"model"`
-		LatencyMs *float64 `json:"latency_ms"`
+		ID         string                   `json:"id"`
+		Status     string                   `json:"status"`
+		Provider   string                   `json:"provider"`
+		Model      string                   `json:"model"`
+		LatencyMs  *float64                 `json:"latency_ms"`
+		TokenUsage *schemas.BifrostLLMUsage `json:"token_usage,omitempty"`
 	}
 
 	entries := make([]activeLogEntry, 0, len(activeLogs))
 	for _, l := range activeLogs {
 		entries = append(entries, activeLogEntry{
-			ID:        l.ID,
-			Status:    l.Status,
-			Provider:  l.Provider,
-			Model:     l.Model,
-			LatencyMs: l.Latency,
+			ID:         l.ID,
+			Status:     l.Status,
+			Provider:   l.Provider,
+			Model:      l.Model,
+			LatencyMs:  l.Latency,
+			TokenUsage: l.TokenUsageParsed,
 		})
 	}
 
@@ -3162,11 +3165,12 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 			for _, l := range recentResult.Logs {
 				if l.Status != "processing" {
 					recentEntries = append(recentEntries, activeLogEntry{
-						ID:        l.ID,
-						Status:    l.Status,
-						Provider:  l.Provider,
-						Model:     l.Model,
-						LatencyMs: l.Latency,
+						ID:         l.ID,
+						Status:     l.Status,
+						Provider:   l.Provider,
+						Model:      l.Model,
+						LatencyMs:  l.Latency,
+						TokenUsage: l.TokenUsageParsed,
 					})
 				}
 			}
@@ -3184,12 +3188,13 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 					return
 				}
 				updateData, _ := sonic.Marshal(map[string]interface{}{
-					"id":         updatedLog.ID,
-					"status":     updatedLog.Status,
-					"provider":   updatedLog.Provider,
-					"model":      updatedLog.Model,
-					"timestamp":  updatedLog.Timestamp.Format(time.RFC3339Nano),
-					"latency_ms": updatedLog.Latency,
+					"id":          updatedLog.ID,
+					"status":      updatedLog.Status,
+					"provider":    updatedLog.Provider,
+					"model":       updatedLog.Model,
+					"timestamp":   updatedLog.Timestamp.Format(time.RFC3339Nano),
+					"latency_ms":  updatedLog.Latency,
+					"token_usage": updatedLog.TokenUsageParsed,
 				})
 				if !reader.SendEvent("log_updated", updateData) {
 					return
