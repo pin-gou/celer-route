@@ -155,6 +155,30 @@ func TestAsFilterEmptyInput(t *testing.T) {
 	}
 }
 
+func TestAsFilter_EnabledFilter(t *testing.T) {
+	// Verify that the KeyPoolFilter returned by AsFilter does not panic
+	// when BifrostContext is nil (the "nil path" through the filter).
+	// This simulates the filter being called from the key selection loop
+	// without a context — the filter must never dereference a nil context.
+	s := NewCooldownState(time.Minute)
+	s.Mark(schemas.OpenAI, "hot-key")
+
+	filter := s.AsFilter(nil)
+	keys := []schemas.Key{
+		{ID: "hot-key", Name: "hot"},
+		{ID: "cold-key", Name: "cold"},
+	}
+
+	// Call with nil BifrostContext — must not panic.
+	out, err := filter(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != "cold-key" {
+		t.Fatalf("expected only cold-key to survive the nil-context filter call, got %+v", out)
+	}
+}
+
 func TestStateSnapshot(t *testing.T) {
 	s := NewCooldownState(time.Minute)
 	s.Mark(schemas.OpenAI, "key-a")
