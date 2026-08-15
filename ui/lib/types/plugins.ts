@@ -72,6 +72,7 @@ export type ProviderCooldownConfig = z.infer<typeof providerCooldownConfigSchema
 export interface CooldownStateEntry {
 	provider: string;
 	keyId: string;
+	keyName?: string;
 	expireAt: string;
 	reason: string;
 }

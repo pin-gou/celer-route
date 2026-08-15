@@ -20,9 +20,9 @@ func newCooldownCtx(userValues map[string]string) *fasthttp.RequestCtx {
 }
 
 // newCooldownHandlerWithPlugin builds a CooldownHandler whose resolver always
-// returns the given plugin instance.
-func newCooldownHandlerWithPlugin(p *providercooldown.CooldownPlugin) *CooldownHandler {
-	return NewCooldownHandler(func() *providercooldown.CooldownPlugin { return p })
+// returns the given plugin instance. Optional keyName resolvers are forwarded.
+func newCooldownHandlerWithPlugin(p *providercooldown.CooldownPlugin, keyNameResolvers ...KeyNameResolver) *CooldownHandler {
+	return NewCooldownHandler(func() *providercooldown.CooldownPlugin { return p }, keyNameResolvers...)
 }
 
 // -----------------------------------------------------------------------------
@@ -68,7 +68,15 @@ func TestGetCooldownState_WithEntries(t *testing.T) {
 	plugin.State.Mark(schemas.OpenAI, "key-a")
 	plugin.State.Mark(schemas.Anthropic, "key-b")
 
-	h := newCooldownHandlerWithPlugin(plugin)
+	h := newCooldownHandlerWithPlugin(plugin, func(provider schemas.ModelProvider, keyID string) string {
+		switch keyID {
+		case "key-a":
+			return "prod-openai-key"
+		case "key-b":
+			return "prod-anthropic-key"
+		}
+		return ""
+	})
 	ctx := newCooldownCtx(nil)
 	h.getState(ctx)
 
@@ -79,10 +87,33 @@ func TestGetCooldownState_WithEntries(t *testing.T) {
 	if !strings.Contains(body, `"count":2`) {
 		t.Fatalf("expected count:2, got %s", body)
 	}
-	for _, want := range []string{`"provider":"openai"`, `"key_id":"key-a"`, `"provider":"anthropic"`, `"key_id":"key-b"`} {
+	for _, want := range []string{
+		`"provider":"openai"`, `"key_id":"key-a"`, `"key_name":"prod-openai-key"`,
+		`"provider":"anthropic"`, `"key_id":"key-b"`, `"key_name":"prod-anthropic-key"`,
+	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected %s in body, got %s", want, body)
 		}
+	}
+}
+
+// TestGetCooldownState_KeyNameOmittedWithoutResolver pins that entries carry
+// no key_name field when no KeyNameResolver is wired (backward compatibility).
+func TestGetCooldownState_KeyNameOmittedWithoutResolver(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	plugin.State.Mark(schemas.OpenAI, "key-a")
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(nil)
+	h.getState(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	if strings.Contains(body, `"key_name"`) {
+		t.Fatalf("expected no key_name field without a resolver, got %s", body)
 	}
 }
 

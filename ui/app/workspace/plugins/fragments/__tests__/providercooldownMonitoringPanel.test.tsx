@@ -36,16 +36,18 @@ const mocks = vi.hoisted(() => ({
 		{
 			provider: "openai",
 			keyId: "key-abc-123",
+			keyName: "prod-openai-key",
 			expireAt: "2026-08-15T18:00:00Z",
 			reason: "quota_exhausted",
 		},
 		{
 			provider: "anthropic",
 			keyId: "key-def-456",
+			keyName: "prod-anthropic-key",
 			expireAt: "2026-08-15T18:30:00Z",
 			reason: "rate_limited",
 		},
-	] as Array<{ provider: string; keyId: string; expireAt: string; reason: string }>,
+	] as Array<{ provider: string; keyId: string; keyName?: string; expireAt: string; reason: string }>,
 	statsData: { markCount: 12, suppressedCount: 8, activeCount: 3 },
 }));
 
@@ -67,8 +69,8 @@ describe("MonitoringPanel — stats rendering (task 11.2)", () => {
 	beforeEach(() => {
 		mocks.unfreeze.mockReset();
 		mocks.stateData = [
-			{ provider: "openai", keyId: "key-abc-123", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" },
-			{ provider: "anthropic", keyId: "key-def-456", expireAt: "2026-08-15T18:30:00Z", reason: "rate_limited" },
+			{ provider: "openai", keyId: "key-abc-123", keyName: "prod-openai-key", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" },
+			{ provider: "anthropic", keyId: "key-def-456", keyName: "prod-anthropic-key", expireAt: "2026-08-15T18:30:00Z", reason: "rate_limited" },
 		];
 		mocks.statsData = { markCount: 12, suppressedCount: 8, activeCount: 3 };
 	});
@@ -96,26 +98,26 @@ describe("MonitoringPanel — state list rendering (task 11.2)", () => {
 	beforeEach(() => {
 		mocks.unfreeze.mockReset();
 		mocks.stateData = [
-			{ provider: "openai", keyId: "key-abc-123", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" },
-			{ provider: "anthropic", keyId: "key-def-456", expireAt: "2026-08-15T18:30:00Z", reason: "rate_limited" },
+			{ provider: "openai", keyId: "key-abc-123", keyName: "prod-openai-key", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" },
+			{ provider: "anthropic", keyId: "key-def-456", keyName: "prod-anthropic-key", expireAt: "2026-08-15T18:30:00Z", reason: "rate_limited" },
 		];
 	});
 
 	it("renders cooldown state entries from useGetCooldownStateQuery", () => {
 		render(<MonitoringPanel />);
 
-		// First entry: openai / key-abc-123
+		// First entry: openai / key-abc-123 (prod-openai-key)
 		const row1 = screen.getByTestId("providercooldown-state-row-key-abc-123");
 		expect(row1).toBeTruthy();
 		expect(row1.textContent).toContain("openai");
-		expect(row1.textContent).toContain("key-abc-123");
+		expect(row1.textContent).toContain("key-abc-123 (prod-openai-key)");
 		expect(row1.textContent).toContain("quota_exhausted");
 
-		// Second entry: anthropic / key-def-456
+		// Second entry: anthropic / key-def-456 (prod-anthropic-key)
 		const row2 = screen.getByTestId("providercooldown-state-row-key-def-456");
 		expect(row2).toBeTruthy();
 		expect(row2.textContent).toContain("anthropic");
-		expect(row2.textContent).toContain("key-def-456");
+		expect(row2.textContent).toContain("key-def-456 (prod-anthropic-key)");
 		expect(row2.textContent).toContain("rate_limited");
 	});
 

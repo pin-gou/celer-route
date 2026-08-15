@@ -2120,6 +2120,17 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 			return nil
 		}
 		return p
+	}, func(provider schemas.ModelProvider, keyID string) string {
+		keys, err := s.Config.GetProviderKeysRedacted(provider)
+		if err != nil {
+			return ""
+		}
+		for _, k := range keys {
+			if k.ID == keyID {
+				return k.Name
+			}
+		}
+		return ""
 	})
 	var promptsReloader handlers.PromptCacheReloader
 	if promptsPlugin, err := lib.FindPluginAs[handlers.PromptCacheReloader](s.Config, s.getPromptsPluginName()); err == nil && promptsPlugin != nil {

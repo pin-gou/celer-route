@@ -354,7 +354,10 @@ export function MonitoringPanel() {
 								<div className="min-w-0 flex-1">
 									<div className="flex items-center gap-2">
 										<span className="font-medium">{entry.provider}</span>
-										<span className="text-muted-foreground text-xs">{entry.keyId}</span>
+										<span className="text-muted-foreground text-xs">
+											{entry.keyId}
+											{entry.keyName ? ` (${entry.keyName})` : ""}
+										</span>
 									</div>
 									<div className="text-muted-foreground mt-1 text-xs">
 										<span>Reason: {entry.reason}</span>

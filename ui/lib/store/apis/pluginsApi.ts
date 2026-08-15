@@ -128,6 +128,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 						state: response.entries.map((e: any) => ({
 							provider: e.provider,
 							keyId: e.key_id ?? e.keyId,
+							keyName: e.key_name ?? e.keyName,
 							expireAt: e.expires_at ?? e.expireAt,
 							reason: e.reason || "cooldown",
 						})),
@@ -166,6 +167,10 @@ export const pluginsApi = baseApi.injectEndpoints({
 				url: `/plugins/provider-cooldown/state/${provider}/${keyId}`,
 				method: "DELETE",
 			}),
+			// Trigger an immediate refetch of the cooldown state/stats after a
+			// successful unfreeze so the Active Cooldown State list drops the
+			// un-frozen entry without waiting for the next polling tick.
+			invalidatesTags: ["Plugins"],
 			transformResponse: (response: any) => {
 				if (response && "key_id" in response && !("keyId" in response)) {
 					return { ...response, keyId: response.key_id };
