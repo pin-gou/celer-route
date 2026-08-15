@@ -5590,16 +5590,14 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 		}
 		return resp, nil
 	case bifrostErrVal := <-msg.Err:
-		// When the key pool filter prevents all keys from being selected (e.g.
-		// provider-cooldown plugin suppressing the only key), no actual provider
-		// call was made — the error is a synthetic 503 "no_eligible_keys" from
-		// the retry loop. Skip PostLLMHooks so plugins (especially logging)
-		// don't record a spurious failed request with 0ms latency.
-		if isSyntheticNoEligibleKeysError(&bifrostErrVal) {
-			bifrostErrVal.PopulateExtraFields(req.RequestType, provider, model, model)
-			bifrost.releaseChannelMessage(msg)
-			return nil, &bifrostErrVal
-		}
+		// The key pool filter may prevent all keys from being selected (e.g.
+		// provider-cooldown plugin suppressing the only key), producing a
+		// synthetic 503 "no_eligible_keys" before any provider call. Previously
+		// this branch skipped PostLLMHooks to avoid logging a "spurious" 0ms
+		// failure, but doing so left the request stuck in "processing" forever
+		// in the timeline because PreLLMHook already pushed a processing event.
+		// Always running PostLLMHooks records the terminal status correctly
+		// (the logging plugin emits a log_updated event with status="error").
 		bifrostErrPtr := &bifrostErrVal
 		resp, bifrostErrPtr = pipeline.RunPostLLMHooks(msg.Context, nil, bifrostErrPtr, pluginCount)
 		if bifrostErrPtr != nil {
@@ -5913,17 +5911,14 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 		} else {
 			bifrost.logger.Debug("error while executing stream request: %+v", bifrostErrVal)
 		}
-		// When the key pool filter prevents all keys from being selected (e.g.
-		// provider-cooldown plugin suppressing the only key), no actual provider
-		// call was made — the error is a synthetic 503 "no_eligible_keys" from
-		// the retry loop. Skip PostLLMHooks so plugins (especially logging)
-		// don't record a spurious failed request with 0ms latency. Mirrors the
-		// non-streaming short-circuit in tryRequest.
-		if isSyntheticNoEligibleKeysError(&bifrostErrVal) {
-			bifrostErrVal.PopulateExtraFields(req.RequestType, provider, model, model)
-			bifrost.releaseChannelMessage(msg)
-			return nil, &bifrostErrVal
-		}
+		// The key pool filter may prevent all keys from being selected (e.g.
+		// provider-cooldown plugin suppressing the only key), producing a
+		// synthetic 503 "no_eligible_keys" before any provider call. Previously
+		// this branch skipped PostLLMHooks to avoid logging a "spurious" 0ms
+		// failure, but doing so left the request stuck in "processing" forever
+		// in the timeline because PreLLMHook already pushed a processing event.
+		// Always running PostLLMHooks records the terminal status correctly
+		// (the logging plugin emits a log_updated event with status="error").
 		// Marking final chunk
 		ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
 		// On error we will complete post-hooks
@@ -5965,18 +5960,16 @@ var errAllKeysFiltered = errors.New("all eligible keys are temporarily suppresse
 
 // noEligibleKeysErrorType is the BifrostError.Type value attached to the synthetic
 // 503 error raised by executeRequestWithRetries when the KeyPoolFilter (e.g.
-// provider-cooldown) suppresses every eligible key. Used by
-// isSyntheticNoEligibleKeysError to short-circuit PostLLMHooks for that case so
-// the logging plugin does not record a spurious failed request — no provider
-// call was actually made.
+// provider-cooldown) suppresses every eligible key.
 const noEligibleKeysErrorType = "no_eligible_keys"
 
 // isSyntheticNoEligibleKeysError reports whether the error is the synthetic
 // 503 "no_eligible_keys" BifrostError raised by executeRequestWithRetries when
-// the KeyPoolFilter vetoes every key for the request. Both call sites (tryRequest
-// for non-streaming and tryStreamRequest for streaming) check this to bypass
-// PostLLMHooks, on the rationale that no actual provider call happened and the
-// logging plugin would otherwise record a 0-latency failure.
+// the KeyPoolFilter vetoes every key for the request. PostLLMHooks are still run
+// for this case so the logging plugin records the terminal "error" status and
+// the timeline does not leave the request stuck in "processing"; this predicate
+// is retained primarily for tests and for any caller that wants to distinguish
+// a key-pool veto from a genuine provider failure.
 func isSyntheticNoEligibleKeysError(err *schemas.BifrostError) bool {
 	if err == nil {
 		return false

@@ -532,6 +532,25 @@ func (s *RDBLogStore) BatchCreateIfNotExists(ctx context.Context, entries []*Log
 	}).Create(&entries).Error
 }
 
+// BatchUpsert inserts new log entries or overwrites existing ones by id.
+// Uses ON CONFLICT DO UPDATE to transition an entry that was written earlier
+// with status="processing" to its terminal status (success/error/cancelled).
+// UpdateAll updates every column except the primary key (and inc_number,
+// omitted below) so the row always reflects the latest state of the log.
+func (s *RDBLogStore) BatchUpsert(ctx context.Context, entries []*Log) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	db := s.db.WithContext(ctx)
+	if s.db.Dialector.Name() == "postgres" {
+		db = db.Omit("inc_number")
+	}
+	return db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		UpdateAll: true,
+	}).Create(&entries).Error
+}
+
 // Ping checks if the database is reachable.
 func (s *RDBLogStore) Ping(ctx context.Context) error {
 	return s.db.WithContext(ctx).Exec("SELECT 1").Error

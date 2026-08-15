@@ -3189,13 +3189,12 @@ func TestFixedKeyProviderHonoursDeadKeyIDs(t *testing.T) {
 	}
 }
 
-// TestIsSyntheticNoEligibleKeysError pins the exact predicate used by both
-// tryRequest (non-streaming) and tryStreamRequest (streaming) to short-circuit
-// PostLLMHooks for the synthetic 503 "no_eligible_keys" error. When the
-// KeyPoolFilter (provider-cooldown) suppresses every eligible key, no provider
-// call is made, so the logging plugin must not record a spurious 0-latency
-// failed request. The predicate must ONLY match the genuine synthetic error and
-// not a real provider 503 (which did reach the provider and should be logged).
+// TestIsSyntheticNoEligibleKeysError pins the exact predicate that
+// distinguishes the synthetic 503 "no_eligible_keys" error (raised when the
+// KeyPoolFilter suppresses every eligible key before any provider call) from a
+// real provider 503 (which did reach the provider). Callers use it to decide
+// whether the request reached the provider; it does not gate PostLLMHooks
+// anymore — those always run so the logging plugin records the terminal status.
 func TestIsSyntheticNoEligibleKeysError(t *testing.T) {
 	status503 := 503
 	status500 := 500
@@ -3243,19 +3242,19 @@ func TestIsSyntheticNoEligibleKeysError(t *testing.T) {
 }
 
 // TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys is
-// the streaming regression test for the provider-cooldown double-logging bug.
+// the streaming regression test for the key-pool veto path.
 //
 // When the KeyPoolFilter vetoes every eligible key on a STREAMING request
 // (canRotate=false single-key provider), executeRequestWithRetries must:
 //   - surface exactly the synthetic 503 "no_eligible_keys" error that
-//     isSyntheticNoEligibleKeysError matches (which is what lets
-//     tryStreamRequest skip PostLLMHooks and avoid logging), AND
+//     isSyntheticNoEligibleKeysError matches, AND
 //   - never invoke the provider requestHandler — no provider call happened.
 //
-// This is the red-phase guard for the earlier fix: the non-streaming path
-// (tryRequest) gained its short-circuit but the streaming path (tryStreamRequest)
-// did not, so a vetoed streaming request was still handed to PostLLMHooks and
-// the logging plugin recorded a spurious error with 0ms latency.
+// The synthetic 503 is still passed through PostLLMHooks by the caller
+// (tryStreamRequest / tryRequest) so the logging plugin records the terminal
+// "error" status; this test only pins the error-shape returned from
+// executeRequestWithRetries (which opts out of the provider round-trip), not
+// whether PostLLMHooks run afterwards.
 func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys(t *testing.T) {
 	config := createTestConfig(1, 10*time.Millisecond, 100*time.Millisecond)
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
@@ -3291,8 +3290,8 @@ func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys(
 		t.Fatal("expected a 503 no_eligible_keys error when every key is vetoed, got nil")
 	}
 	// Assert the exact shape isSyntheticNoEligibleKeysError relies on — if this
-	// is not a genuine match, tryStreamRequest will not short-circuit and the
-	// logging plugin will still record a spurious failure.
+	// is not a genuine match, callers cannot distinguish a key-pool veto from a
+	// real provider 503 and may treat it as a logged provider failure.
 	if err.StatusCode == nil || *err.StatusCode != 503 {
 		t.Fatalf("expected status 503, got %v", err.StatusCode)
 	}

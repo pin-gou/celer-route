@@ -182,9 +182,12 @@ func (p *LoggerPlugin) processBatch(batch []*writeQueueEntry) {
 
 	if len(logs) > 0 {
 		// Split into chunks to avoid SQLite's variable limit. Each chunk is
-		// inserted in a single BatchCreateIfNotExists call; individual-insert
-		// fallback is only used when a chunk genuinely fails (e.g. serialization
-		// error), not because the batch was too large for the dialect.
+		// upserted in a single BatchUpsert call; individual-insert fallback is
+		// only used when a chunk genuinely fails (e.g. serialization error),
+		// not because the batch was too large for the dialect. BatchUpsert is
+		// used (not BatchCreateIfNotExists) because an entry may have been
+		// written as "processing" in an earlier flush and a later flush must
+		// transition it to its terminal status (success/error/cancelled).
 		chunkSize := maxBatchSizeForStore
 		for i := 0; i < len(logs); i += chunkSize {
 			end := i + chunkSize
@@ -192,18 +195,18 @@ func (p *LoggerPlugin) processBatch(batch []*writeQueueEntry) {
 				end = len(logs)
 			}
 			chunk := logs[i:end]
-			if err := p.store.BatchCreateIfNotExists(p.ctx, chunk); err != nil {
-				p.logger.Warn("batch insert failed for %d entries, falling back to individual inserts: %v", len(chunk), err)
+			if err := p.store.BatchUpsert(p.ctx, chunk); err != nil {
+				p.logger.Warn("batch upsert failed for %d entries, falling back to individual upserts: %v", len(chunk), err)
 				// Individual fallback — isolate the bad entry instead of losing the whole batch
 				for _, log := range chunk {
-					if err := p.store.BatchCreateIfNotExists(p.ctx, []*logstore.Log{log}); err != nil {
-						p.logger.Warn("individual insert failed for log %s, retrying without payload fields: %v", log.ID, err)
+					if err := p.store.BatchUpsert(p.ctx, []*logstore.Log{log}); err != nil {
+						p.logger.Warn("individual upsert failed for log %s, retrying without payload fields: %v", log.ID, err)
 						// Last resort: strip the parsed payload fields (one of them
 						// failed serialization) and keep the scalar row — a log
 						// without content beats a silently dropped request.
 						stripUnserializablePayloads(log)
-						if err := p.store.BatchCreateIfNotExists(p.ctx, []*logstore.Log{log}); err != nil {
-							p.logger.Warn("payload-stripped insert failed for log %s: %v", log.ID, err)
+						if err := p.store.BatchUpsert(p.ctx, []*logstore.Log{log}); err != nil {
+							p.logger.Warn("payload-stripped upsert failed for log %s: %v", log.ID, err)
 							p.droppedRequests.Add(1)
 						}
 					}

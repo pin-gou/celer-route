@@ -33,11 +33,34 @@ func logStatusForError(err *schemas.BifrostError) string {
 	return logStatusError
 }
 
+// isNoEligibleKeysError reports whether the error is the synthetic 503
+// "no_eligible_keys" raised when the KeyPoolFilter suppresses every eligible key
+// before any provider call. Such requests never reached the provider, so they
+// are logged with the terminal "cancelled" status instead of "error": this
+// terminates the timeline block (processing → grey) without inflating the
+// error rate or cost/latency aggregates, since cancelled is counted separately
+// and costs are only ever non-zero on successful provider responses.
+func isNoEligibleKeysError(err *schemas.BifrostError) bool {
+	if err == nil {
+		return false
+	}
+	if err.StatusCode == nil || *err.StatusCode != 503 {
+		return false
+	}
+	if err.Error != nil && err.Error.Type != nil && *err.Error.Type == "no_eligible_keys" {
+		return true
+	}
+	return err.Type != nil && *err.Type == "no_eligible_keys"
+}
+
 func isCancelledLogError(err *schemas.BifrostError) bool {
 	if err == nil {
 		return false
 	}
 	if err.StatusCode != nil && *err.StatusCode == 499 {
+		return true
+	}
+	if isNoEligibleKeysError(err) {
 		return true
 	}
 	if err.Error == nil || err.Error.Type == nil {
@@ -366,7 +389,22 @@ func (p *LoggerPlugin) updateLogEntry(
 			updates["raw_response"] = string(rawResponseBytes)
 		}
 	}
-	return p.store.Update(ctx, requestID, updates)
+	if err := p.store.Update(ctx, requestID, updates); err != nil {
+		return err
+	}
+	// Notify SSE subscribers of the status update so the timeline reflects
+	// the transition without waiting for the batch writer's next flush.
+	latencyPtr := (*float64)(nil)
+	if latency > 0 {
+		l := float64(latency)
+		latencyPtr = &l
+	}
+	p.notifyActiveLogSubscribers(&logstore.Log{
+		ID:       requestID,
+		Status:   data.Status,
+		Latency:  latencyPtr,
+	})
+	return nil
 }
 
 // makePostWriteCallback creates a callback function for use after the batch writer commits.
@@ -1374,19 +1412,40 @@ func (p *LoggerPlugin) ListTimelineEventsByLogID(ctx context.Context, logID stri
 
 // GetActiveLogs returns a snapshot of currently processing log entries.
 func (p *LoggerPlugin) GetActiveLogs(ctx context.Context) ([]*logstore.Log, error) {
+	var logs []*logstore.Log
+	seen := make(map[string]bool)
+
+	// 1. In-memory pending logs that have not been written to the DB yet.
+	// PreLLMHook stores these with status "processing" and defers the DB
+	// write to PostLLMHook, so a DB-only query would miss them.
+	p.pendingLogsEntries.Range(func(key, value any) bool {
+		if pending, ok := value.(*PendingLogData); ok {
+			entry := buildInitialLogEntry(pending)
+			if entry != nil && !seen[entry.ID] {
+				logs = append(logs, entry)
+				seen[entry.ID] = true
+			}
+		}
+		return true
+	})
+
+	// 2. DB processing logs that were written by the batch writer but have
+	// not yet transitioned to a terminal status.
 	filters := logstore.SearchFilters{
 		Status: []string{"processing"},
 	}
 	result, err := p.store.SearchLogs(ctx, filters, logstore.PaginationOptions{Limit: 100, SortBy: "timestamp", Order: "desc"})
 	if err != nil {
-		return nil, err
+		// Return whatever we collected from memory; DB errors are non-fatal.
+		return logs, nil
 	}
-	if result == nil || len(result.Logs) == 0 {
-		return nil, nil
-	}
-	logs := make([]*logstore.Log, len(result.Logs))
-	for i := range result.Logs {
-		logs[i] = &result.Logs[i]
+	if result != nil {
+		for i := range result.Logs {
+			if !seen[result.Logs[i].ID] {
+				logs = append(logs, &result.Logs[i])
+				seen[result.Logs[i].ID] = true
+			}
+		}
 	}
 	return logs, nil
 }

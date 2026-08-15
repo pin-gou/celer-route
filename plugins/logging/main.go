@@ -994,6 +994,9 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 	if callback != nil {
 		callback(p.ctx, buildInitialLogEntry(pending))
 	}
+	// Notify SSE subscribers so the timeline shows the blue "processing" bar
+	// immediately, before the log is written to the DB by the batch writer.
+	p.notifyActiveLogSubscribers(buildInitialLogEntry(pending))
 	return req, nil, nil
 }
 

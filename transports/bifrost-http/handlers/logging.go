@@ -3081,11 +3081,13 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 	})
 }
 
-// getActiveLogStream handles GET /api/logs/active/stream (SSE) - Pushes active
-// log status changes to clients using Server-Sent Events.
-// The stream sends an initial active_logs handshake, then pushes log_updated
-// events for status transitions (processing→success/error). The connection
-// remains open until the client disconnects.
+// getActiveLogStream handles GET /api/logs/active/stream (SSE) - Pushes log
+// status changes to clients using Server-Sent Events.
+// The stream sends:
+//  1. active_logs — initial snapshot of currently processing logs
+//  2. recent_logs — recently completed logs (last 30 s) for quick reconciliation
+//  3. log_updated — incremental updates for every log write/transition
+// The connection remains open until the client disconnects.
 func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("text/event-stream")
 	ctx.Response.Header.Set("Cache-Control", "no-cache")
@@ -3143,10 +3145,35 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 		defer h.logManager.UnsubscribeActiveLogStream(ctx, ch)
 		defer reader.Done()
 
-		// Send initial handshake event
+		// Send initial handshake event (processing logs)
 		handshakeData, _ := sonic.Marshal(entries)
 		if !reader.SendEvent("active_logs", handshakeData) {
 			return
+		}
+
+		// Send recent completed logs (last 30 s) so the client can reconcile
+		// state without needing a separate polling endpoint.
+		thirtySecAgo := time.Now().Add(-30 * time.Second)
+		recentResult, searchErr := h.logManager.Search(ctx, &logstore.SearchFilters{
+			StartTime: &thirtySecAgo,
+		}, &logstore.PaginationOptions{Limit: 100, SortBy: "timestamp", Order: "desc"})
+		if searchErr == nil && recentResult != nil && len(recentResult.Logs) > 0 {
+			recentEntries := make([]activeLogEntry, 0, len(recentResult.Logs))
+			for _, l := range recentResult.Logs {
+				if l.Status != "processing" {
+					recentEntries = append(recentEntries, activeLogEntry{
+						ID:        l.ID,
+						Status:    l.Status,
+						Provider:  l.Provider,
+						Model:     l.Model,
+						LatencyMs: l.Latency,
+					})
+				}
+			}
+			if len(recentEntries) > 0 {
+				recentData, _ := sonic.Marshal(recentEntries)
+				reader.SendEvent("recent_logs", recentData)
+			}
 		}
 
 		// Loop: push incremental log_updated events until client disconnects
@@ -3157,10 +3184,12 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 					return
 				}
 				updateData, _ := sonic.Marshal(map[string]interface{}{
-					"id":              updatedLog.ID,
-					"previous_status": "processing",
-					"status":          updatedLog.Status,
-					"latency_ms":      updatedLog.Latency,
+					"id":         updatedLog.ID,
+					"status":     updatedLog.Status,
+					"provider":   updatedLog.Provider,
+					"model":      updatedLog.Model,
+					"timestamp":  updatedLog.Timestamp.Format(time.RFC3339Nano),
+					"latency_ms": updatedLog.Latency,
 				})
 				if !reader.SendEvent("log_updated", updateData) {
 					return

@@ -25,6 +25,11 @@ type LogStore interface {
 	Create(ctx context.Context, entry *Log) error
 	CreateIfNotExists(ctx context.Context, entry *Log) error
 	BatchCreateIfNotExists(ctx context.Context, entries []*Log) error
+	// BatchUpsert inserts new log entries or overwrites existing ones by id
+	// (ON CONFLICT DO UPDATE). Used when an entry may have been written as
+	// "processing" in an earlier batch flush and a later write needs to
+	// transition it to its terminal status.
+	BatchUpsert(ctx context.Context, entries []*Log) error
 	FindByID(ctx context.Context, id string) (*Log, error)
 	IsLogEntryPresent(ctx context.Context, id string) (bool, error)
 	FindFirst(ctx context.Context, query any, fields ...string) (*Log, error)

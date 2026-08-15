@@ -1129,11 +1129,12 @@ func TestGetActiveLogStream_Handshake(t *testing.T) {
 
 	// Push a log_updated event through the channel
 	updatedLog := &logstore.Log{
-		ID:       "log-active-1",
-		Status:   "success",
-		Provider: "openai",
-		Model:    "gpt-4",
-		Latency:  ptrFloat64(1234.0),
+		ID:        "log-active-1",
+		Status:    "success",
+		Provider:  "openai",
+		Model:     "gpt-4",
+		Timestamp: now,
+		Latency:   ptrFloat64(1234.0),
 	}
 	activeLogStreamCh <- updatedLog
 
@@ -1150,6 +1151,18 @@ func TestGetActiveLogStream_Handshake(t *testing.T) {
 	}
 	if !strings.Contains(string(chunk2), "success") {
 		t.Fatalf("expected 'success' in log_updated chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), "openai") {
+		t.Fatalf("expected 'openai' provider in log_updated chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), "gpt-4") {
+		t.Fatalf("expected 'gpt-4' model in log_updated chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), "1234") {
+		t.Fatalf("expected latency 1234 in log_updated chunk, got: %q", chunk2)
+	}
+	if !strings.Contains(string(chunk2), now.Format(time.RFC3339Nano)) {
+		t.Fatalf("expected timestamp in log_updated chunk, got: %q", chunk2)
 	}
 
 	// Close the client connection to terminate the streaming

@@ -36,6 +36,21 @@ func (s *recordingStore) BatchCreateIfNotExists(ctx context.Context, entries []*
 	return nil
 }
 
+func (s *recordingStore) BatchUpsert(ctx context.Context, entries []*logstore.Log) error {
+	if s.delay > 0 {
+		time.Sleep(s.delay)
+	}
+	if err := s.LogStore.BatchUpsert(ctx, entries); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	for _, e := range entries {
+		s.received = append(s.received, e.ID)
+	}
+	s.mu.Unlock()
+	return nil
+}
+
 func (s *recordingStore) uniqueIDs() map[string]struct{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()

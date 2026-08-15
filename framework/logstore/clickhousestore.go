@@ -314,6 +314,41 @@ func (s *ClickHouseLogStore) BatchCreateIfNotExists(ctx context.Context, entries
 	})
 }
 
+// BatchUpsert inserts or overwrites log entries by id. ClickHouse has no ON
+// CONFLICT; instead the `ver` column defaults to now64() and ReplacingMergeTree
+// keeps the row with the highest ver, so a plain INSERT for an existing id is
+// enough — the newest row wins on the next merge and replaces the old state
+// (e.g. status transitions from "processing" to "success").
+func (s *ClickHouseLogStore) BatchUpsert(ctx context.Context, entries []*Log) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(entries))
+	return forEachRMWChunk(entries, func(chunk []*Log) error {
+		fresh := make([]*Log, 0, len(chunk))
+		ids := make([]string, 0, len(chunk))
+		for _, e := range chunk {
+			if e == nil {
+				continue
+			}
+			if _, ok := seen[e.ID]; ok {
+				continue
+			}
+			seen[e.ID] = struct{}{}
+			fresh = append(fresh, e)
+			ids = append(ids, e.ID)
+		}
+		if len(fresh) == 0 {
+			return nil
+		}
+		defer s.lockRMWBatch("logs", ids)()
+		// Omit inc_number so ClickHouse's DEFAULT generateSnowflakeID() fires.
+		// Insert every entry; ReplacingMergeTree merges on `ver` so an existing
+		// row with the same id is overwritten by the newer row.
+		return s.db.WithContext(ctx).Omit("inc_number").Create(&fresh).Error
+	})
+}
+
 // BatchCreateMCPToolLogsIfNotExists inserts the MCP tool log entries whose
 // ids are not already present. See CreateIfNotExists.
 func (s *ClickHouseLogStore) BatchCreateMCPToolLogsIfNotExists(ctx context.Context, entries []*MCPToolLog) error {

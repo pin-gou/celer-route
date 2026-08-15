@@ -1426,9 +1426,9 @@ export interface TimelineResponse {
 
 export interface ActiveLogStreamEvent {
 	id: string;
-	previous_status?: string;
 	status: string;
 	provider?: string;
 	model?: string;
+	timestamp?: string;
 	latency_ms?: number | null;
 }

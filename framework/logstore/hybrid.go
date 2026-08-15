@@ -358,6 +358,18 @@ func (h *HybridLogStore) CreateIfNotExists(ctx context.Context, entry *Log) erro
 // call, then enqueues one object-storage upload per inserted entry. Nil
 // entries are skipped. On DB failure no uploads are enqueued.
 func (h *HybridLogStore) BatchCreateIfNotExists(ctx context.Context, entries []*Log) error {
+	return h.batchUpsertLike(ctx, entries, h.inner.BatchCreateIfNotExists)
+}
+
+// BatchUpsert upserts many lightweight DB rows in a single inner call, then
+// re-enqueues one object-storage upload per upserted entry (overwriting the
+// previous payload, since status transitions like processing → success now
+// carry the full response body). Nil entries are skipped.
+func (h *HybridLogStore) BatchUpsert(ctx context.Context, entries []*Log) error {
+	return h.batchUpsertLike(ctx, entries, h.inner.BatchUpsert)
+}
+
+func (h *HybridLogStore) batchUpsertLike(ctx context.Context, entries []*Log, inner func(context.Context, []*Log) error) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -396,7 +408,7 @@ func (h *HybridLogStore) BatchCreateIfNotExists(ctx context.Context, entries []*
 	if len(dbEntries) == 0 {
 		return nil
 	}
-	if err := h.inner.BatchCreateIfNotExists(ctx, dbEntries); err != nil {
+	if err := inner(ctx, dbEntries); err != nil {
 		return err
 	}
 
