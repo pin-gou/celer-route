@@ -233,6 +233,7 @@ export function LogsDataTable({
 									className={cn(
 										"hover:bg-muted/50 group/table-row min-h-[40px] cursor-pointer",
 										(row.original as DisplayLogEntry).__chainChild && "bg-muted/30 border-l-2 border-l-zinc-300 dark:border-l-zinc-600",
+										(row.original as DisplayLogEntry).__processing && "bg-blue-50/30 dark:bg-blue-950/20 animate-pulse",
 									)}
 								>
 									{row.getVisibleCells().map((cell) => {

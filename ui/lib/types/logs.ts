@@ -629,8 +629,9 @@ export interface LogEntry {
 }
 
 // A log row as rendered by the logs table. __chainChild marks rows injected
-// below an expanded parent in the grouped view; it never comes from the API.
-export type DisplayLogEntry = LogEntry & { __chainChild?: boolean };
+// below an expanded parent in the grouped view; __processing marks rows from
+// SSE active-logs; neither comes from the API.
+export type DisplayLogEntry = LogEntry & { __chainChild?: boolean; __processing?: boolean };
 
 export interface LogFilters {
 	providers?: string[];

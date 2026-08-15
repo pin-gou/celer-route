@@ -21,6 +21,7 @@ import {
 } from "@/lib/store";
 import { useLazyGetLogByIdQuery, useLazyGetLogsQuery } from "@/lib/store/apis/logsApi";
 import type { DisplayLogEntry, LogEntry, LogFilters, Pagination } from "@/lib/types/logs";
+import { useLogsTimelineSSE, type ActiveLogEntry } from "@/hooks/useLogsTimelineSSE";
 import { dateUtils } from "@/lib/types/logs";
 import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
@@ -35,6 +36,38 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // A fallback chain is a handful of attempts, so one page covers every realistic
 // chain. Capped at the list endpoint's own maximum.
 const chainChildrenPageLimit = 1000;
+
+// ---------------------------------------------------------------------------
+// SSE helpers — client-side filter matching for real-time log insertion
+// ---------------------------------------------------------------------------
+
+function matchesFilters(entry: { id: string; status: string; provider?: string; model?: string }, filters: LogFilters): boolean {
+	if (filters.status && filters.status.length > 0 && !filters.status.includes(entry.status)) return false;
+	if (filters.providers && filters.providers.length > 0 && entry.provider && !filters.providers.includes(entry.provider)) return false;
+	if (filters.models && filters.models.length > 0 && entry.model && !filters.models.includes(entry.model)) return false;
+	return true;
+}
+
+function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
+	return {
+		id: a.id,
+		object: "chat.completion",
+		timestamp: a.timestamp ?? new Date().toISOString(),
+		provider: a.provider ?? "",
+		model: a.model ?? "",
+		status: "processing",
+		latency: null as unknown as number,
+		cost: null as unknown as number,
+		stream: false,
+		number_of_retries: 0,
+		fallback_index: 0,
+		input_history: [],
+		responses_input_history: [],
+		created_at: a.timestamp ?? new Date().toISOString(),
+		token_usage: a.token_usage ?? undefined,
+		__processing: true,
+	} as DisplayLogEntry;
+}
 
 export default function LogsPage() {
 	const { t } = useTranslation("logs");
@@ -51,6 +84,7 @@ export default function LogsPage() {
 
 	const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 	const [sessionHighlightedLogId, setSessionHighlightedLogId] = useState<string | null>(null);
+	const [sseNewLogs, setSseNewLogs] = useState<DisplayLogEntry[]>([]);
 	// Stable handler so SessionDetailsSheet's loadSessionPage useCallback doesn't
 	// recreate on every parent re-render. Without this, every live WebSocket log
 	// tick would re-render LogsPage, hand the sheet a fresh inline arrow, recreate
@@ -314,7 +348,9 @@ export default function LogsPage() {
 			rootsOnly: grouped,
 		},
 		{
-			pollingInterval: showEmptyState || polling ? 10000 : 0,
+			// 30s: new rows arrive near-instantly via SSE; this poll reconciles the
+			// full entries and pagination instead of being the primary update path.
+			pollingInterval: showEmptyState || polling ? 30000 : 0,
 			skipPollingIfUnfocused: true,
 		},
 	);
@@ -347,6 +383,45 @@ export default function LogsPage() {
 		},
 	);
 
+	// "Live view" — the table whose top of page is the newest log: polling
+	// enabled, first page, sorted by timestamp desc. Only there do we surface
+	// in-flight (processing) rows and instantly inject newly completed logs.
+	const isLiveView = polling && pagination.offset === 0 && pagination.sort_by === "timestamp" && pagination.order === "desc";
+
+	// Refs so the SSE callback reads the latest state without re-connecting.
+	const isLiveViewRef = useRef(isLiveView);
+	isLiveViewRef.current = isLiveView;
+	const filtersRef = useRef(filters);
+	filtersRef.current = filters;
+
+	// SSE subscription for real-time log updates. Always connected (the timeline
+	// page pattern); the hooks' every other page/filter/sort configuration simply
+	// ignores the events. New completed logs arrive via onNewLog instead of
+	// waiting for the next poll cycle.
+	const handleSseNewLog = useCallback((entry: ActiveLogEntry) => {
+		if (!isLiveViewRef.current) return;
+		if (entry.status === "processing") return;
+		if (!matchesFilters(entry, filtersRef.current)) return;
+		setSseNewLogs((prev) => {
+			if (prev.some((l) => l.id === entry.id)) return prev;
+			const log: DisplayLogEntry = {
+				...toProcessingEntry(entry),
+				__processing: false,
+				status: entry.status,
+				latency: entry.latency ?? (null as unknown as number),
+			};
+			return [log, ...prev];
+		});
+	}, []);
+
+	const { activeLogs: sseActiveLogs } = useLogsTimelineSSE({ onNewLog: handleSseNewLog });
+
+	// Clear SSE-injected rows when the live view is exited — the next poll will
+	// shadow them with full entries from the API.
+	useEffect(() => {
+		if (!isLiveView) setSseNewLogs([]);
+	}, [isLiveView]);
+
 	// Set showEmptyState on first response; clear it as soon as logs appear.
 	useEffect(() => {
 		if (!logsData) return;
@@ -357,6 +432,14 @@ export default function LogsPage() {
 			setShowEmptyState(false);
 		}
 	}, [logsData, showEmptyState]);
+
+	// Dismiss the empty state when SSE brings live data (processing or completed
+	// rows) before the first poll cycle returns.
+	useEffect(() => {
+		if (showEmptyState && (sseActiveLogs.length > 0 || sseNewLogs.length > 0)) {
+			setShowEmptyState(false);
+		}
+	}, [showEmptyState, sseActiveLogs, sseNewLogs]);
 
 	const handleFilterByParentRequestId = useCallback(
 		(parentRequestId: string) => {
@@ -433,6 +516,7 @@ export default function LogsPage() {
 
 	const handleDelete = useCallback(
 		async (log: LogEntry) => {
+			if ((log as DisplayLogEntry).__processing) return;
 			try {
 				await deleteLogs({ ids: [log.id] }).unwrap();
 				if (urlState.selected_log === log.id) {
@@ -625,21 +709,42 @@ export default function LogsPage() {
 	const logs = logsData?.logs ?? [];
 	const totalItems = logsData?.stats?.total_requests ?? 0;
 
-	// Grouped view: splice loaded children in below their expanded root. Children
-	// are marked so the table can indent them; they don't affect pagination.
+	// Merge SSE active logs + SSE new logs + RTK Query logs into a single list.
+	// Processing rows appear at the top, then newly completed rows, then the
+	// existing paginated data.
 	const displayLogs: DisplayLogEntry[] = useMemo(() => {
-		if (!grouped || expandedChainIds.size === 0) return logs;
-		const out: DisplayLogEntry[] = [];
-		for (const log of logs) {
-			out.push(log);
-			if (expandedChainIds.has(log.id)) {
-				for (const child of chainChildren[log.id] ?? []) {
-					out.push({ ...child, __chainChild: true });
+		if (!isLiveView) return logs;
+
+		// Ids already served by the API — SSE rows are only ever a fill-in until
+		// the next poll returns their full entry.
+		const apiIds = new Set(logs.map((l) => l.id));
+
+		// 1. Processing rows from SSE active logs (client-filtered).
+		const processingRows: DisplayLogEntry[] = sseActiveLogs
+			.filter((a) => !apiIds.has(a.id))
+			.filter((a) => matchesFilters(a, filters))
+			.map(toProcessingEntry);
+
+		// 2. SSE new completed logs not yet returned by the API.
+		const newCompletedRows: DisplayLogEntry[] = sseNewLogs.filter((l) => !apiIds.has(l.id));
+
+		const out: DisplayLogEntry[] = [...processingRows, ...newCompletedRows];
+
+		// 3. Grouped view: expand chains below their expanded root.
+		if (grouped && expandedChainIds.size > 0) {
+			for (const log of logs) {
+				out.push(log);
+				if (expandedChainIds.has(log.id)) {
+					for (const child of chainChildren[log.id] ?? []) {
+						out.push({ ...child, __chainChild: true });
+					}
 				}
 			}
+			return out;
 		}
-		return out;
-	}, [logs, grouped, expandedChainIds, chainChildren]);
+
+		return [...out, ...logs];
+	}, [logs, grouped, expandedChainIds, chainChildren, sseActiveLogs, sseNewLogs, filters, isLiveView]);
 
 	const tableMeta = useMemo(
 		() => ({ expandedChainIds, loadingChainIds, onToggleChain: handleToggleChain }),
