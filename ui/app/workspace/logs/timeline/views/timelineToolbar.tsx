@@ -17,21 +17,11 @@ export interface TimelineToolbarProps {
 	className?: string;
 }
 
-export function TimelineToolbar({
-	mode,
-	onModeChange,
-	onRefresh,
-	isLive,
-	onLiveToggle,
-	className,
-}: TimelineToolbarProps) {
+export function TimelineToolbar({ mode, onModeChange, onRefresh, isLive, onLiveToggle, className }: TimelineToolbarProps) {
 	return (
-		<div
-			data-testid="timeline-toolbar"
-			className={cn("flex items-center gap-2", className)}
-		>
+		<div data-testid="timeline-toolbar" className={cn("flex items-center gap-2", className)}>
 			{/* Mode selector */}
-			<div className="flex items-center rounded-md border bg-muted/30 p-0.5" data-testid="timeline-mode-selector">
+			<div className="bg-muted/30 flex items-center rounded-md border p-0.5" data-testid="timeline-mode-selector">
 				<button
 					type="button"
 					data-testid="timeline-mode-follow"
@@ -68,25 +58,13 @@ export function TimelineToolbar({
 			</div>
 
 			{/* Live toggle */}
-			<Button
-				variant="outline"
-				size="sm"
-				data-testid="timeline-live-toggle"
-				onClick={() => onLiveToggle(!isLive)}
-				className="gap-1.5"
-			>
+			<Button variant="outline" size="sm" data-testid="timeline-live-toggle" onClick={() => onLiveToggle(!isLive)} className="gap-1.5">
 				{isLive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
 				<span className="text-xs">{isLive ? "Pause" : "Live"}</span>
 			</Button>
 
 			{/* Refresh */}
-			<Button
-				variant="ghost"
-				size="sm"
-				data-testid="timeline-refresh-button"
-				onClick={onRefresh}
-				className="gap-1.5"
-			>
+			<Button variant="ghost" size="sm" data-testid="timeline-refresh-button" onClick={onRefresh} className="gap-1.5">
 				<RefreshCw className="h-3.5 w-3.5" />
 				<span className="text-xs">Refresh</span>
 			</Button>

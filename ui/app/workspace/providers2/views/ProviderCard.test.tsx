@@ -44,13 +44,7 @@ describe("ProviderCard", () => {
 	// -----------------------------------------------------------------------
 
 	it("should render provider icon", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		// Provider icon should be rendered with a data-testid
 		const icon = screen.getByTestId("providers2-card-icon-openai");
@@ -58,25 +52,13 @@ describe("ProviderCard", () => {
 	});
 
 	it("should render provider name", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.getByText("openai")).toBeTruthy();
 	});
 
 	it("should render health badge with correct status", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		const badge = screen.getByTestId("providers2-card-health-badge");
 		expect(badge).toBeTruthy();
@@ -88,61 +70,31 @@ describe("ProviderCard", () => {
 	// -----------------------------------------------------------------------
 
 	it("should render keys count as '3 keys'", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.getByText(/3 keys/i)).toBeTruthy();
 	});
 
 	it("should render models count as '47 models'", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.getByText(/47 models/i)).toBeTruthy();
 	});
 
 	it("should render today requests count as '1284 reqs'", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.getByText(/1284/i)).toBeTruthy();
 	});
 
 	it("should render today errors count", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.getByText(/3 err/i)).toBeTruthy();
 	});
 
 	it("should render last error time when last_error_at is present", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.getByTestId("providers2-card-last-error")).toBeTruthy();
 	});
@@ -152,52 +104,28 @@ describe("ProviderCard", () => {
 	// -----------------------------------------------------------------------
 
 	it("should render a toggle switch for bulk enable/disable", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		const toggle = screen.getByTestId("providers2-card-toggle");
 		expect(toggle).toBeTruthy();
 	});
 
 	it("should call onToggle when toggle is clicked", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		fireEvent.click(screen.getByTestId("providers2-card-toggle"));
 		expect(mockOnToggle).toHaveBeenCalledTimes(1);
 	});
 
 	it("should render a Quick test button", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		const quickTestBtn = screen.getByTestId("providers2-card-quick-test");
 		expect(quickTestBtn).toBeTruthy();
 	});
 
 	it("should call onQuickTest when Quick test button is clicked", () => {
-		render(
-			<ProviderCard
-				provider={mockProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		fireEvent.click(screen.getByTestId("providers2-card-quick-test"));
 		expect(mockOnQuickTest).toHaveBeenCalledTimes(1);
@@ -213,13 +141,7 @@ describe("ProviderCard", () => {
 			last_error_at: null,
 		};
 
-		render(
-			<ProviderCard
-				provider={providerWithoutError}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={providerWithoutError} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.queryByTestId("providers2-card-last-error")).toBeNull();
 	});
@@ -231,13 +153,7 @@ describe("ProviderCard", () => {
 			keys_health_status: "degraded" as const,
 		};
 
-		render(
-			<ProviderCard
-				provider={erroredProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={erroredProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		const badge = screen.getByTestId("providers2-card-health-badge");
 		expect(badge.getAttribute("data-health-status")).toBe("degraded");
@@ -253,13 +169,7 @@ describe("ProviderCard", () => {
 			last_error_at: null,
 		};
 
-		render(
-			<ProviderCard
-				provider={emptyProvider}
-				onToggle={mockOnToggle}
-				onQuickTest={mockOnQuickTest}
-			/>,
-		);
+		render(<ProviderCard provider={emptyProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
 
 		expect(screen.getByText(/0 keys/i)).toBeTruthy();
 		expect(screen.getByText(/0 models/i)).toBeTruthy();

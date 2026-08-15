@@ -29,6 +29,8 @@ import ConfirmDeleteProviderDialog from "./dialogs/confirmDeleteProviderDialog";
 import ConfirmRedirectionDialog from "./dialogs/confirmRedirection";
 import { AddProviderDropdown } from "./views/addProviderDropdown";
 import { ProvidersEmptyState } from "./views/providersEmptyState";
+import { Button } from "@/components/ui/button";
+import { ArrowUpRight } from "lucide-react";
 
 export default function Providers() {
 	const { t } = useTranslation(["providers", "common"]);
@@ -98,7 +100,7 @@ export default function Providers() {
 				});
 				return;
 			});
-		}, [provider, isLoadingProviders]);
+	}, [provider, isLoadingProviders]);
 
 	useEffect(() => {
 		if (selectedProvider || configuredProviders.length === 0 || provider) return;
@@ -166,112 +168,129 @@ export default function Providers() {
 	}
 
 	return (
-		<div className="flex h-full w-full flex-row gap-4">
-			<ConfirmDeleteProviderDialog
-				provider={selectedProvider!}
-				show={showDeleteProviderDialog}
-				onCancel={() => setShowDeleteProviderDialog(false)}
-				onDelete={() => {
-					const next = configuredProviders.filter((p) => p.name !== selectedProvider?.name)[0];
-					setProvider(next?.name ?? null);
-					setShowDeleteProviderDialog(false);
-				}}
-			/>
-			<ConfirmRedirectionDialog
-				show={showRedirectionDialog}
-				onCancel={() => setShowRedirectionDialog(false)}
-				onContinue={() => {
-					setShowRedirectionDialog(false);
-					if (pendingRedirection) setProvider(pendingRedirection);
-					setPendingRedirection(undefined);
-				}}
-			/>
-			<AddCustomProviderSheet
-				show={showCustomProviderSheet}
-				onClose={() => setShowCustomProviderSheet(false)}
-				onSave={(providerName) => {
-					setTimeout(() => setProvider(providerName), 300);
-					setShowCustomProviderSheet(false);
-				}}
-			/>
-			<div className="flex flex-col" style={{ maxHeight: "calc(100vh - 70px)", width: "300px" }}>
-				<TooltipProvider>
-					<div className="custom-scrollbar flex-1 overflow-y-auto">
-						<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
-							{/* Configured Providers (standard with keys + custom) */}
-							{configuredProviders.length > 0 && (
-								<div className="mb-4">
-									<div className="text-muted-foreground mb-2 text-xs font-medium">{t("list.configuredProviders")}</div>
-									{configuredProviders.map((p) => {
-										const isCustom = !ProviderNames.includes(p.name as KnownProvider);
-										const label = isCustom ? p.name : ProviderLabels[p.name as keyof typeof ProviderLabels];
-										return (
-											<div
-												key={p.name}
-												data-testid={`provider-item-${p.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}
-												className={cn(
-													"mb-1 flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm border px-3 text-sm",
-													selectedProvider?.name === p.name
-														? "bg-secondary opacity-100 hover:opacity-100"
-														: "hover:bg-secondary cursor-pointer border-transparent opacity-100 hover:border",
-												)}
-												onClick={(e) => {
-													e.preventDefault();
-													e.stopPropagation();
-													if (providerFormIsDirty) {
-														setPendingRedirection(p.name);
-														setShowRedirectionDialog(true);
-														return;
-													}
-													setProvider(p.name);
-												}}
-											>
-												<RenderProviderIcon
-													provider={(isCustom ? p.custom_provider_config?.base_provider_type : p.name) as ProviderIconType}
-													size="sm"
-													className="h-4 w-4 shrink-0"
-												/>
-												<TruncatedLabel className="flex-1 text-sm">{label}</TruncatedLabel>
-												<KeyDiscoveryFailedBadge provider={p} />
-												<ProviderStatusBadge status={p.provider_status} />
-												{isCustom && (
-													<Badge variant="secondary" className="text-muted-foreground ml-auto shrink-0 px-1.5 py-0.5 text-[10px] font-bold">
-														{t("common:common.custom")}
-													</Badge>
-												)}
-											</div>
-										);
-									})}
-								</div>
-							)}
-							{hasProviderCreateAccess ? (
-								<div className="pb-4">
-									<AddProviderDropdown
-										disabled={!hasProviderCreateAccess}
-										existingInSidebar={existingInSidebarNames}
-										knownProviders={knownProviders}
-										onSelectKnownProvider={handleSelectKnownProvider}
-										onAddCustomProvider={() => setShowCustomProviderSheet(true)}
-									/>
-								</div>
-							) : null}
-						</div>
-					</div>
-				</TooltipProvider>
+		<div className="flex h-full w-full flex-col gap-4">
+			<div className="flex items-center justify-end px-4 pt-2">
+				<Button
+					variant="outline"
+					size="sm"
+					data-testid="providers-try-new-view"
+					onClick={() => navigate({ to: "/workspace/providers2" })}
+					className="gap-1 text-xs"
+				>
+					Try new view
+					<ArrowUpRight className="h-3 w-3" />
+				</Button>
 			</div>
-			{isLoadingProvider && (
-				<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
-					<FullPageLoader />
+			<div className="flex h-full w-full flex-row gap-4">
+				<ConfirmDeleteProviderDialog
+					provider={selectedProvider!}
+					show={showDeleteProviderDialog}
+					onCancel={() => setShowDeleteProviderDialog(false)}
+					onDelete={() => {
+						const next = configuredProviders.filter((p) => p.name !== selectedProvider?.name)[0];
+						setProvider(next?.name ?? null);
+						setShowDeleteProviderDialog(false);
+					}}
+				/>
+				<ConfirmRedirectionDialog
+					show={showRedirectionDialog}
+					onCancel={() => setShowRedirectionDialog(false)}
+					onContinue={() => {
+						setShowRedirectionDialog(false);
+						if (pendingRedirection) setProvider(pendingRedirection);
+						setPendingRedirection(undefined);
+					}}
+				/>
+				<AddCustomProviderSheet
+					show={showCustomProviderSheet}
+					onClose={() => setShowCustomProviderSheet(false)}
+					onSave={(providerName) => {
+						setTimeout(() => setProvider(providerName), 300);
+						setShowCustomProviderSheet(false);
+					}}
+				/>
+				<div className="flex flex-col" style={{ maxHeight: "calc(100vh - 70px)", width: "300px" }}>
+					<TooltipProvider>
+						<div className="custom-scrollbar flex-1 overflow-y-auto">
+							<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
+								{/* Configured Providers (standard with keys + custom) */}
+								{configuredProviders.length > 0 && (
+									<div className="mb-4">
+										<div className="text-muted-foreground mb-2 text-xs font-medium">{t("list.configuredProviders")}</div>
+										{configuredProviders.map((p) => {
+											const isCustom = !ProviderNames.includes(p.name as KnownProvider);
+											const label = isCustom ? p.name : ProviderLabels[p.name as keyof typeof ProviderLabels];
+											return (
+												<div
+													key={p.name}
+													data-testid={`provider-item-${p.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}
+													className={cn(
+														"mb-1 flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm border px-3 text-sm",
+														selectedProvider?.name === p.name
+															? "bg-secondary opacity-100 hover:opacity-100"
+															: "hover:bg-secondary cursor-pointer border-transparent opacity-100 hover:border",
+													)}
+													onClick={(e) => {
+														e.preventDefault();
+														e.stopPropagation();
+														if (providerFormIsDirty) {
+															setPendingRedirection(p.name);
+															setShowRedirectionDialog(true);
+															return;
+														}
+														setProvider(p.name);
+													}}
+												>
+													<RenderProviderIcon
+														provider={(isCustom ? p.custom_provider_config?.base_provider_type : p.name) as ProviderIconType}
+														size="sm"
+														className="h-4 w-4 shrink-0"
+													/>
+													<TruncatedLabel className="flex-1 text-sm">{label}</TruncatedLabel>
+													<KeyDiscoveryFailedBadge provider={p} />
+													<ProviderStatusBadge status={p.provider_status} />
+													{isCustom && (
+														<Badge
+															variant="secondary"
+															className="text-muted-foreground ml-auto shrink-0 px-1.5 py-0.5 text-[10px] font-bold"
+														>
+															{t("common:common.custom")}
+														</Badge>
+													)}
+												</div>
+											);
+										})}
+									</div>
+								)}
+								{hasProviderCreateAccess ? (
+									<div className="pb-4">
+										<AddProviderDropdown
+											disabled={!hasProviderCreateAccess}
+											existingInSidebar={existingInSidebarNames}
+											knownProviders={knownProviders}
+											onSelectKnownProvider={handleSelectKnownProvider}
+											onAddCustomProvider={() => setShowCustomProviderSheet(true)}
+										/>
+									</div>
+								) : null}
+							</div>
+						</div>
+					</TooltipProvider>
 				</div>
-			)}
-			{!selectedProvider && (
-				<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
-					<div className="text-muted-foreground text-sm">{t("list.selectProvider")}</div>
-				</div>
-			)}
-			{!isLoadingProvider && selectedProvider && (
-				<ModelProviderConfig provider={selectedProvider} onRequestDelete={() => setShowDeleteProviderDialog(true)} />
-			)}
+				{isLoadingProvider && (
+					<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
+						<FullPageLoader />
+					</div>
+				)}
+				{!selectedProvider && (
+					<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
+						<div className="text-muted-foreground text-sm">{t("list.selectProvider")}</div>
+					</div>
+				)}
+				{!isLoadingProvider && selectedProvider && (
+					<ModelProviderConfig provider={selectedProvider} onRequestDelete={() => setShowDeleteProviderDialog(true)} />
+				)}
+			</div>
 		</div>
 	);
 }

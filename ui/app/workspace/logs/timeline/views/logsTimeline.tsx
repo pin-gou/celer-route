@@ -57,9 +57,7 @@ function allocateLanes(logs: LogEntry[]): Map<string, number> {
 	const laneEndTimes: number[] = [];
 
 	// Sort by timestamp ascending
-	const sorted = [...logs].sort(
-		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-	);
+	const sorted = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
 	for (const log of sorted) {
 		const start = new Date(log.timestamp).getTime();
@@ -93,14 +91,8 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 	const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 	const containerRef = useRef<HTMLDivElement>(null);
 
-	const timeRangeStart = useMemo(
-		() => new Date(timeRange.start).getTime(),
-		[timeRange.start],
-	);
-	const timeRangeEnd = useMemo(
-		() => new Date(timeRange.end).getTime(),
-		[timeRange.end],
-	);
+	const timeRangeStart = useMemo(() => new Date(timeRange.start).getTime(), [timeRange.start]);
+	const timeRangeEnd = useMemo(() => new Date(timeRange.end).getTime(), [timeRange.end]);
 	const rangeDuration = timeRangeEnd - timeRangeStart;
 
 	// Merge active logs into the logs array for display
@@ -118,7 +110,7 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 					provider: active.provider ?? "",
 					model: active.model ?? "",
 					status: active.status,
-					latency: active.latency ?? null as unknown as number,
+					latency: active.latency ?? (null as unknown as number),
 					stream: false,
 					number_of_retries: 0,
 					fallback_index: 0,
@@ -142,10 +134,7 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 				const logStart = new Date(log.timestamp).getTime();
 				const logEnd = logStart + (log.latency ?? 0);
 				const leftPct = Math.max(0, ((logStart - timeRangeStart) / rangeDuration) * 100);
-				const widthPct = Math.max(
-					0.5,
-					rangeDuration > 0 ? ((log.latency ?? 0) / rangeDuration) * 100 : 0.5,
-				);
+				const widthPct = Math.max(0.5, rangeDuration > 0 ? ((log.latency ?? 0) / rangeDuration) * 100 : 0.5);
 				const lane = laneMap.get(log.id) ?? 0;
 				return {
 					log,
@@ -159,26 +148,20 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 		[mergedLogs, timeRangeStart, rangeDuration, laneMap],
 	);
 
-	const maxLane = useMemo(
-		() => Math.max(0, ...bars.map((b) => b.lane)) + 1,
-		[bars],
-	);
+	const maxLane = useMemo(() => Math.max(0, ...bars.map((b) => b.lane)) + 1, [bars]);
 
 	const laneHeight = 40;
 	const totalHeight = maxLane * laneHeight + 20;
 
-	const handleMouseEnter = useCallback(
-		(log: LogEntry, event: React.MouseEvent) => {
-			setTooltipLog(log);
-			const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-			const containerRect = containerRef.current?.getBoundingClientRect();
-			setTooltipPos({
-				x: rect.left - (containerRect?.left ?? 0) + rect.width / 2,
-				y: rect.top - (containerRect?.top ?? 0) - 8,
-			});
-		},
-		[],
-	);
+	const handleMouseEnter = useCallback((log: LogEntry, event: React.MouseEvent) => {
+		setTooltipLog(log);
+		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		const containerRect = containerRef.current?.getBoundingClientRect();
+		setTooltipPos({
+			x: rect.left - (containerRect?.left ?? 0) + rect.width / 2,
+			y: rect.top - (containerRect?.top ?? 0) - 8,
+		});
+	}, []);
 
 	const handleMouseLeave = useCallback(() => {
 		setTooltipLog(null);
@@ -192,23 +175,15 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 	);
 
 	return (
-		<div
-			ref={containerRef}
-			data-testid="logs-timeline"
-			className={cn("relative w-full overflow-x-auto", className)}
-		>
+		<div ref={containerRef} data-testid="logs-timeline" className={cn("relative w-full overflow-x-auto", className)}>
 			{/* Time axis header */}
-			<div className="sticky top-0 z-10 flex h-6 border-b bg-background text-[11px] text-muted-foreground tabular-nums">
+			<div className="bg-background text-muted-foreground sticky top-0 z-10 flex h-6 border-b text-[11px] tabular-nums">
 				<span className="pl-1">{timeRange.start}</span>
 				<span className="ml-auto pr-1">{timeRange.end}</span>
 			</div>
 
 			{/* Gantt area */}
-			<div
-				className="relative"
-				style={{ height: totalHeight }}
-				data-testid="timeline-gantt-area"
-			>
+			<div className="relative" style={{ height: totalHeight }} data-testid="timeline-gantt-area">
 				{/* Grid lines */}
 				{bars.length > 0 && (
 					<>
@@ -224,7 +199,7 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 						{Array.from({ length: maxLane }, (_, i) => (
 							<div
 								key={`lane-line-${i}`}
-								className="absolute left-0 right-0 border-b border-gray-100 dark:border-gray-800"
+								className="absolute right-0 left-0 border-b border-gray-100 dark:border-gray-800"
 								style={{ top: `${i * laneHeight + laneHeight}px` }}
 							/>
 						))}
@@ -255,10 +230,7 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 						onMouseLeave={handleMouseLeave}
 						onClick={() => handleBarClick(bar.log)}
 					>
-						<span
-							data-testid={`timeline-bar-${bar.log.id}`}
-							className="sr-only"
-						>
+						<span data-testid={`timeline-bar-${bar.log.id}`} className="sr-only">
 							bar-{bar.log.id}
 						</span>
 					</div>
@@ -266,9 +238,7 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 
 				{/* Empty state */}
 				{bars.length === 0 && (
-					<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-						No requests in this time range.
-					</div>
+					<div className="text-muted-foreground flex h-full items-center justify-center text-sm">No requests in this time range.</div>
 				)}
 			</div>
 
@@ -276,7 +246,7 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 			{tooltipLog && (
 				<div
 					data-testid="timeline-tooltip"
-					className="pointer-events-none absolute z-20 rounded-md border bg-popover px-3 py-2 text-xs shadow-md"
+					className="bg-popover pointer-events-none absolute z-20 rounded-md border px-3 py-2 text-xs shadow-md"
 					style={{
 						left: tooltipPos.x,
 						top: tooltipPos.y,
@@ -288,12 +258,8 @@ export function LogsTimeline({ logs, timeRange, onBarClick, activeLogs, classNam
 						<span className="text-muted-foreground">{tooltipLog.model}</span>
 					</div>
 					<div className="text-muted-foreground mt-1 flex gap-3">
-						<span>
-							{(tooltipLog.latency ?? 0).toLocaleString()}ms
-						</span>
-						<span>
-							{tooltipLog.cost != null ? formatCost(tooltipLog.cost) : "—"}
-						</span>
+						<span>{(tooltipLog.latency ?? 0).toLocaleString()}ms</span>
+						<span>{tooltipLog.cost != null ? formatCost(tooltipLog.cost) : "—"}</span>
 					</div>
 				</div>
 			)}

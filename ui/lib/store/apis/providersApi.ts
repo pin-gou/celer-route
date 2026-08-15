@@ -469,6 +469,23 @@ export const providersApi = baseApi.injectEndpoints({
 			}),
 			invalidatesTags: ["Models"],
 		}),
+
+		// Batch update provider keys (enable/disable multiple keys at once)
+		batchUpdateProviderKeys: builder.mutation<
+			{ updated: number; key_ids: string[] },
+			{ provider: string; key_ids: string[]; enabled: boolean }
+		>({
+			query: ({ provider, key_ids, enabled }) => ({
+				url: `/providers/${encodeURIComponent(provider)}/keys/batch`,
+				method: "POST",
+				body: { key_ids, enabled },
+			}),
+			invalidatesTags: (result, error, { provider }) => [
+				{ type: "Providers" as const, id: provider },
+				{ type: "ProviderKeys" as const, id: provider },
+				"DBKeys" as const,
+			],
+		}),
 	}),
 });
 
@@ -500,4 +517,5 @@ export const {
 	useGetModelDetailsQuery,
 	useLazyGetModelDetailsQuery,
 	useUpsertModelCatalogEntriesMutation,
+	useBatchUpdateProviderKeysMutation,
 } = providersApi;

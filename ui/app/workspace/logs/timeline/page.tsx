@@ -33,7 +33,11 @@ export default function TimelinePage() {
 	const [isLive, setIsLive] = useState(false);
 
 	// Fetch logs
-	const { data: logsData, isFetching, refetch } = useGetLogsQuery(
+	const {
+		data: logsData,
+		isFetching,
+		refetch,
+	} = useGetLogsQuery(
 		{
 			filters: {
 				start_time: timeRange.start,
@@ -55,7 +59,7 @@ export default function TimelinePage() {
 	const logs = logsData?.logs ?? [];
 
 	const selectedLog = useMemo(
-		() => (urlState.selected_log ? logs.find((l) => l.id === urlState.selected_log) ?? null : null),
+		() => (urlState.selected_log ? (logs.find((l) => l.id === urlState.selected_log) ?? null) : null),
 		[urlState.selected_log, logs],
 	);
 
@@ -126,13 +130,8 @@ export default function TimelinePage() {
 			)}
 
 			{/* Gantt chart */}
-			<div className="min-h-0 flex-1 overflow-auto rounded-sm border bg-card p-3">
-				<LogsTimeline
-					logs={logs}
-					timeRange={timeRange}
-					onBarClick={handleBarClick}
-					activeLogs={isLive ? activeLogs : undefined}
-				/>
+			<div className="bg-card min-h-0 flex-1 overflow-auto rounded-sm border p-3">
+				<LogsTimeline logs={logs} timeRange={timeRange} onBarClick={handleBarClick} activeLogs={isLive ? activeLogs : undefined} />
 			</div>
 
 			{/* Log detail sheet */}

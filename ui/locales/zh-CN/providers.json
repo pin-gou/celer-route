@@ -1,45 +1,45 @@
 {
-  "page": {
-    "title": "模型提供商",
-    "description": "配置和管理您的 AI 模型提供商"
-  },
-  "list": {
-    "configuredProviders": "已配置的提供商",
-    "addProvider": "添加提供商",
-    "addCustomProvider": "添加自定义提供商",
-    "selectProvider": "选择一个提供商",
-    "noProviders": "尚未配置任何提供商",
-    "noProvidersDescription": "添加您的第一个提供商，开始使用 AI 模型访问。"
-  },
-  "providerStatus": {
-    "active": "活跃",
-    "error": "提供商无法初始化",
-    "deleted": "提供商已删除",
-    "listModelsFailed": "提供商模型发现失败。",
-    "keyDiscoveryFailed": "密钥发现失败"
-  },
-  "details": {
-    "networkConfig": "网络配置",
-    "performanceConfig": "性能配置",
-    "allowedRequests": "允许的请求",
-    "baseUrl": "基础 URL",
-    "timeout": "超时时间",
-    "maxRetries": "最大重试次数",
-    "concurrency": "并发数",
-    "bufferSize": "缓冲区大小",
-    "models": "模型",
-    "apiKey": "API 密钥",
-    "deleteProvider": "删除提供商",
-    "deleteConfirm": "确定要删除此提供商吗？"
-  },
-  "actions": {
-    "configure": "配置",
-    "delete": "删除",
-    "save": "保存配置",
-    "test": "测试连接"
-  },
-  "empty": {
-    "title": "未配置提供商",
-    "description": "添加您的第一个提供商，开始通过 Bifrost 路由 AI 模型请求。"
-  }
+	"page": {
+		"title": "模型提供商",
+		"description": "配置和管理您的 AI 模型提供商"
+	},
+	"list": {
+		"configuredProviders": "已配置的提供商",
+		"addProvider": "添加提供商",
+		"addCustomProvider": "添加自定义提供商",
+		"selectProvider": "选择一个提供商",
+		"noProviders": "尚未配置任何提供商",
+		"noProvidersDescription": "添加您的第一个提供商，开始使用 AI 模型访问。"
+	},
+	"providerStatus": {
+		"active": "活跃",
+		"error": "提供商无法初始化",
+		"deleted": "提供商已删除",
+		"listModelsFailed": "提供商模型发现失败。",
+		"keyDiscoveryFailed": "密钥发现失败"
+	},
+	"details": {
+		"networkConfig": "网络配置",
+		"performanceConfig": "性能配置",
+		"allowedRequests": "允许的请求",
+		"baseUrl": "基础 URL",
+		"timeout": "超时时间",
+		"maxRetries": "最大重试次数",
+		"concurrency": "并发数",
+		"bufferSize": "缓冲区大小",
+		"models": "模型",
+		"apiKey": "API 密钥",
+		"deleteProvider": "删除提供商",
+		"deleteConfirm": "确定要删除此提供商吗？"
+	},
+	"actions": {
+		"configure": "配置",
+		"delete": "删除",
+		"save": "保存配置",
+		"test": "测试连接"
+	},
+	"empty": {
+		"title": "未配置提供商",
+		"description": "添加您的第一个提供商，开始通过 Bifrost 路由 AI 模型请求。"
+	}
 }

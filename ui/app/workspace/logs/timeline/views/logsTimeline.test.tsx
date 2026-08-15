@@ -140,10 +140,7 @@ describe("LogsTimeline — Gantt component", () => {
 		const narrowBarLog = { ...mockLogs[2], id: "narrow", latency: 500 };
 
 		const { container } = render(
-			<LogsTimeline
-				logs={[wideBarLog, narrowBarLog]}
-				timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }}
-			/>,
+			<LogsTimeline logs={[wideBarLog, narrowBarLog]} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />,
 		);
 
 		const wideBar = container.querySelector("[data-log-id='wide']");

@@ -69,10 +69,7 @@ export function useLogsTimelineSSE(): UseLogsTimelineSSEResult {
 				if (idx >= 0) {
 					// If the log transitioned from processing to a terminal state,
 					// remove it from the active list
-					if (
-						update.previous_status === "processing" &&
-						(update.status === "success" || update.status === "error")
-					) {
+					if (update.previous_status === "processing" && (update.status === "success" || update.status === "error")) {
 						const next = [...prev];
 						next.splice(idx, 1);
 						return next;

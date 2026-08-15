@@ -66,26 +66,29 @@ const mockCompletedLog: LogEntry = {
 describe("useLogsTimelineSSE — SSE hook", () => {
 	beforeEach(() => {
 		// Mock EventSource for SSE subscription
-		vi.stubGlobal("EventSource", vi.fn(function() {
-			const listeners: Record<string, Set<(...args: unknown[]) => void>> = {};
-			return {
-				close: vi.fn(),
-				addEventListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-					if (!listeners[event]) listeners[event] = new Set();
-					listeners[event].add(handler);
-				}),
-				removeEventListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-					listeners[event]?.delete(handler);
-				}),
-				// Simulate dispatching events
-				_dispatch: (event: string, data: unknown) => {
-					const eventListeners = listeners[event];
-					if (eventListeners) {
-						eventListeners.forEach((handler) => handler({ data: JSON.stringify(data) }));
-					}
-				},
-			};
-		}));
+		vi.stubGlobal(
+			"EventSource",
+			vi.fn(function () {
+				const listeners: Record<string, Set<(...args: unknown[]) => void>> = {};
+				return {
+					close: vi.fn(),
+					addEventListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+						if (!listeners[event]) listeners[event] = new Set();
+						listeners[event].add(handler);
+					}),
+					removeEventListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+						listeners[event]?.delete(handler);
+					}),
+					// Simulate dispatching events
+					_dispatch: (event: string, data: unknown) => {
+						const eventListeners = listeners[event];
+						if (eventListeners) {
+							eventListeners.forEach((handler) => handler({ data: JSON.stringify(data) }));
+						}
+					},
+				};
+			}),
+		);
 	});
 
 	afterEach(() => {
@@ -123,10 +126,7 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 
 		// Second handshake: two active logs (simulating a new request arriving)
 		act(() => {
-			eventSource._dispatch("active_logs", [
-				mockActiveLog,
-				{ ...mockActiveLog, id: "active-2", provider: "anthropic", model: "claude-3" },
-			]);
+			eventSource._dispatch("active_logs", [mockActiveLog, { ...mockActiveLog, id: "active-2", provider: "anthropic", model: "claude-3" }]);
 		});
 		expect(result.current.activeLogs).toHaveLength(2);
 	});

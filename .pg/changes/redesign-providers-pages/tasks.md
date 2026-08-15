@@ -89,24 +89,24 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 7.1 创建 `ui/app/workspace/providers2/layout.tsx`：使用 `createFileRoute("/workspace/providers2")` 注册新路由（与 `ui/app/workspace/providers/layout.tsx` 同级但独立文件）
-- [ ] 7.2 创建 `ui/app/workspace/providers2/page.tsx`：列表页主组件，包含顶部 Toolbar + 分组 section 列表。复用 `useGetProvidersQuery` 但扩展 9 个聚合字段的 TS 类型
-- [ ] 7.3 创建 `ui/app/workspace/providers2/views/ProviderFamilyGroup.tsx`：单个厂商家族 section 组件，接收一组 provider，按 family 名渲染折叠/展开列表
-- [ ] 7.4 创建 `ui/app/workspace/providers2/views/ProviderCard.tsx`：单张 provider 卡片，含图标 + 名称 + CUSTOM 标签 + 健康度 Badge + Keys 数 + Models 数 + 今日请求 + 上次错误时间 + 批量启用/禁用 Toggle + Quick test 按钮（POST /refresh-models）
-- [ ] 7.5 创建 `ui/app/workspace/providers2/views/ProviderFilters.tsx`：名称搜索 + provider 多选 + 健康度 chips（all/active/error）
-- [ ] 7.6 创建 `ui/app/workspace/providers2/dialogs/TryLegacyViewButton.tsx`：顶部 "Try legacy view" 按钮，`onClick` 调 `router.navigate({ to: "/workspace/providers", search: { provider: currentProvider } })`
-- [ ] 7.7 创建 `ui/app/workspace/providers2/[id]/layout.tsx` + `[id]/page.tsx`：详情路由 `createFileRoute("/workspace/providers2/$id")` + 主组件（Tabs 容器）
-- [ ] 7.8 创建 `ui/app/workspace/providers2/[id]/views/OverviewTab.tsx`：内联编辑 Network / Proxy / Performance / Governance / Beta Headers / OpenAI Config 共 6 个 fragment（复用 `ui/app/workspace/providers/fragments/`）
-- [ ] 7.9 创建 `ui/app/workspace/providers2/[id]/views/KeysTab.tsx`：复用 `modelProviderKeysTableView` + 新增 `useBatchUpdateProviderKeysMutation` hook（RTK Query mutation 调用新批量端点）
-- [ ] 7.10 创建 `ui/app/workspace/providers2/[id]/views/ModelsTab.tsx` + `UsageTab.tsx` + `GovernanceTab.tsx` + `LogsTab.tsx`：分别复用 modelcatalog / logs 聚合 API / providerGovernanceTable / Logs 跳转入口
-- [ ] 7.11 创建 `ui/app/workspace/providers2/[id]/dialogs/OpenLegacyConfigSheetButton.tsx`：触发现有 `ProviderConfigSheet` 的"Open legacy config sheet"按钮
-- [ ] 7.12 修改 `ui/lib/store/apis/providersApi.ts`：扩展 `ProviderResponse` TS 类型追加 9 字段；新增 `useBatchUpdateProviderKeysMutation` hook
-- [ ] 7.13 修改 `ui/lib/constants/nav.ts`：在 `Providers` 菜单下新增子项 `{ label: "Browse Providers (New)", to: "/workspace/providers2" }`
-- [ ] 7.14 修改 `ui/app/workspace/providers/dialogs/confirmRedirection.tsx` 或新增按钮：在旧 `/workspace/providers` 页面顶部加 "Try new view" 按钮，链接到 `/workspace/providers2`
-- [ ] 7.15 所有新增 React 组件加 `data-testid`（命名空间 `providers2-*`，与现有 testid 不冲突）
-- [ ] 7.16 跑通 6.1-6.5 的单测与 e2e（绿）
-- [ ] 7.17 `cd ui && npm run format` 确认格式通过
-- [ ] 7.18 `cd ui && npm run build` 确认 build 通过
+- [x] 7.1 创建 `ui/app/workspace/providers2/layout.tsx`：使用 `createFileRoute("/workspace/providers2")` 注册新路由（与 `ui/app/workspace/providers/layout.tsx` 同级但独立文件）
+- [x] 7.2 创建 `ui/app/workspace/providers2/page.tsx`：列表页主组件，包含顶部 Toolbar + 分组 section 列表。复用 `useGetProvidersQuery` 但扩展 9 个聚合字段的 TS 类型
+- [x] 7.3 创建 `ui/app/workspace/providers2/views/ProviderFamilyGroup.tsx`：单个厂商家族 section 组件，接收一组 provider，按 family 名渲染折叠/展开列表
+- [x] 7.4 创建 `ui/app/workspace/providers2/views/ProviderCard.tsx`：单张 provider 卡片，含图标 + 名称 + CUSTOM 标签 + 健康度 Badge + Keys 数 + Models 数 + 今日请求 + 上次错误时间 + 批量启用/禁用 Toggle + Quick test 按钮（POST /refresh-models）
+- [x] 7.5 创建 `ui/app/workspace/providers2/views/ProviderFilters.tsx`：名称搜索 + provider 多选 + 健康度 chips（all/active/error）
+- [x] 7.6 创建 `ui/app/workspace/providers2/dialogs/TryLegacyViewButton.tsx`：顶部 "Try legacy view" 按钮，`onClick` 调 `router.navigate({ to: "/workspace/providers", search: { provider: currentProvider } })`
+- [x] 7.7 创建 `ui/app/workspace/providers2/[id]/layout.tsx` + `[id]/page.tsx`：详情路由 `createFileRoute("/workspace/providers2/$id")` + 主组件（Tabs 容器）
+- [x] 7.8 创建 `ui/app/workspace/providers2/[id]/views/OverviewTab.tsx`：内联编辑 Network / Proxy / Performance / Governance / Beta Headers / OpenAI Config 共 6 个 fragment（复用 `ui/app/workspace/providers/fragments/`）
+- [x] 7.9 创建 `ui/app/workspace/providers2/[id]/views/KeysTab.tsx`：复用 `modelProviderKeysTableView` + 新增 `useBatchUpdateProviderKeysMutation` hook（RTK Query mutation 调用新批量端点）
+- [x] 7.10 创建 `ui/app/workspace/providers2/[id]/views/ModelsTab.tsx` + `UsageTab.tsx` + `GovernanceTab.tsx` + `LogsTab.tsx`：分别复用 modelcatalog / logs 聚合 API / providerGovernanceTable / Logs 跳转入口
+- [x] 7.11 创建 `ui/app/workspace/providers2/[id]/dialogs/OpenLegacyConfigSheetButton.tsx`：触发现有 `ProviderConfigSheet` 的"Open legacy config sheet"按钮
+- [x] 7.12 修改 `ui/lib/store/apis/providersApi.ts`：扩展 `ProviderResponse` TS 类型追加 9 字段；新增 `useBatchUpdateProviderKeysMutation` hook
+- [x] 7.13 修改 `ui/lib/constants/nav.ts`：在 `Providers` 菜单下新增子项 `{ label: "Browse Providers (New)", to: "/workspace/providers2" }`
+- [x] 7.14 修改 `ui/app/workspace/providers/dialogs/confirmRedirection.tsx` 或新增按钮：在旧 `/workspace/providers` 页面顶部加 "Try new view" 按钮，链接到 `/workspace/providers2`
+- [x] 7.15 所有新增 React 组件加 `data-testid`（命名空间 `providers2-*`，与现有 testid 不冲突）
+- [x] 7.16 跑通 6.1-6.5 的单测与 e2e（绿）
+- [x] 7.17 `cd ui && npm run format` 确认格式通过
+- [x] 7.18 `cd ui && npm run build` 确认 build 通过
 
 ## 8. dev.ui:review - 静态代码审查
 

@@ -132,9 +132,7 @@ describe("ProviderFilters", () => {
 
 	it("should combine search term and health chip selection when both are active", () => {
 		const onChange = vi.fn();
-		const { rerender } = render(
-			<ProviderFilters filters={defaultFilters} onChange={onChange} />,
-		);
+		const { rerender } = render(<ProviderFilters filters={defaultFilters} onChange={onChange} />);
 
 		// First change search term
 		fireEvent.change(screen.getByTestId("providers2-filter-search"), {
@@ -161,9 +159,7 @@ describe("ProviderFilters", () => {
 		const onChange = vi.fn();
 		const filtersWithSearch: FilterState = { search: "openai", health: "all" };
 
-		const { rerender } = render(
-			<ProviderFilters filters={filtersWithSearch} onChange={onChange} />,
-		);
+		const { rerender } = render(<ProviderFilters filters={filtersWithSearch} onChange={onChange} />);
 
 		// Clear the search input
 		fireEvent.change(screen.getByTestId("providers2-filter-search"), {

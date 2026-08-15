@@ -1,5 +1,3 @@
-
-
 // Known provider names array - centralized definition
 export const KnownProvidersNames = [
 	"anthropic",

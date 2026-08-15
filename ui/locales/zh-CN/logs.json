@@ -1,378 +1,378 @@
 {
-  "page": {
-    "title": "日志"
-  },
-  "mcpLogs": {
-    "statCards": {
-      "totalExecutions": "总执行次数",
-      "successRate": "成功率",
-      "avgLatency": "平均延迟",
-      "totalCost": "总成本"
-    },
-    "COLUMN_LABELS": {
-      "timestamp": "时间",
-      "tool_name": "工具名称",
-      "server_label": "服务器",
-      "latency": "延迟",
-      "cost": "成本",
-      "virtual_key": "虚拟密钥"
-    },
-    "emptyState": {
-      "title": "开始使用 MCP 工具执行",
-      "description": "执行您的第一个 MCP 工具调用以查看日志",
-      "manualTab": "手动工具执行",
-      "agentTab": "代理模式（自动执行）",
-      "manualDesc": "完全控制工具审批。您可以通过 API 显式执行每个工具调用。",
-      "agentDesc": "预批准工具的自动执行。在 MCP 网关设置中配置自动执行工具。",
-      "prerequisites": "前置条件",
-      "prereq1": "在 MCP 网关中配置 MCP 服务器（例如：filesystem, web_search）",
-      "prereq2": "设置 tools_to_execute 以白名单可用工具",
-      "prereq3": "对于代理模式：配置 tools_to_auto_execute 以实现自动执行"
-    },
-    "filterLabels": {
-      "toolName": "工具名称",
-      "server": "服务器",
-      "status": "状态",
-      "virtualKey": "虚拟密钥"
-    },
-    "page": "MCP 日志"
-  },
-  "action": {
-    "refresh": "刷新",
-    "live": "实时",
-    "group": "分组"
-  },
-  "filterLabels": {
-    "searchLogs": "搜索日志",
-    "searchMCPLogs": "搜索 MCP 日志"
-  },
-  "statCards": {
-    "totalRequests": "总请求数",
-    "successRate": "成功率",
-    "successRateDesc": "系统感知的成功率。每次回退算作一次独立尝试。同一请求的重试算作一次尝试。",
-    "userSuccessRate": "用户成功率",
-    "userSuccessRateDesc": "最终用户感知的成功率。将回退链视为一次请求。",
-    "avgLatency": "平均延迟",
-    "totalTokens": "总令牌数",
-    "totalTokensDesc": "使用的总令牌数，分为输入（提示词）和输出（完成）令牌。",
-    "totalCost": "总成本",
-    "in": "入",
-    "out": "出"
-  },
-  "COLUMN_LABELS": {
-    "timestamp": "时间",
-    "request_type": "类型",
-    "input": "消息",
-    "provider": "提供商",
-    "model": "模型",
-    "app": "应用",
-    "latency": "延迟",
-    "tokens": "令牌",
-    "cost": "成本",
-    "virtual_key": "虚拟密钥",
-    "routing_rule": "路由规则",
-    "team": "团队",
-    "customer": "客户",
-    "user": "用户",
-    "business_unit": "业务单元"
-  },
-  "providers": {
-    "openai": {
-      "label": "OpenAI"
-    },
-    "anthropic": {
-      "label": "Anthropic"
-    },
-    "azure": {
-      "label": "Azure"
-    },
-    "bedrock": {
-      "label": "AWS Bedrock"
-    },
-    "bedrock_mantle": {
-      "label": "AWS Bedrock Mantle"
-    },
-    "cohere": {
-      "label": "Cohere"
-    },
-    "deepseek": {
-      "label": "DeepSeek"
-    },
-    "vertex": {
-      "label": "Vertex AI"
-    },
-    "mistral": {
-      "label": "Mistral AI"
-    },
-    "ollama": {
-      "label": "Ollama"
-    },
-    "opencode_go": {
-      "label": "OpenCode Go"
-    },
-    "opencode_zen": {
-      "label": "OpenCode Zen"
-    },
-    "groq": {
-      "label": "Groq"
-    },
-    "parasail": {
-      "label": "Parasail"
-    },
-    "elevenlabs": {
-      "label": "Elevenlabs"
-    },
-    "perplexity": {
-      "label": "Perplexity"
-    },
-    "sgl": {
-      "label": "SGLang"
-    },
-    "cerebras": {
-      "label": "Cerebras"
-    },
-    "gemini": {
-      "label": "Gemini"
-    },
-    "openrouter": {
-      "label": "OpenRouter"
-    },
-    "huggingface": {
-      "label": "HuggingFace"
-    },
-    "nebius": {
-      "label": "Nebius Token Factory"
-    },
-    "xai": {
-      "label": "xAI"
-    },
-    "replicate": {
-      "label": "Replicate"
-    },
-    "vllm": {
-      "label": "vLLM"
-    },
-    "runway": {
-      "label": "Runway"
-    },
-    "runware": {
-      "label": "Runware"
-    },
-    "fireworks": {
-      "label": "Fireworks AI"
-    },
-    "sarvam": {
-      "label": "Sarvam AI"
-    },
-    "wafer": {
-      "label": "Wafer"
-    }
-  },
-  "requestTypes": {
-    "chat_completion": {
-      "label": "聊天"
-    },
-    "chat_completion_stream": {
-      "label": "聊天流"
-    },
-    "text_completion": {
-      "label": "文本"
-    },
-    "text_completion_stream": {
-      "label": "文本流"
-    },
-    "responses": {
-      "label": "响应"
-    },
-    "responses_stream": {
-      "label": "响应流"
-    },
-    "responses_retrieve": {
-      "label": "响应检索"
-    },
-    "responses_retrieve_stream": {
-      "label": "响应检索流"
-    },
-    "responses_delete": {
-      "label": "响应删除"
-    },
-    "responses_cancel": {
-      "label": "响应取消"
-    },
-    "responses_input_items": {
-      "label": "响应输入项"
-    },
-    "list_models": {
-      "label": "列出模型"
-    },
-    "embedding": {
-      "label": "嵌入"
-    },
-    "rerank": {
-      "label": "重排序"
-    },
-    "speech": {
-      "label": "语音"
-    },
-    "speech_stream": {
-      "label": "语音流"
-    },
-    "transcription": {
-      "label": "转录"
-    },
-    "transcription_stream": {
-      "label": "转录流"
-    },
-    "image_generation": {
-      "label": "图像生成"
-    },
-    "image_generation_stream": {
-      "label": "图像生成流"
-    },
-    "image_edit": {
-      "label": "图像编辑"
-    },
-    "image_edit_stream": {
-      "label": "图像编辑流"
-    },
-    "image_variation": {
-      "label": "图像变体"
-    },
-    "ocr": {
-      "label": "OCR"
-    },
-    "ocr_stream": {
-      "label": "OCR 流"
-    },
-    "video_generation": {
-      "label": "视频生成"
-    },
-    "video_retrieve": {
-      "label": "视频检索"
-    },
-    "video_download": {
-      "label": "视频下载"
-    },
-    "video_delete": {
-      "label": "视频删除"
-    },
-    "video_list": {
-      "label": "视频列表"
-    },
-    "video_remix": {
-      "label": "视频混剪"
-    },
-    "count_tokens": {
-      "label": "计数令牌"
-    },
-    "compaction": {
-      "label": "压缩"
-    },
-    "batch_create": {
-      "label": "批量创建"
-    },
-    "batch_list": {
-      "label": "批量列表"
-    },
-    "batch_retrieve": {
-      "label": "批量检索"
-    },
-    "batch_cancel": {
-      "label": "批量取消"
-    },
-    "batch_delete": {
-      "label": "批量删除"
-    },
-    "batch_results": {
-      "label": "批量结果"
-    },
-    "file_upload": {
-      "label": "文件上传"
-    },
-    "file_list": {
-      "label": "文件列表"
-    },
-    "file_retrieve": {
-      "label": "文件检索"
-    },
-    "file_delete": {
-      "label": "文件删除"
-    },
-    "file_content": {
-      "label": "文件内容"
-    },
-    "container_create": {
-      "label": "容器创建"
-    },
-    "container_list": {
-      "label": "容器列表"
-    },
-    "container_retrieve": {
-      "label": "容器检索"
-    },
-    "container_delete": {
-      "label": "容器删除"
-    },
-    "container_file_create": {
-      "label": "容器文件创建"
-    },
-    "container_file_list": {
-      "label": "容器文件列表"
-    },
-    "container_file_retrieve": {
-      "label": "容器文件检索"
-    },
-    "container_file_content": {
-      "label": "容器文件内容"
-    },
-    "container_file_delete": {
-      "label": "容器文件删除"
-    },
-    "passthrough": {
-      "label": "透传"
-    },
-    "passthrough_stream": {
-      "label": "透传流"
-    },
-    "websocket_responses": {
-      "label": "WebSocket 响应"
-    },
-    "realtime": {
-      "label": "实时"
-    },
-    "realtime_turn": {
-      "label": "实时轮次"
-    }
-  },
-  "statuses": {
-    "success": {
-      "label": "成功"
-    },
-    "error": {
-      "label": "错误"
-    },
-    "processing": {
-      "label": "处理中"
-    },
-    "cancelled": {
-      "label": "已取消"
-    }
-  },
-  "routingEngine": {
-    "routing_rule": {
-      "label": "路由规则"
-    },
-    "governance": {
-      "label": "治理"
-    },
-    "loadbalancing": {
-      "label": "负载均衡"
-    },
-    "model_catalog": {
-      "label": "模型目录"
-    },
-    "core": {
-      "label": "核心"
-    }
-  }
+	"page": {
+		"title": "日志"
+	},
+	"mcpLogs": {
+		"statCards": {
+			"totalExecutions": "总执行次数",
+			"successRate": "成功率",
+			"avgLatency": "平均延迟",
+			"totalCost": "总成本"
+		},
+		"COLUMN_LABELS": {
+			"timestamp": "时间",
+			"tool_name": "工具名称",
+			"server_label": "服务器",
+			"latency": "延迟",
+			"cost": "成本",
+			"virtual_key": "虚拟密钥"
+		},
+		"emptyState": {
+			"title": "开始使用 MCP 工具执行",
+			"description": "执行您的第一个 MCP 工具调用以查看日志",
+			"manualTab": "手动工具执行",
+			"agentTab": "代理模式（自动执行）",
+			"manualDesc": "完全控制工具审批。您可以通过 API 显式执行每个工具调用。",
+			"agentDesc": "预批准工具的自动执行。在 MCP 网关设置中配置自动执行工具。",
+			"prerequisites": "前置条件",
+			"prereq1": "在 MCP 网关中配置 MCP 服务器（例如：filesystem, web_search）",
+			"prereq2": "设置 tools_to_execute 以白名单可用工具",
+			"prereq3": "对于代理模式：配置 tools_to_auto_execute 以实现自动执行"
+		},
+		"filterLabels": {
+			"toolName": "工具名称",
+			"server": "服务器",
+			"status": "状态",
+			"virtualKey": "虚拟密钥"
+		},
+		"page": "MCP 日志"
+	},
+	"action": {
+		"refresh": "刷新",
+		"live": "实时",
+		"group": "分组"
+	},
+	"filterLabels": {
+		"searchLogs": "搜索日志",
+		"searchMCPLogs": "搜索 MCP 日志"
+	},
+	"statCards": {
+		"totalRequests": "总请求数",
+		"successRate": "成功率",
+		"successRateDesc": "系统感知的成功率。每次回退算作一次独立尝试。同一请求的重试算作一次尝试。",
+		"userSuccessRate": "用户成功率",
+		"userSuccessRateDesc": "最终用户感知的成功率。将回退链视为一次请求。",
+		"avgLatency": "平均延迟",
+		"totalTokens": "总令牌数",
+		"totalTokensDesc": "使用的总令牌数，分为输入（提示词）和输出（完成）令牌。",
+		"totalCost": "总成本",
+		"in": "入",
+		"out": "出"
+	},
+	"COLUMN_LABELS": {
+		"timestamp": "时间",
+		"request_type": "类型",
+		"input": "消息",
+		"provider": "提供商",
+		"model": "模型",
+		"app": "应用",
+		"latency": "延迟",
+		"tokens": "令牌",
+		"cost": "成本",
+		"virtual_key": "虚拟密钥",
+		"routing_rule": "路由规则",
+		"team": "团队",
+		"customer": "客户",
+		"user": "用户",
+		"business_unit": "业务单元"
+	},
+	"providers": {
+		"openai": {
+			"label": "OpenAI"
+		},
+		"anthropic": {
+			"label": "Anthropic"
+		},
+		"azure": {
+			"label": "Azure"
+		},
+		"bedrock": {
+			"label": "AWS Bedrock"
+		},
+		"bedrock_mantle": {
+			"label": "AWS Bedrock Mantle"
+		},
+		"cohere": {
+			"label": "Cohere"
+		},
+		"deepseek": {
+			"label": "DeepSeek"
+		},
+		"vertex": {
+			"label": "Vertex AI"
+		},
+		"mistral": {
+			"label": "Mistral AI"
+		},
+		"ollama": {
+			"label": "Ollama"
+		},
+		"opencode_go": {
+			"label": "OpenCode Go"
+		},
+		"opencode_zen": {
+			"label": "OpenCode Zen"
+		},
+		"groq": {
+			"label": "Groq"
+		},
+		"parasail": {
+			"label": "Parasail"
+		},
+		"elevenlabs": {
+			"label": "Elevenlabs"
+		},
+		"perplexity": {
+			"label": "Perplexity"
+		},
+		"sgl": {
+			"label": "SGLang"
+		},
+		"cerebras": {
+			"label": "Cerebras"
+		},
+		"gemini": {
+			"label": "Gemini"
+		},
+		"openrouter": {
+			"label": "OpenRouter"
+		},
+		"huggingface": {
+			"label": "HuggingFace"
+		},
+		"nebius": {
+			"label": "Nebius Token Factory"
+		},
+		"xai": {
+			"label": "xAI"
+		},
+		"replicate": {
+			"label": "Replicate"
+		},
+		"vllm": {
+			"label": "vLLM"
+		},
+		"runway": {
+			"label": "Runway"
+		},
+		"runware": {
+			"label": "Runware"
+		},
+		"fireworks": {
+			"label": "Fireworks AI"
+		},
+		"sarvam": {
+			"label": "Sarvam AI"
+		},
+		"wafer": {
+			"label": "Wafer"
+		}
+	},
+	"requestTypes": {
+		"chat_completion": {
+			"label": "聊天"
+		},
+		"chat_completion_stream": {
+			"label": "聊天流"
+		},
+		"text_completion": {
+			"label": "文本"
+		},
+		"text_completion_stream": {
+			"label": "文本流"
+		},
+		"responses": {
+			"label": "响应"
+		},
+		"responses_stream": {
+			"label": "响应流"
+		},
+		"responses_retrieve": {
+			"label": "响应检索"
+		},
+		"responses_retrieve_stream": {
+			"label": "响应检索流"
+		},
+		"responses_delete": {
+			"label": "响应删除"
+		},
+		"responses_cancel": {
+			"label": "响应取消"
+		},
+		"responses_input_items": {
+			"label": "响应输入项"
+		},
+		"list_models": {
+			"label": "列出模型"
+		},
+		"embedding": {
+			"label": "嵌入"
+		},
+		"rerank": {
+			"label": "重排序"
+		},
+		"speech": {
+			"label": "语音"
+		},
+		"speech_stream": {
+			"label": "语音流"
+		},
+		"transcription": {
+			"label": "转录"
+		},
+		"transcription_stream": {
+			"label": "转录流"
+		},
+		"image_generation": {
+			"label": "图像生成"
+		},
+		"image_generation_stream": {
+			"label": "图像生成流"
+		},
+		"image_edit": {
+			"label": "图像编辑"
+		},
+		"image_edit_stream": {
+			"label": "图像编辑流"
+		},
+		"image_variation": {
+			"label": "图像变体"
+		},
+		"ocr": {
+			"label": "OCR"
+		},
+		"ocr_stream": {
+			"label": "OCR 流"
+		},
+		"video_generation": {
+			"label": "视频生成"
+		},
+		"video_retrieve": {
+			"label": "视频检索"
+		},
+		"video_download": {
+			"label": "视频下载"
+		},
+		"video_delete": {
+			"label": "视频删除"
+		},
+		"video_list": {
+			"label": "视频列表"
+		},
+		"video_remix": {
+			"label": "视频混剪"
+		},
+		"count_tokens": {
+			"label": "计数令牌"
+		},
+		"compaction": {
+			"label": "压缩"
+		},
+		"batch_create": {
+			"label": "批量创建"
+		},
+		"batch_list": {
+			"label": "批量列表"
+		},
+		"batch_retrieve": {
+			"label": "批量检索"
+		},
+		"batch_cancel": {
+			"label": "批量取消"
+		},
+		"batch_delete": {
+			"label": "批量删除"
+		},
+		"batch_results": {
+			"label": "批量结果"
+		},
+		"file_upload": {
+			"label": "文件上传"
+		},
+		"file_list": {
+			"label": "文件列表"
+		},
+		"file_retrieve": {
+			"label": "文件检索"
+		},
+		"file_delete": {
+			"label": "文件删除"
+		},
+		"file_content": {
+			"label": "文件内容"
+		},
+		"container_create": {
+			"label": "容器创建"
+		},
+		"container_list": {
+			"label": "容器列表"
+		},
+		"container_retrieve": {
+			"label": "容器检索"
+		},
+		"container_delete": {
+			"label": "容器删除"
+		},
+		"container_file_create": {
+			"label": "容器文件创建"
+		},
+		"container_file_list": {
+			"label": "容器文件列表"
+		},
+		"container_file_retrieve": {
+			"label": "容器文件检索"
+		},
+		"container_file_content": {
+			"label": "容器文件内容"
+		},
+		"container_file_delete": {
+			"label": "容器文件删除"
+		},
+		"passthrough": {
+			"label": "透传"
+		},
+		"passthrough_stream": {
+			"label": "透传流"
+		},
+		"websocket_responses": {
+			"label": "WebSocket 响应"
+		},
+		"realtime": {
+			"label": "实时"
+		},
+		"realtime_turn": {
+			"label": "实时轮次"
+		}
+	},
+	"statuses": {
+		"success": {
+			"label": "成功"
+		},
+		"error": {
+			"label": "错误"
+		},
+		"processing": {
+			"label": "处理中"
+		},
+		"cancelled": {
+			"label": "已取消"
+		}
+	},
+	"routingEngine": {
+		"routing_rule": {
+			"label": "路由规则"
+		},
+		"governance": {
+			"label": "治理"
+		},
+		"loadbalancing": {
+			"label": "负载均衡"
+		},
+		"model_catalog": {
+			"label": "模型目录"
+		},
+		"core": {
+			"label": "核心"
+		}
+	}
 }
