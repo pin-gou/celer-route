@@ -1,8 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, Puzzle } from "lucide-react";
+import { Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-const CUSTOM_PLUGINS_DOCS_URL = "https://docs.getbifrost.ai/plugins";
 
 interface PluginsEmptyStateProps {
 	onCreateClick: () => void;
@@ -25,16 +23,6 @@ export function PluginsEmptyState({ onCreateClick, canCreate = true }: PluginsEm
 					{t("emptyState.description")}
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						aria-label="Read more about custom plugins (opens in new tab)"
-						data-testid="plugins-button-read-more"
-						onClick={() => {
-							window.open(`${CUSTOM_PLUGINS_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					<Button
 						aria-label="Create your first plugin"
 						data-testid="plugins-button-install-new"

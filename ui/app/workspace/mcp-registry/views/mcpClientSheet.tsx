@@ -746,26 +746,7 @@ export default function MCPClientSheet({
 														<FormItem className="flex flex-row items-center justify-between gap-4 px-4 py-3">
 															<div className="flex items-center gap-2">
 																<FormLabel>Code Mode Server</FormLabel>
-																<TooltipProvider>
-																	<Tooltip>
-																		<TooltipTrigger asChild>
-																			<a
-																				href="https://docs.getbifrost.ai/mcp/code-mode"
-																				target="_blank"
-																				rel="noopener noreferrer"
-																				data-testid="code-mode-link-help"
-																				className="text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded focus-visible:ring-2 focus-visible:outline-none"
-																				aria-label="Learn more about Code Mode"
-																			>
-																				<Info className="h-4 w-4 cursor-help" />
-																			</a>
-																		</TooltipTrigger>
-																		<TooltipContent>
-																			<p>Click to learn more about Code Mode</p>
-																		</TooltipContent>
-																	</Tooltip>
-																</TooltipProvider>
-															</div>
+																</div>
 															<FormControl>
 																<Switch checked={field.value || false} onCheckedChange={field.onChange} />
 															</FormControl>
@@ -1389,28 +1370,7 @@ export default function MCPClientSheet({
 																<TableHead className="w-28 text-center">
 																	<div className="flex items-center justify-center gap-1.5">
 																		<span>Auto-execute</span>
-																		<TooltipProvider>
-																			<Tooltip>
-																				<TooltipTrigger asChild>
-																					<a
-																						href="https://docs.getbifrost.ai/mcp/agent-mode"
-																						target="_blank"
-																						rel="noopener noreferrer"
-																						aria-label="Learn more about Auto-execute and Agent Mode"
-																						className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex rounded focus-visible:ring-2 focus-visible:outline-none"
-																					>
-																						<Info className="h-3.5 w-3.5 cursor-help" />
-																					</a>
-																				</TooltipTrigger>
-																				<TooltipContent className="max-w-xs">
-																					<p>
-																						Applies only when Bifrost runs the LLM loop in Agent Mode. In MCP Gateway mode, the connected
-																						client (Claude Desktop, Cursor, etc.) controls tool approval and this setting is ignored. Click
-																						to learn more.
-																					</p>
-																				</TooltipContent>
-																			</Tooltip>
-																		</TooltipProvider>
+																		
 																	</div>
 																</TableHead>
 																<TableHead className="w-32 text-center">Cost (USD)</TableHead>

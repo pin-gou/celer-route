@@ -63,15 +63,7 @@ export default function CompatibilityView() {
 				<h2 className="text-lg font-semibold tracking-tight">{t("page.compatibility")}</h2>
 				<p className="text-muted-foreground text-sm">
 					{t("descriptions.compatibility")}{" "}
-					<a
-						className="text-primary underline"
-						href="https://docs.getbifrost.ai/features/compat-plugin"
-						target="_blank"
-						rel="noopener noreferrer"
-						data-testid="litellm-docs-link"
-					>
-						Learn more
-					</a>
+					
 				</p>
 			</div>
 

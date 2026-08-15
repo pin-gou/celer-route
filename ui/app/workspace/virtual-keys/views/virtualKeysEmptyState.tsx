@@ -1,9 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { KeyRound } from "lucide-react";
-import { ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-const VIRTUAL_KEYS_DOCS_URL = "https://docs.getbifrost.ai/features/governance/virtual-keys";
 
 interface VirtualKeysEmptyStateProps {
 	onAddClick: () => void;
@@ -26,16 +23,6 @@ export function VirtualKeysEmptyState({ onAddClick, canCreate = true }: VirtualK
 					{t("emptyState.description")}
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						aria-label="Read more about virtual keys (opens in new tab)"
-						data-testid="virtual-keys-button-read-more"
-						onClick={() => {
-							window.open(`${VIRTUAL_KEYS_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					<Button aria-label="Add your first virtual key" onClick={onAddClick} disabled={!canCreate} data-testid="create-vk-btn">
 						Add Virtual Key
 					</Button>

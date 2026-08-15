@@ -1,8 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, Boxes, Server } from "lucide-react";
-
-const MCP_SERVERS_DOCS_URL = "https://docs.getbifrost.ai/features/mcp/overview";
+import { Boxes, Server } from "lucide-react";
 
 interface MCPServersEmptyStateProps {
 	onAddClick: () => void;
@@ -22,16 +20,6 @@ export function MCPServersEmptyState({ onAddClick, canCreate = true }: MCPServer
 					enable.
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						aria-label="Read more about MCP servers (opens in new tab)"
-						data-testid="mcp-registry-button-read-more"
-						onClick={() => {
-							window.open(`${MCP_SERVERS_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					<Button aria-label="Add your first MCP server" onClick={onAddClick} disabled={!canCreate} data-testid="create-mcp-client-btn">
 						Add MCP Server
 					</Button>

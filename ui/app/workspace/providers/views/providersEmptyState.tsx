@@ -1,7 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, Server } from "lucide-react";
-
-const PROVIDERS_DOCS_URL = "https://docs.getbifrost.ai/providers/supported-providers/overview";
+import { Server } from "lucide-react";
 
 interface ProvidersEmptyStateProps {
 	/** Dropdown (or button) for adding a provider; never greyed out */
@@ -20,16 +18,6 @@ export function ProvidersEmptyState({ addProviderDropdown }: ProvidersEmptyState
 					Configure API keys for OpenAI, Anthropic, Bedrock, and other supported providers. Bifrost unifies them behind a single API.
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						aria-label="Read more about providers (opens in new tab)"
-						data-testid="providers-button-read-more"
-						onClick={() => {
-							window.open(`${PROVIDERS_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					{addProviderDropdown}
 				</div>
 			</div>

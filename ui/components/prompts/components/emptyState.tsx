@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, SquareTerminal } from "lucide-react";
+import { SquareTerminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePromptContext } from "../context";
 
@@ -49,16 +49,6 @@ export function PromptsEmptyState() {
 						: "View prompts and test them with different models and parameters in the playground."}
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						aria-label="Read more about prompt repository (opens in new tab)"
-						data-testid="empty-state-read-more"
-						onClick={() => {
-							window.open(`https://docs.getbifrost.ai/features/prompt-repository?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					{canCreate && (
 						<Button
 							aria-label="Create your first prompt"

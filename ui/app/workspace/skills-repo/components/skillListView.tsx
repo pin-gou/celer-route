@@ -35,7 +35,6 @@ import {
 	ArrowDown,
 	ArrowUp,
 	ArrowUpDown,
-	ArrowUpRight,
 	BookOpenText,
 	Check,
 	ChevronDown,
@@ -56,7 +55,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { PAGE_SIZE, formatDateShort, useDebouncedValue } from "./helpers";
 
-const SKILLS_REPOSITORY_DOCS_URL = "https://docs.getbifrost.ai/features/skills-repository";
+
 
 // ---------- MarketplacePopover ----------
 
@@ -384,16 +383,6 @@ export function SkillsListView({
 						plugins for Claude Code, Codex, and other skill-aware clients.
 					</div>
 					<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-						<Button
-							variant="outline"
-							aria-label="Read more about skills (opens in new tab)"
-							data-testid="skills-button-read-more"
-							onClick={() => {
-								window.open(`${SKILLS_REPOSITORY_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-							}}
-						>
-							Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-						</Button>
 						{hasCreateAccess && (
 							<Button aria-label="Create your first skill" data-testid="skill-create-btn" onClick={onCreateNew}>
 								Create Skill

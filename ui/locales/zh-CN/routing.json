@@ -201,6 +201,10 @@
       "codeKeywordsCannotBeEmptyShort": "代码关键词不能为空",
       "technicalKeywordsCannotBeEmptyShort": "技术关键词不能为空",
       "reasoningKeywordsCannotBeEmptyShort": "推理关键词不能为空",
+      "simpleKeywordsDescription": "使请求偏向简单层级的短语（问候、闲聊、琐事）。",
+      "codeKeywordsDescription": "表示请求涉及代码、调试或编程工件的信号。",
+      "technicalKeywordsDescription": "架构、基础设施和运维术语，会提高复杂度评分。",
+      "reasoningKeywordsDescription": "强推理触发器。匹配这些短语可以覆盖层级选择，转向推理层级。",
       "simpleAbove": "分数低于或等于此值的请求被归类为简单。",
       "mediumAbove": "分数高于 simple_medium 且低于或等于此值的归为中等。",
       "complexAbove": "分数高于此值的为推理。介于两者之间的为复杂。"

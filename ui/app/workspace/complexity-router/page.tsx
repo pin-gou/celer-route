@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useTranslation } from "react-i18next";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ExternalLink, LoaderCircle, RotateCcw, Save } from "lucide-react";
+import { LoaderCircle, RotateCcw, Save } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -166,6 +166,10 @@ function finiteBoundaryValue(value: number | undefined, fallback: number) {
 
 function clampUnit(value: number) {
 	return Math.min(1, Math.max(0, value));
+}
+
+function snakeToCamel(value: string): string {
+	return value.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
 function testIdPart(value: string) {
@@ -372,13 +376,7 @@ export default function ComplexityRouterPage() {
 							{t("complexityRouter.headerDescriptionSuffix")}
 						</p>
 					</div>
-					<Button asChild variant="outline" size="sm" className="w-fit shrink-0" data-testid="complexity-router-docs-link">
-						<a href={"https://docs.getbifrost.ai/features/governance/complexity-router"} target="_blank" rel="noopener noreferrer">
-							<ExternalLink className="size-3.5" />
-							{t("complexityRouter.docsLink")}
-						</a>
-					</Button>
-				</div>
+					</div>
 
 				{/* ── Complexity Spectrum ── */}
 				<div className="bg-card space-y-4 rounded-sm border p-5">
@@ -492,11 +490,13 @@ export default function ComplexityRouterPage() {
 					</div>
 
 					<div className="grid gap-3 md:grid-cols-2">
-						{KEYWORD_LIST_DEFINITIONS.map(({ key, label, description }) => {
+						{KEYWORD_LIST_DEFINITIONS.map(({ key }) => {
 							const fieldError = keywordErrors?.[key as KeywordListKey];
 							const errorId = `keywords-${key}-error`;
-							const labelKey = `routing.complexityRouter.validation.${key}Label`;
-							const emptyKey = `routing.complexityRouter.validation.${key}CannotBeEmptyShort`;
+							const camelKey = snakeToCamel(key);
+							const labelKey = `complexityRouter.validation.${camelKey}Label`;
+							const emptyKey = `complexityRouter.validation.${camelKey}CannotBeEmptyShort`;
+							const descriptionKey = `complexityRouter.validation.${camelKey}Description`;
 							return (
 								<div key={key} className="bg-card relative overflow-hidden rounded-sm border">
 									<Controller
@@ -516,7 +516,7 @@ export default function ComplexityRouterPage() {
 															: t("complexityRouter.entries")}
 													</span>
 												</div>
-												<p className="text-muted-foreground text-xs leading-relaxed">{description}</p>
+<p className="text-muted-foreground text-xs leading-relaxed">{t(descriptionKey)}</p>
 												<TagInput
 													data-testid={`complexity-router-keywords-${testIdPart(key)}-input`}
 													value={field.value}

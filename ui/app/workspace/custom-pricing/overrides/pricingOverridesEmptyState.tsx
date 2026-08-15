@@ -1,7 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
-
-const PRICING_OVERRIDES_DOCS_URL = "https://docs.getbifrost.ai/providers/custom-pricing";
+import { SlidersHorizontal } from "lucide-react";
 
 interface PricingOverridesEmptyStateProps {
 	onCreateClick: () => void;
@@ -22,16 +20,6 @@ export function PricingOverridesEmptyState({ onCreateClick }: PricingOverridesEm
 					Define custom per-token prices for specific providers, keys, or virtual keys to accurately reflect your negotiated rates.
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						aria-label="Read more about pricing overrides (opens in new tab)"
-						data-testid="pricing-overrides-button-read-more"
-						onClick={() => {
-							window.open(`${PRICING_OVERRIDES_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					<Button aria-label="Create your first pricing override" data-testid="pricing-override-create-btn" onClick={onCreateClick}>
 						Create Override
 					</Button>

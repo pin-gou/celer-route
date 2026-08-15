@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBranding } from "@/lib/hooks/useBranding";
 import { getErrorMessage, useLoginMutation } from "@/lib/store/apis";
-import { BooksIcon, DiscordLogoIcon, GithubLogoIcon } from "@phosphor-icons/react";
+import { DiscordLogoIcon, GithubLogoIcon } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -20,13 +20,7 @@ const externalLinks = [
 		url: "https://github.com/maximhq/bifrost",
 		icon: GithubLogoIcon,
 	},
-	{
-		title: "Full Documentation",
-		url: "https://docs.getbifrost.ai",
-		icon: BooksIcon,
-		strokeWidth: 1,
-	},
-];
+	];
 
 export default function LoginView() {
 	const { resolvedTheme } = useTheme();
@@ -135,7 +129,7 @@ export default function LoginView() {
 								className="text-muted-foreground hover:text-primary transition-colors"
 								title={item.title}
 							>
-								<item.icon className="h-5 w-5" size={20} weight="regular" strokeWidth={item.strokeWidth} />
+								<item.icon className="h-5 w-5" size={20} weight="regular" />
 							</a>
 						))}
 					</div>

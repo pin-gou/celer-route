@@ -201,6 +201,10 @@
       "codeKeywordsCannotBeEmptyShort": "Code keywords cannot be empty",
       "technicalKeywordsCannotBeEmptyShort": "Technical keywords cannot be empty",
       "reasoningKeywordsCannotBeEmptyShort": "Reasoning keywords cannot be empty",
+      "simpleKeywordsDescription": "Phrases that bias the request toward the SIMPLE tier (greetings, trivia, small talk).",
+      "codeKeywordsDescription": "Signals that the request involves code, debugging, or programming artifacts.",
+      "technicalKeywordsDescription": "Architecture, infra, and operational terms that raise the complexity score.",
+      "reasoningKeywordsDescription": "Strong reasoning triggers. Matching these phrases can override tier selection toward the REASONING tier.",
       "simpleAbove": "Scores at or below this are classified as SIMPLE.",
       "mediumAbove": "Scores above simple_medium and at or below this are MEDIUM.",
       "complexAbove": "Scores above this are REASONING. Everything in between is COMPLEX."

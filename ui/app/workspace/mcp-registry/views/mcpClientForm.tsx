@@ -421,25 +421,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 											<FormItem className="flex flex-row items-center justify-between gap-4 px-4 py-3">
 												<div className="flex items-center gap-2">
 													<FormLabel htmlFor="code-mode">Code Mode Server</FormLabel>
-													<TooltipProvider>
-														<Tooltip>
-															<TooltipTrigger asChild>
-																<a
-																	href="https://docs.getbifrost.ai/mcp/code-mode"
-																	target="_blank"
-																	rel="noopener noreferrer"
-																	data-testid="code-mode-link-help"
-																	className="text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded focus-visible:ring-2 focus-visible:outline-none"
-																	aria-label="Learn more about Code Mode"
-																>
-																	<Info className="h-4 w-4 cursor-help" />
-																</a>
-															</TooltipTrigger>
-															<TooltipContent>
-																<p>Click to learn more about Code Mode</p>
-															</TooltipContent>
-														</Tooltip>
-													</TooltipProvider>
+													
 												</div>
 												<FormControl>
 													<Switch

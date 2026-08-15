@@ -845,15 +845,7 @@ export default function MCPClientsTable({
 													retained admin credential (used only to periodically refresh the tool list), not any individual user's own
 													session, which is unaffected either way.
 												</p>
-												<a
-													data-testid="mcp-client-state-link"
-													href="https://docs.getbifrost.ai/mcp/connections"
-													target="_blank"
-													rel="noreferrer"
-													className="text-primary mt-2 inline-block underline"
-												>
-													See all connection states
-												</a>
+												
 											</>
 										}
 									/>

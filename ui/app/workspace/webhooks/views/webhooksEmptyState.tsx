@@ -1,8 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, Webhook } from "lucide-react";
+import { Webhook } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-const WEBHOOKS_DOCS_URL = "https://docs.getbifrost.ai/features/webhooks";
 
 interface WebhooksEmptyStateProps {
 	onAddClick: () => void;
@@ -25,14 +23,6 @@ export function WebhooksEmptyState({ onAddClick, canCreate }: WebhooksEmptyState
 					{t("emptyState.description")}
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						onClick={() => {
-							window.open(`${WEBHOOKS_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					<Button onClick={onAddClick} disabled={!canCreate} data-testid="create-webhook-btn">
 						Add Webhook Endpoint
 					</Button>

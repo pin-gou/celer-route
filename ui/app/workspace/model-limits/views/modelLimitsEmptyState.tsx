@@ -1,8 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Wallet } from "lucide-react";
-import { ArrowUpRight } from "lucide-react";
-
-const MODEL_LIMITS_DOCS_URL = "https://docs.getbifrost.ai/features/governance";
 
 interface ModelLimitsEmptyStateProps {
 	onAddClick: () => void;
@@ -21,16 +18,6 @@ export function ModelLimitsEmptyState({ onAddClick, canCreate = true }: ModelLim
 					Set spending caps and rate limits at any scope: virtual keys, users, providers, or specific models.
 				</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						aria-label="Read more about budgets and limits (opens in new tab)"
-						data-testid="model-limits-button-read-more"
-						onClick={() => {
-							window.open(`${MODEL_LIMITS_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
-						}}
-					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
-					</Button>
 					<Button aria-label="Add your first limit" onClick={onAddClick} disabled={!canCreate} data-testid="model-limits-button-create">
 						Add Limit
 					</Button>

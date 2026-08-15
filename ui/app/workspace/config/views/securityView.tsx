@@ -313,15 +313,7 @@ export default function SecurityView() {
 						</label>
 						<p className="text-muted-foreground text-sm">
 							{t("security.enforceVirtualKeysDesc")}{" "}
-							<a
-								href="https://docs.getbifrost.ai/features/governance/virtual-keys"
-								target="_blank"
-								rel="noopener noreferrer"
-								className="text-primary underline"
-								data-testid="security-virtual-keys-docs-link"
-							>
-								{t("security.documentation")}
-							</a>
+							
 						</p>
 					</div>
 					<Switch
@@ -446,11 +438,7 @@ export default function SecurityView() {
 						<Button variant="outline" onClick={() => setSetupTokenErrorMessage(null)} data-testid="setup-token-error-close">
 							{t("security.close")}
 						</Button>
-						<Button asChild data-testid="setup-token-error-view-docs">
-							<a href="https://docs.getbifrost.ai/quickstart/gateway/setting-up-auth" target="_blank" rel="noopener noreferrer">
-								{t("security.viewDocs")}
-							</a>
-						</Button>
+						
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
