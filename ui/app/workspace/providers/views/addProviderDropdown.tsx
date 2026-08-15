@@ -20,8 +20,8 @@ interface AddProviderDropdownProps {
 	onSelectKnownProvider: (name: string) => void;
 	onAddCustomProvider: () => void;
 	disabled?: boolean;
-	/** Optional: use compact trigger for empty state */
-	variant?: "default" | "empty";
+	/** Optional: use compact trigger for empty state or toolbar */
+	variant?: "default" | "empty" | "toolbar";
 }
 
 export function AddProviderDropdown({
@@ -42,12 +42,18 @@ export function AddProviderDropdown({
 					variant="outline"
 					size={variant === "empty" ? "default" : "sm"}
 					data-testid="add-provider-btn"
-					className={variant === "empty" ? "" : "w-full justify-start"}
+					className={
+						variant === "empty" ? "" : variant === "toolbar" ? "gap-1 text-xs" : "w-full justify-start"
+					}
 					aria-label="Add new provider"
 					disabled={disabled}
 				>
 					<PlusIcon className="h-4 w-4" />
-					{variant === "empty" ? <span>Add provider</span> : <div className="text-xs">Add New Provider</div>}
+					{variant === "empty" ? (
+						<span>Add provider</span>
+					) : (
+						<div className="text-xs">Add New Provider</div>
+					)}
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
@@ -55,18 +61,18 @@ export function AddProviderDropdown({
 				className="custom-scrollbar max-h-[min(70vh,24rem)] min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
 				data-testid="add-provider-dropdown"
 			>
+				{/* Add New Provider > Custom provider... — used by E2E (add-provider-option-custom) */}
+				<DropdownMenuItem data-testid="add-provider-option-custom" onSelect={onAddCustomProvider}>
+					<Settings2Icon className="h-4 w-4" />
+					<span>Custom provider...</span>
+				</DropdownMenuItem>
+				{hasKnown && <DropdownMenuSeparator />}
 				{availableKnown.map((p) => (
 					<DropdownMenuItem key={p.name} data-testid={`add-provider-option-${p.name}`} onSelect={() => onSelectKnownProvider(p.name)}>
 						<RenderProviderIcon provider={p.name as ProviderIconType} size="sm" className="h-4 w-4" />
 						<span>{ProviderLabels[p.name as keyof typeof ProviderLabels] ?? p.name}</span>
 					</DropdownMenuItem>
 				))}
-				{hasKnown && <DropdownMenuSeparator />}
-				{/* Add New Provider > Custom provider... — used by E2E (add-provider-option-custom) */}
-				<DropdownMenuItem data-testid="add-provider-option-custom" onSelect={onAddCustomProvider}>
-					<Settings2Icon className="h-4 w-4" />
-					<span>Custom provider...</span>
-				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

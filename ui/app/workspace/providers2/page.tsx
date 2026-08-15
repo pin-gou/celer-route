@@ -1,19 +1,30 @@
 import FullPageLoader from "@/components/fullPageLoader";
+import { ProviderNames } from "@/lib/constants/logs";
+import { getErrorMessage, useCreateProviderMutation } from "@/lib/store";
 import { useRefreshProviderModelsMutation } from "@/lib/store/apis/providersApi";
+import { ModelProviderName } from "@/lib/types/config";
 import { useRbac, RbacOperation, RbacResource } from "@/lib/rbac";
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import TryLegacyViewButton from "./dialogs/TryLegacyViewButton";
+import AddCustomProviderSheet from "@/app/workspace/providers/dialogs/addNewCustomProviderSheet";
+import { AddProviderDropdown } from "@/app/workspace/providers/views/addProviderDropdown";
 import { ProviderFamilyGroup } from "./views/ProviderFamilyGroup";
 import { ProviderFilters, type FilterState } from "./views/ProviderFilters";
 import { useProviders2Data } from "./views/useProviders2Data";
 
 export default function Providers2Page() {
-	const navigate = useNavigate();
 	const { groupedProviders, isLoading, error, refetch } = useProviders2Data();
 	const [refreshProviderModels] = useRefreshProviderModelsMutation();
-	const hasUpdateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
+	const [showCustomProviderSheet, setShowCustomProviderSheet] = useState(false);
+	const [createProvider] = useCreateProviderMutation();
+	const hasCreateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Create);
+
+	const existingInSidebar = useMemo(
+		() => new Set(groupedProviders.flatMap((g) => g.providers.map((p) => p.name))),
+		[groupedProviders],
+	);
+
+	const knownProviders = useMemo(() => ProviderNames.map((name) => ({ name })), []);
 
 	const [filters, setFilters] = useState<FilterState>({
 		search: "",
@@ -59,6 +70,21 @@ export default function Providers2Page() {
 		}
 	};
 
+	const handleSelectKnownProvider = async (name: string) => {
+		try {
+			await createProvider({ provider: name as ModelProviderName }).unwrap();
+		} catch (err: any) {
+			if (err?.status === 409) return;
+			toast.error("Failed to add provider", {
+				description: getErrorMessage(err),
+			});
+		}
+	};
+
+	const handleAddCustomProvider = () => {
+		setShowCustomProviderSheet(true);
+	};
+
 	if (isLoading) {
 		return <FullPageLoader />;
 	}
@@ -75,7 +101,14 @@ export default function Providers2Page() {
 					<ProviderFilters filters={filters} onChange={setFilters} />
 				</div>
 				<div className="flex items-center gap-2">
-					<TryLegacyViewButton currentProvider={filteredGroups[0]?.providers[0]?.name} />
+					<AddProviderDropdown
+						variant="toolbar"
+						disabled={!hasCreateAccess}
+						existingInSidebar={existingInSidebar}
+						knownProviders={knownProviders}
+						onSelectKnownProvider={handleSelectKnownProvider}
+						onAddCustomProvider={handleAddCustomProvider}
+					/>
 				</div>
 			</div>
 
@@ -97,6 +130,15 @@ export default function Providers2Page() {
 					))
 				)}
 			</div>
+
+			<AddCustomProviderSheet
+				show={showCustomProviderSheet}
+				onClose={() => setShowCustomProviderSheet(false)}
+				onSave={() => {
+					refetch();
+					setShowCustomProviderSheet(false);
+				}}
+			/>
 		</div>
 	);
 }

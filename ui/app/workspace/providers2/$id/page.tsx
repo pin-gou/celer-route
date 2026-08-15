@@ -7,7 +7,7 @@ import { ProviderLabels } from "@/lib/constants/logs";
 import { useGetProviderQuery } from "@/lib/store/apis/providersApi";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
-import { useState } from "react";
+import { parseAsString, useQueryState } from "nuqs";
 import OpenLegacyConfigSheetButton from "./dialogs/OpenLegacyConfigSheetButton";
 import { GovernanceTab } from "./views/GovernanceTab";
 import { KeysTab } from "./views/KeysTab";
@@ -20,7 +20,7 @@ export default function ProviderDetailPage() {
 	const { id } = useParams({ from: "/workspace/providers2/$id" });
 	const navigate = useNavigate();
 	const { data: provider, isLoading } = useGetProviderQuery(id);
-	const [activeTab, setActiveTab] = useState("overview");
+	const [tabParam, setTab] = useQueryState("tab", parseAsString.withDefault("overview"));
 
 	if (isLoading) {
 		return <FullPageLoader />;
@@ -45,6 +45,16 @@ export default function ProviderDetailPage() {
 		...(provider.name === "openai" ? [{ id: "governance", label: "Governance" }] : []),
 		{ id: "logs", label: "Logs" },
 	];
+
+	// The tab is persisted in the URL query param so a refresh keeps the user
+	// on the selected tab. Fall back to overview if the URL holds an inactive
+	// tab (e.g. "governance" for a non-OpenAI provider).
+	const tabIds = tabs.map((t) => t.id);
+	const activeTab = tabIds.includes(tabParam) ? tabParam : "overview";
+
+	const handleTabChange = (value: string) => {
+		setTab(value);
+	};
 
 	const handleLegacyView = () => {
 		navigate({ to: "/workspace/providers", search: { provider: id } });
@@ -106,7 +116,7 @@ export default function ProviderDetailPage() {
 			</div>
 
 			{/* Tabs */}
-			<Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
+			<Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1">
 				<TabsList>
 					{tabs.map((tab) => (
 						<TabsTrigger key={tab.id} value={tab.id} data-testid={`providers2-tab-${tab.id}`}>
