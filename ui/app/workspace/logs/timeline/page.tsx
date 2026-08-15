@@ -45,7 +45,7 @@ export default function TimelinePage() {
 
 	// --- Time-window engine -------------------------------------------------
 	const [mode, setMode] = useState<TimelineMode>("follow");
-	const [zoom, setZoom] = useState(3);
+	const [zoom, setZoom] = useState(1);
 	const [panOffsetMs, setPanOffsetMs] = useState(0);
 	const [panFrozenMs, setPanFrozenMs] = useState(0);
 	const [liveBaseMs, setLiveBaseMs] = useState(() => Date.now());
