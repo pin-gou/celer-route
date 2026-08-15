@@ -115,10 +115,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 8.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 8.2 review agent 对 git diff feat/pg/redesign-providers-pages 做静态审查
-- [ ] 8.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 8.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 8.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 8.2 review agent 对 git diff feat/pg/redesign-providers-pages 做静态审查
+- [x] 8.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 8.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 ## 9. dev.ui:verify - dev 集成验证
 
