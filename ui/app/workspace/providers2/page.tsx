@@ -65,6 +65,10 @@ export default function Providers2Page() {
 
 	return (
 		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 p-6">
+			{/* Page heading */}
+			<div data-testid="providers2-page-heading" className="sr-only">
+				Providers (New)
+			</div>
 			{/* Toolbar */}
 			<div className="flex items-center justify-between gap-4">
 				<div className="flex-1">

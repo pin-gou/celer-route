@@ -1,10 +1,12 @@
 import FullPageLoader from "@/components/fullPageLoader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { ProviderLabels } from "@/lib/constants/logs";
 import { useGetProviderQuery } from "@/lib/store/apis/providersApi";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { ArrowUpRight } from "lucide-react";
 import { useState } from "react";
 import OpenLegacyConfigSheetButton from "./dialogs/OpenLegacyConfigSheetButton";
 import { GovernanceTab } from "./views/GovernanceTab";
@@ -44,11 +46,28 @@ export default function ProviderDetailPage() {
 		{ id: "logs", label: "Logs" },
 	];
 
+	const handleLegacyView = () => {
+		navigate({ to: "/workspace/providers", search: { provider: id } });
+	};
+
 	return (
 		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 p-6">
-			{/* Breadcrumb + Header */}
+			{/* Breadcrumb */}
+			<div data-testid="providers2-detail-breadcrumb" className="flex items-center gap-2 text-sm text-muted-foreground">
+				<button
+					data-testid="providers2-breadcrumb-list-link"
+					className="hover:text-foreground underline underline-offset-2 transition-colors"
+					onClick={() => navigate({ to: "/workspace/providers2" })}
+				>
+					Providers (New)
+				</button>
+				<span>/</span>
+				<span className="text-foreground font-medium">{label}</span>
+			</div>
+
+			{/* Header */}
 			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-3">
+				<div className="flex items-center gap-3" data-testid="providers2-detail-heading">
 					<div className="flex h-10 w-10 items-center justify-center">
 						<RenderProviderIcon
 							provider={(isCustom ? provider.custom_provider_config?.base_provider_type : provider.name) as ProviderIconType}
@@ -72,6 +91,16 @@ export default function ProviderDetailPage() {
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
+					<Button
+						variant="outline"
+						size="sm"
+						data-testid="providers2-legacy-view-btn"
+						onClick={handleLegacyView}
+						className="gap-1 text-xs"
+					>
+						Open legacy view
+						<ArrowUpRight className="h-3 w-3" />
+					</Button>
 					<OpenLegacyConfigSheetButton provider={provider} />
 				</div>
 			</div>
@@ -86,22 +115,22 @@ export default function ProviderDetailPage() {
 					))}
 				</TabsList>
 
-				<TabsContent value="overview" className="mt-4">
+				<TabsContent value="overview" className="mt-4" data-testid="providers2-tab-content-overview">
 					<OverviewTab provider={provider} onSave={() => {}} />
 				</TabsContent>
-				<TabsContent value="keys" className="mt-4">
+				<TabsContent value="keys" className="mt-4" data-testid="providers2-tab-content-keys">
 					<KeysTab provider={provider} />
 				</TabsContent>
-				<TabsContent value="models" className="mt-4">
+				<TabsContent value="models" className="mt-4" data-testid="providers2-tab-content-models">
 					<ModelsTab provider={provider} />
 				</TabsContent>
-				<TabsContent value="usage" className="mt-4">
+				<TabsContent value="usage" className="mt-4" data-testid="providers2-tab-content-usage">
 					<UsageTab provider={provider} />
 				</TabsContent>
-				<TabsContent value="governance" className="mt-4">
+				<TabsContent value="governance" className="mt-4" data-testid="providers2-tab-content-governance">
 					<GovernanceTab provider={provider} />
 				</TabsContent>
-				<TabsContent value="logs" className="mt-4">
+				<TabsContent value="logs" className="mt-4" data-testid="providers2-tab-content-logs">
 					<LogsTab provider={provider} />
 				</TabsContent>
 			</Tabs>

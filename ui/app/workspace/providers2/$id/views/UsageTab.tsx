@@ -5,10 +5,11 @@ interface UsageTabProps {
 }
 
 export function UsageTab({ provider }: UsageTabProps) {
-	const todayRequests = (provider as any).today_requests ?? 0;
-	const todayErrors = (provider as any).today_errors ?? 0;
-	const uptime = (provider as any).uptime ?? 1;
-	const avgLatency = (provider as any).avg_latency_ms ?? 0;
+	const p = provider as ModelProvider;
+	const todayRequests = p.today_requests ?? 0;
+	const todayErrors = p.today_errors ?? 0;
+	const uptime = p.uptime ?? 1;
+	const avgLatency = p.avg_latency_ms ?? 0;
 
 	return (
 		<div data-testid="providers2-usage-tab" className="rounded-lg border p-6">

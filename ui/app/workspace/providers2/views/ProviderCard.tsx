@@ -4,6 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "@tanstack/react-router";
 import { PlayIcon } from "lucide-react";
 
 export interface ProviderCardProvider {
@@ -27,8 +28,13 @@ export interface ProviderCardProps {
 }
 
 export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardProps) {
+	const navigate = useNavigate();
 	const isCustom = !!provider.custom_provider_config;
 	const healthStatus = provider.keys_health_status;
+
+	const handleCardClick = () => {
+		navigate({ to: "/workspace/providers2/$id", params: { id: provider.name } });
+	};
 
 	const getHealthColor = (status: string) => {
 		switch (status) {
@@ -56,11 +62,12 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 		<div
 			data-testid={`providers2-card-${provider.name}`}
 			className={cn(
-				"flex flex-col gap-3 rounded-lg border p-4 transition-colors",
+				"flex flex-col gap-3 rounded-lg border p-4 transition-colors cursor-pointer",
 				provider.provider_status === "error"
 					? "border-red-200 bg-red-50/30 dark:border-red-900/30 dark:bg-red-950/10"
 					: "hover:bg-accent/50",
 			)}
+			onClick={handleCardClick}
 		>
 			{/* Header: Icon + Name + Health Badge + CUSTOM tag */}
 			<div className="flex items-center gap-3">
@@ -110,7 +117,7 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 							variant="outline"
 							size="sm"
 							data-testid="providers2-card-quick-test"
-							onClick={onQuickTest}
+							onClick={(e) => { e.stopPropagation(); onQuickTest(); }}
 							className="h-7 gap-1 text-xs"
 						>
 							<PlayIcon className="h-3 w-3" />
@@ -120,7 +127,7 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 					<TooltipContent>Quick test: POST /refresh-models</TooltipContent>
 				</Tooltip>
 				<div className="ml-auto">
-					<Switch data-testid="providers2-card-toggle" checked={true} onCheckedChange={() => onToggle()} className="h-5 w-9" />
+					<Switch data-testid="providers2-card-toggle" checked={true} onCheckedChange={() => onToggle()} onClick={(e) => e.stopPropagation()} className="h-5 w-9" />
 				</div>
 			</div>
 		</div>

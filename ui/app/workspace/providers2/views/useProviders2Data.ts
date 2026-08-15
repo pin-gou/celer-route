@@ -29,23 +29,23 @@ export function useProviders2Data() {
 
 		const groups = new Map<string, ProviderCardProvider[]>();
 
-		for (const provider of providers) {
-			const family = getFamilyName(provider);
+		for (const p of providers) {
+			const family = getFamilyName(p);
 			if (!groups.has(family)) {
 				groups.set(family, []);
 			}
 			const cardProvider: ProviderCardProvider = {
-				name: provider.name,
-				provider_status: provider.provider_status,
-				keys_count: (provider as any).keys_count ?? 0,
-				models_count: (provider as any).models_count ?? 0,
-				today_requests: (provider as any).today_requests ?? 0,
-				today_errors: (provider as any).today_errors ?? 0,
-				last_error_at: (provider as any).last_error_at ?? null,
-				uptime: (provider as any).uptime ?? 1,
-				avg_latency_ms: (provider as any).avg_latency_ms ?? 0,
-				keys_health_status: (provider as any).keys_health_status ?? "unknown",
-				custom_provider_config: provider.custom_provider_config,
+				name: p.name,
+				provider_status: p.provider_status,
+				keys_count: p.keys_count ?? 0,
+				models_count: p.models_count ?? 0,
+				today_requests: p.today_requests ?? 0,
+				today_errors: p.today_errors ?? 0,
+				last_error_at: p.last_error_at ?? null,
+				uptime: p.uptime ?? 1,
+				avg_latency_ms: p.avg_latency_ms ?? 0,
+				keys_health_status: p.keys_health_status ?? "unknown",
+				custom_provider_config: p.custom_provider_config,
 			};
 			groups.get(family)!.push(cardProvider);
 		}

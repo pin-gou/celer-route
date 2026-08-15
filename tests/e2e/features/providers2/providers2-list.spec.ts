@@ -55,7 +55,7 @@ test.describe("Providers2 List", () => {
 		const modelsStat = page.locator("[data-testid^='providers2-card-models-']").first();
 		await expect(modelsStat).toBeVisible();
 
-		const reqsStat = page.locator("[data-testid^='providers2-card-reqs-']").first();
+		const reqsStat = page.locator("[data-testid='providers2-card-today-requests']").first();
 		await expect(reqsStat).toBeVisible();
 	});
 

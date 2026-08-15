@@ -38,7 +38,7 @@ describe("ProviderFilters", () => {
 		render(<ProviderFilters filters={defaultFilters} onChange={onChange} />);
 
 		const searchInput = screen.getByTestId("providers2-filter-search");
-		expect(searchInput).toBeTruthy();
+		expect(searchInput).not.toBeNull();
 	});
 
 	it("should call onChange with search term when typing in search input", () => {
@@ -76,9 +76,9 @@ describe("ProviderFilters", () => {
 		const activeChip = screen.getByTestId("providers2-filter-chip-active");
 		const errorChip = screen.getByTestId("providers2-filter-chip-error");
 
-		expect(allChip).toBeTruthy();
-		expect(activeChip).toBeTruthy();
-		expect(errorChip).toBeTruthy();
+		expect(allChip).not.toBeNull();
+		expect(activeChip).not.toBeNull();
+		expect(errorChip).not.toBeNull();
 	});
 
 	it("should mark the 'all' chip as active by default", () => {
