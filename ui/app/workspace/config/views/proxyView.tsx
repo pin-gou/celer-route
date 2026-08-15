@@ -16,9 +16,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, Info } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export default function ProxyView() {
+	const { t } = useTranslation("config");
 	const hasSettingsUpdateAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const { data: bifrostConfig } = useGetCoreConfigQuery({ fromDB: true });
 	const proxyConfig = bifrostConfig?.proxy_config;
@@ -46,7 +48,7 @@ export default function ProxyView() {
 	const onSubmit = async (data: GlobalProxyConfig) => {
 		try {
 			await updateProxyConfig(data).unwrap();
-			toast.success("Proxy configuration updated successfully.");
+			toast.success(t("toast.proxyUpdated"));
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		}
@@ -59,16 +61,16 @@ export default function ProxyView() {
 			<Form {...form}>
 				<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
 					<div>
-						<h2 className="text-lg font-semibold tracking-tight">Proxy Settings</h2>
-						<p className="text-muted-foreground text-sm">Configure global proxy settings for outbound requests.</p>
+						<h2 className="text-lg font-semibold tracking-tight">{t("proxy.title")}</h2>
+						<p className="text-muted-foreground text-sm">{t("proxy.description")}</p>
 					</div>
 
 					<fieldset disabled={!hasSettingsUpdateAccess} className="space-y-4">
 						{/* Enable Proxy */}
 						<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 							<div className="space-y-0.5">
-								<FormLabel className="text-sm font-medium">Enable Proxy</FormLabel>
-								<p className="text-muted-foreground text-sm">Enable global proxy for outbound HTTP requests.</p>
+								<FormLabel className="text-sm font-medium">{t("proxy.enableProxy")}</FormLabel>
+								<p className="text-muted-foreground text-sm">{t("proxy.enableProxyDesc")}</p>
 							</div>
 							<FormField
 								control={form.control}
@@ -85,7 +87,7 @@ export default function ProxyView() {
 
 						{/* Proxy Configuration Section */}
 						<div className={cn("space-y-4 rounded-sm border p-4 transition-opacity", !watchedEnabled && "pointer-events-none opacity-50")}>
-							<h3 className="text-lg font-medium">Proxy Configuration</h3>
+							<h3 className="text-lg font-medium">{t("proxy.configSection")}</h3>
 
 							{/* Proxy Type */}
 							<FormField
@@ -93,30 +95,30 @@ export default function ProxyView() {
 								name="type"
 								render={({ field }) => (
 									<FormItem>
-										<FormLabel>Proxy Type</FormLabel>
+										<FormLabel>{t("proxy.type")}</FormLabel>
 										<Select onValueChange={field.onChange} value={field.value} disabled={!watchedEnabled}>
 											<FormControl>
 												<SelectTrigger className="w-48">
-													<SelectValue placeholder="Select type" />
+													<SelectValue placeholder={t("proxy.typePlaceholder")} />
 												</SelectTrigger>
 											</FormControl>
 											<SelectContent>
-												<SelectItem value="http">HTTP / HTTPS</SelectItem>
+												<SelectItem value="http">{t("proxy.typeHttp")}</SelectItem>
 												<SelectItem value="socks5" disabled>
-													SOCKS5{" "}
+													{t("proxy.typeSocks5")}{" "}
 													<Badge variant="outline" className="ml-2 text-xs">
-														Coming soon
+														{t("proxy.comingSoon")}
 													</Badge>
 												</SelectItem>
 												<SelectItem value="tcp" disabled>
-													TCP{" "}
+													{t("proxy.typeTcp")}{" "}
 													<Badge variant="outline" className="ml-2 text-xs">
-														Coming soon
+														{t("proxy.comingSoon")}
 													</Badge>
 												</SelectItem>
 											</SelectContent>
 										</Select>
-										<FormDescription>Select the proxy protocol type. Currently only HTTP proxy is supported.</FormDescription>
+										<FormDescription>{t("proxy.typeDescription")}</FormDescription>
 										<FormMessage />
 									</FormItem>
 								)}
@@ -125,7 +127,7 @@ export default function ProxyView() {
 							{isTypeUnsupported && watchedEnabled && (
 								<Alert variant="destructive">
 									<AlertTriangle className="h-4 w-4" />
-									<AlertDescription>{watchedType.toUpperCase()} proxy is not yet supported. Please use HTTP proxy.</AlertDescription>
+									<AlertDescription>{t("proxy.unsupportedType", { type: watchedType.toUpperCase() })}</AlertDescription>
 								</Alert>
 							)}
 
@@ -135,11 +137,11 @@ export default function ProxyView() {
 								name="url"
 								render={({ field }) => (
 									<FormItem>
-										<FormLabel>Proxy URL</FormLabel>
+										<FormLabel>{t("proxy.url")}</FormLabel>
 										<FormControl>
-											<Input placeholder="http://proxy.example.com:8080" disabled={!watchedEnabled} {...field} />
+											<Input placeholder={t("proxy.urlPlaceholder")} disabled={!watchedEnabled} {...field} />
 										</FormControl>
-										<FormDescription>Full URL of the proxy server including protocol and port.</FormDescription>
+										<FormDescription>{t("proxy.urlDescription")}</FormDescription>
 										<FormMessage />
 									</FormItem>
 								)}
@@ -147,16 +149,16 @@ export default function ProxyView() {
 
 							{/* Authentication Section */}
 							<div className="bg-muted/20 space-y-4 rounded-sm border p-4">
-								<h4 className="text-sm font-medium">Authentication (Optional)</h4>
+								<h4 className="text-sm font-medium">{t("proxy.authSection")}</h4>
 								<div className="grid grid-cols-2 gap-4">
 									<FormField
 										control={form.control}
 										name="username"
 										render={({ field }) => (
 											<FormItem>
-												<FormLabel>Username</FormLabel>
+												<FormLabel>{t("proxy.username")}</FormLabel>
 												<FormControl>
-													<Input placeholder="Proxy username" disabled={!watchedEnabled} {...field} value={field.value || ""} />
+													<Input placeholder={t("proxy.usernamePlaceholder")} disabled={!watchedEnabled} {...field} value={field.value || ""} />
 												</FormControl>
 												<FormMessage />
 											</FormItem>
@@ -167,11 +169,11 @@ export default function ProxyView() {
 										name="password"
 										render={({ field }) => (
 											<FormItem>
-												<FormLabel>Password</FormLabel>
+												<FormLabel>{t("proxy.password")}</FormLabel>
 												<FormControl>
 													<Input
 														type="password"
-														placeholder="Proxy password"
+														placeholder={t("proxy.passwordPlaceholder")}
 														disabled={!watchedEnabled}
 														{...field}
 														value={field.value || ""}
@@ -186,7 +188,7 @@ export default function ProxyView() {
 
 							{/* Advanced Settings */}
 							<div className="bg-muted/20 space-y-4 rounded-sm border p-4">
-								<h4 className="text-sm font-medium">Advanced Settings</h4>
+								<h4 className="text-sm font-medium">{t("proxy.advancedSection")}</h4>
 
 								{/* No Proxy */}
 								<FormField
@@ -194,17 +196,17 @@ export default function ProxyView() {
 									name="no_proxy"
 									render={({ field }) => (
 										<FormItem>
-											<FormLabel>No Proxy Hosts</FormLabel>
+											<FormLabel>{t("proxy.noProxyHosts")}</FormLabel>
 											<FormControl>
 												<Textarea
-													placeholder="localhost, 127.0.0.1, .internal.example.com"
+													placeholder={t("proxy.noProxyPlaceholder")}
 													className="h-20"
 													disabled={!watchedEnabled}
 													{...field}
 													value={field.value || ""}
 												/>
 											</FormControl>
-											<FormDescription>Comma-separated list of hosts that should bypass the proxy.</FormDescription>
+											<FormDescription>{t("proxy.noProxyDesc")}</FormDescription>
 											<FormMessage />
 										</FormItem>
 									)}
@@ -216,13 +218,13 @@ export default function ProxyView() {
 									name="timeout"
 									render={({ field }) => (
 										<FormItem>
-											<FormLabel>Connection Timeout (seconds)</FormLabel>
+											<FormLabel>{t("proxy.timeout")}</FormLabel>
 											<FormControl>
 												<Input
 													type="number"
 													min={0}
 													max={300}
-													placeholder="30"
+													placeholder={t("proxy.timeoutPlaceholder")}
 													className="w-32"
 													disabled={!watchedEnabled}
 													{...field}
@@ -231,7 +233,7 @@ export default function ProxyView() {
 												/>
 											</FormControl>
 											<FormDescription>
-												Timeout for establishing proxy connections. 0 means no timeout. Default is 60 seconds.
+												{t("proxy.timeoutDesc")}
 											</FormDescription>
 											<FormMessage />
 										</FormItem>
@@ -244,10 +246,10 @@ export default function ProxyView() {
 									name="ca_cert_pem"
 									render={({ field }) => (
 										<FormItem>
-											<FormLabel>CA Certificate (PEM) (Optional)</FormLabel>
+											<FormLabel>{t("proxy.caCert")}</FormLabel>
 											<FormControl>
 												<Textarea
-													placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+													placeholder={t("proxy.caCertPlaceholder")}
 													className="font-mono text-xs"
 													rows={6}
 													disabled={!watchedEnabled}
@@ -256,7 +258,7 @@ export default function ProxyView() {
 												/>
 											</FormControl>
 											<FormDescription>
-												PEM-encoded CA certificate to trust for TLS connections through SSL-intercepting proxies.
+												{t("proxy.caCertDesc")}
 											</FormDescription>
 											<FormMessage />
 										</FormItem>
@@ -266,9 +268,9 @@ export default function ProxyView() {
 								{/* Skip TLS Verify */}
 								<div className="flex items-center justify-between">
 									<div className="space-y-0.5">
-										<FormLabel className="text-sm font-medium">Skip TLS Verification</FormLabel>
+										<FormLabel className="text-sm font-medium">{t("proxy.skipTlsVerify")}</FormLabel>
 										<p className="text-muted-foreground text-sm">
-											Disable TLS certificate verification for HTTPS proxies. Not recommended for production.
+											{t("proxy.skipTlsVerifyDesc")}
 										</p>
 									</div>
 									<FormField
@@ -289,8 +291,8 @@ export default function ProxyView() {
 						{/* Entity Enablement Section */}
 						<div className={cn("space-y-4 rounded-sm border p-4 transition-opacity", !watchedEnabled && "pointer-events-none opacity-50")}>
 							<div className="space-y-1">
-								<h3 className="text-lg font-medium">Enable Proxy For</h3>
-								<p className="text-muted-foreground text-sm">Select which components should use the proxy for outbound requests.</p>
+								<h3 className="text-lg font-medium">{t("proxy.enableFor")}</h3>
+								<p className="text-muted-foreground text-sm">{t("proxy.enableForDesc")}</p>
 							</div>
 
 							{/* SCIM - Enterprise only */}
@@ -298,10 +300,10 @@ export default function ProxyView() {
 								<div className="flex items-center justify-between rounded-sm border p-4">
 									<div className="space-y-0.5">
 										<div className="flex items-center gap-2">
-											<FormLabel className="text-sm font-medium">SCIM</FormLabel>
-											<Badge variant="secondary">Enterprise</Badge>
+											<FormLabel className="text-sm font-medium">{t("proxy.scim")}</FormLabel>
+											<Badge variant="secondary">{t("proxy.enterprise")}</Badge>
 										</div>
-										<p className="text-muted-foreground text-sm">Use proxy for SCIM directory sync requests.</p>
+										<p className="text-muted-foreground text-sm">{t("proxy.scimDesc")}</p>
 									</div>
 									<FormField
 										control={form.control}
@@ -321,10 +323,10 @@ export default function ProxyView() {
 							<div className="flex items-center justify-between rounded-sm border p-4 opacity-60">
 								<div className="space-y-0.5">
 									<div className="flex items-center gap-2">
-										<FormLabel className="text-sm font-medium">Inference</FormLabel>
-										<Badge variant="outline">Coming soon</Badge>
+										<FormLabel className="text-sm font-medium">{t("proxy.inference")}</FormLabel>
+										<Badge variant="outline">{t("proxy.comingSoon")}</Badge>
 									</div>
-									<p className="text-muted-foreground text-sm">Use proxy for LLM inference requests to model providers.</p>
+									<p className="text-muted-foreground text-sm">{t("proxy.inferenceDesc")}</p>
 								</div>
 								<Switch disabled checked={false} />
 							</div>
@@ -333,10 +335,10 @@ export default function ProxyView() {
 							<div className="flex items-center justify-between rounded-sm border p-4 opacity-60">
 								<div className="space-y-0.5">
 									<div className="flex items-center gap-2">
-										<FormLabel className="text-sm font-medium">API</FormLabel>
-										<Badge variant="outline">Coming soon</Badge>
+										<FormLabel className="text-sm font-medium">{t("proxy.api")}</FormLabel>
+										<Badge variant="outline">{t("proxy.comingSoon")}</Badge>
 									</div>
-									<p className="text-muted-foreground text-sm">Use proxy for external API calls and webhooks.</p>
+									<p className="text-muted-foreground text-sm">{t("proxy.apiDesc")}</p>
 								</div>
 								<Switch disabled checked={false} />
 							</div>
@@ -344,7 +346,7 @@ export default function ProxyView() {
 							{!false && (
 								<Alert>
 									<Info className="h-4 w-4" />
-									<AlertDescription>SCIM proxy support is available in Bifrost Enterprise.</AlertDescription>
+									<AlertDescription>{t("proxy.scimEnterprise")}</AlertDescription>
 								</Alert>
 							)}
 						</div>
@@ -357,11 +359,11 @@ export default function ProxyView() {
 										type="submit"
 										disabled={!form.formState.isDirty || !form.formState.isValid || isLoading || !hasSettingsUpdateAccess}
 									>
-										{isLoading ? "Saving..." : "Save Changes"}
+										{isLoading ? t("actions.saving") : t("actions.saveChanges")}
 									</Button>
 								</span>
 							</TooltipTrigger>
-							{!hasSettingsUpdateAccess && <TooltipContent>You don't have permission to update settings</TooltipContent>}
+							{!hasSettingsUpdateAccess && <TooltipContent>{t("proxy.noPermission")}</TooltipContent>}
 						</Tooltip>
 					</div>
 				</form>

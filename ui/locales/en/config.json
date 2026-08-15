@@ -213,7 +213,16 @@
     "tracing": "Tracing",
     "metrics": "Metrics",
     "exporters": "Exporters",
-    "noConfig": "No observability configuration"
+    "noConfig": "No observability configuration",
+    "fields": {
+      "prometheusLabels": "Prometheus Labels"
+    },
+    "descriptions": {
+      "prometheusLabels": "Comma-separated list of custom labels to add to the Prometheus metrics."
+    },
+    "placeholder": {
+      "prometheusLabels": "teamId, projectId, environment"
+    }
   },
   "performanceTuning": {
     "title": "Performance Tuning",
@@ -261,6 +270,85 @@
     "noSettings": "No MCP settings configured"
   },
   "routingRules": {},
+  "proxy": {
+    "title": "Proxy Settings",
+    "description": "Configure global proxy settings for outbound requests.",
+    "enableProxy": "Enable Proxy",
+    "enableProxyDesc": "Enable global proxy for outbound HTTP requests.",
+    "configSection": "Proxy Configuration",
+    "type": "Proxy Type",
+    "typePlaceholder": "Select type",
+    "typeHttp": "HTTP / HTTPS",
+    "typeSocks5": "SOCKS5",
+    "typeTcp": "TCP",
+    "comingSoon": "Coming soon",
+    "typeDescription": "Select the proxy protocol type. Currently only HTTP proxy is supported.",
+    "unsupportedType": "{type} proxy is not yet supported. Please use HTTP proxy.",
+    "url": "Proxy URL",
+    "urlPlaceholder": "http://proxy.example.com:8080",
+    "urlDescription": "Full URL of the proxy server including protocol and port.",
+    "authSection": "Authentication (Optional)",
+    "username": "Username",
+    "usernamePlaceholder": "Proxy username",
+    "password": "Password",
+    "passwordPlaceholder": "Proxy password",
+    "advancedSection": "Advanced Settings",
+    "noProxyHosts": "No Proxy Hosts",
+    "noProxyPlaceholder": "localhost, 127.0.0.1, .internal.example.com",
+    "noProxyDesc": "Comma-separated list of hosts that should bypass the proxy.",
+    "timeout": "Connection Timeout (seconds)",
+    "timeoutPlaceholder": "30",
+    "timeoutDesc": "Timeout for establishing proxy connections. 0 means no timeout. Default is 60 seconds.",
+    "caCert": "CA Certificate (PEM) (Optional)",
+    "caCertPlaceholder": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----",
+    "caCertDesc": "PEM-encoded CA certificate to trust for TLS connections through SSL-intercepting proxies.",
+    "skipTlsVerify": "Skip TLS Verification",
+    "skipTlsVerifyDesc": "Disable TLS certificate verification for HTTPS proxies. Not recommended for production.",
+    "enableFor": "Enable Proxy For",
+    "enableForDesc": "Select which components should use the proxy for outbound requests.",
+    "scim": "SCIM",
+    "scimDesc": "Use proxy for SCIM directory sync requests.",
+    "inference": "Inference",
+    "inferenceDesc": "Use proxy for LLM inference requests to model providers.",
+    "api": "API",
+    "apiDesc": "Use proxy for external API calls and webhooks.",
+    "scimEnterprise": "SCIM proxy support is available in Bifrost Enterprise.",
+    "noPermission": "You don't have permission to update settings",
+    "enterprise": "Enterprise"
+  },
+  "modelSettings": {
+    "title": "Model Settings",
+    "description": "Configure pricing and routing behaviour.",
+    "fields": {
+      "modelParamsUrl": "Model Parameters URL",
+      "pricingSyncInterval": "Pricing Sync Interval (hours)",
+      "modelDiscoveryInterval": "Model Discovery Interval (minutes)",
+      "routingChainMaxDepth": "Routing Chain Max Depth"
+    },
+    "descriptions": {
+      "modelParamsUrl": "URL to a custom model parameters datasheet. Leave empty to use default.",
+      "pricingSyncInterval": "How often to sync pricing data from the datasheet URL.",
+      "modelDiscoveryInterval": "How often each provider's model list is re-fetched in the background, so models a provider starts serving become available without a restart. Set to 0 to turn it off and refresh only from the Providers page.",
+      "modelDiscoveryOff": "Background discovery is off. Model lists update only at startup, on key changes, and when refreshed manually.",
+      "routingChainMaxDepth": "Maximum number of chained routing rule evaluations per request. Prevents infinite loops from circular rule definitions."
+    },
+    "placeholder": {
+      "pricingUrl": "https://example.com/pricing.json",
+      "modelParamsUrl": "https://example.com/model-parameters.json"
+    },
+    "validation": {
+      "urlPrefix": "URL must start with http://, https://, or file://",
+      "pricingSyncRequired": "Pricing sync interval is required",
+      "pricingSyncMin": "Sync interval must be at least 1 hour",
+      "pricingSyncMax": "Sync interval cannot exceed 8760 hours (1 year)",
+      "modelDiscoveryRequired": "Model discovery interval is required",
+      "modelDiscoveryMin": "Interval must be 0 (disabled) or at least {n} minute",
+      "modelDiscoveryMax": "Interval cannot exceed 1440 minutes (24 hours)",
+      "routingDepthRequired": "Routing chain max depth is required",
+      "routingDepthMin": "Must be at least 1",
+      "routingDepthMax": "Cannot exceed 100"
+    }
+  },
   "actions": {
     "saveChanges": "Save Changes",
     "saving": "Saving...",
@@ -308,6 +396,8 @@
     "pricingUpdated": "Pricing configuration updated successfully.",
     "pricingSynced": "Pricing synced successfully.",
     "compatibilityUpdated": "Compatibility settings updated successfully.",
-    "observabilityUpdated": "Observability settings updated successfully."
+    "observabilityUpdated": "Observability settings updated successfully.",
+    "proxyUpdated": "Proxy configuration updated successfully.",
+    "modelSettingsUpdated": "Model settings updated successfully."
   }
 }
