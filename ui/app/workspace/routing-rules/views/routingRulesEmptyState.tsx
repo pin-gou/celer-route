@@ -28,21 +28,21 @@ export function RoutingRulesEmptyState({ onAddClick, canCreate = true }: Routing
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
 					<Button
 						variant="outline"
-						aria-label="Read more about routing rules (opens in new tab)"
+						aria-label={t("rules.readMoreAriaLabel")}
 						data-testid="routing-rules-empty-read-more"
 						onClick={() => {
 							window.open(`${ROUTING_RULES_DOCS_URL}?utm_source=bfd`, "_blank", "noopener,noreferrer");
 						}}
 					>
-						Read more <ArrowUpRight className="text-muted-foreground h-3 w-3" />
+						{t("rules.readMore")} <ArrowUpRight className="text-muted-foreground h-3 w-3" />
 					</Button>
 					<Button
-						aria-label="Create your first routing rule"
+						aria-label={t("rules.createFirstAriaLabel")}
 						data-testid="create-routing-rule-btn"
 						onClick={onAddClick}
 						disabled={!canCreate}
 					>
-						New Rule
+						{t("page.newRule")}
 					</Button>
 				</div>
 			</div>

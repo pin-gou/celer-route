@@ -1,8 +1,3 @@
-/**
- * Routing Rules View
- * Main orchestrator component for routing rules management
- */
-
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { useGetRoutingRulesQuery } from "@/lib/store/apis/routingRulesApi";
@@ -32,17 +27,14 @@ export function RoutingRulesView() {
 
 	const debouncedSearch = useDebouncedValue(search, 300);
 
-	// Reset to first page when search changes
 	useEffect(() => {
 		setOffset(0);
 	}, [debouncedSearch]);
 
-	// Permissions
 	const canCreate = useRbac(RbacResource.RoutingRules, RbacOperation.Create);
 	const canDelete = useRbac(RbacResource.RoutingRules, RbacOperation.Delete);
 	const canUpdate = useRbac(RbacResource.RoutingRules, RbacOperation.Update);
 
-	// API
 	const { data: rulesData, isLoading } = useGetRoutingRulesQuery(
 		{
 			limit: PAGE_SIZE,
@@ -57,7 +49,6 @@ export function RoutingRulesView() {
 	const rules = rulesData?.rules || [];
 	const totalCount = rulesData?.total_count || 0;
 
-	// Snap offset back when total shrinks past current page (e.g. delete last item on last page)
 	useEffect(() => {
 		if (!rulesData || offset < totalCount) return;
 		setOffset(totalCount === 0 ? 0 : Math.floor((totalCount - 1) / PAGE_SIZE) * PAGE_SIZE);
@@ -104,7 +95,6 @@ export function RoutingRulesView() {
 
 	const hasActiveFilters = debouncedSearch;
 
-	// True empty state: no rules at all (not just filtered to zero)
 	if (!isLoading && totalCount === 0 && !hasActiveFilters) {
 		return (
 			<>
@@ -116,23 +106,22 @@ export function RoutingRulesView() {
 
 	return (
 		<div className="flex flex-col overflow-y-auto">
-			{/* Header */}
 			<div className="mb-4 flex items-center justify-between">
 				<div>
 					<h1 className="text-foreground text-lg font-semibold">{t("page.title")}</h1>
-					<p className="text-muted-foreground text-sm">Manage CEL-based routing rules for intelligent request routing across providers</p>
+					<p className="text-muted-foreground text-sm">{t("page.description")}</p>
 				</div>
 				<div className="flex items-center gap-2">
 					<Button variant="outline" size="sm" asChild className="gap-2">
 						<Link to="/workspace/routing-rules/tree">
 							<GitBranch className="h-4 w-4" />
-							<span className="hidden sm:inline">View Tree</span>
+							<span className="hidden sm:inline">{t("page.viewTree")}</span>
 						</Link>
 					</Button>
 					{canCreate && (
 						<Button data-testid="create-routing-rule-btn" onClick={handleCreateNew} disabled={isLoading} className="gap-2">
 							<Plus className="h-4 w-4" />
-							<span className="hidden sm:inline">New Rule</span>
+							<span className="hidden sm:inline">{t("page.newRule")}</span>
 						</Button>
 					)}
 				</div>
