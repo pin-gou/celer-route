@@ -7,6 +7,20 @@
     "overview": "Overview",
     "models": "Models"
   },
+  "table": {
+    "title": "Model Catalog",
+    "description": "Overview of all configured providers, models, and usage.",
+    "totalProviders": "Total Providers",
+    "totalModels": "Total Models",
+    "totalRequests24h": "Total Requests (24h)",
+    "totalCost24h": "Total Cost (24h)",
+    "allProviders": "All Providers",
+    "totalTraffic24h": "Total Traffic (24h)",
+    "modelsUsedTooltip": "Models used in the last 30 days",
+    "noMatchingProviders": "No matching providers found.",
+    "custom": "CUSTOM",
+    "moreCount": "+{count} more"
+  },
   "catalog": {
     "title": "Model Catalog",
     "searchModels": "Search models...",
