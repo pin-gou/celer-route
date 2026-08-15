@@ -102,6 +102,78 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	wafer: true,
 };
 
+// Provider websites (link on the provider detail header) for known providers.
+// Custom providers (defined via custom_provider_config at runtime) are not in
+// this map and never get a header link.
+export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
+	anthropic: "https://www.anthropic.com",
+	azure: "https://azure.microsoft.com/products/ai-services/openai-service",
+	bedrock: "https://aws.amazon.com/bedrock/",
+	bedrock_mantle: "https://aws.amazon.com/bedrock/mantle/",
+	cerebras: "https://www.cerebras.ai",
+	cohere: "https://cohere.com",
+	deepseek: "https://www.deepseek.com",
+	gemini: "https://ai.google.dev",
+	groq: "https://groq.com",
+	huggingface: "https://huggingface.co",
+	mistral: "https://mistral.ai",
+	openrouter: "https://openrouter.ai",
+	sgl: "https://sgl-project.github.io",
+	parasail: "https://parasail.io",
+	elevenlabs: "https://elevenlabs.io",
+	perplexity: "https://www.perplexity.ai",
+	ollama: "https://ollama.com",
+	"opencode-go": "https://opencode.ai",
+	"opencode-zen": "https://opencode.ai",
+	openai: "https://platform.openai.com",
+	vertex: "https://cloud.google.com/vertex-ai",
+	nebius: "https://nebius.com",
+	xai: "https://x.ai",
+	replicate: "https://replicate.com",
+	runway: "https://runwayml.com",
+	runware: "https://runware.ai",
+	vllm: "https://docs.vllm.ai",
+	fireworks: "https://fireworks.ai",
+	sarvam: "https://www.sarvam.ai",
+	wafer: "https://waferhoufy.com",
+};
+
+// API-key registration/creation pages per known provider. Rendered as a
+// "Get API key" link on the provider detail header; hidden for custom
+// providers and for keyless providers.
+export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
+	anthropic: "https://console.anthropic.com/settings/keys",
+	azure: "https://portal.azure.com/#settings/keys",
+	bedrock: "https://us-east-1.console.aws.amazon.com/bedrock/home",
+	bedrock_mantle: "https://console.aws.amazon.com/bedrock",
+	cerebras: "https://inference.cerebras.ai",
+	cohere: "https://dashboard.cohere.com/api-keys",
+	deepseek: "https://platform.deepseek.com/api_keys",
+	gemini: "https://aistudio.google.com/apikey",
+	groq: "https://console.groq.com/keys",
+	huggingface: "https://huggingface.co/settings/tokens",
+	mistral: "https://console.mistral.ai/api-keys",
+	openrouter: "https://openrouter.ai/settings/keys",
+	sgl: "",
+	parasail: "https://console.parasail.io/api-keys",
+	elevenlabs: "https://elevenlabs.io/app/settings/api-keys",
+	perplexity: "https://www.perplexity.ai/settings/api",
+	ollama: "",
+	"opencode-go": "https://opencode.ai/settings/keys",
+	"opencode-zen": "https://opencode.ai/settings/keys",
+	openai: "https://platform.openai.com/api-keys",
+	vertex: "https://console.cloud.google.com/apis/credentials",
+	nebius: "https://nebius.com/console/keys",
+	xai: "https://console.x.ai/api-keys",
+	replicate: "https://replicate.com/account/api-tokens",
+	runway: "https://app.runwayml.com/api-keys",
+	runware: "https://runware.ai/console/api-keys",
+	vllm: "",
+	fireworks: "https://app.fireworks.ai/api-keys",
+	sarvam: "https://console.sarvam.ai/api-keys",
+	wafer: "",
+};
+
 export const DefaultNetworkConfig = {
 	base_url: "",
 	default_request_timeout_in_seconds: 300,

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -381,6 +382,51 @@ func TestRefreshProviderModels_UnknownProviderReturns404(t *testing.T) {
 	}
 	if len(mgr.refreshProviderCalls) != 0 {
 		t.Fatalf("expected no upstream refresh for an unknown provider, got %v", mgr.refreshProviderCalls)
+	}
+}
+
+// test-model endpoint validation tests ---------------------------------------
+
+func TestTestProviderModel_MissingModel(t *testing.T) {
+	h := &ProviderHandler{client: &bifrost.Bifrost{}}
+	ctx := newTestRequestCtx(`{}`)
+	ctx.SetUserValue("provider", "openai")
+	h.testProviderModel(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("status got %d, want 400; body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+}
+
+func TestTestProviderModel_NilClient(t *testing.T) {
+	h := &ProviderHandler{}
+	ctx := newTestRequestCtx(`{"model":"gpt-4"}`)
+	ctx.SetUserValue("provider", "openai")
+	h.testProviderModel(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusInternalServerError {
+		t.Fatalf("status got %d, want 500; body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+}
+
+func TestTestProviderModel_UnknownKey(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	h := &ProviderHandler{
+		client: &bifrost.Bifrost{},
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				"openai": {Keys: []schemas.Key{{ID: "key-1"}}},
+			},
+		},
+	}
+	ctx := newTestRequestCtx(`{"model":"gpt-4","key_id":"does-not-exist"}`)
+	ctx.SetUserValue("provider", "openai")
+	h.testProviderModel(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusNotFound {
+		t.Fatalf("status got %d, want 404; body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
 	}
 }
 

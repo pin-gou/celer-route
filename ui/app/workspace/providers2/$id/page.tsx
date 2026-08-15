@@ -3,7 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
-import { ProviderLabels } from "@/lib/constants/logs";
+import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
+import { ProviderApiKeyUrls, ProviderWebsites } from "@/lib/constants/config";
+import { isKeyRequiredByProvider } from "@/lib/constants/config";
 import { useGetProviderQuery } from "@/lib/store/apis/providersApi";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
@@ -36,6 +38,18 @@ export default function ProviderDetailPage() {
 
 	const isCustom = !provider.name || !Object.keys(ProviderLabels).includes(provider.name);
 	const label = isCustom ? provider.name : (ProviderLabels[provider.name as keyof typeof ProviderLabels] ?? provider.name);
+
+	// Custom providers inherit the base provider type for the header links so a
+	// sensova→openai-style custom provider still surfaces its provider's
+	// website / API-key page. Keyless providers never get an API-key link.
+	const linkProvider = (isCustom
+		? provider.custom_provider_config?.base_provider_type
+		: provider.name) as ProviderName | undefined;
+	const websiteUrl = linkProvider ? ProviderWebsites[linkProvider] : undefined;
+	const apiKeyUrl = linkProvider ? ProviderApiKeyUrls[linkProvider] : undefined;
+	const keyRequired = linkProvider ? isKeyRequiredByProvider[linkProvider] : undefined;
+	const showWebsiteLink = !!websiteUrl;
+	const showApiKeyLink = !!apiKeyUrl && keyRequired !== false;
 
 	const tabs = [
 		{ id: "overview", label: "Overview" },
@@ -87,7 +101,19 @@ export default function ProviderDetailPage() {
 					</div>
 					<div>
 						<div className="flex items-center gap-2">
-							<span className="text-lg font-semibold">{label}</span>
+							{showWebsiteLink ? (
+								<a
+									href={websiteUrl}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="text-lg font-semibold hover:underline inline-flex items-center gap-1"
+								>
+									{label}
+									<ArrowUpRight className="h-3.5 w-3.5 opacity-60" />
+								</a>
+							) : (
+								<span className="text-lg font-semibold">{label}</span>
+							)}
 							{provider.provider_status === "active" ? (
 								<Badge variant="outline" className="border-green-500 text-xs text-green-600">
 									● active
@@ -98,6 +124,18 @@ export default function ProviderDetailPage() {
 								</Badge>
 							)}
 						</div>
+						{showApiKeyLink && (
+							<a
+								href={apiKeyUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								data-testid="providers2-detail-api-key-link"
+								className="text-muted-foreground hover:text-primary mt-0.5 inline-flex items-center gap-1 text-xs underline underline-offset-2"
+							>
+								Get API key
+								<ArrowUpRight className="h-3 w-3" />
+							</a>
+						)}
 					</div>
 				</div>
 				<div className="flex items-center gap-2">

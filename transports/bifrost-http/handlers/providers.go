@@ -212,6 +212,7 @@ func (h *ProviderHandler) RegisterRoutes(r *router.Router, middlewares ...schema
 	// newly served model (or re-check a failing key) without waiting.
 	r.POST("/api/providers/{provider}/refresh-models", lib.ChainMiddlewares(h.refreshProviderModels, middlewares...))
 	r.POST("/api/providers/{provider}/keys/{key_id}/refresh-models", lib.ChainMiddlewares(h.refreshProviderKeyModels, middlewares...))
+	r.POST("/api/providers/{provider}/test-model", lib.ChainMiddlewares(h.testProviderModel, middlewares...))
 	r.GET("/api/keys", lib.ChainMiddlewares(h.listKeys, middlewares...))
 	r.GET("/api/models", lib.ChainMiddlewares(h.listModels, middlewares...))
 	r.GET("/api/models/details", lib.ChainMiddlewares(h.listModelDetails, middlewares...))
@@ -1577,4 +1578,107 @@ func (h *ProviderHandler) upsertModelCatalogEntries(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	ctx.SetStatusCode(fasthttp.StatusNoContent)
+}
+
+// TestModelRequest is the body of POST /api/providers/{provider}/test-model.
+type TestModelRequest struct {
+	Model  string  `json:"model"`
+	KeyID  string  `json:"key_id,omitempty"`
+}
+
+// TestModelResponse is the body returned by the test-model endpoint.
+type TestModelResponse struct {
+	Success   bool   `json:"success"`
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// testProviderModel handles POST /api/providers/{provider}/test-model.
+// It sends a minimal chat completion request to validate that a model is
+// reachable and responds with the latency or an error message.
+func (h *ProviderHandler) testProviderModel(ctx *fasthttp.RequestCtx) {
+	provider, err := getProviderFromCtx(ctx)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid provider: %v", err))
+		return
+	}
+	if h.client == nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "Bifrost client is not available")
+		return
+	}
+
+	var payload TestModelRequest
+	if err := sonic.Unmarshal(ctx.PostBody(), &payload); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	if payload.Model == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "model is required")
+		return
+	}
+
+	// Build the BifrostContext. The plugin pipeline is left active so logging
+	// records the test call in the LLM logs page. Budget/rate-limit checks and
+	// VK usage tracking are disabled so the test never affects quotas or stats.
+	bfCtx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
+	bfCtx.SetValue(schemas.BifrostContextKeySkipBudgetAndRateLimits, true)
+	bfCtx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
+
+	// If a key_id is specified, resolve it and force it on the context.
+	if payload.KeyID != "" {
+		rawKey, err := h.inMemoryStore.GetProviderKeyRaw(provider, payload.KeyID)
+		if err != nil {
+			if errors.Is(err, lib.ErrNotFound) {
+				SendError(ctx, fasthttp.StatusNotFound, fmt.Sprintf("Key %q not found", payload.KeyID))
+				return
+			}
+			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get key: %v", err))
+			return
+		}
+		bfCtx.SetValue(schemas.BifrostContextKeyDirectKey, *rawKey)
+	}
+
+	// Build a minimal chat request.
+	hi := "hi"
+	content := &schemas.ChatMessageContent{ContentStr: &hi}
+	msg := schemas.ChatMessage{
+		Role:    schemas.ChatMessageRoleUser,
+		Content: content,
+	}
+	maxTokens := 1
+	chatReq := &schemas.BifrostChatRequest{
+		Provider: provider,
+		Model:    payload.Model,
+		Input:    []schemas.ChatMessage{msg},
+		Params: &schemas.ChatParameters{
+			MaxCompletionTokens: &maxTokens,
+		},
+	}
+
+	start := time.Now()
+	resp, bifrostErr := h.client.ChatCompletionRequest(bfCtx, chatReq)
+	latencyMs := time.Since(start).Milliseconds()
+	bfCtx.Cancel()
+
+	if bifrostErr != nil {
+		SendJSON(ctx, TestModelResponse{
+			Success:   false,
+			LatencyMs: latencyMs,
+			Error:     bifrostErr.Error.Message,
+		})
+		return
+	}
+	if resp == nil {
+		SendJSON(ctx, TestModelResponse{
+			Success:   false,
+			LatencyMs: latencyMs,
+			Error:     "empty response from provider",
+		})
+		return
+	}
+
+	SendJSON(ctx, TestModelResponse{
+		Success:   true,
+		LatencyMs: latencyMs,
+	})
 }

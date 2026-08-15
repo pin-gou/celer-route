@@ -486,6 +486,19 @@ export const providersApi = baseApi.injectEndpoints({
 				"DBKeys" as const,
 			],
 		}),
+
+		// Test a single model by sending a minimal chat completion request
+		// upstream. Returns the latency and, on failure, the upstream error.
+		testProviderModel: builder.mutation<
+			{ success: boolean; latency_ms?: number; error?: string },
+			{ provider: string; model: string; key_id?: string }
+		>({
+			query: ({ provider, model, key_id }) => ({
+				url: `/providers/${encodeURIComponent(provider)}/test-model`,
+				method: "POST",
+				body: key_id ? { model, key_id } : { model },
+			}),
+		}),
 	}),
 });
 
@@ -518,4 +531,5 @@ export const {
 	useLazyGetModelDetailsQuery,
 	useUpsertModelCatalogEntriesMutation,
 	useBatchUpdateProviderKeysMutation,
+	useTestProviderModelMutation,
 } = providersApi;
