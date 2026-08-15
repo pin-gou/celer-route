@@ -1,0 +1,175 @@
+scenarios:
+- scenario_id: S-end-to-end-default-on
+  critical: true
+  description: providercooldown 默认开启,GET /api/plugins 包含 enabled=true 且 status=active
+  given:
+  - '# env: bifrost-api 启动后由 prepare_env 注入 fixture, 无 config.json provider-cooldown entry'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
+  - '{env.data_resources[name=fixture-plugins].state.status} == seeded'
+  - '{env.config_resources[name=bifrost-binary].location} 编译产物存在'
+  covers:
+  - V-transports-1
+  when:
+  - name: list plugins
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body contains plugin entry with name=provider-cooldown
+  - response.body[?name=provider-cooldown].enabled == true
+  - response.body[?name=provider-cooldown].isCustom == false
+  - response.body[?name=provider-cooldown].status.status == active
+  evidence:
+  - 2-build/<report_seq>-S-end-to-end-default-on-evidence.json
+- scenario_id: S-put-config-persists
+  critical: true
+  description: PUT /api/plugins/provider-cooldown 写入 3 字段后 GET /api/plugins/{name} 返回相同值
+  given:
+  - '# env: bifrost-api 启动后由 prepare_env 注入 fixture'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
+  - '{env.data_resources[name=config-db].state.status} == seeded'
+  covers:
+  - V-transports-4
+  - V-ui-2
+  when:
+  - name: put config
+    type: api
+    method: PUT
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins/provider-cooldown'
+    body:
+      enabled: true
+      config:
+        default_ttl_seconds: 300
+        ttl_overrides:
+          openai: 120
+        quota_patterns:
+          - insufficient_quota
+          - quota exceeded
+    expect_status: 200
+  - name: get config
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins/provider-cooldown'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.config.default_ttl_seconds == 300
+  - response.body.config.ttl_overrides.openai == 120
+  - response.body.config.quota_patterns contains insufficient_quota
+  and:
+  - name: cleanup config
+    action: HTTP PUT /api/plugins/provider-cooldown with restored default config (default ttl 600)
+  evidence:
+  - 2-build/<report_seq>-S-put-config-persists-evidence.json
+- scenario_id: S-stats-default-empty
+  critical: false
+  description: GET /api/plugins/provider-cooldown/stats 初始为 markCount=0, suppressedCount=0, activeCount=0
+  given:
+  - '# env: bifrost-api 启动后无任何 LLM 调用发生过'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
+  - '{env.data_resources[name=logs-db].state.status} == empty'
+  covers:
+  - V-ui-3
+  when:
+  - name: get stats
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins/provider-cooldown/stats'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.stats.markCount == 0
+  - response.body.stats.suppressedCount == 0
+  - response.body.stats.activeCount == 0
+  evidence:
+  - 2-build/<report_seq>-S-stats-default-empty-evidence.json
+- scenario_id: S-state-default-empty
+  critical: false
+  description: GET /api/plugins/provider-cooldown/state 初始为空数组
+  given:
+  - '# env: bifrost-api 启动后无任何 LLM 调用发生过'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
+  covers:
+  - V-ui-3
+  when:
+  - name: get state
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins/provider-cooldown/state'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.state == []
+  evidence:
+  - 2-build/<report_seq>-S-state-default-empty-evidence.json
+- scenario_id: S-disabled-loading-skip
+  critical: true
+  description: 显式 enabled=false entry 导致插件不加载 (status=disabled)
+  given:
+  - '# env: bifrost-api 启动时加载 config.json 含 provider-cooldown entry 且 enabled=false'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
+  - '{env.data_resources[name=fixture-plugins].state.status} == seeded'
+  covers:
+  - V-transports-1
+  when:
+  - name: list plugins
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body[?name=provider-cooldown].enabled == false
+  - response.body[?name=provider-cooldown].status.status == disabled
+  and:
+  - name: cleanup default config
+    action: HTTP DELETE /api/plugins/provider-cooldown 删除显式 entry 恢复默认开启
+  evidence:
+  - 2-build/<report_seq>-S-disabled-loading-skip-evidence.json
+- scenario_id: S-unfreeze-endpoint
+  critical: false
+  description: DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} 返回 200 + provider/keyId
+  given:
+  - '# env: bifrost-api 启动后 (用于验证 endpoint 路由 + 鉴权 + 404 路径)'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
+  covers:
+  - V-ui-3
+  when:
+  - name: delete state none
+    type: api
+    method: DELETE
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins/provider-cooldown/state/nonexistent-provider/nonexistent-key'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.provider == nonexistent-provider
+  - response.body.keyId == nonexistent-key
+  evidence:
+  - 2-build/<report_seq>-S-unfreeze-endpoint-evidence.json
+- scenario_id: S-plugins-list-include
+  critical: false
+  description: GET /api/plugins/builtins 返回的列表包含 provider-cooldown
+  given:
+  - '# env: bifrost-api 启动后'
+  - '{env.business_systems[name=bifrost-api].endpoints[name=api].url} 可达'
+  covers:
+  - V-transports-1
+  - V-ui-1
+  when:
+  - name: list builtin plugins
+    type: api
+    method: GET
+    url: '{env.business_systems[name=bifrost-api].endpoints[name=api].url}/api/plugins/builtins'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.plugins contains provider-cooldown
+  evidence:
+  - 2-build/<report_seq>-S-plugins-list-include-evidence.json
+_meta:
+  _comment: 'scenario-scr.yaml 由 LLM 填充，基于 design.md V-transports-1 / V-transports-4 / V-ui-1 / V-ui-2 / V-ui-3 6 个 verifiable V-* 共 7 个 scenario (上限 7)。given 全部引用 env-description.yaml 的 {env.<段>.<name>.<字段路径>} 占位 (与 bifrost-api fixture 路径一致)。type=api 覆盖后端跨模块，type=browser 留待后续 Playwright 阶段 (不在本 PR scope)。'
+  change: providercooldown-builtin-ui
+  track_id: scr
+  schema_version: v3.10
