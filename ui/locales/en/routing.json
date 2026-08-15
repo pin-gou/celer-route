@@ -1,51 +1,51 @@
 {
-	"page": {
-		"title": "Routing Rules",
-		"description": "Configure routing rules for model requests"
-	},
-	"rules": {
-		"title": "Routing Rules",
-		"createRule": "Create Rule",
-		"editRule": "Edit Rule",
-		"deleteRule": "Delete Rule",
-		"ruleName": "Rule Name",
-		"priority": "Priority",
-		"status": "Status",
-		"condition": "Condition",
-		"target": "Target",
-		"noRules": "No routing rules",
-		"noRulesDesc": "Create your first routing rule to get started",
-		"active": "Active",
-		"inactive": "Inactive"
-	},
-	"tree": {
-		"title": "Routing Tree",
-		"view": "Tree View",
-		"source": "Source",
-		"condition": "Condition",
-		"action": "Action",
-		"edge": "Edge",
-		"node": "Node"
-	},
-	"complexityRouter": {
-		"title": "Complexity Router",
-		"description": "Route requests based on complexity tiers",
-		"tiers": "Tiers",
-		"tierName": "Tier Name",
-		"boundary": "Boundary",
-		"transition": "Transition",
-		"simple": "Simple",
-		"medium": "Medium",
-		"complex": "Complex",
-		"simpleBoundary": "Simple Boundary",
-		"mediumBoundary": "Medium Boundary",
-		"complexBoundary": "Complex Boundary",
-		"simpleToMedium": "Simple → Medium",
-		"mediumToComplex": "Medium → Complex"
-	},
-	"permissionDenied": "You don't have permission to access routing rules",
-	"routingRules": {
-		"emptyTitle": "Routing rules direct requests using CEL conditions",
-		"emptyDescription": "Create CEL-based rules to route requests by model, provider, budget, or custom attributes. Control which provider or model handles each request."
-	}
+  "page": {
+    "title": "Routing Rules",
+    "description": "Configure routing rules for model requests"
+  },
+  "rules": {
+    "title": "Routing Rules",
+    "createRule": "Create Rule",
+    "editRule": "Edit Rule",
+    "deleteRule": "Delete Rule",
+    "ruleName": "Rule Name",
+    "priority": "Priority",
+    "status": "Status",
+    "condition": "Condition",
+    "target": "Target",
+    "noRules": "No routing rules",
+    "noRulesDesc": "Create your first routing rule to get started",
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "tree": {
+    "title": "Routing Tree",
+    "view": "Tree View",
+    "source": "Source",
+    "condition": "Condition",
+    "action": "Action",
+    "edge": "Edge",
+    "node": "Node"
+  },
+  "complexityRouter": {
+    "title": "Complexity Router",
+    "description": "Route requests based on complexity tiers",
+    "tiers": "Tiers",
+    "tierName": "Tier Name",
+    "boundary": "Boundary",
+    "transition": "Transition",
+    "simple": "Simple",
+    "medium": "Medium",
+    "complex": "Complex",
+    "simpleBoundary": "Simple Boundary",
+    "mediumBoundary": "Medium Boundary",
+    "complexBoundary": "Complex Boundary",
+    "simpleToMedium": "Simple → Medium",
+    "mediumToComplex": "Medium → Complex"
+  },
+  "permissionDenied": "You don't have permission to access routing rules",
+  "routingRules": {
+    "emptyTitle": "Routing rules direct requests using CEL conditions",
+    "emptyDescription": "Create CEL-based rules to route requests by model, provider, budget, or custom attributes. Control which provider or model handles each request."
+  }
 }

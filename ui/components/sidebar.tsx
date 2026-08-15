@@ -483,7 +483,11 @@ export default function AppSidebar() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [focusedIndex, setFocusedIndex] = useState(-1);
 	const searchInputRef = useRef<HTMLInputElement>(null);
-	const [cookies, setCookie, removeCookie] = useCookies([HIDDEN_UNTIL_NAV_COOKIE, REMIND_LATER_COOKIE, ONBOARDING_CARD_DISMISSED_COOKIE]);
+	const [cookies, setCookie, removeCookie] = useCookies([
+		HIDDEN_UNTIL_NAV_COOKIE,
+		REMIND_LATER_COOKIE,
+		ONBOARDING_CARD_DISMISSED_COOKIE,
+	]);
 	const isOnboardingCardDismissed = !!cookies[ONBOARDING_CARD_DISMISSED_COOKIE];
 	const { data: latestRelease } = useGetLatestReleaseQuery(undefined, {
 		skip: !mounted, // Only fetch after component is mounted
@@ -1299,7 +1303,12 @@ export default function AppSidebar() {
 										title={item.title}
 									>
 										<div className="flex items-center space-x-3">
-											<item.icon className="hover:text-primary text-muted-foreground h-5 w-5" size={22} weight="regular" />
+											<item.icon
+												className="hover:text-primary text-muted-foreground h-5 w-5"
+												size={22}
+												weight="regular"
+												
+											/>
 										</div>
 									</a>
 								))}
@@ -1333,14 +1342,7 @@ export default function AppSidebar() {
 					<div className="mx-auto flex flex-col items-center gap-1 group-data-[collapsible=icon]:hidden">
 						<div className="font-mono text-xs">
 							{version ?? ""}
-							{process.env.BUILD_TIME && (
-								<span className="text-muted-foreground ml-1">
-									·{" "}
-									{new Date(process.env.BUILD_TIME)
-										.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-										.replace(":", "")}
-								</span>
-							)}
+							{process.env.BUILD_TIME && <span className="text-muted-foreground ml-1">· {new Date(process.env.BUILD_TIME).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", "")}</span>}
 						</div>
 					</div>
 				</div>

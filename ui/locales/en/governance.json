@@ -1,62 +1,62 @@
 {
-	"page": {
-		"title": "governance"
-	},
-	"reset": {
-		"1m": { "label": "Every Minute" },
-		"5m": { "label": "Every 5 Minutes" },
-		"15m": { "label": "Every 15 Minutes" },
-		"30m": { "label": "Every 30 Minutes" },
-		"1h": { "label": "Hourly" },
-		"6h": { "label": "Every 6 Hours" },
-		"1d": { "label": "Daily" },
-		"1w": { "label": "Weekly" },
-		"1M": { "label": "Monthly" },
-		"1Q": { "label": "Quarterly" }
-	},
-	"budget": {
-		"title": "Budgets & Limits",
-		"createBudget": "Create Budget",
-		"editBudget": "Edit Budget",
-		"deleteBudget": "Delete Budget",
-		"budgetName": "Budget Name",
-		"budgetAmount": "Budget Amount",
-		"resetPeriod": "Reset Period",
-		"calendarAlignment": "Calendar Alignment",
-		"quarterStart": "Quarter Start Month",
-		"quarterPreview": "Quarter Preview",
-		"spent": "Spent",
-		"remaining": "Remaining",
-		"overBudget": "Over Budget",
-		"status": {
-			"active": "Active",
-			"exhausted": "Exhausted",
-			"expired": "Expired"
-		}
-	},
-	"rateLimit": {
-		"title": "Rate Limits",
-		"createLimit": "Create Rate Limit",
-		"requests": "Requests",
-		"tokens": "Tokens",
-		"perInterval": "per interval",
-		"interval": "Interval"
-	},
-	"modelLimits": {
-		"title": "Model Limits",
-		"createLimit": "Create Model Limit",
-		"editLimit": "Edit Model Limit",
-		"deleteLimit": "Delete Model Limit",
-		"modelName": "Model Name",
-		"provider": "Provider",
-		"maxRequests": "Max Requests",
-		"maxTokens": "Max Tokens",
-		"tpm": "Tokens per Minute",
-		"rpm": "Requests per Minute",
-		"status": "Status",
-		"noLimits": "No model limits configured",
-		"noLimitsDesc": "Create your first model limit to get started",
-		"active": "Active",
-		"inactive": "Inactive"
-	}
+  "page": {
+    "title": "governance"
+  },
+  "reset": {
+    "1m": { "label": "Every Minute" },
+    "5m": { "label": "Every 5 Minutes" },
+    "15m": { "label": "Every 15 Minutes" },
+    "30m": { "label": "Every 30 Minutes" },
+    "1h": { "label": "Hourly" },
+    "6h": { "label": "Every 6 Hours" },
+    "1d": { "label": "Daily" },
+    "1w": { "label": "Weekly" },
+    "1M": { "label": "Monthly" },
+    "1Q": { "label": "Quarterly" }
+  },
+  "budget": {
+    "title": "Budgets & Limits",
+    "createBudget": "Create Budget",
+    "editBudget": "Edit Budget",
+    "deleteBudget": "Delete Budget",
+    "budgetName": "Budget Name",
+    "budgetAmount": "Budget Amount",
+    "resetPeriod": "Reset Period",
+    "calendarAlignment": "Calendar Alignment",
+    "quarterStart": "Quarter Start Month",
+    "quarterPreview": "Quarter Preview",
+    "spent": "Spent",
+    "remaining": "Remaining",
+    "overBudget": "Over Budget",
+    "status": {
+      "active": "Active",
+      "exhausted": "Exhausted",
+      "expired": "Expired"
+    }
+  },
+  "rateLimit": {
+    "title": "Rate Limits",
+    "createLimit": "Create Rate Limit",
+    "requests": "Requests",
+    "tokens": "Tokens",
+    "perInterval": "per interval",
+    "interval": "Interval"
+  },
+  "modelLimits": {
+    "title": "Model Limits",
+    "createLimit": "Create Model Limit",
+    "editLimit": "Edit Model Limit",
+    "deleteLimit": "Delete Model Limit",
+    "modelName": "Model Name",
+    "provider": "Provider",
+    "maxRequests": "Max Requests",
+    "maxTokens": "Max Tokens",
+    "tpm": "Tokens per Minute",
+    "rpm": "Requests per Minute",
+    "status": "Status",
+    "noLimits": "No model limits configured",
+    "noLimitsDesc": "Create your first model limit to get started",
+    "active": "Active",
+    "inactive": "Inactive"
+  }
 }

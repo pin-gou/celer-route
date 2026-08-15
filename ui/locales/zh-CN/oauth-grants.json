@@ -1,23 +1,23 @@
 {
-	"page": {
-		"title": "OAuth 授权",
-		"description": "管理 OAuth 授权许可"
-	},
-	"grants": {
-		"title": "OAuth 授权",
-		"revokeGrant": "撤销授权",
-		"grantId": "授权 ID",
-		"provider": "提供商",
-		"scope": "范围",
-		"status": "状态",
-		"created": "创建时间",
-		"expires": "过期时间",
-		"lastUsed": "最后使用",
-		"noGrants": "无 OAuth 授权",
-		"noGrantsDesc": "应用程序请求授权后会显示 OAuth 授权",
-		"active": "活跃",
-		"expired": "已过期",
-		"revoked": "已撤销"
-	},
-	"permissionDenied": "您没有访问 OAuth 授权的权限"
+  "page": {
+    "title": "OAuth 授权",
+    "description": "管理 OAuth 授权许可"
+  },
+  "grants": {
+    "title": "OAuth 授权",
+    "revokeGrant": "撤销授权",
+    "grantId": "授权 ID",
+    "provider": "提供商",
+    "scope": "范围",
+    "status": "状态",
+    "created": "创建时间",
+    "expires": "过期时间",
+    "lastUsed": "最后使用",
+    "noGrants": "无 OAuth 授权",
+    "noGrantsDesc": "应用程序请求授权后会显示 OAuth 授权",
+    "active": "活跃",
+    "expired": "已过期",
+    "revoked": "已撤销"
+  },
+  "permissionDenied": "您没有访问 OAuth 授权的权限"
 }

@@ -1,26 +1,26 @@
 {
-	"page": {
-		"title": "Model Catalog",
-		"description": "Browse and manage AI models"
-	},
-	"catalog": {
-		"title": "Model Catalog",
-		"searchModels": "Search models...",
-		"provider": "Provider",
-		"modelName": "Model Name",
-		"capabilities": "Capabilities",
-		"pricing": "Pricing",
-		"contextWindow": "Context Window",
-		"status": "Status",
-		"noModels": "No models found",
-		"noModelsDesc": "Try adjusting your search or filter criteria",
-		"supported": "Supported",
-		"unsupported": "Unsupported",
-		"chat": "Chat",
-		"embedding": "Embedding",
-		"image": "Image",
-		"audio": "Audio",
-		"video": "Video"
-	},
-	"permissionDenied": "You don't have permission to access the model catalog"
+  "page": {
+    "title": "Model Catalog",
+    "description": "Browse and manage AI models"
+  },
+  "catalog": {
+    "title": "Model Catalog",
+    "searchModels": "Search models...",
+    "provider": "Provider",
+    "modelName": "Model Name",
+    "capabilities": "Capabilities",
+    "pricing": "Pricing",
+    "contextWindow": "Context Window",
+    "status": "Status",
+    "noModels": "No models found",
+    "noModelsDesc": "Try adjusting your search or filter criteria",
+    "supported": "Supported",
+    "unsupported": "Unsupported",
+    "chat": "Chat",
+    "embedding": "Embedding",
+    "image": "Image",
+    "audio": "Audio",
+    "video": "Video"
+  },
+  "permissionDenied": "You don't have permission to access the model catalog"
 }

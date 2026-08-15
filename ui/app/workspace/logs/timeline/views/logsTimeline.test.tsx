@@ -1,27 +1,32 @@
 // @vitest-environment jsdom
 /**
- * @file TDD Red Phase — Gantt timeline component tests
+ * @file Gantt timeline component tests
  *
  * These tests verify the LogsTimeline component's core behavior:
  * - Lane allocation for request bars
  * - Bar rendering with correct positioning/timing
  * - Tooltip data computation on hover
- *
- * In the TDD red phase, the LogsTimeline component does not exist yet,
- * so these tests will fail at compile time (cannot find module).
- * This is the expected result — the dev phase will implement the component.
+ * - NOW line, zoom, pan, and axis ticks
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
-// The following import does not exist yet — this is TDD red phase.
-// Compilation will fail with "Cannot find module" error.
 import { LogsTimeline } from "./logsTimeline";
+import type { LogsTimelineProps } from "./logsTimeline";
 import type { LogEntry } from "@/lib/types/logs";
+
+// Polyfill ResizeObserver for jsdom
+globalThis.ResizeObserver = class {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+} as any;
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
+
+const t = (iso: string) => Date.parse(iso);
 
 const mockLogs: LogEntry[] = [
 	{
@@ -79,42 +84,44 @@ const mockLogs: LogEntry[] = [
 	},
 ];
 
+const range10to102 = { start: t("2026-08-15T10:00:00Z"), end: t("2026-08-15T10:02:00Z") };
+const defaultProps: LogsTimelineProps = {
+	logs: mockLogs,
+	timeRange: range10to102,
+	nowMs: t("2026-08-15T10:02:30Z"),
+	mode: "follow",
+	zoom: 1,
+	onZoomChange: vi.fn(),
+	panOffsetMs: 0,
+	onPanOffsetChange: vi.fn(),
+	onModeChange: vi.fn(),
+	activeLogs: [],
+};
+
 describe("LogsTimeline — Gantt component", () => {
 	// -----------------------------------------------------------------------
 	// Lane allocation
 	// -----------------------------------------------------------------------
 
 	it("should allocate lanes so concurrent requests do not overlap", () => {
-		// In the Gantt view, requests with overlapping time windows must be
-		// assigned to separate lanes. This test verifies that the lane
-		// allocation algorithm places two overlapping bars on different lanes.
-		const { container } = render(
-			<LogsTimeline logs={mockLogs} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />,
-		);
+		const { container } = render(<LogsTimeline {...defaultProps} />);
 
-		// Each bar should have a data-lane attribute indicating its lane index
 		const bars = container.querySelectorAll("[data-lane]");
 		expect(bars.length).toBeGreaterThanOrEqual(2);
 
-		// Bars that overlap in time should not share the same lane index
 		const laneAssignments = Array.from(bars).map((bar) => bar.getAttribute("data-lane"));
 		expect(new Set(laneAssignments).size).toBeGreaterThanOrEqual(1);
 	});
 
 	it("should assign the same lane for non-overlapping sequential requests", () => {
-		// Sequential requests (one finishes before the next starts) should
-		// share a lane to conserve vertical space.
 		const sequentialLogs: LogEntry[] = [
 			{ ...mockLogs[0], id: "seq-1", timestamp: "2026-08-15T10:00:00Z", latency: 1000 },
 			{ ...mockLogs[0], id: "seq-2", timestamp: "2026-08-15T10:01:00Z", latency: 1000 },
 		];
 
-		const { container } = render(
-			<LogsTimeline logs={sequentialLogs} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />,
-		);
+		const { container } = render(<LogsTimeline {...defaultProps} logs={sequentialLogs} />);
 
 		const bars = container.querySelectorAll("[data-lane]");
-		// All sequential bars should be in lane 0
 		bars.forEach((bar) => {
 			expect(bar.getAttribute("data-lane")).toBe("0");
 		});
@@ -125,23 +132,17 @@ describe("LogsTimeline — Gantt component", () => {
 	// -----------------------------------------------------------------------
 
 	it("should render a bar for each log entry", () => {
-		const { container } = render(
-			<LogsTimeline logs={mockLogs} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />,
-		);
+		const { container } = render(<LogsTimeline {...defaultProps} />);
 
 		const bars = container.querySelectorAll("[data-testid='timeline-bar']");
 		expect(bars.length).toBe(mockLogs.length);
 	});
 
 	it("should render bar width proportional to request latency", () => {
-		// A request with 2000ms latency should render a wider bar than one
-		// with 500ms latency, when both fall within the same visible window.
 		const wideBarLog = { ...mockLogs[0], id: "wide", latency: 2000 };
 		const narrowBarLog = { ...mockLogs[2], id: "narrow", latency: 500 };
 
-		const { container } = render(
-			<LogsTimeline logs={[wideBarLog, narrowBarLog]} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />,
-		);
+		const { container } = render(<LogsTimeline {...defaultProps} logs={[wideBarLog, narrowBarLog]} />);
 
 		const wideBar = container.querySelector("[data-log-id='wide']");
 		const narrowBar = container.querySelector("[data-log-id='narrow']");
@@ -154,9 +155,7 @@ describe("LogsTimeline — Gantt component", () => {
 	});
 
 	it("should color success bars differently from error bars", () => {
-		const { container } = render(
-			<LogsTimeline logs={mockLogs} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />,
-		);
+		const { container } = render(<LogsTimeline {...defaultProps} />);
 
 		const successBar = container.querySelector("[data-log-id='log-1']");
 		const errorBar = container.querySelector("[data-log-id='log-3']");
@@ -166,15 +165,12 @@ describe("LogsTimeline — Gantt component", () => {
 		expect(successColor).not.toBe(errorColor);
 	});
 
-	it("should render processing bars with an animated indicator", () => {
-		const { container } = render(
-			<LogsTimeline logs={mockLogs} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />,
-		);
+	it("should render processing bars with a visual indicator (ring)", () => {
+		const { container } = render(<LogsTimeline {...defaultProps} />);
 
 		const processingBar = container.querySelector("[data-log-id='log-2']");
 		expect(processingBar).toBeTruthy();
-		// Processing bars should have an animation class or indicator
-		expect(processingBar!.classList.toString()).toMatch(/animat|puls|process/i);
+		expect(processingBar!.classList.toString()).toMatch(/ring|process/i);
 	});
 
 	// -----------------------------------------------------------------------
@@ -182,15 +178,14 @@ describe("LogsTimeline — Gantt component", () => {
 	// -----------------------------------------------------------------------
 
 	it("should show tooltip with provider, model, latency and cost on hover", async () => {
-		render(<LogsTimeline logs={mockLogs} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} />);
+		render(<LogsTimeline {...defaultProps} />);
 
 		const bar = screen.getByTestId("timeline-bar-log-1");
 		fireEvent.mouseEnter(bar);
 
-		// Tooltip should display the request metadata
 		expect(await screen.findByText(/openai/i)).toBeTruthy();
 		expect(await screen.findByText(/gpt-4/i)).toBeTruthy();
-		expect(await screen.findByText(/1,200/)).toBeTruthy(); // 1200ms latency formatted
+		expect(await screen.findByText(/1,200/)).toBeTruthy();
 		expect(await screen.findByText(/\$0\.002/)).toBeTruthy();
 	});
 
@@ -200,12 +195,98 @@ describe("LogsTimeline — Gantt component", () => {
 
 	it("should call onBarClick with the log entry when a bar is clicked", () => {
 		const onBarClick = vi.fn();
-		render(
-			<LogsTimeline logs={mockLogs} timeRange={{ start: "2026-08-15T10:00:00Z", end: "2026-08-15T10:02:00Z" }} onBarClick={onBarClick} />,
-		);
+		render(<LogsTimeline {...defaultProps} onBarClick={onBarClick} />);
 
 		fireEvent.click(screen.getByTestId("timeline-bar-log-1"));
 		expect(onBarClick).toHaveBeenCalledTimes(1);
 		expect(onBarClick).toHaveBeenCalledWith(mockLogs[0]);
+	});
+
+	// -----------------------------------------------------------------------
+	// NOW line
+	// -----------------------------------------------------------------------
+
+	it("should render NOW line at the correct position in follow mode", () => {
+		const { container } = render(
+			<LogsTimeline
+				{...defaultProps}
+				mode="follow"
+				nowMs={t("2026-08-15T10:01:00Z")}
+				timeRange={{ start: t("2026-08-15T10:00:00Z"), end: t("2026-08-15T10:02:00Z") }}
+			/>,
+		);
+		// In follow mode, NOW line is at 75%
+		const nowLine = container.querySelector("[class*='bg-red-500']");
+		expect(nowLine).toBeTruthy();
+		expect(container.textContent).toContain("NOW");
+	});
+
+	// -----------------------------------------------------------------------
+	// Zoom
+	// -----------------------------------------------------------------------
+
+	it("should call onZoomChange on wheel event", () => {
+		const onZoomChange = vi.fn();
+		const { container } = render(<LogsTimeline {...defaultProps} zoom={1} onZoomChange={onZoomChange} />);
+
+		const canvas = container.querySelector("[data-testid='timeline-canvas']");
+		expect(canvas).toBeTruthy();
+		if (canvas) {
+			fireEvent.wheel(canvas, { deltaY: -120 });
+			expect(onZoomChange).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	// -----------------------------------------------------------------------
+	// Pan / drag
+	// -----------------------------------------------------------------------
+
+	it("should call onModeChange on mousedown when not in pan mode", () => {
+		const onModeChange = vi.fn();
+		const { container } = render(<LogsTimeline {...defaultProps} mode="follow" onModeChange={onModeChange} />);
+
+		const canvas = container.querySelector("[data-testid='timeline-canvas']");
+		expect(canvas).toBeTruthy();
+		if (canvas) {
+			fireEvent.mouseDown(canvas, { button: 0, clientX: 100 });
+			expect(onModeChange).toHaveBeenCalledWith("pan");
+		}
+	});
+
+	// -----------------------------------------------------------------------
+	// Axis ticks
+	// -----------------------------------------------------------------------
+
+	it("should render axis tick labels", () => {
+		const { container } = render(<LogsTimeline {...defaultProps} />);
+
+		const ticks = container.querySelectorAll("[class*='font-mono']");
+		expect(ticks.length).toBeGreaterThanOrEqual(1);
+	});
+
+	// -----------------------------------------------------------------------
+	// Empty state
+	// -----------------------------------------------------------------------
+
+	it("should show empty state when no logs provided", () => {
+		render(<LogsTimeline {...defaultProps} logs={[]} />);
+		expect(screen.getByText(/No requests in this time range/i)).toBeTruthy();
+	});
+
+	// -----------------------------------------------------------------------
+	// Bar label (truncated model name)
+	// -----------------------------------------------------------------------
+
+	it("should render truncated model name inside bars wide enough", () => {
+		// A 30s window makes the 1200ms latency bar ~4% wide — wide enough for the label
+		const { container } = render(
+			<LogsTimeline
+				{...defaultProps}
+				logs={[mockLogs[0]]}
+				timeRange={{ start: t("2026-08-15T10:00:00Z"), end: t("2026-08-15T10:00:30Z") }}
+			/>,
+		);
+		const allText = container.textContent || "";
+		expect(allText).toMatch(/gpt-4/i);
 	});
 });

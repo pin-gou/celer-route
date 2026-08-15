@@ -1,23 +1,23 @@
 {
-	"page": {
-		"title": "OAuth Grants",
-		"description": "Manage OAuth authorization grants"
-	},
-	"grants": {
-		"title": "OAuth Grants",
-		"revokeGrant": "Revoke Grant",
-		"grantId": "Grant ID",
-		"provider": "Provider",
-		"scope": "Scope",
-		"status": "Status",
-		"created": "Created",
-		"expires": "Expires",
-		"lastUsed": "Last Used",
-		"noGrants": "No OAuth grants",
-		"noGrantsDesc": "OAuth grants will appear here when applications request authorization",
-		"active": "Active",
-		"expired": "Expired",
-		"revoked": "Revoked"
-	},
-	"permissionDenied": "You don't have permission to access OAuth grants"
+  "page": {
+    "title": "OAuth Grants",
+    "description": "Manage OAuth authorization grants"
+  },
+  "grants": {
+    "title": "OAuth Grants",
+    "revokeGrant": "Revoke Grant",
+    "grantId": "Grant ID",
+    "provider": "Provider",
+    "scope": "Scope",
+    "status": "Status",
+    "created": "Created",
+    "expires": "Expires",
+    "lastUsed": "Last Used",
+    "noGrants": "No OAuth grants",
+    "noGrantsDesc": "OAuth grants will appear here when applications request authorization",
+    "active": "Active",
+    "expired": "Expired",
+    "revoked": "Revoked"
+  },
+  "permissionDenied": "You don't have permission to access OAuth grants"
 }

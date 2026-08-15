@@ -1,58 +1,58 @@
 {
-	"title": "Governance",
-	"virtualKeys": {
-		"title": "Virtual Keys",
-		"description": "Manage virtual API keys and access policies",
-		"createKey": "Create Virtual Key",
-		"editKey": "Edit Virtual Key",
-		"deleteKey": "Delete Virtual Key",
-		"keyName": "Key Name",
-		"keyValue": "Key Value",
-		"provider": "Provider",
-		"models": "Models",
-		"rateLimit": "Rate Limit",
-		"budget": "Budget",
-		"status": "Status",
-		"lastUsed": "Last Used",
-		"expiresAt": "Expires At",
-		"neverExpires": "Never expires",
-		"search": "Search virtual keys...",
-		"noKeys": "No virtual keys found",
-		"noKeysDescription": "Virtual keys allow you to control access to your AI models with fine-grained permissions."
-	},
-	"statuses": {
-		"active": "Active",
-		"inactive": "Inactive",
-		"expired": "Expired",
-		"revoked": "Revoked"
-	},
-	"table": {
-		"name": "Name",
-		"key": "Key",
-		"provider": "Provider",
-		"models": "Models",
-		"rateLimit": "Rate Limit",
-		"budget": "Budget",
-		"status": "Status",
-		"usage": "Usage",
-		"lastUsed": "Last Used",
-		"created": "Created",
-		"expires": "Expires",
-		"actions": "Actions"
-	},
-	"actions": {
-		"create": "Create Key",
-		"edit": "Edit",
-		"delete": "Delete",
-		"revoke": "Revoke",
-		"activate": "Activate"
-	},
-	"empty": {
-		"title": "No Virtual Keys",
-		"description": "Virtual keys are not configured yet. Create your first virtual key to get started."
-	},
-	"emptyState": {
-		"title": "Virtual keys control access, budgets, and rate limits",
-		"description": "Create virtual keys to assign permissions, spending limits, and usage quotas to teams, customers, or API clients."
-	}
+  "title": "Governance",
+  "virtualKeys": {
+    "title": "Virtual Keys",
+    "description": "Manage virtual API keys and access policies",
+    "createKey": "Create Virtual Key",
+    "editKey": "Edit Virtual Key",
+    "deleteKey": "Delete Virtual Key",
+    "keyName": "Key Name",
+    "keyValue": "Key Value",
+    "provider": "Provider",
+    "models": "Models",
+    "rateLimit": "Rate Limit",
+    "budget": "Budget",
+    "status": "Status",
+    "lastUsed": "Last Used",
+    "expiresAt": "Expires At",
+    "neverExpires": "Never expires",
+    "search": "Search virtual keys...",
+    "noKeys": "No virtual keys found",
+    "noKeysDescription": "Virtual keys allow you to control access to your AI models with fine-grained permissions."
+  },
+  "statuses": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "expired": "Expired",
+    "revoked": "Revoked"
+  },
+  "table": {
+    "name": "Name",
+    "key": "Key",
+    "provider": "Provider",
+    "models": "Models",
+    "rateLimit": "Rate Limit",
+    "budget": "Budget",
+    "status": "Status",
+    "usage": "Usage",
+    "lastUsed": "Last Used",
+    "created": "Created",
+    "expires": "Expires",
+    "actions": "Actions"
+  },
+  "actions": {
+    "create": "Create Key",
+    "edit": "Edit",
+    "delete": "Delete",
+    "revoke": "Revoke",
+    "activate": "Activate"
+  },
+  "empty": {
+    "title": "No Virtual Keys",
+    "description": "Virtual keys are not configured yet. Create your first virtual key to get started."
+  },
+  "emptyState": {
+    "title": "Virtual keys control access, budgets, and rate limits",
+    "description": "Create virtual keys to assign permissions, spending limits, and usage quotas to teams, customers, or API clients."
+  }
 }

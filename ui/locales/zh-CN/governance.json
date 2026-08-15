@@ -1,62 +1,62 @@
 {
-	"page": {
-		"title": "治理"
-	},
-	"reset": {
-		"1m": { "label": "每分钟" },
-		"5m": { "label": "每5分钟" },
-		"15m": { "label": "每15分钟" },
-		"30m": { "label": "每30分钟" },
-		"1h": { "label": "每小时" },
-		"6h": { "label": "每6小时" },
-		"1d": { "label": "每天" },
-		"1w": { "label": "每周" },
-		"1M": { "label": "每月" },
-		"1Q": { "label": "每季度" }
-	},
-	"budget": {
-		"title": "预算与限制",
-		"createBudget": "创建预算",
-		"editBudget": "编辑预算",
-		"deleteBudget": "删除预算",
-		"budgetName": "预算名称",
-		"budgetAmount": "预算金额",
-		"resetPeriod": "重置周期",
-		"calendarAlignment": "日历对齐",
-		"quarterStart": "季度起始月份",
-		"quarterPreview": "季度预览",
-		"spent": "已花费",
-		"remaining": "剩余",
-		"overBudget": "超出预算",
-		"status": {
-			"active": "活跃",
-			"exhausted": "已耗尽",
-			"expired": "已过期"
-		}
-	},
-	"rateLimit": {
-		"title": "速率限制",
-		"createLimit": "创建速率限制",
-		"requests": "请求数",
-		"tokens": "令牌数",
-		"perInterval": "每间隔",
-		"interval": "间隔"
-	},
-	"modelLimits": {
-		"title": "模型限制",
-		"createLimit": "创建模型限制",
-		"editLimit": "编辑模型限制",
-		"deleteLimit": "删除模型限制",
-		"modelName": "模型名称",
-		"provider": "提供商",
-		"maxRequests": "最大请求数",
-		"maxTokens": "最大令牌数",
-		"tpm": "每分钟令牌数",
-		"rpm": "每分钟请求数",
-		"status": "状态",
-		"noLimits": "未配置模型限制",
-		"noLimitsDesc": "创建您的第一个模型限制以开始使用",
-		"active": "活跃",
-		"inactive": "不活跃"
-	}
+  "page": {
+    "title": "治理"
+  },
+  "reset": {
+    "1m": { "label": "每分钟" },
+    "5m": { "label": "每5分钟" },
+    "15m": { "label": "每15分钟" },
+    "30m": { "label": "每30分钟" },
+    "1h": { "label": "每小时" },
+    "6h": { "label": "每6小时" },
+    "1d": { "label": "每天" },
+    "1w": { "label": "每周" },
+    "1M": { "label": "每月" },
+    "1Q": { "label": "每季度" }
+  },
+  "budget": {
+    "title": "预算与限制",
+    "createBudget": "创建预算",
+    "editBudget": "编辑预算",
+    "deleteBudget": "删除预算",
+    "budgetName": "预算名称",
+    "budgetAmount": "预算金额",
+    "resetPeriod": "重置周期",
+    "calendarAlignment": "日历对齐",
+    "quarterStart": "季度起始月份",
+    "quarterPreview": "季度预览",
+    "spent": "已花费",
+    "remaining": "剩余",
+    "overBudget": "超出预算",
+    "status": {
+      "active": "活跃",
+      "exhausted": "已耗尽",
+      "expired": "已过期"
+    }
+  },
+  "rateLimit": {
+    "title": "速率限制",
+    "createLimit": "创建速率限制",
+    "requests": "请求数",
+    "tokens": "词元数",
+    "perInterval": "每间隔",
+    "interval": "间隔"
+  },
+  "modelLimits": {
+    "title": "模型限制",
+    "createLimit": "创建模型限制",
+    "editLimit": "编辑模型限制",
+    "deleteLimit": "删除模型限制",
+    "modelName": "模型名称",
+    "provider": "提供商",
+    "maxRequests": "最大请求数",
+    "maxTokens": "最大词元数",
+    "tpm": "每分钟词元数",
+    "rpm": "每分钟请求数",
+    "status": "状态",
+    "noLimits": "未配置模型限制",
+    "noLimitsDesc": "创建您的第一个模型限制以开始使用",
+    "active": "活跃",
+    "inactive": "不活跃"
+  }
 }

@@ -25,7 +25,9 @@ export function NoPermissionView({ entity, entityI18nKey, className, align = "mi
 			</div>
 			<div className="flex flex-col items-center gap-1">
 				<h1 className="text-muted-foreground text-xl font-medium">You don't have permission to view {displayEntity}</h1>
-				<p className="text-muted-foreground mt-2 max-w-[400px] text-sm font-normal">{t("common:noPermission.message")}</p>
+				<p className="text-muted-foreground mt-2 max-w-[400px] text-sm font-normal">
+					{t("common:noPermission.message")}
+				</p>
 			</div>
 		</div>
 	);
