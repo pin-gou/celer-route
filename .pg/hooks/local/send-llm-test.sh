@@ -2,10 +2,11 @@
 # send-llm-test.sh — 查询 local 环境 providers / models / routes，随机挑选并发送测试请求
 #
 # 用法:
-#   ./send-llm-test.sh [count]
+#   ./send-llm-test.sh [count] [concurrency]
 #
 # 参数:
-#   count  测试请求数量（默认 3）
+#   count        测试请求数量（默认 3）
+#   concurrency  并发度，同时发送的请求数（默认 1）
 #
 # 环境变量:
 #   PG_INSTANCE_HOST  API 主机（默认 localhost）
@@ -14,6 +15,8 @@
 set -uo pipefail
 
 COUNT="${1:-3}"
+CONCURRENCY="${2:-1}"
+(( CONCURRENCY < 1 )) && CONCURRENCY=1
 HOST="${PG_INSTANCE_HOST:-localhost}"
 PORT="${PG_INSTANCE_PORT:-9080}"
 BASE="http://${HOST}:${PORT}"
@@ -30,7 +33,7 @@ MESSAGES=(
   "Tell me a short joke."
 )
 
-echo "=== Bifrost LLM Test — sending ${COUNT} request(s) to ${BASE} ==="
+echo "=== Bifrost LLM Test — sending ${COUNT} request(s) to ${BASE} (concurrency=${CONCURRENCY}) ==="
 echo ""
 
 # ---- 1. 查询 providers ----
@@ -85,40 +88,51 @@ IFS=' ' read -ra MODEL_ARRAY <<< "$MODELS"
 IFS=' ' read -ra ROUTE_ARRAY <<< "$ROUTES"
 IFS=' ' read -ra MSG_ARRAY <<< "${MESSAGES[*]}"
 
-# ---- 4. 发送测试请求 ----
-PASS=0
-FAIL=0
+# ---- 4. 发送测试请求（按并发度分批，每批内后台并发，批间隔离） ----
+PASS_FILE="$(mktemp)"
+FAIL_FILE="$(mktemp)"
+: > "$PASS_FILE"
+: > "$FAIL_FILE"
 
-for ((i = 1; i <= COUNT; i++)); do
-  echo "--- Request #${i} ---"
+send_llm_request() {
+  # $1 = 请求序号（从 1 开始）
+  local i="$1"
+  local resp="/tmp/send-llm-test-resp-$$-${i}.json"
+  local out="/tmp/send-llm-test-out-$$-${i}.txt"
 
-  # 随机决定使用 model 还是 route
-  USE_MODEL=$((RANDOM % 2))
+  # 每个子进程重新播种 RANDOM，避免并发子进程产生相同随机序列
+  RANDOM=$((i * 7919 + $$))
 
-  if [[ USE_MODEL -eq 0 && ${#MODEL_ARRAY[@]} -gt 0 ]]; then
-    idx=$((RANDOM % ${#MODEL_ARRAY[@]}))
-    MODEL="${MODEL_ARRAY[$idx]}"
-    echo "mode: by-model | model: ${MODEL}"
-  elif [[ ${#ROUTE_ARRAY[@]} -gt 0 ]]; then
-    idx=$((RANDOM % ${#ROUTE_ARRAY[@]}))
-    MODEL="${ROUTE_ARRAY[$idx]}"
-    echo "mode: by-route | route: ${MODEL}"
-  else
-    idx=$((RANDOM % ${#MODEL_ARRAY[@]}))
-    MODEL="${MODEL_ARRAY[$idx]}"
-    echo "mode: by-model (route fallback) | model: ${MODEL}"
-  fi
+  {
+    echo "--- Request #${i} ---"
 
-  msg_idx=$((RANDOM % ${#MESSAGES[@]}))
-  MSG="${MESSAGES[$msg_idx]}"
+    # 随机决定使用 model 还是 route
+    USE_MODEL=$((RANDOM % 2))
 
-  echo "request: model=${MODEL} message=\"${MSG:0:50}...\""
+    if [[ USE_MODEL -eq 0 && ${#MODEL_ARRAY[@]} -gt 0 ]]; then
+      idx=$((RANDOM % ${#MODEL_ARRAY[@]}))
+      MODEL="${MODEL_ARRAY[$idx]}"
+      echo "mode: by-model | model: ${MODEL}"
+    elif [[ ${#ROUTE_ARRAY[@]} -gt 0 ]]; then
+      idx=$((RANDOM % ${#ROUTE_ARRAY[@]}))
+      MODEL="${ROUTE_ARRAY[$idx]}"
+      echo "mode: by-route | route: ${MODEL}"
+    else
+      idx=$((RANDOM % ${#MODEL_ARRAY[@]}))
+      MODEL="${MODEL_ARRAY[$idx]}"
+      echo "mode: by-model (route fallback) | model: ${MODEL}"
+    fi
 
-  START=$(date +%s%N)
-  HTTP_CODE=$(curl -s -o /tmp/send-llm-test-resp-$$.json -w "%{http_code}" \
-    -X POST "${BASE}/v1/chat/completions" \
-    -H "Content-Type: application/json" \
-    -d "$(cat <<PAYLOAD
+    msg_idx=$((RANDOM % ${#MESSAGES[@]}))
+    MSG="${MESSAGES[$msg_idx]}"
+
+    echo "request: model=${MODEL} message=\"${MSG:0:50}...\""
+
+    START=$(date +%s%N)
+    HTTP_CODE=$(curl -s -o "$resp" -w "%{http_code}" \
+      -X POST "${BASE}/v1/chat/completions" \
+      -H "Content-Type: application/json" \
+      -d "$(cat <<PAYLOAD
 {
   "model": "${MODEL}",
   "messages": [
@@ -131,13 +145,13 @@ for ((i = 1; i <= COUNT; i++)); do
 }
 PAYLOAD
 )" 2>/dev/null)
-  END=$(date +%s%N)
-  ELAPSED_MS=$(( (END - START) / 1000000 ))
+    END=$(date +%s%N)
+    ELAPSED_MS=$(( (END - START) / 1000000 ))
 
-  if [[ "$HTTP_CODE" == "200" ]]; then
-    CONTENT=$(python3 -c "
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      CONTENT=$(python3 -c "
 import json
-with open('/tmp/send-llm-test-resp-$$.json') as f:
+with open('${resp}') as f:
     d = json.load(f)
 choices = d.get('choices', [])
 if choices:
@@ -146,16 +160,45 @@ if choices:
 else:
     print('(no choices)')
 " 2>/dev/null || echo "(parse error)")
-    echo "result: PASS (${HTTP_CODE}, ${ELAPSED_MS}ms) → ${CONTENT}"
-    PASS=$((PASS + 1))
-  else
-    BODY=$(head -c 200 /tmp/send-llm-test-resp-$$.json 2>/dev/null || echo "(no response body)")
-    echo "result: FAIL (${HTTP_CODE}, ${ELAPSED_MS}ms) → ${BODY}"
-    FAIL=$((FAIL + 1))
-  fi
-  rm -f /tmp/send-llm-test-resp-$$.json
+      echo "result: PASS (${HTTP_CODE}, ${ELAPSED_MS}ms) → ${CONTENT}"
+      echo 1 >> "$PASS_FILE"
+    else
+      BODY=$(head -c 200 "$resp" 2>/dev/null || echo "(no response body)")
+      echo "result: FAIL (${HTTP_CODE}, ${ELAPSED_MS}ms) → ${BODY}"
+      echo 1 >> "$FAIL_FILE"
+    fi
+  } > "$out" 2>&1
+
+  rm -f "$resp"
+}
+
+i=1
+while (( i <= COUNT )); do
+  batch_end=$(( i + CONCURRENCY - 1 ))
+  (( batch_end > COUNT )) && batch_end=$COUNT
+
+  pids=()
+  for ((j = i; j <= batch_end; j++)); do
+    send_llm_request "$j" &
+    pids+=("$!")
+  done
+
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
+
+  for ((j = i; j <= batch_end; j++)); do
+    cat "/tmp/send-llm-test-out-$$-${j}.txt"
+    rm -f "/tmp/send-llm-test-out-$$-${j}.txt"
+  done
   echo ""
+
+  i=$(( batch_end + 1 ))
 done
+
+PASS=$(($(wc -l < "$PASS_FILE")))
+FAIL=$(($(wc -l < "$FAIL_FILE")))
+rm -f "$PASS_FILE" "$FAIL_FILE"
 
 echo "=== Summary ==="
 echo "Total: ${COUNT} | Pass: ${PASS} | Fail: ${FAIL}"
