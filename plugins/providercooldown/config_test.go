@@ -231,6 +231,36 @@ func TestParseConfigQuotaPatternsNilIsOK(t *testing.T) {
 	}
 }
 
+func TestConfig_DefaultOnInitialization(t *testing.T) {
+	// Verify that NewPlugin(logger).Init(nil) succeeds with default
+	// configuration and produces a fully usable plugin (covering the
+	// default-enable path where no config.json block is present).
+	log := &testLogger{}
+	plugin := NewPlugin(log)
+	defer plugin.Cleanup()
+
+	if err := plugin.Init(nil); err != nil {
+		t.Fatalf("Init(nil) should succeed with default config, got %v", err)
+	}
+	if plugin.State == nil {
+		t.Fatal("Init(nil) must populate State")
+	}
+	// Default TTL must be DefaultCooldownTTL (10 minutes) when no config
+	// overrides are provided.
+	if got := plugin.State.EffectiveTTL(schemas.OpenAI); got != DefaultCooldownTTL {
+		t.Fatalf("default TTL after Init(nil) = %v, want %v", got, DefaultCooldownTTL)
+	}
+	// The plugin must be fully usable: mark a key and verify cooldown.
+	plugin.State.Mark(schemas.OpenAI, "key-1")
+	if !plugin.State.IsCoolingDown(schemas.OpenAI, "key-1") {
+		t.Fatal("key should be in cooldown after Mark")
+	}
+	// Verify the init log line was emitted.
+	if !log.contains("initialized") {
+		t.Fatalf("expected init log message, got %v", log.msgs)
+	}
+}
+
 func TestPluginCustomQuotaPatternMatches(t *testing.T) {
 	log := &testLogger{}
 	plugin := NewPlugin(log)

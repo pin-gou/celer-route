@@ -1,0 +1,117 @@
+---
+title: "Provider Cooldown"
+description: "Automatically cool down provider keys that return quota/billing errors"
+---
+
+# Provider Cooldown
+
+The **Provider Cooldown** plugin is a built-in Bifrost plugin that automatically
+suppresses provider API keys returning quota, billing, or rate-limit errors.
+When a key triggers a cooldown, it is temporarily removed from the key pool so
+subsequent requests are routed to healthy keys. After the configured TTL
+expires, the key is automatically re-enabled.
+
+## Configuration
+
+The plugin's configuration is managed through the **Plugins** UI at
+`/workspace/plugins`. Select the `provider-cooldown` plugin from the list to
+open the dedicated fragment.
+
+### Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `default_ttl_seconds` | integer (1–86400) | `600` | Default cooldown duration in seconds for all providers. Maximum 1 day (86400s). |
+| `ttl_overrides` | object | `{}` | Per-provider TTL overrides. Key is the provider name (e.g. `openai`), value is the TTL in seconds (minimum 1). |
+| `quota_patterns` | array of strings | `["insufficient_quota"]` | Error message patterns that trigger cooldown. At least one pattern is required. Matches are case-insensitive substring matches against the provider's error response. |
+
+### Example
+
+```json
+{
+  "default_ttl_seconds": 600,
+  "ttl_overrides": {
+    "openai": 300,
+    "anthropic": 900
+  },
+  "quota_patterns": [
+    "insufficient_quota",
+    "quota exceeded",
+    "billing",
+    "usage limit"
+  ]
+}
+```
+
+## UI Entry
+
+The `provider-cooldown` plugin appears in the **Plugins** list
+(`/workspace/plugins`). When selected, a dedicated fragment is shown with three
+sections:
+
+1. **Enable Provider Cooldown** — Top-level toggle switch. RBAC-gated
+   (requires `Plugins.Update` permission).
+2. **Cooldown Settings** — The three configuration fields above in a
+   react-hook-form with Zod validation. Inline errors show on invalid input.
+3. **Monitoring** — Live monitoring panel with 5-second polling.
+
+## Monitoring API
+
+The monitoring panel consumes three read-only endpoints:
+
+### GET /api/plugins/provider-cooldown/state
+
+Returns all active cooldown entries with provider, key ID, expiry time, and
+reason.
+
+```json
+{
+  "state": [
+    {
+      "provider": "openai",
+      "keyId": "key-abc-123",
+      "expireAt": "2026-08-15T18:00:00Z",
+      "reason": "quota_exhausted"
+    }
+  ]
+}
+```
+
+### GET /api/plugins/provider-cooldown/stats
+
+Returns lifetime counters and point-in-time active count.
+
+```json
+{
+  "stats": {
+    "markCount": 12,
+    "suppressedCount": 8,
+    "activeCount": 3
+  }
+}
+```
+
+### DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId}
+
+Manually clear a cooldown entry for a specific provider/key pair. The UI
+provides an **Unfreeze** button per entry in the state list.
+
+```json
+{
+  "message": "key unfrozen",
+  "provider": "openai",
+  "keyId": "key-abc-123"
+}
+```
+
+## Default Behaviour
+
+The plugin is enabled by default — no explicit `config.json` entry is required
+to activate it. To disable it, add the following to your `config.json`:
+
+```json
+{
+  "name": "provider-cooldown",
+  "enabled": false
+}
+```

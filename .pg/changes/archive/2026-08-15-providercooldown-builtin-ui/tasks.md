@@ -34,10 +34,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 3.2 review agent 对 git diff feat/pg/providercooldown-builtin-ui 做静态审查
-- [ ] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 3.2 review agent 对 git diff feat/pg/providercooldown-builtin-ui 做静态审查
+- [x] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 > **本次变更 review 关注点**：
 > 1. `IsBuiltinPlugin()` 决策函数未改，`builtinPluginNames` 列表未改
@@ -51,10 +51,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 4.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 4.3 启动服务（如需）
-- [ ] 4.4 验证 V-transports-N：来自 design.md（N 由 design.md 决定，非章节号）
+- [x] 4.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 4.2 执行测试（runner 通过 modules 注入命令）
+- [x] 4.3 启动服务（如需）
+- [x] 4.4 验证 V-transports-N：来自 design.md（N 由 design.md 决定，非章节号）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
@@ -102,10 +102,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 8.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 8.2 review agent 对 git diff feat/pg/providercooldown-builtin-ui 做静态审查
-- [ ] 8.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 8.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 8.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 8.2 review agent 对 git diff feat/pg/providercooldown-builtin-ui 做静态审查
+- [x] 8.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 8.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 > **本次变更 review 关注点**：
 > 1. providercooldown 核心逻辑改动最小化（仅允许 Init 容忍 nil 入口）
@@ -118,10 +118,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 9.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 9.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 9.3 启动服务（如需）
-- [ ] 9.4 验证 V-plugins-N：来自 design.md（N 由 design.md 决定，非章节号）
+- [x] 9.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 9.2 执行测试（runner 通过 modules 注入命令）
+- [x] 9.3 启动服务（如需）
+- [x] 9.4 验证 V-plugins-N：来自 design.md（N 由 design.md 决定，非章节号）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
@@ -181,10 +181,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 13.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 13.2 review agent 对 git diff feat/pg/providercooldown-builtin-ui 做静态审查
-- [ ] 13.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 13.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 13.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 13.2 review agent 对 git diff feat/pg/providercooldown-builtin-ui 做静态审查
+- [x] 13.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 13.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 > **本次变更 review 关注点**：
 > 1. UI 端 zod schema 与 config.schema.json 字段类型一致（无 drift）
@@ -198,10 +198,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 14.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 14.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 14.3 启动服务（如需）
-- [ ] 14.4 验证 V-ui-N：来自 design.md（N 由 design.md 决定，非章节号）
+- [x] 14.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 14.2 执行测试（runner 通过 modules 注入命令）
+- [x] 14.3 启动服务（如需）
+- [x] 14.4 验证 V-ui-N：来自 design.md（N 由 design.md 决定，非章节号）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
@@ -230,20 +230,20 @@
 
 #### 步骤组 1：scenario-scr.yaml 读取
 
-- [ ] 16.1 确认 `.pg/changes/providercooldown-builtin-ui/scenario-scr.yaml` 存在且每个 Scenario 含 6 段（scenario_id / critical / given / when / then / evidence；and 可选）
-- [ ] 16.2 校验 scenario_id 全局唯一、critical 字段为 bool
+- [x] 16.1 确认 `.pg/changes/providercooldown-builtin-ui/scenario-scr.yaml` 存在且每个 Scenario 含 6 段（scenario_id / critical / given / when / then / evidence；and 可选）
+- [x] 16.2 校验 scenario_id 全局唯一、critical 字段为 bool
 
 #### 步骤组 2：执行
 
-- [ ] 16.3 按 scenario_id 排序：先 critical=true，后 critical=false
-- [ ] 16.4 串行执行每个 Scenario 的 given → when → then → and（cleanup）
-- [ ] 16.5 按 when[].type 分派执行方式：
+- [x] 16.3 按 scenario_id 排序：先 critical=true，后 critical=false
+- [x] 16.4 串行执行每个 Scenario 的 given → when → then → and（cleanup）
+- [x] 16.5 按 when[].type 分派执行方式：
   - type=api（默认）：使用 curl 等 HTTP 工具执行 API 请求
   - type=browser：加载 `pg-browser-testing-with-devtools` SKILL，使用 Chrome DevTools MCP 工具执行浏览器交互
-- [ ] 16.6 产出结构化 JSON 证据到 `2-build/<report_seq>-<scenario_id>-evidence.json`（<report_seq> 与本 phase 主报告共享同一 seq，由 dispatch_file 注入；加 seq 前缀避免多次 execute 派遣覆盖同 scenario 的历史 evidence）
-- [ ] 16.7 browser 场景截图存到 `2-build/<report_seq>-<scenario_id>-screenshot.png`
-- [ ] 16.8 critical=true FAIL → 立即停止后续 Scenario，全部标记 SKIPPED → record(scenario-execute, "escalate")
-- [ ] 16.9 全部通过 / scenario-execute agent 写盘报告到 `2-build/<seq>-scenario-execute.md`
+- [x] 16.6 产出结构化 JSON 证据到 `2-build/<report_seq>-<scenario_id>-evidence.json`（<report_seq> 与本 phase 主报告共享同一 seq，由 dispatch_file 注入；加 seq 前缀避免多次 execute 派遣覆盖同 scenario 的历史 evidence）
+- [x] 16.7 browser 场景截图存到 `2-build/<report_seq>-<scenario_id>-screenshot.png`
+- [x] 16.8 critical=true FAIL → 立即停止后续 Scenario，全部标记 SKIPPED → record(scenario-execute, "escalate")
+- [x] 16.9 全部通过 / scenario-execute agent 写盘报告到 `2-build/<seq>-scenario-execute.md`
 
 ## 17. final-gate - 最终门控审查
 
@@ -251,6 +251,6 @@
      stage=final (常驻, 无 on_conditions)
 -->
 
-- [ ] 17.1 收集所有 stage 的 Gate Assessment
-- [ ] 17.2 检查跨 stage 依赖项
-- [ ] 17.3 输出 Final Gate Assessment
+- [x] 17.1 收集所有 stage 的 Gate Assessment
+- [x] 17.2 检查跨 stage 依赖项
+- [x] 17.3 输出 Final Gate Assessment

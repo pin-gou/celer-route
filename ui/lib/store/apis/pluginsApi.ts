@@ -1,4 +1,14 @@
-import { CreatePluginRequest, Plugin, PluginsResponse, UpdatePluginRequest } from "@/lib/types/plugins";
+import {
+	CooldownStateEntry,
+	CooldownStats,
+	CooldownStateResponse,
+	CooldownStatsResponse,
+	CreatePluginRequest,
+	Plugin,
+	PluginsResponse,
+	UnfreezeCooldownResponse,
+	UpdatePluginRequest,
+} from "@/lib/types/plugins";
 import { baseApi } from "./baseApi";
 
 export const pluginsApi = baseApi.injectEndpoints({
@@ -101,6 +111,68 @@ export const pluginsApi = baseApi.injectEndpoints({
 				} catch {}
 			},
 		}),
+
+		// -----------------------------------------------------------------------
+		// Provider cooldown monitoring endpoints
+		// -----------------------------------------------------------------------
+
+		// GET /api/plugins/provider-cooldown/state — dump active cooldown entries.
+		// Backend returns { plugin, count, entries: [...] } — map entries → state
+		// for the UI contract.
+		getCooldownState: builder.query<CooldownStateResponse, void>({
+			query: () => "/plugins/provider-cooldown/state",
+			providesTags: ["Plugins"],
+			transformResponse: (response: any) => {
+				if (response && Array.isArray(response.entries)) {
+					return {
+						state: response.entries.map((e: any) => ({
+							provider: e.provider,
+							keyId: e.key_id ?? e.keyId,
+							expireAt: e.expires_at ?? e.expireAt,
+							reason: e.reason || "cooldown",
+						})),
+					};
+				}
+				return response;
+			},
+		}),
+
+		// GET /api/plugins/provider-cooldown/stats — lifetime counters + active
+		// count. Backend returns { plugin, mark_count, suppressed_count,
+		// current_active_count } — map to camelCase for the UI contract.
+		getCooldownStats: builder.query<CooldownStatsResponse, void>({
+			query: () => "/plugins/provider-cooldown/stats",
+			providesTags: ["Plugins"],
+			transformResponse: (response: any) => {
+				if (response && response.stats) return response;
+				if (response && "mark_count" in response) {
+					return {
+						stats: {
+							markCount: response.mark_count,
+							suppressedCount: response.suppressed_count,
+							activeCount: response.current_active_count,
+						},
+					};
+				}
+				return response;
+			},
+		}),
+
+		// DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} —
+		// manually un-cool a cooldown key. Backend returns { message, provider,
+		// key_id } — map key_id → keyId for the UI contract.
+		unfreezeCooldown: builder.mutation<UnfreezeCooldownResponse, { provider: string; keyId: string }>({
+			query: ({ provider, keyId }) => ({
+				url: `/plugins/provider-cooldown/state/${provider}/${keyId}`,
+				method: "DELETE",
+			}),
+			transformResponse: (response: any) => {
+				if (response && "key_id" in response && !("keyId" in response)) {
+					return { ...response, keyId: response.key_id };
+				}
+				return response;
+			},
+		}),
 	}),
 });
 
@@ -113,4 +185,7 @@ export const {
 	useUpdatePluginMutation,
 	useDeletePluginMutation,
 	useLazyGetPluginsQuery,
+	useGetCooldownStateQuery,
+	useGetCooldownStatsQuery,
+	useUnfreezeCooldownMutation,
 } = pluginsApi;

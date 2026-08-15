@@ -6,13 +6,14 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { setPluginFormDirtyState, useAppDispatch, useAppSelector, useUpdatePluginMutation } from "@/lib/store";
-import { PluginType } from "@/lib/types/plugins";
+import { PluginType, PROVIDER_COOLDOWN_PLUGIN } from "@/lib/types/plugins";
 import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import ProvidercooldownFragment from "../fragments/providercooldownFragment";
 import { toast } from "sonner";
 import * as z from "zod";
 
@@ -132,15 +133,24 @@ export default function PluginsView(props: Props) {
 		props.onDelete();
 	};
 
-	if (!selectedPlugin) {
-		return (
-			<div className="ml-4 flex w-full items-center justify-center">
-				<p className="text-muted-foreground">No plugin selected</p>
-			</div>
-		);
-	}
+if (!selectedPlugin) {
+			return (
+				<div className="ml-4 flex w-full items-center justify-center">
+					<p className="text-muted-foreground">No plugin selected</p>
+				</div>
+			);
+		}
 
-	const isErrorLog = (log: string) => {
+		// Render the dedicated fragment for the provider-cooldown built-in plugin
+		if (selectedPlugin.name === PROVIDER_COOLDOWN_PLUGIN) {
+			return (
+				<div className="ml-4 w-full">
+					<ProvidercooldownFragment plugin={selectedPlugin} />
+				</div>
+			);
+		}
+
+		const isErrorLog = (log: string) => {
 		const errorKeywords = ["error", "failed", "exception", "panic", "fatal", "ERR"];
 		return errorKeywords.some((keyword) => log.toLowerCase().includes(keyword.toLowerCase()));
 	};

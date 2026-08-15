@@ -209,6 +209,31 @@ func (h *PluginsHandler) getPlugins(ctx *fasthttp.RequestCtx) {
 	for _, plugin := range plugins {
 		finalPlugins = append(finalPlugins, h.buildPluginResponseWithStatuses(plugin, pluginStatuses))
 	}
+	// Merge in compiled-in built-in plugins that are loaded at runtime but
+	// have no config_plugins row (e.g. provider-cooldown loaded by default).
+	// This keeps built-ins visible to the UI even when they were never
+	// explicitly created through the plugins API.
+	persisted := make(map[string]struct{}, len(plugins))
+	for _, plugin := range plugins {
+		persisted[plugin.Name] = struct{}{}
+	}
+	for actualName, status := range pluginStatuses {
+		if _, ok := persisted[status.Name]; ok {
+			continue
+		}
+		if !lib.IsBuiltinPlugin(status.Name) {
+			continue
+		}
+		finalPlugins = append(finalPlugins, PluginResponse{
+			Name:       status.Name,
+			ActualName: actualName,
+			Enabled:    true,
+			Config:     map[string]any{},
+			IsCustom:   false,
+			Path:       nil,
+			Status:     status,
+		})
+	}
 	// Creating ephemeral struct
 	SendJSON(ctx, map[string]any{
 		"plugins": finalPlugins,
