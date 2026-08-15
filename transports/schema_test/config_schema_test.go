@@ -1065,3 +1065,86 @@ func TestSchemaResetConfigRequiresQuarterlyDuration(t *testing.T) {
 		})
 	}
 }
+
+// providerCooldownPluginConfig builds a full root config.json containing a
+// single provider-cooldown plugin entry with the given config block, so the
+// allOf/if/then plugin schema branch for name=provider-cooldown is exercised.
+func providerCooldownPluginConfig(configBlock string) string {
+	return `{
+		"plugins": [{
+			"name": "provider-cooldown",
+			"enabled": true,
+			"config": ` + configBlock + `
+		}]
+	}`
+}
+
+// TestSchemaProviderCooldownConfig pins the dedicated config.schema.json
+// validation rules for the provider-cooldown plugin (allOf/if/then branch).
+// Each invalid fixture must be rejected; the corresponding valid fixture must
+// still pass.
+//
+// Red-phase expectation: the dedicated allOf/if/then branch does not exist yet,
+// so every "must be rejected" fixture currently validates successfully and the
+// test fails. The dev phase adds the schema branch to turn it green.
+func TestSchemaProviderCooldownConfig(t *testing.T) {
+	compiled := compileSchema(t)
+
+	// Valid control fixture — exercised first so a blanket pass/fail of every
+	// case distinguishes "schema branch missing" from "branch rejects this".
+	validConfig := providerCooldownPluginConfig(`{
+		"default_ttl_seconds": 600,
+		"ttl_overrides": {"openai": 300},
+		"quota_patterns": ["insufficient_quota"]
+	}`)
+	if err := validateConfig(t, compiled, validConfig); err != nil {
+		t.Fatalf("valid provider-cooldown config should validate, got: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		config string
+	}{
+		{
+			name: "negative default_ttl_seconds is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": -1
+			}`),
+		},
+		{
+			name: "zero default_ttl_seconds is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 0
+			}`),
+		},
+		{
+			name: "negative ttl_overrides value is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": -300}
+			}`),
+		},
+		{
+			name: "zero ttl_overrides value is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 0}
+			}`),
+		},
+		{
+			name: "empty quota_patterns array is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": []
+			}`),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateConfig(t, compiled, tt.config); err == nil {
+				t.Error("config should be rejected by the provider-cooldown schema branch")
+			}
+		})
+	}
+}
