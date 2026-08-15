@@ -1367,8 +1367,6 @@ func TestListModels_KeyBlacklistIsCaseInsensitive(t *testing.T) {
 // TestListProvidersAggregatedFields verifies that GET /api/providers returns the 9 new
 // aggregation fields (keys_count, models_count, keys_health_status, today_requests,
 // today_errors, last_used_at, last_error_at, uptime, avg_latency_ms) with correct values.
-// The production code does not yet implement these fields, so this test is expected to
-// fail at compile time (TDD red phase).
 func TestListProvidersAggregatedFields(t *testing.T) {
 	SetLogger(&mockLogger{})
 	lib.SetLogger(&mockLogger{})
@@ -1397,8 +1395,15 @@ func TestListProvidersAggregatedFields(t *testing.T) {
 				provider: models,
 			},
 		},
-		// The dev agent will initialize h.client so that GetConfiguredProviders
-		// returns the provider, or refactor listProviders to work without it.
+		// Mock the logs store so the today_* / last_* / avg_latency aggregates are
+		// deterministic: 100 today requests, 3 errors, known timestamps, 312ms avg.
+		logStats: &mockProviderLogStats{
+			todayRequests: 100,
+			todayErrors:   3,
+			lastUsedAt:    "2026-08-15T01:42:00Z",
+			lastErrorAt:   "2026-08-15T00:15:22Z",
+			avgLatencyMs:  312,
+		},
 	}
 
 	ctx := &fasthttp.RequestCtx{}
@@ -1744,3 +1749,21 @@ func TestProviderResponse_BackwardCompat(t *testing.T) {
 
 // ptr returns a pointer to the given value. Useful for *bool literals in test setup.
 func ptr[T any](v T) *T { return &v }
+
+// mockProviderLogStats implements ProviderLogStats with fixed values, letting the
+// handler tests exercise the aggregated fields without a real logs store.
+type mockProviderLogStats struct {
+	todayRequests int
+	todayErrors   int
+	lastUsedAt    string
+	lastErrorAt   string
+	avgLatencyMs  int
+	err           error
+}
+
+func (m *mockProviderLogStats) AggregateProviderLogStats(_ context.Context, _ schemas.ModelProvider) (int, int, string, string, int, error) {
+	if m.err != nil {
+		return 0, 0, "", "", 0, m.err
+	}
+	return m.todayRequests, m.todayErrors, m.lastUsedAt, m.lastErrorAt, m.avgLatencyMs, nil
+}

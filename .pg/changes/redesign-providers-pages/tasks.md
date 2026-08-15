@@ -19,14 +19,14 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 2.1 `transports/bifrost-http/handlers/providers.go` 的 `ProviderResponse` struct 追加 9 个只读字段：`KeysCount int`、`ModelsCount int`、`KeysHealthStatus string`、`TodayRequests int`、`TodayErrors int`、`LastUsedAt *time.Time`、`LastErrorAt *time.Time`、`Uptime float64`、`AvgLatencyMs int`，全部加 `json` tag 与 `omitempty`（除 `omitempty` 不适用的基础类型）
-- [ ] 2.2 `transports/bifrost-http/handlers/providers.go` 新增私有方法 `aggregateProviderStats(ctx, providerName) (ProviderStats, error)`：单次 GROUP BY 批拉 keys 计数 + models 计数 + 当日请求/错误 + 24h avg latency。**禁止 N+1 循环**——批查询必须按 provider 分组一次性返回
-- [ ] 2.3 修改 `listProviders` handler：在循环中调用 `aggregateProviderStats`，将结果填入 `ProviderResponse` 新增字段；`getProvider` handler 同样填充
-- [ ] 2.4 `transports/bifrost-http/handlers/provider_keys.go` 新增 `batchUpdateProviderKeys(ctx)` handler：解析 body `{key_ids:[]string, enabled:bool}`，开启 DB 事务 → 校验所有 key_id 属于该 provider（`missing_key_ids` 收集）→ `UPDATE keys SET enabled=? WHERE id IN (...)` → 提交
-- [ ] 2.5 `transports/bifrost-http/handlers/provider_keys.go` 的 `RegisterRoutes` 注册 `r.POST("/api/providers/{provider}/keys/batch", lib.ChainMiddlewares(h.batchUpdateProviderKeys, middlewares...))`
-- [ ] 2.6 在 `transports/bifrost-http/handlers/providers_test.go` 中跑通 1.1-1.4 写的单测（绿）
-- [ ] 2.7 `cd transports && go build ./...` 确认编译通过
-- [ ] 2.8 `cd transports && go vet ./...` 确认 lint 通过
+- [x] 2.1 `transports/bifrost-http/handlers/providers.go` 的 `ProviderResponse` struct 追加 9 个只读字段：`KeysCount int`、`ModelsCount int`、`KeysHealthStatus string`、`TodayRequests int`、`TodayErrors int`、`LastUsedAt *time.Time`、`LastErrorAt *time.Time`、`Uptime float64`、`AvgLatencyMs int`，全部加 `json` tag 与 `omitempty`（除 `omitempty` 不适用的基础类型）
+- [x] 2.2 `transports/bifrost-http/handlers/providers.go` 新增私有方法 `aggregateProviderStats(ctx, providerName) (ProviderStats, error)`：单次 GROUP BY 批拉 keys 计数 + models 计数 + 当日请求/错误 + 24h avg latency。**禁止 N+1 循环**——批查询必须按 provider 分组一次性返回
+- [x] 2.3 修改 `listProviders` handler：在循环中调用 `aggregateProviderStats`，将结果填入 `ProviderResponse` 新增字段；`getProvider` handler 同样填充
+- [x] 2.4 `transports/bifrost-http/handlers/provider_keys.go` 新增 `batchUpdateProviderKeys(ctx)` handler：解析 body `{key_ids:[]string, enabled:bool}`，开启 DB 事务 → 校验所有 key_id 属于该 provider（`missing_key_ids` 收集）→ `UPDATE keys SET enabled=? WHERE id IN (...)` → 提交
+- [x] 2.5 `transports/bifrost-http/handlers/provider_keys.go` 的 `RegisterRoutes` 注册 `r.POST("/api/providers/{provider}/keys/batch", lib.ChainMiddlewares(h.batchUpdateProviderKeys, middlewares...))`
+- [x] 2.6 在 `transports/bifrost-http/handlers/providers_test.go` 中跑通 1.1-1.4 写的单测（绿）
+- [x] 2.7 `cd transports && go build ./...` 确认编译通过
+- [x] 2.8 `cd transports && go vet ./...` 确认 lint 通过
 
 ## 3. dev.transports:review - 静态代码审查
 
