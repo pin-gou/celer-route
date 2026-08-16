@@ -229,10 +229,6 @@ bifrost/
 ├── docs/                          # Documentation
 │   └── features/                  # Feature documentation (MDX)
 │
-├── helm-charts/                   # Kubernetes Helm charts
-│   ├── bifrost/                   # Bifrost Helm chart
-│   └── index.yaml                 # Chart index
-│
 ├── examples/                      # Example configurations
 │   ├── configs/                   # Config examples
 │   ├── dockers/                   # Docker examples

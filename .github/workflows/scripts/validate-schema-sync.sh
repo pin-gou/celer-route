@@ -58,6 +58,4 @@ echo "=================================================================="
 (cd "$TOOL_DIR" && GOWORK=off go build -o /tmp/schemasync .)
 /tmp/schemasync \
   --schema "$REPO_ROOT/transports/config.schema.json" \
-  --pkg-root "$REPO_ROOT" \
-  --helm-values "$REPO_ROOT/helm-charts/bifrost/values.schema.json" \
-  --helm-helpers "$REPO_ROOT/helm-charts/bifrost/templates/_helpers.tpl"
+  --pkg-root "$REPO_ROOT"

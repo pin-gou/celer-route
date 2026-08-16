@@ -125,17 +125,7 @@ jobs:
         id: detect
         run: ./.github/workflows/scripts/detect-all-changes.sh "auto"
 
-      - name: Validate Helm templates
-        run: |
-          chmod +x .github/workflows/scripts/validate-helm-templates.sh
-          .github/workflows/scripts/validate-helm-templates.sh
-
-      - name: Validate Helm config fields
-        run: |
-          chmod +x .github/workflows/scripts/validate-helm-config-fields.sh
-          .github/workflows/scripts/validate-helm-config-fields.sh
-
-      - name: Validate Go ↔ config.schema.json ↔ helm-chart sync (schemasync)
+      - name: Validate Go ↔ config.schema.json sync (schemasync)
         run: |
           chmod +x .github/workflows/scripts/validate-schema-sync.sh
           .github/workflows/scripts/validate-schema-sync.sh

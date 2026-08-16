@@ -1,5 +1,0 @@
-storage:
-  mode: sqlite
-  persistence:
-    enabled: true
-    size: 2Gi

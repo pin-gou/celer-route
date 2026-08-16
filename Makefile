@@ -68,7 +68,7 @@ define EXPOSE_ENV
 	fi
 endef
 
-.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner helm-index install-microsocks socks5-proxy install-tinyproxy http-proxy
+.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy
 
 all: help
 
@@ -500,25 +500,6 @@ clean-test-reports: ## Clean test reports only
 	@$(ECHO) "$(YELLOW)Cleaning test reports...$(NC)"
 	@rm -rf $(TEST_REPORTS_DIR)/
 	@$(ECHO) "$(GREEN)Test reports cleaned$(NC)"
-
-helm-index: ## Repackage helm chart, regenerate index.yaml digest, then remove the .tgz
-	@if ! which helm > /dev/null 2>&1; then \
-		$(ECHO) "$(RED)Error: helm not installed$(NC)"; \
-		exit 1; \
-	fi
-	@CHART_VERSION=$$(grep '^version:' helm-charts/bifrost/Chart.yaml | awk '{print $$2}'); \
-	$(ECHO) "$(YELLOW)Packaging helm chart v$$CHART_VERSION...$(NC)"; \
-	cd helm-charts && \
-	helm package bifrost && \
-	$(ECHO) "$(YELLOW)Regenerating index.yaml digest...$(NC)" && \
-	if [ -f index.yaml ]; then \
-		helm repo index . --url https://github.com/maximhq/bifrost/releases/download/helm-chart-v$$CHART_VERSION --merge index.yaml; \
-	else \
-		helm repo index . --url https://github.com/maximhq/bifrost/releases/download/helm-chart-v$$CHART_VERSION; \
-	fi && \
-	$(ECHO) "$(YELLOW)Removing bifrost-$$CHART_VERSION.tgz...$(NC)" && \
-	rm -f bifrost-$$CHART_VERSION.tgz && \
-	$(ECHO) "$(GREEN)Helm index updated$(NC)"
 
 generate-html-reports: ## Convert existing XML reports to HTML
 	@if ! which junit-viewer > /dev/null 2>&1; then \
