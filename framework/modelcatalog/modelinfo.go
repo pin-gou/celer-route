@@ -5,8 +5,8 @@ import (
 	"maps"
 	"slices"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // GetModelInfo returns pricing and capability metadata for a (provider, model)

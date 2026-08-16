@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	schemas "github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
 )
 
 // buildCompleteImageFromImageStreamChunks builds a complete image generation response from accumulated chunks

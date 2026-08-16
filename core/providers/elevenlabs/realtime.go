@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
 )
 
 // SupportsRealtimeAPI returns true since ElevenLabs supports Conversational AI via WebSocket.

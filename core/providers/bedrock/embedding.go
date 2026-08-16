@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // bedrockInputTokenCountHeader is the HTTP response header Bedrock uses to report input

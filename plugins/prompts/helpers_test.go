@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	tables "github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	tables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
 )
 
 // ============================================================

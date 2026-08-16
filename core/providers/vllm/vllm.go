@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maximhq/bifrost/core/providers/anthropic"
-	"github.com/maximhq/bifrost/core/providers/openai"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
+	"github.com/pin-gou/pg-gateway/core/providers/openai"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

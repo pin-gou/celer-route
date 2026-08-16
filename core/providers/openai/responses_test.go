@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func TestToOpenAIResponsesRequest_ReasoningOnlyMessageSkip(t *testing.T) {

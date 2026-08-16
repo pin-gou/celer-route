@@ -1,7 +1,7 @@
 package anthropic
 
 import (
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToBifrostCountTokensResponse converts an Anthropic count tokens response to Bifrost format

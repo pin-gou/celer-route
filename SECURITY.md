@@ -10,7 +10,7 @@
   Instead, please report them via one of the following methods:
 
   1. **GitHub Security Advisories (preferred)**: Use [GitHub's private vulnerability
-  reporting](https://github.com/maximhq/bifrost/security/advisories/new) to submit a report
+  reporting](https://github.com/pin-gou/pg-gateway/security/advisories/new) to submit a report
   directly through the repository.
   2. **Email**: Send an email to **akshay@getmaxim.ai** with the details of the
   vulnerability.

@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/mcp"
-	"github.com/maximhq/bifrost/core/mcp/codemode/starlark"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/mcp"
+	"github.com/pin-gou/pg-gateway/core/mcp/codemode/starlark"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1065,7 +1065,7 @@ func GetBifrostRoot(t *testing.T) string {
 	cwd, err := os.Getwd()
 	require.NoError(t, err, "should get current working directory")
 
-	// Walk up the directory tree to find the bifrost root (contains go.mod with module github.com/maximhq/bifrost)
+	// Walk up the directory tree to find the bifrost root (contains go.mod with module github.com/pin-gou/pg-gateway)
 	dir := cwd
 	for {
 		goModPath := filepath.Join(dir, "go.mod")

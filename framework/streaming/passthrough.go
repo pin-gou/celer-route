@@ -5,8 +5,8 @@ import (
 	"maps"
 	"time"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // processPassthroughStreamingResponse handles accumulation of passthrough streaming responses.

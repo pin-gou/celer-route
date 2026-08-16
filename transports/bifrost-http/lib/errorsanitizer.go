@@ -3,7 +3,7 @@ package lib
 import (
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 const ClientSafeInternalErrorMessage = "internal server error"

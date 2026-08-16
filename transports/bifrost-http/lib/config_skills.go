@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maximhq/bifrost/framework/configstore"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/objectstore"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/objectstore"
 )
 
 // loadSkillsRegistry reconciles config-defined skills with the database on startup.

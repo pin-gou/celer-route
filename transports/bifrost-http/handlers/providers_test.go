@@ -10,13 +10,13 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/configstore"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
-	"github.com/maximhq/bifrost/framework/modelcatalog/datasheet"
-	governanceplugin "github.com/maximhq/bifrost/plugins/governance"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog/datasheet"
+	governanceplugin "github.com/pin-gou/pg-gateway/plugins/governance"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 

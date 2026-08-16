@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/configstore"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
 	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
 )

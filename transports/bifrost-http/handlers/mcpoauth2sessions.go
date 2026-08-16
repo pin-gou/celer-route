@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/fasthttp/router"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/configstore"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 

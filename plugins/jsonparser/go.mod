@@ -1,8 +1,8 @@
-module github.com/maximhq/bifrost/plugins/jsonparser
+module github.com/pin-gou/pg-gateway/plugins/jsonparser
 
 go 1.26.5
 
-require github.com/maximhq/bifrost/core v1.7.7
+require github.com/pin-gou/pg-gateway/core v1.7.7
 
 require (
 	cloud.google.com/go v0.123.0 // indirect
@@ -71,3 +71,5 @@ require (
 	golang.org/x/text v0.39.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/pin-gou/pg-gateway/core => ../../core

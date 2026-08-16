@@ -1,7 +1,7 @@
 package gemini
 
 import (
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToGeminiEmbeddingRequest converts a BifrostRequest with embedding input to Gemini's batch embedding request format

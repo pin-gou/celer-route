@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/encrypt"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/encrypt"
 	"gorm.io/gorm"
 )
 

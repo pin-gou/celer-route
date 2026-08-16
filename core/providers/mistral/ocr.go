@@ -1,7 +1,7 @@
 package mistral
 
 import (
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToMistralOCRRequest converts a Bifrost OCR request to a Mistral OCR request.

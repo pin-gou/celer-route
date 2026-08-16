@@ -15,8 +15,8 @@ import (
 
 	"github.com/bytedance/sonic"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 
 	"github.com/valyala/fasthttp"
 )
@@ -479,7 +479,7 @@ func (provider *CohereProvider) ChatCompletionStream(ctx *schemas.BifrostContext
 		// Request failed before the first response byte (server closed an idle/pooled connection,
 		// broken pipe, connection refused, DNS failure, etc.). Surface as a retriable upstream
 		// connection error (502) so executeRequestWithRetries honors max_retries, matching the
-		// non-streaming path - see https://github.com/maximhq/bifrost/issues/4496.
+		// non-streaming path - see https://github.com/pin-gou/pg-gateway/issues/4496.
 		return nil, providerUtils.EnrichError(ctx, providerUtils.NewBifrostUpstreamConnectionError(schemas.ErrProviderDoRequest, err), jsonBody, nil, sendBackRawRequest, sendBackRawResponse, latency)
 	}
 
@@ -768,7 +768,7 @@ func (provider *CohereProvider) ResponsesStream(ctx *schemas.BifrostContext, pos
 		// Request failed before the first response byte (server closed an idle/pooled connection,
 		// broken pipe, connection refused, DNS failure, etc.). Surface as a retriable upstream
 		// connection error (502) so executeRequestWithRetries honors max_retries, matching the
-		// non-streaming path - see https://github.com/maximhq/bifrost/issues/4496.
+		// non-streaming path - see https://github.com/pin-gou/pg-gateway/issues/4496.
 		return nil, providerUtils.EnrichError(ctx, providerUtils.NewBifrostUpstreamConnectionError(schemas.ErrProviderDoRequest, err), jsonBody, nil, sendBackRawRequest, sendBackRawResponse, latency)
 	}
 

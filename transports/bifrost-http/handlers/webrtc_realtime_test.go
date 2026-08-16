@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/kvstore"
-	"github.com/maximhq/bifrost/framework/logstore"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
-	bfws "github.com/maximhq/bifrost/transports/bifrost-http/websocket"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/kvstore"
+	"github.com/pin-gou/pg-gateway/framework/logstore"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
+	bfws "github.com/pin-gou/pg-gateway/transports/bifrost-http/websocket"
 	"github.com/valyala/fasthttp"
 )
 

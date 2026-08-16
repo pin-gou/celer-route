@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/providers/openai"
-	"github.com/maximhq/bifrost/core/schemas"
-	bfws "github.com/maximhq/bifrost/transports/bifrost-http/websocket"
+	"github.com/pin-gou/pg-gateway/core/providers/openai"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	bfws "github.com/pin-gou/pg-gateway/transports/bifrost-http/websocket"
 )
 
 func TestBuildRealtimeTurnPreRequestIncludesResponseCreateContent(t *testing.T) {

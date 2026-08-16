@@ -10,11 +10,11 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/google/uuid"
-	mcputils "github.com/maximhq/bifrost/core/mcp/utils"
-	"github.com/maximhq/bifrost/core/schemas"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/temptoken"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	mcputils "github.com/pin-gou/pg-gateway/core/mcp/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/temptoken"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 

@@ -17,7 +17,7 @@ const externalLinks = [
 	},
 	{
 		title: "GitHub Repository",
-		url: "https://github.com/maximhq/bifrost",
+		url: "https://github.com/pin-gou/pg-gateway",
 		icon: GithubLogoIcon,
 	},
 ];

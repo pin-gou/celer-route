@@ -1,1 +1,1 @@
-从 https://github.com/maximhq/bifrost 的 commit 5dbf56b41df44c28db6f6765f8c6dd9b65ba78e2 fork
+从 https://github.com/pin-gou/pg-gateway 的 commit 5dbf56b41df44c28db6f6765f8c6dd9b65ba78e2 fork

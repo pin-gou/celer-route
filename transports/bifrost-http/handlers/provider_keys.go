@@ -9,9 +9,9 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
 )

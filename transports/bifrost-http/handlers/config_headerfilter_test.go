@@ -3,8 +3,8 @@ package handlers
 import (
 	"testing"
 
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 )
 
 func TestValidateHeaderFilterConfig(t *testing.T) {

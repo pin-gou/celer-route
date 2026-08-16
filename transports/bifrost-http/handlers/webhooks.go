@@ -16,12 +16,12 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/fasthttp/router"
 	"github.com/google/uuid"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/configstore"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/logstore"
-	"github.com/maximhq/bifrost/framework/webhooks"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/logstore"
+	"github.com/pin-gou/pg-gateway/framework/webhooks"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 

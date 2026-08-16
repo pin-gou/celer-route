@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestConfigUnmarshalLegacySingleObject verifies that a legacy single-object config

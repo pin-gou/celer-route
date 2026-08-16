@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestResponsesAPIBasicFunctionality tests the core caching functionality with Responses API

@@ -4,7 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func cloneBifrostReq(req *schemas.BifrostRequest) *schemas.BifrostRequest {

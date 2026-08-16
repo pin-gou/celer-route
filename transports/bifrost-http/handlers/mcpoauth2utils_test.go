@@ -3,9 +3,9 @@ package handlers
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/framework/configstore"
-	configtables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configtables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )

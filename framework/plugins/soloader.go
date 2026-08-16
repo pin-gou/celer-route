@@ -7,8 +7,8 @@ import (
 	"plugin"
 	"strings"
 
-	"github.com/maximhq/bifrost/core/network"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/network"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // SharedObjectPluginLoader is the loader for shared object plugins. The zero value is a

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/internal/llmtests"
-	deepseek "github.com/maximhq/bifrost/core/providers/deepseek"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
+	deepseek "github.com/pin-gou/pg-gateway/core/providers/deepseek"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 type testLogger struct{}

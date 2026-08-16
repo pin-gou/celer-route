@@ -1,7 +1,7 @@
 package openai
 
 import (
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToBifrostSpeechRequest converts an OpenAI speech request to Bifrost format

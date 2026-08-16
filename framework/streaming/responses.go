@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
 )
 
 // deepCopyResponsesStreamResponse creates a deep copy of BifrostResponsesStreamResponse

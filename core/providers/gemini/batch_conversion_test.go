@@ -3,7 +3,7 @@ package gemini_test
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/providers/gemini"
+	"github.com/pin-gou/pg-gateway/core/providers/gemini"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

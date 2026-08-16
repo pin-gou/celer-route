@@ -3,7 +3,7 @@ package runway
 import (
 	"strings"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // getRunwayEndpoint determines which Runway API endpoint to use based on the request parameters.

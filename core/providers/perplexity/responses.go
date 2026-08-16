@@ -3,7 +3,7 @@ package perplexity
 import (
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // isPerplexityResponsesSupported reports whether the model should use /v1/responses vs /chat/completions.

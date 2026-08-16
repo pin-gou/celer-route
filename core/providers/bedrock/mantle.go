@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 
-	openai "github.com/maximhq/bifrost/core/providers/openai"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	openai "github.com/pin-gou/pg-gateway/core/providers/openai"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 const (

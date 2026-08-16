@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/mcp"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/mcp"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

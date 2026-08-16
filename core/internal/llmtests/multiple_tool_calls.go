@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // getKeysFromMap returns the keys of a map[string]bool as a slice

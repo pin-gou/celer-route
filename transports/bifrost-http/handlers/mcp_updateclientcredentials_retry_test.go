@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // fakeUpdateCredsMCPManager is a minimal MCPManager test double: only

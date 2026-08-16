@@ -1,6 +1,6 @@
 package tables
 
-import "github.com/maximhq/bifrost/core/network"
+import "github.com/pin-gou/pg-gateway/core/network"
 
 const (
 	ConfigAdminUsernameKey = "admin_username"

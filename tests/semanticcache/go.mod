@@ -1,3 +1,3 @@
-module github.com/maximhq/bifrost/tests/semanticcache
+module github.com/pin-gou/pg-gateway/tests/semanticcache
 
 go 1.26.5

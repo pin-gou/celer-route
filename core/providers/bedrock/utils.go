@@ -15,9 +15,9 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/tidwall/sjson"
 
-	"github.com/maximhq/bifrost/core/providers/anthropic"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // awsRegionRegex matches valid AWS region identifiers (e.g. "us-east-1", "eu-north-1", "us-gov-east-1").

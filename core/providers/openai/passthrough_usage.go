@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ExtractOpenAIPassthroughUsage extracts usage from a passthrough response payload. method is the

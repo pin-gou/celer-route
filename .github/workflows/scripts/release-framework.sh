@@ -61,7 +61,7 @@ CORE_VERSION="v$(tr -d '\n\r' < core/version)"
 # Before starting the test, we need to update hello-word plugin core dependencies
 echo "🔧 Updating hello-word plugin core dependencies..."
 cd examples/plugins/hello-world
-go_get_with_backoff "github.com/maximhq/bifrost/core@$CORE_VERSION"
+go_get_with_backoff "github.com/pin-gou/pg-gateway/core@$CORE_VERSION"
 go mod tidy
 git add go.mod go.sum
 cd ../../..
@@ -71,7 +71,7 @@ echo "🔧 Using core version: $CORE_VERSION"
 # Update framework dependencies
 echo "🔧 Updating framework dependencies..."
 cd framework
-go_get_with_backoff "github.com/maximhq/bifrost/core@$CORE_VERSION"
+go_get_with_backoff "github.com/pin-gou/pg-gateway/core@$CORE_VERSION"
 go mod tidy
 git add go.mod go.sum
 
@@ -162,7 +162,7 @@ $CHANGELOG_BODY
 ### Installation
 
 \`\`\`bash
-go get github.com/maximhq/bifrost/framework@$VERSION
+go get github.com/pin-gou/pg-gateway/framework@$VERSION
 \`\`\`
 
 ---

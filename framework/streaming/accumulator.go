@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
 )
 
 // getAccumulatorID extracts the ID for accumulator lookup from context.

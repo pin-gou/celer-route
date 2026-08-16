@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/postgresconn"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/postgresconn"
 	"gorm.io/gorm"
 )
 

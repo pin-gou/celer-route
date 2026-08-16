@@ -12,11 +12,11 @@ import (
 
 	"github.com/fasthttp/router"
 	ws "github.com/fasthttp/websocket"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
-	bfws "github.com/maximhq/bifrost/transports/bifrost-http/websocket"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/integrations"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
+	bfws "github.com/pin-gou/pg-gateway/transports/bifrost-http/websocket"
 	"github.com/valyala/fasthttp"
 )
 

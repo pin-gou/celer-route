@@ -11,10 +11,10 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/logstore"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
-	"github.com/maximhq/bifrost/framework/streaming"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/logstore"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	"github.com/pin-gou/pg-gateway/framework/streaming"
 )
 
 const realtimeMissingTranscriptText = "[Audio transcription unavailable]"

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // driveResponsesStream replays a sequence of Anthropic SSE events through

@@ -62,12 +62,12 @@ import (
 
 	_ "go.uber.org/automaxprocs" // Automatically set GOMAXPROCS based on container cgroup limits
 
-	bifrost "github.com/maximhq/bifrost/core"
-	schemas "github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
-	"github.com/maximhq/bifrost/transports/bifrost-http/profiling"
-	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/handlers"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/profiling"
+	bifrostServer "github.com/pin-gou/pg-gateway/transports/bifrost-http/server"
 )
 
 //go:embed all:ui
@@ -133,7 +133,7 @@ func main() {
 ║═══════════════════════════════════════════════════════════║
 ║                 The Fastest LLM Gateway                   ║
 ║═══════════════════════════════════════════════════════════║
-║             https://github.com/maximhq/bifrost            ║
+║             https://github.com/pin-gou/pg-gateway            ║
 ╚═══════════════════════════════════════════════════════════╝
 
 `, versionLine)

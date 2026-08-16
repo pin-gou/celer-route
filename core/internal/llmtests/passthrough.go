@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // RunPassthroughExtraParamsTest executes the passthrough extraParams test scenario

@@ -118,9 +118,9 @@ jobs:
           curl -sLO https://maximhq.github.io/bifrost/helm-charts/index.yaml || true
           # Merge with new chart only if index.yaml exists
           if [ -f index.yaml ]; then
-            helm repo index . --url https://github.com/maximhq/bifrost/releases/download/helm-chart-v${{ steps.chart-version.outputs.version }} --merge index.yaml
+            helm repo index . --url https://github.com/pin-gou/pg-gateway/releases/download/helm-chart-v${{ steps.chart-version.outputs.version }} --merge index.yaml
           else
-            helm repo index . --url https://github.com/maximhq/bifrost/releases/download/helm-chart-v${{ steps.chart-version.outputs.version }}
+            helm repo index . --url https://github.com/pin-gou/pg-gateway/releases/download/helm-chart-v${{ steps.chart-version.outputs.version }}
           fi
 
       - name: Deploy to GitHub Pages

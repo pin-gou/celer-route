@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maximhq/bifrost/framework/configstore"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
 )
 
 // oauth2SweepWorker periodically removes expired authorize requests and old

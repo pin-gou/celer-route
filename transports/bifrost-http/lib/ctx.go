@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/plugins/governance"
-	"github.com/maximhq/bifrost/plugins/maxim"
-	"github.com/maximhq/bifrost/plugins/semanticcache"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/plugins/governance"
+	"github.com/pin-gou/pg-gateway/plugins/maxim"
+	"github.com/pin-gou/pg-gateway/plugins/semanticcache"
 	"github.com/valyala/fasthttp"
 )
 

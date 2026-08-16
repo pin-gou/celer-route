@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/logstore"
-	"github.com/maximhq/bifrost/framework/streaming"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/logstore"
+	"github.com/pin-gou/pg-gateway/framework/streaming"
 )
 
 // KeyPair represents an ID-Name pair for keys

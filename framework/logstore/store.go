@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/objectstore"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/objectstore"
 )
 
 // LogStoreType represents the type of log store.

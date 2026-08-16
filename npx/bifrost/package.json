@@ -10,10 +10,10 @@
     "cli",
     "bifrost"
   ],
-  "homepage": "https://github.com/maximhq/bifrost",
+  "homepage": "https://github.com/pin-gou/pg-gateway",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/maximhq/bifrost.git"
+    "url": "git+https://github.com/pin-gou/pg-gateway.git"
   },
   "license": "Apache-2.0",
   "author": "Maxim HQ",

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
-// Regression tests for https://github.com/maximhq/bifrost/issues/4788.
+// Regression tests for https://github.com/pin-gou/pg-gateway/issues/4788.
 //
 // When a streaming attempt fails through an error embedded in an HTTP 200 SSE
 // stream (e.g. rate limits sent as SSE events), the provider goroutine exits

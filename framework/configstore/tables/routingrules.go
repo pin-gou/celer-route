@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	bifrost "github.com/maximhq/bifrost/core"
+	bifrost "github.com/pin-gou/pg-gateway/core"
 	"gorm.io/gorm"
 )
 

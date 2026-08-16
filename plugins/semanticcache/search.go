@@ -11,9 +11,9 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/google/uuid"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/vectorstore"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/vectorstore"
 )
 
 // performDirectSearch does an O(1) point fetch on the deterministic directCacheID

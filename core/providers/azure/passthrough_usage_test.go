@@ -3,7 +3,7 @@ package azure
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestExtractAzurePassthroughUsage verifies Azure dispatches usage extraction by upstream model:

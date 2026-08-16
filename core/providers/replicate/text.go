@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func ToReplicateTextRequest(bifrostReq *schemas.BifrostTextCompletionRequest) (*ReplicatePredictionRequest, error) {

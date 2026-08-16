@@ -3,7 +3,7 @@ package openai
 import (
 	"net/http"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/tidwall/gjson"
 )
 

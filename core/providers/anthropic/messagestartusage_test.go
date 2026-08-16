@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/tidwall/gjson"
 )
 

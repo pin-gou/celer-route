@@ -2,8 +2,8 @@ package vllm
 
 import (
 	"github.com/bytedance/sonic"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func HandleVLLMResponse[T any](responseBody []byte, response *T, requestBody []byte, sendBackRawRequest bool, sendBackRawResponse bool) (rawRequest interface{}, rawResponse interface{}, bifrostErr *schemas.BifrostError) {

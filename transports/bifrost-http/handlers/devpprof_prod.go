@@ -4,7 +4,7 @@ package handlers
 
 import (
 	"github.com/fasthttp/router"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // DevPprofHandler is a no-op stub for production builds (built without the "dev" tag).

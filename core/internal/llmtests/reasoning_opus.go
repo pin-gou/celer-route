@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // OpusReasoningTestConfig holds configuration for Opus-specific reasoning tests

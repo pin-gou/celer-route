@@ -3,7 +3,7 @@ package bedrock
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestConverseToolErrorReachesChatSurface pins the Bedrock ingress round trip.

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
 )

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestMCPErrorTypeClassification asserts that mcpErrorType maps failed MCP ops onto the

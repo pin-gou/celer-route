@@ -13,9 +13,9 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	core "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/mcp"
-	"github.com/maximhq/bifrost/core/schemas"
+	core "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/mcp"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

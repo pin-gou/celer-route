@@ -14,9 +14,9 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/fasthttp/router"
-	"github.com/maximhq/bifrost/core/providers/anthropic"
-	"github.com/maximhq/bifrost/core/providers/openai"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
+	"github.com/pin-gou/pg-gateway/core/providers/openai"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"

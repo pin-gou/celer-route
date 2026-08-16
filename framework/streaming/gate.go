@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // gateReplayBufMaxBytes caps the per-stream paused replay buffer at 100 MB.

@@ -10,9 +10,9 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/streaming"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/streaming"
 
 	"github.com/maximhq/maxim-go"
 	"github.com/maximhq/maxim-go/logging"

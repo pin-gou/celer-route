@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // BaseAccount implements the Account interface for Bifrost.

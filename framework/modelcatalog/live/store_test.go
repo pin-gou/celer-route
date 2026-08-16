@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 const (

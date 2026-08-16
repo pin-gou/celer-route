@@ -8,7 +8,7 @@ import (
 	"mime/multipart"
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ParseMultipartFormFields extracts text form fields from a multipart/form-data body,

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // reasoningStreamChunk builds a single Chat streaming chunk.

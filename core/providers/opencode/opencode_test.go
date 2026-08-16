@@ -3,7 +3,7 @@ package opencode
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Compile-time check that opencodeProvider satisfies the full Provider interface.

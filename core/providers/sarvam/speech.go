@@ -1,7 +1,7 @@
 package sarvam
 
 import (
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToSarvamSpeechRequest maps a Bifrost speech request onto Sarvam's text-to-speech request.

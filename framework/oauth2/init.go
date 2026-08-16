@@ -1,6 +1,6 @@
 package oauth2
 
-import "github.com/maximhq/bifrost/core/schemas"
+import "github.com/pin-gou/pg-gateway/core/schemas"
 
 var logger schemas.Logger
 

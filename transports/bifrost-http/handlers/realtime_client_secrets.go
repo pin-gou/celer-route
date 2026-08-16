@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/plugins/governance"
-	"github.com/maximhq/bifrost/plugins/modelcatalogresolver"
-	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/plugins/governance"
+	"github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/integrations"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 

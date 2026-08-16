@@ -5,9 +5,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/maximhq/bifrost/core/schemas"
-	configtables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	configtables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"

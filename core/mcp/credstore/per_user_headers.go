@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/maximhq/bifrost/core/mcp/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/mcp/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // perUserHeadersResolver handles MCPAuthTypePerUserHeaders — each caller's

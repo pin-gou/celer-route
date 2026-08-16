@@ -10,8 +10,8 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/tidwall/gjson"
 )
 

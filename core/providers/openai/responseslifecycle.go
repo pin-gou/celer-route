@@ -13,8 +13,8 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/valyala/fasthttp"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func buildResponsesRetrieveQuery(req *schemas.BifrostResponsesRetrieveRequest) string {

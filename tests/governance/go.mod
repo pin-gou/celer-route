@@ -1,3 +1,3 @@
-module github.com/maximhq/bifrost/tests/governance
+module github.com/pin-gou/pg-gateway/tests/governance
 
 go 1.26.5

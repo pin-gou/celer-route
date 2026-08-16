@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/internal/llmtests"
-	"github.com/maximhq/bifrost/core/providers/anthropic"
-	"github.com/maximhq/bifrost/core/providers/bedrock"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
+	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
+	"github.com/pin-gou/pg-gateway/core/providers/bedrock"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -6271,7 +6271,7 @@ func TestBedrockToBifrostResponsesResponse_StructuredOutput_MixedWithRealTools(t
 }
 
 // TestBedrockSearchResultToolResultRoundTrip is the regression gate for
-// https://github.com/maximhq/bifrost/issues/3537 — a Bedrock-native passthrough
+// https://github.com/pin-gou/pg-gateway/issues/3537 — a Bedrock-native passthrough
 // request containing toolResult.content[].searchResult must survive
 // ToBifrostResponsesRequest → ToBedrockResponsesRequest with all fields intact.
 // Pre-fix, the SearchResult field is dropped during JSON unmarshal and the

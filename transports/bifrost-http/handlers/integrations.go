@@ -4,10 +4,10 @@ package handlers
 
 import (
 	"github.com/fasthttp/router"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/integrations"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 )
 
 // IntegrationHandler manages HTTP requests for AI provider integrations

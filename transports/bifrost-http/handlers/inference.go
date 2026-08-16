@@ -20,11 +20,11 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/fasthttp/router"
-	bifrost "github.com/maximhq/bifrost/core"
+	bifrost "github.com/pin-gou/pg-gateway/core"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 

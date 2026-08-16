@@ -279,7 +279,7 @@ setup_mocker() {
   else
     log_info "Cloning bifrost-benchmarking repository..."
     mkdir -p "$(dirname "${BENCHMARK_DIR}")"
-    git clone --depth 1 https://github.com/maximhq/bifrost-benchmarking.git "${BENCHMARK_DIR}"
+    git clone --depth 1 https://github.com/pin-gou/pg-gateway-benchmarking.git "${BENCHMARK_DIR}"
     cd "${WORK_DIR}"
   fi
 

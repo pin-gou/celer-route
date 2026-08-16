@@ -3,7 +3,7 @@ package azure
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func TestBuildPassthroughURL(t *testing.T) {

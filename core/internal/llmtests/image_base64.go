@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // RunImageBase64Test executes the image base64 test scenario using dual API testing framework

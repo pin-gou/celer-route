@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 
 // A "data: [DONE]" marker states that the stream finished normally. Emitting it
 // after an error frame reproduces, one layer up, the same ambiguity that made
 // truncated upstream streams look successful: a client keyed on the marker sees
-// a clean end either way. See https://github.com/maximhq/bifrost/issues/5546.
+// a clean end either way. See https://github.com/pin-gou/pg-gateway/issues/5546.
 
 // serveStreamingResponse runs handleStreamingResponse against an in-process
 // connection and returns the raw SSE body the client would receive.

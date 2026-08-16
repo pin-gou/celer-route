@@ -1,4 +1,4 @@
-module github.com/maximhq/bifrost/plugins/governance
+module github.com/pin-gou/pg-gateway/plugins/governance
 
 go 1.26.5
 
@@ -8,8 +8,8 @@ require (
 	github.com/blevesearch/go-porterstemmer v1.0.3
 	github.com/google/cel-go v0.29.0
 	github.com/google/uuid v1.6.0
-	github.com/maximhq/bifrost/core v1.7.7
-	github.com/maximhq/bifrost/framework v1.5.7
+	github.com/pin-gou/pg-gateway/core v1.7.7
+	github.com/pin-gou/pg-gateway/framework v1.5.7
 	github.com/stretchr/testify v1.11.1
 	github.com/valyala/fasthttp v1.71.0
 )
@@ -175,3 +175,7 @@ require (
 	gorm.io/driver/postgres v1.6.0 // indirect
 	gorm.io/driver/sqlite v1.6.0 // indirect
 )
+
+replace github.com/pin-gou/pg-gateway/core => ../../core
+
+replace github.com/pin-gou/pg-gateway/framework => ../../framework

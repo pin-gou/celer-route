@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func testToolCall(id string) schemas.ChatAssistantMessageToolCall {

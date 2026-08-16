@@ -140,7 +140,7 @@ start_postgres() {
 build_binaries() {
   if [ ! -d "${BENCHMARK_DIR}" ]; then
     log "cloning bifrost-benchmarking"
-    git clone --depth 1 https://github.com/maximhq/bifrost-benchmarking.git "${BENCHMARK_DIR}"
+    git clone --depth 1 https://github.com/pin-gou/pg-gateway-benchmarking.git "${BENCHMARK_DIR}"
   fi
 
   mkdir -p "${ROOT_DIR}/tmp" "${ROOT_DIR}/transports/bifrost-http/ui"

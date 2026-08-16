@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // makeResponsesTextFormat returns a minimal json_schema text config for the

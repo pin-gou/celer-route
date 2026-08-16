@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // AnthropicRequestBuildConfig holds the dynamic, per-call inputs to

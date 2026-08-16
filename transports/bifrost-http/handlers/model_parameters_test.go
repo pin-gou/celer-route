@@ -6,11 +6,11 @@ import (
 	"net"
 	"testing"
 
-	"github.com/maximhq/bifrost/framework/configstore"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
-	"github.com/maximhq/bifrost/framework/modelcatalog/datasheet"
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog/datasheet"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 )

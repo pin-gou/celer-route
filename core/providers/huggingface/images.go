@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	nebiusProvider "github.com/maximhq/bifrost/core/providers/nebius"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	nebiusProvider "github.com/pin-gou/pg-gateway/core/providers/nebius"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Models that support multiple images (image_urls)

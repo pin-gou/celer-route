@@ -1,4 +1,4 @@
-module github.com/maximhq/bifrost/core
+module github.com/pin-gou/pg-gateway/core
 
 go 1.26.5
 

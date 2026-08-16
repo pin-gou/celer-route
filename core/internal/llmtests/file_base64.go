@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // HelloWorldPDFBase64 is a base64 encoded PDF file containing "Hello World!" text.

@@ -1,4 +1,4 @@
-module github.com/maximhq/bifrost/scripts/realtime-test
+module github.com/pin-gou/pg-gateway/scripts/realtime-test
 
 go 1.26.5
 

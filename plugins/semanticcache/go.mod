@@ -1,13 +1,13 @@
-module github.com/maximhq/bifrost/plugins/semanticcache
+module github.com/pin-gou/pg-gateway/plugins/semanticcache
 
 go 1.26.5
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/google/uuid v1.6.0
-	github.com/maximhq/bifrost/core v1.7.7
-	github.com/maximhq/bifrost/framework v1.5.7
-	github.com/maximhq/bifrost/plugins/mocker v1.5.19
+	github.com/pin-gou/pg-gateway/core v1.7.7
+	github.com/pin-gou/pg-gateway/framework v1.5.7
+	github.com/pin-gou/pg-gateway/plugins/mocker v1.5.19
 )
 
 require (
@@ -125,3 +125,9 @@ require (
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/pin-gou/pg-gateway/core => ../../core
+
+replace github.com/pin-gou/pg-gateway/framework => ../../framework
+
+replace github.com/pin-gou/pg-gateway/plugins/mocker => ../mocker

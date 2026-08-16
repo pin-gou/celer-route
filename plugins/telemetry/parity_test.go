@@ -3,7 +3,7 @@ package telemetry
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestPrometheusLabelsMatchEnrichmentRegistry keeps the Prometheus bifrost label

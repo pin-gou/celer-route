@@ -5,7 +5,7 @@
 package modelcatalog
 
 import (
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // UpsertLive caches one (provider, keyID, unfiltered) list-models response.

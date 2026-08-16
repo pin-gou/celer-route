@@ -3,7 +3,7 @@ package anthropic
 import (
 	"testing"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Anthropic-format clients (Claude Code's Read tool among them) return a PDF

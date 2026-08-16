@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // visibleThinkingToolUseLifecycle returns the real Anthropic SSE shape of a

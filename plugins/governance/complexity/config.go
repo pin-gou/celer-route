@@ -1,7 +1,7 @@
 // Package complexity provides request-complexity scoring for governance routing.
 package complexity
 
-import "github.com/maximhq/bifrost/framework/configstore"
+import "github.com/pin-gou/pg-gateway/framework/configstore"
 
 // ComplexityInput is the normalized input for the analyzer.
 // The caller is responsible for extracting text from request payloads.

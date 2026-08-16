@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"testing"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestConversationHistoryThresholdBasic tests basic conversation history threshold functionality

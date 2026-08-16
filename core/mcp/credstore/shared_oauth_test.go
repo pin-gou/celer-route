@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // fakeSharedOAuthProvider implements schemas.OAuth2Provider with only

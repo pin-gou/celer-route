@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	bifrost "github.com/maximhq/bifrost/core"
+	bifrost "github.com/pin-gou/pg-gateway/core"
 
-	"github.com/maximhq/bifrost/core/providers/gemini"
-	"github.com/maximhq/bifrost/core/providers/vertex"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/gemini"
+	"github.com/pin-gou/pg-gateway/core/providers/vertex"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 
-	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/pin-gou/pg-gateway/transports/bifrost-http/lib"
 	"github.com/tidwall/gjson"
 	"github.com/valyala/fasthttp"
 )

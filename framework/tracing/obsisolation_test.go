@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // blockingObsPlugin is an observability plugin whose Inject blocks until released.

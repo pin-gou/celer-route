@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // RunFastModeTest tests that the fast-mode-2026-02-01 beta header is correctly

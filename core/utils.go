@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maximhq/bifrost/core/mcp"
-	"github.com/maximhq/bifrost/core/network"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/mcp"
+	"github.com/pin-gou/pg-gateway/core/network"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 const (

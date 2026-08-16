@@ -1,4 +1,4 @@
-module github.com/maximhq/bifrost/examples/mcps/error-test-server
+module github.com/pin-gou/pg-gateway/examples/mcps/error-test-server
 
 go 1.26.5
 

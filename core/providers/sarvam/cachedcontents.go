@@ -1,8 +1,8 @@
 package sarvam
 
 import (
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // CachedContentCreate is unsupported on SarvamProvider. Only Gemini and Vertex AI

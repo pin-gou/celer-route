@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/framework/configstore"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
 )
 
 // sweepRecordingStore counts sweep invocations. It embeds the ConfigStore

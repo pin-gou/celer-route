@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Config is the JSON-serializable form parsed from config.json's

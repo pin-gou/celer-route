@@ -6,7 +6,7 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 type MCPCatalog struct {

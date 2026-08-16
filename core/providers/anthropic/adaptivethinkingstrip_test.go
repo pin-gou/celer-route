@@ -3,8 +3,8 @@ package anthropic
 import (
 	"testing"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Adaptive-only models (Opus 4.7+, Opus 5, Sonnet 5, Fable/Mythos 5) removed

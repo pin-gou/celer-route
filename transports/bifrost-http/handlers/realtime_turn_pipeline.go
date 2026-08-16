@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	bifrost "github.com/maximhq/bifrost/core"
-	openaiProvider "github.com/maximhq/bifrost/core/providers/openai"
-	"github.com/maximhq/bifrost/core/schemas"
-	bfws "github.com/maximhq/bifrost/transports/bifrost-http/websocket"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	openaiProvider "github.com/pin-gou/pg-gateway/core/providers/openai"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	bfws "github.com/pin-gou/pg-gateway/transports/bifrost-http/websocket"
 )
 
 func newRealtimeTurnContext(

@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestFilePathFromURL verifies that filePathFromURL resolves every shape of

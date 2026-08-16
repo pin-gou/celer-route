@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/maximhq/bifrost/core/providers/gemini"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/gemini"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // vertexBatchCustomIDLabel is the request label used to carry the Bifrost custom_id

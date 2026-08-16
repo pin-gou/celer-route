@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/tidwall/gjson"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
 )
 
 // AnthropicResponsesStreamState tracks state during streaming conversion for responses API

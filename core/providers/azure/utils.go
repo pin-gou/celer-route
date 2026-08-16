@@ -3,7 +3,7 @@ package azure
 import (
 	"strings"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // getAzureScopes returns the configured scopes or the default scope if none are valid.

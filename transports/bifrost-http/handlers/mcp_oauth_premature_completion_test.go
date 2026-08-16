@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
 )
 
 // TestIsPrematureOAuthCompletion pins the signal that catches a

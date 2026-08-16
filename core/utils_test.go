@@ -9,7 +9,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/maximhq/bifrost/core/network"
+	"github.com/pin-gou/pg-gateway/core/network"
 )
 
 func TestValidateExternalURL(t *testing.T) {

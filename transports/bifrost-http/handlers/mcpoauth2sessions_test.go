@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/maximhq/bifrost/framework/configstore"
-	configtables "github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configtables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"

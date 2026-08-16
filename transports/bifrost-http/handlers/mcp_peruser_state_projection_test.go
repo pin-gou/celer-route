@@ -3,7 +3,7 @@ package handlers
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestProjectPerUserAdminCredentialState table-tests the response-only

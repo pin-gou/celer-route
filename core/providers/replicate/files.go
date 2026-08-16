@@ -3,7 +3,7 @@ package replicate
 import (
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Replicate File API Converters

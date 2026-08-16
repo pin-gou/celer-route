@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // getRequestID extracts a unique identifier for the request to maintain state

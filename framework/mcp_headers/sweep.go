@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // CredentialSweepWorker periodically purges stale per-user header credentials

@@ -1,4 +1,4 @@
-module github.com/maximhq/bifrost/examples/mcps/edge-case-server
+module github.com/pin-gou/pg-gateway/examples/mcps/edge-case-server
 
 go 1.26.5
 
