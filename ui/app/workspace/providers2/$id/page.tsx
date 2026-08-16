@@ -11,18 +11,15 @@ import { useGetProviderQuery } from "@/lib/store/apis/providersApi";
 import { useRbac, RbacOperation, RbacResource } from "@/lib/rbac";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight, Trash2 } from "lucide-react";
+import { ArrowUpRight, ExternalLink, Trash2 } from "lucide-react";
 import { parseAsString, useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { useState } from "react";
-import OpenLegacyConfigSheetButton from "./dialogs/OpenLegacyConfigSheetButton";
 import ConfirmDeleteProviderDialog from "@/app/workspace/providers/dialogs/confirmDeleteProviderDialog";
 import { GovernanceTab } from "./views/GovernanceTab";
 import { KeysTab } from "./views/KeysTab";
-import { LogsTab } from "./views/LogsTab";
 import { ModelsTab } from "./views/ModelsTab";
 import { OverviewTab } from "./views/OverviewTab";
-import { UsageTab } from "./views/UsageTab";
 
 export default function ProviderDetailPage() {
 	const { id } = useParams({ from: "/workspace/providers2/$id" });
@@ -65,9 +62,7 @@ export default function ProviderDetailPage() {
 		{ id: "overview", label: t("providers2.tabs.overview") },
 		{ id: "keys", label: t("providers2.tabs.keys") },
 		{ id: "models", label: t("providers2.tabs.models") },
-		{ id: "usage", label: t("providers2.tabs.usage") },
 		...(provider.name === "openai" ? [{ id: "governance", label: t("providers2.tabs.governance") }] : []),
-		{ id: "logs", label: t("providers2.tabs.logs") },
 	];
 
 	// The tab is persisted in the URL query param so a refresh keeps the user
@@ -78,10 +73,6 @@ export default function ProviderDetailPage() {
 
 	const handleTabChange = (value: string) => {
 		setTab(value);
-	};
-
-	const handleLegacyView = () => {
-		navigate({ to: "/workspace/providers", search: { provider: id } });
 	};
 
 	const handleDelete = () => {
@@ -162,6 +153,16 @@ export default function ProviderDetailPage() {
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
+					<Button
+						variant="outline"
+						size="sm"
+						data-testid="providers2-detail-logs-btn"
+						onClick={() => navigate({ to: "/workspace/logs", search: { provider: id } })}
+						className="gap-1 text-xs"
+					>
+						<ExternalLink className="h-3 w-3" />
+						{t("providers2.detail.viewLogs")}
+					</Button>
 					{hasDeleteAccess && (
 						<Button
 							variant="outline"
@@ -174,18 +175,7 @@ export default function ProviderDetailPage() {
 							{t("providers2.detail.delete")}
 						</Button>
 					)}
-					<Button
-						variant="outline"
-						size="sm"
-						data-testid="providers2-legacy-view-btn"
-						onClick={handleLegacyView}
-						className="gap-1 text-xs"
-					>
-						{t("providers2.detail.openLegacyView")}
-						<ArrowUpRight className="h-3 w-3" />
-					</Button>
-					<OpenLegacyConfigSheetButton provider={provider} />
-				</div>
+					</div>
 			</div>
 
 			{/* Tabs */}
@@ -207,14 +197,8 @@ export default function ProviderDetailPage() {
 				<TabsContent value="models" className="mt-4" data-testid="providers2-tab-content-models">
 					<ModelsTab provider={provider} />
 				</TabsContent>
-				<TabsContent value="usage" className="mt-4" data-testid="providers2-tab-content-usage">
-					<UsageTab provider={provider} />
-				</TabsContent>
 				<TabsContent value="governance" className="mt-4" data-testid="providers2-tab-content-governance">
 					<GovernanceTab provider={provider} />
-				</TabsContent>
-				<TabsContent value="logs" className="mt-4" data-testid="providers2-tab-content-logs">
-					<LogsTab provider={provider} />
 				</TabsContent>
 			</Tabs>
 

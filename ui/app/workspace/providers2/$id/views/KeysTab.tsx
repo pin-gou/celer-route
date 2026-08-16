@@ -345,8 +345,8 @@ export function KeysTab({ provider }: KeysTabProps) {
 						<RefreshCwIcon className={`h-3 w-3 ${isRefreshingAll ? "animate-spin" : ""}`} />
 						{isRefreshingAll ? t("providers2.keysTab.syncing") : t("providers2.keysTab.syncModels")}
 					</Button>
-					<Button size="sm" className="text-xs" onClick={() => setShowAddKeySheet(true)}>
-						<PlusIcon className="mr-1 h-3 w-3" />
+					<Button size="sm" className="gap-1 text-xs" onClick={() => setShowAddKeySheet(true)}>
+						<PlusIcon className="h-3 w-3" />
 						{t("providers2.keysTab.addKey")}
 					</Button>
 				</div>
