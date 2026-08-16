@@ -3,10 +3,10 @@ import { getApiBaseUrl } from "@/lib/utils/port";
 
 /** Bundled pg-gateway assets. These are the OSS values and the fallback for every
  * slot an enterprise deployment has not overridden. */
-const DEFAULT_LOGO_LIGHT = "/pg-gateway-logo.webp";
-const DEFAULT_LOGO_DARK = "/pg-gateway-logo-dark.webp";
-const DEFAULT_ICON_LIGHT = "/pg-gateway-icon.webp";
-const DEFAULT_ICON_DARK = "/pg-gateway-icon-dark.webp";
+const DEFAULT_LOGO_LIGHT = "/pg-gateway-logo-dark.webp";
+const DEFAULT_LOGO_DARK = "/pg-gateway-logo.webp";
+const DEFAULT_ICON_LIGHT = "/pg-gateway-icon-dark.webp";
+const DEFAULT_ICON_DARK = "/pg-gateway-icon.webp";
 
 /**
  * Resolves a branding asset URL returned by the API against the current API
