@@ -19,7 +19,7 @@ const (
 	// applied when a quota-exhausted error is observed. The plugin does not have
 	// access to HTTP response headers (e.g. Retry-After) at the post-hook layer,
 	// so a single default is the simplest correct default.
-	DefaultCooldownTTL = 10 * time.Minute
+	DefaultCooldownTTL = 5 * time.Minute
 
 	pluginName = PluginName
 )

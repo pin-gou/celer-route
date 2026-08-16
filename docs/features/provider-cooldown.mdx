@@ -21,24 +21,23 @@ open the dedicated fragment.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `default_ttl_seconds` | integer (1–86400) | `600` | Default cooldown duration in seconds for all providers. Maximum 1 day (86400s). |
+| `default_ttl_seconds` | integer (1–86400) | `300` | Default cooldown duration in seconds for all providers. Maximum 1 day (86400s). |
 | `ttl_overrides` | object | `{}` | Per-provider TTL overrides. Key is the provider name (e.g. `openai`), value is the TTL in seconds (minimum 1). |
-| `quota_patterns` | array of strings | `["insufficient_quota"]` | Error message patterns that trigger cooldown. At least one pattern is required. Matches are case-insensitive substring matches against the provider's error response. |
+| `quota_patterns` | array of strings | `["用量上限", "token plan", "token-plan"]` | Error message patterns that trigger cooldown. At least one pattern is required. Matches are case-insensitive substring matches against the provider's error response. |
 
 ### Example
 
 ```json
 {
-  "default_ttl_seconds": 600,
+  "default_ttl_seconds": 300,
   "ttl_overrides": {
     "openai": 300,
     "anthropic": 900
   },
   "quota_patterns": [
-    "insufficient_quota",
-    "quota exceeded",
-    "billing",
-    "usage limit"
+    "用量上限",
+    "token plan",
+    "token-plan"
   ]
 }
 ```

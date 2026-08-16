@@ -245,7 +245,7 @@ func TestConfig_DefaultOnInitialization(t *testing.T) {
 	if plugin.State == nil {
 		t.Fatal("Init(nil) must populate State")
 	}
-	// Default TTL must be DefaultCooldownTTL (10 minutes) when no config
+	// Default TTL must be DefaultCooldownTTL (5 minutes) when no config
 	// overrides are provided.
 	if got := plugin.State.EffectiveTTL(schemas.OpenAI); got != DefaultCooldownTTL {
 		t.Fatalf("default TTL after Init(nil) = %v, want %v", got, DefaultCooldownTTL)

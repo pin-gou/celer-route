@@ -123,7 +123,7 @@
 		"monitoringTitle": "监控",
 		"monitoringLoading": "正在加载监控数据...",
 		"defaultTTLLabel": "默认 TTL（秒）",
-		"defaultTTLPlaceholder": "600",
+		"defaultTTLPlaceholder": "300",
 		"defaultTTLDescription": "冷却的提供商密钥自动重新启用前的秒数（1–86400）",
 		"ttlOverridesLabel": "TTL 覆盖",
 		"ttlOverridesDescription": "按提供商的 TTL 覆盖（秒）",
@@ -151,6 +151,15 @@
 		"expires": "过期时间：{{expireAt}}",
 		"unfreeze": "解除冻结",
 		"unfreezeSuccessToast": "已解除冻结 {{provider}}/{{keyId}}",
-		"unfreezeFailedToast": "解除冻结密钥失败"
+		"unfreezeFailedToast": "解除冻结密钥失败",
+		"howItWorks": {
+			"title": "冷却工作原理",
+			"triggerTitle": "什么情况会触发冷却",
+			"triggerBody": "提供商请求失败后，插件会对错误的消息、编码和类型字段进行不区分大小写的模式匹配（内置模式：insufficient_quota、quota exceeded、quota_exceeded、billing、usage limit，外加自定义的 quota_patterns）。同时受状态码约束：HTTP 429 及其他 4xx 在文案命中时才会触发；HTTP 402（永久性计费失败）和 5xx 错误永远不会触发冷却。",
+			"effectTitle": "冷却期间的影响",
+			"effectBody": "触发失败的 (provider, key) 会在配置的 TTL（默认 300 秒）内暂时移出密钥池。选钥阶段跳过该冷却中的密钥，请求自动落到同一提供商的其他健康密钥，再按顺序回退到其他提供商。如果所有可用密钥都被抑制，请求会返回合成的 503 no_eligible_keys 错误。",
+			"recoveryTitle": "恢复机制",
+			"recoveryBody": "TTL 到期后密钥会自动重新启用。冷却状态保存在进程内存中，重启 Bifrost 会清空所有冷却记录。"
+		}
 	}
 }

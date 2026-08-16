@@ -9,7 +9,7 @@ import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { ProviderLabels } from "@/lib/constants/logs";
 import { PROVIDER_COOLDOWN_PLUGIN, providerCooldownConfigSchema, type Plugin } from "@/lib/types/plugins";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { Info, PlusIcon, Trash2Icon } from "lucide-react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -45,17 +45,38 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 	};
 
 	return (
-		<div className="flex flex-row items-center justify-between rounded-lg border p-4">
-			<div className="space-y-0.5">
-				<label className="text-sm font-medium">{t("providerCooldown.enableTitle")}</label>
-				<p className="text-muted-foreground text-sm">{t("providerCooldown.enableDescription")}</p>
+		<div className="rounded-lg border p-4">
+			<div className="flex flex-row items-center justify-between">
+				<div className="space-y-0.5">
+					<label className="text-sm font-medium">{t("providerCooldown.enableTitle")}</label>
+					<p className="text-muted-foreground text-sm">{t("providerCooldown.enableDescription")}</p>
+				</div>
+				<Switch
+					data-testid="providercooldown-enabled-switch"
+					checked={plugin.enabled}
+					onCheckedChange={handleToggle}
+					disabled={isLoading || !hasUpdateAccess}
+				/>
 			</div>
-			<Switch
-				data-testid="providercooldown-enabled-switch"
-				checked={plugin.enabled}
-				onCheckedChange={handleToggle}
-				disabled={isLoading || !hasUpdateAccess}
-			/>
+
+			<div className="bg-muted/50 mt-4 space-y-3 rounded-md border p-4">
+				<div className="flex items-center gap-2">
+					<Info className="text-muted-foreground size-4 shrink-0" />
+					<h4 className="text-sm font-medium">{t("providerCooldown.howItWorks.title")}</h4>
+				</div>
+				<div>
+					<h5 className="text-muted-foreground text-sm font-medium">{t("providerCooldown.howItWorks.triggerTitle")}</h5>
+					<p className="text-muted-foreground mt-1 text-sm leading-relaxed">{t("providerCooldown.howItWorks.triggerBody")}</p>
+				</div>
+				<div>
+					<h5 className="text-muted-foreground text-sm font-medium">{t("providerCooldown.howItWorks.effectTitle")}</h5>
+					<p className="text-muted-foreground mt-1 text-sm leading-relaxed">{t("providerCooldown.howItWorks.effectBody")}</p>
+				</div>
+				<div>
+					<h5 className="text-muted-foreground text-sm font-medium">{t("providerCooldown.howItWorks.recoveryTitle")}</h5>
+					<p className="text-muted-foreground mt-1 text-sm leading-relaxed">{t("providerCooldown.howItWorks.recoveryBody")}</p>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -75,9 +96,9 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 	const form = useForm<ProviderCooldownFormValues>({
 		resolver: zodResolver(providerCooldownConfigSchema),
 		defaultValues: {
-			default_ttl_seconds: pluginConfig.default_ttl_seconds ?? 600,
+			default_ttl_seconds: pluginConfig.default_ttl_seconds ?? 300,
 			ttl_overrides: pluginConfig.ttl_overrides ?? {},
-			quota_patterns: pluginConfig.quota_patterns ?? [],
+			quota_patterns: pluginConfig.quota_patterns ?? ["用量上限", "token plan", "token-plan"],
 		},
 	});
 
@@ -395,19 +416,19 @@ export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
 		<div className="space-y-8">
 			<h3 className="text-lg font-semibold">{t("providerCooldown.title")}</h3>
 
-			{/* Section 1: enabled switch */}
-			<EnabledSwitch plugin={plugin} />
-
-			{/* Section 2: config form */}
-			<div className="rounded-lg border p-4">
-				<h4 className="mb-4 text-sm font-medium">{t("providerCooldown.settingsTitle")}</h4>
-				<ConfigForm plugin={plugin} />
-			</div>
-
-			{/* Section 3: monitoring panel */}
+			{/* Section 1: monitoring panel — moved to top */}
 			<div className="rounded-lg border p-4">
 				<h4 className="mb-4 text-sm font-medium">{t("providerCooldown.monitoringTitle")}</h4>
 				<MonitoringPanel />
+			</div>
+
+			{/* Section 2: enabled switch */}
+			<EnabledSwitch plugin={plugin} />
+
+			{/* Section 3: config form */}
+			<div className="rounded-lg border p-4">
+				<h4 className="mb-4 text-sm font-medium">{t("providerCooldown.settingsTitle")}</h4>
+				<ConfigForm plugin={plugin} />
 			</div>
 		</div>
 	);

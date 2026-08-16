@@ -41,7 +41,7 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
       "enabled": true,
       "name": "provider-cooldown",
       "config": {
-        "default_ttl_seconds": 600,
+        "default_ttl_seconds": 300,
         "ttl_overrides": { "openai": 30, "anthropic": 1200 }
       }
     }
@@ -53,7 +53,7 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 |---|---|---|---|
 | `enabled` | bool | — | set false to disable the plugin entirely |
 | `name` | string | — | must be `"provider-cooldown"` |
-| `config.default_ttl_seconds` | int | 600 | applied to every provider without an override; `<= 0` falls back to 600 |
+| `config.default_ttl_seconds` | int | 300 | applied to every provider without an override; `<= 0` falls back to 300 |
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
 
 Provider names use Bifrost's `ModelProvider` enum (e.g. `"openai"`,

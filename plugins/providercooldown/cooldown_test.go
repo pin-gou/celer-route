@@ -838,7 +838,7 @@ func TestNewPluginWithTTL(t *testing.T) {
 func TestNewPluginWithTTLNonPositiveFallsBack(t *testing.T) {
 	plugin := NewPluginWithTTL(nil, 0)
 	defer plugin.Cleanup()
-	// Non-positive TTL must fall back to DefaultCooldownTTL (10 min).
+	// Non-positive TTL must fall back to DefaultCooldownTTL (5 min).
 	if got := plugin.State.EffectiveTTL(schemas.OpenAI); got != DefaultCooldownTTL {
 		t.Fatalf("expected fallback to DefaultCooldownTTL, got %v", got)
 	}
