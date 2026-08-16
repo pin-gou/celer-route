@@ -340,14 +340,14 @@ build-ui: install-ui ## Build ui
 	@rm -rf ui/.next
 	@$(USE_NODE); cd ui && npm run build && npm run copy-build
 
-build: build-ui ## Build bifrost-http binary
+build: build-ui ## Build pg-gateway-http binary
 	@if [ -n "$(LOCAL)" ]; then \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════════════╗$(NC)"; \
-		$(ECHO) "$(GREEN)║  Building bifrost-http with local go.work...  ║$(NC)"; \
+		$(ECHO) "$(GREEN)║  Building pg-gateway-http with local go.work...  ║$(NC)"; \
 		$(ECHO) "$(GREEN)╚═══════════════════════════════════════════════╝$(NC)"; \
 	else \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════╗$(NC)"; \
-		$(ECHO) "$(GREEN)║  Building bifrost-http...             ║$(NC)"; \
+		$(ECHO) "$(GREEN)║  Building pg-gateway-http...             ║$(NC)"; \
 		$(ECHO) "$(GREEN)╚═══════════════════════════════════════╝$(NC)"; \
 	fi
 	@if [ -n "$(DYNAMIC)" ]; then \
@@ -375,7 +375,7 @@ build: build-ui ## Build bifrost-http binary
 			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 				-ldflags="-w -s -X main.Version=v$(VERSION)" \
 				-a -trimpath \
-				-o ../../tmp/bifrost-http \
+				-o ../../tmp/pg-gateway-http \
 				.; \
 		else \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with static linking...$(NC)"; \
@@ -383,19 +383,19 @@ build: build-ui ## Build bifrost-http binary
 				-ldflags="-w -s -extldflags "-static" -X main.Version=v$(VERSION)" \
 				-a -trimpath \
 				-tags "sqlite_static" \
-				-o ../../tmp/bifrost-http \
+				-o ../../tmp/pg-gateway-http \
 				.; \
 		fi; \
-		$(ECHO) "$(GREEN)Built: tmp/bifrost-http (version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION))$(NC)"; \
 	elif [ "$$TARGET_OS" = "$$HOST_OS" ] && [ "$$TARGET_ARCH" = "$$HOST_ARCH" ]; then \
 		$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH (native build with CGO)...$(NC)"; \
 		cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 			-ldflags="-w -s -X main.Version=v$(VERSION)" \
 			-a -trimpath \
 			-tags "sqlite_static" \
-			-o ../../tmp/bifrost-http \
+			-o ../../tmp/pg-gateway-http \
 			.; \
-		$(ECHO) "$(GREEN)Built: tmp/bifrost-http (version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION))$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Cross-compilation detected: $$HOST_OS/$$HOST_ARCH -> $$TARGET_OS/$$TARGET_ARCH$(NC)"; \
 		$(ECHO) "$(CYAN)Using Docker for cross-compilation...$(NC)"; \
@@ -422,7 +422,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 				go build \
 					-ldflags='-w -s -X main.Version=v$(VERSION)' \
 					-a -trimpath \
-					-o ../../tmp/bifrost-http \
+					-o ../../tmp/pg-gateway-http \
 					."; \
 		else \
 			$(ECHO) "$(CYAN)Building for $(TARGET_OS)/$(TARGET_ARCH) in Docker container...$(NC)"; \
@@ -440,10 +440,10 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 					-ldflags='-w -s -extldflags "-static" -X main.Version=v$(VERSION)' \
 					-a -trimpath \
 					-tags sqlite_static \
-					-o ../../tmp/bifrost-http \
+					-o ../../tmp/pg-gateway-http \
 					."; \
 		fi; \
-		$(ECHO) "$(GREEN)Built: tmp/bifrost-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION))$(NC)"; \
 	else \
 		$(ECHO) "$(RED)Error: Docker cross-compilation only supports Linux targets$(NC)"; \
 		$(ECHO) "$(YELLOW)For $(TARGET_OS), please build on a native $(TARGET_OS) machine$(NC)"; \
@@ -476,9 +476,9 @@ docs: ## Prepare local docs (bundles OpenAPI spec then starts Mintlify dev serve
 	@$(ECHO) "$(GREEN)Preparing local docs...$(NC)"
 	@cd docs && npx --yes mintlify@latest dev
 
-run: build ## Build and run bifrost-http (no hot reload)
-	@$(ECHO) "$(GREEN)Running bifrost-http...$(NC)"
-	@./tmp/bifrost-http \
+run: build ## Build and run pg-gateway-http (no hot reload)
+	@$(ECHO) "$(GREEN)Running pg-gateway-http...$(NC)"
+	@./tmp/pg-gateway-http \
 		-host "$(HOST)" \
 		-port "$(PORT)" \
 		-log-style "$(LOG_STYLE)" \
@@ -542,32 +542,32 @@ generate-html-reports: ## Convert existing XML reports to HTML
 	@$(ECHO) "$(CYAN)View reports:$(NC)"
 	@ls -1 $(TEST_REPORTS_DIR)/*.html 2>/dev/null | sed 's|$(TEST_REPORTS_DIR)/|  open $(TEST_REPORTS_DIR)/|' || true
 
-test: install-gotestsum ## Run tests for bifrost-http
-	@$(ECHO) "$(GREEN)Running bifrost-http tests...$(NC)"
+test: install-gotestsum ## Run tests for pg-gateway-http
+	@$(ECHO) "$(GREEN)Running pg-gateway-http tests...$(NC)"
 	@mkdir -p $(TEST_REPORTS_DIR)
 	@cd transports/pg-gateway-http && GOWORK=off gotestsum \
 		--format=$(GOTESTSUM_FORMAT) \
-		--junitfile=../../$(TEST_REPORTS_DIR)/bifrost-http.xml \
+		--junitfile=../../$(TEST_REPORTS_DIR)/pg-gateway-http.xml \
 		-- -v ./...
 	@if [ -z "$$CI" ] && [ -z "$$GITHUB_ACTIONS" ] && [ -z "$$GITLAB_CI" ] && [ -z "$$CIRCLECI" ] && [ -z "$$JENKINS_HOME" ]; then \
 		if which junit-viewer > /dev/null 2>&1; then \
 			$(ECHO) "$(YELLOW)Generating HTML report...$(NC)"; \
-			if junit-viewer --results=$(TEST_REPORTS_DIR)/bifrost-http.xml --save=$(TEST_REPORTS_DIR)/bifrost-http.html 2>/dev/null; then \
+			if junit-viewer --results=$(TEST_REPORTS_DIR)/pg-gateway-http.xml --save=$(TEST_REPORTS_DIR)/pg-gateway-http.html 2>/dev/null; then \
 				$(ECHO) ""; \
-				$(ECHO) "$(CYAN)HTML report: $(TEST_REPORTS_DIR)/bifrost-http.html$(NC)"; \
-				$(ECHO) "$(CYAN)Open with: open $(TEST_REPORTS_DIR)/bifrost-http.html$(NC)"; \
+				$(ECHO) "$(CYAN)HTML report: $(TEST_REPORTS_DIR)/pg-gateway-http.html$(NC)"; \
+				$(ECHO) "$(CYAN)Open with: open $(TEST_REPORTS_DIR)/pg-gateway-http.html$(NC)"; \
 			else \
 				$(ECHO) "$(YELLOW)HTML generation failed. JUnit XML report available.$(NC)"; \
-				$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/bifrost-http.xml$(NC)"; \
+				$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
 			fi; \
 		else \
 			$(ECHO) ""; \
 			$(ECHO) "$(YELLOW)junit-viewer not installed. Install with: make install-junit-viewer$(NC)"; \
-			$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/bifrost-http.xml$(NC)"; \
+			$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
 		fi; \
 	else \
 		$(ECHO) ""; \
-		$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/bifrost-http.xml$(NC)"; \
+		$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
 	fi
 
 test-core: install-gotestsum $(if $(DEBUG),install-delve) ## Run core tests (Usage: make test-core PROVIDER=openai TESTCASE=TestName or PATTERN=substring, DEBUG=1 for debugger)
@@ -1360,7 +1360,7 @@ test-integrations-py: ## Run Python integration tests (Usage: make test-integrat
 		$(ECHO) "$(GREEN)✓ Bifrost is already running$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Bifrost not running, starting it...$(NC)"; \
-		./tmp/bifrost-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/python > /tmp/bifrost-test.log 2>&1 & \
+		./tmp/pg-gateway-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/python > /tmp/bifrost-test.log 2>&1 & \
 		BIFROST_PID=$$!; \
 		BIFROST_STARTED=1; \
 		$(ECHO) "$(YELLOW)Waiting for Bifrost to be ready...$(NC)"; \
@@ -1496,7 +1496,7 @@ test-integrations-ts: ## Run TypeScript integration tests (Usage: make test-inte
 		$(ECHO) "$(GREEN)✓ Bifrost is already running$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Bifrost not running, starting it...$(NC)"; \
-		./tmp/bifrost-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/typescript > /tmp/bifrost-test.log 2>&1 & \
+		./tmp/pg-gateway-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/typescript > /tmp/bifrost-test.log 2>&1 & \
 		BIFROST_PID=$$!; \
 		BIFROST_STARTED=1; \
 		$(ECHO) "$(YELLOW)Waiting for Bifrost to be ready...$(NC)"; \

@@ -4,7 +4,7 @@ set -e
 APP_DIR=${APP_DIR:-/app/data}
 
 app_dir_writable() {
-    PROBE_DIR="$APP_DIR/.bifrost-write-test.$$"
+    PROBE_DIR="$APP_DIR/.pg-gateway-write-test.$$"
     if [ -e "$PROBE_DIR" ]; then
         PROBE_DIR="$PROBE_DIR.$(date +%s)"
     fi
@@ -54,7 +54,7 @@ ensure_app_dir() {
             echo "  Only safe for read-only deployments backed by external stores (e.g. Postgres)."
         else
             echo "Error: $APP_DIR is not writable by UID:GID $CURRENT_UID:$CURRENT_GID (owned by $DATA_UID:$DATA_GID)"
-            echo "  Bifrost needs a writable APP_DIR for config.db and logs.db before startup."
+            echo "  pg-gateway needs a writable APP_DIR for config.db and logs.db before startup."
             echo "  On vanilla Kubernetes, set podSecurityContext.fsGroup (for example, 1000)."
             echo "  On OpenShift (restricted-v2), leave fsGroup unset/null so the SCC assigns an in-range GID."
             echo "  Or mount a volume writable by GID 0, matching the image's group-0 ownership."

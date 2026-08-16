@@ -73,7 +73,7 @@
       -a -trimpath \
       -tags "sqlite_static" \
       -o /app/main \
-      ./bifrost-http
+      ./pg-gateway-http
 
   # Verify build succeeded
   RUN test -f /app/main || (echo "Build failed" && exit 1)
