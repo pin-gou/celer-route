@@ -246,7 +246,6 @@ bifrost/
 ├── cmd/                           # Auxiliary commands
 │   └── e2eseed/                   # E2E seed data command
 │
-├── terraform/                     # Infrastructure as Code
 ├── .claude/skills/                # Claude Code skill definitions (13 skills)
 ├── go.work                        # Go workspace — requires Go 1.26.6
 ├── Makefile                       # Build, test, dev commands

@@ -111,13 +111,7 @@ npm-debug.log*
 # Playwright
 playwright/.cache/
 
-# Terraform
-.terraform/
-.terraform.lock.hcl
-terraform.tfstate
-terraform.tfstate.backup
-*.tfvars
-!*.tfvars.example
+### PROJECT SPECIFIC ###
 
 # Bifrost benchmarking
 bifrost-benchmarking
