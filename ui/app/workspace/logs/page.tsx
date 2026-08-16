@@ -144,7 +144,6 @@ export default function LogsPage() {
 			metadata_filters: parseAsString.withDefault(""),
 			selected_log: parseAsString.withDefault(""),
 			grouped: parseAsBoolean.withDefault(false),
-			provider: parseAsSafeString.withDefault(""),
 		},
 		{
 			history: "push",
@@ -159,18 +158,6 @@ export default function LogsPage() {
 	// Grouped view collapses fallback chains under their root. Disabled while a
 	// session filter is active — that view is already scoped to one chain/session.
 	const grouped = urlState.grouped && !urlState.parent_request_id;
-
-	// Backward compat: older entry points (provider detail page, bookmarks) used a
-	// singular `provider` param; migrate it into the `providers` filter and clean up.
-	const migratedProvider = useRef(false);
-	useEffect(() => {
-		if (migratedProvider.current) return;
-		const legacy = urlState.provider;
-		if (legacy && urlState.providers.length === 0) {
-			setUrlState({ providers: [legacy], provider: "" });
-		}
-		migratedProvider.current = true;
-	}, [urlState.provider, urlState.providers, setUrlState]);
 
 	// Convert URL state to filters and pagination for API calls
 	const filters: LogFilters = useMemo(
