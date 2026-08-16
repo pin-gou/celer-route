@@ -1188,3 +1188,54 @@ cd ui && npm run build
 * Follow **strict folder structure and routing conventions**
 * Use **the right tool for the right problem**
 * Keep code **simple, predictable, and maintainable**
+
+---
+
+## Git Commit 规范
+
+### 提交规则
+
+1. **commit message 必须用中文编写**，简洁明了地描述本次变更的内容和原因。
+2. 每次提交前，先执行 `git status`、`git diff`、`git log --oneline -10` 确认变更范围。
+3. 只提交本次任务相关的文件，禁止提交密钥、敏感信息或无关文件。
+4. 如果 commit hook 拒绝提交，修复问题后重新创建新 commit，不要 `--amend` 失败的 commit。
+5. 禁止使用 `--force-push`、`--no-verify`、交互式 `-i` 或创建空 commit，除非明确要求。
+6. 不要修改 git config。
+
+### 提交信息格式
+
+```
+<类型>: <简短描述（中文）>
+
+<可选：详细说明（中文），说明为什么做这个变更>
+```
+
+### 类型
+
+- `feat` — 新功能
+- `fix` — 修复 bug
+- `refactor` — 重构（不改变外部行为）
+- `test` — 添加或修改测试
+- `docs` — 文档变更
+- `style` — 代码格式化、样式变更（非逻辑变更）
+- `chore` — 构建、CI、依赖等杂项
+
+### 示例
+
+```
+feat: 添加 OpenAI 兼容的流式响应支持
+
+支持 SSE 分块传输，客户端可以实时接收增量回复。
+```
+
+```
+fix: 修复长文本请求时 token 计数溢出问题
+
+当输入超过 32768 token 时，整数溢出导致返回负数。
+```
+
+```
+refactor: 提取 HTTP 客户端为共享工具函数
+
+将 openai 和 anthropic 提供商的重复 HTTP 逻辑合并到 providers/utils。
+```
