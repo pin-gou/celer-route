@@ -68,7 +68,7 @@ define EXPOSE_ENV
 	fi
 endef
 
-.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy
+.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-push docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy
 
 all: help
 
@@ -447,12 +447,21 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 		exit 1; \
 	fi
 
+DOCKER_IMAGE ?= ghcr.io/pin-gou/pg-gateway
+
 docker-image: build-ui ## Build Docker image (LOCAL=1 to use Dockerfile.local)
 	@$(ECHO) "$(GREEN)Building Docker image...$(NC)"
 	$(eval GIT_SHA=$(shell git rev-parse --short HEAD))
 	$(eval DOCKERFILE=$(if $(LOCAL),transports/Dockerfile.local,transports/Dockerfile))
-	@docker build -f $(DOCKERFILE) -t bifrost -t bifrost:$(GIT_SHA) -t bifrost:latest .
-	@$(ECHO) "$(GREEN)Docker image built: bifrost, bifrost:$(GIT_SHA), bifrost:latest (using $(DOCKERFILE))$(NC)"
+	@docker build -f $(DOCKERFILE) -t $(DOCKER_IMAGE) -t $(DOCKER_IMAGE):$(GIT_SHA) -t $(DOCKER_IMAGE):latest .
+	@$(ECHO) "$(GREEN)Docker image built: $(DOCKER_IMAGE), $(DOCKER_IMAGE):$(GIT_SHA), $(DOCKER_IMAGE):latest (using $(DOCKERFILE))$(NC)"
+
+docker-push: docker-image ## Build and push Docker image to GHCR (login first: docker login ghcr.io -u pin-gou)
+	@$(ECHO) "$(GREEN)Pushing Docker image to $(DOCKER_IMAGE)...$(NC)"
+	$(eval GIT_SHA=$(shell git rev-parse --short HEAD))
+	@docker push $(DOCKER_IMAGE):$(GIT_SHA)
+	@docker push $(DOCKER_IMAGE):latest
+	@$(ECHO) "$(GREEN)Docker image pushed: $(DOCKER_IMAGE):$(GIT_SHA), $(DOCKER_IMAGE):latest$(NC)"
 
 docker-run: ## Run Docker container (Usage: make docker-run [CONFIG=path/to/config.json or path/to/dir/])
 	@$(ECHO) "$(GREEN)Running Docker container...$(NC)"
@@ -465,7 +474,7 @@ docker-run: ## Run Docker container (Usage: make docker-run [CONFIG=path/to/conf
 	else \
 		CONFIG_MOUNT=""; \
 	fi; \
-	docker run -e APP_PORT=$(PORT) -e APP_HOST=0.0.0.0 -p $(PORT):$(PORT) -e LOG_LEVEL=$(LOG_LEVEL) -e LOG_STYLE=$(LOG_STYLE) -v $(shell pwd):/app/data $$CONFIG_MOUNT bifrost
+	docker run -e APP_PORT=$(PORT) -e APP_HOST=0.0.0.0 -p $(PORT):$(PORT) -e LOG_LEVEL=$(LOG_LEVEL) -e LOG_STYLE=$(LOG_STYLE) -v $(shell pwd):/app/data $$CONFIG_MOUNT $(DOCKER_IMAGE)
 
 docs: ## Prepare local docs (bundles OpenAPI spec then starts Mintlify dev server)
 	@$(ECHO) "$(GREEN)Bundling OpenAPI spec...$(NC)"

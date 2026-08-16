@@ -35,8 +35,8 @@ description: \"$VERSION changelog - $CURRENT_DATE\"
   </Tab>
   <Tab title=\"Docker\">
     \`\`\`bash
-    docker pull maximhq/bifrost:$VERSION
-    docker run -p 8080:8080 maximhq/bifrost:$VERSION
+    docker pull ghcr.io/pin-gou/pg-gateway:$VERSION
+    docker run -p 8080:8080 ghcr.io/pin-gou/pg-gateway:$VERSION
     \`\`\`
   </Tab>
 </Tabs>
