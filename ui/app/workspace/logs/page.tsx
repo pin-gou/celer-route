@@ -143,7 +143,7 @@ export default function LogsPage() {
 			cache_hit_types: parseAsSafeArrayOf.withDefault([]),
 			metadata_filters: parseAsString.withDefault(""),
 			selected_log: parseAsString.withDefault(""),
-			grouped: parseAsBoolean.withDefault(false),
+			grouped: parseAsBoolean.withDefault(true),
 		},
 		{
 			history: "push",
@@ -708,6 +708,42 @@ export default function LogsPage() {
 	// Navigation for log detail sheet
 	const logs = logsData?.logs ?? [];
 	const totalItems = logsData?.stats?.total_requests ?? 0;
+
+	// Auto-expand all chains in grouped view when logs data arrives
+	const autoExpandDoneRef = useRef(false);
+	useEffect(() => {
+		if (!grouped || logs.length === 0) return;
+		autoExpandDoneRef.current = false;
+	}, [pagination, grouped]);
+
+	useEffect(() => {
+		if (!grouped || logs.length === 0 || autoExpandDoneRef.current) return;
+
+		const toExpand = logs.filter((log) => (log.child_count ?? 0) > 0);
+		if (toExpand.length === 0) return;
+		autoExpandDoneRef.current = true;
+
+		setExpandedChainIds(new Set(toExpand.map((l) => l.id)));
+
+		for (const log of toExpand) {
+			setLoadingChainIds((prev) => new Set(prev).add(log.id));
+			triggerGetChainChildren({
+				filters: { ...filters, parent_request_id: log.id },
+				pagination: { ...pagination, limit: chainChildrenPageLimit, offset: 0, sort_by: "timestamp", order: "asc" },
+			}).then((result) => {
+				setLoadingChainIds((prev) => {
+					const next = new Set(prev);
+					next.delete(log.id);
+					return next;
+				});
+				const data = result.data;
+				if (data) {
+					setChainChildren((prev) => ({ ...prev, [log.id]: data.logs }));
+				}
+			});
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [grouped, logs]);
 
 	// Merge SSE active logs + SSE new logs + RTK Query logs into a single list.
 	// Processing rows appear at the top, then newly completed rows, then the

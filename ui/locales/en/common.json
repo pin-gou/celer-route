@@ -156,12 +156,17 @@
 	"pagination": {
 		"previous": "Previous",
 		"next": "Next",
+		"firstPage": "First page",
+		"lastPage": "Last page",
+		"goToPage": "Go to page",
 		"page": "Page",
+		"pageSuffix": "",
 		"of": "of",
 		"rowsPerPage": "Rows per page",
 		"total": "Total",
 		"showing": "Showing",
-		"to": "to"
+		"to": "to",
+		"entries": "entries"
 	},
 	"datePicker": {
 		"pickADate": "Pick a date",

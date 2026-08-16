@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Pagination } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PIN_SHADOW_RIGHT } from "@/components/table/columnPinning";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
@@ -22,7 +23,7 @@ import { useDeleteRoutingRuleMutation, useUpdateRoutingRuleMutation } from "@/li
 import { RoutingRule, RoutingTarget } from "@/lib/types/routingRules";
 import { getScopeLabel } from "@/lib/utils/labels";
 import { getPriorityBadgeClass, truncateCELExpression } from "@/lib/utils/routingRules";
-import { ChevronLeft, ChevronRight, Edit, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { Edit, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -229,7 +230,7 @@ export function RoutingRulesTable({
 										<Badge variant="secondary">{getScopeLabel(rule.scope)}</Badge>
 									</TableCell>
 									<TableCell className="text-right">
-										<div className={`inline-block rounded px-2.5 py-1 text-xs font-medium ${getPriorityBadgeClass()}`}>{rule.priority}</div>
+										<div className={`inline-block rounded px-2.5 py-1 text-xs font-medium font-mono ${getPriorityBadgeClass()}`}>{rule.priority}</div>
 									</TableCell>
 									<TableCell>
 										<span className="text-muted-foreground block max-w-xs truncate font-mono text-xs" title={rule.cel_expression}>
@@ -280,46 +281,13 @@ export function RoutingRulesTable({
 				</Table>
 			</div>
 
-			{totalCount > 0 && (
-				<div className="flex shrink-0 items-center justify-between text-xs" data-testid="pagination">
-					<div className="text-muted-foreground flex items-center gap-2">
-						{(offset + 1).toLocaleString()}-{Math.min(offset + limit, totalCount).toLocaleString()} {t("rules.of")}{" "}
-						{totalCount.toLocaleString()} {t("rules.entries")}
-					</div>
-
-					<div className="flex items-center gap-2">
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => onOffsetChange(Math.max(0, offset - limit))}
-							disabled={offset === 0}
-							data-testid="routing-rules-pagination-prev-btn"
-							aria-label={t("rules.prevPage")}
-						>
-							<ChevronLeft className="size-3" />
-						</Button>
-
-						<div className="flex items-center gap-1">
-							<span>{t("rules.page")}</span>
-							<span>{Math.floor(offset / limit) + 1}</span>
-							<span>
-								{t("rules.of")} {Math.ceil(totalCount / limit)}
-							</span>
-						</div>
-
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => onOffsetChange(offset + limit)}
-							disabled={offset + limit >= totalCount}
-							data-testid="routing-rules-pagination-next-btn"
-							aria-label={t("rules.nextPage")}
-						>
-							<ChevronRight className="size-3" />
-						</Button>
-					</div>
-				</div>
-			)}
+			<Pagination
+				offset={offset}
+				limit={limit}
+				totalCount={totalCount}
+				onOffsetChange={onOffsetChange}
+				dataTestIdPrefix="routing-rules"
+			/>
 
 			<AlertDialog open={!!deleteRuleId} onOpenChange={(open) => !open && setDeleteRuleId(null)}>
 				<AlertDialogContent>

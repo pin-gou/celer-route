@@ -8,21 +8,23 @@ import {
 	usePinOffsets,
 } from "@/components/table";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import type { MCPToolLogEntry, Pagination } from "@/lib/types/logs";
+import type { MCPToolLogEntry, Pagination as PaginationParams } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import type { ColumnOrderState, ColumnPinningState, VisibilityState } from "@tanstack/react-table";
 import { ColumnDef, flexRender, getCoreRowModel, SortingState, useReactTable } from "@tanstack/react-table";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+
 
 interface DataTableProps {
 	columns: ColumnDef<MCPToolLogEntry>[];
 	data: MCPToolLogEntry[];
 	totalItems: number;
 	loading?: boolean;
-	pagination: Pagination;
-	onPaginationChange: (pagination: Pagination) => void;
+	pagination: PaginationParams;
+	onPaginationChange: (pagination: PaginationParams) => void;
 	onRowClick?: (log: MCPToolLogEntry, columnId: string) => void;
 	onRefresh?: () => void;
 	polling?: boolean;
@@ -110,23 +112,6 @@ export function MCPLogsDataTable({
 		onSortingChange: handleSortingChange,
 	});
 
-	const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
-	const totalPages = Math.ceil(totalItems / pagination.limit);
-	const startItem = pagination.offset + 1;
-	const endItem = Math.min(pagination.offset + pagination.limit, totalItems);
-
-	// Display values that handle the case when totalItems is 0
-	const startItemDisplay = totalItems === 0 ? 0 : startItem;
-	const endItemDisplay = totalItems === 0 ? 0 : endItem;
-
-	const goToPage = (page: number) => {
-		const newOffset = (page - 1) * pagination.limit;
-		onPaginationChange({
-			...pagination,
-			offset: newOffset,
-		});
-	};
-
 	return (
 		<div className="flex grow flex-col gap-2 overflow-y-auto px-4 pb-2">
 			<div className="flex h-full grow flex-col gap-2">
@@ -211,42 +196,13 @@ export function MCPLogsDataTable({
 						</TableBody>
 					</Table>
 				</div>
-				{/* Pagination Footer */}
-				<div className="flex items-center justify-between text-xs" data-testid="pagination">
-					<div className="text-muted-foreground flex items-center gap-2">
-						{startItemDisplay.toLocaleString()}-{endItemDisplay.toLocaleString()} of {totalItems.toLocaleString()} entries
-					</div>
-
-					<div className="flex items-center gap-2">
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => goToPage(currentPage - 1)}
-							disabled={currentPage <= 1}
-							data-testid="prev-page"
-							aria-label="Previous page"
-						>
-							<ChevronLeft className="size-3" />
-						</Button>
-
-						<div className="flex items-center gap-1">
-							<span>Page</span>
-							<span>{currentPage}</span>
-							<span>of {totalPages}</span>
-						</div>
-
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => goToPage(currentPage + 1)}
-							disabled={totalPages === 0 || currentPage >= totalPages}
-							data-testid="next-page"
-							aria-label="Next page"
-						>
-							<ChevronRight className="size-3" />
-						</Button>
-					</div>
-				</div>
+				<Pagination
+					offset={pagination.offset}
+					limit={pagination.limit}
+					totalCount={totalItems}
+					onOffsetChange={(newOffset) => onPaginationChange({ ...pagination, offset: newOffset })}
+					dataTestIdPrefix="mcp-logs"
+				/>
 			</div>
 		</div>
 	);

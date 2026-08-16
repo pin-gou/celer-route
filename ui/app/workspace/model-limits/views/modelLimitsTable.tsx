@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Pagination } from "@/components/ui/pagination";
 import { resetDurationLabels, supportsCalendarAlignment } from "@/lib/constants/governance";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
@@ -27,7 +28,8 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/governance";
 import { getScopeLabel } from "@/lib/utils/labels";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { ArrowUpRight, ChevronLeft, ChevronRight, Edit, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ArrowUpRight, Edit, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -141,6 +143,7 @@ export default function ModelLimitsTable({
 	onOffsetChange,
 	isLoading = false,
 }: ModelLimitsTableProps) {
+	const { t } = useTranslation("common");
 	const navigate = useNavigate();
 	// The edit sheet is driven entirely by the URL: /workspace/model-limits?edit=<model-config-id>.
 	// Clicking Edit writes the param, closing it clears the param — so the open
@@ -557,45 +560,13 @@ export default function ModelLimitsTable({
 					</Table>
 				</div>
 
-				{/* Pagination */}
-				{totalCount > 0 && (
-					<div className="flex shrink-0 items-center justify-between text-xs" data-testid="pagination">
-						<div className="text-muted-foreground flex items-center gap-2">
-							{(offset + 1).toLocaleString()}-{Math.min(offset + limit, totalCount).toLocaleString()} of {totalCount.toLocaleString()}{" "}
-							entries
-						</div>
-
-						<div className="flex items-center gap-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => onOffsetChange(Math.max(0, offset - limit))}
-								disabled={offset === 0}
-								data-testid="model-limits-pagination-prev-btn"
-								aria-label="Previous page"
-							>
-								<ChevronLeft className="size-3" />
-							</Button>
-
-							<div className="flex items-center gap-1">
-								<span>Page</span>
-								<span>{Math.floor(offset / limit) + 1}</span>
-								<span>of {Math.ceil(totalCount / limit)}</span>
-							</div>
-
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => onOffsetChange(offset + limit)}
-								disabled={offset + limit >= totalCount}
-								data-testid="model-limits-pagination-next-btn"
-								aria-label="Next page"
-							>
-								<ChevronRight className="size-3" />
-							</Button>
-						</div>
-					</div>
-				)}
+				<Pagination
+					offset={offset}
+					limit={limit}
+					totalCount={totalCount}
+					onOffsetChange={onOffsetChange}
+					dataTestIdPrefix="model-limits"
+				/>
 			</div>
 		</>
 	);

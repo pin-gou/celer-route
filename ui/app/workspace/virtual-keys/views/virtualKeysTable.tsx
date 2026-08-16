@@ -1,6 +1,7 @@
 import { BudgetDisplay } from "@/components/budgetDisplay";
 import { RateLimitDisplay } from "@/components/rateLimitDisplay";
 import { PIN_SHADOW_RIGHT } from "@/components/table/columnPinning";
+import { useTranslation } from "react-i18next";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Pagination } from "@/components/ui/pagination";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { resetDurationLabels } from "@/lib/constants/governance";
@@ -40,8 +42,7 @@ import {
 	ArrowDown,
 	ArrowUp,
 	ArrowUpDown,
-	ChevronLeft,
-	ChevronRight,
+	
 	Copy,
 	Download,
 	Edit,
@@ -320,6 +321,7 @@ export default function VirtualKeysTable({
 	selectedVkId,
 	onSelectedVkChange,
 }: VirtualKeysTableProps) {
+	const { t } = useTranslation("common");
 	const [showVirtualKeySheet, setShowVirtualKeySheet] = useState(false);
 	const [editingVirtualKeyId, setEditingVirtualKeyId] = useState<string | null>(null);
 	const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
@@ -910,45 +912,13 @@ export default function VirtualKeysTable({
 					</Table>
 				</div>
 
-				{/* Pagination */}
-				{totalCount > 0 && (
-					<div className="flex shrink-0 items-center justify-between text-xs" data-testid="pagination">
-						<div className="text-muted-foreground flex items-center gap-2">
-							{(offset + 1).toLocaleString()}-{Math.min(offset + limit, totalCount).toLocaleString()} of {totalCount.toLocaleString()}{" "}
-							entries
-						</div>
-
-						<div className="flex items-center gap-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => onOffsetChange(Math.max(0, offset - limit))}
-								disabled={offset === 0}
-								data-testid="vk-pagination-prev-btn"
-								aria-label="Previous page"
-							>
-								<ChevronLeft className="size-3" />
-							</Button>
-
-							<div className="flex items-center gap-1">
-								<span>Page</span>
-								<span>{Math.floor(offset / limit) + 1}</span>
-								<span>of {Math.ceil(totalCount / limit)}</span>
-							</div>
-
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => onOffsetChange(offset + limit)}
-								disabled={offset + limit >= totalCount}
-								data-testid="vk-pagination-next-btn"
-								aria-label="Next page"
-							>
-								<ChevronRight className="size-3" />
-							</Button>
-						</div>
-					</div>
-				)}
+				<Pagination
+					offset={offset}
+					limit={limit}
+					totalCount={totalCount}
+					onOffsetChange={onOffsetChange}
+					dataTestIdPrefix="vk"
+				/>
 			</div>
 		</>
 	);

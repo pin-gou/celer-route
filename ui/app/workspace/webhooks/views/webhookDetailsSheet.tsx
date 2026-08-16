@@ -2,13 +2,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Pagination } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { getErrorMessage, useGetWebhookDeliveriesQuery, useRedeliverWebhookDeliveryMutation } from "@/lib/store";
 import { WEBHOOK_TUNING_DEFAULTS, WebhookDelivery, WebhookDeliveryOutcome, WebhookEndpoint, WebhookEvent } from "@/lib/types/webhooks";
 import { format, formatDistanceToNow } from "date-fns";
-import { ChevronDown, ChevronLeft, ChevronRight, Info, Loader2, RefreshCcw, Send } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ChevronDown, ChevronRight, Info, Loader2, RefreshCcw, Send } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -101,6 +103,7 @@ interface WebhookDetailsSheetProps {
 }
 
 export function WebhookDetailsSheet({ endpoint, isTesting, canManage, onTest, onClose }: WebhookDetailsSheetProps) {
+	const { t } = useTranslation("common");
 	const open = !!endpoint;
 	const [offset, setOffset] = useState(0);
 	const [redeliverWebhookDelivery] = useRedeliverWebhookDeliveryMutation();
@@ -462,37 +465,13 @@ export function WebhookDetailsSheet({ endpoint, isTesting, canManage, onTest, on
 				</div>
 
 				{totalCount > 0 && (
-					<div className="flex shrink-0 items-center justify-between text-xs" data-testid="webhook-delivery-pagination">
-						<div className="text-muted-foreground flex items-center gap-2">
-							{(offset + 1).toLocaleString()}-{Math.min(offset + PAGE_SIZE, totalCount).toLocaleString()} of {totalCount.toLocaleString()}{" "}
-							deliveries
-						</div>
-						<div className="flex items-center gap-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-								disabled={offset === 0}
-								aria-label="Previous page"
-							>
-								<ChevronLeft className="size-3" />
-							</Button>
-							<div className="flex items-center gap-1">
-								<span>Page</span>
-								<span>{Math.floor(offset / PAGE_SIZE) + 1}</span>
-								<span>of {Math.ceil(totalCount / PAGE_SIZE)}</span>
-							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setOffset(offset + PAGE_SIZE)}
-								disabled={offset + PAGE_SIZE >= totalCount}
-								aria-label="Next page"
-							>
-								<ChevronRight className="size-3" />
-							</Button>
-						</div>
-					</div>
+					<Pagination
+						offset={offset}
+						limit={PAGE_SIZE}
+						totalCount={totalCount}
+						onOffsetChange={setOffset}
+						dataTestIdPrefix="webhook-delivery"
+					/>
 				)}
 			</SheetContent>
 		</Sheet>

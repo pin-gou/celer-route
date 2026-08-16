@@ -8,14 +8,14 @@ import {
 	usePinOffsets,
 } from "@/components/table";
 import { Button } from "@/components/ui/button";
-import { ComboboxSelect, type ComboboxSelectOption } from "@/components/ui/combobox";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { DEFAULT_PAGE_SIZE_OPTIONS, useTablePageSizePreference } from "@/lib/hooks/useTablePageSizePreference";
-import type { DisplayLogEntry, LogEntry, Pagination } from "@/lib/types/logs";
+import { Pagination } from "@/components/ui/pagination";
+import { useTablePageSizePreference } from "@/lib/hooks/useTablePageSizePreference";
+import type { DisplayLogEntry, LogEntry, Pagination as PaginationType } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import type { ColumnOrderState, ColumnPinningState, TableMeta, VisibilityState } from "@tanstack/react-table";
 import { ColumnDef, flexRender, getCoreRowModel, SortingState, useReactTable } from "@tanstack/react-table";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -23,8 +23,8 @@ interface DataTableProps {
 	columns: ColumnDef<LogEntry>[];
 	data: LogEntry[];
 	totalItems: number;
-	pagination: Pagination;
-	onPaginationChange: (pagination: Pagination) => void;
+	pagination: PaginationType;
+	onPaginationChange: (pagination: PaginationType) => void;
 	onRowClick?: (log: LogEntry, columnId: string) => void;
 	polling: boolean;
 	loading?: boolean;
@@ -109,21 +109,6 @@ export function LogsDataTable({
 		}
 	}, [pageSizePref, pageSizeHydrated]);
 
-	const pageSizeOptions = useMemo<ComboboxSelectOption[]>(
-		() => DEFAULT_PAGE_SIZE_OPTIONS.map((size) => ({ label: String(size), value: String(size) })),
-		[],
-	);
-
-	const handlePageSizeChange = useCallback(
-		(value: string | null) => {
-			if (!value) return;
-			const next = Number(value);
-			setPageSizePref(next);
-			onPaginationChange({ ...pagination, limit: next, offset: 0 });
-		},
-		[onPaginationChange, pagination, setPageSizePref],
-	);
-
 	const handleSortingChange = (updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
 		const newSorting = typeof updaterOrValue === "function" ? updaterOrValue(sorting) : updaterOrValue;
 		setSorting(newSorting);
@@ -154,20 +139,6 @@ export function LogsDataTable({
 		onSortingChange: handleSortingChange,
 		meta: tableMeta,
 	});
-
-	const hasItems = totalItems > 0;
-	const currentPage = hasItems ? Math.floor(pagination.offset / pagination.limit) + 1 : 0;
-	const totalPages = hasItems ? Math.ceil(totalItems / pagination.limit) : 0;
-	const startItem = hasItems ? pagination.offset + 1 : 0;
-	const endItem = hasItems ? Math.min(pagination.offset + pagination.limit, totalItems) : 0;
-
-	const goToPage = (page: number) => {
-		const newOffset = (page - 1) * pagination.limit;
-		onPaginationChange({
-			...pagination,
-			offset: newOffset,
-		});
-	};
 
 	return (
 		<div className="flex h-full flex-col gap-2">
@@ -276,57 +247,18 @@ export function LogsDataTable({
 				</Table>
 			</div>
 
-			{/* Pagination Footer */}
-			<div className="flex shrink-0 items-center justify-between text-xs" data-testid="pagination">
-				<div className="text-muted-foreground flex items-center gap-2">
-					{startItem.toLocaleString()}-{endItem.toLocaleString()} of {totalItems.toLocaleString()} {t("table.entries")}
-				</div>
-
-				<div className="flex items-center gap-3">
-					<div className="flex items-center gap-1.5">
-						<span className="text-muted-foreground">{t("table.rowsPerPage")}</span>
-						<ComboboxSelect
-							options={pageSizeOptions}
-							value={String(pageSizePref)}
-							onValueChange={handlePageSizeChange}
-							disableSearch
-							hideClear
-							className="h-7 w-fit gap-1 text-xs"
-							data-testid="page-size-select"
-						/>
-					</div>
-
-					<div className="flex items-center gap-2">
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => goToPage(currentPage - 1)}
-							disabled={currentPage <= 1}
-							data-testid="prev-page"
-							aria-label={t("table.previousPage")}
-						>
-							<ChevronLeft className="size-3" />
-						</Button>
-
-						<div className="flex items-center gap-1">
-							<span>{t("table.page")}</span>
-							<span>{currentPage}</span>
-							<span>{t("table.of")} {totalPages}</span>
-						</div>
-
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => goToPage(currentPage + 1)}
-							disabled={totalPages === 0 || currentPage >= totalPages}
-							data-testid="next-page"
-							aria-label={t("table.nextPage")}
-						>
-							<ChevronRight className="size-3" />
-						</Button>
-					</div>
-				</div>
-			</div>
+			<Pagination
+				offset={pagination.offset}
+				limit={pagination.limit}
+				totalCount={totalItems}
+				onOffsetChange={(newOffset) => onPaginationChange({ ...pagination, offset: newOffset })}
+				onLimitChange={(newLimit) => {
+					setPageSizePref(newLimit);
+					onPaginationChange({ ...pagination, limit: newLimit, offset: 0 });
+				}}
+				pageSizeOptions={[10, 25, 50, 100, 200]}
+				dataTestIdPrefix="logs"
+			/>
 		</div>
 	);
 }

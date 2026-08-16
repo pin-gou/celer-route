@@ -1,5 +1,6 @@
 import ClientForm from "@/app/workspace/mcp-registry/views/mcpClientForm";
 import { PIN_SHADOW_RIGHT } from "@/components/table/columnPinning";
+import { useTranslation } from "react-i18next";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
 import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/ui/pagination";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -36,8 +38,6 @@ import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Link } from "@tanstack/react-router";
 import {
 	Box,
-	ChevronLeft,
-	ChevronRight,
 	Info,
 	KeyRound,
 	Loader2,
@@ -268,6 +268,7 @@ export default function MCPClientsTable({
 	limit,
 	onOffsetChange,
 }: MCPClientsTableProps) {
+	const { t } = useTranslation("common");
 	const [formOpen, setFormOpen] = useState(false);
 	const hasCreateMCPClientAccess = useRbac(RbacResource.MCPGateway, RbacOperation.Create);
 	const hasUpdateMCPClientAccess = useRbac(RbacResource.MCPGateway, RbacOperation.Update);
@@ -1004,45 +1005,13 @@ export default function MCPClientsTable({
 					</Table>
 				</div>
 
-				{/* Pagination */}
-				{totalCount > 0 && (
-					<div className="flex shrink-0 items-center justify-between text-xs" data-testid="pagination">
-						<div className="text-muted-foreground flex items-center gap-2">
-							{(offset + 1).toLocaleString()}-{Math.min(offset + limit, totalCount).toLocaleString()} of {totalCount.toLocaleString()}{" "}
-							entries
-						</div>
-
-						<div className="flex items-center gap-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => onOffsetChange(Math.max(0, offset - limit))}
-								disabled={offset === 0}
-								data-testid="mcp-clients-pagination-prev-btn"
-								aria-label="Previous page"
-							>
-								<ChevronLeft className="size-3" />
-							</Button>
-
-							<div className="flex items-center gap-1">
-								<span>Page</span>
-								<span>{Math.floor(offset / limit) + 1}</span>
-								<span>of {Math.ceil(totalCount / limit)}</span>
-							</div>
-
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => onOffsetChange(offset + limit)}
-								disabled={offset + limit >= totalCount}
-								data-testid="mcp-clients-pagination-next-btn"
-								aria-label="Next page"
-							>
-								<ChevronRight className="size-3" />
-							</Button>
-						</div>
-					</div>
-				)}
+				<Pagination
+					offset={offset}
+					limit={limit}
+					totalCount={totalCount}
+					onOffsetChange={onOffsetChange}
+					dataTestIdPrefix="mcp-clients"
+				/>
 			</div>
 
 			{formOpen && <ClientForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={handleSaved} />}

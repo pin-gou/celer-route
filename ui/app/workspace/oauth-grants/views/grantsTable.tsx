@@ -3,12 +3,14 @@
 // times, and a per-row actions menu. Owns the empty state and pagination; the
 // page passes in the current page slice plus filter/revoke state.
 
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PIN_SHADOW_RIGHT } from "@/components/table/columnPinning";
 import type { OAuth2GrantRow } from "@/lib/store/apis/oauth2SessionsApi";
-import { ChevronLeft, ChevronRight, Fingerprint, Info, KeyRound, UserRound } from "lucide-react";
+import { Fingerprint, Info, KeyRound, UserRound } from "lucide-react";
 import GrantActions from "./grantActions";
 
 interface GrantsTableProps {
@@ -36,6 +38,7 @@ export default function GrantsTable({
 	pendingActionRowId,
 	onRevoke,
 }: GrantsTableProps) {
+	const { t } = useTranslation("common");
 	return (
 		<div className="flex grow flex-col overflow-hidden">
 			<div className={`mb-2 grow overflow-hidden rounded-sm border ${isFetching ? "opacity-70 transition-opacity" : ""}`}>
@@ -105,44 +108,13 @@ export default function GrantsTable({
 				</Table>
 			</div>
 
-			{totalCount > 0 && (
-				<div className="flex shrink-0 items-center justify-between text-xs" data-testid="pagination">
-					<div className="text-muted-foreground flex items-center gap-2">
-						{(offset + 1).toLocaleString()}-{Math.min(offset + pageSize, totalCount).toLocaleString()} of {totalCount.toLocaleString()}{" "}
-						entries
-					</div>
-
-					<div className="flex items-center gap-2">
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => onOffsetChange(Math.max(0, offset - pageSize))}
-							disabled={offset === 0}
-							data-testid="oauth-grants-prev-page-btn"
-							aria-label="Previous page"
-						>
-							<ChevronLeft className="size-3" />
-						</Button>
-
-						<div className="flex items-center gap-1">
-							<span>Page</span>
-							<span>{Math.floor(offset / pageSize) + 1}</span>
-							<span>of {Math.ceil(totalCount / pageSize)}</span>
-						</div>
-
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => onOffsetChange(offset + pageSize)}
-							disabled={offset + pageSize >= totalCount}
-							data-testid="oauth-grants-next-page-btn"
-							aria-label="Next page"
-						>
-							<ChevronRight className="size-3" />
-						</Button>
-					</div>
-				</div>
-			)}
+			<Pagination
+				offset={offset}
+				limit={pageSize}
+				totalCount={totalCount}
+				onOffsetChange={onOffsetChange}
+				dataTestIdPrefix="oauth-grants"
+			/>
 		</div>
 	);
 }

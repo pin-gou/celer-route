@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/ui/pagination";
 import { ScrollArea } from "@/components/ui/scrollArea";
 import { useToast } from "@/hooks/use-toast";
 import { useDebouncedValue } from "@/hooks/useDebounce";
@@ -8,9 +9,10 @@ import { getErrorMessage, useGetMCPClientsQuery, useGetMCPLibraryQuery } from "@
 import type { MCPLibraryEntry } from "@/lib/types/mcp";
 import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { ChevronLeft, ChevronRight, LayoutGrid, Library, List, Plus, Search, Settings } from "lucide-react";
+import { LayoutGrid, Library, List, Plus, Search, Settings } from "lucide-react";
 import { parseAsArrayOf, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MCPLibraryAddServerSheet } from "./views/mcpLibraryAddServerSheet";
 import { MCPLibraryFilterSidebar, type MCPLibraryFilters } from "./views/mcpLibraryFilterSidebar";
 import { MCPLibraryInstallSheet, sanitizeServerName } from "./views/mcpLibraryInstallSheet";
@@ -33,6 +35,7 @@ function getInitialViewMode(): MCPLibraryViewMode {
 }
 
 export default function MCPLibraryPage() {
+	const { t } = useTranslation("common");
 	const hasCreateMCPClientAccess = useRbac(RbacResource.MCPGateway, RbacOperation.Create);
 	const hasDeleteMCPLibraryAccess = useRbac(RbacResource.MCPGateway, RbacOperation.Delete);
 	const hasSettingsAccess = useRbac(RbacResource.Settings, RbacOperation.Update);
@@ -307,42 +310,13 @@ export default function MCPLibraryPage() {
 
 									{/* Pagination */}
 									{totalCount > 0 && (
-										<div className="mt-auto flex shrink-0 items-center justify-between text-xs" data-testid="pagination">
-											<div className="text-muted-foreground flex items-center gap-2">
-												{(urlState.offset + 1).toLocaleString()}-{Math.min(urlState.offset + PAGE_SIZE, totalCount).toLocaleString()} of{" "}
-												{totalCount.toLocaleString()} entries
-											</div>
-
-											<div className="flex items-center gap-2">
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => setUrlState({ offset: Math.max(0, urlState.offset - PAGE_SIZE) }, { history: "push" })}
-													disabled={urlState.offset === 0}
-													data-testid="mcp-library-pagination-prev-btn"
-													aria-label="Previous page"
-												>
-													<ChevronLeft className="size-3" />
-												</Button>
-
-												<div className="flex items-center gap-1">
-													<span>Page</span>
-													<span>{currentPage}</span>
-													<span>of {totalPages}</span>
-												</div>
-
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => setUrlState({ offset: urlState.offset + PAGE_SIZE }, { history: "push" })}
-													disabled={urlState.offset + PAGE_SIZE >= totalCount}
-													data-testid="mcp-library-pagination-next-btn"
-													aria-label="Next page"
-												>
-													<ChevronRight className="size-3" />
-												</Button>
-											</div>
-										</div>
+										<Pagination
+											offset={urlState.offset}
+											limit={PAGE_SIZE}
+											totalCount={totalCount}
+											onOffsetChange={(newOffset) => setUrlState({ offset: newOffset }, { history: "push" })}
+											dataTestIdPrefix="mcp-library"
+										/>
 									)}
 								</>
 							)}

@@ -156,12 +156,17 @@
 	"pagination": {
 		"previous": "上一页",
 		"next": "下一页",
-		"page": "页",
-		"of": "共",
+		"firstPage": "首页",
+		"lastPage": "末页",
+		"goToPage": "跳转到第",
+		"page": "第",
+		"pageSuffix": "页",
+		"of": "页 · 共",
 		"rowsPerPage": "每页行数",
 		"total": "总计",
 		"showing": "显示",
-		"to": "至"
+		"to": "至",
+		"entries": "条"
 	},
 	"datePicker": {
 		"pickADate": "选择日期",

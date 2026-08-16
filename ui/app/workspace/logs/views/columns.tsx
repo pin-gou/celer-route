@@ -1,4 +1,4 @@
-import { formatCost, formatLatency } from "@/app/workspace/dashboard/utils/chartUtils";
+import { formatCost } from "@/app/workspace/dashboard/utils/chartUtils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
@@ -436,20 +436,16 @@ export const createColumns = (
 					</Button>
 				);
 			},
-			size: 170,
+			size: 100,
 			cell: ({ row }) => {
 				const latency = row.original.latency;
 				if (latency === undefined || latency === null) {
-					return <div className="pl-4 font-mono text-xs">N/A</div>;
+					return <div className="pr-3 text-right font-mono text-xs">N/A</div>;
 				}
-				const tone = latency >= 5000 ? "bg-red-500" : latency >= 2000 ? "bg-amber-500" : "bg-emerald-500";
-				const pct = Math.min(100, (latency / 5000) * 100);
+				const tone = latency >= 5000 ? "text-red-500" : latency >= 2000 ? "text-amber-500" : "text-emerald-500";
 				return (
-					<div className="flex items-center gap-2 pl-4">
-						<span className="font-mono text-[12px] tabular-nums">{formatLatency(latency)}</span>
-						<div className="relative h-1.5 w-[56px] overflow-hidden rounded-sm bg-zinc-200 dark:bg-zinc-700">
-							<div className={cn("absolute inset-y-0 left-0 rounded-sm opacity-85", tone)} style={{ width: `${pct}%` }} />
-						</div>
+					<div className="text-right font-mono text-[12px] tabular-nums">
+						<strong className={tone}>{Math.round(latency).toLocaleString()}</strong> ms
 					</div>
 				);
 			},
@@ -490,7 +486,7 @@ export const createColumns = (
 			cell: ({ row }) => {
 				const tokenUsage = row.original.token_usage;
 				if (!tokenUsage) {
-					return <div className="pl-4 font-mono text-xs">N/A</div>;
+					return null;
 				}
 				const prompt = tokenUsage.prompt_tokens ?? 0;
 				const completion = tokenUsage.completion_tokens ?? 0;
@@ -534,7 +530,7 @@ export const createColumns = (
 			size: 120,
 			cell: ({ row }) => {
 				if (row.original.cost == null) {
-					return <div className="pl-4 font-mono text-[12px]">N/A</div>;
+					return null;
 				}
 				return <div className="pl-4 font-mono text-sm tabular-nums">{formatCost(row.original.cost)}</div>;
 			},

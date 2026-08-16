@@ -55,6 +55,7 @@
 		"moreTargets": "+{{count}} more target",
 		"moreTargets_plural": "+{{count}} more targets",
 		"page": "Page",
+		"pageSuffix": "",
 		"of": "of",
 		"entries": "entries",
 		"prevPage": "Previous page",

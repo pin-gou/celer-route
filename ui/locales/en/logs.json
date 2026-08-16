@@ -519,6 +519,7 @@
 		"entries": "entries",
 		"rowsPerPage": "Rows per page",
 		"page": "Page",
+		"pageSuffix": "",
 		"of": "of",
 		"previousPage": "Previous page",
 		"nextPage": "Next page",
