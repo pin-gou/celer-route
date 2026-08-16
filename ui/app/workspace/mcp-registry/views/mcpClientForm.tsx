@@ -882,9 +882,9 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 											<div className="flex-1">
 												<p className="text-xs font-medium text-amber-900">Docker Notice</p>
 												<p className="mt-0.5 text-xs text-amber-800">
-													If not using the official pg-gateway Docker image, STDIO connections may not work if required commands (npx, python,
-													etc.) aren't installed. You can safely ignore this if running locally or using a custom image with the necessary
-													dependencies.
+													If not using the official pg-gateway Docker image, STDIO connections may not work if required commands (npx,
+													python, etc.) aren't installed. You can safely ignore this if running locally or using a custom image with the
+													necessary dependencies.
 												</p>
 											</div>
 										</div>

@@ -87,11 +87,15 @@ function LocalCacheTokenMeterChartImpl({ data }: LocalCacheTokenMeterChartProps)
 						<div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-2 text-[11px] leading-none">
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: METER_COLORS.direct }} />
-								<span className="text-primary">{t("charts.localCacheDirect")}: {directHits}</span>
+								<span className="text-primary">
+									{t("charts.localCacheDirect")}: {directHits}
+								</span>
 							</span>
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: METER_COLORS.semantic }} />
-								<span className="text-primary">{t("charts.localCacheSemantic")}: {semanticHits}</span>
+								<span className="text-primary">
+									{t("charts.localCacheSemantic")}: {semanticHits}
+								</span>
 							</span>
 						</div>
 					</div>

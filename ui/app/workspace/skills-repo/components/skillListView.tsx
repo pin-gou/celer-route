@@ -418,8 +418,8 @@ export function SkillsListView({
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
 								<p className="max-w-xs text-xs">
-									Git is not available on the server. Install git and restart pg-gateway to enable marketplace registration for Claude Code and
-									Codex.
+									Git is not available on the server. Install git and restart pg-gateway to enable marketplace registration for Claude Code
+									and Codex.
 								</p>
 							</TooltipContent>
 						</Tooltip>

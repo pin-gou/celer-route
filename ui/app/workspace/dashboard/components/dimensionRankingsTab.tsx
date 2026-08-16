@@ -31,7 +31,9 @@ function TopDimensionTooltip({ active, payload }: any) {
 	return (
 		<div className="rounded-sm border border-zinc-200 bg-white px-3 py-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
 			<div className="mb-1 text-xs text-zinc-500">{data.displayName}</div>
-			<div className="text-sm font-medium">{data.total_requests.toLocaleString()} {t("charts.requests")}</div>
+			<div className="text-sm font-medium">
+				{data.total_requests.toLocaleString()} {t("charts.requests")}
+			</div>
 		</div>
 	);
 }
@@ -262,7 +264,13 @@ function DimensionRankingsTabImpl({ data, loading, dimensionLabel, testIdPrefix,
 									/>
 								</TableHead>
 								<TableHead className="text-right">
-									<SortableHeader label={t("rankings.cost")} field="total_cost" currentSort={sortField} currentOrder={sortOrder} onSort={handleSort} />
+									<SortableHeader
+										label={t("rankings.cost")}
+										field="total_cost"
+										currentSort={sortField}
+										currentOrder={sortOrder}
+										onSort={handleSort}
+									/>
 								</TableHead>
 							</TableRow>
 						</TableHeader>

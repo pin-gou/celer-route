@@ -289,9 +289,7 @@ function ModelRankingsTabImpl({ rankingsData, loading, modelData, loadingModels,
 				</Card>
 			) : !rankingsData?.rankings?.length ? (
 				<Card className="rounded-sm p-4 shadow-none">
-					<div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
-						{t("empty.noModelUsage")}
-					</div>
+					<div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">{t("empty.noModelUsage")}</div>
 				</Card>
 			) : (
 				<Card className="rounded-sm p-2 shadow-none" data-testid="dashboard-model-rankings-table">
@@ -329,7 +327,13 @@ function ModelRankingsTabImpl({ rankingsData, loading, modelData, loadingModels,
 									/>
 								</TableHead>
 								<TableHead className="text-right">
-									<SortableHeader label={t("rankings.cost")} field="total_cost" currentSort={sortField} currentOrder={sortOrder} onSort={handleSort} />
+									<SortableHeader
+										label={t("rankings.cost")}
+										field="total_cost"
+										currentSort={sortField}
+										currentOrder={sortOrder}
+										onSort={handleSort}
+									/>
 								</TableHead>
 								<TableHead className="text-right">
 									<SortableHeader

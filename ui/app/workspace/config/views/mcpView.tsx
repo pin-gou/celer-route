@@ -343,8 +343,8 @@ export default function MCPView() {
 							Allow Temp Token Auth Links
 						</label>
 						<p className="text-muted-foreground text-sm">
-							When enabled, per-user MCP OAuth links can include a short-lived scoped token so someone without an active pg-gateway dashboard
-							session can complete the flow. Keep disabled to require normal dashboard authentication.
+							When enabled, per-user MCP OAuth links can include a short-lived scoped token so someone without an active pg-gateway
+							dashboard session can complete the flow. Keep disabled to require normal dashboard authentication.
 						</p>
 					</div>
 					<Switch
@@ -454,8 +454,8 @@ export default function MCPView() {
 								<p className="text-muted-foreground text-sm">
 									Controls how inbound MCP clients (e.g. Claude Code, Cursor) authenticate to the <code className="text-xs">/mcp</code>{" "}
 									endpoint. <b>headers</b> (default) - VK / api-key / session headers only, OAuth discovery disabled. <b>both</b> - accepts
-									header credentials and pg-gateway-issued JWTs; existing integrations are unaffected. <b>oauth</b> - JWTs only; VK and header
-									access is disabled.
+									header credentials and pg-gateway-issued JWTs; existing integrations are unaffected. <b>oauth</b> - JWTs only; VK and
+									header access is disabled.
 								</p>
 								<Select
 									value={localConfig.mcp_server_auth_mode ?? "headers"}

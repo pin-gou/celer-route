@@ -82,7 +82,16 @@ export function ExportPopover({ getData, activeTab, onPreloadData, onPdfExport, 
 		[onPdfExport, onExportDone, fileName],
 	);
 
-	const tabKey = activeTab === "overview" ? "overview" : activeTab === "provider-usage" ? "providerUsage" : activeTab === "rankings" ? "modelRankings" : activeTab === "virtual-key-rankings" ? "virtualKeyRankings" : "appRankings";
+	const tabKey =
+		activeTab === "overview"
+			? "overview"
+			: activeTab === "provider-usage"
+				? "providerUsage"
+				: activeTab === "rankings"
+					? "modelRankings"
+					: activeTab === "virtual-key-rankings"
+						? "virtualKeyRankings"
+						: "appRankings";
 	const activeTabLabel = t("tabs." + tabKey);
 
 	return (

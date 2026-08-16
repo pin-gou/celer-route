@@ -69,7 +69,7 @@ export default function PluginsPage() {
 		<div className="mx-auto w-full max-w-7xl">
 			<h1 className="sr-only">{t("page.title")}</h1>
 			<div className="flex flex-row gap-4">
-				<div className="sticky top-0 self-start flex min-w-[250px] flex-col gap-2 pb-10">
+				<div className="sticky top-0 flex min-w-[250px] flex-col gap-2 self-start pb-10">
 					<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
 						<div className="mb-4">
 							<div className="text-muted-foreground mb-2 text-xs font-medium">{t("sidebar.title")}</div>

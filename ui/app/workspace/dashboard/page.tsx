@@ -33,7 +33,16 @@ export default function DashboardPage() {
 	const { t } = useTranslation("dashboard");
 
 	const tabLabel = (tab: DashboardTab): string => {
-		const key = tab === "overview" ? "overview" : tab === "provider-usage" ? "providerUsage" : tab === "rankings" ? "modelRankings" : tab === "virtual-key-rankings" ? "virtualKeyRankings" : "appRankings";
+		const key =
+			tab === "overview"
+				? "overview"
+				: tab === "provider-usage"
+					? "providerUsage"
+					: tab === "rankings"
+						? "modelRankings"
+						: tab === "virtual-key-rankings"
+							? "virtualKeyRankings"
+							: "appRankings";
 		return t("tabs." + key);
 	};
 
@@ -171,13 +180,7 @@ export default function DashboardPage() {
 	const virtualKeyRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const appRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 
-	const allRefs = [
-		overviewRef,
-		providerRef,
-		modelRankingsRef,
-		virtualKeyRankingsRef,
-		appRankingsRef,
-	];
+	const allRefs = [overviewRef, providerRef, modelRankingsRef, virtualKeyRankingsRef, appRankingsRef];
 
 	const getDashboardData = useCallback((): DashboardData => {
 		const merged: Partial<DashboardData> = {};
@@ -531,7 +534,7 @@ export default function DashboardPage() {
 							</div>
 						</TabsContent>
 
-<TabsContent value="virtual-key-rankings" {...(exportingAll && { forceMount: true })}>
+						<TabsContent value="virtual-key-rankings" {...(exportingAll && { forceMount: true })}>
 							<div id="dashboard-section-virtual-key-rankings">
 								<DimensionRankingsTabView
 									ref={virtualKeyRankingsRef}

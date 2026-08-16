@@ -180,12 +180,7 @@ export interface DashboardData {
 	appRankingsData: DimensionRankingsResponse | null;
 }
 
-export type DashboardTab =
-	| "overview"
-	| "provider-usage"
-	| "rankings"
-	| "virtual-key-rankings"
-	| "app-rankings";
+export type DashboardTab = "overview" | "provider-usage" | "rankings" | "virtual-key-rankings" | "app-rankings";
 
 export type ExportTab = DashboardTab | "all";
 

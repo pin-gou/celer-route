@@ -179,8 +179,8 @@ export const MCPHeadersAuthorizer: React.FC<MCPHeadersAuthorizerProps> = ({
 						<>
 							<InfoBox icon={<KeyRound className="size-4" />}>
 								<p>
-									These values verify the connection now and are kept on file so pg-gateway can periodically refresh the available tool list.
-									Each user still submits their own values when they use this server.
+									These values verify the connection now and are kept on file so pg-gateway can periodically refresh the available tool
+									list. Each user still submits their own values when they use this server.
 								</p>
 							</InfoBox>
 							<HeadersForm
