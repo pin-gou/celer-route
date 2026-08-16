@@ -4,8 +4,7 @@ import { ScrollArea } from "@/components/ui/scrollArea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTimezonePreference } from "@/lib/hooks/useTimezonePreference";
 import { parseAsSafeArrayOf } from "@/lib/queryParamsParser";
-import { useGetMCPAvailableFilterDataQuery } from "@/lib/store";
-import type { LogFilters, MCPToolLogFilters } from "@/lib/types/logs";
+import type { LogFilters } from "@/lib/types/logs";
 import { dateUtils } from "@/lib/types/logs";
 import { getRangeForPeriod, getTimePeriods } from "@/lib/utils/timeRange";
 import { useLocation } from "@tanstack/react-router";
@@ -13,10 +12,8 @@ import { parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "n
 import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type ChartType } from "./components/charts/chartTypeToggle";
-import { ModelFilterSelect } from "./components/charts/modelFilterSelect";
 import { ExportPopover } from "./components/exportPopover";
 import { type DimensionRankingsTabViewHandle, DimensionRankingsTabView } from "./components/tabViews/dimensionRankingsTabView";
-import { type MCPTabViewHandle, MCPTabView } from "./components/tabViews/mcpTabView";
 import { type ModelRankingsTabViewHandle, ModelRankingsTabView } from "./components/tabViews/modelRankingsTabView";
 import { type OverviewTabViewHandle, OverviewTabView } from "./components/tabViews/overviewTabView";
 import { type ProviderUsageTabViewHandle, ProviderUsageTabView } from "./components/tabViews/providerUsageTabView";
@@ -34,9 +31,6 @@ const nextFrames = () =>
 
 export default function DashboardPage() {
 	const { t } = useTranslation("dashboard");
-
-	// MCP filter data
-	const { data: mcpFilterData } = useGetMCPAvailableFilterDataQuery();
 
 	const defaultTimeRange = useMemo(() => dateUtils.getDefaultTimeRange(), []);
 
@@ -79,10 +73,6 @@ export default function DashboardPage() {
 			provider_token_provider: parseAsString.withDefault("all"),
 			provider_latency_provider: parseAsString.withDefault("all"),
 			provider_throughput_provider: parseAsString.withDefault("all"),
-			mcp_volume_chart: parseAsString.withDefault("bar"),
-			mcp_cost_chart: parseAsString.withDefault("bar"),
-			mcp_tool_names: parseAsString.withDefault(""),
-			mcp_server_labels: parseAsString.withDefault(""),
 			parent_request_id: parseAsString.withDefault(""),
 			user_ids: parseAsSafeArrayOf.withDefault([]),
 			team_ids: parseAsSafeArrayOf.withDefault([]),
@@ -95,13 +85,6 @@ export default function DashboardPage() {
 			history: "push",
 			shallow: false,
 		},
-	);
-
-	// Parse string-backed MCP filter values from URL state
-	const selectedMcpToolNames = useMemo(() => (urlState.mcp_tool_names ? [urlState.mcp_tool_names] : []), [urlState.mcp_tool_names]);
-	const selectedMcpServerLabels = useMemo(
-		() => (urlState.mcp_server_labels ? [urlState.mcp_server_labels] : []),
-		[urlState.mcp_server_labels],
 	);
 
 	const metadataFilters = useMemo(() => {
@@ -176,57 +159,17 @@ export default function DashboardPage() {
 		],
 	);
 
-	const mcpFilters: MCPToolLogFilters = useMemo(
-		() => ({
-			...(urlState.period
-				? { period: urlState.period }
-				: {
-						start_time: dateUtils.toISOString(urlState.start_time),
-						end_time: dateUtils.toISOString(urlState.end_time),
-					}),
-			...(selectedMcpToolNames.length > 0 && {
-				tool_names: selectedMcpToolNames,
-			}),
-			...(selectedMcpServerLabels.length > 0 && {
-				server_labels: selectedMcpServerLabels,
-			}),
-			...(urlState.status.length > 0 && { status: urlState.status }),
-			...(urlState.virtual_key_ids.length > 0 && {
-				virtual_key_ids: urlState.virtual_key_ids,
-			}),
-		}),
-		[
-			urlState.period,
-			urlState.start_time,
-			urlState.end_time,
-			selectedMcpToolNames,
-			selectedMcpServerLabels,
-			urlState.status,
-			urlState.virtual_key_ids,
-		],
-	);
-
 	// Tab view refs for export data aggregation
 	const overviewRef = useRef<OverviewTabViewHandle>(null);
 	const providerRef = useRef<ProviderUsageTabViewHandle>(null);
-	const mcpRef = useRef<MCPTabViewHandle>(null);
 	const modelRankingsRef = useRef<ModelRankingsTabViewHandle>(null);
-	const teamRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
-	const customerRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
-	const buRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
-	const userRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const virtualKeyRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const appRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 
 	const allRefs = [
 		overviewRef,
 		providerRef,
-		mcpRef,
 		modelRankingsRef,
-		teamRankingsRef,
-		customerRankingsRef,
-		buRankingsRef,
-		userRankingsRef,
 		virtualKeyRankingsRef,
 		appRankingsRef,
 	];
@@ -246,15 +189,8 @@ export default function DashboardPage() {
 			providerTokenData: null,
 			providerLatencyData: null,
 			rankingsData: null,
-			teamRankingsData: null,
-			customerRankingsData: null,
-			buRankingsData: null,
-			userRankingsData: null,
 			virtualKeyRankingsData: null,
 			appRankingsData: null,
-			mcpHistogramData: null,
-			mcpCostData: null,
-			mcpTopToolsData: null,
 			...merged,
 		};
 	}, []);
@@ -278,12 +214,7 @@ export default function DashboardPage() {
 		const refsByTab: Record<DashboardTab, RefObject<{ loadData: () => Promise<void> } | null>> = {
 			overview: overviewRef,
 			"provider-usage": providerRef,
-			mcp: mcpRef,
 			rankings: modelRankingsRef,
-			"team-rankings": teamRankingsRef,
-			"customer-rankings": customerRankingsRef,
-			"bu-rankings": buRankingsRef,
-			"user-rankings": userRankingsRef,
 			"virtual-key-rankings": virtualKeyRankingsRef,
 			"app-rankings": appRankingsRef,
 		};
@@ -318,9 +249,6 @@ export default function DashboardPage() {
 		(type: ChartType) => setUrlState({ provider_throughput_chart: type }),
 		[setUrlState],
 	);
-	const handleMcpVolumeChartToggle = useCallback((type: ChartType) => setUrlState({ mcp_volume_chart: type }), [setUrlState]);
-	const handleMcpCostChartToggle = useCallback((type: ChartType) => setUrlState({ mcp_cost_chart: type }), [setUrlState]);
-
 	// Model / provider filter changes
 	const handleCostModelChange = useCallback((model: string) => setUrlState({ cost_model: model }), [setUrlState]);
 	const handleUsageModelChange = useCallback((model: string) => setUrlState({ usage_model: model }), [setUrlState]);
@@ -489,40 +417,6 @@ export default function DashboardPage() {
 							onPdfExport={handlePdfExport}
 							onExportDone={handleExportDone}
 						/>
-						{activeTab === "mcp" && mcpFilterData && (
-							<div className="flex items-center gap-1">
-								{(mcpFilterData.tool_names?.length ?? 0) > 0 && (
-									<ModelFilterSelect
-										models={mcpFilterData.tool_names ?? []}
-										selectedModel={selectedMcpToolNames.length === 1 ? selectedMcpToolNames[0] : "all"}
-										onModelChange={(value) => {
-											if (value === "all") {
-												setUrlState({ mcp_tool_names: "" });
-											} else {
-												setUrlState({ mcp_tool_names: value });
-											}
-										}}
-										placeholder={t("filters.allTools")}
-										data-testid="dashboard-mcp-tool-filter"
-									/>
-								)}
-								{(mcpFilterData.server_labels?.length ?? 0) > 0 && (
-									<ModelFilterSelect
-										models={mcpFilterData.server_labels ?? []}
-										selectedModel={selectedMcpServerLabels.length === 1 ? selectedMcpServerLabels[0] : "all"}
-										onModelChange={(value) => {
-											if (value === "all") {
-												setUrlState({ mcp_server_labels: "" });
-											} else {
-												setUrlState({ mcp_server_labels: value });
-											}
-										}}
-										placeholder={t("filters.allServers")}
-										data-testid="dashboard-mcp-server-filter"
-									/>
-								)}
-							</div>
-						)}
 						<DateTimePickerWithRange
 							dateTime={dateRange}
 							onDateTimeUpdate={handleDateRangeChange}
@@ -552,23 +446,8 @@ export default function DashboardPage() {
 								<TabsTrigger className="shrink-0" value="rankings" data-testid="dashboard-tab-rankings">
 									{t("tabs.modelRankings")}
 								</TabsTrigger>
-								<TabsTrigger className="shrink-0" value="mcp" data-testid="dashboard-tab-mcp">
-									{t("tabs.mcpUsage")}
-								</TabsTrigger>
-								<TabsTrigger className="shrink-0" value="team-rankings" data-testid="dashboard-tab-team-rankings">
-									{t("tabs.teamRankings")}
-								</TabsTrigger>
-								<TabsTrigger className="shrink-0" value="user-rankings" data-testid="dashboard-tab-user-rankings">
-									{t("tabs.userRankings")}
-								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="virtual-key-rankings" data-testid="dashboard-tab-virtual-key-rankings">
 									{t("tabs.virtualKeyRankings")}
-								</TabsTrigger>
-								<TabsTrigger className="shrink-0" value="customer-rankings" data-testid="dashboard-tab-customer-rankings">
-									{t("tabs.customerRankings")}
-								</TabsTrigger>
-								<TabsTrigger className="shrink-0" value="bu-rankings" data-testid="dashboard-tab-bu-rankings">
-									{t("tabs.buRankings")}
 								</TabsTrigger>
 								<TabsTrigger value="app-rankings" data-testid="dashboard-tab-app-rankings">
 									{t("tabs.appRankings")}
@@ -647,89 +526,7 @@ export default function DashboardPage() {
 							</div>
 						</TabsContent>
 
-						{/* MCP Tab */}
-						<TabsContent value="mcp" {...(exportingAll && { forceMount: true })}>
-							<div id="dashboard-section-mcp">
-								<MCPTabView
-									ref={mcpRef}
-									filters={mcpFilters}
-									active={activeTab === "mcp" || exportingAll}
-									startTime={urlState.start_time}
-									endTime={urlState.end_time}
-									mcpVolumeChartType={toChartType(urlState.mcp_volume_chart)}
-									mcpCostChartType={toChartType(urlState.mcp_cost_chart)}
-									onMcpVolumeChartToggle={handleMcpVolumeChartToggle}
-									onMcpCostChartToggle={handleMcpCostChartToggle}
-								/>
-							</div>
-						</TabsContent>
-
-						{/* Team Rankings Tab */}
-						<TabsContent value="team-rankings" {...(exportingAll && { forceMount: true })}>
-							<div id="dashboard-section-team-rankings">
-								<DimensionRankingsTabView
-									ref={teamRankingsRef}
-									filters={filters}
-									active={activeTab === "team-rankings" || exportingAll}
-									dimension="team"
-									dimensionLabel="Team"
-									testIdPrefix="dashboard-team-rankings"
-									dataKey="teamRankingsData"
-									pdfMode={isExportingTab("team-rankings")}
-								/>
-							</div>
-						</TabsContent>
-
-						{/* Customer Rankings Tab */}
-						<TabsContent value="customer-rankings" {...(exportingAll && { forceMount: true })}>
-							<div id="dashboard-section-customer-rankings">
-								<DimensionRankingsTabView
-									ref={customerRankingsRef}
-									filters={filters}
-									active={activeTab === "customer-rankings" || exportingAll}
-									dimension="customer"
-									dimensionLabel="Customer"
-									testIdPrefix="dashboard-customer-rankings"
-									dataKey="customerRankingsData"
-									pdfMode={isExportingTab("customer-rankings")}
-								/>
-							</div>
-						</TabsContent>
-
-						{/* Business Unit Rankings Tab */}
-						<TabsContent value="bu-rankings" {...(exportingAll && { forceMount: true })}>
-							<div id="dashboard-section-bu-rankings">
-								<DimensionRankingsTabView
-									ref={buRankingsRef}
-									filters={filters}
-									active={activeTab === "bu-rankings" || exportingAll}
-									dimension="business_unit"
-									dimensionLabel="Business Unit"
-									testIdPrefix="dashboard-bu-rankings"
-									dataKey="buRankingsData"
-									pdfMode={isExportingTab("bu-rankings")}
-								/>
-							</div>
-						</TabsContent>
-
-						{/* User Rankings Tab */}
-						<TabsContent value="user-rankings" {...(exportingAll && { forceMount: true })}>
-							<div id="dashboard-section-user-rankings">
-								<DimensionRankingsTabView
-									ref={userRankingsRef}
-									filters={filters}
-									active={activeTab === "user-rankings" || exportingAll}
-									dimension="user"
-									dimensionLabel="User"
-									testIdPrefix="dashboard-user-rankings"
-									dataKey="userRankingsData"
-									pdfMode={isExportingTab("user-rankings")}
-								/>
-							</div>
-						</TabsContent>
-
-						{/* Virtual Key Rankings Tab */}
-						<TabsContent value="virtual-key-rankings" {...(exportingAll && { forceMount: true })}>
+<TabsContent value="virtual-key-rankings" {...(exportingAll && { forceMount: true })}>
 							<div id="dashboard-section-virtual-key-rankings">
 								<DimensionRankingsTabView
 									ref={virtualKeyRankingsRef}

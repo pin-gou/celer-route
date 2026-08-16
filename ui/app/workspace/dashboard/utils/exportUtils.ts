@@ -10,9 +10,6 @@ import type {
 	DimensionRankingsResponse,
 	LatencyHistogramResponse,
 	LogsHistogramResponse,
-	MCPCostHistogramResponse,
-	MCPHistogramResponse,
-	MCPTopToolsResponse,
 	ModelHistogramResponse,
 	ModelRankingsResponse,
 	ProviderCostHistogramResponse,
@@ -166,24 +163,6 @@ export function dimensionRankingsToCSV(data: DimensionRankingsResponse | null, d
 	return { headers, rows };
 }
 
-export function mcpVolumeToCSV(data: MCPHistogramResponse | null): CSVData {
-	const headers = ["Timestamp", "Total Executions", "Success", "Error"];
-	const rows = (data?.buckets ?? []).map((b) => [b.timestamp, b.count, b.success, b.error]);
-	return { headers, rows };
-}
-
-export function mcpCostToCSV(data: MCPCostHistogramResponse | null): CSVData {
-	const headers = ["Timestamp", "Total Cost ($)"];
-	const rows = (data?.buckets ?? []).map((b) => [b.timestamp, b.total_cost]);
-	return { headers, rows };
-}
-
-export function mcpTopToolsToCSV(data: MCPTopToolsResponse | null): CSVData {
-	const headers = ["Tool Name", "Execution Count", "Cost ($)"];
-	const rows = (data?.tools ?? []).map((t) => [t.tool_name, t.count, t.cost]);
-	return { headers, rows };
-}
-
 export interface DashboardData {
 	// Overview
 	histogramData: LogsHistogramResponse | null;
@@ -197,29 +176,16 @@ export interface DashboardData {
 	providerLatencyData: ProviderLatencyHistogramResponse | null;
 	// Rankings
 	rankingsData: ModelRankingsResponse | null;
-	teamRankingsData: DimensionRankingsResponse | null;
-	customerRankingsData: DimensionRankingsResponse | null;
-	buRankingsData: DimensionRankingsResponse | null;
-	userRankingsData: DimensionRankingsResponse | null;
 	virtualKeyRankingsData: DimensionRankingsResponse | null;
 	appRankingsData: DimensionRankingsResponse | null;
-	// MCP
-	mcpHistogramData: MCPHistogramResponse | null;
-	mcpCostData: MCPCostHistogramResponse | null;
-	mcpTopToolsData: MCPTopToolsResponse | null;
 }
 
 export type DashboardTab =
 	| "overview"
 	| "provider-usage"
 	| "rankings"
-	| "team-rankings"
-	| "customer-rankings"
-	| "bu-rankings"
-	| "user-rankings"
 	| "virtual-key-rankings"
-	| "app-rankings"
-	| "mcp";
+	| "app-rankings";
 
 export type ExportTab = DashboardTab | "all";
 
@@ -232,11 +198,6 @@ export const DASHBOARD_EXPORT_TABS: { value: DashboardTab; label: string; sectio
 	{ value: "overview", label: "Overview", sectionId: "dashboard-section-overview" },
 	{ value: "provider-usage", label: "Provider Usage", sectionId: "dashboard-section-provider-usage" },
 	{ value: "rankings", label: "Model Rankings", sectionId: "dashboard-section-rankings" },
-	{ value: "mcp", label: "MCP Usage", sectionId: "dashboard-section-mcp" },
-	{ value: "team-rankings", label: "Team Rankings", sectionId: "dashboard-section-team-rankings" },
-	{ value: "customer-rankings", label: "Customer Rankings", sectionId: "dashboard-section-customer-rankings" },
-	{ value: "bu-rankings", label: "BU Rankings", sectionId: "dashboard-section-bu-rankings" },
-	{ value: "user-rankings", label: "User Rankings", sectionId: "dashboard-section-user-rankings" },
 	{ value: "virtual-key-rankings", label: "Virtual Key Rankings", sectionId: "dashboard-section-virtual-key-rankings" },
 	{ value: "app-rankings", label: "App Rankings", sectionId: "dashboard-section-app-rankings" },
 ];
@@ -269,36 +230,12 @@ export function getCSVSections(data: DashboardData, tab: ExportTab): { name: str
 		sections.push({ name: "model-rankings", csv: modelRankingsToCSV(data.rankingsData) });
 	}
 
-	if (tab === "all" || tab === "team-rankings") {
-		sections.push({ name: "team-rankings", csv: dimensionRankingsToCSV(data.teamRankingsData, "Team") });
-	}
-
-	if (tab === "all" || tab === "customer-rankings") {
-		sections.push({ name: "customer-rankings", csv: dimensionRankingsToCSV(data.customerRankingsData, "Customer") });
-	}
-
-	if (tab === "all" || tab === "bu-rankings") {
-		sections.push({ name: "bu-rankings", csv: dimensionRankingsToCSV(data.buRankingsData, "Business Unit") });
-	}
-
-	if (tab === "all" || tab === "user-rankings") {
-		sections.push({ name: "user-rankings", csv: dimensionRankingsToCSV(data.userRankingsData, "User") });
-	}
-
 	if (tab === "all" || tab === "virtual-key-rankings") {
 		sections.push({ name: "virtual-key-rankings", csv: dimensionRankingsToCSV(data.virtualKeyRankingsData, "Virtual Key") });
 	}
 
 	if (tab === "all" || tab === "app-rankings") {
 		sections.push({ name: "app-rankings", csv: dimensionRankingsToCSV(data.appRankingsData, "App") });
-	}
-
-	if (tab === "all" || tab === "mcp") {
-		sections.push(
-			{ name: "mcp-volume", csv: mcpVolumeToCSV(data.mcpHistogramData) },
-			{ name: "mcp-cost", csv: mcpCostToCSV(data.mcpCostData) },
-			{ name: "mcp-top-tools", csv: mcpTopToolsToCSV(data.mcpTopToolsData) },
-		);
 	}
 
 	return sections;
