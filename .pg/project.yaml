@@ -27,7 +27,7 @@ modules:
     build: go build ./...
     lint: cd transports && go vet ./...
     test:
-      unit: cd transports/bifrost-http && go test ./... -short -count=1
+      unit: cd transports/pg-gateway-http && go test ./... -short -count=1
       integration: make test
   plugins:
     root: plugins
@@ -50,11 +50,11 @@ modules:
       e2e: make run-e2e
 environments:
   local:
-    description: '本地开发环境：bifrost-http API 服务器 + UI 开发服务器。TBD: 确认端口配置'
+    description: '本地开发环境：pg-gateway-http API 服务器 + UI 开发服务器。TBD: 确认端口配置'
     prepare_env:
       host: localhost
       script: .pg/hooks/local/prepare.sh
-      description: 启动 bifrost-api 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
+      description: 启动 pg-gateway 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
     describe_env:
       script: .pg/hooks/local/describe_env.sh
       timeout_seconds: 30
@@ -65,7 +65,7 @@ environments:
       - name: bifrost-api-1
         host: localhost
         port: 9080
-        description: bifrost-api 实例端口
+        description: pg-gateway 实例端口
       actions:
         start:
           host: localhost

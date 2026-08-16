@@ -11,7 +11,7 @@ if [[ -f "$HOOK_DIR/lib/common.sh" ]]; then
     pg_resolve_paths
 fi
 
-pkill -f 'bifrost-http' 2>/dev/null || true
+pkill -f 'pg-gateway-http' 2>/dev/null || true
 pkill -f 'air' 2>/dev/null || true
 pg_stop_bg "$PID_DIR/bifrost-api.pid" "bifrost-api" 2>&1 || true
 

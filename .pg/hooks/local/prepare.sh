@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# local environment prepare_env hook: 启动 bifrost-api 实例，用 fixture 数据初始化，然后关闭
+# local environment prepare_env hook: 启动 pg-gateway 实例，用 fixture 数据初始化，然后关闭
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 export PG_SKILLS_PATH="${PG_SKILLS_PATH:-$SELF_DIR}"
@@ -18,7 +18,7 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 LOCAL_DIR="$HOOK_DIR"
 DATA_DIR="$LOCAL_DIR/data"
 FIXTURE_DIR="$LOCAL_DIR/fixature"
-BIFROST_BIN="${BIFROST_BIN:-$PROJECT_ROOT/tmp/bifrost-http}"
+BIFROST_BIN="${BIFROST_BIN:-$PROJECT_ROOT/tmp/pg-gateway-http}"
 PORT="${BIFROST_PREPARE_PORT:-9080}"
 HOST="localhost"
 
@@ -31,36 +31,36 @@ echo "  binary:   $BIFROST_BIN"
 mkdir -p "$DATA_DIR"
 
 # 构建 UI 产物（如缺失，供 go:embed 使用）
-if [[ ! -d "$PROJECT_ROOT/transports/bifrost-http/ui" ]]; then
+if [[ ! -d "$PROJECT_ROOT/transports/pg-gateway-http/ui" ]]; then
     echo "构建 UI 产物..."
     if [[ ! -d "$PROJECT_ROOT/ui/node_modules" ]]; then
         echo "  → 安装 UI 依赖..."
         (cd "$PROJECT_ROOT/ui" && npm ci --prefer-offline) || {
             echo "WARN: 安装 UI 依赖失败，尝试创建空 UI 目录以继续构建"
-            mkdir -p "$PROJECT_ROOT/transports/bifrost-http/ui"
+            mkdir -p "$PROJECT_ROOT/transports/pg-gateway-http/ui"
         }
     fi
     if [[ -d "$PROJECT_ROOT/ui/node_modules" ]]; then
         (cd "$PROJECT_ROOT/ui" && npm run build && npm run copy-build) || {
             echo "WARN: UI 构建失败，尝试创建空 UI 目录以继续构建"
-            mkdir -p "$PROJECT_ROOT/transports/bifrost-http/ui"
+            mkdir -p "$PROJECT_ROOT/transports/pg-gateway-http/ui"
         }
     fi
-    if [[ -d "$PROJECT_ROOT/transports/bifrost-http/ui" ]]; then
+    if [[ -d "$PROJECT_ROOT/transports/pg-gateway-http/ui" ]]; then
         echo "  → UI 产物就绪"
     fi
 fi
 
 # 构建 binary（如缺失）
 if [[ ! -x "$BIFROST_BIN" ]]; then
-    echo "构建 bifrost-http binary..."
+    echo "构建 pg-gateway-http binary..."
     # 确保 Go workspace 存在（跨模块引用需要）
     if [[ ! -f "$PROJECT_ROOT/go.work" ]]; then
         (cd "$PROJECT_ROOT" && make setup-workspace >/dev/null 2>&1) || true
     fi
-    (cd "$PROJECT_ROOT/transports/bifrost-http" && go build -ldflags="-w -s" -o "$BIFROST_BIN" .) || {
+    (cd "$PROJECT_ROOT/transports/pg-gateway-http" && go build -ldflags="-w -s" -o "$BIFROST_BIN" .) || {
         pg_fail --category=dependency_not_ready --code=PG-E-0800 \
-            --message="bifrost-http 构建失败" \
+            --message="pg-gateway-http 构建失败" \
             --hint="Run 'make setup-workspace && make build LOCAL=1' in project root" \
             --agent-recoverable=true
     }
@@ -76,8 +76,8 @@ fi
 # 清理旧数据
 rm -f "$DATA_DIR"/config.db* "$DATA_DIR"/config.json
 
-# 启动 bifrost-api
-echo "启动 bifrost-api (port $PORT)..."
+# 启动 pg-gateway
+echo "启动 pg-gateway (port $PORT)..."
 if ! pid=$(pg_start_bg "$LOG_DIR/bifrost-prepare.log" "$PID_DIR/bifrost-prepare.pid" \
         "BIFROST_PORT=$PORT" -- \
         "$BIFROST_BIN" -app-dir "$DATA_DIR" -port "$PORT" -host "$HOST" -log-level warn -log-style pretty); then
@@ -88,7 +88,7 @@ if ! pid=$(pg_start_bg "$LOG_DIR/bifrost-prepare.log" "$PID_DIR/bifrost-prepare.
 fi
 
 # 等待健康检查
-echo "等待 bifrost-api 就绪..."
+echo "等待 pg-gateway 就绪..."
 if ! wait_for_port_with_monitor "$PORT" "bifrost-prepare" 120 \
         "$PID_DIR/bifrost-prepare.pid" "$LOG_DIR/bifrost-prepare.log"; then
     pg_stop_bg "$PID_DIR/bifrost-prepare.pid" "bifrost-prepare" 2>&1 || true
@@ -107,11 +107,11 @@ if [ "$SEED_RESULT" -ne 0 ]; then
     echo "WARN: seed 过程有错误（$SEED_RESULT），但已有数据已持久化"
 fi
 
-# 关闭 bifrost-api
-echo "关闭 bifrost-api..."
+# 关闭 pg-gateway
+echo "关闭 pg-gateway..."
 pg_stop_bg "$PID_DIR/bifrost-prepare.pid" "bifrost-prepare" 2>&1 || true
 # 额外兜底
-pkill -f "bifrost-http.*-app-dir $DATA_DIR" 2>/dev/null || true
+pkill -f "pg-gateway-http.*-app-dir $DATA_DIR" 2>/dev/null || true
 sleep 1
 
 echo "=== prepare_env 完成 ==="
