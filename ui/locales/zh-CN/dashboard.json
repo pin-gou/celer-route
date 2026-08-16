@@ -29,7 +29,7 @@
 		"throughput": "吞吐量",
 		"cacheRate": "输入词元中被提供商缓存的占比",
 		"cacheRateInfo": "关于外部缓存命中率的更多信息",
-		"cacheRateTooltip": "这反映的是提供商层面的缓存，而非 Bifrost 语义缓存命中。",
+		"cacheRateTooltip": "这反映的是提供商层面的缓存，而非 pg-gateway 语义缓存命中。",
 		"cached": "已缓存",
 		"input": "输入",
 		"requestVolume": "请求量",

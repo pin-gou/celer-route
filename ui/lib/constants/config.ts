@@ -197,7 +197,7 @@ export const DefaultPerformanceConfig = {
 export const MCP_STATUS_COLORS: Record<string, string> = {
 	healthy: "bg-green-100 text-green-800",
 	error: "bg-red-100 text-red-800",
-	// Amber, not red/gray: Bifrost's own connection check most recently
+	// Amber, not red/gray: pg-gateway's own connection check most recently
 	// failed, but this is purely informational — nothing is gated on it, and
 	// it self-heals on the next successful check. Same mild treatment as
 	// pending_verification, deliberately distinct from needs_reauth's red

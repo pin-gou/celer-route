@@ -733,7 +733,7 @@ export default function AppSidebar() {
 				title: t("nav.settings"),
 				url: "/workspace/config",
 				icon: Settings2Icon,
-				description: "Bifrost settings",
+				description: "pg-gateway settings",
 				hasAccess: hasSettingsAccess,
 				subItems: [
 					{
@@ -1074,7 +1074,7 @@ export default function AppSidebar() {
 				title: t("sidebar.releaseAvailable", { name: latestRelease.name }),
 				description: (
 					<div className="flex h-full flex-col gap-2">
-						<img src={newReleaseImage} alt="Bifrost" className="h-[95px] rounded-md object-cover" />
+						<img src={newReleaseImage} alt="pg-gateway" className="h-[95px] rounded-md object-cover" />
 						<a
 							href={latestRelease.changelogUrl}
 							target="_blank"

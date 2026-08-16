@@ -145,7 +145,7 @@
 		"action": "Action",
 		"edge": "Edge",
 		"node": "Node",
-		"pageTitle": "Routing Tree | Bifrost",
+		"pageTitle": "Routing Tree | pg-gateway",
 		"pageDescription": "Read-only decision tree visualization of routing rules",
 		"back": "Back",
 		"searchPlaceholder": "Search conditions or rules\u2026",

@@ -1,6 +1,6 @@
 {
 	"app": {
-		"name": "Bifrost",
+		"name": "pg-gateway",
 		"tagline": "AI 网关"
 	},
 	"nav": {
@@ -244,7 +244,7 @@
 		"restartRequired": "需要重启",
 		"restartReason": "配置变更需要重启服务器才能生效。",
 		"setupIncomplete": "设置清单未完成",
-		"setupStepsLeft": "还剩 {{n}} 步设置未完成。不完成这些步骤将使您的 Bifrost 设置存在风险。",
+		"setupStepsLeft": "还剩 {{n}} 步设置未完成。不完成这些步骤将使您的 pg-gateway 设置存在风险。",
 		"resumeSetup": "继续设置",
 		"viewReleaseNotes": "查看发布说明",
 		"releaseAvailable": "{{name}} 现已可用。"

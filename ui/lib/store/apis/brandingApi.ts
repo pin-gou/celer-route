@@ -3,7 +3,7 @@ import { baseApi } from "./baseApi";
 /**
  * custom branding.
  *
- * Enterprise deployments can replace the Bifrost logo and icon. Every endpoint
+ * Enterprise deployments can replace the pg-gateway logo and icon. Every endpoint
  * below lives in the enterprise build — the read is public there (the login
  * screen renders before any session exists), while the writes carry auth and
  * RBAC. On OSS none of them exist: callers skip the query (see useBranding) and
@@ -17,7 +17,7 @@ export interface BrandingState {
 	enabled: boolean;
 	has_logo: boolean;
 	has_icon: boolean;
-	/** Content-versioned; empty when the slot uses the Bifrost default. */
+	/** Content-versioned; empty when the slot uses the pg-gateway default. */
 	logo_url?: string;
 	icon_url?: string;
 	updated_at?: string;
@@ -27,7 +27,7 @@ export interface BrandingState {
  * Upload payload, applied as a merge:
  *
  *   omitted        -> leave that slot as stored
- *   ""             -> clear that slot, restoring the Bifrost default
+ *   ""             -> clear that slot, restoring the pg-gateway default
  *   base64 data    -> replace that slot
  *
  * So a caller changing only the icon omits the logo fields rather than
@@ -58,7 +58,7 @@ export const brandingApi = baseApi.injectEndpoints({
 			invalidatesTags: ["Branding"],
 		}),
 
-		// Clears branding and restores the default Bifrost logo and icon.
+		// Clears branding and restores the default pg-gateway logo and icon.
 		resetBranding: builder.mutation<BrandingState, void>({
 			query: () => ({
 				url: "/branding",

@@ -1,6 +1,6 @@
 {
 	"app": {
-		"name": "Bifrost",
+		"name": "pg-gateway",
 		"tagline": "AI Gateway"
 	},
 	"nav": {
@@ -244,7 +244,7 @@
 		"restartRequired": "Restart Required",
 		"restartReason": "Configuration changes require a server restart to take effect.",
 		"setupIncomplete": "Setup checklist incomplete",
-		"setupStepsLeft": "{{n}} setup step(s) left. Not completing these steps keeps your Bifrost setup vulnerable.",
+		"setupStepsLeft": "{{n}} setup step(s) left. Not completing these steps keeps your pg-gateway setup vulnerable.",
 		"resumeSetup": "Resume setup",
 		"viewReleaseNotes": "View release notes",
 		"releaseAvailable": "{{name}} is now available."

@@ -609,13 +609,13 @@ export default function MCPClientSheet({
 								<SheetDescription>
 									{mcpClient.state === "pending_verification"
 										? mcpClient.config.auth_type === "token_exchange"
-											? "This server needs a one-time verification: Bifrost exchanges your signed-in identity token, tests the connection, and discovers tools. Callers then have their own identity tokens exchanged automatically on every tool call."
+											? "This server needs a one-time verification: pg-gateway exchanges your signed-in identity token, tests the connection, and discovers tools. Callers then have their own identity tokens exchanged automatically on every tool call."
 											: mcpClient.config.auth_type === "per_user_oauth"
-												? "This client was declared in config.json. An admin sign-in is needed to verify the OAuth setup and discover tools; Bifrost keeps it on file to refresh the tool list periodically. Each user will still authenticate individually when they use this server."
+												? "This client was declared in config.json. An admin sign-in is needed to verify the OAuth setup and discover tools; pg-gateway keeps it on file to refresh the tool list periodically. Each user will still authenticate individually when they use this server."
 												: "This client was declared in config.json and needs a one-time OAuth authorization before it can be used."
 										: mcpClient.state === "needs_reauth"
 											? isPerUserAuth
-												? "The admin credential Bifrost keeps on file to refresh this server's tool list needs repair. End-user credentials and tool calls are unaffected. Use Refresh admin credential from the server's actions menu to fix it."
+												? "The admin credential pg-gateway keeps on file to refresh this server's tool list needs repair. End-user credentials and tool calls are unaffected. Use Refresh admin credential from the server's actions menu to fix it."
 												: "This connection's credentials need to be re-authorized. Use Reauthorize from the server's actions menu to redo the OAuth consent flow."
 											: "MCP server configuration and available tools"}
 								</SheetDescription>

@@ -49,7 +49,7 @@ function BatchAPIFormField({ control }: { control: Control<any>; form: UseFormRe
 	);
 }
 
-// AWS endpoint services Bifrost dials for Bedrock. `name` is the config field, `placeholder` the
+// AWS endpoint services pg-gateway dials for Bedrock. `name` is the config field, `placeholder` the
 // DNS name shape for that service - S3 differs from the rest, so each is spelled out.
 const BEDROCK_VPC_ENDPOINT_SERVICES = [
 	{

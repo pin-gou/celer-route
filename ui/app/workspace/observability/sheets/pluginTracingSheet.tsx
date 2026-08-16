@@ -157,7 +157,7 @@ export default function PluginTracingSheet({ open, onClose, pluginName, destinat
 						<AlertDescription>
 							<span>
 								If <strong className="inline">plugin_span_filter</strong> is set in the <strong className="inline">{pluginName}</strong>{" "}
-								plugin config in config.json, it takes precedence over these settings after restarting Bifrost.
+								plugin config in config.json, it takes precedence over these settings after restarting pg-gateway.
 							</span>
 						</AlertDescription>
 					</Alert>

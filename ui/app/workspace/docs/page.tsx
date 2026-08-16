@@ -8,7 +8,7 @@ import { BookOpen, Code, ExternalLink, FileText, GitBranch, Play, Shield, Users,
 const docSections = [
 	{
 		title: "Quick Start",
-		description: "Get Bifrost running in under 30 seconds",
+		description: "Get pg-gateway running in under 30 seconds",
 		icon: Play,
 		url: "https://github.com/pin-gou/pg-gateway/tree/main/docs/quickstart",
 		badge: "Popular",
@@ -16,7 +16,7 @@ const docSections = [
 	},
 	{
 		title: "Architecture",
-		description: "Deep dive into Bifrost's design and performance",
+		description: "Deep dive into pg-gateway's design and performance",
 		icon: GitBranch,
 		url: "https://github.com/pin-gou/pg-gateway/tree/main/docs/architecture",
 		items: ["System Overview", "Request Flow", "Concurrency Model", "Design Decisions"],
@@ -31,7 +31,7 @@ const docSections = [
 	},
 	{
 		title: "Contributing",
-		description: "Help improve Bifrost for everyone",
+		description: "Help improve pg-gateway for everyone",
 		icon: Users,
 		url: "https://github.com/pin-gou/pg-gateway/tree/main/docs/contributing",
 		items: ["Contributing Guide", "Adding Providers", "Plugin Development", "Code Conventions"],
@@ -92,9 +92,9 @@ export default function DocsPage() {
 							<BookOpen className="h-4 w-4" />
 							<span className="font-semibold">Documentation</span>
 						</div>
-						<GradientHeader title="Power Up Your Bifrost Stack" />
+						<GradientHeader title="Power Up Your pg-gateway Stack" />
 						<p className="text-muted-foreground mx-auto max-w-2xl text-lg">
-							Everything you need to know about building production AI applications with Bifrost
+							Everything you need to know about building production AI applications with pg-gateway
 						</p>
 						<div className="flex justify-center gap-4">
 							<Button asChild>

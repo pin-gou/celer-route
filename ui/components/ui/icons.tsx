@@ -867,7 +867,7 @@ export const Icons = {
 };
 
 export const SdkIcons = {
-	Bifrost: (props: IconProps) => (
+	PgGateway: (props: IconProps) => (
 		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="24" height="24" {...props}>
 			<path d="M7.17044 2V4.28156L5.06687 9.83345H2L7.17044 2Z" stroke="#27272A" strokeLinejoin="round" />
 			<path d="M8.99614 2V4.28156L11.0997 9.83345H14.1666L8.99614 2Z" stroke="#27272A" strokeLinejoin="round" />
