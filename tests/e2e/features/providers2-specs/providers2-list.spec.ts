@@ -50,9 +50,6 @@ test.describe("Providers List", () => {
 
 		const modelsStat = page.locator("[data-testid^='providers2-card-models-']").first();
 		await expect(modelsStat).toBeVisible();
-
-		const reqsStat = page.locator("[data-testid='providers2-card-today-requests']").first();
-		await expect(reqsStat).toBeVisible();
 	});
 
 	test("should filter providers by name search", async ({

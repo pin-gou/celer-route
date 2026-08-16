@@ -34,11 +34,6 @@ const mockProvider: ProviderCardProps["provider"] = {
 	provider_status: "active",
 	keys_count: 3,
 	models_count: 47,
-	today_requests: 1284,
-	today_errors: 3,
-	last_error_at: "2026-08-15T00:15:22Z",
-	uptime: 0.998,
-	avg_latency_ms: 312,
 	keys_health_status: "healthy",
 	keys_enabled: true,
 };
@@ -88,24 +83,6 @@ describe("ProviderCard", () => {
 		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		expect(screen.getByText("providers2.card.models")).not.toBeNull();
-	});
-
-	it("should render today requests count", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
-
-		expect(screen.getByText("providers2.card.requests")).not.toBeNull();
-	});
-
-	it("should render today errors count", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
-
-		expect(screen.getByText("providers2.card.errors")).not.toBeNull();
-	});
-
-	it("should render last error time when last_error_at is present", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
-
-		expect(screen.getByTestId("providers2-card-last-error")).not.toBeNull();
 	});
 
 	// -----------------------------------------------------------------------
@@ -187,15 +164,11 @@ describe("ProviderCard", () => {
 			...mockProvider,
 			keys_count: 0,
 			models_count: 0,
-			today_requests: 0,
-			today_errors: 0,
-			last_error_at: null,
 		};
 
 		render(<ProviderCard provider={emptyProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		expect(screen.getByText("providers2.card.keys")).not.toBeNull();
 		expect(screen.getByText("providers2.card.models")).not.toBeNull();
-		expect(screen.getByText("providers2.card.requests")).not.toBeNull();
 	});
 });

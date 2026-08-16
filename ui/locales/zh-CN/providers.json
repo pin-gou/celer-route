@@ -83,12 +83,6 @@
 		"card": {
 			"keys": "{{count}} 个密钥",
 			"models": "{{count}} 个模型",
-			"requests": "{{count}} 次请求",
-			"errors": "{{count}} 个错误",
-			"lastError": "上次错误：{{time}}",
-			"justNow": "刚刚",
-			"hoursAgo": "{{count}}小时前",
-			"daysAgo": "{{count}}天前",
 			"custom": "自定义",
 			"quickTest": "测试",
 			"quickTestTooltip": "快速测试：POST /refresh-models",
@@ -149,9 +143,9 @@
 		"openLegacyConfigSheet": "打开旧版配置面板",
 		"usageTab": {
 			"title": "用量",
-			"todayRequests": "今日请求",
-			"todayErrors": "今日错误",
-			"uptime": "运行时间（24h）",
+			"hourlyRequests": "最近1小时请求",
+			"hourlyErrors": "最近1小时错误",
+			"uptime": "运行时间（1h）",
 			"avgLatency": "平均延迟"
 		},
 		"logsTab": {

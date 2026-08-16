@@ -13,11 +13,6 @@ export interface ProviderCardProvider {
 	provider_status: string;
 	keys_count: number;
 	models_count: number;
-	today_requests: number;
-	today_errors: number;
-	last_error_at: string | null;
-	uptime: number;
-	avg_latency_ms: number;
 	keys_health_status: string;
 	keys_enabled: boolean;
 	custom_provider_config?: { base_provider_type?: string } | null;
@@ -49,17 +44,6 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 			default:
 				return "bg-gray-400";
 		}
-	};
-
-	const formatLastError = (dateStr: string | null) => {
-		if (!dateStr) return null;
-		const date = new Date(dateStr);
-		const now = new Date();
-		const diffMs = now.getTime() - date.getTime();
-		const diffHours = Math.floor(diffMs / 3600000);
-		if (diffHours < 1) return t("providers2.card.justNow");
-		if (diffHours < 24) return t("providers2.card.hoursAgo", { count: diffHours });
-		return t("providers2.card.daysAgo", { count: Math.floor(diffHours / 24) });
 	};
 
 	return (
@@ -104,8 +88,6 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 			<div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
 				<span data-testid="providers2-card-keys-count">{t("providers2.card.keys", { count: provider.keys_count })}</span>
 				<span data-testid="providers2-card-models-count">{t("providers2.card.models", { count: provider.models_count })}</span>
-				<span data-testid="providers2-card-today-requests">{t("providers2.card.requests", { count: provider.today_requests })}</span>
-				<span data-testid="providers2-card-today-errors">{t("providers2.card.errors", { count: provider.today_errors })}</span>
 			</div>
 
 			{/* Actions row */}
@@ -155,15 +137,6 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 					/>
 				</div>
 			</div>
-
-			{/* Last error row — below actions so cards are consistent height */}
-			{provider.last_error_at && (
-				<div className="text-xs text-red-500">
-					<span data-testid="providers2-card-last-error">
-						{t("providers2.card.lastError", { time: formatLastError(provider.last_error_at) })}
-					</span>
-				</div>
-			)}
 		</div>
 	);
 }

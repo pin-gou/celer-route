@@ -1364,9 +1364,10 @@ func TestListModels_KeyBlacklistIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-// TestListProvidersAggregatedFields verifies that GET /api/providers returns the 9 new
-// aggregation fields (keys_count, models_count, keys_health_status, today_requests,
-// today_errors, last_used_at, last_error_at, uptime, avg_latency_ms) with correct values.
+// TestListProvidersAggregatedFields verifies that GET /api/providers returns the
+// in-memory aggregation fields (keys_count, models_count, keys_health_status,
+// keys_enabled) with correct values. The list path must NOT consult the logs
+// store, so it is fast regardless of log volume.
 func TestListProvidersAggregatedFields(t *testing.T) {
 	SetLogger(&mockLogger{})
 	lib.SetLogger(&mockLogger{})
@@ -1395,15 +1396,7 @@ func TestListProvidersAggregatedFields(t *testing.T) {
 				provider: models,
 			},
 		},
-		// Mock the logs store so the today_* / last_* / avg_latency aggregates are
-		// deterministic: 100 today requests, 3 errors, known timestamps, 312ms avg.
-		logStats: &mockProviderLogStats{
-			todayRequests: 100,
-			todayErrors:   3,
-			lastUsedAt:    "2026-08-15T01:42:00Z",
-			lastErrorAt:   "2026-08-15T00:15:22Z",
-			avgLatencyMs:  312,
-		},
+		logStats: &mockProviderLogStats{},
 	}
 
 	ctx := &fasthttp.RequestCtx{}
@@ -1433,8 +1426,7 @@ func TestListProvidersAggregatedFields(t *testing.T) {
 		t.Fatalf("expected provider name %q, got %q", provider, p.Name)
 	}
 
-	// Assert the 9 new aggregation fields.
-	// These fields do not exist yet on ProviderResponse — this is the TDD red phase.
+	// Assert the in-memory aggregation fields.
 	if p.KeysCount != 3 {
 		t.Fatalf("expected keys_count=3, got %d", p.KeysCount)
 	}
@@ -1447,35 +1439,17 @@ func TestListProvidersAggregatedFields(t *testing.T) {
 	if !p.KeysEnabled {
 		t.Fatalf("expected keys_enabled=true when all keys are enabled, got %v", p.KeysEnabled)
 	}
-	if p.TodayRequests != 100 {
-		t.Fatalf("expected today_requests=100, got %d", p.TodayRequests)
-	}
-	if p.TodayErrors != 3 {
-		t.Fatalf("expected today_errors=3, got %d", p.TodayErrors)
-	}
-	if p.LastUsedAt == "" {
-		t.Fatalf("expected non-empty last_used_at")
-	}
-	if p.LastErrorAt == "" {
-		t.Fatalf("expected non-empty last_error_at")
-	}
-	if p.Uptime < 0 || p.Uptime > 1 {
-		t.Fatalf("expected uptime in [0,1], got %f", p.Uptime)
-	}
-	if p.AvgLatencyMs <= 0 {
-		t.Fatalf("expected positive avg_latency_ms, got %d", p.AvgLatencyMs)
-	}
 }
 
-// TestListProviders_UsesBatchLogStatsAggregation verifies that the providers
-// list path aggregates log stats through a single AggregateAllProviderLogStats
-// batch call — never falling back to a per-provider AggregateProviderLogStats
-// loop (the design.md performance contract forbids the N+1 pattern).
-func TestListProviders_UsesBatchLogStatsAggregation(t *testing.T) {
+// TestListProviders_NoLogAggregation verifies that the providers list path
+// does NOT query the log store at all — the list must be fast regardless of
+// log volume. Zero calls to AggregateProviderLogStats means the list path
+// is purely in-memory.
+func TestListProviders_NoLogAggregation(t *testing.T) {
 	SetLogger(&mockLogger{})
 	lib.SetLogger(&mockLogger{})
 
-	singleCalls, batchCalls := 0, 0
+	singleCalls := 0
 
 	h := &ProviderHandler{
 		inMemoryStore: &lib.Config{
@@ -1491,13 +1465,12 @@ func TestListProviders_UsesBatchLogStatsAggregation(t *testing.T) {
 			},
 		},
 		logStats: &mockProviderLogStats{
-			todayRequests:   50,
-			todayErrors:     2,
-			lastUsedAt:      "2026-08-15T01:42:00Z",
-			lastErrorAt:     "2026-08-15T00:15:22Z",
-			avgLatencyMs:    200,
+			hourlyRequests: 50,
+			hourlyErrors:   2,
+			lastUsedAt:     "2026-08-15T01:42:00Z",
+			lastErrorAt:    "2026-08-15T00:15:22Z",
+			avgLatencyMs:   200,
 			singleCallCount: &singleCalls,
-			batchCallCount:  &batchCalls,
 		},
 	}
 
@@ -1511,12 +1484,9 @@ func TestListProviders_UsesBatchLogStatsAggregation(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
 	}
 
-	// Exactly one batch call for the whole provider set; no per-provider loop.
-	if batchCalls != 1 {
-		t.Fatalf("expected exactly 1 AggregateAllProviderLogStats call, got %d", batchCalls)
-	}
+	// Zero log-stat calls — the list path must not query the log store.
 	if singleCalls != 0 {
-		t.Fatalf("expected 0 per-provider AggregateProviderLogStats calls, got %d (N+1 loop)", singleCalls)
+		t.Fatalf("expected 0 AggregateProviderLogStats calls (list must be in-memory only), got %d", singleCalls)
 	}
 
 	var resp ListProvidersResponse
@@ -1525,17 +1495,6 @@ func TestListProviders_UsesBatchLogStatsAggregation(t *testing.T) {
 	}
 	if resp.Total != 2 {
 		t.Fatalf("expected total=2, got %d", resp.Total)
-	}
-
-	// Both providers received the batch-derived values.
-	for _, p := range resp.Providers {
-		if p.TodayRequests != 50 || p.TodayErrors != 2 {
-			t.Fatalf("provider %s: expected batch stats (today_requests=50, today_errors=2), got (%d, %d)",
-				p.Name, p.TodayRequests, p.TodayErrors)
-		}
-		if p.LastUsedAt == "" || p.LastErrorAt == "" || p.AvgLatencyMs != 200 {
-			t.Fatalf("provider %s: expected non-empty timestamps and avg_latency_ms=200, got %#v", p.Name, p)
-		}
 	}
 }
 
@@ -1784,11 +1743,11 @@ func TestProviderResponse_BackwardCompat(t *testing.T) {
 	if p.KeysHealthStatus != "" {
 		t.Fatalf("expected keys_health_status=\"\" (zero value when absent), got %q", p.KeysHealthStatus)
 	}
-	if p.TodayRequests != 0 {
-		t.Fatalf("expected today_requests=0 (zero value when absent), got %d", p.TodayRequests)
+	if p.HourlyRequests != 0 {
+		t.Fatalf("expected hourly_requests=0 (zero value when absent), got %d", p.HourlyRequests)
 	}
-	if p.TodayErrors != 0 {
-		t.Fatalf("expected today_errors=0 (zero value when absent), got %d", p.TodayErrors)
+	if p.HourlyErrors != 0 {
+		t.Fatalf("expected hourly_errors=0 (zero value when absent), got %d", p.HourlyErrors)
 	}
 	if p.LastUsedAt != "" {
 		t.Fatalf("expected last_used_at=\"\" (zero value when absent), got %q", p.LastUsedAt)
@@ -1942,15 +1901,14 @@ func ptr[T any](v T) *T { return &v }
 // mockProviderLogStats implements ProviderLogStats with fixed values, letting the
 // handler tests exercise the aggregated fields without a real logs store.
 type mockProviderLogStats struct {
-	todayRequests int
-	todayErrors   int
-	lastUsedAt    string
-	lastErrorAt   string
-	avgLatencyMs  int
-	err           error
-	// When non-nil, tracks which method was called (for test assertions).
+	hourlyRequests int
+	hourlyErrors   int
+	lastUsedAt     string
+	lastErrorAt    string
+	avgLatencyMs   int
+	err            error
+	// When non-nil, counts AggregateProviderLogStats calls (for test assertions).
 	singleCallCount *int
-	batchCallCount  *int
 }
 
 func (m *mockProviderLogStats) AggregateProviderLogStats(_ context.Context, _ schemas.ModelProvider) (int, int, string, string, int, error) {
@@ -1960,25 +1918,5 @@ func (m *mockProviderLogStats) AggregateProviderLogStats(_ context.Context, _ sc
 	if m.err != nil {
 		return 0, 0, "", "", 0, m.err
 	}
-	return m.todayRequests, m.todayErrors, m.lastUsedAt, m.lastErrorAt, m.avgLatencyMs, nil
-}
-
-func (m *mockProviderLogStats) AggregateAllProviderLogStats(_ context.Context, providerNames []schemas.ModelProvider) (map[schemas.ModelProvider]LogAgg, error) {
-	if m.batchCallCount != nil {
-		*m.batchCallCount++
-	}
-	if m.err != nil {
-		return nil, m.err
-	}
-	out := make(map[schemas.ModelProvider]LogAgg, len(providerNames))
-	for _, p := range providerNames {
-		out[p] = LogAgg{
-			TodayRequests: m.todayRequests,
-			TodayErrors:   m.todayErrors,
-			LastUsedAt:    m.lastUsedAt,
-			LastErrorAt:   m.lastErrorAt,
-			AvgLatencyMs:  m.avgLatencyMs,
-		}
-	}
-	return out, nil
+	return m.hourlyRequests, m.hourlyErrors, m.lastUsedAt, m.lastErrorAt, m.avgLatencyMs, nil
 }

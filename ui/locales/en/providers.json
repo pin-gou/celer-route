@@ -83,12 +83,6 @@
 		"card": {
 			"keys": "{{count}} keys",
 			"models": "{{count}} models",
-			"requests": "{{count}} reqs",
-			"errors": "{{count}} err",
-			"lastError": "last err: {{time}}",
-			"justNow": "just now",
-			"hoursAgo": "{{count}}h ago",
-			"daysAgo": "{{count}}d ago",
 			"custom": "CUSTOM",
 			"quickTest": "Test",
 			"quickTestTooltip": "Quick test: POST /refresh-models",
@@ -149,9 +143,9 @@
 		"openLegacyConfigSheet": "Open legacy config sheet",
 		"usageTab": {
 			"title": "Usage",
-			"todayRequests": "Today Requests",
-			"todayErrors": "Today Errors",
-			"uptime": "Uptime (24h)",
+			"hourlyRequests": "1h Requests",
+			"hourlyErrors": "1h Errors",
+			"uptime": "Uptime (1h)",
 			"avgLatency": "Avg Latency"
 		},
 		"logsTab": {

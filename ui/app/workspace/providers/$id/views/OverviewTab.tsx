@@ -213,8 +213,8 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 		);
 	}
 
-	const todayRequests = provider.today_requests ?? 0;
-	const todayErrors = provider.today_errors ?? 0;
+	const hourlyRequests = provider.hourly_requests ?? 0;
+	const hourlyErrors = provider.hourly_errors ?? 0;
 	const uptime = provider.uptime ?? 1;
 	const avgLatency = provider.avg_latency_ms ?? 0;
 
@@ -225,12 +225,12 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 				<h3 className="mb-4 text-sm font-medium">{t("providers2.usageTab.title")}</h3>
 				<div className="grid grid-cols-2 gap-4 md:grid-cols-4">
 					<div className="bg-muted/50 rounded-md p-4">
-						<div className="text-muted-foreground text-xs">{t("providers2.usageTab.todayRequests")}</div>
-						<div className="mt-1 text-2xl font-semibold">{todayRequests.toLocaleString()}</div>
+						<div className="text-muted-foreground text-xs">{t("providers2.usageTab.hourlyRequests")}</div>
+						<div className="mt-1 text-2xl font-semibold">{hourlyRequests.toLocaleString()}</div>
 					</div>
 					<div className="bg-muted/50 rounded-md p-4">
-						<div className="text-muted-foreground text-xs">{t("providers2.usageTab.todayErrors")}</div>
-						<div className="mt-1 text-2xl font-semibold">{todayErrors.toLocaleString()}</div>
+						<div className="text-muted-foreground text-xs">{t("providers2.usageTab.hourlyErrors")}</div>
+						<div className="mt-1 text-2xl font-semibold">{hourlyErrors.toLocaleString()}</div>
 					</div>
 					<div className="bg-muted/50 rounded-md p-4">
 						<div className="text-muted-foreground text-xs">{t("providers2.usageTab.uptime")}</div>
