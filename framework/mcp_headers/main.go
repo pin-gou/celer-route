@@ -57,7 +57,7 @@ type Provider struct {
 }
 
 // NewProvider constructs a configstore-backed MCPHeadersProvider. Mirrors
-// oauth2.NewOAuth2Provider so the wiring in transports/bifrost-http stays
+// oauth2.NewOAuth2Provider so the wiring in transports/pg-gateway-http stays
 // symmetric between the two per-user auth surfaces.
 func NewProvider(configStore configstore.ConfigStore, logger schemas.Logger) *Provider {
 	if logger == nil {

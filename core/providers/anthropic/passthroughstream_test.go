@@ -18,7 +18,7 @@ import (
 // content_block_stop/_delta for an index that no content_block_start opened,
 // failing the turn with "API Error: Content block not found".
 //
-// The fix lives in the transport (transports/bifrost-http/integrations/anthropic.go
+// The fix lives in the transport (transports/pg-gateway-http/integrations/anthropic.go
 // mustConvertInPassthrough): server-tool frames and every output_item.added are
 // rendered by the converter instead of forwarded raw, keeping the converter's
 // block-index allocation authoritative and in lockstep with the surrounding raw
@@ -124,7 +124,7 @@ func ptConcat(parts ...[]string) []string {
 	return out
 }
 
-// passthroughMustConvert mirrors transports/bifrost-http/integrations/anthropic.go
+// passthroughMustConvert mirrors transports/pg-gateway-http/integrations/anthropic.go
 // mustConvertInPassthrough. Kept in sync by that package's TestMustConvertInPassthrough.
 func passthroughMustConvert(r *schemas.BifrostResponsesStreamResponse) bool {
 	switch r.Type {

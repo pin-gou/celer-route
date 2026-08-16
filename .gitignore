@@ -17,10 +17,10 @@ ui/components/enterprise
 # Temporary directories
 **/temp/
 /transports/ui
-/transports/bifrost-http/lib/ui
-/transports/bifrost-http/ui/
-transports/bifrost-http/logs/
-transports/bifrost-http/tmp/
+/transports/pg-gateway-http/lib/ui
+/transports/pg-gateway-http/ui/
+transports/pg-gateway-http/logs/
+transports/pg-gateway-http/tmp/
 node_modules
 /dist
 **/dist
@@ -46,7 +46,7 @@ transports/schema/config.schema.json
 *.db
 *.db-shm
 *.db-wal
-transports/bifrost-http/v1.5.x
+transports/pg-gateway-http/v1.5.x
 
 # Test reports
 test-reports

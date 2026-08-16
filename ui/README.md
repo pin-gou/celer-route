@@ -231,7 +231,7 @@ Get help with:
 ## Links
 
 - **Main Repository**: [github.com/pin-gou/pg-gateway](https://github.com/pin-gou/pg-gateway)
-- **HTTP Transport**: [../transports/bifrost-http](../transports/bifrost-http)
+- **HTTP Transport**: [../transports/pg-gateway-http](../transports/pg-gateway-http)
 - **Documentation**: [docs.getbifrost.ai](https://docs.getbifrost.ai)
 - **Website**: [getbifrost.ai](https://www.getbifrost.ai)
 

@@ -58,7 +58,7 @@ Trace the chain in code with Grep/Read until you can state it in one sentence, e
 Useful switches the harness relies on:
 - `x-bf-compat` header: `true` enables all compat features; a JSON array like
   `["convert_chat_to_responses"]` enables only specific ones (parsed in
-  `transports/bifrost-http/lib/ctx.go`, consumed by `plugins/compat/main.go`). Prefer
+  `transports/pg-gateway-http/lib/ctx.go`, consumed by `plugins/compat/main.go`). Prefer
   the targeted array form in regression cases so only the feature under test is active.
   Note: when the suite runs with `COMPAT=on`, a collection-level prerequest script
   upserts `x-bf-compat: true` over any per-request value - the targeted form matters

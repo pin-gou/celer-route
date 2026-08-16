@@ -2,7 +2,7 @@
 // transports/config.schema.json.
 //
 // Starting from a configured entry-point type (default: ConfigData in
-// transports/bifrost-http/lib), it recursively walks every nested struct
+// transports/pg-gateway-http/lib), it recursively walks every nested struct
 // field via go/types. For each field it verifies:
 //
 //  1. The json:"X" tag has a corresponding property in config.schema.json at
@@ -36,7 +36,7 @@ type entrypoint struct {
 
 var entrypoints = []entrypoint{
 	{
-		pkg:        "github.com/pin-gou/pg-gateway/transports/bifrost-http/lib",
+		pkg:        "github.com/pin-gou/pg-gateway/transports/pg-gateway-http/lib",
 		typeName:   "ConfigData",
 		schemaPath: "", // root schema node — collectProperties will find .properties
 		moduleDir:  "transports",

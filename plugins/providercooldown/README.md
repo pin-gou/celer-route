@@ -129,15 +129,15 @@ in-memory and ephemeral; container restart clears it.
 
 Three small changes in the bifrost repository:
 
-1. `transports/bifrost-http/server/server.go` — adds an optional
+1. `transports/pg-gateway-http/server/server.go` — adds an optional
    `KeyPoolFilter schemas.KeyPoolFilter` field on `BifrostHTTPServer`
    and threads it into the `bifrost.Init` call (and the subsequent
    `s.Client.ReloadConfig`).
-2. `transports/bifrost-http/server/plugins.go` — registers
+2. `transports/pg-gateway-http/server/plugins.go` — registers
    `providercooldown` as a built-in plugin during `loadBuiltinPlugins`,
    calling `providercooldown.NewPlugin()` + `Init(config)` and wiring
    `plugin.State.AsFilter()` into `s.KeyPoolFilter`.
-3. `transports/bifrost-http/lib/config.go` — adds `providercooldown.PluginName`
+3. `transports/pg-gateway-http/lib/config.go` — adds `providercooldown.PluginName`
    to `builtinPluginNames` so the plugin admin API recognises it as
    built-in.
 

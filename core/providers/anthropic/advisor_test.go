@@ -360,7 +360,7 @@ func TestAdvisorStream_RoundTrip(t *testing.T) {
 }
 
 // countPassthroughMessageStarts mirrors the transport passthrough converter
-// (transports/bifrost-http/integrations/anthropic.go): for each bifrost stream
+// (transports/pg-gateway-http/integrations/anthropic.go): for each bifrost stream
 // response it forwards the raw upstream frame verbatim when present (except
 // ContentPartAdded), otherwise falls back to the normalized converter. Returns
 // how many message_start frames are emitted and the raw bytes of the forwarded one.

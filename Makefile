@@ -215,10 +215,10 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)  3. Debugger (delve) listening on port 2345$(NC)"; \
 	fi; \
-	if [ ! -d "transports/bifrost-http/ui" ]; then \
-		$(ECHO) "$(YELLOW)Creating transports/bifrost-http/ui directory...$(NC)"; \
-		mkdir -p transports/bifrost-http/ui; \
-		touch transports/bifrost-http/ui/.tmp; \
+	if [ ! -d "transports/pg-gateway-http/ui" ]; then \
+		$(ECHO) "$(YELLOW)Creating transports/pg-gateway-http/ui directory...$(NC)"; \
+		mkdir -p transports/pg-gateway-http/ui; \
+		touch transports/pg-gateway-http/ui/.tmp; \
 	fi; \
 	$(ECHO) ""; \
 	$(ECHO) "$(YELLOW)Starting UI development server...$(NC)"; \
@@ -236,7 +236,7 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)Starting with air + delve debugger on port 2345...$(NC)"; \
 		$(ECHO) "$(YELLOW)Attach your debugger to localhost:2345$(NC)"; \
-		(cd transports/bifrost-http && BIFROST_UI_DEV=true air -c .air.debug.toml -- \
+		(cd transports/pg-gateway-http && BIFROST_UI_DEV=true air -c .air.debug.toml -- \
 			-host "$(HOST)" \
 			-port "$(PORT)" \
 			-log-style "$(LOG_STYLE)" \
@@ -244,7 +244,7 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 			$(if $(PROMETHEUS_LABELS),-prometheus-labels "$(PROMETHEUS_LABELS)") \
 			$(if $(APP_DIR),-app-dir "$(abspath $(APP_DIR))")) & \
 	else \
-		(cd transports/bifrost-http && BIFROST_UI_DEV=true air -c .air.toml -- \
+		(cd transports/pg-gateway-http && BIFROST_UI_DEV=true air -c .air.toml -- \
 			-host "$(HOST)" \
 			-port "$(PORT)" \
 			-log-style "$(LOG_STYLE)" \
@@ -301,10 +301,10 @@ dev-pulse: install-ui install-pulse setup-workspace $(if $(DEBUG),install-delve)
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)  3. Debugger (delve) listening on port 2345$(NC)"; \
 	fi; \
-	if [ ! -d "transports/bifrost-http/ui" ]; then \
-		$(ECHO) "$(YELLOW)Creating transports/bifrost-http/ui directory...$(NC)"; \
-		mkdir -p transports/bifrost-http/ui; \
-		touch transports/bifrost-http/ui/.tmp; \
+	if [ ! -d "transports/pg-gateway-http/ui" ]; then \
+		$(ECHO) "$(YELLOW)Creating transports/pg-gateway-http/ui directory...$(NC)"; \
+		mkdir -p transports/pg-gateway-http/ui; \
+		touch transports/pg-gateway-http/ui/.tmp; \
 	fi; \
 	$(ECHO) ""; \
 	$(ECHO) "$(YELLOW)Starting UI development server...$(NC)"; \
@@ -372,14 +372,14 @@ build: build-ui ## Build bifrost-http binary
 	if [ "$$TARGET_OS" = "linux" ] && [ "$$HOST_OS" = "linux" ]; then \
 		if [ -n "$(DYNAMIC)" ]; then \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with dynamic linking...$(NC)"; \
-			cd transports/bifrost-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 				-ldflags="-w -s -X main.Version=v$(VERSION)" \
 				-a -trimpath \
 				-o ../../tmp/bifrost-http \
 				.; \
 		else \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with static linking...$(NC)"; \
-			cd transports/bifrost-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 				-ldflags="-w -s -extldflags "-static" -X main.Version=v$(VERSION)" \
 				-a -trimpath \
 				-tags "sqlite_static" \
@@ -389,7 +389,7 @@ build: build-ui ## Build bifrost-http binary
 		$(ECHO) "$(GREEN)Built: tmp/bifrost-http (version: v$(VERSION))$(NC)"; \
 	elif [ "$$TARGET_OS" = "$$HOST_OS" ] && [ "$$TARGET_ARCH" = "$$HOST_ARCH" ]; then \
 		$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH (native build with CGO)...$(NC)"; \
-		cd transports/bifrost-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+		cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 			-ldflags="-w -s -X main.Version=v$(VERSION)" \
 			-a -trimpath \
 			-tags "sqlite_static" \
@@ -412,7 +412,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 			docker run --rm \
 				--platform linux/$(TARGET_ARCH) \
 				-v "$(shell pwd):/workspace" \
-				-w /workspace/transports/bifrost-http \
+				-w /workspace/transports/pg-gateway-http \
 				-e CGO_ENABLED=1 \
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
@@ -429,7 +429,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 			docker run --rm \
 				--platform linux/$(TARGET_ARCH) \
 				-v "$(shell pwd):/workspace" \
-				-w /workspace/transports/bifrost-http \
+				-w /workspace/transports/pg-gateway-http \
 				-e CGO_ENABLED=1 \
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
@@ -491,8 +491,8 @@ run: build ## Build and run bifrost-http (no hot reload)
 clean: ## Clean build artifacts and temporary files
 	@$(ECHO) "$(YELLOW)Cleaning build artifacts...$(NC)"
 	@rm -rf tmp/
-	@rm -f transports/bifrost-http/build-errors.log
-	@rm -rf transports/bifrost-http/tmp/
+	@rm -f transports/pg-gateway-http/build-errors.log
+	@rm -rf transports/pg-gateway-http/tmp/
 	@rm -rf $(TEST_REPORTS_DIR)/
 	@$(ECHO) "$(GREEN)Clean complete$(NC)"
 
@@ -545,7 +545,7 @@ generate-html-reports: ## Convert existing XML reports to HTML
 test: install-gotestsum ## Run tests for bifrost-http
 	@$(ECHO) "$(GREEN)Running bifrost-http tests...$(NC)"
 	@mkdir -p $(TEST_REPORTS_DIR)
-	@cd transports/bifrost-http && GOWORK=off gotestsum \
+	@cd transports/pg-gateway-http && GOWORK=off gotestsum \
 		--format=$(GOTESTSUM_FORMAT) \
 		--junitfile=../../$(TEST_REPORTS_DIR)/bifrost-http.xml \
 		-- -v ./...
@@ -913,7 +913,7 @@ test-http-transport: install-gotestsum ## Run HTTP transport tests
 	@$(EXPOSE_ENV); \
 	$(ECHO) "$(GREEN)Running HTTP transport tests...$(NC)"; \
 	mkdir -p $(TEST_REPORTS_DIR); \
-	cd transports/bifrost-http && find . -name "*.go" -path "*/tests/*" -o -name "*_test.go" | head -1 > /dev/null && \
+	cd transports/pg-gateway-http && find . -name "*.go" -path "*/tests/*" -o -name "*_test.go" | head -1 > /dev/null && \
 		for dir in $$(find . -name "*_test.go" -exec dirname {} \; | sort -u); do \
 			pkg_name=$$(echo $$dir | sed 's|^\./||' | sed 's|/|-|g'); \
 			$(ECHO) "Testing $$dir..."; \

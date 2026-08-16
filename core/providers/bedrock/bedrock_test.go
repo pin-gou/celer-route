@@ -329,7 +329,7 @@ func TestBedrock(t *testing.T) {
 			}
 
 			// Convert via the SAME entry point the HTTP integration uses
-			// (transports/bifrost-http/integrations/anthropic.go RequestConverter
+			// (transports/pg-gateway-http/integrations/anthropic.go RequestConverter
 			// at lines 92-100 calls anthropicReq.ToBifrostResponsesRequest(ctx)).
 			reqCtx := schemas.NewBifrostContext(ctx, schemas.NoDeadline)
 			bifrostReq := anthropicReq.ToBifrostResponsesRequest(reqCtx)

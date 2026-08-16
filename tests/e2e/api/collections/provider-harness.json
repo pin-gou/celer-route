@@ -873,7 +873,7 @@
     },
     {
       "name": "8. Criss-Cross (endpoint × provider × modality matrix)",
-      "description": "Every Bifrost drop-in request shape × every model provider × every supported modality.\n\nBifrost's `ParseModelString` (core/schemas/utils.go) splits the `provider/model-name` prefix and dispatches to the right backend; per-shape converters in `transports/bifrost-http/integrations/` normalize the incoming payload to `BifrostChatRequest` (or the equivalent for embeddings/audio/images) regardless of which provider serves it.\n\nSub-folders:\n- 8.1 Text Chat (non-streaming) — rows A-G × providers\n- 8.2 Text Chat (streaming) — same matrix with stream:true / :streamGenerateContent / converse-stream\n- 8.3 Embeddings — rows H-J × providers\n- 8.4 Audio — transcriptions (K-L) + speech (M-N)\n- 8.5 Image generation / editing — rows O-Q\n- 8.6 Feature combinations — tool calling, vision, JSON/structured output, reasoning\n\nCells where the provider doesn't support the modality (e.g., Anthropic embeddings, Bedrock audio input — see core/providers/*/{anthropic.go:1878-1923, bedrock.go:1936-1941}) are tagged `[SKIP]` and skipped at runtime unless `include_skip=1`.",
+      "description": "Every Bifrost drop-in request shape × every model provider × every supported modality.\n\nBifrost's `ParseModelString` (core/schemas/utils.go) splits the `provider/model-name` prefix and dispatches to the right backend; per-shape converters in `transports/pg-gateway-http/integrations/` normalize the incoming payload to `BifrostChatRequest` (or the equivalent for embeddings/audio/images) regardless of which provider serves it.\n\nSub-folders:\n- 8.1 Text Chat (non-streaming) — rows A-G × providers\n- 8.2 Text Chat (streaming) — same matrix with stream:true / :streamGenerateContent / converse-stream\n- 8.3 Embeddings — rows H-J × providers\n- 8.4 Audio — transcriptions (K-L) + speech (M-N)\n- 8.5 Image generation / editing — rows O-Q\n- 8.6 Feature combinations — tool calling, vision, JSON/structured output, reasoning\n\nCells where the provider doesn't support the modality (e.g., Anthropic embeddings, Bedrock audio input — see core/providers/*/{anthropic.go:1878-1923, bedrock.go:1936-1941}) are tagged `[SKIP]` and skipped at runtime unless `include_skip=1`.",
       "item": [
         {
           "name": "8.1 Text Chat (non-streaming)",
@@ -4371,7 +4371,7 @@
             },
             {
               "name": "8.1.G Bedrock drop-in /bedrock/model/{modelId}/converse × non-Bedrock providers",
-              "description": "AWS Bedrock Converse API shape (`messages[].content[].text` body, model ID in the URL path) routed to non-Bedrock backends. The Converse route captures `{modelId}` as a single path segment, so a `provider/model` prefix must be URL-encoded (`%2F`) in the path — see `bedrockPreCallback` in `transports/bifrost-http/integrations/bedrock.go`.",
+              "description": "AWS Bedrock Converse API shape (`messages[].content[].text` body, model ID in the URL path) routed to non-Bedrock backends. The Converse route captures `{modelId}` as a single path segment, so a `provider/model` prefix must be URL-encoded (`%2F`) in the path — see `bedrockPreCallback` in `transports/pg-gateway-http/integrations/bedrock.go`.",
               "item": [
                 {
                   "name": "openai/gpt-5",
@@ -9016,7 +9016,7 @@
     },
     {
       "name": "9. Passthrough (catch-all forwarding)",
-      "description": "Catch-all routes that forward the request body byte-for-byte to the upstream provider, with Bifrost injecting its own configured key. The handler at transports/bifrost-http/integrations/router.go:604 strips Authorization / API-Key / X-API-Key / X-Goog-API-Key from the inbound request - so these requests intentionally omit those headers. Bedrock and Vertex have no passthrough variant (AWS SigV4 / Google OAuth can't be bridged this way).",
+      "description": "Catch-all routes that forward the request body byte-for-byte to the upstream provider, with Bifrost injecting its own configured key. The handler at transports/pg-gateway-http/integrations/router.go:604 strips Authorization / API-Key / X-API-Key / X-Goog-API-Key from the inbound request - so these requests intentionally omit those headers. Bedrock and Vertex have no passthrough variant (AWS SigV4 / Google OAuth can't be bridged this way).",
       "item": [
         {
           "name": "POST /openai_passthrough/v1/chat/completions",
@@ -36264,7 +36264,7 @@
       "item": [
         {
           "name": "8. Criss-Cross (endpoint × provider × modality matrix)",
-          "description": "Every Bifrost drop-in request shape × every model provider × every supported modality.\n\nBifrost's `ParseModelString` (core/schemas/utils.go) splits the `provider/model-name` prefix and dispatches to the right backend; per-shape converters in `transports/bifrost-http/integrations/` normalize the incoming payload to `BifrostChatRequest` (or the equivalent for embeddings/audio/images) regardless of which provider serves it.\n\nSub-folders:\n- 8.1 Text Chat (non-streaming) — rows A-G × providers\n- 8.2 Text Chat (streaming) — same matrix with stream:true / :streamGenerateContent / converse-stream\n- 8.3 Embeddings — rows H-J × providers\n- 8.4 Audio — transcriptions (K-L) + speech (M-N)\n- 8.5 Image generation / editing — rows O-Q\n- 8.6 Feature combinations — tool calling, vision, JSON/structured output, reasoning\n\nCells where the provider doesn't support the modality (e.g., Anthropic embeddings, Bedrock audio input — see core/providers/*/{anthropic.go:1878-1923, bedrock.go:1936-1941}) are tagged `[SKIP]` and skipped at runtime unless `include_skip=1`.",
+          "description": "Every Bifrost drop-in request shape × every model provider × every supported modality.\n\nBifrost's `ParseModelString` (core/schemas/utils.go) splits the `provider/model-name` prefix and dispatches to the right backend; per-shape converters in `transports/pg-gateway-http/integrations/` normalize the incoming payload to `BifrostChatRequest` (or the equivalent for embeddings/audio/images) regardless of which provider serves it.\n\nSub-folders:\n- 8.1 Text Chat (non-streaming) — rows A-G × providers\n- 8.2 Text Chat (streaming) — same matrix with stream:true / :streamGenerateContent / converse-stream\n- 8.3 Embeddings — rows H-J × providers\n- 8.4 Audio — transcriptions (K-L) + speech (M-N)\n- 8.5 Image generation / editing — rows O-Q\n- 8.6 Feature combinations — tool calling, vision, JSON/structured output, reasoning\n\nCells where the provider doesn't support the modality (e.g., Anthropic embeddings, Bedrock audio input — see core/providers/*/{anthropic.go:1878-1923, bedrock.go:1936-1941}) are tagged `[SKIP]` and skipped at runtime unless `include_skip=1`.",
           "item": [
             {
               "name": "8.1 Text Chat (non-streaming)",

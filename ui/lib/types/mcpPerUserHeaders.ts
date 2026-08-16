@@ -1,5 +1,5 @@
 // Types for the MCP per-user headers credential flow.
-// Mirrors the wire shapes in transports/bifrost-http/handlers/mcp_per_user_headers.go.
+// Mirrors the wire shapes in transports/pg-gateway-http/handlers/mcp_per_user_headers.go.
 //
 // Admin verification + tool discovery happen inline on POST /api/mcp/client
 // (see CreateMCPClientRequest.user_headers); this module only carries the

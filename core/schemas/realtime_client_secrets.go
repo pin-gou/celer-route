@@ -72,7 +72,7 @@ func ExtractRealtimeClientSecretModel(root map[string]json.RawMessage) (string, 
 // transcription-only session (RealtimeTranscriptionSessionCreateRequestGA)
 // rather than a full realtime session. This is the single canonical
 // classifier shared by extraction (above) and both normalization layers
-// (transports/bifrost-http/handlers and core/providers/openai) so they
+// (transports/pg-gateway-http/handlers and core/providers/openai) so they
 // cannot diverge on the same input — each layer previously ran its own
 // ad hoc classification logic, which could disagree.
 //

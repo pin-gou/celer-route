@@ -13,7 +13,7 @@ function isTransportVersionFlag(arg) {
 	return (eq === -1 ? arg : arg.slice(0, eq)) === "--transport-version";
 }
 
-// Keep in sync with transports/bifrost-http/main.go (flag.StringVar names).
+// Keep in sync with transports/pg-gateway-http/main.go (flag.StringVar names).
 const BIFROST_HTTP_KNOWN_FLAGS = new Set(["app-dir", "host", "log-level", "log-style", "port"]);
 
 // Go's flag package registers -help / -h (and commonly -version); not declared in main.go.

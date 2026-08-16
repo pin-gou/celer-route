@@ -61,7 +61,7 @@
     go work use ./transports
 
   # Copy UI build output into transports
-  COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
+  COPY --from=ui-builder /app/out ./transports/pg-gateway-http/ui
 
   # Build the binary with CGO enabled and static SQLite linking
   # CC is set dynamically: use aarch64-linux-musl-gcc for arm64 cross-compilation, gcc for native

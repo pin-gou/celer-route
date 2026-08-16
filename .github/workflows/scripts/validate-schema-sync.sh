@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Validate that Go config types in transports/bifrost-http/lib/config.go
+# Validate that Go config types in transports/pg-gateway-http/lib/config.go
 # stay in sync (fields + enum values) with transports/config.schema.json.
 # Walks the type graph recursively via go/types rather than regex-parsing source.
 
