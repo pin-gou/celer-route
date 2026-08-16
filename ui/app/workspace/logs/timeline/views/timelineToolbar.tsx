@@ -17,22 +17,10 @@ export interface TimelineToolbarProps {
 	zoom: number;
 	onZoomChange: (z: number) => void;
 	onReset: () => void;
-	visibleCount: number;
-	totalCount: number;
 	className?: string;
 }
 
-export function TimelineToolbar({
-	mode,
-	onModeChange,
-	onRefresh,
-	zoom,
-	onZoomChange,
-	onReset,
-	visibleCount,
-	totalCount,
-	className,
-}: TimelineToolbarProps) {
+export function TimelineToolbar({ mode, onModeChange, onRefresh, zoom, onZoomChange, onReset, className }: TimelineToolbarProps) {
 	const { t } = useTranslation("logs");
 
 	const modeDescriptions = useMemo(
@@ -121,11 +109,6 @@ export function TimelineToolbar({
 
 				{/* Spacer */}
 				<div className="flex-1" />
-
-				{/* Visible / total count */}
-				<span className="text-muted-foreground font-mono text-[10px] tabular-nums" data-testid="timeline-count">
-					{visibleCount} {t("timeline.toolbar.visible")} / {totalCount} {t("timeline.toolbar.total")}
-				</span>
 			</div>
 
 			{/* Mode description */}

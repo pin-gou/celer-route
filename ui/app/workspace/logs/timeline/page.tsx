@@ -228,6 +228,12 @@ export default function TimelinePage() {
 				title: t("timeline.statCards.totalRequests"),
 				value: <NumberFlow value={timelineStats.totalRequests} format={{ notation: "compact" }} />,
 				icon: <BarChart className="size-4" />,
+				subValue: (
+					<span className="text-muted-foreground">
+						{t("timeline.toolbar.visible")}: <strong className="text-foreground font-bold">{totalLogs}</strong> ·{" "}
+						{t("timeline.toolbar.total")}: <strong className="text-foreground font-bold">{timelineStats.totalRequests}</strong>
+					</span>
+				),
 			},
 			{
 				key: "success-rate",
@@ -330,7 +336,7 @@ export default function TimelinePage() {
 				),
 			},
 		],
-		[t, timelineStats],
+		[t, timelineStats, totalLogs],
 	);
 
 	const selectedLog = useMemo(
@@ -397,8 +403,6 @@ export default function TimelinePage() {
 				zoom={zoom}
 				onZoomChange={handleZoomChange}
 				onReset={handleReset}
-				visibleCount={logs.length}
-				totalCount={totalLogs}
 			/>
 
 			{/* Stat cards */}
