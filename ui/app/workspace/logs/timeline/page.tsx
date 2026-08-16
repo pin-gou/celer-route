@@ -39,6 +39,13 @@ const LIVE_LINE_FRACTION = 0.9;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 8;
 
+// Local HH:MM:SS time-of-day, matching the timeline axis labels (local time).
+function formatTimeOfDay(ms: number): string {
+	const d = new Date(ms);
+	const pad = (n: number) => n.toString().padStart(2, "0");
+	return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 export default function TimelinePage() {
 	const { t } = useTranslation("logs");
 	const navigate = useNavigate();
@@ -204,18 +211,23 @@ export default function TimelinePage() {
 		return Array.from(merged.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	}, [logsData, extraLogs]);
 
-	// Count of logs whose bars are visible in the current canvas window.
-	// Mirrors LogsTimeline's visibleLogs filter (logsTimeline.tsx) so the stat
-	// card matches the chart exactly, including in-flight processing bars that
-	// extend to the NOW line.
-	const visibleCount = useMemo(() => {
+	// Visible-window summary for the stat cards: count of logs whose bars are
+	// in the current canvas window, plus the timestamp of the first visible
+	// request. Mirrors LogsTimeline's visibleLogs filter (logsTimeline.tsx) so
+	// the card matches the chart exactly, including in-flight processing bars
+	// that extend to the NOW line.
+	const [visibleCount, firstVisibleTimeMs] = useMemo(() => {
 		let count = 0;
+		let firstMs: number | null = null;
 		for (const log of logs) {
 			const start = new Date(log.timestamp).getTime();
 			const end = log.status === "processing" ? nowMs : start + (log.latency ?? 0);
-			if (end >= visibleWindow.start && start <= visibleWindow.end) count++;
+			if (end >= visibleWindow.start && start <= visibleWindow.end) {
+				count++;
+				if (firstMs === null || start < firstMs) firstMs = start;
+			}
 		}
-		return count;
+		return [count, firstMs] as const;
 	}, [logs, visibleWindow, nowMs]);
 
 	// Stat cards: total requests comes from the backend's exact count over the
@@ -243,7 +255,9 @@ export default function TimelinePage() {
 				icon: <BarChart className="size-4" />,
 				subValue: (
 					<span className="text-muted-foreground">
-						{t("timeline.toolbar.visible")}: <strong className="text-foreground font-bold">{visibleCount}</strong>
+						{t("timeline.toolbar.visible")}: <strong className="text-foreground font-bold">{visibleCount}</strong> ·{" "}
+						{t("timeline.statCards.firstRequest")}:{" "}
+						<strong className="text-foreground font-bold">{firstVisibleTimeMs !== null ? formatTimeOfDay(firstVisibleTimeMs) : "—"}</strong>
 					</span>
 				),
 			},
@@ -348,7 +362,7 @@ export default function TimelinePage() {
 				),
 			},
 		],
-		[t, timelineStats, visibleCount],
+		[t, timelineStats, visibleCount, firstVisibleTimeMs],
 	);
 
 	const selectedLog = useMemo(

@@ -474,7 +474,8 @@
 			"out": "输出",
 			"errors": "错误",
 			"cancelled": "已取消",
-			"activeRequests": "活跃请求"
+			"activeRequests": "活跃请求",
+			"firstRequest": "首请求"
 		}
 	},
 	"toast": {

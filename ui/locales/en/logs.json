@@ -474,7 +474,8 @@
 			"out": "out",
 			"errors": "Errors",
 			"cancelled": "Cancelled",
-			"activeRequests": "Active Requests"
+			"activeRequests": "Active Requests",
+			"firstRequest": "first request"
 		}
 	},
 	"toast": {
