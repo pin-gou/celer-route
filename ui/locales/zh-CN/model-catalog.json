@@ -19,7 +19,7 @@
 		"modelsUsedTooltip": "过去30天内使用的模型",
 		"noMatchingProviders": "未找到匹配的提供商。",
 		"custom": "自定义",
-		"moreCount": "还有 {count} 个"
+		"moreCount": "还有 {{count}} 个"
 	},
 	"catalog": {
 		"title": "模型目录",

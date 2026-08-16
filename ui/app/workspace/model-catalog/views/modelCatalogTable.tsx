@@ -202,7 +202,7 @@ function ModelsUsedCell({ models: rawModels }: { models: string[] }) {
 				{remaining > 0 && (
 					<Tooltip>
 						<TooltipTrigger data-testid="model-catalog-models-overflow-trigger">
-							<Badge variant="outline" className="text-xs font-normal">
+							<Badge variant="secondary" className="text-xs font-normal">
 								{t("table.moreCount", { count: remaining })}
 							</Badge>
 						</TooltipTrigger>

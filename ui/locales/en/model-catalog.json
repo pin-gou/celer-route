@@ -19,7 +19,7 @@
 		"modelsUsedTooltip": "Models used in the last 30 days",
 		"noMatchingProviders": "No matching providers found.",
 		"custom": "CUSTOM",
-		"moreCount": "+{count} more"
+		"moreCount": "+{{count}} more"
 	},
 	"catalog": {
 		"title": "Model Catalog",
