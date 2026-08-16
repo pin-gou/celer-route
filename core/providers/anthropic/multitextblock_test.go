@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 
 	"github.com/bytedance/sonic"
 	"github.com/tidwall/gjson"

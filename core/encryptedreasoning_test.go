@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // newEncryptedReasoningRequest builds a Responses request whose input replays a

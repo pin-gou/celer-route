@@ -229,10 +229,6 @@ bifrost/
 ├── docs/                          # Documentation
 │   └── features/                  # Feature documentation (MDX)
 │
-├── helm-charts/                   # Kubernetes Helm charts
-│   ├── bifrost/                   # Bifrost Helm chart
-│   └── index.yaml                 # Chart index
-│
 ├── examples/                      # Example configurations
 │   ├── configs/                   # Config examples
 │   ├── dockers/                   # Docker examples
@@ -241,23 +237,15 @@ bifrost/
 │   ├── plugins/                   # Plugin examples
 │   └── webhooks/                  # Webhook examples
 │
-├── nix/                           # Nix flake modules
-│   ├── devshells/                 # Development shells
-│   ├── modules/                   # NixOS modules
-│   └── packages/                  # Nix packages
-│
 ├── scripts/                       # Utility scripts
 │   └── realtime-test/             # Realtime test scripts
 │
 ├── community/                     # Community resources
 │   └── mcp-library/               # MCP server library
 │
-├── recipes/                       # Deployment recipes (ECS, Fly, k8s)
-│
 ├── cmd/                           # Auxiliary commands
 │   └── e2eseed/                   # E2E seed data command
 │
-├── terraform/                     # Infrastructure as Code
 ├── .claude/skills/                # Claude Code skill definitions (13 skills)
 ├── go.work                        # Go workspace — requires Go 1.26.6
 ├── Makefile                       # Build, test, dev commands
@@ -273,9 +261,9 @@ Bifrost is a **multi-module Go workspace**. Each module has its own `go.mod`:
 
 ```
 go.work
-├── core/go.mod              # github.com/maximhq/bifrost/core
-├── framework/go.mod         # github.com/maximhq/bifrost/framework
-├── transports/go.mod        # github.com/maximhq/bifrost/transports
+├── core/go.mod              # github.com/pin-gou/pg-gateway/core
+├── framework/go.mod         # github.com/pin-gou/pg-gateway/framework
+├── transports/go.mod        # github.com/pin-gou/pg-gateway/transports
 └── plugins/*/go.mod         # 9 plugin modules (governance, telemetry, logging, etc.)
 ```
 
@@ -536,7 +524,7 @@ type CompletionHandler struct {
 
 **Route registration:** Each handler implements `RegisterRoutes(router, middlewares...)` — routes get middleware chains applied per-route via `lib.ChainMiddlewares()`.
 
-**SDK integration layers** (`transports/bifrost-http/integrations/`) provide request/response converters between provider-native SDK formats and Bifrost's internal format. This enables drop-in replacement of OpenAI SDK, Anthropic SDK, AWS Bedrock SDK, Google GenAI SDK, LangChain, and LiteLLM.
+**SDK integration layers** (`transports/pg-gateway-http/integrations/`) provide request/response converters between provider-native SDK formats and Bifrost's internal format. This enables drop-in replacement of OpenAI SDK, Anthropic SDK, AWS Bedrock SDK, Google GenAI SDK, LangChain, and LiteLLM.
 
 ---
 
@@ -587,7 +575,7 @@ Adding a new operation type requires changes across the entire codebase:
 2. Implement in **all** 20+ providers (most return "not supported")
 3. Add `RequestType` constant in `core/schemas/bifrost.go`
 4. Add to `AllowedRequests` struct and `IsOperationAllowed()` switch
-5. Add handler endpoint in `transports/bifrost-http/handlers/`
+5. Add handler endpoint in `transports/pg-gateway-http/handlers/`
 6. Wire up in `core/bifrost.go` and `core/inference.go`
 
 ### 6. OpenAI Provider Changes Cascade to 9+ Providers
@@ -848,10 +836,10 @@ Systematically address unresolved PR review comments. Uses GraphQL to get unreso
 | Object pool (prod + debug) | `core/pool/pool_prod.go`, `pool_debug.go` |
 | Shared provider utils & SSE parsing | `core/providers/utils/utils.go` |
 | Streaming accumulator | `framework/streaming/accumulator.go` |
-| HTTP inference handler | `transports/bifrost-http/handlers/inference.go` |
-| Governance handler | `transports/bifrost-http/handlers/governance.go` |
+| HTTP inference handler | `transports/pg-gateway-http/handlers/inference.go` |
+| Governance handler | `transports/pg-gateway-http/handlers/governance.go` |
 | Config schema (source of truth) | `transports/config.schema.json` |
-| Pool debug profiler | `transports/bifrost-http/handlers/devpprof.go` |
+| Pool debug profiler | `transports/pg-gateway-http/handlers/devpprof.go` |
 | LLM test infrastructure | `core/internal/llmtests/` |
 | MCP test infrastructure | `core/internal/mcptests/` |
 | E2E test infrastructure | `tests/e2e/core/` |

@@ -25,10 +25,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	"github.com/maximhq/bifrost/core/providers/anthropic"
-	openai "github.com/maximhq/bifrost/core/providers/openai"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
+	openai "github.com/pin-gou/pg-gateway/core/providers/openai"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

@@ -3,7 +3,7 @@ package wafer
 import (
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Wafer File API Types

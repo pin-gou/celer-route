@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/maximhq/bifrost/framework/logstore"
+	"github.com/pin-gou/pg-gateway/framework/logstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

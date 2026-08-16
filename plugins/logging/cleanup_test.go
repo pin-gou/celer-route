@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/framework/logstore"
+	"github.com/pin-gou/pg-gateway/framework/logstore"
 )
 
 // recordingStore wraps a LogStore and records every log ID that reaches

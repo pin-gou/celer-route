@@ -19,8 +19,8 @@ import (
 	"slices"
 	"sync"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Key identifies one cached response. KeyID is "" for keyless providers

@@ -1,10 +1,10 @@
-module github.com/maximhq/bifrost/examples/plugins/http-transport-only
+module github.com/pin-gou/pg-gateway/examples/plugins/http-transport-only
 
 go 1.26.5
 
-replace github.com/maximhq/bifrost/core => ../../../core
+replace github.com/pin-gou/pg-gateway/core => ../../../core
 
-require github.com/maximhq/bifrost/core v0.0.0-00010101000000-000000000000
+require github.com/pin-gou/pg-gateway/core v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect

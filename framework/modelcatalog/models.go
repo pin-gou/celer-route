@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/configstore"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
 )
 
 // providersWithPartialListModels enumerates providers whose /v1/models response

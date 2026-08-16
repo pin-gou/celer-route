@@ -3,8 +3,8 @@ package governance
 import (
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/plugins/governance/complexity"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/plugins/governance/complexity"
 )
 
 // buildComplexityInput extracts text from normalized BifrostRequest values for

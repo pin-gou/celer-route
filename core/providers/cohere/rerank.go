@@ -4,7 +4,7 @@ import (
 	"sort"
 
 	"github.com/bytedance/sonic"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"gopkg.in/yaml.v3"
 )
 

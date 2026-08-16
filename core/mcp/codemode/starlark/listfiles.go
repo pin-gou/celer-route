@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	codemcp "github.com/maximhq/bifrost/core/mcp"
-	"github.com/maximhq/bifrost/core/schemas"
+	codemcp "github.com/pin-gou/pg-gateway/core/mcp"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // createListToolFilesTool creates the listToolFiles tool definition for code mode.

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"sync"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // KeyEntry is the per-key configuration snapshot the store maintains. Slice

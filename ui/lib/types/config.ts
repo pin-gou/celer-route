@@ -580,7 +580,7 @@ export interface RestartRequiredConfig {
 	reason?: string;
 }
 
-// Bifrost Config
+// pg-gateway Config
 export type PluginSpanFilterMode = "include" | "exclude";
 
 export interface PluginSpanFilter {
@@ -611,7 +611,7 @@ export interface CompatConfig {
 	should_convert_params: boolean;
 }
 
-// Core Bifrost configuration types
+// Core pg-gateway configuration types
 export interface CoreConfig {
 	drop_excess_requests: boolean;
 	initial_pool_size: number;

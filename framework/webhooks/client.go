@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/maximhq/bifrost/core/network"
-	"github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/logstore"
+	"github.com/pin-gou/pg-gateway/core/network"
+	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/logstore"
 )
 
 // maxErrorBodyBytes caps how much of a failing receiver's response body is

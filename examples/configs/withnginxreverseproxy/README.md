@@ -1,15 +1,14 @@
-# Bifrost behind NGINX (Docker Compose)
+# pg-gateway behind NGINX (Docker Compose)
 
-This example runs 3 Bifrost containers behind an NGINX reverse proxy.
+This example runs 3 pg-gateway containers behind an NGINX reverse proxy.
 
 ## Files
 
-- `docker-compose.yml` - Starts NGINX and 3 Bifrost nodes
+- `docker-compose.yml` - Starts NGINX and 3 pg-gateway nodes
 - `nginx.conf` - Reverse proxy and load balancing config
-- `config.json` - Shared Bifrost config for all nodes
+- `config.json` - Shared pg-gateway config for all nodes
 - `.env.example` - Required environment variables
-- `helm-values.yaml` - Helm values for Kubernetes + NGINX Ingress
-- `k8s-ingress.yaml` - Standalone ingress manifest (non-Helm or override)
+- `k8s-ingress.yaml` - Standalone ingress manifest for Kubernetes
 
 ## Run
 
@@ -23,7 +22,7 @@ docker compose up -d
 docker compose ps
 ```
 
-NGINX exposes Bifrost on `http://localhost:8080`.
+NGINX exposes pg-gateway on `http://localhost:8080`.
 
 ## Verify
 
@@ -58,17 +57,7 @@ curl -N http://localhost:8080/v1/chat/completions \
 docker compose down
 ```
 
-## Kubernetes / Helm
-
-```bash
-# Render manifests and verify ingress is present
-helm template bifrost ./helm-charts/bifrost \
-  -f examples/configs/withnginxreverseproxy/helm-values.yaml
-
-# Install (or upgrade) with this example
-helm upgrade --install bifrost ./helm-charts/bifrost \
-  -f examples/configs/withnginxreverseproxy/helm-values.yaml
-```
+## Kubernetes
 
 Validate ingress manifest only:
 

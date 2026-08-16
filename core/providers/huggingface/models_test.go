@@ -3,12 +3,12 @@ package huggingface
 import (
 	"testing"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Regression tests for https://github.com/maximhq/bifrost/issues/4215.
+// Regression tests for https://github.com/pin-gou/pg-gateway/issues/4215.
 //
 // Allowlist entries selected from a previous ListModels response carry an
 // inference-provider segment (e.g. "featherless-ai/org/model"). The backfill

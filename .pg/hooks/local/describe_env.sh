@@ -33,7 +33,7 @@ environments:
       - name: bifrost-api
         type: rest-api
         category: upstream
-        description: "Bifrost AI 网关 HTTP API。prepare_env 阶段启动后通过 fixture 数据种子化，然后关闭。数据持久化在 data 目录"
+        description: "pg-gateway AI 网关 HTTP API。prepare_env 阶段启动后通过 fixture 数据种子化，然后关闭。数据持久化在 data 目录"
         endpoints:
           - name: health
             url: "http://localhost:9080/health"
@@ -61,7 +61,7 @@ environments:
       - name: ui-dev
         type: web-app
         category: upstream
-        description: "Vite + React 前端开发服务器（NPM run dev，端口 3008）。支持中英文 i18n 运行时切换与 localStorage 持久化（bifrost.locale）。本服务用于前端 i18n 改造验证、Chrome DevTools MCP 采证。"
+        description: "Vite + React 前端开发服务器（NPM run dev，端口 3008）。支持中英文 i18n 运行时切换与 localStorage 持久化（pg-gateway.locale）。本服务用于前端 i18n 改造验证、Chrome DevTools MCP 采证。"
         endpoints:
           - name: dev
             url: "http://localhost:3008"
@@ -213,9 +213,9 @@ environments:
 
       - name: bifrost-binary
         type: file
-        location: tmp/bifrost-http
+        location: tmp/pg-gateway-http
         scope: environment
-        description: "编译后的 bifrost-http 二进制文件"
+        description: "编译后的 pg-gateway-http 二进制文件"
         lifecycle: persistent
         tags:
           - binary
@@ -231,7 +231,7 @@ environments:
           ports:
             - port: 9080
               role: bifrost-api
-              description: "bifrost HTTP API 端口（prepare_env 阶段使用后关闭）"
+              description: "pg-gateway HTTP API 端口（prepare_env 阶段使用后关闭）"
             - port: 3008
               role: ui-dev
               description: "Vite 开发服务器端口（由 stage 的 role start 启动）"
@@ -246,13 +246,13 @@ environments:
         to: bifrost-api
         type: owns
         criticality: required
-        description: "bifrost-api 读取 config.db 获取配置"
+        description: "pg-gateway 读取 config.db 获取配置"
 
       - from: logs-db
         to: bifrost-api
         type: owns
         criticality: required
-        description: "bifrost-api 写入 logs.db 存储日志"
+        description: "pg-gateway 写入 logs.db 存储日志"
 
       - from: fixture-providers
         to: config-db
@@ -306,7 +306,7 @@ environments:
         to: bifrost-api
         type: consumes
         criticality: required
-        description: "ui-dev 通过 http://localhost:9080 调 bifrost REST API 加载数据"
+        description: "ui-dev 通过 http://localhost:9080 调 pg-gateway REST API 加载数据"
 YAML
 
 pg_exit --status=pass --duration=0 \

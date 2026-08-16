@@ -3,7 +3,7 @@ package semanticcache
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestDefaultCacheKey_CachesWithoutPerRequestKey verifies that when DefaultCacheKey

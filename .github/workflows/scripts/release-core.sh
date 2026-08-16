@@ -87,7 +87,7 @@ $CHANGELOG_BODY
 ### Installation
 
 \`\`\`bash
-go get github.com/maximhq/bifrost/core@v$VERSION
+go get github.com/pin-gou/pg-gateway/core@v$VERSION
 \`\`\`
 
 ---

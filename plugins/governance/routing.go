@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
-	"github.com/maximhq/bifrost/core/schemas"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/routing"
-	"github.com/maximhq/bifrost/plugins/governance/complexity"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/routing"
+	"github.com/pin-gou/pg-gateway/plugins/governance/complexity"
 )
 
 // DefaultRoutingChainMaxDepth is the default maximum depth for routing rule chain evaluation.

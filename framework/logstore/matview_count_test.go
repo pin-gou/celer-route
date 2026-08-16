@@ -31,7 +31,7 @@ func insertCountTestModelLog(t *testing.T, db *gorm.DB, ts time.Time, status, mo
 }
 
 // TestSearchLogsMatViewCountMatchesRawRange is the regression test for
-// https://github.com/maximhq/bifrost/issues/5329: for matview-eligible windows
+// https://github.com/pin-gou/pg-gateway/issues/5329: for matview-eligible windows
 // (>= 24h), pagination total_count came from mv_logs_hourly with predicates
 // that rounded both boundaries out to full hour buckets, counting logs the
 // exact-range row list can never page to. The hybrid count must match the

@@ -11,14 +11,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/modelcatalog"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
 )
 
 const PluginName = "model-catalog-resolver"
 
 // integrationTypeToDefaultProvider maps the integration-type ctx value (set by
-// transports/bifrost-http/integrations/router.go on integration routes) to the
+// transports/pg-gateway-http/integrations/router.go on integration routes) to the
 // integration's canonical provider. When the catalog returns multiple providers
 // for an unprefixed model, the resolver prefers the integration's canonical
 // provider if it's in the candidate list.

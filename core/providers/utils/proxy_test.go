@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	ws "github.com/fasthttp/websocket"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

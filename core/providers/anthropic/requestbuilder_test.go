@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func makeSimpleInput(text string) []schemas.ResponsesMessage {

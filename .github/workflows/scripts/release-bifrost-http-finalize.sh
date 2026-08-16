@@ -43,7 +43,7 @@ while IFS= read -r plugin_line; do
     PLUGIN_VERSIONS["$plugin_name"]="$plugin_version"
     PLUGINS_USED+=("$plugin_name:$plugin_version")
   fi
-done < <(grep "github.com/maximhq/bifrost/plugins/" transports/go.mod)
+done < <(grep "github.com/pin-gou/pg-gateway/plugins/" transports/go.mod)
 
 echo "🔧 Versions:"
 echo "   Core: $CORE_VERSION"

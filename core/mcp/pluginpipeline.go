@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/client"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // Sentinels wrapped (%w) into wire-op errors so mcpErrorType classifies error.type via

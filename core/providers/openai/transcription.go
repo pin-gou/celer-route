@@ -5,8 +5,8 @@ import (
 	"mime/multipart"
 	"sort"
 
-	"github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToBifrostTranscriptionRequest converts an OpenAI transcription request to Bifrost format

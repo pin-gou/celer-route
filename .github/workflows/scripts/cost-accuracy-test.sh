@@ -140,14 +140,14 @@ start_postgres() {
 build_binaries() {
   if [ ! -d "${BENCHMARK_DIR}" ]; then
     log "cloning bifrost-benchmarking"
-    git clone --depth 1 https://github.com/maximhq/bifrost-benchmarking.git "${BENCHMARK_DIR}"
+    git clone --depth 1 https://github.com/pin-gou/pg-gateway-benchmarking.git "${BENCHMARK_DIR}"
   fi
 
-  mkdir -p "${ROOT_DIR}/tmp" "${ROOT_DIR}/transports/bifrost-http/ui"
-  touch "${ROOT_DIR}/transports/bifrost-http/ui/.gitkeep"
+  mkdir -p "${ROOT_DIR}/tmp" "${ROOT_DIR}/transports/pg-gateway-http/ui"
+  touch "${ROOT_DIR}/transports/pg-gateway-http/ui/.gitkeep"
 
   log "building bifrost-http"
-  (cd "${ROOT_DIR}/transports/bifrost-http" && go build -o "${BIFROST_BIN}" .)
+  (cd "${ROOT_DIR}/transports/pg-gateway-http" && go build -o "${BIFROST_BIN}" .)
 
   # GOWORK=off: bifrost-benchmarking is its own module and in CI is checked out
   # inside the repo root (${github.workspace}/bifrost-benchmarking), so `go build`
@@ -166,7 +166,7 @@ write_config() {
   mkdir -p "${APP_DIR}"
   cat > "${APP_DIR}/config.json" <<EOF
 {
-  "\$schema": "https://www.getbifrost.ai/schema",
+  "\$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "client": {
     "enable_logging": true,
     "drop_excess_requests": false,

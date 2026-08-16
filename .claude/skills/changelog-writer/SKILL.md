@@ -257,7 +257,7 @@ gh api repos/maximhq/bifrost/issues/<ISSUE_NUMBER> --jq '"#\(.number) [\(.state)
 Render every closed issue as a markdown link in ascending issue-number order:
 
 ```markdown
-- [#3795](https://github.com/maximhq/bifrost/issues/3795) - MCP tools fail with Bedrock provider in v1.5.0
+- [#3795](https://github.com/pin-gou/pg-gateway/issues/3795) - MCP tools fail with Bedrock provider in v1.5.0
 ```
 
 If an issue's title is generic or unhelpful (e.g. just `[Bug Report]`), read the issue body and write a short, specific description instead.
@@ -309,8 +309,8 @@ The transports changelog uses a categorized format with bold names. Write it usi
 
 ## 🐙 Closed GitHub Issues
 
-- [#1234](https://github.com/maximhq/bifrost/issues/1234) - Issue title
-- [#1235](https://github.com/maximhq/bifrost/issues/1235) - Issue title
+- [#1234](https://github.com/pin-gou/pg-gateway/issues/1234) - Issue title
+- [#1235](https://github.com/pin-gou/pg-gateway/issues/1235) - Issue title
 ```
 
 **Formatting rules for transports/changelog.md:**
@@ -324,7 +324,7 @@ The transports changelog uses a categorized format with bold names. Write it usi
 - Omit sections that have no entries (e.g., if there are no features, skip the Features section)
 - If the release has only cascading bumps and no meaningful features or fixes, add a `## 🔧 Maintenance` section with an entry like: `- **Dependency Upgrades** - Bumped core to v1.5.0 and framework to v1.3.0 across all modules`
 - Always include a `## 🗄️ Database Migrations` section (see "Detect Database Migrations and Reversibility" above) - unlike the other sections, this one is never omitted. If `framework/configstore/migrations.go` changed in the release window, add one bullet per new migration, named by its migration ID, stating what it changes, and explicitly saying **Reversible** or **Non-reversible** with the one-line reason pulled from the `Rollback:` closure. Non-reversible migrations should stand out - consider a `<Warning>` block for any that drop or transform existing data, since those are unsafe to roll back mid-deploy. If `migrations.go` did NOT change in the release window, still add the section with a single line: `- No new database migrations in this release.`
-- Add a `## 🐙 Closed GitHub Issues` section listing **every** issue closed in this release (see "Collect Closed GitHub Issues" above). Each entry MUST be a markdown link to the issue: `- [#NUMBER](https://github.com/maximhq/bifrost/issues/NUMBER) - Issue title`. Omit the section only if no issues were closed.
+- Add a `## 🐙 Closed GitHub Issues` section listing **every** issue closed in this release (see "Collect Closed GitHub Issues" above). Each entry MUST be a markdown link to the issue: `- [#NUMBER](https://github.com/pin-gou/pg-gateway/issues/NUMBER) - Issue title`. Omit the section only if no issues were closed.
 
 ### Step 6: Update Version Files
 

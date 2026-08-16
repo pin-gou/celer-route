@@ -3,8 +3,8 @@ package gemini_test
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/providers/gemini"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/providers/gemini"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func TestExtractGeminiPassthroughUsage(t *testing.T) {

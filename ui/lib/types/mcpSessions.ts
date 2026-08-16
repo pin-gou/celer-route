@@ -1,5 +1,5 @@
 // Types for the MCP Auth Sessions tab + auth landing flow.
-// Mirrors the wire shapes in transports/bifrost-http/handlers/mcp_sessions.go.
+// Mirrors the wire shapes in transports/pg-gateway-http/handlers/mcp_sessions.go.
 
 export type AuthMode = "user" | "vk" | "session";
 

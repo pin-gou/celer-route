@@ -3,7 +3,7 @@ package openai
 import (
 	"maps"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToOpenAITextCompletionRequest converts a Bifrost text completion request to OpenAI format

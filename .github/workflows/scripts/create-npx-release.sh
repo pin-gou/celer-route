@@ -51,8 +51,8 @@ bifrost --help
 ### Links
 
 - 📦 [View on npm](https://www.npmjs.com/package/@maximhq/bifrost)
-- 📚 [Documentation](https://github.com/maximhq/bifrost)
-- 🐛 [Report Issues](https://github.com/maximhq/bifrost/issues)
+- 📚 [Documentation](https://github.com/pin-gou/pg-gateway)
+- 🐛 [Report Issues](https://github.com/pin-gou/pg-gateway/issues)
 
 ### What's New
 

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/maximhq/bifrost/core/schemas"
+import "github.com/pin-gou/pg-gateway/core/schemas"
 
 // ============================================================================
 // Input/Output Structs

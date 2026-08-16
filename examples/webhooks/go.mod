@@ -1,3 +1,3 @@
-module github.com/maximhq/bifrost/examples/webhooks
+module github.com/pin-gou/pg-gateway/examples/webhooks
 
 go 1.26.5

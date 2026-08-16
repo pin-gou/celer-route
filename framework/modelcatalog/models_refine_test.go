@@ -3,7 +3,7 @@ package modelcatalog
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestRefineModelForProvider covers the refinement contract: bare names resolve to the

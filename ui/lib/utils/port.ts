@@ -1,5 +1,5 @@
 /**
- * Port and URL utility - single source of truth for Bifrost backend connectivity
+ * Port and URL utility - single source of truth for pg-gateway backend connectivity
  *
  * This utility handles:
  * - Development vs Production environment detection

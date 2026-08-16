@@ -1,8 +1,8 @@
-module github.com/maximhq/bifrost/plugins/providercooldown
+module github.com/pin-gou/pg-gateway/plugins/providercooldown
 
 go 1.26.5
 
-require github.com/maximhq/bifrost/core v1.7.8
+require github.com/pin-gou/pg-gateway/core v1.7.8
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
@@ -34,3 +34,7 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/pin-gou/pg-gateway/core => ../../core
+
+replace github.com/pin-gou/pg-gateway/framework => ../../framework

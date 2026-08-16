@@ -315,7 +315,7 @@ function FileAddForm({ folderPath, initialSourceType, initialEntry, submitLabel,
 			{sourceType === "url" && (
 				<div className="flex items-start gap-2 rounded-sm border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
 					<Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-					<span>This source is saved as a live reference. Bifrost will read from this URL when the skill file is retrieved.</span>
+					<span>This source is saved as a live reference. pg-gateway will read from this URL when the skill file is retrieved.</span>
 				</div>
 			)}
 

@@ -150,9 +150,9 @@
 		"loading": "Loading...",
 		"setupFirst": "To generate API keys, you need to set up admin username and password first.",
 		"configureSecurity": "Configure Security Settings",
-		"usageInstructions": "Once generated you will need to use this API key for all API calls to the Bifrost admin APIs and UI.",
+		"usageInstructions": "Once generated you will need to use this API key for all API calls to the pg-gateway admin APIs and UI.",
 		"authDisabledForInference": "Authentication is currently <0>disabled for inference API calls</0>. You can make inference requests without authentication. Dashboard and admin API calls still require Basic auth with your admin credentials encoded in the standard <1>username:password</1> format with base64 encoding.",
-		"authEnabledForInference": "Use Basic auth with your admin credentials when making API calls to Bifrost. Encode your credentials in the standard <0>username:password</0> format with base64 encoding.",
+		"authEnabledForInference": "Use Basic auth with your admin credentials when making API calls to pg-gateway. Encode your credentials in the standard <0>username:password</0> format with base64 encoding.",
 		"example": "Example:"
 	},
 	"caching": {
@@ -240,7 +240,7 @@
 		"connectionPool": "Connection Pool",
 		"noConfig": "No client settings configured",
 		"dropExcessRequests": "Drop Excess Requests",
-		"dropExcessRequestsDesc": "If enabled, Bifrost will drop requests that exceed pool capacity.",
+		"dropExcessRequestsDesc": "If enabled, pg-gateway will drop requests that exceed pool capacity.",
 		"droppedRequests": "Have dropped <1>{{count}} requests</1> since last restart.",
 		"disableDbPings": "Disable DB Pings in Health Check",
 		"disableDbPingsDesc": "If enabled, the /health endpoint will skip database connectivity checks and return OK immediately.",
@@ -398,7 +398,7 @@
 		"loggingHeadersPlaceholder": "X-Tenant-ID, X-Request-Source, x-custom-*",
 		"saving": "Saving...",
 		"saveChanges": "Save Changes",
-		"restartWarning": "Need to restart Bifrost to apply changes."
+		"restartWarning": "Need to restart pg-gateway to apply changes."
 	},
 	"mcpGateway": {
 		"title": "MCP Gateway",
@@ -452,7 +452,7 @@
 		"pageDescription": "Configure security and access control settings.",
 		"passwordProtect": "Password protect the dashboard",
 		"beta": "BETA",
-		"passwordProtectDesc": "Set up authentication credentials to protect your Bifrost dashboard. Once configured, use the generated token for all admin API calls.",
+		"passwordProtectDesc": "Set up authentication credentials to protect your pg-gateway dashboard. Once configured, use the generated token for all admin API calls.",
 		"username": "Username",
 		"usernamePlaceholder": "Enter admin username or env.VAR_NAME",
 		"password": "Password",
@@ -468,7 +468,7 @@
 		"enforceVirtualKeysDesc": "Require a virtual key for all inference requests. See documentation for details.",
 		"documentation": "documentation",
 		"allowDirectKeys": "Allow Direct API Keys",
-		"allowDirectKeysDesc": "When enabled, callers can pass a provider API key directly in the Authorization, x-api-key, or x-goog-api-key header alongside x-bf-direct-key: true. Bifrost will use that key directly, bypassing the registered key pool.",
+		"allowDirectKeysDesc": "When enabled, callers can pass a provider API key directly in the Authorization, x-api-key, or x-goog-api-key header alongside x-bf-direct-key: true. pg-gateway will use that key directly, bypassing the registered key pool.",
 		"allowedOrigins": "Allowed Origins",
 		"allowedOriginsDesc": "Comma-separated list of allowed origins for CORS and WebSocket connections. Localhost origins are always allowed. Each origin must be a complete URL with protocol (e.g., https://app.example.com, http://10.0.0.100:3000). Wildcards are supported for subdomains (e.g., https://*.example.com) or use \"*\" to allow all origins.",
 		"allowedOriginsPlaceholder": "https://app.example.com, https://*.example.com, *",
@@ -482,7 +482,7 @@
 		"whitelistedRoutesDesc": "Comma-separated list of routes that bypass the auth middleware. Requests to these routes will not require authentication. System routes like /health, /api/session/login, and /api/session/is-auth-enabled are always whitelisted regardless of this setting.",
 		"whitelistedRoutesPlaceholder": "/api/custom-webhook, /api/public-endpoint",
 		"invalidOrigins": "Invalid origins: {origins}. Origins must be valid URLs like https://example.com, wildcard patterns like https://*.example.com, or \"*\" to allow all origins",
-		"restartWarning": "Need to restart Bifrost to apply changes.",
+		"restartWarning": "Need to restart pg-gateway to apply changes.",
 		"close": "Close",
 		"viewDocs": "View docs",
 		"toast": {
@@ -553,7 +553,7 @@
 		"inferenceDesc": "Use proxy for LLM inference requests to model providers.",
 		"api": "API",
 		"apiDesc": "Use proxy for external API calls and webhooks.",
-		"scimEnterprise": "SCIM proxy support is available in Bifrost Enterprise.",
+		"scimEnterprise": "SCIM proxy support is available in pg-gateway Enterprise.",
 		"noPermission": "You don't have permission to update settings",
 		"enterprise": "Enterprise"
 	},
@@ -619,8 +619,8 @@
 		"loadFailed": "Failed to load feature flags"
 	},
 	"restart": {
-		"description": "These settings require a Bifrost service restart to take effect. Current connections will continue with existing settings until restart.",
-		"warning": "Need to restart Bifrost to apply changes."
+		"description": "These settings require a pg-gateway service restart to take effect. Current connections will continue with existing settings until restart.",
+		"warning": "Need to restart pg-gateway to apply changes."
 	},
 	"toast": {
 		"settingsSaved": "Settings saved successfully",

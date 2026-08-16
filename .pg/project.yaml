@@ -27,17 +27,8 @@ modules:
     build: go build ./...
     lint: cd transports && go vet ./...
     test:
-      unit: cd transports/bifrost-http && go test ./... -short -count=1
+      unit: cd transports/pg-gateway-http && go test ./... -short -count=1
       integration: make test
-  cli:
-    root: cli
-    language: go
-    description: CLI 工具
-    build: go build ./...
-    lint: cd cli && go vet ./...
-    test:
-      unit: go test ./... -short -count=1
-      integration: make test-cli
   plugins:
     root: plugins
     language: go
@@ -59,11 +50,11 @@ modules:
       e2e: make run-e2e
 environments:
   local:
-    description: '本地开发环境：bifrost-http API 服务器 + UI 开发服务器。TBD: 确认端口配置'
+    description: '本地开发环境：pg-gateway-http API 服务器 + UI 开发服务器。TBD: 确认端口配置'
     prepare_env:
       host: localhost
       script: .pg/hooks/local/prepare.sh
-      description: 启动 bifrost-api 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
+      description: 启动 pg-gateway 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
     describe_env:
       script: .pg/hooks/local/describe_env.sh
       timeout_seconds: 30
@@ -74,7 +65,7 @@ environments:
       - name: bifrost-api-1
         host: localhost
         port: 9080
-        description: bifrost-api 实例端口
+        description: pg-gateway 实例端口
       actions:
         start:
           host: localhost
@@ -120,12 +111,6 @@ tracks:
     - transports
     max_fix_retries: 5
     description: HTTP 传输层开发与测试
-  cli:
-    type: standard
-    modules:
-    - cli
-    max_fix_retries: 5
-    description: CLI 工具开发与测试
   plugins:
     type: standard
     modules:
@@ -144,7 +129,6 @@ tracks:
     - core
     - framework
     - transports
-    - cli
     - plugins
     - ui
     max_fix_retries: 3
@@ -155,7 +139,6 @@ stages:
   - core
   - framework
   - transports
-  - cli
   - plugins
   - ui
   gate: all_pass

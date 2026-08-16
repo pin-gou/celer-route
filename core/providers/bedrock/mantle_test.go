@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func TestIsMantleModel(t *testing.T) {

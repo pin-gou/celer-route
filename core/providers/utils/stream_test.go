@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func TestCheckFirstStreamChunk_ErrorInFirstChunk(t *testing.T) {

@@ -2,7 +2,7 @@
 // transports/config.schema.json.
 //
 // Starting from a configured entry-point type (default: ConfigData in
-// transports/bifrost-http/lib), it recursively walks every nested struct
+// transports/pg-gateway-http/lib), it recursively walks every nested struct
 // field via go/types. For each field it verifies:
 //
 //  1. The json:"X" tag has a corresponding property in config.schema.json at
@@ -36,7 +36,7 @@ type entrypoint struct {
 
 var entrypoints = []entrypoint{
 	{
-		pkg:        "github.com/maximhq/bifrost/transports/bifrost-http/lib",
+		pkg:        "github.com/pin-gou/pg-gateway/transports/pg-gateway-http/lib",
 		typeName:   "ConfigData",
 		schemaPath: "", // root schema node — collectProperties will find .properties
 		moduleDir:  "transports",
@@ -123,14 +123,13 @@ var ignoreGoFieldNames = map[string]string{
 
 // opaqueLeafTypes are named Go types that have custom JSON marshalling and
 // should be treated as leaves. The walker does NOT recurse into their fields,
-// and they are collected for downstream checks (e.g., SecretVar → helm secret).
+// and they are collected for downstream checks.
 var opaqueLeafTypes = map[string]string{
-	"github.com/maximhq/bifrost/core/schemas.SecretVar": "env-aware string; custom JSON",
+	"github.com/pin-gou/pg-gateway/core/schemas.SecretVar": "env-aware string; custom JSON",
 }
 
 // secretVarLocation records where an SecretVar-typed field appears in config.json
-// so a downstream pass can confirm the helm chart supports Secret-backed
-// injection (existingSecret / secretRef / env.BIFROST_*) for that path.
+// so downstream passes can verify env-aware behavior for that path.
 type secretVarLocation struct {
 	schemaPath string
 	goPath     string
@@ -161,8 +160,6 @@ type checker struct {
 func main() {
 	schemaFlag := flag.String("schema", "transports/config.schema.json", "path to config.schema.json")
 	pkgDir := flag.String("pkg-root", ".", "repo root used as packages.Load dir")
-	helmValuesFlag := flag.String("helm-values", "helm-charts/bifrost/values.schema.json", "path to helm values.schema.json (for SecretVar secret-support check)")
-	helmHelpersFlag := flag.String("helm-helpers", "helm-charts/bifrost/templates/_helpers.tpl", "path to helm _helpers.tpl (for env.BIFROST_* emission detection)")
 	flag.Parse()
 
 	schemaBytes, err := os.ReadFile(*schemaFlag)
@@ -260,12 +257,7 @@ func main() {
 		c.walkType(named, e.schemaPath, fmt.Sprintf("%s.%s", e.pkg, e.typeName))
 	}
 
-	// SecretVar → helm-chart secret-support pass. For each Go field typed as
-	// schemas.SecretVar, the helm chart must either (a) emit an env.BIFROST_*
-	// placeholder for that JSON path via _helpers.tpl, or (b) expose a
-	// secretRef/existingSecret knob in values.schema.json at the equivalent
-	// camelCase location. If neither, warn.
-	c.checkSecretVarHelmSupport(*helmValuesFlag, *helmHelpersFlag)
+// SecretVar → helm-chart secret-support pass removed (helm chart no longer shipped).
 
 	printReport(os.Stderr, c.findings)
 	errCount := c.countErrs()
@@ -400,101 +392,9 @@ func renderTable(w interface{ Write([]byte) (int, error) }, headers []string, ro
 	}
 }
 
-// checkSecretVarHelmSupport verifies that every Go field of type schemas.SecretVar
-// has a way to be sourced from a Kubernetes secret via the helm chart. Proof
-// of support is any of:
-//
-//  1. An `env.BIFROST_*` string literal appears in _helpers.tpl (indicating
-//     a rewrite is wired up for the corresponding config path), OR
-//  2. values.schema.json declares a `secretRef` or `existingSecret` object
-//     at the camelCase equivalent of the schema path.
-//
-// Neither heuristic is perfect — this is a structural review aid, not a
-// proof. Treat misses as warnings so they don't block CI on borderline cases.
-func (c *checker) checkSecretVarHelmSupport(valuesPath, helpersPath string) {
-	helpersBytes, err := os.ReadFile(helpersPath)
-	if err != nil {
-		c.add(Finding{Category: "envvar-no-secret", Severity: "WARN", Detail: fmt.Sprintf("could not read helm helpers %s: %v — skipping SecretVar helm-support check", helpersPath, err)})
-		return
-	}
-	helpers := string(helpersBytes)
-	// Extract every env.BIFROST_* token mentioned in _helpers.tpl.
-	envBifrostMentions := map[string]bool{}
-	for _, line := range strings.Split(helpers, "\n") {
-		// crude extraction: look for "env.BIFROST_X" substrings
-		idx := 0
-		for idx < len(line) {
-			k := strings.Index(line[idx:], "env.BIFROST_")
-			if k < 0 {
-				break
-			}
-			start := idx + k
-			end := start
-			for end < len(line) {
-				ch := line[end]
-				if ch == '"' || ch == ' ' || ch == '\t' || ch == '}' || ch == ')' {
-					break
-				}
-				end++
-			}
-			envBifrostMentions[line[start:end]] = true
-			idx = end
-		}
-	}
-
-	valuesBytes, err := os.ReadFile(valuesPath)
-	hasValues := err == nil
-	var valuesSchema map[string]any
-	if hasValues {
-		_ = json.Unmarshal(valuesBytes, &valuesSchema)
-	}
-
-	for _, loc := range c.secretVarFields {
-		// Heuristic 1: any env.BIFROST_* is present in helpers — broad acceptance.
-		// We can't easily map a specific SecretVar field to a specific env var
-		// without per-field config, so we just check that the helpers file
-		// has AT LEAST ONE envBifrost mention that maps to this field's path.
-		// To make this stricter, we look for a helpers line mentioning either
-		// the camelCase field's parent path or an env var matching it.
-		camel := schemaPathToCamelCase(loc.schemaPath)
-		matched := false
-		// Heuristic 2: values.schema.json declares secretRef under the parent path.
-		if hasValues && valuesSchema != nil {
-			if hasSecretRefAt(valuesSchema, camel) {
-				matched = true
-			}
-		}
-		if !matched && len(envBifrostMentions) > 0 {
-			// Fall back to "some envBifrost wiring exists somewhere" — we flag it
-			// as a weaker hit so maintainers know to verify the mapping manually.
-			// Do not accept purely from presence; require a name-similarity match.
-			tail := lastSchemaComponent(loc.schemaPath)
-			for mention := range envBifrostMentions {
-				up := strings.ToUpper(tail)
-				if strings.Contains(mention, "_"+up) || strings.HasSuffix(mention, up) {
-					matched = true
-					break
-				}
-			}
-		}
-		if !matched {
-			if _, ignored := ignoreSchemaProps[loc.schemaPath]; ignored {
-				continue
-			}
-			c.add(Finding{
-				Category: "envvar-no-secret",
-				Severity: "WARN",
-				Path:     loc.schemaPath,
-				Detail:   "helm has no secretRef/existingSecret at " + camel + " or parent",
-				Go:       loc.goPath,
-			})
-		}
-	}
-}
-
 // schemaPathToCamelCase converts a JSON pointer like
 // "/properties/governance/properties/auth_config/properties/admin_username"
-// into a best-effort camelCase helm values path like
+// into a best-effort camelCase config path like
 // "properties.bifrost.properties.governance.properties.authConfig.properties.adminUsername".
 func schemaPathToCamelCase(p string) string {
 	parts := strings.Split(strings.TrimPrefix(p, "/"), "/")
@@ -536,8 +436,8 @@ func lastSchemaComponent(p string) string {
 // secretRef/existingSecret/*Secret knob inside its own "properties", OR
 // (b) a SIBLING of the target (at the same properties-map level) is named
 // "<target>Secret" / "secretRef" / "existingSecret" / has "Secret" suffix.
-// Sibling match is how the helm chart's encryptionKey + encryptionKeySecret
-// pattern works: the Secret-source knob is a sibling of the field itself.
+// Sibling match mirrors the encryptionKey + encryptionKeySecret pattern:
+// the Secret-source knob is a sibling of the field itself.
 func hasSecretRefAt(schema map[string]any, dotted string) bool {
 	parts := strings.Split(dotted, ".")
 	var cur any = schema
@@ -587,7 +487,7 @@ func hasSecretRefAt(schema map[string]any, dotted string) bool {
 }
 
 // jsonPointerGet resolves a /-delimited JSON Pointer into a schema root.
-// Used by hasSecretRefAt to follow $ref entries in helm values.schema.json.
+// Used by hasSecretRefAt to follow $ref entries.
 func jsonPointerGet(root any, pointer string) any {
 	if pointer == "" {
 		return root
@@ -705,7 +605,7 @@ func (c *checker) walkType(t types.Type, schemaPath, goPath string) {
 		key := named.Obj().Pkg().Path() + "." + named.Obj().Name()
 		// Treat opaque types (like schemas.SecretVar) as leaves.
 		if _, isOpaque := opaqueLeafTypes[key]; isOpaque {
-			if key == "github.com/maximhq/bifrost/core/schemas.SecretVar" {
+			if key == "github.com/pin-gou/pg-gateway/core/schemas.SecretVar" {
 				c.secretVarFields = append(c.secretVarFields, secretVarLocation{schemaPath, goPath})
 			}
 			return
@@ -810,7 +710,7 @@ func (c *checker) walkField(t types.Type, schemaNode map[string]any, schemaPath,
 	if named, ok := t.(*types.Named); ok {
 		key := named.Obj().Pkg().Path() + "." + named.Obj().Name()
 		if _, isOpaque := opaqueLeafTypes[key]; isOpaque {
-			if key == "github.com/maximhq/bifrost/core/schemas.SecretVar" {
+			if key == "github.com/pin-gou/pg-gateway/core/schemas.SecretVar" {
 				c.secretVarFields = append(c.secretVarFields, secretVarLocation{schemaPath, goPath})
 			}
 			return // do not recurse into opaque types

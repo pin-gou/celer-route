@@ -91,7 +91,7 @@ Use the issue's labels and body content to map to codebase areas. The issue temp
 |---|---|---|
 | Core (Go) | `core/`, `core/schemas/`, `core/providers/`, `core/mcp/` | `core/bifrost.go`, `core/utils.go` |
 | Framework | `framework/`, `framework/configstore/`, `framework/logstore/` | `framework/config.go`, `framework/list.go` |
-| Transports (HTTP) | `transports/bifrost-http/` | `transports/bifrost-http/` |
+| Transports (HTTP) | `transports/pg-gateway-http/` | `transports/pg-gateway-http/` |
 | Plugins | `plugins/` (governance, jsonparser, litellmcompat, etc.) | Plugin-specific `go.mod` files |
 | UI (React) | `ui/`, `ui/app/workspace/`, `ui/components/` | Feature-specific workspace pages |
 | Docs | `docs/` | `docs/docs.json`, feature-specific `.mdx` files |
@@ -209,7 +209,7 @@ grep -rn "FunctionName(" --include='*.go' core/ framework/ transports/ plugins/
 grep -rn "InterfaceName" --include='*.go' core/ framework/
 
 # Find all imports of a package
-grep -rn '"github.com/maximhq/bifrost/core/schemas"' --include='*.go' .
+grep -rn '"github.com/pin-gou/pg-gateway/core/schemas"' --include='*.go' .
 ```
 
 ### 3d. Find Related Tests

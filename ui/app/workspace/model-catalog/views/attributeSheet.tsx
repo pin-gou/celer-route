@@ -14,7 +14,7 @@ import { ExternalLink, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-const DEFAULT_PRICING_SOURCE_URL = "https://getbifrost.ai/datasheet";
+const DEFAULT_PRICING_SOURCE_URL = "https://pin-gou.github.io/pg-gateway/datasheet";
 
 interface AttributeSheetProps {
 	model: ModelDetails;

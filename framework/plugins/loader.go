@@ -1,6 +1,6 @@
 package plugins
 
-import "github.com/maximhq/bifrost/core/schemas"
+import "github.com/pin-gou/pg-gateway/core/schemas"
 
 // PluginLoader is the contract for a plugin loader
 type PluginLoader interface {

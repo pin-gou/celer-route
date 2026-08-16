@@ -33,7 +33,7 @@ RUN go mod download
 # Copy source code and dependencies
 COPY transports/ ./
 
-COPY --from=ui-builder /app/out ./bifrost-http/ui
+COPY --from=ui-builder /app/out ./pg-gateway-http/ui
 
 # Build the binary with CGO enabled and static SQLite linking
 ENV GOWORK=off
@@ -43,7 +43,7 @@ RUN go build \
   -a -trimpath \
   -tags "sqlite_static" \
   -o /app/main \
-  ./bifrost-http
+  ./pg-gateway-http
 
 # Verify build succeeded
 RUN test -f /app/main || (echo "Build failed" && exit 1)
@@ -55,13 +55,13 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal@sha256:24650313873554b6ba16c1a1
 ARG VERSION=unknown
 
 # Required labels for Red Hat Preflight certification.
-LABEL name="maximhq/bifrost" \
+LABEL name="ghcr.io/pin-gou/pg-gateway" \
       vendor="H3 Labs Inc" \
       version="${VERSION}" \
       release="1" \
       summary="High-performance LLM gateway and proxy" \
-      maintainer="Maxim Engineering <engineering@getmaxim.ai>" \
-      description="Bifrost is an open-source LLM gateway providing a unified API for routing requests across AI providers with fallbacks, load balancing, and observability."
+      maintainer="shaohq@foxmail.com" \
+      description="pg-gateway is an open-source LLM gateway providing a unified API for routing requests across AI providers with fallbacks, load balancing, and observability."
 
 WORKDIR /app
 

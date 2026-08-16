@@ -116,7 +116,7 @@ write_config() {
     fi
     cat > "$dir/config.json" <<EOF
 {
-  "\$schema": "https://www.getbifrost.ai/schema",
+  "\$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "client": {
     "drop_excess_requests": false,
     "initial_pool_size": 50,

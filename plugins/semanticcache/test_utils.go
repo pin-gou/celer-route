@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/vectorstore"
-	mocker "github.com/maximhq/bifrost/plugins/mocker"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/vectorstore"
+	mocker "github.com/pin-gou/pg-gateway/plugins/mocker"
 )
 
 // embeddingThrottle bounds the number of concurrent live embedding calls

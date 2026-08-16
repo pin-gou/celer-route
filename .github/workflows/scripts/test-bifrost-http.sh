@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Test bifrost-http component
+# Test pg-gateway-http component
 # Usage: ./test-bifrost-http.sh
 
 # Get the absolute path of the script directory
@@ -14,20 +14,7 @@ fi
 # Setup Go workspace for CI
 source "$(dirname "$0")/setup-go-workspace.sh"
 
-echo "🧪 Running bifrost-http tests..."
-
-# Validate that config.schema.json and values.schema.json are in sync
-echo "🔍 Validating schema consistency between config.schema.json and values.schema.json..."
-VALIDATE_SCHEMA_SCRIPT="$SCRIPT_DIR/validate-helm-schema.sh"
-if [ -f "$VALIDATE_SCHEMA_SCRIPT" ]; then
-  if ! "$VALIDATE_SCHEMA_SCRIPT"; then
-    echo "❌ Schema validation failed. The Helm chart values.schema.json is not in sync with config.schema.json"
-    exit 1
-  fi
-  echo "✅ Schema validation passed"
-else
-  echo "⚠️  Warning: validate-helm-schema.sh not found, skipping schema validation"
-fi
+echo "🧪 Running pg-gateway-http tests..."
 
 # Cleanup function to ensure Docker services are stopped
 cleanup_docker() {

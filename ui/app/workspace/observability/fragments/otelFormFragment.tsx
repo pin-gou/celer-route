@@ -495,7 +495,7 @@ function OtelProfileSection({ form, control, index, hasOtelAccess, canRemove, op
 									<FormItem className="w-full">
 										<FormLabel>TLS CA Certificate Path</FormLabel>
 										<FormDescription>
-											File path to the CA certificate on the Bifrost server. Leave empty to use system root CAs.
+											File path to the CA certificate on the pg-gateway server. Leave empty to use system root CAs.
 										</FormDescription>
 										<FormControl>
 											<Input placeholder="/path/to/ca.crt" disabled={!hasOtelAccess} {...field} />

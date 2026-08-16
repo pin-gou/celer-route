@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/internal/llmtests"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestBedrockMantle runs the comprehensive harness against the bedrock_mantle provider.

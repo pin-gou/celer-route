@@ -6,8 +6,8 @@ import (
 	"mime/multipart"
 	"strconv"
 
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToMistralTranscriptionRequest converts a Bifrost transcription request to Mistral format.

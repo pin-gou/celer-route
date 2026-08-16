@@ -13,8 +13,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/maximhq/bifrost/core/mcp/credstore"
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/mcp/credstore"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ClientManager interface for accessing MCP clients and tools

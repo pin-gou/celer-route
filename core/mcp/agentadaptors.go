@@ -3,7 +3,7 @@ package mcp
 import (
 	"fmt"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // agentAPIAdapter defines the interface for API-specific operations in agent mode.

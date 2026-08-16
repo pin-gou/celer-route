@@ -3,12 +3,12 @@ package bedrock
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestConverseToolErrorReachesChatSurface pins the Bedrock ingress round trip.
 // A Converse request is only ever converted to the Responses surface
-// (transports/bifrost-http/integrations/bedrock.go routes every branch through
+// (transports/pg-gateway-http/integrations/bedrock.go routes every branch through
 // ToBifrostResponsesRequest), so the chat surface is reached transitively via the
 // mux. This asserts a toolResult status of "error" survives both hops rather than
 // arriving at a chat-surface provider as a success.

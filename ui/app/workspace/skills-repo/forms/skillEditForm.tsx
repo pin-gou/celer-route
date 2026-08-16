@@ -205,7 +205,7 @@ export function SkillEditView({
 				<Alert variant="info">
 					<AlertTriangle aria-hidden="true" />
 					<AlertDescription>
-						Files added to a skill can be downloaded from marketplace URLs without logging in. Anyone who can reach this Bifrost server can
+						Files added to a skill can be downloaded from marketplace URLs without logging in. Anyone who can reach this pg-gateway server can
 						request them directly, so do not upload secrets, credentials, private code, or other sensitive files.
 					</AlertDescription>
 				</Alert>

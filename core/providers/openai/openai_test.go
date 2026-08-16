@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/internal/llmtests"
+	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func TestOpenAI(t *testing.T) {

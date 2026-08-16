@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"strings"
 
-	openaiProvider "github.com/maximhq/bifrost/core/providers/openai"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	"github.com/maximhq/bifrost/core/schemas"
+	openaiProvider "github.com/pin-gou/pg-gateway/core/providers/openai"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

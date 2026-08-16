@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // These tests cover the Anthropic server-side tool_search streaming path

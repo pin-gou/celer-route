@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/jaswdr/faker/v2"
-	bifrost "github.com/maximhq/bifrost/core"
-	"github.com/maximhq/bifrost/core/schemas"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 const (

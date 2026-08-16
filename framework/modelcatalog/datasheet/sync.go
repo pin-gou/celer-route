@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
-	bifrost "github.com/maximhq/bifrost/core"
-	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
+	bifrost "github.com/pin-gou/pg-gateway/core"
+	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
 )
 
 const (

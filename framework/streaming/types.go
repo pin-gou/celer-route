@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 type StreamType string

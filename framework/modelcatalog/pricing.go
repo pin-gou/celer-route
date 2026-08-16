@@ -3,9 +3,9 @@ package modelcatalog
 import (
 	"context"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
-	"github.com/maximhq/bifrost/framework/modelcatalog/datasheet"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog/datasheet"
 )
 
 // GetModelCapabilityEntryForModel returns capability metadata for a

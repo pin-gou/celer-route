@@ -40,7 +40,7 @@
 	},
 	"empty": {
 		"title": "No Providers Configured",
-		"description": "Add your first provider to start routing AI model requests through Bifrost."
+		"description": "Add your first provider to start routing AI model requests through pg-gateway."
 	},
 	"toast": {
 		"providerAdded": "Provider added successfully",
@@ -328,7 +328,7 @@
 			"modelFamilyPlaceholder": "Select a model family",
 			"modelFamilyNone": "None",
 			"description": "Description",
-			"descriptionHint": "Note for users. Not used by Bifrost.",
+			"descriptionHint": "Note for users. Not used by pg-gateway.",
 			"descriptionPlaceholder": "What is this deployment used for?",
 			"useKeySetting": "Use key setting",
 			"on": "On",
@@ -642,7 +642,7 @@
 			"useAnthropicEndpointsDescription": "Routes chat completions and responses requests through Anthropic-compatible endpoints.",
 			"vpcEndpoints": {
 				"title": "VPC Endpoints (Optional)",
-				"description": "Override the default public AWS Bedrock endpoints with PrivateLink VPC endpoint DNS names. Bifrost dials each service through its corresponding VPC endpoint.",
+				"description": "Override the default public AWS Bedrock endpoints with PrivateLink VPC endpoint DNS names. pg-gateway dials each service through its corresponding VPC endpoint.",
 				"services": {
 					"runtime": {
 						"label": "Runtime",

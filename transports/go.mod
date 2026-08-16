@@ -1,4 +1,4 @@
-module github.com/maximhq/bifrost/transports
+module github.com/pin-gou/pg-gateway/transports
 
 go 1.26.5
 
@@ -15,17 +15,17 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.6
 	github.com/mark3labs/mcp-go v0.43.2
-	github.com/maximhq/bifrost/core v1.7.8
-	github.com/maximhq/bifrost/framework v1.5.7
-	github.com/maximhq/bifrost/plugins/compat v0.1.33
-	github.com/maximhq/bifrost/plugins/governance v1.6.11
-	github.com/maximhq/bifrost/plugins/logging v1.6.7
-	github.com/maximhq/bifrost/plugins/maxim v1.6.34
-	github.com/maximhq/bifrost/plugins/modelcatalogresolver v1.0.15
-	github.com/maximhq/bifrost/plugins/otel v1.4.6
-	github.com/maximhq/bifrost/plugins/prompts v1.0.34
-	github.com/maximhq/bifrost/plugins/semanticcache v1.5.34
-	github.com/maximhq/bifrost/plugins/telemetry v1.5.34
+	github.com/pin-gou/pg-gateway/core v1.7.8
+	github.com/pin-gou/pg-gateway/framework v1.5.7
+	github.com/pin-gou/pg-gateway/plugins/compat v0.1.33
+	github.com/pin-gou/pg-gateway/plugins/governance v1.6.11
+	github.com/pin-gou/pg-gateway/plugins/logging v1.6.7
+	github.com/pin-gou/pg-gateway/plugins/maxim v1.6.34
+	github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver v1.0.15
+	github.com/pin-gou/pg-gateway/plugins/otel v1.4.6
+	github.com/pin-gou/pg-gateway/plugins/prompts v1.0.34
+	github.com/pin-gou/pg-gateway/plugins/semanticcache v1.5.34
+	github.com/pin-gou/pg-gateway/plugins/telemetry v1.5.34
 	github.com/pion/rtcp v1.2.16
 	github.com/pion/webrtc/v4 v4.2.9
 	github.com/prometheus/client_golang v1.23.2
@@ -152,8 +152,6 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
-	github.com/maximhq/bifrost/plugins/mocker v1.5.34 // indirect
-	github.com/maximhq/bifrost/plugins/providercooldown v0.0.0
 	github.com/maximhq/maxim-go v0.2.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oapi-codegen/runtime v1.1.1 // indirect
@@ -161,6 +159,8 @@ require (
 	github.com/onsi/gomega v1.38.2 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pin-gou/pg-gateway/plugins/mocker v1.5.34 // indirect
+	github.com/pin-gou/pg-gateway/plugins/providercooldown v0.0.0
 	github.com/pinecone-io/go-pinecone/v5 v5.3.0 // indirect
 	github.com/pion/datachannel v1.6.0 // indirect
 	github.com/pion/dtls/v3 v3.1.5 // indirect
@@ -240,4 +240,28 @@ require (
 	gorm.io/driver/postgres v1.6.0 // indirect
 )
 
-replace github.com/maximhq/bifrost/plugins/providercooldown => ../plugins/providercooldown
+replace github.com/pin-gou/pg-gateway/plugins/providercooldown => ../plugins/providercooldown
+
+replace github.com/pin-gou/pg-gateway/core => ../core
+
+replace github.com/pin-gou/pg-gateway/framework => ../framework
+
+replace github.com/pin-gou/pg-gateway/plugins/compat => ../plugins/compat
+
+replace github.com/pin-gou/pg-gateway/plugins/governance => ../plugins/governance
+
+replace github.com/pin-gou/pg-gateway/plugins/logging => ../plugins/logging
+
+replace github.com/pin-gou/pg-gateway/plugins/maxim => ../plugins/maxim
+
+replace github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver => ../plugins/modelcatalogresolver
+
+replace github.com/pin-gou/pg-gateway/plugins/otel => ../plugins/otel
+
+replace github.com/pin-gou/pg-gateway/plugins/prompts => ../plugins/prompts
+
+replace github.com/pin-gou/pg-gateway/plugins/semanticcache => ../plugins/semanticcache
+
+replace github.com/pin-gou/pg-gateway/plugins/telemetry => ../plugins/telemetry
+
+replace github.com/pin-gou/pg-gateway/plugins/mocker => ../plugins/mocker

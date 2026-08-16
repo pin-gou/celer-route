@@ -150,9 +150,9 @@
 		"loading": "加载中...",
 		"setupFirst": "要生成 API 密钥，您需要先设置管理员用户名和密码。",
 		"configureSecurity": "配置安全设置",
-		"usageInstructions": "生成后，您需要在所有对 Bifrost 管理 API 和 UI 的 API 调用中使用此 API 密钥。",
+		"usageInstructions": "生成后，您需要在所有对 pg-gateway 管理 API 和 UI 的 API 调用中使用此 API 密钥。",
 		"authDisabledForInference": "推理 API 调用的身份验证当前已禁用。您可以在没有身份验证的情况下进行推理请求。仪表板和管理 API 调用仍需使用您的管理员凭据以标准 <0>username:password</0> 格式进行 base64 编码的 Basic 身份验证。",
-		"authEnabledForInference": "在对 Bifrost 进行 API 调用时，使用您的管理员凭据进行 Basic 身份验证。以标准 <0>username:password</0> 格式对您的凭据进行 base64 编码。",
+		"authEnabledForInference": "在对 pg-gateway 进行 API 调用时，使用您的管理员凭据进行 Basic 身份验证。以标准 <0>username:password</0> 格式对您的凭据进行 base64 编码。",
 		"example": "示例："
 	},
 	"caching": {
@@ -240,7 +240,7 @@
 		"connectionPool": "连接池",
 		"noConfig": "未配置客户端设置",
 		"dropExcessRequests": "丢弃超额请求",
-		"dropExcessRequestsDesc": "启用后，Bifrost 将丢弃超过池容量的请求。",
+		"dropExcessRequestsDesc": "启用后，pg-gateway 将丢弃超过池容量的请求。",
 		"droppedRequests": "自上次重启以来已丢弃 <1>{{count}} 个请求</1>。",
 		"disableDbPings": "健康检查中禁用数据库 Ping",
 		"disableDbPingsDesc": "启用后，/health 端点将跳过数据库连接检查并立即返回 OK。",
@@ -398,7 +398,7 @@
 		"loggingHeadersPlaceholder": "X-Tenant-ID, X-Request-Source, x-custom-*",
 		"saving": "保存中...",
 		"saveChanges": "保存更改",
-		"restartWarning": "需要重启 Bifrost 才能使更改生效。"
+		"restartWarning": "需要重启 pg-gateway 才能使更改生效。"
 	},
 	"mcpGateway": {
 		"title": "MCP 网关",
@@ -452,7 +452,7 @@
 		"pageDescription": "配置安全和访问控制设置。",
 		"passwordProtect": "仪表盘密码保护",
 		"beta": "测试版",
-		"passwordProtectDesc": "设置身份验证凭据以保护您的 Bifrost 仪表盘。配置后，使用生成的令牌进行所有管理 API 调用。",
+		"passwordProtectDesc": "设置身份验证凭据以保护您的 pg-gateway 仪表盘。配置后，使用生成的令牌进行所有管理 API 调用。",
 		"username": "用户名",
 		"usernamePlaceholder": "输入管理员用户名或 env.VAR_NAME",
 		"password": "密码",
@@ -468,7 +468,7 @@
 		"enforceVirtualKeysDesc": "要求所有推理请求使用虚拟密钥。详情请参阅文档。",
 		"documentation": "文档",
 		"allowDirectKeys": "允许直接使用 API 密钥",
-		"allowDirectKeysDesc": "启用后，调用方可以在 Authorization、x-api-key 或 x-goog-api-key 头部中直接传递提供商 API 密钥，同时附带 x-bf-direct-key: true。Bifrost 将直接使用该密钥，绕过已注册的密钥池。",
+		"allowDirectKeysDesc": "启用后，调用方可以在 Authorization、x-api-key 或 x-goog-api-key 头部中直接传递提供商 API 密钥，同时附带 x-bf-direct-key: true。pg-gateway 将直接使用该密钥，绕过已注册的密钥池。",
 		"allowedOrigins": "允许的来源",
 		"allowedOriginsDesc": "逗号分隔的 CORS 和 WebSocket 连接允许的来源列表。本地主机来源始终允许。每个来源必须是包含协议的完整 URL（例如 https://app.example.com、http://10.0.0.100:3000）。子域名支持通配符（例如 https://*.example.com），或使用 \"*\" 允许所有来源。",
 		"allowedOriginsPlaceholder": "https://app.example.com, https://*.example.com, *",
@@ -482,7 +482,7 @@
 		"whitelistedRoutesDesc": "逗号分隔的绕过认证中间件的路由列表。对这些路由的请求不需要认证。系统路由如 /health、/api/session/login 和 /api/session/is-auth-enabled 始终被列入白名单，不受此设置影响。",
 		"whitelistedRoutesPlaceholder": "/api/custom-webhook, /api/public-endpoint",
 		"invalidOrigins": "无效的来源：{origins}。来源必须是有效的 URL，如 https://example.com，通配符模式如 https://*.example.com，或 \"*\" 以允许所有来源",
-		"restartWarning": "需要重启 Bifrost 才能使更改生效。",
+		"restartWarning": "需要重启 pg-gateway 才能使更改生效。",
 		"close": "关闭",
 		"viewDocs": "查看文档",
 		"toast": {
@@ -553,7 +553,7 @@
 		"inferenceDesc": "使用代理向模型提供商发送 LLM 推理请求。",
 		"api": "API",
 		"apiDesc": "使用代理进行外部 API 调用和 Webhook。",
-		"scimEnterprise": "SCIM 代理支持在 Bifrost Enterprise 中可用。",
+		"scimEnterprise": "SCIM 代理支持在 pg-gateway Enterprise 中可用。",
 		"noPermission": "您没有权限更新设置",
 		"enterprise": "企业版"
 	},
@@ -619,8 +619,8 @@
 		"loadFailed": "加载功能开关失败"
 	},
 	"restart": {
-		"description": "这些设置需要重启 Bifrost 服务才能生效。当前连接将继续使用现有设置直到重启。",
-		"warning": "需要重启 Bifrost 才能使更改生效。"
+		"description": "这些设置需要重启 pg-gateway 服务才能生效。当前连接将继续使用现有设置直到重启。",
+		"warning": "需要重启 pg-gateway 才能使更改生效。"
 	},
 	"toast": {
 		"settingsSaved": "设置保存成功",

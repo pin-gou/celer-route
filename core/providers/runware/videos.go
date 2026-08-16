@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ToRunwareVideoGenerationRequest converts a Bifrost video generation request to a Runware

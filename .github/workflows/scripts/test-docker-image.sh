@@ -107,7 +107,7 @@ echo ""
 echo "=== Generating config.json ==="
 cat > "$CONFIG_FILE" << 'CONFIGEOF'
 {
-  "$schema": "https://www.getbifrost.ai/schema",
+  "$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "providers": {
     "openai": {
       "keys": [{ "name": "OpenAI API Key", "value": "env.OPENAI_API_KEY", "weight": 1, "use_for_batch_api": true }],

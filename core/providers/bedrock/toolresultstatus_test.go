@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestToolResultStatusFromIsError verifies that a tool message carrying

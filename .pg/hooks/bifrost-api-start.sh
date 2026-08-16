@@ -13,14 +13,14 @@ fi
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 PROJECT_ROOT="$(cd "$HOOK_DIR/../.." && pwd)"
-BIFROST_BIN="${BIFROST_BIN:-$PROJECT_ROOT/tmp/bifrost-http}"
+BIFROST_BIN="${BIFROST_BIN:-$PROJECT_ROOT/tmp/pg-gateway-http}"
 DATA_DIR="$HOOK_DIR/local/data"
 PORT="${BIFROST_START_PORT:-${PG_INSTANCE_PORT:-9080}}"
 HOST="${PG_INSTANCE_HOST:-localhost}"
 
 # 确保 UI 嵌入资源存在 (go:embed all:ui 要求目录含可嵌入文件)
 ensure_ui_embed() {
-    local ui_embed_dir="$PROJECT_ROOT/transports/bifrost-http/ui"
+    local ui_embed_dir="$PROJECT_ROOT/transports/pg-gateway-http/ui"
     local ui_embed_parent="$(dirname "$ui_embed_dir")"
     local ui_out_dir="$PROJECT_ROOT/ui/out"
 
@@ -55,20 +55,20 @@ ensure_ui_embed || {
 }
 
 # 重新构建
-echo "重新构建 bifrost-http..."
+echo "重新构建 pg-gateway-http..."
 if [[ ! -f "$PROJECT_ROOT/go.work" ]]; then
     (cd "$PROJECT_ROOT" && make setup-workspace >/dev/null 2>&1) || true
 fi
-(cd "$PROJECT_ROOT/transports/bifrost-http" && go build -tags dev -ldflags="-w -s" -o "$BIFROST_BIN" .) || {
+(cd "$PROJECT_ROOT/transports/pg-gateway-http" && go build -tags dev -ldflags="-w -s" -o "$BIFROST_BIN" .) || {
     pg_fail --category=build_failure --code=PG-E-0800 \
-        --message="bifrost-http 构建失败" \
+        --message="pg-gateway-http 构建失败" \
         --hint="Run 'make setup-workspace && make build LOCAL=1' in project root" \
         --agent-recoverable=true
 }
 
 if [[ ! -d "$DATA_DIR" ]]; then
     pg_fail --category=prereq_missing --code=PG-E-0900 \
-        --message="bifrost 数据目录不存在 ($DATA_DIR)" \
+        --message="pg-gateway 数据目录不存在 ($DATA_DIR)" \
         --hint="先运行 prepare_env 初始化数据" \
         --agent-recoverable=true
 fi

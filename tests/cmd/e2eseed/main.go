@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/maximhq/bifrost/tests/cmd/seed"
+	"github.com/pin-gou/pg-gateway/tests/cmd/seed"
 )
 
 // main runs the OSS API e2e seed command.

@@ -159,7 +159,7 @@ export const batchS3ConfigSchema = z.object({
 	buckets: z.array(s3BucketConfigSchema).optional(),
 });
 
-// Interface VPC endpoint hosts, one per AWS endpoint service Bifrost dials for Bedrock.
+// Interface VPC endpoint hosts, one per AWS endpoint service pg-gateway dials for Bedrock.
 export const bedrockEndpointsSchema = z.object({
 	runtime: secretVarSchema.optional(),
 	control_plane: secretVarSchema.optional(),
@@ -847,7 +847,7 @@ export const coreConfigSchema = z.object({
 	mcp_enable_temp_token_auth: z.boolean().default(false),
 });
 
-// Bifrost config schema
+// pg-gateway config schema
 export const bifrostConfigSchema = z.object({
 	client_config: coreConfigSchema,
 	is_db_connected: z.boolean(),

@@ -68,14 +68,11 @@ define EXPOSE_ENV
 	fi
 endef
 
-.PHONY: all help dev dev-pulse build-ui build build-cli run run-cli install-air install-pulse clean test test-cli install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner helm-index install-microsocks socks5-proxy install-tinyproxy http-proxy
+.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy
 
 all: help
 
-# Include deployment recipes
-include recipes/fly.mk
-include recipes/ecs.mk
-include recipes/local-k8s.mk
+
 
 # Default target
 help: ## Show this help message
@@ -215,10 +212,10 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)  3. Debugger (delve) listening on port 2345$(NC)"; \
 	fi; \
-	if [ ! -d "transports/bifrost-http/ui" ]; then \
-		$(ECHO) "$(YELLOW)Creating transports/bifrost-http/ui directory...$(NC)"; \
-		mkdir -p transports/bifrost-http/ui; \
-		touch transports/bifrost-http/ui/.tmp; \
+	if [ ! -d "transports/pg-gateway-http/ui" ]; then \
+		$(ECHO) "$(YELLOW)Creating transports/pg-gateway-http/ui directory...$(NC)"; \
+		mkdir -p transports/pg-gateway-http/ui; \
+		touch transports/pg-gateway-http/ui/.tmp; \
 	fi; \
 	$(ECHO) ""; \
 	$(ECHO) "$(YELLOW)Starting UI development server...$(NC)"; \
@@ -236,7 +233,7 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)Starting with air + delve debugger on port 2345...$(NC)"; \
 		$(ECHO) "$(YELLOW)Attach your debugger to localhost:2345$(NC)"; \
-		(cd transports/bifrost-http && BIFROST_UI_DEV=true air -c .air.debug.toml -- \
+		(cd transports/pg-gateway-http && BIFROST_UI_DEV=true air -c .air.debug.toml -- \
 			-host "$(HOST)" \
 			-port "$(PORT)" \
 			-log-style "$(LOG_STYLE)" \
@@ -244,7 +241,7 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 			$(if $(PROMETHEUS_LABELS),-prometheus-labels "$(PROMETHEUS_LABELS)") \
 			$(if $(APP_DIR),-app-dir "$(abspath $(APP_DIR))")) & \
 	else \
-		(cd transports/bifrost-http && BIFROST_UI_DEV=true air -c .air.toml -- \
+		(cd transports/pg-gateway-http && BIFROST_UI_DEV=true air -c .air.toml -- \
 			-host "$(HOST)" \
 			-port "$(PORT)" \
 			-log-style "$(LOG_STYLE)" \
@@ -301,10 +298,10 @@ dev-pulse: install-ui install-pulse setup-workspace $(if $(DEBUG),install-delve)
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)  3. Debugger (delve) listening on port 2345$(NC)"; \
 	fi; \
-	if [ ! -d "transports/bifrost-http/ui" ]; then \
-		$(ECHO) "$(YELLOW)Creating transports/bifrost-http/ui directory...$(NC)"; \
-		mkdir -p transports/bifrost-http/ui; \
-		touch transports/bifrost-http/ui/.tmp; \
+	if [ ! -d "transports/pg-gateway-http/ui" ]; then \
+		$(ECHO) "$(YELLOW)Creating transports/pg-gateway-http/ui directory...$(NC)"; \
+		mkdir -p transports/pg-gateway-http/ui; \
+		touch transports/pg-gateway-http/ui/.tmp; \
 	fi; \
 	$(ECHO) ""; \
 	$(ECHO) "$(YELLOW)Starting UI development server...$(NC)"; \
@@ -340,14 +337,14 @@ build-ui: install-ui ## Build ui
 	@rm -rf ui/.next
 	@$(USE_NODE); cd ui && npm run build && npm run copy-build
 
-build: build-ui ## Build bifrost-http binary
+build: build-ui ## Build pg-gateway-http binary
 	@if [ -n "$(LOCAL)" ]; then \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════════════╗$(NC)"; \
-		$(ECHO) "$(GREEN)║  Building bifrost-http with local go.work...  ║$(NC)"; \
+		$(ECHO) "$(GREEN)║  Building pg-gateway-http with local go.work...  ║$(NC)"; \
 		$(ECHO) "$(GREEN)╚═══════════════════════════════════════════════╝$(NC)"; \
 	else \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════╗$(NC)"; \
-		$(ECHO) "$(GREEN)║  Building bifrost-http...             ║$(NC)"; \
+		$(ECHO) "$(GREEN)║  Building pg-gateway-http...             ║$(NC)"; \
 		$(ECHO) "$(GREEN)╚═══════════════════════════════════════╝$(NC)"; \
 	fi
 	@if [ -n "$(DYNAMIC)" ]; then \
@@ -372,41 +369,37 @@ build: build-ui ## Build bifrost-http binary
 	if [ "$$TARGET_OS" = "linux" ] && [ "$$HOST_OS" = "linux" ]; then \
 		if [ -n "$(DYNAMIC)" ]; then \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with dynamic linking...$(NC)"; \
-			cd transports/bifrost-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 				-ldflags="-w -s -X main.Version=v$(VERSION)" \
 				-a -trimpath \
-				-o ../../tmp/bifrost-http \
+				-o ../../tmp/pg-gateway-http \
 				.; \
 		else \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with static linking...$(NC)"; \
-			cd transports/bifrost-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 				-ldflags="-w -s -extldflags "-static" -X main.Version=v$(VERSION)" \
 				-a -trimpath \
 				-tags "sqlite_static" \
-				-o ../../tmp/bifrost-http \
+				-o ../../tmp/pg-gateway-http \
 				.; \
 		fi; \
-		$(ECHO) "$(GREEN)Built: tmp/bifrost-http (version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION))$(NC)"; \
 	elif [ "$$TARGET_OS" = "$$HOST_OS" ] && [ "$$TARGET_ARCH" = "$$HOST_ARCH" ]; then \
 		$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH (native build with CGO)...$(NC)"; \
-		cd transports/bifrost-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+		cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 			-ldflags="-w -s -X main.Version=v$(VERSION)" \
 			-a -trimpath \
 			-tags "sqlite_static" \
-			-o ../../tmp/bifrost-http \
+			-o ../../tmp/pg-gateway-http \
 			.; \
-		$(ECHO) "$(GREEN)Built: tmp/bifrost-http (version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION))$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Cross-compilation detected: $$HOST_OS/$$HOST_ARCH -> $$TARGET_OS/$$TARGET_ARCH$(NC)"; \
 		$(ECHO) "$(CYAN)Using Docker for cross-compilation...$(NC)"; \
 		$(MAKE) _build-with-docker TARGET_OS=$$TARGET_OS TARGET_ARCH=$$TARGET_ARCH $(if $(DYNAMIC),DYNAMIC=$(DYNAMIC)); \
 	fi
 
-build-cli: ## Build bifrost CLI binary
-	@$(ECHO) "$(GREEN)Building bifrost CLI...$(NC)"
-	@mkdir -p ./tmp
-	@cd cli && $(if $(LOCAL),,GOWORK=off) go build -ldflags "-X main.version=v0.1.1-dev" -o ../tmp/bifrost .
-	@$(ECHO) "$(GREEN)Built: tmp/bifrost$(NC)"
+
 
 _build-with-docker: # Internal target for Docker-based cross-compilation
 	@$(ECHO) "$(CYAN)Using Docker for cross-compilation...$(NC)"; \
@@ -416,7 +409,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 			docker run --rm \
 				--platform linux/$(TARGET_ARCH) \
 				-v "$(shell pwd):/workspace" \
-				-w /workspace/transports/bifrost-http \
+				-w /workspace/transports/pg-gateway-http \
 				-e CGO_ENABLED=1 \
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
@@ -426,14 +419,14 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 				go build \
 					-ldflags='-w -s -X main.Version=v$(VERSION)' \
 					-a -trimpath \
-					-o ../../tmp/bifrost-http \
+					-o ../../tmp/pg-gateway-http \
 					."; \
 		else \
 			$(ECHO) "$(CYAN)Building for $(TARGET_OS)/$(TARGET_ARCH) in Docker container...$(NC)"; \
 			docker run --rm \
 				--platform linux/$(TARGET_ARCH) \
 				-v "$(shell pwd):/workspace" \
-				-w /workspace/transports/bifrost-http \
+				-w /workspace/transports/pg-gateway-http \
 				-e CGO_ENABLED=1 \
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
@@ -444,10 +437,10 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 					-ldflags='-w -s -extldflags "-static" -X main.Version=v$(VERSION)' \
 					-a -trimpath \
 					-tags sqlite_static \
-					-o ../../tmp/bifrost-http \
+					-o ../../tmp/pg-gateway-http \
 					."; \
 		fi; \
-		$(ECHO) "$(GREEN)Built: tmp/bifrost-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION))$(NC)"; \
 	else \
 		$(ECHO) "$(RED)Error: Docker cross-compilation only supports Linux targets$(NC)"; \
 		$(ECHO) "$(YELLOW)For $(TARGET_OS), please build on a native $(TARGET_OS) machine$(NC)"; \
@@ -480,9 +473,9 @@ docs: ## Prepare local docs (bundles OpenAPI spec then starts Mintlify dev serve
 	@$(ECHO) "$(GREEN)Preparing local docs...$(NC)"
 	@cd docs && npx --yes mintlify@latest dev
 
-run: build ## Build and run bifrost-http (no hot reload)
-	@$(ECHO) "$(GREEN)Running bifrost-http...$(NC)"
-	@./tmp/bifrost-http \
+run: build ## Build and run pg-gateway-http (no hot reload)
+	@$(ECHO) "$(GREEN)Running pg-gateway-http...$(NC)"
+	@./tmp/pg-gateway-http \
 		-host "$(HOST)" \
 		-port "$(PORT)" \
 		-log-style "$(LOG_STYLE)" \
@@ -490,15 +483,13 @@ run: build ## Build and run bifrost-http (no hot reload)
 		$(if $(PROMETHEUS_LABELS),-prometheus-labels "$(PROMETHEUS_LABELS)") \
 		$(if $(APP_DIR),-app-dir "$(abspath $(APP_DIR))")
 
-run-cli: build-cli ## Run bifrost CLI (Usage: make run-cli [ARGS="--config ~/.bifrost/config.json"])
-	@$(ECHO) "$(GREEN)Running bifrost CLI...$(NC)"
-	@./tmp/bifrost $(ARGS)
+
 
 clean: ## Clean build artifacts and temporary files
 	@$(ECHO) "$(YELLOW)Cleaning build artifacts...$(NC)"
 	@rm -rf tmp/
-	@rm -f transports/bifrost-http/build-errors.log
-	@rm -rf transports/bifrost-http/tmp/
+	@rm -f transports/pg-gateway-http/build-errors.log
+	@rm -rf transports/pg-gateway-http/tmp/
 	@rm -rf $(TEST_REPORTS_DIR)/
 	@$(ECHO) "$(GREEN)Clean complete$(NC)"
 
@@ -506,25 +497,6 @@ clean-test-reports: ## Clean test reports only
 	@$(ECHO) "$(YELLOW)Cleaning test reports...$(NC)"
 	@rm -rf $(TEST_REPORTS_DIR)/
 	@$(ECHO) "$(GREEN)Test reports cleaned$(NC)"
-
-helm-index: ## Repackage helm chart, regenerate index.yaml digest, then remove the .tgz
-	@if ! which helm > /dev/null 2>&1; then \
-		$(ECHO) "$(RED)Error: helm not installed$(NC)"; \
-		exit 1; \
-	fi
-	@CHART_VERSION=$$(grep '^version:' helm-charts/bifrost/Chart.yaml | awk '{print $$2}'); \
-	$(ECHO) "$(YELLOW)Packaging helm chart v$$CHART_VERSION...$(NC)"; \
-	cd helm-charts && \
-	helm package bifrost && \
-	$(ECHO) "$(YELLOW)Regenerating index.yaml digest...$(NC)" && \
-	if [ -f index.yaml ]; then \
-		helm repo index . --url https://github.com/maximhq/bifrost/releases/download/helm-chart-v$$CHART_VERSION --merge index.yaml; \
-	else \
-		helm repo index . --url https://github.com/maximhq/bifrost/releases/download/helm-chart-v$$CHART_VERSION; \
-	fi && \
-	$(ECHO) "$(YELLOW)Removing bifrost-$$CHART_VERSION.tgz...$(NC)" && \
-	rm -f bifrost-$$CHART_VERSION.tgz && \
-	$(ECHO) "$(GREEN)Helm index updated$(NC)"
 
 generate-html-reports: ## Convert existing XML reports to HTML
 	@if ! which junit-viewer > /dev/null 2>&1; then \
@@ -548,32 +520,32 @@ generate-html-reports: ## Convert existing XML reports to HTML
 	@$(ECHO) "$(CYAN)View reports:$(NC)"
 	@ls -1 $(TEST_REPORTS_DIR)/*.html 2>/dev/null | sed 's|$(TEST_REPORTS_DIR)/|  open $(TEST_REPORTS_DIR)/|' || true
 
-test: install-gotestsum ## Run tests for bifrost-http
-	@$(ECHO) "$(GREEN)Running bifrost-http tests...$(NC)"
+test: install-gotestsum ## Run tests for pg-gateway-http
+	@$(ECHO) "$(GREEN)Running pg-gateway-http tests...$(NC)"
 	@mkdir -p $(TEST_REPORTS_DIR)
-	@cd transports/bifrost-http && GOWORK=off gotestsum \
+	@cd transports/pg-gateway-http && GOWORK=off gotestsum \
 		--format=$(GOTESTSUM_FORMAT) \
-		--junitfile=../../$(TEST_REPORTS_DIR)/bifrost-http.xml \
+		--junitfile=../../$(TEST_REPORTS_DIR)/pg-gateway-http.xml \
 		-- -v ./...
 	@if [ -z "$$CI" ] && [ -z "$$GITHUB_ACTIONS" ] && [ -z "$$GITLAB_CI" ] && [ -z "$$CIRCLECI" ] && [ -z "$$JENKINS_HOME" ]; then \
 		if which junit-viewer > /dev/null 2>&1; then \
 			$(ECHO) "$(YELLOW)Generating HTML report...$(NC)"; \
-			if junit-viewer --results=$(TEST_REPORTS_DIR)/bifrost-http.xml --save=$(TEST_REPORTS_DIR)/bifrost-http.html 2>/dev/null; then \
+			if junit-viewer --results=$(TEST_REPORTS_DIR)/pg-gateway-http.xml --save=$(TEST_REPORTS_DIR)/pg-gateway-http.html 2>/dev/null; then \
 				$(ECHO) ""; \
-				$(ECHO) "$(CYAN)HTML report: $(TEST_REPORTS_DIR)/bifrost-http.html$(NC)"; \
-				$(ECHO) "$(CYAN)Open with: open $(TEST_REPORTS_DIR)/bifrost-http.html$(NC)"; \
+				$(ECHO) "$(CYAN)HTML report: $(TEST_REPORTS_DIR)/pg-gateway-http.html$(NC)"; \
+				$(ECHO) "$(CYAN)Open with: open $(TEST_REPORTS_DIR)/pg-gateway-http.html$(NC)"; \
 			else \
 				$(ECHO) "$(YELLOW)HTML generation failed. JUnit XML report available.$(NC)"; \
-				$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/bifrost-http.xml$(NC)"; \
+				$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
 			fi; \
 		else \
 			$(ECHO) ""; \
 			$(ECHO) "$(YELLOW)junit-viewer not installed. Install with: make install-junit-viewer$(NC)"; \
-			$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/bifrost-http.xml$(NC)"; \
+			$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
 		fi; \
 	else \
 		$(ECHO) ""; \
-		$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/bifrost-http.xml$(NC)"; \
+		$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
 	fi
 
 test-core: install-gotestsum $(if $(DEBUG),install-delve) ## Run core tests (Usage: make test-core PROVIDER=openai TESTCASE=TestName or PATTERN=substring, DEBUG=1 for debugger)
@@ -919,7 +891,7 @@ test-http-transport: install-gotestsum ## Run HTTP transport tests
 	@$(EXPOSE_ENV); \
 	$(ECHO) "$(GREEN)Running HTTP transport tests...$(NC)"; \
 	mkdir -p $(TEST_REPORTS_DIR); \
-	cd transports/bifrost-http && find . -name "*.go" -path "*/tests/*" -o -name "*_test.go" | head -1 > /dev/null && \
+	cd transports/pg-gateway-http && find . -name "*.go" -path "*/tests/*" -o -name "*_test.go" | head -1 > /dev/null && \
 		for dir in $$(find . -name "*_test.go" -exec dirname {} \; | sort -u); do \
 			pkg_name=$$(echo $$dir | sed 's|^\./||' | sed 's|/|-|g'); \
 			$(ECHO) "Testing $$dir..."; \
@@ -1234,7 +1206,7 @@ test-mcp: install-gotestsum setup-mcp-tests ## Run MCP tests (Usage: make test-m
 		exit 1; \
 	fi
 
-test-all: test-core test-framework test-plugins test-http-transport test test-cli ## Run all tests
+test-all: test-core test-framework test-plugins test-http-transport test ## Run all tests
 	@$(ECHO) ""
 	@$(ECHO) "$(GREEN)═══════════════════════════════════════════════════════════$(NC)"
 	@$(ECHO) "$(GREEN)              All Tests Complete - Summary                 $(NC)"
@@ -1366,7 +1338,7 @@ test-integrations-py: ## Run Python integration tests (Usage: make test-integrat
 		$(ECHO) "$(GREEN)✓ Bifrost is already running$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Bifrost not running, starting it...$(NC)"; \
-		./tmp/bifrost-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/python > /tmp/bifrost-test.log 2>&1 & \
+		./tmp/pg-gateway-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/python > /tmp/bifrost-test.log 2>&1 & \
 		BIFROST_PID=$$!; \
 		BIFROST_STARTED=1; \
 		$(ECHO) "$(YELLOW)Waiting for Bifrost to be ready...$(NC)"; \
@@ -1502,7 +1474,7 @@ test-integrations-ts: ## Run TypeScript integration tests (Usage: make test-inte
 		$(ECHO) "$(GREEN)✓ Bifrost is already running$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Bifrost not running, starting it...$(NC)"; \
-		./tmp/bifrost-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/typescript > /tmp/bifrost-test.log 2>&1 & \
+		./tmp/pg-gateway-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/typescript > /tmp/bifrost-test.log 2>&1 & \
 		BIFROST_PID=$$!; \
 		BIFROST_STARTED=1; \
 		$(ECHO) "$(YELLOW)Waiting for Bifrost to be ready...$(NC)"; \
@@ -1691,7 +1663,7 @@ setup-workspace: ## Set up Go workspace with all local modules for development
 	@$(ECHO) "$(YELLOW)Cleaning existing workspace...$(NC)"
 	@rm -f go.work go.work.sum || true
 	@$(ECHO) "$(YELLOW)Initializing new workspace...$(NC)"
-	@go work init ./cli ./core ./framework ./transports
+	@go work init ./core ./framework ./transports
 	@$(ECHO) "$(YELLOW)Adding plugin modules...$(NC)"
 	@for plugin_dir in ./plugins/*/; do \
 		if [ -d "$$plugin_dir" ] && [ -f "$$plugin_dir/go.mod" ]; then \
@@ -1729,12 +1701,8 @@ work-clean: ## Remove local go.work
 # Module parameter for mod-tidy (all/core/plugins/framework/transport/tests)
 MODULE ?= all
 
-mod-tidy: ## Run go mod tidy on modules (Usage: make mod-tidy [MODULE=all|cli|core|plugins|framework|transport|tests])
+mod-tidy: ## Run go mod tidy on modules (Usage: make mod-tidy [MODULE=all|core|plugins|framework|transport|tests])
 	@$(ECHO) "$(GREEN)Running go mod tidy...$(NC)"
-	@if [ "$(MODULE)" = "all" ] || [ "$(MODULE)" = "cli" ]; then \
-		$(ECHO) "$(CYAN)Tidying cli...$(NC)"; \
-		cd cli && $(if $(LOCAL),,GOWORK=off) go mod tidy && $(ECHO) "$(GREEN)  ✓ cli$(NC)"; \
-	fi
 	@if [ "$(MODULE)" = "all" ] || [ "$(MODULE)" = "core" ]; then \
 		$(ECHO) "$(CYAN)Tidying core...$(NC)"; \
 		cd core && go mod tidy && $(ECHO) "$(GREEN)  ✓ core$(NC)"; \
@@ -1768,13 +1736,7 @@ mod-tidy: ## Run go mod tidy on modules (Usage: make mod-tidy [MODULE=all|cli|co
 	@$(ECHO) ""
 	@$(ECHO) "$(GREEN)✓ go mod tidy complete$(NC)"
 
-test-cli: install-gotestsum ## Run CLI tests
-	@$(ECHO) "$(GREEN)Running CLI tests...$(NC)"
-	@mkdir -p $(TEST_REPORTS_DIR)
-	@cd cli && GOWORK=off gotestsum \
-		--format=$(GOTESTSUM_FORMAT) \
-		--junitfile=../$(TEST_REPORTS_DIR)/cli.xml \
-		-- ./...
+
 
 # The CLI harness always runs `go test -v`, because without it `go test` buffers
 # the whole package's stdout AND stderr and discards it when the package passes -

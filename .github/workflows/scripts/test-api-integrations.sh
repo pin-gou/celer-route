@@ -76,7 +76,7 @@ echo "🎨 Building UI..."
 
 echo "🔨 Building bifrost-http binary..."
 mkdir -p "$BIN_DIR"
-(cd "$REPO_ROOT/transports/bifrost-http" && go build -o "$BIFROST_BINARY" .)
+(cd "$REPO_ROOT/transports/pg-gateway-http" && go build -o "$BIFROST_BINARY" .)
 
 echo "🐳 Starting Docker services (PostgreSQL + dependencies)..."
 docker compose -f "$COMPOSE_FILE" up -d

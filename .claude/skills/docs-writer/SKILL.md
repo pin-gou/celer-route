@@ -61,7 +61,7 @@ If the feature name does not match any known mapping, search the codebase:
 ls ui/app/workspace/ | grep -i "<feature>"
 
 # Search handlers for related endpoints
-grep -rn "<feature>" transports/bifrost-http/handlers/ --include='*.go' -l
+grep -rn "<feature>" transports/pg-gateway-http/handlers/ --include='*.go' -l
 
 # Search config schema
 grep -i "<feature>" transports/config.schema.json | head -20
@@ -80,7 +80,7 @@ cat docs/<doc-path>
 Then identify what has changed by checking recent git history:
 ```bash
 # Find recent code changes related to the feature
-git log --oneline -20 -- 'ui/app/workspace/<feature>/' 'transports/bifrost-http/handlers/<handler>.go'
+git log --oneline -20 -- 'ui/app/workspace/<feature>/' 'transports/pg-gateway-http/handlers/<handler>.go'
 
 # See actual diffs
 git diff HEAD~10 -- 'ui/app/workspace/<feature>/'
@@ -137,20 +137,20 @@ grep -rn 'import.*from.*components' ui/app/workspace/<feature>/ --include='*.tsx
 
 ### 2b. Explore the Go Backend
 
-API handlers live in `transports/bifrost-http/handlers/`.
+API handlers live in `transports/pg-gateway-http/handlers/`.
 
 ```bash
 # Find the relevant handler file
-grep -rn '<feature>\|<Feature>' transports/bifrost-http/handlers/ --include='*.go' -l
+grep -rn '<feature>\|<Feature>' transports/pg-gateway-http/handlers/ --include='*.go' -l
 
 # Read route registrations
-grep -n '/api/' transports/bifrost-http/handlers/<handler>.go
+grep -n '/api/' transports/pg-gateway-http/handlers/<handler>.go
 
 # Read request/response types
-grep -n 'type.*Request\|type.*Response' transports/bifrost-http/handlers/<handler>.go
+grep -n 'type.*Request\|type.*Response' transports/pg-gateway-http/handlers/<handler>.go
 
 # Read the handler functions for create/update operations
-grep -n 'func.*create\|func.*update\|func.*delete\|func.*get' transports/bifrost-http/handlers/<handler>.go
+grep -n 'func.*create\|func.*update\|func.*delete\|func.*get' transports/pg-gateway-http/handlers/<handler>.go
 ```
 
 **Complete API route reference by handler:**
@@ -552,7 +552,7 @@ print(json.dumps(ref, indent=2))
 
 4. Cross-check field names against the Go handler request types:
 ```bash
-grep -A 30 'type Create.*Request\|type Update.*Request' transports/bifrost-http/handlers/<handler>.go
+grep -A 30 'type Create.*Request\|type Update.*Request' transports/pg-gateway-http/handlers/<handler>.go
 ```
 
 ### 6d. Mintlify Component Reference

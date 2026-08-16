@@ -21,7 +21,7 @@
 	},
 	"emptyState": {
 		"title": "Webhook 异步任务完成时通知您",
-		"description": "注册 Webhook 端点，当异步推理作业完成或失败时，Bifrost 会向您发送签名通知，因此您无需轮询结果。"
+		"description": "注册 Webhook 端点，当异步推理作业完成或失败时，pg-gateway 会向您发送签名通知，因此您无需轮询结果。"
 	},
 	"permissionDenied": "您没有访问 Webhooks 的权限",
 	"toast": {

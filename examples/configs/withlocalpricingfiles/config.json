@@ -1,5 +1,5 @@
 {
-  "$schema": "https://www.getbifrost.ai/schema",
+  "$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "version": 2,
   "config_store": {
     "enabled": true,

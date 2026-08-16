@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // chatCompletionBody is a minimal well-formed OpenAI chat completion response.

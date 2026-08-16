@@ -3,7 +3,7 @@ package semanticcache
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestCrossCacheTypeAccessibility tests that entries cached one way are accessible another way

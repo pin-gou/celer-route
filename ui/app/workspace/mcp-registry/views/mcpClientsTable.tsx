@@ -699,8 +699,8 @@ export default function MCPClientsTable({
 								</DialogTitle>
 								<DialogDescription className="text-xs leading-relaxed">
 									{exchangeVerifyClient?.state === "pending_verification"
-										? "Establish Bifrost's discovery credential using your identity."
-										: "Renew Bifrost's own discovery credential using your identity."}
+										? "Establish pg-gateway's discovery credential using your identity."
+										: "Renew pg-gateway's own discovery credential using your identity."}
 								</DialogDescription>
 							</div>
 						</div>
@@ -709,7 +709,7 @@ export default function MCPClientsTable({
 						<InfoBox icon={<KeyRound className="size-4" />}>
 							<p>
 								This exchanges your own signed-in identity to{" "}
-								{exchangeVerifyClient?.state === "pending_verification" ? "establish" : "renew"} Bifrost&apos;s discovery credential for{" "}
+								{exchangeVerifyClient?.state === "pending_verification" ? "establish" : "renew"} pg-gateway&apos;s discovery credential for{" "}
 								<strong>{exchangeVerifyClient?.config.name}</strong>.
 							</p>
 							{exchangeVerifyClient?.state === "pending_verification" ? (
@@ -829,8 +829,8 @@ export default function MCPClientsTable({
 											<>
 												<p>
 													The client's connection state (healthy, unstable, needs re-authorization, and so on). "Unstable" reflects
-													Bifrost's own connection checks to the server, not the results of tool calls made through it: it self-heals and
-													never blocks tool calls. For per-user clients (OAuth, headers, token exchange), this reflects Bifrost's own
+													pg-gateway's own connection checks to the server, not the results of tool calls made through it: it self-heals and
+													never blocks tool calls. For per-user clients (OAuth, headers, token exchange), this reflects pg-gateway's own
 													retained admin credential (used only to periodically refresh the tool list), not any individual user's own
 													session, which is unaffected either way.
 												</p>
@@ -922,7 +922,7 @@ export default function MCPClientsTable({
 												    the connection checker's periodic admin-discovery check for
 												    per-user auth types, so this is just the badge uniformly,
 												    same as shared clients. Column-header tooltip above explains
-												    that "unstable" reflects Bifrost's own connection checks, not
+												    that "unstable" reflects pg-gateway's own connection checks, not
 												    caller traffic. "degraded" additionally gets a drill-down —
 												    see StateBadge below. */}
 												<StateBadge state={c.state} nodeStates={c.node_states} />

@@ -1,6 +1,6 @@
 package framework
 
-import "github.com/maximhq/bifrost/framework/modelcatalog"
+import "github.com/pin-gou/pg-gateway/framework/modelcatalog"
 
 // FrameworkConfig represents the configuration for the framework.
 type FrameworkConfig struct {

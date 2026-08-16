@@ -3,7 +3,7 @@ package otel
 import (
 	"testing"
 
-	schemas "github.com/maximhq/bifrost/core/schemas"
+	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 func TestGetStringSliceAttr_AnyPreservesIndex(t *testing.T) {

@@ -3,7 +3,7 @@ package utils
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // makeKeys returns a slice of n dummy keys for use in pagination tests.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/lrucache"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/lrucache"
 )
 
 // defaultUserTokenCacheCapacity bounds the per-user token cache. Session-mode

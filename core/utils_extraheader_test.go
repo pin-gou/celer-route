@@ -3,7 +3,7 @@ package bifrost
 import (
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // TestExtraHeaderSpanAttribute pins what reaches the tracer. The virtual key is the sharp

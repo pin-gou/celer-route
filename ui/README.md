@@ -1,6 +1,6 @@
 # Bifrost UI
 
-A modern, production-ready web interface for the [Bifrost AI Gateway](https://github.com/maximhq/bifrost) - providing real-time monitoring, configuration management, and comprehensive observability for your AI infrastructure.
+A modern, production-ready web interface for the [Bifrost AI Gateway](https://github.com/pin-gou/pg-gateway) - providing real-time monitoring, configuration management, and comprehensive observability for your AI infrastructure.
 
 ## Overview
 
@@ -230,8 +230,8 @@ Get help with:
 
 ## Links
 
-- **Main Repository**: [github.com/maximhq/bifrost](https://github.com/maximhq/bifrost)
-- **HTTP Transport**: [../transports/bifrost-http](../transports/bifrost-http)
+- **Main Repository**: [github.com/pin-gou/pg-gateway](https://github.com/pin-gou/pg-gateway)
+- **HTTP Transport**: [../transports/pg-gateway-http](../transports/pg-gateway-http)
 - **Documentation**: [docs.getbifrost.ai](https://docs.getbifrost.ai)
 - **Website**: [getbifrost.ai](https://www.getbifrost.ai)
 

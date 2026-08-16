@@ -5611,7 +5611,7 @@ run_postgres_migration_tests() {
   local config_file="$TEMP_DIR/config.json"
   cat > "$config_file" << EOF
 {
-  "\$schema": "https://www.getbifrost.ai/schema",
+  "\$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "config_store": {
     "enabled": true,
     "type": "postgres",
@@ -5648,11 +5648,11 @@ EOF
   local current_binary="$TEMP_DIR/bifrost-http-current"
   cd "$REPO_ROOT"
   # Ensure the embedded ui directory exists (it's gitignored, so it won't be present in CI)
-  if [ ! -d "$REPO_ROOT/transports/bifrost-http/ui" ]; then
-    mkdir -p "$REPO_ROOT/transports/bifrost-http/ui"
-    echo "placeholder" > "$REPO_ROOT/transports/bifrost-http/ui/.gitkeep"
+  if [ ! -d "$REPO_ROOT/transports/pg-gateway-http/ui" ]; then
+    mkdir -p "$REPO_ROOT/transports/pg-gateway-http/ui"
+    echo "placeholder" > "$REPO_ROOT/transports/pg-gateway-http/ui/.gitkeep"
   fi
-  if ! go build -o "$current_binary" ./transports/bifrost-http; then
+  if ! go build -o "$current_binary" ./transports/pg-gateway-http; then
     log_error "Failed to build current version"
     return 1
   fi
@@ -5826,7 +5826,7 @@ run_sqlite_migration_tests() {
   local config_file="$TEMP_DIR/config.json"
   cat > "$config_file" << EOF
 {
-  "\$schema": "https://www.getbifrost.ai/schema",
+  "\$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "config_store": {
     "enabled": true,
     "type": "sqlite",
@@ -5853,11 +5853,11 @@ EOF
   local current_binary="$TEMP_DIR/bifrost-http-current"
   cd "$REPO_ROOT"
   # Ensure the embedded ui directory exists (it's gitignored, so it won't be present in CI)
-  if [ ! -d "$REPO_ROOT/transports/bifrost-http/ui" ]; then
-    mkdir -p "$REPO_ROOT/transports/bifrost-http/ui"
-    echo "placeholder" > "$REPO_ROOT/transports/bifrost-http/ui/.gitkeep"
+  if [ ! -d "$REPO_ROOT/transports/pg-gateway-http/ui" ]; then
+    mkdir -p "$REPO_ROOT/transports/pg-gateway-http/ui"
+    echo "placeholder" > "$REPO_ROOT/transports/pg-gateway-http/ui/.gitkeep"
   fi
-  if ! go build -o "$current_binary" ./transports/bifrost-http; then
+  if ! go build -o "$current_binary" ./transports/pg-gateway-http; then
     log_error "Failed to build current version"
     return 1
   fi

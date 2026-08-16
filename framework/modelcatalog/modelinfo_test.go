@@ -6,10 +6,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/framework/modelcatalog/datasheet"
-	"github.com/maximhq/bifrost/framework/modelcatalog/keyconfig"
-	"github.com/maximhq/bifrost/framework/modelcatalog/live"
+	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog/datasheet"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog/keyconfig"
+	"github.com/pin-gou/pg-gateway/framework/modelcatalog/live"
 )
 
 func modelInfoCatalog(t *testing.T) *ModelCatalog {

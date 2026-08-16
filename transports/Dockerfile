@@ -35,7 +35,7 @@
   # Copy source code and dependencies
   COPY transports/ ./
 
-  COPY --from=ui-builder /app/out ./bifrost-http/ui
+  COPY --from=ui-builder /app/out ./pg-gateway-http/ui
 
   # Build the binary with CGO enabled and static SQLite linking
   ENV GOWORK=off
@@ -45,7 +45,7 @@
     -a -trimpath \
     -tags "sqlite_static" \
     -o /app/main \
-    ./bifrost-http
+    ./pg-gateway-http
 
   # Verify build succeeded
   RUN test -f /app/main || (echo "Build failed" && exit 1)

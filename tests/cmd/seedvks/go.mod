@@ -1,16 +1,16 @@
-module github.com/maximhq/bifrost/tests/cmd/seedvks
+module github.com/pin-gou/pg-gateway/tests/cmd/seedvks
 
 go 1.26.5
 
 replace (
-	github.com/maximhq/bifrost/core => ../../../core
-	github.com/maximhq/bifrost/framework => ../../../framework
+	github.com/pin-gou/pg-gateway/core => ../../../core
+	github.com/pin-gou/pg-gateway/framework => ../../../framework
 )
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/maximhq/bifrost/core v1.7.7
-	github.com/maximhq/bifrost/framework v1.3.16
+	github.com/pin-gou/pg-gateway/core v1.7.7
+	github.com/pin-gou/pg-gateway/framework v1.3.16
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )

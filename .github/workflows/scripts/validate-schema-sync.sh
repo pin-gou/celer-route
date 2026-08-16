@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Validate that Go config types in transports/bifrost-http/lib/config.go
+# Validate that Go config types in transports/pg-gateway-http/lib/config.go
 # stay in sync (fields + enum values) with transports/config.schema.json.
 # Walks the type graph recursively via go/types rather than regex-parsing source.
 
@@ -58,6 +58,4 @@ echo "=================================================================="
 (cd "$TOOL_DIR" && GOWORK=off go build -o /tmp/schemasync .)
 /tmp/schemasync \
   --schema "$REPO_ROOT/transports/config.schema.json" \
-  --pkg-root "$REPO_ROOT" \
-  --helm-values "$REPO_ROOT/helm-charts/bifrost/values.schema.json" \
-  --helm-helpers "$REPO_ROOT/helm-charts/bifrost/templates/_helpers.tpl"
+  --pkg-root "$REPO_ROOT"
