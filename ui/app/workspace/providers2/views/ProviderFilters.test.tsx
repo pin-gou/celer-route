@@ -14,6 +14,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+		i18n: { language: "en", options: { ns: [] }, services: {} },
+	}),
+}));
+
 // The following import does not exist yet — this is TDD red phase.
 // Compilation will fail with "Cannot find module" error.
 import { ProviderFilters } from "./ProviderFilters";

@@ -14,6 +14,7 @@ import { ModelProvider } from "@/lib/types/config";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { AlertCircle, CheckCircle2, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AddNewKeySheet from "@/app/workspace/providers/dialogs/addNewKeySheet";
 import {
@@ -36,6 +37,7 @@ const PAGE_SIZE = 10;
 type HealthFilter = "all" | "active" | "error";
 
 export function KeysTab({ provider }: KeysTabProps) {
+	const { t } = useTranslation("providers");
 	const hasUpdateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const hasDeleteAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Delete);
 	const { data: keys = [], isLoading, refetch } = useGetProviderKeysQuery(provider.name);
@@ -114,9 +116,9 @@ export function KeysTab({ provider }: KeysTabProps) {
 		setTogglingId(keyId);
 		try {
 			await updateProviderKey({ provider: provider.name, keyId, key: { ...key, enabled } }).unwrap();
-			toast.success(`Key ${enabled ? "enabled" : "disabled"}`);
+			toast.success(enabled ? t("providers2.keysTab.toast.keyEnabled") : t("providers2.keysTab.toast.keyDisabled"));
 		} catch (err) {
-			toast.error("Failed to update key", { description: getErrorMessage(err) });
+			toast.error(t("providers2.keysTab.toast.failedToUpdateKey"), { description: getErrorMessage(err) });
 		} finally {
 			setTogglingId(null);
 		}
@@ -125,12 +127,12 @@ export function KeysTab({ provider }: KeysTabProps) {
 	const handleRefreshAll = async () => {
 		try {
 			await refreshProviderModels(provider.name).unwrap();
-			toast.success("Model refresh started");
+			toast.success(t("providers2.keysTab.toast.modelRefreshStarted"));
 		} catch (err: any) {
 			if (err?.status === 409) {
-				toast.info("Model refresh already running");
+				toast.info(t("providers2.keysTab.toast.modelRefreshRunning"));
 			} else {
-				toast.error("Failed to refresh models", { description: getErrorMessage(err) });
+				toast.error(t("providers2.keysTab.toast.failedToRefreshModels"), { description: getErrorMessage(err) });
 			}
 		}
 	};
@@ -142,12 +144,12 @@ export function KeysTab({ provider }: KeysTabProps) {
 			await refetch();
 			const key = keys.find((k) => k.id === keyId);
 			if (key?.status === "success" || !key?.status) {
-				toast.success("Key test passed");
+				toast.success(t("providers2.keysTab.toast.keyTestPassed"));
 			} else {
-				toast.error("Key test failed", { description: key?.description || "Unknown error" });
+				toast.error(t("providers2.keysTab.toast.keyTestFailed"), { description: key?.description || "Unknown error" });
 			}
 		} catch (err) {
-			toast.error("Key test failed", { description: getErrorMessage(err) });
+			toast.error(t("providers2.keysTab.toast.keyTestFailed"), { description: getErrorMessage(err) });
 		} finally {
 			setTestingKeyId(null);
 		}
@@ -167,7 +169,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 			}
 		}
 		await refetch();
-		toast.success(`Tested ${enabledKeys.length} keys: ${passed} passed, ${failed} failed`);
+		toast.success(t("providers2.keysTab.toast.keysTested", { count: enabledKeys.length, passed, failed }));
 		setTestingAll(false);
 	};
 
@@ -180,10 +182,10 @@ export function KeysTab({ provider }: KeysTabProps) {
 				key_ids: Array.from(selectedIds),
 				enabled,
 			}).unwrap();
-			toast.success(`Updated ${result.updated} keys`);
+			toast.success(t("providers2.keysTab.toast.keysUpdated", { count: result.updated }));
 			setSelectedIds(new Set());
 		} catch (err) {
-			toast.error("Failed to batch update keys", { description: getErrorMessage(err) });
+			toast.error(t("providers2.keysTab.toast.batchUpdateFailed"), { description: getErrorMessage(err) });
 		} finally {
 			setBatchUpdating(null);
 		}
@@ -201,7 +203,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 				// skip individual failures
 			}
 		}
-		toast.success(`Deleted ${count} keys`);
+		toast.success(t("providers2.keysTab.toast.keysDeleted", { count }));
 		setSelectedIds(new Set());
 		setBatchDeleting(false);
 	};
@@ -217,7 +219,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 			}
 		}
 		await refetch();
-		toast.success(`Retested ${selectedIds.size} keys`);
+		toast.success(t("providers2.keysTab.toast.keysRetested", { count: selectedIds.size }));
 		setSelectedIds(new Set());
 		setBatchRetesting(false);
 	};
@@ -226,18 +228,18 @@ export function KeysTab({ provider }: KeysTabProps) {
 		setDeleteConfirmKeyId(null);
 		try {
 			await deleteProviderKey({ provider: provider.name, keyId }).unwrap();
-			toast.success("Key deleted");
+			toast.success(t("providers2.keysTab.toast.keyDeleted"));
 		} catch (err) {
-			toast.error("Failed to delete key", { description: getErrorMessage(err) });
+			toast.error(t("providers2.keysTab.toast.failedToDeleteKey"), { description: getErrorMessage(err) });
 		}
 	};
 
 	const isBulkBusy = batchUpdating !== null || batchDeleting || batchRetesting;
 
 	const healthOptions = [
-		{ value: "all" as const, label: "All" },
-		{ value: "active" as const, label: "Active" },
-		{ value: "error" as const, label: "Error" },
+		{ value: "all" as const, label: t("providers2.keysTab.healthFilter.all") },
+		{ value: "active" as const, label: t("providers2.keysTab.healthFilter.active") },
+		{ value: "error" as const, label: t("providers2.keysTab.healthFilter.error") },
 	];
 
 	return (
@@ -255,7 +257,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								setSearch(e.target.value);
 								setPage(0);
 							}}
-							placeholder="Search keys..."
+							placeholder={t("providers2.keysTab.searchPlaceholder")}
 							className="border-input w-48 rounded-md border py-1.5 pl-7 pr-3 text-xs outline-none focus:ring-1 focus:ring-blue-500"
 						/>
 					</div>
@@ -282,7 +284,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 				<div className="flex items-center gap-2">
 					{selectedIds.size > 0 && (
 						<>
-							<span className="text-muted-foreground text-xs">{selectedIds.size} selected</span>
+							<span className="text-muted-foreground text-xs">{t("providers2.keysTab.bulk.selected", { count: selectedIds.size })}</span>
 							<Button
 								variant="outline"
 								size="sm"
@@ -290,7 +292,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								disabled={isBulkBusy || !hasUpdateAccess}
 								onClick={() => handleBatchToggle(true)}
 							>
-								Enable
+								{t("providers2.keysTab.bulk.enable")}
 							</Button>
 							<Button
 								variant="outline"
@@ -299,7 +301,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								disabled={isBulkBusy || !hasUpdateAccess}
 								onClick={() => handleBatchToggle(false)}
 							>
-								Disable
+								{t("providers2.keysTab.bulk.disable")}
 							</Button>
 							<Button
 								variant="outline"
@@ -308,7 +310,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								disabled={isBulkBusy || !hasUpdateAccess}
 								onClick={handleBatchRetest}
 							>
-								Retest
+								{t("providers2.keysTab.bulk.retest")}
 							</Button>
 							<Button
 								variant="outline"
@@ -317,7 +319,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								disabled={isBulkBusy || !hasDeleteAccess}
 								onClick={handleBatchDelete}
 							>
-								Delete
+								{t("providers2.keysTab.bulk.delete")}
 							</Button>
 						</>
 					)}
@@ -330,7 +332,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 							disabled={testingAll}
 						>
 							<RefreshCwIcon className={`h-3 w-3 ${testingAll ? "animate-spin" : ""}`} />
-							{testingAll ? "Testing..." : "Test All"}
+							{testingAll ? t("providers2.keysTab.testing") : t("providers2.keysTab.testAll")}
 						</Button>
 					)}
 					<Button
@@ -341,20 +343,20 @@ export function KeysTab({ provider }: KeysTabProps) {
 						disabled={isRefreshingAll}
 					>
 						<RefreshCwIcon className={`h-3 w-3 ${isRefreshingAll ? "animate-spin" : ""}`} />
-						{isRefreshingAll ? "Syncing..." : "Sync models"}
+						{isRefreshingAll ? t("providers2.keysTab.syncing") : t("providers2.keysTab.syncModels")}
 					</Button>
 					<Button size="sm" className="text-xs" onClick={() => setShowAddKeySheet(true)}>
 						<PlusIcon className="mr-1 h-3 w-3" />
-						Add key
+						{t("providers2.keysTab.addKey")}
 					</Button>
 				</div>
 			</div>
 
 			{/* Keys table */}
 			{isLoading ? (
-				<div className="text-muted-foreground flex h-24 items-center justify-center text-xs">Loading keys...</div>
+				<div className="text-muted-foreground flex h-24 items-center justify-center text-xs">{t("providers2.keysTab.loading")}</div>
 			) : keys.length === 0 ? (
-				<div className="text-muted-foreground flex h-24 items-center justify-center text-xs">No keys found.</div>
+				<div className="text-muted-foreground flex h-24 items-center justify-center text-xs">{t("providers2.keysTab.noKeys")}</div>
 			) : (
 				<>
 					<div className="overflow-x-auto">
@@ -372,11 +374,11 @@ export function KeysTab({ provider }: KeysTabProps) {
 											className="h-4 w-4 rounded border-gray-300"
 										/>
 									</th>
-									<th className="px-2 py-2 font-medium">Name</th>
-									<th className="w-20 px-2 py-2 font-medium">Weight</th>
-									<th className="w-24 px-2 py-2 font-medium">Status</th>
-									<th className="w-20 px-2 py-2 font-medium">Enabled</th>
-									<th className="w-28 px-2 py-2 font-medium">Test</th>
+									<th className="px-2 py-2 font-medium">{t("providers2.keysTab.table.name")}</th>
+									<th className="w-20 px-2 py-2 font-medium">{t("providers2.keysTab.table.weight")}</th>
+									<th className="w-24 px-2 py-2 font-medium">{t("providers2.keysTab.table.status")}</th>
+									<th className="w-20 px-2 py-2 font-medium">{t("providers2.keysTab.table.enabled")}</th>
+									<th className="w-28 px-2 py-2 font-medium">{t("providers2.keysTab.table.test")}</th>
 									<th className="w-20 px-2 py-2 font-medium"></th>
 								</tr>
 							</thead>
@@ -407,18 +409,18 @@ export function KeysTab({ provider }: KeysTabProps) {
 											<td className="px-2 py-2 font-mono">{key.weight}</td>
 											<td className="px-2 py-2">
 												{healthy ? (
-													<span className="text-green-600">Active</span>
+													<span className="text-green-600">{t("providers2.keysTab.status.active")}</span>
 												) : key.status === "list_models_failed" ? (
 													<Tooltip>
 														<TooltipTrigger asChild>
 															<span className="cursor-help text-red-600 underline decoration-dotted">
-																List models failed
+																{t("providers2.keysTab.status.listModelsFailed")}
 															</span>
 														</TooltipTrigger>
-														<TooltipContent className="max-w-xs">{key.description || "Model discovery failed"}</TooltipContent>
+														<TooltipContent className="max-w-xs">{key.description || t("providers2.keysTab.status.listModelsFailed")}</TooltipContent>
 													</Tooltip>
 												) : (
-													<span className="text-red-500">Error</span>
+													<span className="text-red-500">{t("providers2.keysTab.status.error")}</span>
 												)}
 											</td>
 											<td className="px-2 py-2">
@@ -440,7 +442,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 													onClick={() => handleTestKey(key.id)}
 												>
 													<RefreshCwIcon className={`mr-1 h-3 w-3 ${isTesting ? "animate-spin" : ""}`} />
-													{isTesting ? "Testing..." : "Test"}
+													{isTesting ? t("providers2.keysTab.testing") : t("providers2.keysTab.test")}
 												</Button>
 											</td>
 											<td className="px-2 py-2">
@@ -455,7 +457,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 																	<PencilIcon className="h-3.5 w-3.5" />
 																</button>
 															</TooltipTrigger>
-															<TooltipContent>Edit</TooltipContent>
+															<TooltipContent>{t("providers2.keysTab.tooltip.edit")}</TooltipContent>
 														</Tooltip>
 													)}
 													{hasDeleteAccess && (
@@ -468,7 +470,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 																	<TrashIcon className="h-3.5 w-3.5" />
 																</button>
 															</TooltipTrigger>
-															<TooltipContent>Delete</TooltipContent>
+															<TooltipContent>{t("providers2.keysTab.tooltip.delete")}</TooltipContent>
 														</Tooltip>
 													)}
 												</div>
@@ -492,7 +494,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 									onClick={() => setPage((p) => Math.max(0, p - 1))}
 									className="disabled:text-muted-foreground/30 rounded px-2 py-1 hover:bg-muted"
 								>
-									Prev
+									{t("providers2.keysTab.pagination.prev")}
 								</button>
 								<span className="min-w-[4rem] text-center">
 									{clampedPage + 1} / {totalPages}
@@ -502,7 +504,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 									onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
 									className="disabled:text-muted-foreground/30 rounded px-2 py-1 hover:bg-muted"
 								>
-									Next
+									{t("providers2.keysTab.pagination.next")}
 								</button>
 							</div>
 						</div>
@@ -533,18 +535,18 @@ export function KeysTab({ provider }: KeysTabProps) {
 				<AlertDialog open={!!deleteConfirmKeyId}>
 					<AlertDialogContent onClick={(e) => e.stopPropagation()}>
 						<AlertDialogHeader>
-							<AlertDialogTitle>Delete key</AlertDialogTitle>
+							<AlertDialogTitle>{t("providers2.keysTab.deleteConfirm.title")}</AlertDialogTitle>
 							<AlertDialogDescription>
-								Are you sure you want to delete this key? This action cannot be undone.
+								{t("providers2.keysTab.deleteConfirm.description")}
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter className="pt-4">
-							<AlertDialogCancel onClick={() => setDeleteConfirmKeyId(null)}>Cancel</AlertDialogCancel>
+							<AlertDialogCancel onClick={() => setDeleteConfirmKeyId(null)}>{t("providers2.keysTab.deleteConfirm.cancel")}</AlertDialogCancel>
 							<AlertDialogAction
 								className="bg-red-600 text-white hover:bg-red-700"
 								onClick={() => handleDeleteKey(deleteConfirmKeyId)}
 							>
-								Delete
+								{t("providers2.keysTab.deleteConfirm.confirm")}
 							</AlertDialogAction>
 						</AlertDialogFooter>
 					</AlertDialogContent>

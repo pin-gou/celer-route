@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -39,6 +40,7 @@ type StatusFilter = "all" | "active" | "deprecated";
 const DISPLAY_LIMIT = 500;
 
 export function ModelsTab({ provider }: ModelsTabProps) {
+	const { t } = useTranslation("providers");
 	const hasUpdateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const hasCreateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Create);
 	const [query, setQuery] = useState("");
@@ -89,13 +91,13 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 	const handleSync = async () => {
 		try {
 			await refreshModels(provider.name).unwrap();
-			toast.success(`Model refresh started for ${provider.name}`);
+			toast.success(t("providers2.modelsTab.toast.modelRefreshStarted", { provider: provider.name }));
 			refetch();
 		} catch (err: any) {
 			if (err?.status === 409) {
-				toast.info(`Model refresh already running for ${provider.name}`);
+				toast.info(t("providers2.modelsTab.toast.modelRefreshRunning", { provider: provider.name }));
 			} else {
-				toast.error(`Failed to refresh models for ${provider.name}`);
+				toast.error(t("providers2.modelsTab.toast.failedToRefreshModels", { provider: provider.name }));
 			}
 		}
 	};
@@ -110,7 +112,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 				...prev,
 				[name]: { state: "error", message: getErrorMessage(err) },
 			}));
-			toast.error(`Failed to test ${name}`, { description: getErrorMessage(err) });
+			toast.error(t("providers2.modelsTab.toast.testFailed", { model: name }), { description: getErrorMessage(err) });
 		}
 	};
 
@@ -127,9 +129,9 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 			syncStatus(targets.map((m) => m.name), results.results);
 			const passed = results.results.filter((r) => r.success).length;
 			const failed = results.results.length - passed;
-			toast.success(`Tested ${results.results.length} models: ${passed} passed, ${failed} failed`);
+			toast.success(t("providers2.modelsTab.toast.modelsTested", { count: results.results.length, passed, failed }));
 		} catch (err) {
-			toast.error("Failed to test models", { description: getErrorMessage(err) });
+			toast.error(t("providers2.modelsTab.toast.failedToTestModels"), { description: getErrorMessage(err) });
 		} finally {
 			setTestProgress(null);
 			setTestingAll(false);
@@ -137,9 +139,9 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 	};
 
 	const statusOptions: { value: StatusFilter; label: string }[] = [
-		{ value: "all", label: "All" },
-		{ value: "active", label: "Active" },
-		{ value: "deprecated", label: "Deprecated" },
+		{ value: "all", label: t("providers2.modelsTab.statusFilter.all") },
+		{ value: "active", label: t("providers2.modelsTab.statusFilter.active") },
+		{ value: "deprecated", label: t("providers2.modelsTab.statusFilter.deprecated") },
 	];
 
 	return (
@@ -155,7 +157,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 							type="text"
 							value={query}
 							onChange={(e) => setQuery(e.target.value)}
-							placeholder="Search models..."
+							placeholder={t("providers2.modelsTab.searchPlaceholder")}
 							className="border-input w-52 rounded-md border py-1.5 pl-7 pr-3 text-xs outline-none focus:ring-1 focus:ring-blue-500"
 						/>
 					</div>
@@ -187,7 +189,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 							className="gap-1 text-xs"
 						>
 							<RefreshCwIcon className={`h-3 w-3 ${testingAll ? "animate-spin" : ""}`} />
-							{testingAll ? "Testing..." : "Test All"}
+							{testingAll ? t("providers2.modelsTab.testing") : t("providers2.modelsTab.testAll")}
 						</Button>
 					)}
 					<Button
@@ -199,7 +201,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 						className="gap-1 text-xs"
 					>
 						<RefreshCwIcon className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
-						{isRefreshing ? "Syncing..." : "Sync"}
+						{isRefreshing ? t("providers2.modelsTab.syncing") : t("providers2.modelsTab.sync")}
 					</Button>
 					{hasCreateAccess && (
 						<Button
@@ -209,7 +211,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 							className="gap-1 text-xs"
 						>
 							<PlusIcon className="h-3 w-3" />
-							Add model
+							{t("providers2.modelsTab.addModel")}
 						</Button>
 					)}
 				</div>
@@ -219,7 +221,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 			{testProgress && (
 				<div className="border-b px-4 py-2">
 					<div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-						<span>Testing models...</span>
+						<span>{t("providers2.modelsTab.testProgress")}</span>
 						<span>
 							{testProgress.done} / {testProgress.total}
 						</span>
@@ -235,22 +237,22 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 
 			{isLoading ? (
 				<div className="text-muted-foreground flex h-20 items-center justify-center text-xs">
-					Loading models...
+					{t("providers2.modelsTab.loading")}
 				</div>
 			) : filteredModels.length === 0 ? (
 				<div className="text-muted-foreground flex h-20 items-center justify-center text-xs">
 					{query
-						? `No models matching "${query}".`
-						: `No models found for ${provider.name}. Click Sync or Add model to add one.`}
+						? t("providers2.modelsTab.noModelsMatch", { query })
+						: t("providers2.modelsTab.noModels", { provider: provider.name })}
 				</div>
 			) : (
 				<div className="overflow-x-auto">
 					<table className="w-full text-left text-xs">
 						<thead>
 							<tr className="text-muted-foreground border-b">
-								<th className="px-4 py-2 font-medium">Model Name</th>
-								<th className="w-28 px-2 py-2 font-medium">Status</th>
-								<th className="w-20 px-2 py-2 font-medium">Test</th>
+								<th className="px-4 py-2 font-medium">{t("providers2.modelsTab.table.modelName")}</th>
+								<th className="w-28 px-2 py-2 font-medium">{t("providers2.modelsTab.table.status")}</th>
+								<th className="w-20 px-2 py-2 font-medium">{t("providers2.modelsTab.table.test")}</th>
 								<th className="w-20 px-2 py-2 font-medium"></th>
 							</tr>
 						</thead>
@@ -272,15 +274,15 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 															<Copy className="h-3 w-3" />
 														</button>
 													</TooltipTrigger>
-													<TooltipContent>Copy provider-qualified model ID</TooltipContent>
+													<TooltipContent>{t("providers2.modelsTab.tooltip.copyModelId")}</TooltipContent>
 												</Tooltip>
 											</span>
 										</td>
 										<td className="px-2 py-2">
 											{model.is_deprecated ? (
-												<span className="text-red-500">Deprecated</span>
+												<span className="text-red-500">{t("providers2.modelsTab.status.deprecated")}</span>
 											) : (
-												<span className="text-green-600">Active</span>
+												<span className="text-green-600">{t("providers2.modelsTab.status.active")}</span>
 											)}
 											{status?.state === "ok" && (
 												<span className="text-green-600 ml-2 whitespace-nowrap">
@@ -293,7 +295,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 													<TooltipTrigger asChild>
 														<span className="text-red-500 ml-2 cursor-help whitespace-nowrap underline decoration-dotted">
 															<XCircle className="mr-0.5 inline h-3 w-3" />
-															Failed
+															{t("providers2.modelsTab.status.failed")}
 														</span>
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs break-words">{status.message}</TooltipContent>
@@ -309,7 +311,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 												onClick={() => handleTestModel(model.name)}
 											>
 												<RefreshCwIcon className={`h-3 w-3 ${isTesting ? "animate-spin" : ""}`} />
-												{isTesting ? "Testing..." : "Test"}
+												{isTesting ? t("providers2.modelsTab.testingModel") : t("providers2.modelsTab.test")}
 											</Button>
 										</td>
 										<td className="px-2 py-2">
@@ -324,7 +326,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 														<PencilIcon className="h-3.5 w-3.5" />
 													</button>
 												</TooltipTrigger>
-												<TooltipContent>Edit model attributes</TooltipContent>
+												<TooltipContent>{t("providers2.modelsTab.tooltip.editAttributes")}</TooltipContent>
 											</Tooltip>
 										</td>
 									</tr>
@@ -338,8 +340,8 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 			{/* Info footer */}
 			<div className="text-muted-foreground flex items-center justify-between border-t px-4 py-2 text-xs">
 				<span>
-					{filteredModels.length} of {total} model{total !== 1 ? "s" : ""}
-					{query.trim() ? ` matching "${query.trim()}"` : ""}
+					{t("providers2.modelsTab.footer", { count: filteredModels.length, total })}
+					{query.trim() ? t("providers2.modelsTab.footerMatching", { query: query.trim() }) : ""}
 				</span>
 			</div>
 

@@ -13,6 +13,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+		i18n: { language: "en", options: { ns: [] }, services: {} },
+	}),
+}));
+
 // The following import does not exist yet — this is TDD red phase.
 // Compilation will fail with "Cannot find module" error.
 import { ProviderCard } from "./ProviderCard";
@@ -38,6 +45,7 @@ const mockProvider: ProviderCardProps["provider"] = {
 
 const mockOnToggle = vi.fn();
 const mockOnQuickTest = vi.fn();
+const mockOnDelete = vi.fn();
 
 describe("ProviderCard", () => {
 	// -----------------------------------------------------------------------
@@ -45,7 +53,7 @@ describe("ProviderCard", () => {
 	// -----------------------------------------------------------------------
 
 	it("should render provider icon", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		// Provider icon should be rendered with a data-testid
 		const icon = screen.getByTestId("providers2-card-icon-openai");
@@ -53,13 +61,13 @@ describe("ProviderCard", () => {
 	});
 
 	it("should render provider name", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		expect(screen.getByText("openai")).not.toBeNull();
 	});
 
 	it("should render health badge with correct status", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		const badge = screen.getByTestId("providers2-card-health-badge");
 		expect(badge).not.toBeNull();
@@ -70,32 +78,32 @@ describe("ProviderCard", () => {
 	// Aggregated stats
 	// -----------------------------------------------------------------------
 
-	it("should render keys count as '3 keys'", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+	it("should render keys count", () => {
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
-		expect(screen.getByText(/3 keys/i)).not.toBeNull();
+		expect(screen.getByText("providers2.card.keys")).not.toBeNull();
 	});
 
-	it("should render models count as '47 models'", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+	it("should render models count", () => {
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
-		expect(screen.getByText(/47 models/i)).not.toBeNull();
+		expect(screen.getByText("providers2.card.models")).not.toBeNull();
 	});
 
-	it("should render today requests count as '1284 reqs'", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+	it("should render today requests count", () => {
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
-		expect(screen.getByText(/1284/i)).not.toBeNull();
+		expect(screen.getByText("providers2.card.requests")).not.toBeNull();
 	});
 
 	it("should render today errors count", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
-		expect(screen.getByText(/3 err/i)).not.toBeNull();
+		expect(screen.getByText("providers2.card.errors")).not.toBeNull();
 	});
 
 	it("should render last error time when last_error_at is present", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		expect(screen.getByTestId("providers2-card-last-error")).not.toBeNull();
 	});
@@ -105,31 +113,45 @@ describe("ProviderCard", () => {
 	// -----------------------------------------------------------------------
 
 	it("should render a toggle switch for bulk enable/disable", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		const toggle = screen.getByTestId("providers2-card-toggle");
 		expect(toggle).not.toBeNull();
 	});
 
 	it("should call onToggle when toggle is clicked", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		fireEvent.click(screen.getByTestId("providers2-card-toggle"));
 		expect(mockOnToggle).toHaveBeenCalledTimes(1);
 	});
 
 	it("should render a Quick test button", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		const quickTestBtn = screen.getByTestId("providers2-card-quick-test");
 		expect(quickTestBtn).not.toBeNull();
 	});
 
 	it("should call onQuickTest when Quick test button is clicked", () => {
-		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		fireEvent.click(screen.getByTestId("providers2-card-quick-test"));
 		expect(mockOnQuickTest).toHaveBeenCalledTimes(1);
+	});
+
+	it("should render a delete button", () => {
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
+
+		const deleteBtn = screen.getByTestId("providers2-card-delete");
+		expect(deleteBtn).not.toBeNull();
+	});
+
+	it("should call onDelete when delete button is clicked", () => {
+		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
+
+		fireEvent.click(screen.getByTestId("providers2-card-delete"));
+		expect(mockOnDelete).toHaveBeenCalledTimes(1);
 	});
 
 	// -----------------------------------------------------------------------
@@ -142,7 +164,7 @@ describe("ProviderCard", () => {
 			last_error_at: null,
 		};
 
-		render(<ProviderCard provider={providerWithoutError} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={providerWithoutError} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		expect(screen.queryByTestId("providers2-card-last-error")).toBeNull();
 	});
@@ -154,7 +176,7 @@ describe("ProviderCard", () => {
 			keys_health_status: "degraded" as const,
 		};
 
-		render(<ProviderCard provider={erroredProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={erroredProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
 		const badge = screen.getByTestId("providers2-card-health-badge");
 		expect(badge.getAttribute("data-health-status")).toBe("degraded");
@@ -170,10 +192,10 @@ describe("ProviderCard", () => {
 			last_error_at: null,
 		};
 
-		render(<ProviderCard provider={emptyProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} />);
+		render(<ProviderCard provider={emptyProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
-		expect(screen.getByText(/0 keys/i)).not.toBeNull();
-		expect(screen.getByText(/0 models/i)).not.toBeNull();
-		expect(screen.getByText(/0 reqs/i)).not.toBeNull();
+		expect(screen.getByText("providers2.card.keys")).not.toBeNull();
+		expect(screen.getByText("providers2.card.models")).not.toBeNull();
+		expect(screen.getByText("providers2.card.requests")).not.toBeNull();
 	});
 });

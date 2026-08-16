@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { getErrorMessage, setProviderFormDirtyState, useAppDispatch } from "@/lib/store";
@@ -14,9 +15,11 @@ import { buildProviderUpdatePayload } from "../views/utils";
 
 interface OpenAIConfigFormFragmentProps {
 	provider: ModelProvider;
+	onCancel?: () => void;
 }
 
-export function OpenAIConfigFormFragment({ provider }: OpenAIConfigFormFragmentProps) {
+export function OpenAIConfigFormFragment({ provider, onCancel }: OpenAIConfigFormFragmentProps) {
+	const { t } = useTranslation("providers");
 	const dispatch = useAppDispatch();
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
@@ -49,11 +52,11 @@ export function OpenAIConfigFormFragment({ provider }: OpenAIConfigFormFragmentP
 		)
 			.unwrap()
 			.then(() => {
-				toast.success("OpenAI configuration updated successfully");
+				toast.success(t("fragments.openaiConfig.toast.updated"));
 				form.reset(data);
 			})
 			.catch((err) => {
-				toast.error("Failed to update OpenAI configuration", {
+				toast.error(t("fragments.openaiConfig.toast.failedToUpdate"), {
 					description: getErrorMessage(err),
 				});
 			});
@@ -70,11 +73,9 @@ export function OpenAIConfigFormFragment({ provider }: OpenAIConfigFormFragmentP
 							<FormItem>
 								<div className="flex items-center justify-between space-x-2">
 									<div className="space-y-0.5">
-										<FormLabel>Disable Store</FormLabel>
+										<FormLabel>{t("fragments.openaiConfig.disableStore")}</FormLabel>
 										<p className="text-muted-foreground text-xs">
-											With the Responses API, store defaults to true, and when it is on, the generated response is stored for later
-											retrieval via API. OpenAI exposes endpoints to retrieve and delete stored responses, so your response IDs become
-											durable server-side objects instead of one-shot IDs.
+											{t("fragments.openaiConfig.disableStoreDescription")}
 										</p>
 									</div>
 									<FormControl>
@@ -96,13 +97,18 @@ export function OpenAIConfigFormFragment({ provider }: OpenAIConfigFormFragmentP
 					/>
 				</div>
 
-				<div className="flex justify-end space-x-2 pb-6">
+				<div className="flex items-center justify-end gap-2 pb-6">
+					{onCancel && (
+						<Button type="button" variant="outline" size="sm" onClick={onCancel}>
+{t("fragments.openaiConfig.cancel")}
+						</Button>
+					)}
 					<Button
 						type="submit"
 						disabled={!form.formState.isDirty || !form.formState.isValid || !hasUpdateProviderAccess || isUpdatingProvider}
 						isLoading={isUpdatingProvider}
 					>
-						Save OpenAI Configuration
+						{t("fragments.openaiConfig.save")}
 					</Button>
 				</div>
 			</form>

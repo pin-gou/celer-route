@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export interface FilterState {
 	search: string;
@@ -12,13 +13,15 @@ export interface ProviderFiltersProps {
 	onChange: (filters: FilterState) => void;
 }
 
-const healthChips = [
-	{ key: "all" as const, label: "All", testId: "providers2-filter-chip-all" },
-	{ key: "active" as const, label: "Active", testId: "providers2-filter-chip-active" },
-	{ key: "error" as const, label: "Error", testId: "providers2-filter-chip-error" },
-];
-
 export function ProviderFilters({ filters, onChange }: ProviderFiltersProps) {
+	const { t } = useTranslation("providers");
+
+	const healthChips = [
+		{ key: "all" as const, label: t("providers2.filter.all"), testId: "providers2-filter-chip-all" },
+		{ key: "active" as const, label: t("providers2.filter.active"), testId: "providers2-filter-chip-active" },
+		{ key: "error" as const, label: t("providers2.filter.error"), testId: "providers2-filter-chip-error" },
+	];
+
 	return (
 		<div className="flex items-center gap-4">
 			{/* Search input */}
@@ -26,8 +29,8 @@ export function ProviderFilters({ filters, onChange }: ProviderFiltersProps) {
 				<Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
 				<Input
 					data-testid="providers2-filter-search"
-					aria-label="Search providers"
-					placeholder="Search providers..."
+					aria-label={t("providers2.filter.searchPlaceholder")}
+					placeholder={t("providers2.filter.searchPlaceholder")}
 					value={filters.search}
 					onChange={(e) => onChange({ ...filters, search: e.target.value })}
 					className="h-9 pl-9 text-sm"
@@ -41,7 +44,7 @@ export function ProviderFilters({ filters, onChange }: ProviderFiltersProps) {
 						key={chip.key}
 						data-testid={chip.testId}
 						data-active={filters.health === chip.key ? "true" : "false"}
-						aria-label={`Filter by ${chip.label} status`}
+						aria-label={`${t("providers2.filter.searchPlaceholder")} - ${chip.label}`}
 						onClick={() => onChange({ ...filters, health: chip.key })}
 						className={cn(
 							"rounded-md px-3 py-1.5 text-xs font-medium transition-colors",

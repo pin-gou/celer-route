@@ -1,12 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 interface TryLegacyViewButtonProps {
 	currentProvider?: string;
 }
 
 export default function TryLegacyViewButton({ currentProvider }: TryLegacyViewButtonProps) {
+	const { t } = useTranslation("providers");
 	const navigate = useNavigate();
 
 	const handleClick = () => {
@@ -19,7 +21,7 @@ export default function TryLegacyViewButton({ currentProvider }: TryLegacyViewBu
 
 	return (
 		<Button variant="outline" size="sm" data-testid="providers2-try-legacy-view" onClick={handleClick} className="gap-1 text-xs">
-			Try legacy view
+			{t("providers2.tryLegacyView")}
 			<ArrowUpRight className="h-3 w-3" />
 		</Button>
 	);

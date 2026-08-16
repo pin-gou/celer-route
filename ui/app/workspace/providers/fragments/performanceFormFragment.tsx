@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { DefaultPerformanceConfig } from "@/lib/constants/config";
@@ -15,10 +16,12 @@ import { buildProviderUpdatePayload } from "../views/utils";
 
 interface PerformanceFormFragmentProps {
 	provider: ModelProvider;
+	onCancel?: () => void;
 }
 
-export function PerformanceFormFragment({ provider }: PerformanceFormFragmentProps) {
+export function PerformanceFormFragment({ provider, onCancel }: PerformanceFormFragmentProps) {
 	const dispatch = useAppDispatch();
+	const { t } = useTranslation("providers");
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
 	const form = useForm<PerformanceFormSchema, any, PerformanceFormSchema>({
@@ -58,11 +61,11 @@ export function PerformanceFormFragment({ provider }: PerformanceFormFragmentPro
 		updateProvider(updatedProvider)
 			.unwrap()
 			.then(() => {
-				toast.success("Provider configuration updated successfully");
+				toast.success(t("fragments.performance.saveSuccess"));
 				form.reset(data);
 			})
 			.catch((err) => {
-				toast.error("Failed to update provider configuration", {
+				toast.error(t("fragments.performance.saveFailed"), {
 					description: getErrorMessage(err),
 				});
 			});
@@ -80,7 +83,7 @@ export function PerformanceFormFragment({ provider }: PerformanceFormFragmentPro
 								name="concurrency_and_buffer_size.concurrency"
 								render={({ field }) => (
 									<FormItem>
-										<FormLabel>Concurrency</FormLabel>
+										<FormLabel>{t("fragments.performance.concurrency")}</FormLabel>
 										<FormControl>
 											<Input
 												type="number"
@@ -113,7 +116,7 @@ export function PerformanceFormFragment({ provider }: PerformanceFormFragmentPro
 								name="concurrency_and_buffer_size.buffer_size"
 								render={({ field }) => (
 									<FormItem>
-										<FormLabel>Buffer Size</FormLabel>
+										<FormLabel>{t("fragments.performance.bufferSize")}</FormLabel>
 										<FormControl>
 											<Input
 												type="number"
@@ -144,13 +147,18 @@ export function PerformanceFormFragment({ provider }: PerformanceFormFragmentPro
 				</div>
 
 				{/* Form Actions */}
-				<div className="mb-6 flex justify-end space-x-2">
+				<div className="mb-6 flex items-center justify-end gap-2">
+					{onCancel && (
+						<Button type="button" variant="outline" size="sm" onClick={onCancel}>
+{t("fragments.performance.cancel")}
+						</Button>
+					)}
 					<Button
 						type="submit"
 						disabled={!form.formState.isDirty || !hasUpdateProviderAccess || isUpdatingProvider}
 						isLoading={isUpdatingProvider}
 					>
-						Save Performance Configuration
+						{t("fragments.performance.save")}
 					</Button>
 				</div>
 			</form>

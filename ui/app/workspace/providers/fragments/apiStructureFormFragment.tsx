@@ -12,6 +12,7 @@ import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 import { buildProviderUpdatePayload } from "../views/utils";
@@ -23,10 +24,12 @@ type FormCustomProviderConfig = z.infer<typeof formCustomProviderConfigSchema>;
 // Standalone usage (for provider configuration tabs)
 interface Props {
 	provider: ModelProvider;
+	onCancel?: () => void;
 }
 
 // Standalone component for provider configuration tabs
-export function ApiStructureFormFragment({ provider }: Props) {
+export function ApiStructureFormFragment({ provider, onCancel }: Props) {
+	const { t } = useTranslation("providers");
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const dispatch = useAppDispatch();
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
@@ -83,11 +86,11 @@ export function ApiStructureFormFragment({ provider }: Props) {
 		)
 			.unwrap()
 			.then(() => {
-				toast.success("Provider configuration updated successfully");
+				toast.success(t("fragments.apiStructure.toast.updated"));
 				form.reset(data);
 			})
 			.catch((err) => {
-				toast.error("Failed to update provider configuration", {
+				toast.error(t("fragments.apiStructure.toast.updateFailed"), {
 					description: getErrorMessage(err),
 				});
 			});
@@ -107,23 +110,23 @@ export function ApiStructureFormFragment({ provider }: Props) {
 						name="base_provider_type"
 						render={({ field }) => (
 							<FormItem>
-								<FormLabel>Base Provider Type</FormLabel>
+								<FormLabel>{t("fragments.apiStructure.baseProviderType")}</FormLabel>
 								<Select onValueChange={field.onChange} value={field.value}>
 									<FormControl>
 										<SelectTrigger disabled={true}>
-											<SelectValue placeholder="Select base provider" />
+											<SelectValue placeholder={t("fragments.apiStructure.selectBaseProvider")} />
 										</SelectTrigger>
 									</FormControl>
 									<SelectContent>
-										<SelectItem value="openai">OpenAI</SelectItem>
-										<SelectItem value="anthropic">Anthropic</SelectItem>
-										<SelectItem value="bedrock">AWS Bedrock</SelectItem>
-										<SelectItem value="cohere">Cohere</SelectItem>
-										<SelectItem value="gemini">Gemini</SelectItem>
-										<SelectItem value="replicate">Replicate</SelectItem>
+										<SelectItem value="openai">{t("fragments.apiStructure.providers.openai")}</SelectItem>
+										<SelectItem value="anthropic">{t("fragments.apiStructure.providers.anthropic")}</SelectItem>
+										<SelectItem value="bedrock">{t("fragments.apiStructure.providers.bedrock")}</SelectItem>
+										<SelectItem value="cohere">{t("fragments.apiStructure.providers.cohere")}</SelectItem>
+										<SelectItem value="gemini">{t("fragments.apiStructure.providers.gemini")}</SelectItem>
+										<SelectItem value="replicate">{t("fragments.apiStructure.providers.replicate")}</SelectItem>
 									</SelectContent>
 								</Select>
-								<FormDescription>The underlying provider this custom provider will use</FormDescription>
+								<FormDescription>{t("fragments.apiStructure.baseProviderDescription")}</FormDescription>
 								<FormMessage />
 							</FormItem>
 						)}
@@ -137,9 +140,9 @@ export function ApiStructureFormFragment({ provider }: Props) {
 									<div className="flex items-center justify-between space-x-2 rounded-lg border p-3">
 										<div className="space-y-0.5">
 											<label htmlFor="drop-excess-requests" className="text-sm font-medium">
-												Is Keyless?
+												{t("fragments.apiStructure.isKeyless")}
 											</label>
-											<p className="text-muted-foreground text-sm">Whether the custom provider requires a key</p>
+											<p className="text-muted-foreground text-sm">{t("fragments.apiStructure.isKeylessDescription")}</p>
 										</div>
 										<Switch
 											id="drop-excess-requests"
@@ -163,25 +166,30 @@ export function ApiStructureFormFragment({ provider }: Props) {
 				/>
 
 				{/* Form Actions */}
-				<div className="flex justify-end gap-2 py-2">
+				<div className="flex items-center justify-end gap-2 py-2">
+					{onCancel && (
+						<Button type="button" variant="outline" size="sm" onClick={onCancel}>
+							{t("fragments.apiStructure.cancel")}
+						</Button>
+					)}
 					<Button type="button" variant="outline" onClick={() => form.reset()} disabled={!hasUpdateProviderAccess}>
-						Reset
-					</Button>
-					<TooltipProvider>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button type="submit" disabled={!form.formState.isDirty || !hasUpdateProviderAccess} isLoading={isUpdatingProvider}>
-									Save API Structure Configuration
-								</Button>
-							</TooltipTrigger>
-							{!form.formState.isValid && (
-								<TooltipContent>
-									<p>{form.formState.errors.root?.message || "Please fix validation errors"}</p>
-								</TooltipContent>
-							)}
-						</Tooltip>
-					</TooltipProvider>
-				</div>
+							{t("fragments.apiStructure.reset")}
+						</Button>
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button type="submit" disabled={!form.formState.isDirty || !hasUpdateProviderAccess} isLoading={isUpdatingProvider}>
+										{t("fragments.apiStructure.save")}
+									</Button>
+								</TooltipTrigger>
+								{!form.formState.isValid && (
+									<TooltipContent>
+										<p>{form.formState.errors.root?.message || t("fragments.apiStructure.fixValidationErrors")}</p>
+									</TooltipContent>
+								)}
+							</Tooltip>
+						</TooltipProvider>
+					</div>
 			</form>
 		</Form>
 	);

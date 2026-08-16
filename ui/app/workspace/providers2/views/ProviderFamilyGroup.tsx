@@ -7,9 +7,10 @@ export interface ProviderFamilyGroupProps {
 	providers: ProviderCardProvider[];
 	onToggle: (providerName: string) => void;
 	onQuickTest: (providerName: string) => void;
+	onDelete: (providerName: string) => void;
 }
 
-export function ProviderFamilyGroup({ familyName, providers, onToggle, onQuickTest }: ProviderFamilyGroupProps) {
+export function ProviderFamilyGroup({ familyName, providers, onToggle, onQuickTest, onDelete }: ProviderFamilyGroupProps) {
 	const [isExpanded, setIsExpanded] = useState(true);
 
 	return (
@@ -31,6 +32,7 @@ export function ProviderFamilyGroup({ familyName, providers, onToggle, onQuickTe
 							provider={provider}
 							onToggle={() => onToggle(provider.name)}
 							onQuickTest={() => onQuickTest(provider.name)}
+							onDelete={() => onDelete(provider.name)}
 						/>
 					))}
 				</div>

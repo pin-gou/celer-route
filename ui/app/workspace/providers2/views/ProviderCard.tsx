@@ -5,7 +5,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
-import { PlayIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { PlayIcon, Trash2 } from "lucide-react";
 
 export interface ProviderCardProvider {
 	name: string;
@@ -26,10 +27,12 @@ export interface ProviderCardProps {
 	provider: ProviderCardProvider;
 	onToggle: () => void;
 	onQuickTest: () => void;
+	onDelete: () => void;
 }
 
-export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardProps) {
+export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: ProviderCardProps) {
 	const navigate = useNavigate();
+	const { t } = useTranslation("providers");
 	const isCustom = !!provider.custom_provider_config;
 	const healthStatus = provider.keys_health_status;
 
@@ -54,9 +57,9 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 		const now = new Date();
 		const diffMs = now.getTime() - date.getTime();
 		const diffHours = Math.floor(diffMs / 3600000);
-		if (diffHours < 1) return "just now";
-		if (diffHours < 24) return `${diffHours}h ago`;
-		return `${Math.floor(diffHours / 24)}d ago`;
+		if (diffHours < 1) return t("providers2.card.justNow");
+		if (diffHours < 24) return t("providers2.card.hoursAgo", { count: diffHours });
+		return t("providers2.card.daysAgo", { count: Math.floor(diffHours / 24) });
 	};
 
 	return (
@@ -84,7 +87,7 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 						<span className="text-sm font-medium">{provider.name}</span>
 						{isCustom && (
 							<Badge variant="secondary" className="text-muted-foreground px-1.5 py-0.5 text-[10px] font-bold">
-								CUSTOM
+								{t("providers2.card.custom")}
 							</Badge>
 						)}
 					</div>
@@ -99,10 +102,10 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 
 			{/* Stats row */}
 			<div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-				<span data-testid="providers2-card-keys-count">{provider.keys_count} keys</span>
-				<span data-testid="providers2-card-models-count">{provider.models_count} models</span>
-				<span data-testid="providers2-card-today-requests">{provider.today_requests} reqs</span>
-				<span data-testid="providers2-card-today-errors">{provider.today_errors} err</span>
+				<span data-testid="providers2-card-keys-count">{t("providers2.card.keys", { count: provider.keys_count })}</span>
+				<span data-testid="providers2-card-models-count">{t("providers2.card.models", { count: provider.models_count })}</span>
+				<span data-testid="providers2-card-today-requests">{t("providers2.card.requests", { count: provider.today_requests })}</span>
+				<span data-testid="providers2-card-today-errors">{t("providers2.card.errors", { count: provider.today_errors })}</span>
 			</div>
 
 			{/* Actions row */}
@@ -120,12 +123,29 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 							className="h-7 gap-1 text-xs"
 						>
 							<PlayIcon className="h-3 w-3" />
-							Test
+							{t("providers2.card.quickTest")}
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent>Quick test: POST /refresh-models</TooltipContent>
+					<TooltipContent>{t("providers2.card.quickTestTooltip")}</TooltipContent>
 				</Tooltip>
-				<div className="ml-auto">
+				<div className="ml-auto flex items-center gap-1">
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant="ghost"
+								size="sm"
+								data-testid="providers2-card-delete"
+								onClick={(e) => {
+									e.stopPropagation();
+									onDelete();
+								}}
+								className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500"
+							>
+								<Trash2 className="h-3.5 w-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>{t("providers2.card.deleteTooltip")}</TooltipContent>
+					</Tooltip>
 					<Switch
 						data-testid="providers2-card-toggle"
 						checked={provider.keys_enabled}
@@ -139,7 +159,7 @@ export function ProviderCard({ provider, onToggle, onQuickTest }: ProviderCardPr
 			{/* Last error row — below actions so cards are consistent height */}
 			{provider.last_error_at && (
 				<div className="text-xs text-red-500">
-					<span data-testid="providers2-card-last-error">last err: {formatLastError(provider.last_error_at)}</span>
+					<span data-testid="providers2-card-last-error">{t("providers2.card.lastError", { time: formatLastError(provider.last_error_at) })}</span>
 				</div>
 			)}
 		</div>

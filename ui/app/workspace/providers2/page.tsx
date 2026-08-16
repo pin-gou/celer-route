@@ -6,13 +6,14 @@ import {
 	useLazyGetProviderKeysQuery,
 	useRefreshProviderModelsMutation,
 } from "@/lib/store/apis/providersApi";
-import { ModelProviderName } from "@/lib/types/config";
+import { type ModelProvider, ModelProviderName } from "@/lib/types/config";
 import { useRbac, RbacOperation, RbacResource } from "@/lib/rbac";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AddCustomProviderSheet from "@/app/workspace/providers/dialogs/addNewCustomProviderSheet";
 import { AddProviderDropdown } from "@/app/workspace/providers/views/addProviderDropdown";
+import ConfirmDeleteProviderDialog from "@/app/workspace/providers/dialogs/confirmDeleteProviderDialog";
 import { ProviderFamilyGroup } from "./views/ProviderFamilyGroup";
 import { ProviderFilters, type FilterState } from "./views/ProviderFilters";
 import { useProviders2Data } from "./views/useProviders2Data";
@@ -42,6 +43,20 @@ export default function Providers2Page() {
 		}
 		return lookup;
 	}, [groupedProviders]);
+
+	const [deleteProviderName, setDeleteProviderName] = useState<string | null>(null);
+	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+	const handleDeleteRequest = (providerName: string) => {
+		setDeleteProviderName(providerName);
+		setShowDeleteDialog(true);
+	};
+
+	const handleDeleteConfirm = () => {
+		setShowDeleteDialog(false);
+		setDeleteProviderName(null);
+		refetch();
+	};
 
 	const [filters, setFilters] = useState<FilterState>({
 		search: "",
@@ -164,6 +179,7 @@ export default function Providers2Page() {
 							providers={group.providers}
 							onToggle={handleToggle}
 							onQuickTest={handleQuickTest}
+							onDelete={handleDeleteRequest}
 						/>
 					))
 				)}
@@ -177,6 +193,18 @@ export default function Providers2Page() {
 					setShowCustomProviderSheet(false);
 				}}
 			/>
+
+			{deleteProviderName && (
+				<ConfirmDeleteProviderDialog
+					show={showDeleteDialog}
+					onCancel={() => {
+						setShowDeleteDialog(false);
+						setDeleteProviderName(null);
+					}}
+					onDelete={handleDeleteConfirm}
+					provider={{ name: deleteProviderName } as ModelProvider}
+				/>
+			)}
 		</div>
 	);
 }
