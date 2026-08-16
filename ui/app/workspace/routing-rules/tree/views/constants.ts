@@ -7,6 +7,12 @@ export const SCOPE_CONFIG = {
 
 export type ScopeKey = keyof typeof SCOPE_CONFIG;
 
+/** i18n key (within the "routing" namespace) for each scope label. */
+export const SCOPE_LABEL_KEY: Record<ScopeKey, string> = {
+	virtual_key: "tree.scope.virtual_key",
+	global: "tree.scope.global",
+};
+
 export const SCOPE_ORDER = ["virtual_key", "global"] as const;
 
 // ─── Layout constants (LR: W = horizontal, H = vertical) ──────────────────
