@@ -49,7 +49,7 @@ function getFormSchema(t: (key: string) => string) {
 	});
 }
 
-type FormData = z.infer<typeof formSchema>;
+type FormData = z.infer<ReturnType<typeof getFormSchema>>;
 
 const DEFAULT_GOVERNANCE_FORM_VALUES: FormData = {
 	budgets: [],
