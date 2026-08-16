@@ -19,8 +19,10 @@ import { cn } from "@/lib/utils";
 import { formatCompactNumber } from "@/lib/utils/numbers";
 import { ColumnDef } from "@tanstack/react-table";
 import { format, formatDistanceToNow } from "date-fns";
+import { enUS, zhCN, type Locale } from "date-fns/locale";
 import { ArrowUpDown, ChevronRight, CornerDownRight, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // Passed to useReactTable({ meta }) by the logs page so the expander column can
 // read/toggle chain expansion without threading props through column factories.
@@ -31,12 +33,13 @@ export interface LogsTableMeta {
 }
 
 function LogActionsMenu({ log, onDelete }: { log: LogEntry; onDelete: (log: LogEntry) => void }) {
+	const { t } = useTranslation("logs");
 	const [isOpen, setIsOpen] = useState(false);
 
 	return (
 		<DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
 			<DropdownMenuTrigger asChild onClick={(event) => event.stopPropagation()}>
-				<Button variant="ghost" size="icon" data-testid="log-actions-btn" aria-label="Log actions" className="h-7 w-7">
+				<Button variant="ghost" size="icon" data-testid="log-actions-btn" aria-label={t("table.logActions")} className="h-7 w-7">
 					<MoreHorizontal className="h-4 w-4" />
 				</Button>
 			</DropdownMenuTrigger>
@@ -52,7 +55,7 @@ function LogActionsMenu({ log, onDelete }: { log: LogEntry; onDelete: (log: LogE
 					}}
 				>
 					<Trash2 className="h-4 w-4" />
-					Delete
+					{t("table.delete")}
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
@@ -181,6 +184,7 @@ export function getMessage(log?: LogEntry) {
 }
 
 export function LogMessageCell({ log, contentClassName = "max-w-full" }: { log: LogEntry; contentClassName?: string }) {
+	const { t } = useTranslation("logs");
 	const input = getMessage(log);
 	const isLargePayload = log.is_large_payload_request || log.is_large_payload_response;
 	const realtimeMessages = log.object === "realtime.turn" ? getRealtimeTurnMessages(log) : null;
@@ -190,7 +194,7 @@ export function LogMessageCell({ log, contentClassName = "max-w-full" }: { log: 
 			{isLargePayload && (
 				<span
 					className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/50 dark:text-amber-400"
-					title="Large payload - streamed directly to provider"
+					title={t("columns.largePayloadTitle")}
 				>
 					LP
 				</span>
@@ -198,19 +202,18 @@ export function LogMessageCell({ log, contentClassName = "max-w-full" }: { log: 
 			{realtimeMessages &&
 			(realtimeMessages.tool || realtimeMessages.user || realtimeMessages.assistantToolCall || realtimeMessages.assistant) ? (
 				<div className={cn(contentClassName, "font-mono text-sm font-normal leading-5")}>
-					{realtimeMessages.tool ? <div className="truncate">Tool Result: {realtimeMessages.tool}</div> : null}
-					{realtimeMessages.user ? <div className="truncate">User: {realtimeMessages.user}</div> : null}
+					{realtimeMessages.tool ? <div className="truncate">{t("columns.toolResult", { text: realtimeMessages.tool })}</div> : null}
+					{realtimeMessages.user ? <div className="truncate">{t("columns.user", { text: realtimeMessages.user })}</div> : null}
 					{realtimeMessages.assistantToolCall ? (
-						<div className="truncate">Assistant Tool Call: {realtimeMessages.assistantToolCall}</div>
+						<div className="truncate">{t("columns.assistantToolCall", { text: realtimeMessages.assistantToolCall })}</div>
 					) : null}
-					{realtimeMessages.assistant ? <div className="truncate">Assistant: {realtimeMessages.assistant}</div> : null}
+					{realtimeMessages.assistant ? (
+						<div className="truncate">{t("columns.assistant", { text: realtimeMessages.assistant })}</div>
+					) : null}
 				</div>
 			) : (
 				<div className={cn(contentClassName, "truncate font-mono text-[12px] font-normal")}>
-					{input ||
-						(isLargePayload
-							? `Large payload ${log.is_large_payload_request && log.is_large_payload_response ? "request & response" : log.is_large_payload_request ? "request" : "response"}`
-							: "-")}
+					{input || (isLargePayload ? t("columns.largePayloadBoth") : "-")}
 				</div>
 			)}
 		</div>
@@ -224,6 +227,7 @@ const MAX_ATTRIBUTION_LINES = 1;
 // (array) source is used, values render one per line, capped at
 // MAX_ATTRIBUTION_LINES with a "+N more" indicator for the remainder.
 function AttributionCell({ names, name, ids, id }: { names?: string[]; name?: string | null; ids?: string[]; id?: string | null }) {
+	const { t } = useTranslation("logs");
 	let values: string[] = [];
 	if (Array.isArray(names) && names.filter(Boolean).length > 0) {
 		values = names.filter(Boolean);
@@ -249,7 +253,7 @@ function AttributionCell({ names, name, ids, id }: { names?: string[]; name?: st
 					{value}
 				</span>
 			))}
-			{remaining > 0 && <span className="text-muted-foreground">+{remaining} more</span>}
+			{remaining > 0 && <span className="text-muted-foreground">{t("columns.more", { count: remaining })}</span>}
 		</div>
 	);
 }
@@ -317,14 +321,19 @@ export const createColumns = (
 		},
 		{
 			accessorKey: "timestamp",
-			header: ({ column }) => (
-				<Button variant="ghost" data-testid="logs-time-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-					Time
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			),
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return (
+					<Button variant="ghost" data-testid="logs-time-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+						{t("column_labels.timestamp")}
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
 			size: 130,
 			cell: ({ row }) => {
+				const { i18n } = useTranslation("logs");
+				const dateLocale: Locale = i18n.language.startsWith("zh") ? zhCN : enUS;
 				const timestamp = row.original.timestamp;
 				const date = timestamp ? new Date(timestamp) : null;
 				const isValid = date && date.toString() !== "Invalid Date";
@@ -333,15 +342,20 @@ export const createColumns = (
 				}
 				return (
 					<div className="flex flex-col leading-tight">
-						<span className="font-mono text-xs tabular-nums">{format(date, "MMM dd  HH:mm:ss")}</span>
-						<span className="text-muted-foreground text-[10.5px] tabular-nums">{formatDistanceToNow(date, { addSuffix: true })}</span>
+						<span className="font-mono text-xs tabular-nums">{format(date, "MMM dd  HH:mm:ss", { locale: dateLocale })}</span>
+						<span className="text-muted-foreground text-[10.5px] tabular-nums">
+							{formatDistanceToNow(date, { addSuffix: true, locale: dateLocale })}
+						</span>
 					</div>
 				);
 			},
 		},
 		{
 			id: "request_type",
-			header: "Type",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.request_type");
+			},
 			size: 150,
 			cell: ({ row }) => {
 				return (
@@ -359,13 +373,19 @@ export const createColumns = (
 		},
 		{
 			accessorKey: "input",
-			header: "Message",
+			header: () => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.input");
+			},
 			size: 350,
 			cell: ({ row }) => <LogMessageCell log={row.original} />,
 		},
 		{
 			accessorKey: "model",
-			header: "Model",
+			header: () => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.model");
+			},
 			size: 220,
 			cell: ({ row }) => {
 				const provider = row.original.provider as ProviderName | undefined;
@@ -388,7 +408,10 @@ export const createColumns = (
 		{
 			id: "app",
 			accessorKey: "app",
-			header: "App",
+			header: () => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.app");
+			},
 			size: 140,
 			cell: ({ row }) => {
 				const app = row.original.app ? mapAppToClientApp(row.original.app) : mapUserAgentToApp(row.original.user_agent);
@@ -404,12 +427,15 @@ export const createColumns = (
 		},
 		{
 			accessorKey: "latency",
-			header: ({ column }) => (
-				<Button variant="ghost" data-testid="logs-latency-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-					Latency
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			),
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return (
+					<Button variant="ghost" data-testid="logs-latency-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+						{t("column_labels.latency")}
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
 			size: 170,
 			cell: ({ row }) => {
 				const latency = row.original.latency;
@@ -448,12 +474,15 @@ export const createColumns = (
 		},
 		{
 			accessorKey: "tokens",
-			header: ({ column }) => (
-				<Button variant="ghost" data-testid="logs-tokens-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-					Tokens
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			),
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return (
+					<Button variant="ghost" data-testid="logs-tokens-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+						{t("column_labels.tokens")}
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
 			size: 190,
 			cell: ({ row }) => {
 				const tokenUsage = row.original.token_usage;
@@ -490,12 +519,15 @@ export const createColumns = (
 		},
 		{
 			accessorKey: "cost",
-			header: ({ column }) => (
-				<Button variant="ghost" data-testid="logs-cost-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-					Cost
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			),
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return (
+					<Button variant="ghost" data-testid="logs-cost-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+						{t("column_labels.cost")}
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
 			size: 120,
 			cell: ({ row }) => {
 				if (row.original.cost == null) {
@@ -509,19 +541,28 @@ export const createColumns = (
 	const attributionColumns: ColumnDef<LogEntry>[] = [
 		{
 			id: "virtual_key",
-			header: "Virtual Key",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.virtual_key");
+			},
 			size: 170,
 			cell: ({ row }) => <AttributionCell name={row.original.virtual_key_name} id={row.original.virtual_key_id} />,
 		},
 		{
 			id: "routing_rule",
-			header: "Routing Rule",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.routing_rule");
+			},
 			size: 170,
 			cell: ({ row }) => <AttributionCell name={row.original.routing_rule_name} id={row.original.routing_rule_id} />,
 		},
 		{
 			id: "team",
-			header: "Team",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.team");
+			},
 			size: 150,
 			cell: ({ row }) => (
 				<AttributionCell
@@ -534,7 +575,10 @@ export const createColumns = (
 		},
 		{
 			id: "customer",
-			header: "Customer",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.customer");
+			},
 			size: 150,
 			cell: ({ row }) => (
 				<AttributionCell
@@ -547,13 +591,19 @@ export const createColumns = (
 		},
 		{
 			id: "user",
-			header: "User",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.user");
+			},
 			size: 150,
 			cell: ({ row }) => <AttributionCell name={row.original.user_name} id={row.original.user_id} />,
 		},
 		{
 			id: "business_unit",
-			header: "Business Unit",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.business_unit");
+			},
 			size: 150,
 			cell: ({ row }) => (
 				<AttributionCell

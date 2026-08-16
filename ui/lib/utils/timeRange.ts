@@ -8,6 +8,18 @@ export const TIME_PERIODS = [
 
 export type TimePeriod = (typeof TIME_PERIODS)[number]["value"];
 
+export function getTimePeriods(
+	t: (key: string, opts?: Record<string, unknown>) => string,
+): { label: string; value: string }[] {
+	return [
+		{ label: t("timePeriods.lastHour", { ns: "common" }), value: "1h" },
+		{ label: t("timePeriods.last6Hours", { ns: "common" }), value: "6h" },
+		{ label: t("timePeriods.last24Hours", { ns: "common" }), value: "24h" },
+		{ label: t("timePeriods.last7Days", { ns: "common" }), value: "7d" },
+		{ label: t("timePeriods.last30Days", { ns: "common" }), value: "30d" },
+	];
+}
+
 /** Returns a fresh { from, to } Date pair for the given relative period string. */
 export function getRangeForPeriod(period: string): { from: Date; to: Date } {
 	const to = new Date();

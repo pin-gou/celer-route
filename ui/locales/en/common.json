@@ -163,6 +163,22 @@
 		"showing": "Showing",
 		"to": "to"
 	},
+	"datePicker": {
+		"pickADate": "Pick a date",
+		"pickADateAndTime": "Pick a date and time",
+		"fromTime": "From Time",
+		"toTime": "To Time",
+		"time": "Time",
+		"timezone": "Timezone",
+		"selectTimezone": "Select timezone"
+	},
+	"timePeriods": {
+		"lastHour": "Last hour",
+		"last6Hours": "Last 6 hours",
+		"last24Hours": "Last 24 hours",
+		"last7Days": "Last 7 days",
+		"last30Days": "Last 30 days"
+	},
 	"toast": {
 		"success": "Operation completed successfully",
 		"error": "Something went wrong",

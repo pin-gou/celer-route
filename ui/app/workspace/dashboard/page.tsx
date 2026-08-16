@@ -7,7 +7,7 @@ import { parseAsSafeArrayOf } from "@/lib/queryParamsParser";
 import { useGetMCPAvailableFilterDataQuery } from "@/lib/store";
 import type { LogFilters, MCPToolLogFilters } from "@/lib/types/logs";
 import { dateUtils } from "@/lib/types/logs";
-import { getRangeForPeriod, TIME_PERIODS } from "@/lib/utils/timeRange";
+import { getRangeForPeriod, getTimePeriods } from "@/lib/utils/timeRange";
 import { useLocation } from "@tanstack/react-router";
 import { parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
@@ -526,7 +526,7 @@ export default function DashboardPage() {
 						<DateTimePickerWithRange
 							dateTime={dateRange}
 							onDateTimeUpdate={handleDateRangeChange}
-							preDefinedPeriods={TIME_PERIODS}
+							preDefinedPeriods={getTimePeriods(t)}
 							predefinedPeriod={urlState.period || undefined}
 							onPredefinedPeriodChange={handlePeriodChange}
 							triggerTestId="dashboard-filter-daterange"

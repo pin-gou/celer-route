@@ -4,7 +4,7 @@ import { DateTimePickerWithRange } from "@/components/ui/datePickerWithRange";
 import { Input } from "@/components/ui/input";
 import { useTimezonePreference } from "@/lib/hooks/useTimezonePreference";
 import type { MCPToolLogFilters } from "@/lib/types/logs";
-import { getRangeForPeriod, TIME_PERIODS } from "@/lib/utils/timeRange";
+import { getRangeForPeriod, getTimePeriods } from "@/lib/utils/timeRange";
 import { useTranslation } from "react-i18next";
 import { Radio, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -118,7 +118,7 @@ export function McpHeaderView({
 					setEndTime(p.to);
 					onPeriodChange(undefined, p.from, p.to);
 				}}
-				preDefinedPeriods={TIME_PERIODS}
+				preDefinedPeriods={getTimePeriods(t)}
 				onPredefinedPeriodChange={(periodValue) => {
 					if (!periodValue) return;
 					const { from, to } = getRangeForPeriod(periodValue);
