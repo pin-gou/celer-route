@@ -1,331 +1,210 @@
-import ModelProviderConfig from "@/app/workspace/providers/views/modelProviderConfig";
 import FullPageLoader from "@/components/fullPageLoader";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { TruncatedLabel } from "@/components/ui/truncatedLabel";
-import { DefaultNetworkConfig, DefaultPerformanceConfig } from "@/lib/constants/config";
-import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
-import { ProviderLabels, ProviderNames } from "@/lib/constants/logs";
+import { ProviderNames } from "@/lib/constants/logs";
+import { getErrorMessage, useCreateProviderMutation } from "@/lib/store";
 import {
-	getErrorMessage,
-	setSelectedProvider,
-	useAppDispatch,
-	useAppSelector,
-	useCreateProviderMutation,
-	useGetProvidersQuery,
-	useLazyGetProviderQuery,
-} from "@/lib/store";
-import { KnownProvider, ModelProviderName, ProviderStatus } from "@/lib/types/config";
-import { cn } from "@/lib/utils";
-import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { useNavigate } from "@tanstack/react-router";
-import { AlertCircle } from "lucide-react";
-import { useQueryState } from "nuqs";
-import { useEffect, useState } from "react";
+	useBatchUpdateProviderKeysMutation,
+	useLazyGetProviderKeysQuery,
+	useRefreshProviderModelsMutation,
+} from "@/lib/store/apis/providersApi";
+import { type ModelProvider, ModelProviderName } from "@/lib/types/config";
+import { useRbac, RbacOperation, RbacResource } from "@/lib/rbac";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import AddCustomProviderSheet from "./dialogs/addNewCustomProviderSheet";
-import ConfirmDeleteProviderDialog from "./dialogs/confirmDeleteProviderDialog";
-import ConfirmRedirectionDialog from "./dialogs/confirmRedirection";
-import { AddProviderDropdown } from "./views/addProviderDropdown";
-import { ProvidersEmptyState } from "./views/providersEmptyState";
-import { Button } from "@/components/ui/button";
-import { ArrowUpRight } from "lucide-react";
+import AddCustomProviderSheet from "@/app/workspace/providers/dialogs/addNewCustomProviderSheet";
+import { AddProviderDropdown } from "@/app/workspace/providers/views/addProviderDropdown";
+import ConfirmDeleteProviderDialog from "@/app/workspace/providers/dialogs/confirmDeleteProviderDialog";
+import { ProviderFamilyGroup } from "./views/ProviderFamilyGroup";
+import { ProviderFilters, type FilterState } from "./views/ProviderFilters";
+import { useProviders2Data } from "./views/useProviders2Data";
 
-export default function Providers() {
-	const { t } = useTranslation(["providers", "common"]);
-	const dispatch = useAppDispatch();
-	const navigate = useNavigate();
-	const hasProvidersAccess = useRbac(RbacResource.ModelProvider, RbacOperation.View);
-	const hasSettingsOnly = useRbac(RbacResource.Settings, RbacOperation.View);
-	const hasProviderCreateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Create);
-
-	// Redirect Settings-only users to Custom pricing tab
-	useEffect(() => {
-		if (!hasProvidersAccess && hasSettingsOnly) {
-			navigate({ to: "/workspace/custom-pricing", replace: true });
-		}
-	}, [hasProvidersAccess, hasSettingsOnly, navigate]);
-
-	const selectedProvider = useAppSelector((state) => state.provider.selectedProvider);
-	const providerFormIsDirty = useAppSelector((state) => state.provider.isDirty);
-
-	const [showRedirectionDialog, setShowRedirectionDialog] = useState(false);
-	const [showDeleteProviderDialog, setShowDeleteProviderDialog] = useState(false);
-	const [pendingRedirection, setPendingRedirection] = useState<string | undefined>(undefined);
+export default function ProvidersPage() {
+	const { t } = useTranslation("providers");
+	const { groupedProviders, isLoading, error, refetch } = useProviders2Data();
+	const [batchUpdateKeys] = useBatchUpdateProviderKeysMutation();
+	const [getProviderKeys] = useLazyGetProviderKeysQuery();
+	const [refreshProviderModels] = useRefreshProviderModelsMutation();
 	const [showCustomProviderSheet, setShowCustomProviderSheet] = useState(false);
-	const [provider, setProvider] = useQueryState("provider");
-
-	const { data: savedProviders, isLoading: isLoadingProviders } = useGetProvidersQuery();
-	const [getProvider, { isLoading: isLoadingProvider }] = useLazyGetProviderQuery();
 	const [createProvider] = useCreateProviderMutation();
+	const hasCreateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Create);
 
-	const configuredProviders = (savedProviders ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
-	const configuredProviderNamesArr = configuredProviders.map((p) => p.name);
-	const configuredProviderNamesKey = JSON.stringify(configuredProviderNamesArr);
-	const existingInSidebarNames = new Set(configuredProviders.map((p) => p.name));
+	const [keysEnabledMap, setKeysEnabledMap] = useState<Record<string, boolean>>({});
 
-	const knownProviders = ProviderNames.map((name) => ({ name }));
+	const existingInSidebar = useMemo(() => new Set(groupedProviders.flatMap((g) => g.providers.map((p) => p.name))), [groupedProviders]);
 
-	useEffect(() => {
-		if (!provider) return;
-		const newSelectedProvider = configuredProviders.find((p) => p.name === provider);
-		if (newSelectedProvider) {
-			dispatch(setSelectedProvider(newSelectedProvider));
+	const knownProviders = useMemo(() => ProviderNames.map((name) => ({ name })), []);
+
+	const providerEnabledLookup = useMemo(() => {
+		const lookup: Record<string, boolean> = {};
+		for (const group of groupedProviders) {
+			for (const p of group.providers) {
+				lookup[p.name] = p.keys_enabled;
+			}
 		}
-		getProvider(provider)
-			.unwrap()
-			.then((providerInfo) => {
-				dispatch(setSelectedProvider(providerInfo));
-			})
-			.catch((err) => {
-				if (err.status === 404) {
-					dispatch(
-						setSelectedProvider({
-							name: provider as ModelProviderName,
+		return lookup;
+	}, [groupedProviders]);
 
-							concurrency_and_buffer_size: DefaultPerformanceConfig,
-							network_config: DefaultNetworkConfig,
-							custom_provider_config: undefined,
-							proxy_config: undefined,
-							send_back_raw_request: undefined,
-							send_back_raw_response: undefined,
-							provider_status: "error",
-						}),
-					);
-					return;
-				}
-				toast.error(t("common:toast.error"), {
-					description: `We encountered an error while getting provider config: ${getErrorMessage(err)}`,
-				});
+	const [deleteProviderName, setDeleteProviderName] = useState<string | null>(null);
+	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+	const handleDeleteRequest = (providerName: string) => {
+		setDeleteProviderName(providerName);
+		setShowDeleteDialog(true);
+	};
+
+	const handleDeleteConfirm = () => {
+		setShowDeleteDialog(false);
+		setDeleteProviderName(null);
+		refetch();
+	};
+
+	const [filters, setFilters] = useState<FilterState>({
+		search: "",
+		health: "all",
+	});
+
+	const filteredGroups = groupedProviders
+		.map((group) => {
+			const filtered = group.providers
+				.filter((p) => {
+					// Search filter
+					if (filters.search && !p.name.toLowerCase().includes(filters.search.toLowerCase())) {
+						return false;
+					}
+					// Health filter
+					if (filters.health === "active" && p.provider_status !== "active") return false;
+					if (filters.health === "error" && p.provider_status !== "error") return false;
+					return true;
+				})
+				.map((p) => ({ ...p, keys_enabled: keysEnabledMap[p.name] ?? p.keys_enabled }));
+			return { ...group, providers: filtered };
+		})
+		.filter((g) => g.providers.length > 0);
+
+	const handleToggle = async (providerName: string) => {
+		const previouslyEnabled = keysEnabledMap[providerName] ?? providerEnabledLookup[providerName] ?? true;
+		const nextEnabled = !previouslyEnabled;
+		setKeysEnabledMap((prev) => ({ ...prev, [providerName]: nextEnabled }));
+		try {
+			const keys = await getProviderKeys(providerName).unwrap();
+			const keyIds = keys.map((k) => k.id);
+			if (keyIds.length === 0) {
+				setKeysEnabledMap((prev) => ({ ...prev, [providerName]: previouslyEnabled }));
+				toast.info(t("toast.noKeysToToggle", { provider: providerName }));
 				return;
-			});
-	}, [provider, isLoadingProviders]);
-
-	useEffect(() => {
-		if (selectedProvider || configuredProviders.length === 0 || provider) return;
-		setProvider(configuredProviders[0].name);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [selectedProvider, configuredProviderNamesKey]);
-
-	// When current provider is no longer configured (e.g. all keys deleted), switch to another configured provider
-	useEffect(() => {
-		if (!provider || configuredProviderNamesArr.length === 0) return;
-		const isCurrentConfigured = configuredProviderNamesArr.includes(provider as ModelProviderName);
-		if (!isCurrentConfigured) {
-			setProvider(configuredProviderNamesArr[0]);
+			}
+			const result = await batchUpdateKeys({
+				provider: providerName,
+				key_ids: keyIds,
+				enabled: nextEnabled,
+			}).unwrap();
+			toast.success(
+				nextEnabled
+					? t("toast.keysEnabled", { count: result.updated, provider: providerName })
+					: t("toast.keysDisabled", { count: result.updated, provider: providerName }),
+			);
+			refetch();
+		} catch (err: any) {
+			setKeysEnabledMap((prev) => ({ ...prev, [providerName]: previouslyEnabled }));
+			toast.error(t("toast.failedToggleKeys", { provider: providerName }));
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [provider, configuredProviderNamesKey]);
+	};
 
-	if (!hasProvidersAccess && hasSettingsOnly) {
-		return <FullPageLoader />;
-	}
-	if (isLoadingProviders) {
-		return <FullPageLoader />;
-	}
+	const handleQuickTest = async (providerName: string) => {
+		try {
+			await refreshProviderModels(providerName).unwrap();
+			toast.success(t("toast.modelDiscoveryTriggered", { provider: providerName }));
+		} catch (err: any) {
+			if (err?.status === 409) {
+				toast.info(t("toast.modelDiscoveryRunning", { provider: providerName }));
+			} else {
+				toast.error(t("toast.quickTestFailed", { provider: providerName }));
+			}
+		}
+	};
 
 	const handleSelectKnownProvider = async (name: string) => {
 		try {
 			await createProvider({ provider: name as ModelProviderName }).unwrap();
-			setProvider(name);
 		} catch (err: any) {
-			if (err?.status === 409) {
-				setProvider(name);
-				return;
-			}
-			toast.error("Failed to add provider", {
+			if (err?.status === 409) return;
+			toast.error(t("toast.failedToAddProvider"), {
 				description: getErrorMessage(err),
 			});
 		}
 	};
 
-	if (configuredProviders.length === 0) {
-		return (
-			<div className="mx-auto w-full max-w-7xl">
-				<ProvidersEmptyState
-					addProviderDropdown={
-						<AddProviderDropdown
-							disabled={!hasProviderCreateAccess}
-							existingInSidebar={existingInSidebarNames}
-							knownProviders={knownProviders}
-							onSelectKnownProvider={handleSelectKnownProvider}
-							onAddCustomProvider={() => setShowCustomProviderSheet(true)}
-							variant="empty"
-						/>
-					}
-				/>
-				<AddCustomProviderSheet
-					show={showCustomProviderSheet}
-					onClose={() => setShowCustomProviderSheet(false)}
-					onSave={(providerName) => {
-						setTimeout(() => setProvider(providerName), 300);
-						setShowCustomProviderSheet(false);
-					}}
-				/>
-			</div>
-		);
+	const handleAddCustomProvider = () => {
+		setShowCustomProviderSheet(true);
+	};
+
+	if (isLoading) {
+		return <FullPageLoader />;
 	}
 
 	return (
-		<div className="flex h-full w-full flex-col gap-4">
-			<div className="flex items-center justify-end px-4 pt-2">
-				<Button
-					variant="outline"
-					size="sm"
-					data-testid="providers-try-new-view"
-					onClick={() => navigate({ to: "/workspace/providers2" })}
-					className="gap-1 text-xs"
-				>
-					Try new view
-					<ArrowUpRight className="h-3 w-3" />
-				</Button>
+		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 p-6">
+			{/* Page heading */}
+			<div data-testid="providers2-page-heading" className="sr-only">
+				{t("providers2.pageTitle")}
 			</div>
-			<div className="flex h-full w-full flex-row gap-4">
-				<ConfirmDeleteProviderDialog
-					provider={selectedProvider!}
-					show={showDeleteProviderDialog}
-					onCancel={() => setShowDeleteProviderDialog(false)}
-					onDelete={() => {
-						const next = configuredProviders.filter((p) => p.name !== selectedProvider?.name)[0];
-						setProvider(next?.name ?? null);
-						setShowDeleteProviderDialog(false);
-					}}
-				/>
-				<ConfirmRedirectionDialog
-					show={showRedirectionDialog}
-					onCancel={() => setShowRedirectionDialog(false)}
-					onContinue={() => {
-						setShowRedirectionDialog(false);
-						if (pendingRedirection) setProvider(pendingRedirection);
-						setPendingRedirection(undefined);
-					}}
-				/>
-				<AddCustomProviderSheet
-					show={showCustomProviderSheet}
-					onClose={() => setShowCustomProviderSheet(false)}
-					onSave={(providerName) => {
-						setTimeout(() => setProvider(providerName), 300);
-						setShowCustomProviderSheet(false);
-					}}
-				/>
-				<div className="flex flex-col" style={{ maxHeight: "calc(100vh - 70px)", width: "300px" }}>
-					<TooltipProvider>
-						<div className="custom-scrollbar flex-1 overflow-y-auto">
-							<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
-								{/* Configured Providers (standard with keys + custom) */}
-								{configuredProviders.length > 0 && (
-									<div className="mb-4">
-										<div className="text-muted-foreground mb-2 text-xs font-medium">{t("list.configuredProviders")}</div>
-										{configuredProviders.map((p) => {
-											const isCustom = !ProviderNames.includes(p.name as KnownProvider);
-											const label = isCustom ? p.name : ProviderLabels[p.name as keyof typeof ProviderLabels];
-											return (
-												<div
-													key={p.name}
-													data-testid={`provider-item-${p.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}
-													className={cn(
-														"mb-1 flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm border px-3 text-sm",
-														selectedProvider?.name === p.name
-															? "bg-secondary opacity-100 hover:opacity-100"
-															: "hover:bg-secondary cursor-pointer border-transparent opacity-100 hover:border",
-													)}
-													onClick={(e) => {
-														e.preventDefault();
-														e.stopPropagation();
-														if (providerFormIsDirty) {
-															setPendingRedirection(p.name);
-															setShowRedirectionDialog(true);
-															return;
-														}
-														setProvider(p.name);
-													}}
-												>
-													<RenderProviderIcon
-														provider={(isCustom ? p.custom_provider_config?.base_provider_type : p.name) as ProviderIconType}
-														size="sm"
-														className="h-4 w-4 shrink-0"
-													/>
-													<TruncatedLabel className="flex-1 text-sm">{label}</TruncatedLabel>
-													<KeyDiscoveryFailedBadge provider={p} />
-													<ProviderStatusBadge status={p.provider_status} />
-													{isCustom && (
-														<Badge
-															variant="secondary"
-															className="text-muted-foreground ml-auto shrink-0 px-1.5 py-0.5 text-[10px] font-bold"
-														>
-															{t("common:common.custom")}
-														</Badge>
-													)}
-												</div>
-											);
-										})}
-									</div>
-								)}
-								{hasProviderCreateAccess ? (
-									<div className="pb-4">
-										<AddProviderDropdown
-											disabled={!hasProviderCreateAccess}
-											existingInSidebar={existingInSidebarNames}
-											knownProviders={knownProviders}
-											onSelectKnownProvider={handleSelectKnownProvider}
-											onAddCustomProvider={() => setShowCustomProviderSheet(true)}
-										/>
-									</div>
-								) : null}
-							</div>
-						</div>
-					</TooltipProvider>
+			{/* Toolbar */}
+			<div className="flex items-center justify-between gap-4">
+				<div className="flex-1">
+					<ProviderFilters filters={filters} onChange={setFilters} />
 				</div>
-				{isLoadingProvider && (
-					<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
-						<FullPageLoader />
+				<div className="flex items-center gap-2">
+					<AddProviderDropdown
+						variant="toolbar"
+						disabled={!hasCreateAccess}
+						existingInSidebar={existingInSidebar}
+						knownProviders={knownProviders}
+						onSelectKnownProvider={handleSelectKnownProvider}
+						onAddCustomProvider={handleAddCustomProvider}
+					/>
+				</div>
+			</div>
+
+			{/* Grouped provider cards */}
+			<div className="flex-1 overflow-y-auto">
+				{filteredGroups.length === 0 ? (
+					<div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
+						{error ? t("failedToLoad") : t("noMatchFilters")}
 					</div>
-				)}
-				{!selectedProvider && (
-					<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
-						<div className="text-muted-foreground text-sm">{t("list.selectProvider")}</div>
-					</div>
-				)}
-				{!isLoadingProvider && selectedProvider && (
-					<ModelProviderConfig provider={selectedProvider} onRequestDelete={() => setShowDeleteProviderDialog(true)} />
+				) : (
+					filteredGroups.map((group) => (
+						<ProviderFamilyGroup
+							key={group.family}
+							familyName={group.family}
+							providers={group.providers}
+							onToggle={handleToggle}
+							onQuickTest={handleQuickTest}
+							onDelete={handleDeleteRequest}
+						/>
+					))
 				)}
 			</div>
+
+			<AddCustomProviderSheet
+				show={showCustomProviderSheet}
+				onClose={() => setShowCustomProviderSheet(false)}
+				onSave={() => {
+					refetch();
+					setShowCustomProviderSheet(false);
+				}}
+			/>
+
+			{deleteProviderName && (
+				<ConfirmDeleteProviderDialog
+					show={showDeleteDialog}
+					onCancel={() => {
+						setShowDeleteDialog(false);
+						setDeleteProviderName(null);
+					}}
+					onDelete={handleDeleteConfirm}
+					provider={{ name: deleteProviderName } as ModelProvider}
+				/>
+			)}
 		</div>
-	);
-}
-
-function ProviderStatusBadge({ status }: { status: ProviderStatus }) {
-	const { t } = useTranslation("providers");
-	return status != "active" ? (
-		<Tooltip>
-			<TooltipTrigger>
-				<AlertCircle className="h-3 w-3" />
-			</TooltipTrigger>
-			<TooltipContent>{status === "error" ? t("providerStatus.error") : t("providerStatus.deleted")}</TooltipContent>
-		</Tooltip>
-	) : null;
-}
-
-function KeyDiscoveryFailedBadge({
-	provider,
-}: {
-	provider: {
-		status?: string;
-		description?: string;
-	};
-}) {
-	const { t } = useTranslation("providers");
-	const providerFailed = provider.status === "list_models_failed";
-
-	if (!providerFailed) return null;
-
-	return (
-		<Tooltip>
-			<TooltipTrigger>
-				<AlertCircle className="h-3 w-3" />
-			</TooltipTrigger>
-			<TooltipContent>{provider.description || t("providerStatus.listModelsFailed")}</TooltipContent>
-		</Tooltip>
 	);
 }

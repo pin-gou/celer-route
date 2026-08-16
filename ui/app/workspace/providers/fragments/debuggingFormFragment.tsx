@@ -96,9 +96,7 @@ export function DebuggingFormFragment({ provider, onCancel }: DebuggingFormFragm
 												</Tooltip>
 											</TooltipProvider>
 										</div>
-										<p className="text-muted-foreground text-xs">
-											{t("fragments.debugging.sendBackRawRequestDescription")}
-										</p>
+										<p className="text-muted-foreground text-xs">{t("fragments.debugging.sendBackRawRequestDescription")}</p>
 									</div>
 									<FormControl>
 										<Switch
@@ -138,9 +136,7 @@ export function DebuggingFormFragment({ provider, onCancel }: DebuggingFormFragm
 												</Tooltip>
 											</TooltipProvider>
 										</div>
-										<p className="text-muted-foreground text-xs">
-											{t("fragments.debugging.sendBackRawResponseDescription")}
-										</p>
+										<p className="text-muted-foreground text-xs">{t("fragments.debugging.sendBackRawResponseDescription")}</p>
 									</div>
 									<FormControl>
 										<Switch
@@ -180,9 +176,7 @@ export function DebuggingFormFragment({ provider, onCancel }: DebuggingFormFragm
 												</Tooltip>
 											</TooltipProvider>
 										</div>
-										<p className="text-muted-foreground text-xs">
-											{t("fragments.debugging.storeRawRequestResponseDescription")}
-										</p>
+										<p className="text-muted-foreground text-xs">{t("fragments.debugging.storeRawRequestResponseDescription")}</p>
 									</div>
 									<FormControl>
 										<Switch
@@ -206,7 +200,7 @@ export function DebuggingFormFragment({ provider, onCancel }: DebuggingFormFragm
 				<div className="flex items-center justify-end gap-2">
 					{onCancel && (
 						<Button type="button" variant="outline" size="sm" onClick={onCancel}>
-{t("fragments.debugging.cancel")}
+							{t("fragments.debugging.cancel")}
 						</Button>
 					)}
 					<Button

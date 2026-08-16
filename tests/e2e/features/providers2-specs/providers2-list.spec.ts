@@ -1,25 +1,21 @@
 import { expect, test } from "../../core/fixtures/base.fixture";
 
 /**
- * @file TDD Red Phase — Providers2 list page E2E tests
+ * @file Providers list page E2E tests (new grouped view)
  *
- * These tests verify the new providers2 list page:
+ * These tests verify the providers list page:
  * - 5 fixture provider grouped cards visible
  * - Name search filters providers
  * - Health status chip filters providers
- *
- * In the TDD red phase, the /workspace/providers2 route does not exist yet,
- * so these tests will fail when the page returns 404 or cannot find elements.
- * This is the expected result — the dev phase will implement the route.
  */
 
-test.describe("Providers2 List", () => {
+test.describe("Providers List", () => {
 	test.describe.configure({ mode: "serial" });
 
-	test("should display the providers2 list page with 5 fixture provider grouped cards", async ({
+	test("should display the providers list page with 5 fixture provider grouped cards", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2");
+		await page.goto("/workspace/providers");
 
 		// Wait for the page to load
 		await page.waitForLoadState("networkidle");
@@ -41,7 +37,7 @@ test.describe("Providers2 List", () => {
 	test("should display provider cards with health badge, keys count, models count, and requests", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2");
+		await page.goto("/workspace/providers");
 		await page.waitForLoadState("networkidle");
 
 		// Each provider card should have a health badge
@@ -62,7 +58,7 @@ test.describe("Providers2 List", () => {
 	test("should filter providers by name search", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2");
+		await page.goto("/workspace/providers");
 		await page.waitForLoadState("networkidle");
 
 		// Type a search term in the search input
@@ -86,7 +82,7 @@ test.describe("Providers2 List", () => {
 	test("should filter providers by health status chip", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2");
+		await page.goto("/workspace/providers");
 		await page.waitForLoadState("networkidle");
 
 		// Click the "Active" health chip
@@ -120,7 +116,7 @@ test.describe("Providers2 List", () => {
 	test("should display provider cards with toggle and quick test buttons", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2");
+		await page.goto("/workspace/providers");
 		await page.waitForLoadState("networkidle");
 
 		// Each provider card should have a toggle switch
@@ -135,7 +131,7 @@ test.describe("Providers2 List", () => {
 	test("should navigate to provider detail page when clicking a card", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2");
+		await page.goto("/workspace/providers");
 		await page.waitForLoadState("networkidle");
 
 		// Click on the OpenAI provider card
@@ -144,6 +140,6 @@ test.describe("Providers2 List", () => {
 		await openaiCard.click();
 
 		// Should navigate to the detail page
-		await expect(page).toHaveURL(/\/workspace\/providers2\/openai/);
+		await expect(page).toHaveURL(/\/workspace\/providers\/openai/);
 	});
 });

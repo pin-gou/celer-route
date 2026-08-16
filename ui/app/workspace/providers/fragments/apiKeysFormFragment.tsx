@@ -38,9 +38,7 @@ function BatchAPIFormField({ control }: { control: Control<any>; form: UseFormRe
 				<FormItem className="flex flex-row items-center justify-between rounded-sm border p-2">
 					<div className="space-y-1.5">
 						<FormLabel>{t("fragments.apiKeys.useForBatchApis")}</FormLabel>
-						<FormDescription>
-							{t("fragments.apiKeys.useForBatchApisDescription")}
-						</FormDescription>
+						<FormDescription>{t("fragments.apiKeys.useForBatchApisDescription")}</FormDescription>
 					</div>
 					<FormControl>
 						<Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
@@ -104,9 +102,7 @@ function VPCEndpointsFormField({
 				<AccordionTrigger className="py-2 hover:no-underline" data-testid="bedrock-vpc-endpoints-trigger">
 					<span className="block space-y-1.5 pr-2">
 						<span className="block text-sm leading-none font-medium">{t("fragments.apiKeys.vpcEndpoints.title")}</span>
-						<span className="text-muted-foreground block text-sm font-normal">
-							{t("fragments.apiKeys.vpcEndpoints.description")}
-						</span>
+						<span className="text-muted-foreground block text-sm font-normal">{t("fragments.apiKeys.vpcEndpoints.description")}</span>
 					</span>
 				</AccordionTrigger>
 				<AccordionContent className="space-y-4 pt-2 pb-3">
@@ -118,7 +114,9 @@ function VPCEndpointsFormField({
 							render={({ field }) => (
 								<FormItem>
 									<FormLabel>{t(`fragments.apiKeys.vpcEndpoints.services.${service.name}.label`, service.label)}</FormLabel>
-									<FormDescription>{t(`fragments.apiKeys.vpcEndpoints.services.${service.name}.description`, service.description)}</FormDescription>
+									<FormDescription>
+										{t(`fragments.apiKeys.vpcEndpoints.services.${service.name}.description`, service.description)}
+									</FormDescription>
 									<FormControl>
 										<SecretVarInput
 											data-testid={`apikey-bedrock-endpoint-${service.name}-input`}
@@ -280,9 +278,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 											</span>
 										</TooltipTrigger>
 										<TooltipContent className="max-w-sm">
-											<p>
-												{t("fragments.apiKeys.weightTooltip")}
-											</p>
+											<p>{t("fragments.apiKeys.weightTooltip")}</p>
 										</TooltipContent>
 									</Tooltip>
 								</TooltipProvider>
@@ -323,7 +319,10 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 					name={`key.value`}
 					render={({ field }) => (
 						<FormItem>
-							<FormLabel>{t("fragments.apiKeys.apiKey")}{isVLLM ? ` ${t("fragments.apiKeys.apiKeyOptional")}` : ""}</FormLabel>
+							<FormLabel>
+								{t("fragments.apiKeys.apiKey")}
+								{isVLLM ? ` ${t("fragments.apiKeys.apiKeyOptional")}` : ""}
+							</FormLabel>
 							<FormControl>
 								<SecretVarInput placeholder={t("fragments.apiKeys.apiKeyPlaceholder")} type="text" {...field} />
 							</FormControl>
@@ -349,9 +348,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 												</span>
 											</TooltipTrigger>
 											<TooltipContent className="max-w-sm">
-												<p>
-													{t("fragments.apiKeys.allowedModelsTooltip")}
-												</p>
+												<p>{t("fragments.apiKeys.allowedModelsTooltip")}</p>
 											</TooltipContent>
 										</Tooltip>
 									</TooltipProvider>
@@ -402,9 +399,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 												</span>
 											</TooltipTrigger>
 											<TooltipContent className="max-w-sm">
-												<p>
-													{t("fragments.apiKeys.blockedModelsTooltip")}
-												</p>
+												<p>{t("fragments.apiKeys.blockedModelsTooltip")}</p>
 											</TooltipContent>
 										</Tooltip>
 									</TooltipProvider>
@@ -446,9 +441,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 						render={({ field }) => (
 							<FormItem data-testid="apikey-deployments-field">
 								<FormLabel>{t("fragments.apiKeys.deployments")}</FormLabel>
-								<FormDescription>
-									{t("fragments.apiKeys.deploymentsDescription")}
-								</FormDescription>
+								<FormDescription>{t("fragments.apiKeys.deploymentsDescription")}</FormDescription>
 								<FormControl>
 									<div data-testid="apikey-deployments-table">
 										<DeploymentsTable
@@ -511,7 +504,8 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 							render={({ field }) => (
 								<FormItem>
 									<FormLabel>
-										{t("fragments.apiKeys.azure.apiKeyLabel")} {isVertex ? t("fragments.apiKeys.apiKeyVertexOnly") : isVLLM ? ` ${t("fragments.apiKeys.apiKeyOptional")}` : ""}
+										{t("fragments.apiKeys.azure.apiKeyLabel")}{" "}
+										{isVertex ? t("fragments.apiKeys.apiKeyVertexOnly") : isVLLM ? ` ${t("fragments.apiKeys.apiKeyOptional")}` : ""}
 									</FormLabel>
 									<FormControl>
 										<SecretVarInput placeholder={t("fragments.apiKeys.apiKeyPlaceholder")} type="text" {...field} />
@@ -522,9 +516,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 						/>
 					)}
 					{azureAuthType === "default_credential" && (
-						<p className="text-muted-foreground text-sm">
-							{t("fragments.apiKeys.azure.defaultCredentialDescription")}
-						</p>
+						<p className="text-muted-foreground text-sm">{t("fragments.apiKeys.azure.defaultCredentialDescription")}</p>
 					)}
 
 					<FormField
@@ -596,9 +588,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 														</span>
 													</TooltipTrigger>
 													<TooltipContent>
-														<p>
-															{t("fragments.apiKeys.azure.scopesTooltip")}
-														</p>
+														<p>{t("fragments.apiKeys.azure.scopesTooltip")}</p>
 													</TooltipContent>
 												</Tooltip>
 											</TooltipProvider>
@@ -653,9 +643,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 							</TabsList>
 						</Tabs>
 						{vertexAuthType === "service_account" && (
-							<p className="text-muted-foreground text-sm">
-								{t("fragments.apiKeys.vertex.serviceAccountAttachedDescription")}
-							</p>
+							<p className="text-muted-foreground text-sm">{t("fragments.apiKeys.vertex.serviceAccountAttachedDescription")}</p>
 						)}
 					</div>
 
@@ -742,7 +730,12 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 								<FormItem>
 									<FormLabel>{t("fragments.apiKeys.vertex.apiKeyOnlyGemini")}</FormLabel>
 									<FormControl>
-										<SecretVarInput data-testid="apikey-vertex-api-key-input" placeholder={t("fragments.apiKeys.apiKeyPlaceholder")} type="text" {...field} />
+										<SecretVarInput
+											data-testid="apikey-vertex-api-key-input"
+											placeholder={t("fragments.apiKeys.apiKeyPlaceholder")}
+											type="text"
+											{...field}
+										/>
 									</FormControl>
 									<FormMessage />
 								</FormItem>
@@ -756,9 +749,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 							<FormItem className="flex flex-row items-center justify-between rounded-sm border p-2">
 								<div className="space-y-1.5">
 									<FormLabel>{t("fragments.apiKeys.vertex.forceSingleRegion")}</FormLabel>
-									<FormDescription>
-										{t("fragments.apiKeys.vertex.forceSingleRegionDescription")}
-									</FormDescription>
+									<FormDescription>{t("fragments.apiKeys.vertex.forceSingleRegionDescription")}</FormDescription>
 								</div>
 								<FormControl>
 									<Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
@@ -779,9 +770,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 							<FormItem className="flex flex-row items-center justify-between rounded-sm border p-2">
 								<div className="space-y-1.5">
 									<FormLabel>{t("fragments.apiKeys.replicate.useDeploymentsEndpoint")}</FormLabel>
-									<FormDescription>
-										{t("fragments.apiKeys.replicate.useDeploymentsEndpointDescription")}
-									</FormDescription>
+									<FormDescription>{t("fragments.apiKeys.replicate.useDeploymentsEndpointDescription")}</FormDescription>
 								</div>
 								<FormControl>
 									<Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
@@ -802,7 +791,11 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 								<FormLabel>{t("fragments.apiKeys.vllm.serverUrl")}</FormLabel>
 								<FormDescription>{t("fragments.apiKeys.vllm.serverUrlDescription")}</FormDescription>
 								<FormControl>
-									<SecretVarInput data-testid="key-input-vllm-url" placeholder={t("fragments.apiKeys.vllm.serverUrlPlaceholder")} {...field} />
+									<SecretVarInput
+										data-testid="key-input-vllm-url"
+										placeholder={t("fragments.apiKeys.vllm.serverUrlPlaceholder")}
+										{...field}
+									/>
 								</FormControl>
 								<FormMessage />
 							</FormItem>
@@ -816,7 +809,11 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 								<FormLabel>{t("fragments.apiKeys.vllm.modelName")}</FormLabel>
 								<FormDescription>{t("fragments.apiKeys.vllm.modelNameDescription")}</FormDescription>
 								<FormControl>
-									<Input data-testid="key-input-vllm-model-name" placeholder={t("fragments.apiKeys.vllm.modelNamePlaceholder")} {...field} />
+									<Input
+										data-testid="key-input-vllm-model-name"
+										placeholder={t("fragments.apiKeys.vllm.modelNamePlaceholder")}
+										{...field}
+									/>
 								</FormControl>
 								<FormMessage />
 							</FormItem>
@@ -833,7 +830,11 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 							<FormItem>
 								<FormLabel>{t("fragments.apiKeys.keylessProvider.serverUrl")}</FormLabel>
 								<FormDescription>
-									{t(isOllama ? "fragments.apiKeys.keylessProvider.ollamaServerUrlDescription" : "fragments.apiKeys.keylessProvider.sglServerUrlDescription")}
+									{t(
+										isOllama
+											? "fragments.apiKeys.keylessProvider.ollamaServerUrlDescription"
+											: "fragments.apiKeys.keylessProvider.sglServerUrlDescription",
+									)}
 								</FormDescription>
 								<FormControl>
 									<SecretVarInput
@@ -856,7 +857,9 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 						render={({ field }) => (
 							<FormItem className="flex flex-row items-center justify-between rounded-sm border p-2">
 								<div className="space-y-1.5">
-									<FormLabel htmlFor="use-anthropic-endpoints-alias-override-switch">{t("fragments.apiKeys.useAnthropicEndpoints")}</FormLabel>
+									<FormLabel htmlFor="use-anthropic-endpoints-alias-override-switch">
+										{t("fragments.apiKeys.useAnthropicEndpoints")}
+									</FormLabel>
 									<FormDescription>{t("fragments.apiKeys.useAnthropicEndpointsDescription")}</FormDescription>
 								</div>
 								<FormControl>
@@ -1005,9 +1008,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 						render={({ field }) => (
 							<FormItem>
 								<FormLabel>{t("fragments.apiKeys.bedrock.mantleProjectId")}</FormLabel>
-								<FormDescription>
-									{t("fragments.apiKeys.bedrock.mantleProjectIdDescription")}
-								</FormDescription>
+								<FormDescription>{t("fragments.apiKeys.bedrock.mantleProjectIdDescription")}</FormDescription>
 								<FormControl>
 									<SecretVarInput
 										data-testid="apikey-bedrock-project-id-input"
@@ -1027,9 +1028,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 								render={({ field }) => (
 									<FormItem>
 										<FormLabel>{t("fragments.apiKeys.bedrock.assumeRoleArn")}</FormLabel>
-										<FormDescription>
-											{t("fragments.apiKeys.bedrock.assumeRoleArnDescription")}
-										</FormDescription>
+										<FormDescription>{t("fragments.apiKeys.bedrock.assumeRoleArnDescription")}</FormDescription>
 										<FormControl>
 											<SecretVarInput
 												data-testid="apikey-bedrock-role-arn-input"
@@ -1099,9 +1098,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 							render={({ field }) => (
 								<FormItem>
 									<FormLabel>{t("fragments.apiKeys.bedrock.batchRoleArn")}</FormLabel>
-									<FormDescription>
-										{t("fragments.apiKeys.bedrock.batchRoleArnDescription")}
-									</FormDescription>
+									<FormDescription>{t("fragments.apiKeys.bedrock.batchRoleArnDescription")}</FormDescription>
 									<FormControl>
 										<SecretVarInput
 											data-testid="apikey-bedrock-batch-role-arn-input"
@@ -1254,9 +1251,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 						render={({ field }) => (
 							<FormItem>
 								<FormLabel>{t("fragments.apiKeys.bedrockMantle.projectId")}</FormLabel>
-								<FormDescription>
-									{t("fragments.apiKeys.bedrockMantle.projectIdDescription")}
-								</FormDescription>
+								<FormDescription>{t("fragments.apiKeys.bedrockMantle.projectIdDescription")}</FormDescription>
 								<FormControl>
 									<SecretVarInput
 										data-testid="apikey-bedrock-mantle-project-id-input"
@@ -1277,9 +1272,7 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
 								render={({ field }) => (
 									<FormItem>
 										<FormLabel>{t("fragments.apiKeys.bedrockMantle.assumeRoleArn")}</FormLabel>
-										<FormDescription>
-											{t("fragments.apiKeys.bedrockMantle.assumeRoleArnDescription")}
-										</FormDescription>
+										<FormDescription>{t("fragments.apiKeys.bedrockMantle.assumeRoleArnDescription")}</FormDescription>
 										<FormControl>
 											<SecretVarInput placeholder={t("fragments.apiKeys.bedrockMantle.assumeRoleArnPlaceholder")} {...field} />
 										</FormControl>

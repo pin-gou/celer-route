@@ -74,7 +74,9 @@ function CopyButton({ value, label, testId }: { value: string; label?: string; t
 					size="icon"
 					className="h-6 w-6 shrink-0"
 					onClick={handleCopy}
-					aria-label={copied ? t("infoSheet.valueCopied", { label: label ?? "value" }) : t("infoSheet.copyValue", { label: label ?? "value" })}
+					aria-label={
+						copied ? t("infoSheet.valueCopied", { label: label ?? "value" }) : t("infoSheet.copyValue", { label: label ?? "value" })
+					}
 					data-testid={testId}
 				>
 					{copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
@@ -160,7 +162,9 @@ function ConditionGroup({ group, depth = 0 }: { group: RuleGroupType; depth?: nu
 
 	return (
 		<div className="border-foreground/25 relative mx-3 my-1 rounded border border-dashed py-1">
-			<span className="bg-background text-muted-foreground absolute -top-2 right-2 rounded px-1 text-[10px] font-medium">{t("infoSheet.group")}</span>
+			<span className="bg-background text-muted-foreground absolute -top-2 right-2 rounded px-1 text-[10px] font-medium">
+				{t("infoSheet.group")}
+			</span>
 			{content}
 		</div>
 	);
@@ -256,7 +260,9 @@ export function RoutingRuleInfoSheet({ rule, open, onOpenChange, onNavigate, has
 							<div className="flex flex-col items-start gap-1">
 								<div className="flex w-full flex-wrap items-center gap-2">
 									<SheetTitle className="text-base">{rule.name}</SheetTitle>
-									<Badge variant={rule.enabled ? "default" : "secondary"}>{rule.enabled ? t("infoSheet.enabled") : t("infoSheet.disabled")}</Badge>
+									<Badge variant={rule.enabled ? "default" : "secondary"}>
+										{rule.enabled ? t("infoSheet.enabled") : t("infoSheet.disabled")}
+									</Badge>
 									{rule.chain_rule && (
 										<Tooltip>
 											<TooltipTrigger asChild>
@@ -265,9 +271,7 @@ export function RoutingRuleInfoSheet({ rule, open, onOpenChange, onNavigate, has
 													{t("infoSheet.chainRule")}
 												</Badge>
 											</TooltipTrigger>
-											<TooltipContent className="max-w-64">
-												{t("infoSheet.chainRuleTooltip")}
-											</TooltipContent>
+											<TooltipContent className="max-w-64">{t("infoSheet.chainRuleTooltip")}</TooltipContent>
 										</Tooltip>
 									)}
 								</div>

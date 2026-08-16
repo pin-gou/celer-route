@@ -173,23 +173,23 @@ export function ApiStructureFormFragment({ provider, onCancel }: Props) {
 						</Button>
 					)}
 					<Button type="button" variant="outline" onClick={() => form.reset()} disabled={!hasUpdateProviderAccess}>
-							{t("fragments.apiStructure.reset")}
-						</Button>
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button type="submit" disabled={!form.formState.isDirty || !hasUpdateProviderAccess} isLoading={isUpdatingProvider}>
-										{t("fragments.apiStructure.save")}
-									</Button>
-								</TooltipTrigger>
-								{!form.formState.isValid && (
-									<TooltipContent>
-										<p>{form.formState.errors.root?.message || t("fragments.apiStructure.fixValidationErrors")}</p>
-									</TooltipContent>
-								)}
-							</Tooltip>
-						</TooltipProvider>
-					</div>
+						{t("fragments.apiStructure.reset")}
+					</Button>
+					<TooltipProvider>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button type="submit" disabled={!form.formState.isDirty || !hasUpdateProviderAccess} isLoading={isUpdatingProvider}>
+									{t("fragments.apiStructure.save")}
+								</Button>
+							</TooltipTrigger>
+							{!form.formState.isValid && (
+								<TooltipContent>
+									<p>{form.formState.errors.root?.message || t("fragments.apiStructure.fixValidationErrors")}</p>
+								</TooltipContent>
+							)}
+						</Tooltip>
+					</TooltipProvider>
+				</div>
 			</form>
 		</Form>
 	);

@@ -66,9 +66,7 @@ export function AddCustomModelSheet({ provider, onClose }: AddCustomModelSheetPr
 			<SheetContent className="flex w-full flex-col overflow-x-hidden pt-4" data-testid="providers2-add-model-sheet">
 				<SheetHeader className="flex flex-col items-start p-0 px-8 py-4" headerClassName="mb-0 sticky -top-4 bg-card z-10">
 					<SheetTitle>{t("providers2.addCustomModelSheet.title")}</SheetTitle>
-					<SheetDescription>
-						{t("providers2.addCustomModelSheet.description")}
-					</SheetDescription>
+					<SheetDescription>{t("providers2.addCustomModelSheet.description")}</SheetDescription>
 				</SheetHeader>
 
 				<div className="flex h-full flex-col gap-6">
@@ -88,9 +86,7 @@ export function AddCustomModelSheet({ provider, onClose }: AddCustomModelSheetPr
 								onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
 								placeholder={t("providers2.addCustomModelSheet.modelIdPlaceholder")}
 							/>
-							<p className="text-muted-foreground mt-1 text-xs">
-								{t("providers2.addCustomModelSheet.modelIdHint")}
-							</p>
+							<p className="text-muted-foreground mt-1 text-xs">{t("providers2.addCustomModelSheet.modelIdHint")}</p>
 						</div>
 
 						<div>
@@ -98,7 +94,7 @@ export function AddCustomModelSheet({ provider, onClose }: AddCustomModelSheetPr
 							<select
 								value={mode}
 								onChange={(e) => setMode(e.target.value)}
-								className="border-input mt-2 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+								className="border-input bg-background mt-2 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500"
 								data-testid="providers2-add-model-mode"
 							>
 								{MODE_OPTIONS.map((opt) => (

@@ -22,7 +22,7 @@ import { ModelsTab } from "./views/ModelsTab";
 import { OverviewTab } from "./views/OverviewTab";
 
 export default function ProviderDetailPage() {
-	const { id } = useParams({ from: "/workspace/providers2/$id" });
+	const { id } = useParams({ from: "/workspace/providers/$id" });
 	const navigate = useNavigate();
 	const { t } = useTranslation("providers");
 	const { data: provider, isLoading } = useGetProviderQuery(id);
@@ -49,9 +49,7 @@ export default function ProviderDetailPage() {
 	// Custom providers inherit the base provider type for the header links so a
 	// sensova→openai-style custom provider still surfaces its provider's
 	// website / API-key page. Keyless providers never get an API-key link.
-	const linkProvider = (isCustom
-		? provider.custom_provider_config?.base_provider_type
-		: provider.name) as ProviderName | undefined;
+	const linkProvider = (isCustom ? provider.custom_provider_config?.base_provider_type : provider.name) as ProviderName | undefined;
 	const websiteUrl = linkProvider ? ProviderWebsites[linkProvider] : undefined;
 	const apiKeyUrl = linkProvider ? ProviderApiKeyUrls[linkProvider] : undefined;
 	const keyRequired = linkProvider ? isKeyRequiredByProvider[linkProvider] : undefined;
@@ -79,7 +77,7 @@ export default function ProviderDetailPage() {
 		deleteProvider(id)
 			.unwrap()
 			.then(() => {
-				navigate({ to: "/workspace/providers2" });
+				navigate({ to: "/workspace/providers" });
 			})
 			.catch((err) => {
 				toast.error(t("providers2.toast.failedToDeleteProvider"), {
@@ -91,11 +89,11 @@ export default function ProviderDetailPage() {
 	return (
 		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 p-6">
 			{/* Breadcrumb */}
-			<div data-testid="providers2-detail-breadcrumb" className="flex items-center gap-2 text-sm text-muted-foreground">
+			<div data-testid="providers2-detail-breadcrumb" className="text-muted-foreground flex items-center gap-2 text-sm">
 				<button
 					data-testid="providers2-breadcrumb-list-link"
 					className="hover:text-foreground underline underline-offset-2 transition-colors"
-					onClick={() => navigate({ to: "/workspace/providers2" })}
+					onClick={() => navigate({ to: "/workspace/providers" })}
 				>
 					{t("providers2.breadcrumb")}
 				</button>
@@ -120,7 +118,7 @@ export default function ProviderDetailPage() {
 									href={websiteUrl}
 									target="_blank"
 									rel="noopener noreferrer"
-									className="text-lg font-semibold hover:underline inline-flex items-center gap-1"
+									className="inline-flex items-center gap-1 text-lg font-semibold hover:underline"
 								>
 									{label}
 									<ArrowUpRight className="h-3.5 w-3.5 opacity-60" />
@@ -157,7 +155,7 @@ export default function ProviderDetailPage() {
 						variant="outline"
 						size="sm"
 						data-testid="providers2-detail-logs-btn"
-						onClick={() => navigate({ to: "/workspace/logs", search: { provider: id } })}
+						onClick={() => navigate({ to: "/workspace/logs", search: { providers: [id] } })}
 						className="gap-1 text-xs"
 					>
 						<ExternalLink className="h-3 w-3" />
@@ -175,7 +173,7 @@ export default function ProviderDetailPage() {
 							{t("providers2.detail.delete")}
 						</Button>
 					)}
-					</div>
+				</div>
 			</div>
 
 			{/* Tabs */}

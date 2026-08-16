@@ -152,10 +152,7 @@ export default function LoggingView() {
 									}}
 								/>
 								{!bifrostConfig?.is_object_storage_connected && (
-									<span className="text-destructive font-medium">
-										{" "}
-										{t("logging.requiresObjectStorage")}
-									</span>
+									<span className="text-destructive font-medium"> {t("logging.requiresObjectStorage")}</span>
 								)}
 							</p>
 						</div>

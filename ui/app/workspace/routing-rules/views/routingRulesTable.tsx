@@ -302,7 +302,9 @@ export function RoutingRulesTable({
 						<div className="flex items-center gap-1">
 							<span>{t("rules.page")}</span>
 							<span>{Math.floor(offset / limit) + 1}</span>
-							<span>{t("rules.of")} {Math.ceil(totalCount / limit)}</span>
+							<span>
+								{t("rules.of")} {Math.ceil(totalCount / limit)}
+							</span>
 						</div>
 
 						<Button
@@ -323,9 +325,7 @@ export function RoutingRulesTable({
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>{t("rules.deleteRuleTitle")}</AlertDialogTitle>
-						<AlertDialogDescription>
-							{t("rules.deleteRuleConfirm", { name: ruleToDelete?.name })}
-						</AlertDialogDescription>
+						<AlertDialogDescription>{t("rules.deleteRuleConfirm", { name: ruleToDelete?.name })}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={isDeleting}>{t("rules.cancel")}</AlertDialogCancel>
@@ -347,7 +347,9 @@ function TargetsSummary({ targets }: { targets: RoutingTarget[] }) {
 	}
 
 	const first = targets[0];
-	const label = [first.provider ? getProviderLabel(first.provider) : t("rules.anyProvider"), first.model || t("rules.anyModel")].join(" / ");
+	const label = [first.provider ? getProviderLabel(first.provider) : t("rules.anyProvider"), first.model || t("rules.anyModel")].join(
+		" / ",
+	);
 
 	return (
 		<div className="flex flex-col gap-1">
@@ -355,11 +357,7 @@ function TargetsSummary({ targets }: { targets: RoutingTarget[] }) {
 				{first.provider && <RenderProviderIcon provider={first.provider as ProviderIconType} size="sm" className="h-4 w-4 shrink-0" />}
 				<span className="max-w-[160px] truncate text-sm">{label}</span>
 			</div>
-			{targets.length > 1 && (
-				<span className="text-muted-foreground text-xs">
-					{t("rules.moreTargets", { count: targets.length - 1 })}
-				</span>
-			)}
+			{targets.length > 1 && <span className="text-muted-foreground text-xs">{t("rules.moreTargets", { count: targets.length - 1 })}</span>}
 		</div>
 	);
 }

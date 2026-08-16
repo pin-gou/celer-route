@@ -454,7 +454,10 @@ function mappingToPayload(mapping: UserAgentMapping): UserAgentMappingPayload {
 	};
 }
 
-function getMatchTypeLabel(matchType: UserAgentMappingMatchType, options: Array<{ value: UserAgentMappingMatchType; label: string }>): string {
+function getMatchTypeLabel(
+	matchType: UserAgentMappingMatchType,
+	options: Array<{ value: UserAgentMappingMatchType; label: string }>,
+): string {
 	return options.find((o) => o.value === matchType)?.label ?? matchType;
 }
 

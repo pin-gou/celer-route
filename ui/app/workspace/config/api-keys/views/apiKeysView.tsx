@@ -66,18 +66,13 @@ curl --location 'http://localhost:8080/v1/chat/completions'
 							<Trans
 								i18nKey="apiKeys.authDisabledForInference"
 								t={t}
-								components={[
-									<strong />,
-									<code className="bg-muted rounded px-1 py-0.5 text-sm" />,
-								]}
+								components={[<strong />, <code className="bg-muted rounded px-1 py-0.5 text-sm" />]}
 							/>
 						) : (
 							<Trans
 								i18nKey="apiKeys.authEnabledForInference"
 								t={t}
-								components={[
-									<code className="bg-muted rounded px-1 py-0.5 text-sm" />,
-								]}
+								components={[<code className="bg-muted rounded px-1 py-0.5 text-sm" />]}
 							/>
 						)}
 					</p>

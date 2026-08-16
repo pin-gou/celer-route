@@ -137,38 +137,32 @@ export function AllowedRequestsFields({
 						</div>
 						<div className="flex items-center gap-2">
 							{/* Settings icon for path override - only show when enabled */}
-							{allowedField.value &&
-								!isDisabled &&
-								!isPathOverrideDisabled &&
-								!disabled &&
-								!PathOverrideUnsupported.has(requestType) && (
-									<FormField
-										control={control}
-										name={`${pathOverridesPrefix}.${requestType}`}
-										render={({ field: pathField }) => (
-											<Popover>
-												<PopoverTrigger asChild>
-													<button
-														type="button"
-														className="text-muted-foreground hover:text-foreground transition-colors"
-														aria-label={t("fragments.allowedRequests.customizeEndpointPath")}
-													>
-														<Settings2 className="h-4 w-4" />
-													</button>
-												</PopoverTrigger>
-												<PopoverContent className="w-80" align="end" onOpenAutoFocus={(e) => e.preventDefault()}>
-													<div className="space-y-2">
-														<h4 className="text-sm font-medium">{t("fragments.allowedRequests.customPathTitle")}</h4>
-														<p className="text-muted-foreground text-xs">
-															{t("fragments.allowedRequests.customPathDescription")}
-														</p>
-														<Input placeholder={placeholder} {...pathField} value={pathField.value || ""} className="h-9" />
-													</div>
-												</PopoverContent>
-											</Popover>
-										)}
-									/>
-								)}
+							{allowedField.value && !isDisabled && !isPathOverrideDisabled && !disabled && !PathOverrideUnsupported.has(requestType) && (
+								<FormField
+									control={control}
+									name={`${pathOverridesPrefix}.${requestType}`}
+									render={({ field: pathField }) => (
+										<Popover>
+											<PopoverTrigger asChild>
+												<button
+													type="button"
+													className="text-muted-foreground hover:text-foreground transition-colors"
+													aria-label={t("fragments.allowedRequests.customizeEndpointPath")}
+												>
+													<Settings2 className="h-4 w-4" />
+												</button>
+											</PopoverTrigger>
+											<PopoverContent className="w-80" align="end" onOpenAutoFocus={(e) => e.preventDefault()}>
+												<div className="space-y-2">
+													<h4 className="text-sm font-medium">{t("fragments.allowedRequests.customPathTitle")}</h4>
+													<p className="text-muted-foreground text-xs">{t("fragments.allowedRequests.customPathDescription")}</p>
+													<Input placeholder={placeholder} {...pathField} value={pathField.value || ""} className="h-9" />
+												</div>
+											</PopoverContent>
+										</Popover>
+									)}
+								/>
+							)}
 
 							<FormControl>
 								{isDisabled ? (
@@ -200,8 +194,7 @@ export function AllowedRequestsFields({
 			<div>
 				<div className="text-sm font-medium">{t("fragments.allowedRequests.title")}</div>
 				<p className="text-muted-foreground text-xs">
-					{t("fragments.allowedRequests.description")}{" "}
-					{!isPathOverrideDisabled ? t("fragments.allowedRequests.pathOverrideHint") : ""}
+					{t("fragments.allowedRequests.description")} {!isPathOverrideDisabled ? t("fragments.allowedRequests.pathOverrideHint") : ""}
 				</p>
 			</div>
 

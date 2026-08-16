@@ -20,7 +20,7 @@ const externalLinks = [
 		url: "https://github.com/maximhq/bifrost",
 		icon: GithubLogoIcon,
 	},
-	];
+];
 
 export default function LoginView() {
 	const { resolvedTheme } = useTheme();

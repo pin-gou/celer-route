@@ -294,9 +294,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 			<SheetContent className="flex w-full min-w-1/2 flex-col gap-4 overflow-x-hidden p-0 pt-4">
 				<SheetHeader className="flex flex-col items-start px-8 py-4" headerClassName="mb-0 sticky -top-4 bg-card z-10">
 					<SheetTitle>{isEditing ? t("sheet.editTitle") : t("sheet.createTitle")}</SheetTitle>
-					<SheetDescription>
-						{isEditing ? t("sheet.editDescription") : t("sheet.createDescription")}
-					</SheetDescription>
+					<SheetDescription>{isEditing ? t("sheet.editDescription") : t("sheet.createDescription")}</SheetDescription>
 				</SheetHeader>
 
 				<form onSubmit={handleSubmit(onSubmit)} className="flex grow flex-col">
@@ -329,9 +327,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 						<div className="flex items-center justify-between rounded-lg border p-4">
 							<div className="space-y-0.5">
 								<Label htmlFor="chain_rule">{t("rules.chainRule")}</Label>
-								<p className="text-muted-foreground text-sm">
-									{t("rules.chainRuleDescription")}
-								</p>
+								<p className="text-muted-foreground text-sm">{t("rules.chainRuleDescription")}</p>
 							</div>
 							<Switch
 								id="chain_rule"
@@ -399,9 +395,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 
 						<div className="space-y-3">
 							<Label>{t("sheet.ruleBuilder")}</Label>
-							<p className="text-muted-foreground text-sm">
-								{t("sheet.ruleBuilderDesc")}
-							</p>
+							<p className="text-muted-foreground text-sm">{t("sheet.ruleBuilderDesc")}</p>
 							<CELRuleBuilder
 								key={builderKey}
 								initialQuery={query}
@@ -434,9 +428,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 							<div className="flex items-center justify-between">
 								<div>
 									<Label>{t("sheet.routingTargets")}</Label>
-									<p className="text-muted-foreground mt-0.5 text-xs">
-										{t("sheet.routingTargetsDesc")}
-									</p>
+									<p className="text-muted-foreground mt-0.5 text-xs">{t("sheet.routingTargetsDesc")}</p>
 								</div>
 								<Button
 									type="button"
@@ -477,10 +469,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 						<div className="space-y-3">
 							<div className="flex items-center justify-between">
 								<div>
-									<Label>{t("sheet.fallbacks")}</Label>{" "}
-									<p className="text-muted-foreground mt-0.5 text-xs">
-										{t("sheet.fallbacksDesc")}
-									</p>
+									<Label>{t("sheet.fallbacks")}</Label> <p className="text-muted-foreground mt-0.5 text-xs">{t("sheet.fallbacksDesc")}</p>
 								</div>
 								<Button
 									type="button"

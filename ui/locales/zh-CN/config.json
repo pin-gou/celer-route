@@ -1,644 +1,644 @@
 {
-  "page": {
-    "title": "配置",
-    "performanceTuning": "性能调优",
-    "pricingConfig": "定价配置",
-    "featureFlags": "功能开关",
-    "logsSettings": "日志设置",
-    "compatibility": "兼容性",
-    "clientSettings": "客户端设置",
-    "caching": "缓存",
-    "security": "安全设置",
-    "mcpGateway": "MCP 网关",
-    "observability": "可观测性",
-    "largePayload": "大载荷"
-  },
-  "providers": {
-    "default": {
-      "placeholder": "例如：gpt-4, gpt-3.5-turbo。留空表示所有模型。"
-    },
-    "anthropic": {
-      "placeholder": "例如：claude-3-haiku, claude-2.1"
-    },
-    "azure": {
-      "placeholder": "例如：gpt-4, gpt-35-turbo（必须与别名密钥匹配）"
-    },
-    "bedrock": {
-      "placeholder": "例如：claude-v2, titan-text-express-v1, ai21-j2-mid"
-    },
-    "bedrock_mantle": {
-      "placeholder": "例如：anthropic.claude-opus-4-8, openai.gpt-oss-120b"
-    },
-    "cerebras": {
-      "placeholder": "例如：cerebras-2, cerebras-2-vision"
-    },
-    "cohere": {
-      "placeholder": "例如：command-r, command-r-plus"
-    },
-    "deepseek": {
-      "placeholder": "例如：deepseek-v4-flash, deepseek-v4-pro"
-    },
-    "gemini": {
-      "placeholder": "例如：gemini-1.5-pro, gemini-1.5-flash"
-    },
-    "groq": {
-      "placeholder": "例如：llama3-70b-8192, mixtral-8x7b-32768"
-    },
-    "huggingface": {
-      "placeholder": "例如：sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B"
-    },
-    "mistral": {
-      "placeholder": "例如：mistral-7b-instruct, mixtral-8x7b"
-    },
-    "openrouter": {
-      "placeholder": "例如：openai/gpt-4, anthropic/claude-3-haiku"
-    },
-    "sgl": {
-      "placeholder": "例如：sgl-2, sgl-vision"
-    },
-    "parasail": {
-      "placeholder": "例如：parasail-2, parasail-vision"
-    },
-    "elevenlabs": {
-      "placeholder": "例如：eleven_multilingual_v2, eleven_turbo_v2"
-    },
-    "perplexity": {
-      "placeholder": "例如：sonar-pro, sonar-deep-research"
-    },
-    "ollama": {
-      "placeholder": "例如：llama3.1, llama2"
-    },
-    "opencode_go": {
-      "placeholder": "例如：gpt-5.5, claude-sonnet-4-6"
-    },
-    "opencode_zen": {
-      "placeholder": "例如：gpt-5.5, claude-sonnet-4-6"
-    },
-    "openai": {
-      "placeholder": "例如：gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo"
-    },
-    "vertex": {
-      "placeholder": "例如：gemini-1.5-pro, text-bison, chat-bison"
-    },
-    "nebius": {
-      "placeholder": "例如：openai/gpt-oss-120b, google/gemma-2-9b-it-fast, Qwen/Qwen2.5-VL-72B-Instruct"
-    },
-    "xai": {
-      "placeholder": "例如：grok-4-0709, grok-3-mini, grok-3, grok-2-vision-1212"
-    },
-    "replicate": {
-      "placeholder": "例如：meta/llama3-1-8b-instruct, black-forest-labs/flux-dev"
-    },
-    "vllm": {
-      "placeholder": "例如：Qwen/Qwen3-0.6B, Qwen/Qwen3-1.5B"
-    },
-    "runway": {
-      "placeholder": "例如：gen4_turbo_image_to_video, gen3a_turbo_image_to_video"
-    },
-    "runware": {
-      "placeholder": "例如：runware:100@1, runware:101@1"
-    },
-    "fireworks": {
-      "placeholder": "例如：accounts/fireworks/models/deepseek-v3p2"
-    },
-    "sarvam": {
-      "placeholder": "例如：sarvam-30b, sarvam-105b"
-    },
-    "wafer": {
-      "placeholder": "例如：glm-5.2, kimi-k2.6"
-    }
-  },
-  "mcp": {
-    "status": {
-      "healthy": {
-        "label": "健康"
-      },
-      "error": {
-        "label": "错误"
-      },
-      "unstable": {
-        "label": "不稳定"
-      },
-      "pending_verification": {
-        "label": "待验证"
-      },
-      "disabled": {
-        "label": "已禁用"
-      },
-      "needs_reauth": {
-        "label": "需要重新认证"
-      },
-      "degraded": {
-        "label": "降级"
-      }
-    }
-  },
-  "apiKeys": {
-    "title": "API 密钥",
-    "description": "管理 API 密钥认证",
-    "createKey": "创建 API 密钥",
-    "editKey": "编辑 API 密钥",
-    "deleteKey": "删除 API 密钥",
-    "keyName": "密钥名称",
-    "keyValue": "密钥值",
-    "status": "状态",
-    "created": "创建时间",
-    "lastUsed": "最后使用",
-    "noKeys": "未配置 API 密钥",
-    "active": "活跃",
-    "inactive": "不活跃",
-    "loading": "加载中...",
-    "setupFirst": "要生成 API 密钥，您需要先设置管理员用户名和密码。",
-    "configureSecurity": "配置安全设置",
-    "usageInstructions": "生成后，您需要在所有对 Bifrost 管理 API 和 UI 的 API 调用中使用此 API 密钥。",
-    "authDisabledForInference": "推理 API 调用的身份验证当前已禁用。您可以在没有身份验证的情况下进行推理请求。仪表板和管理 API 调用仍需使用您的管理员凭据以标准 <0>username:password</0> 格式进行 base64 编码的 Basic 身份验证。",
-    "authEnabledForInference": "在对 Bifrost 进行 API 调用时，使用您的管理员凭据进行 Basic 身份验证。以标准 <0>username:password</0> 格式对您的凭据进行 base64 编码。",
-    "example": "示例："
-  },
-  "caching": {
-    "title": "缓存",
-    "description": "配置响应缓存设置",
-    "enableCache": "启用缓存",
-    "ttl": "缓存 TTL",
-    "maxSize": "最大缓存大小",
-    "strategies": "缓存策略",
-    "noConfig": "无缓存配置",
-    "pageTitle": "本地缓存",
-    "pageDescription": "通过两种互补的查找路径在本地缓存响应：用于精确重放的直接哈希匹配，以及用于相关内容的语义相似度搜索。发送 x-bf-cache-key 头将缓存响应限定到特定租户或功能。",
-    "requiresVectorStore": "需要在 config.json 中配置并启用向量存储。",
-    "loadFailed": "加载配置失败",
-    "unexpectedError": "发生意外错误，请重试。",
-    "enableCaching": "启用缓存",
-    "enableCachingDesc": "无需重启服务器即可加载（或卸载）插件。您所做的配置更改会就地修改运行中的插件，无需重新部署。",
-    "cacheMode": "缓存模式",
-    "directOnly": "仅直接模式",
-    "directSemantic": "直接 + 语义模式",
-    "embeddingRequired": "请配置支持嵌入的提供商以启用语义模式。",
-    "directModeDesc": "仅直接模式对每个请求进行哈希处理并重放精确匹配。无需嵌入，无需提供商。成本最低，适合稳定的提示词。",
-    "semanticModeDesc": "直接 + 语义模式在直接哈希匹配的基础上增加了向量相似度搜索。需要支持嵌入的提供商和模型的真实维度。仍优先服务直接命中；语义搜索仅在直接查找未命中时运行。",
-    "embeddingProvider": "嵌入提供商和模型",
-    "configuredProviders": "已配置的提供商",
-    "selectProvider": "选择提供商",
-    "embeddingModel": "嵌入模型*",
-    "searchModel": "搜索或输入嵌入模型...",
-    "selectProviderFirst": "请先选择提供商",
-    "apiKeysInherited": "API 密钥从嵌入提供商的主配置继承，无需在此处重新添加。",
-    "dimension": "维度",
-    "dimensionDesc": "嵌入模型产生的向量大小。必须与模型完全匹配（例如 OpenAI text-embedding-3-small 为 1536，text-embedding-3-large 为 3072，许多 Cohere/Voyage 模型为 768）。",
-    "headsUp": "注意：向量存储命名空间只能容纳一种维度的向量。每当您更改嵌入提供商、模型或维度时，请确保维度仍然与模型产生的值匹配，否则写入现有命名空间将失败，读取将静默未命中。命名空间不会自动重建；请使用新的命名空间，或在保存前删除向量存储中的现有类/索引。",
-    "cacheSettings": "缓存设置",
-    "ttl": "TTL（秒）",
-    "ttlDesc": "缓存条目在过期前的存活时间。可通过 x-bf-cache-ttl 头按请求覆盖。",
-    "similarityThreshold": "相似度阈值",
-    "thresholdDesc": "语义命中的最小余弦相似度。可通过 x-bf-cache-threshold 头按请求覆盖。",
-    "storageAndKey": "存储和缓存键",
-    "vectorStoreNamespace": "向量存储命名空间",
-    "namespacePlaceholder": "BifrostLocalCachePlugin",
-    "namespaceDesc": "缓存条目所在的存储桶/索引名称。留空使用默认值（BifrostLocalCachePlugin）。修改此值将使插件指向不同的（可能为空）存储桶。旧条目不会被删除，只是不再被查询。",
-    "defaultCacheKey": "默认缓存键",
-    "cacheKeyPlaceholder": "（无）",
-    "cacheKeyDesc": "当请求未设置 x-bf-cache-key 时使用的回退分区键。缓存键隔离条目：相同的键 ↔ 共享缓存池。留空以禁用任何未发送该头的请求的缓存。",
-    "conversationSettings": "对话设置",
-    "conversationThreshold": "对话历史阈值",
-    "conversationThresholdDesc": "跳过超过此消息数的对话的缓存。长历史记录很少精确匹配，会膨胀缓存而收益不大。",
-    "excludeSystemPrompt": "排除系统提示词",
-    "excludeSystemPromptDesc": "从缓存键中去除系统消息。",
-    "cacheKeyComposition": "缓存键组成",
-    "cacheByModel": "按模型缓存",
-    "cacheByModelDesc": "在缓存键中包含模型名称。不同模型不会共享缓存响应。",
-    "cacheByProvider": "按提供商缓存",
-    "cacheByProviderDesc": "在缓存键中包含提供商名称。不同提供商不会共享缓存响应。",
-    "perRequestOverrides": "按请求覆盖",
-    "overrideKey": "x-bf-cache-key：将此请求限定到特定缓存分区。",
-    "overrideTtl": "x-bf-cache-ttl：仅为此请求覆盖 TTL。",
-    "overrideThreshold": "x-bf-cache-threshold：覆盖语义相似度阈值。",
-    "overrideType": "x-bf-cache-type：发送 direct 或 semantic 以将查找限制为一种路径。",
-    "overrideNoStore": "x-bf-cache-no-store：true 表示跳过写入响应（仍提供缓存命中）。",
-    "toast": {
-      "loadProvidersFailed": "加载提供商失败：{error}",
-      "enabled": "本地缓存已启用",
-      "enableFailed": "启用本地缓存失败：{error}",
-      "disabled": "本地缓存已禁用",
-      "disableFailed": "禁用本地缓存失败：{error}",
-      "configUpdated": "缓存配置已更新",
-      "configUpdateFailed": "更新缓存配置失败：{error}"
-    },
-    "validation": {
-      "providerRequired": "请为语义模式选择嵌入提供商，或切换到仅直接模式。",
-      "modelRequired": "请为语义模式选择嵌入模型。",
-      "dimensionRequired": "语义模式需要嵌入模型的真实维度（必须大于 1）。",
-      "ttlNonNegative": "TTL 必须为非负数。",
-      "thresholdRange": "相似度阈值必须在 0 到 1 之间。",
-      "conversationThresholdRange": "对话历史阈值必须在 1 到 50 之间。"
-    }
-  },
-  "clientSettings": {
-    "title": "客户端设置",
-    "description": "配置客户端连接设置",
-    "timeout": "客户端超时",
-    "maxRetries": "最大重试次数",
-    "connectionPool": "连接池",
-    "noConfig": "未配置客户端设置",
-    "dropExcessRequests": "丢弃超额请求",
-    "dropExcessRequestsDesc": "启用后，Bifrost 将丢弃超过池容量的请求。",
-    "droppedRequests": "自上次重启以来已丢弃 <1>{{count}} 个请求</1>。",
-    "disableDbPings": "健康检查中禁用数据库 Ping",
-    "disableDbPingsDesc": "启用后，/health 端点将跳过数据库连接检查并立即返回 OK。",
-    "dumpErrors": "将错误输出到控制台日志",
-    "dumpErrorsDesc": "启用后，完整的错误详情将写入服务器控制台日志。有助于调试，但在生产环境中可能过于嘈杂。",
-    "asyncJobResultTtl": "异步任务结果 TTL（秒）",
-    "asyncJobResultTtlDesc": "异步任务结果的默认存活时间（秒）。结果在过期后会自动清理。",
-    "headerForwarding": "请求头转发",
-    "headerForwardingDesc": "控制哪些额外的请求头被转发给 LLM 提供商。",
-    "aboutHeaderForwarding": "关于请求头转发",
-    "twoWaysToForward": "两种转发请求头的方式：",
-    "prefixedHeaders": "带前缀的请求头：",
-    "prefixedHeadersDesc": "使用 <1>x-bf-eh-*</1> 前缀。例如 <3>x-bf-eh-custom-id</3> 将作为 <5>custom-id</5> 转发。",
-    "directHeaders": "直接请求头：",
-    "directHeadersDesc": "任何显式添加到白名单的请求头都可以不带前缀直接转发（例如 <1>anthropic-beta</1>）。",
-    "howAllowlistDenylistWork": "白名单和黑名单如何工作：",
-    "allowlistEmpty": "白名单为空：",
-    "allowlistEmptyDesc": "仅转发带 <1>x-bf-eh-*</1> 前缀的请求头（默认行为）",
-    "allowlistConfigured": "已配置白名单：",
-    "allowlistConfiguredDesc": "由白名单过滤的带前缀请求头，加上白名单中的任何直接请求头都会被转发",
-    "denylistRule": "黑名单：",
-    "denylistRuleDesc": "黑名单中的请求头始终被阻止转发",
-    "wildcards": "通配符：",
-    "wildcardsDesc": "在模式末尾使用 <1>*</1> 匹配前缀（例如 <3>anthropic-*</3> 匹配所有以 <5>anthropic-</5> 开头的请求头）。单独使用 <7>*</7> 匹配所有请求头。",
-    "important": "重要：",
-    "importantDesc1": "白名单/黑名单条目应为 <1>不带</1> <3>x-bf-eh-</3> 前缀的请求头名称",
-    "importantDesc2": "示例：要允许 <1>x-bf-eh-custom-id</1> 或直接 <3>custom-id</3>，请将 <5>custom-id</5> 添加到白名单",
-    "securityNote": "安全提示",
-    "securityNoteDesc": "出于安全原因，某些请求头始终被阻止，无论配置如何。这些请求头不能添加到白名单或黑名单：",
-    "allowlist": "白名单",
-    "allowlistDesc": "允许的请求头。输入不带 <1>x-bf-eh-</1> 前缀的名称。此列表中的任何请求头也可以不带前缀直接发送。",
-    "denylist": "黑名单",
-    "denylistDesc": "要阻止的请求头。输入不带 <1>x-bf-eh-</1> 前缀的名称。适用于带前缀和直接请求头转发。",
-    "addHeader": "添加请求头",
-    "saveChanges": "保存更改",
-    "saving": "保存中...",
-    "removeSecurityHeaders": "移除安全请求头",
-    "removeSecurityHeaders_plural": "移除安全请求头",
-    "configNotLoaded": "配置未加载。请刷新并重试。",
-    "saveFailed": "保存客户端配置失败：{{error}}",
-    "saved": "客户端设置更新成功。",
-    "placeholderAllowlist": "例如：anthropic-*, custom-id",
-    "placeholderDenylist": "例如：x-internal-*",
-    "userAgentMappings": {
-      "title": "用户代理映射",
-      "description": "将传入的 User-Agent 字符串映射到应用名称和日志中使用的可选徽标。",
-      "add": "添加",
-      "editTitle": "编辑用户代理映射",
-      "addTitle": "添加用户代理映射",
-      "sheetDescription": "定义 User-Agent 值如何映射到日志中的应用标签。",
-      "saveChanges": "保存更改",
-      "addMapping": "添加映射",
-      "cancel": "取消",
-      "pattern": "模式",
-      "match": "匹配",
-      "app": "应用",
-      "logo": "徽标",
-      "active": "活跃",
-      "inactive": "不活跃",
-      "actions": "操作",
-      "loading": "正在加载映射...",
-      "empty": "未配置用户代理映射。",
-      "edit": "编辑",
-      "delete": "删除",
-      "deleteConfirmTitle": "确定要删除此映射吗？",
-      "deleteConfirmDesc": "此操作无法撤销。这将永久删除用户代理映射。",
-      "patternPlaceholder": "User-Agent 字符串或正则表达式",
-      "matchType": "匹配类型",
-      "appPlaceholder": "应用",
-      "activeDesc": "不活跃的映射会被保存但不会被检测。",
-      "uploadLogo": "上传徽标",
-      "removeLogo": "移除徽标",
-      "logoTooLarge": "徽标必须为 256KB 或更小。",
-      "logoReadFailed": "读取徽标文件失败。",
-      "patternAndAppRequired": "模式和应用为必填项。",
-      "regexInvalid": "正则表达式无效。",
-      "matchTypes": {
-        "contains": "包含",
-        "starts_with": "以...开头",
-        "exact": "精确匹配",
-        "regex": "正则表达式"
-      },
-      "mappingActionsAriaLabel": "映射操作",
-      "toast": {
-        "updated": "用户代理映射已更新。",
-        "added": "用户代理映射已添加。",
-        "deleted": "用户代理映射已删除。",
-        "addFailed": "添加映射失败：{{error}}",
-        "updateFailed": "更新映射失败：{{error}}",
-        "deleteFailed": "删除映射失败：{{error}}"
-      }
-    }
-  },
-  "compatibility": {
-    "title": "兼容性",
-    "description": "配置 API 兼容性设置",
-    "mode": "兼容模式",
-    "openai": "OpenAI 兼容",
-    "anthropic": "Anthropic 兼容",
-    "bedrock": "Bedrock 兼容",
-    "genai": "Google GenAI 兼容",
-    "noConfig": "未配置兼容性设置",
-    "convertTextToChat": "转换文本为对话",
-    "convertTextToChatDesc": "将文本补全请求转换为对话，适用于仅支持对话的模型。",
-    "convertChatToResponses": "转换对话为响应",
-    "convertChatToResponsesDesc": "将对话补全请求转换为响应，适用于仅支持响应的模型。",
-    "dropUnsupportedParams": "丢弃不支持的参数",
-    "dropUnsupportedParamsDesc": "基于模型目录白名单丢弃不支持的参数。",
-    "convertUnsupportedParamValues": "转换不支持的参数值",
-    "convertUnsupportedParamValuesDesc": "转换模型不支持的参数值。",
-    "saveChanges": "保存更改",
-    "saving": "保存中..."
-  },
-  "featureFlags": {
-    "title": "功能开关",
-    "description": "管理功能开关",
-    "enableFeature": "启用功能",
-    "flagName": "开关名称",
-    "status": "状态",
-    "noFlags": "未配置功能开关"
-  },
-  "largePayload": {
-    "title": "大载荷",
-    "description": "配置大载荷处理",
-    "maxSize": "最大载荷大小",
-    "storage": "存储后端",
-    "noConfig": "无大载荷配置"
-  },
-  "logging": {
-    "title": "日志记录",
-    "description": "配置日志记录设置",
-    "logLevel": "日志级别",
-    "logStore": "日志存储",
-    "retention": "保留期限",
-    "sampling": "采样率",
-    "noConfig": "无日志配置",
-    "enableLogs": "启用日志",
-    "enableLogsDesc": "启用对 SQL 数据库的请求和响应日志记录。这可能会增加 40-60MB 的系统内存开销。",
-    "requiresLogsStore": "需要在 config.json 中配置并启用日志存储。",
-    "disableContentLogging": "禁用内容日志记录",
-    "disableContentLoggingDesc": "启用后，仅记录使用元数据（延迟、成本、词元数、状态、路由 ID 等）。请求/响应内容（消息、参数、工具调用及任何原始提供商字节）会从日志记录中丢弃，即使 <1>store_raw_request_response</1> 已开启也不受影响。通过 <3>send_back_raw_*</3> 向调用方回传原始字节不受影响。",
-    "retainContentInObjectStorage": "在对象存储中保留内容",
-    "retainContentInObjectStorageDesc": "启用后，内容日志记录已禁用（通过上述全局设置或 <1>x-bf-disable-content-logging</1> 头部）的请求，其完整内容仍会卸载到对象存储，但内容永远不会在日志中显示：数据库行保持仅元数据，UI/API 永远不会取回载荷。内容只能通过直接访问存储桶来读取。禁用后，此类请求的内容将被完全丢弃（当前行为）。",
-    "requiresObjectStorage": "需要在 config.json 的日志存储中配置对象存储。",
-    "allowPerRequestContentStorageOverride": "允许按请求覆盖内容存储",
-    "allowPerRequestContentStorageOverrideDesc": "启用后，单个请求可以使用 <1>x-bf-disable-content-logging</1> 头部或上下文键覆盖全局内容日志记录设置，并可以使用 <3>x-bf-store-raw-request-response</3> 头部选择在日志中保留原始提供商字节。原始字节存储需要内容日志记录处于开启状态——全局开启，或通过同一请求上的 <5>x-bf-disable-content-logging: false</5> 开启。如果内容日志记录已关闭，即使 <7>x-bf-store-raw-request-response: true</7>，原始字节也会从日志记录中丢弃。不影响向调用方回传原始字节；请参阅“允许按请求原始覆盖”。",
-    "allowPerRequestRawOverride": "允许按请求原始覆盖",
-    "allowPerRequestRawOverrideDesc": "启用后，单个请求可以使用 <1>x-bf-send-back-raw-request</1> 和 <3>x-bf-send-back-raw-response</3> 头部将原始提供商请求/响应字节回传给调用方。不影响日志存储；日志中的原始字节持久化由“允许按请求内容存储覆盖”控制。",
-    "logRetentionDays": "日志保留天数",
-    "logRetentionDaysDesc": "日志在数据库中保留的天数。最少为 1 天。较早的日志将被自动删除。",
-    "hideDeletedVirtualKeys": "不在筛选器中显示已删除的虚拟密钥",
-    "hideDeletedVirtualKeysDesc": "启用后，已删除的虚拟密钥不会显示在日志、仪表盘和 MCP 日志的虚拟密钥筛选选项中。",
-    "loggingHeaders": "日志记录头部",
-    "loggingHeadersDesc": "逗号分隔的请求头部列表，用于在日志元数据中捕获。支持精确名称和通配符模式（例如 <1>x-custom-*</1> 捕获所有具有该前缀的头部，<3>*</3> 记录所有头部；注意 <5>*</5> 会捕获 Authorization 等敏感头部）。值从传入请求中提取并存储在日志条目的元数据字段中。以 <7>x-bf-lh-</7> 前缀开头的头部始终自动捕获。",
-    "loggingHeadersPlaceholder": "X-Tenant-ID, X-Request-Source, x-custom-*",
-    "saving": "保存中...",
-    "saveChanges": "保存更改",
-    "restartWarning": "需要重启 Bifrost 才能使更改生效。"
-  },
-  "mcpGateway": {
-    "title": "MCP 网关",
-    "description": "配置 MCP 网关设置",
-    "maxDepth": "最大代理深度",
-    "timeout": "工具执行超时",
-    "autoApprove": "自动批准工具",
-    "noConfig": "无 MCP 网关配置"
-  },
-  "observability": {
-    "title": "可观测性",
-    "description": "配置可观测性设置",
-    "tracing": "链路追踪",
-    "metrics": "指标",
-    "exporters": "导出器",
-    "noConfig": "无可观测性配置",
-    "fields": {
-      "prometheusLabels": "Prometheus 标签"
-    },
-    "descriptions": {
-      "prometheusLabels": "逗号分隔的自定义标签列表，将添加到 Prometheus 指标中。"
-    },
-    "placeholder": {
-      "prometheusLabels": "teamId, projectId, environment"
-    }
-  },
-  "performanceTuning": {
-    "title": "性能调优",
-    "description": "配置性能调优设置",
-    "concurrency": "并发数",
-    "poolSize": "池大小",
-    "bufferSize": "缓冲区大小",
-    "noConfig": "无性能调优配置"
-  },
-  "pricingConfig": {
-    "title": "定价配置",
-    "description": "配置定价设置",
-    "modelPricing": "模型定价",
-    "customPricing": "自定义定价",
-    "overrides": "定价覆盖",
-    "noConfig": "无定价配置"
-  },
-  "security": {
-    "title": "安全",
-    "description": "配置安全设置",
-    "tls": "TLS 设置",
-    "cors": "CORS 设置",
-    "rateLimiting": "速率限制",
-    "noConfig": "无安全配置",
-    "pageTitle": "安全设置",
-    "pageDescription": "配置安全和访问控制设置。",
-    "passwordProtect": "仪表盘密码保护",
-    "beta": "测试版",
-    "passwordProtectDesc": "设置身份验证凭据以保护您的 Bifrost 仪表盘。配置后，使用生成的令牌进行所有管理 API 调用。",
-    "username": "用户名",
-    "usernamePlaceholder": "输入管理员用户名或 env.VAR_NAME",
-    "password": "密码",
-    "passwordPlaceholder": "输入管理员密码或 env.VAR_NAME",
-    "passwordHint": "至少使用 12 个字符，包含大写字母、小写字母、数字和特殊字符。支持环境变量引用。",
-    "passwordPolicyError": "密码必须包含 {failures}。",
-    "setupToken": "设置令牌",
-    "setupTokenPlaceholder": "粘贴由运维人员配置的设置令牌",
-    "setupTokenDesc": "尚无管理员账户，因此此实例无需密码即可访问。要完成设置，请向运维人员索取通过 config.json 中的 setup_token（或 BIFROST_SETUP_TOKEN 环境变量）配置的设置令牌，并粘贴在此处。",
-    "setupTokenRequired": "需要设置令牌",
-    "setupTokenError": "输入由运维人员配置的设置令牌以创建第一个管理员账户。通过 config.json 中的 setup_token 或 BIFROST_SETUP_TOKEN 环境变量设置。",
-    "enforceVirtualKeys": "强制推理使用虚拟密钥",
-    "enforceVirtualKeysDesc": "要求所有推理请求使用虚拟密钥。详情请参阅文档。",
-    "documentation": "文档",
-    "allowDirectKeys": "允许直接使用 API 密钥",
-    "allowDirectKeysDesc": "启用后，调用方可以在 Authorization、x-api-key 或 x-goog-api-key 头部中直接传递提供商 API 密钥，同时附带 x-bf-direct-key: true。Bifrost 将直接使用该密钥，绕过已注册的密钥池。",
-    "allowedOrigins": "允许的来源",
-    "allowedOriginsDesc": "逗号分隔的 CORS 和 WebSocket 连接允许的来源列表。本地主机来源始终允许。每个来源必须是包含协议的完整 URL（例如 https://app.example.com、http://10.0.0.100:3000）。子域名支持通配符（例如 https://*.example.com），或使用 \"*\" 允许所有来源。",
-    "allowedOriginsPlaceholder": "https://app.example.com, https://*.example.com, *",
-    "allowedHeaders": "允许的头部",
-    "allowedHeadersDesc": "逗号分隔的 CORS 允许的头部列表。",
-    "allowedHeadersPlaceholder": "X-Stainless-Timeout",
-    "requiredHeaders": "必需的头部",
-    "requiredHeadersDesc": "逗号分隔的每个请求必须包含的头部列表。缺少其中任何头部的请求将被拒绝并返回 400 错误。头部名称不区分大小写。",
-    "requiredHeadersPlaceholder": "X-Tenant-ID, X-Custom-Header",
-    "whitelistedRoutes": "白名单路由",
-    "whitelistedRoutesDesc": "逗号分隔的绕过认证中间件的路由列表。对这些路由的请求不需要认证。系统路由如 /health、/api/session/login 和 /api/session/is-auth-enabled 始终被列入白名单，不受此设置影响。",
-    "whitelistedRoutesPlaceholder": "/api/custom-webhook, /api/public-endpoint",
-    "invalidOrigins": "无效的来源：{origins}。来源必须是有效的 URL，如 https://example.com，通配符模式如 https://*.example.com，或 \"*\" 以允许所有来源",
-    "restartWarning": "需要重启 Bifrost 才能使更改生效。",
-    "close": "关闭",
-    "viewDocs": "查看文档",
-    "toast": {
-      "settingsUpdated": "安全设置更新成功。"
-    }
-  },
-  "customPricing": {
-    "title": "自定义定价",
-    "description": "配置自定义定价覆盖",
-    "addOverride": "添加定价覆盖",
-    "editOverride": "编辑定价覆盖",
-    "deleteOverride": "删除定价覆盖",
-    "model": "模型",
-    "provider": "提供商",
-    "inputPrice": "输入价格",
-    "outputPrice": "输出价格",
-    "noOverrides": "未配置定价覆盖",
-    "noOverridesDesc": "添加您的第一个定价覆盖以开始使用"
-  },
-  "mcpSettings": {
-    "title": "MCP 设置",
-    "description": "配置 MCP 服务器设置",
-    "serverUrl": "服务器 URL",
-    "transport": "传输协议",
-    "timeout": "超时时间",
-    "noSettings": "未配置 MCP 设置"
-  },
-  "routingRules": {},
-  "proxy": {
-    "title": "代理设置",
-    "description": "配置出站请求的全局代理设置。",
-    "enableProxy": "启用代理",
-    "enableProxyDesc": "为出站 HTTP 请求启用全局代理。",
-    "configSection": "代理配置",
-    "type": "代理类型",
-    "typePlaceholder": "选择类型",
-    "typeHttp": "HTTP / HTTPS",
-    "typeSocks5": "SOCKS5",
-    "typeTcp": "TCP",
-    "comingSoon": "即将推出",
-    "typeDescription": "选择代理协议类型。目前仅支持 HTTP 代理。",
-    "unsupportedType": "{type} 代理暂不支持。请使用 HTTP 代理。",
-    "url": "代理 URL",
-    "urlPlaceholder": "http://proxy.example.com:8080",
-    "urlDescription": "代理服务器的完整 URL，包括协议和端口。",
-    "authSection": "认证（可选）",
-    "username": "用户名",
-    "usernamePlaceholder": "代理用户名",
-    "password": "密码",
-    "passwordPlaceholder": "代理密码",
-    "advancedSection": "高级设置",
-    "noProxyHosts": "无需代理的主机",
-    "noProxyPlaceholder": "localhost, 127.0.0.1, .internal.example.com",
-    "noProxyDesc": "逗号分隔的主机列表，这些主机应绕过代理。",
-    "timeout": "连接超时（秒）",
-    "timeoutPlaceholder": "30",
-    "timeoutDesc": "建立代理连接的超时时间。0 表示无超时。默认值为 60 秒。",
-    "caCert": "CA 证书 (PEM)（可选）",
-    "caCertPlaceholder": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----",
-    "caCertDesc": "PEM 编码的 CA 证书，用于信任通过 SSL 拦截代理的 TLS 连接。",
-    "skipTlsVerify": "跳过 TLS 验证",
-    "skipTlsVerifyDesc": "禁用 HTTPS 代理的 TLS 证书验证。不建议在生产环境中使用。",
-    "enableFor": "为以下功能启用代理",
-    "enableForDesc": "选择哪些组件应使用代理进行出站请求。",
-    "scim": "SCIM",
-    "scimDesc": "使用代理进行 SCIM 目录同步请求。",
-    "inference": "推理",
-    "inferenceDesc": "使用代理向模型提供商发送 LLM 推理请求。",
-    "api": "API",
-    "apiDesc": "使用代理进行外部 API 调用和 Webhook。",
-    "scimEnterprise": "SCIM 代理支持在 Bifrost Enterprise 中可用。",
-    "noPermission": "您没有权限更新设置",
-    "enterprise": "企业版"
-  },
-  "modelSettings": {
-    "title": "模型设置",
-    "description": "配置定价和路由行为。",
-    "fields": {
-      "modelParamsUrl": "模型参数 URL",
-      "pricingSyncInterval": "定价同步间隔（小时）",
-      "modelDiscoveryInterval": "模型发现间隔（分钟）",
-      "routingChainMaxDepth": "路由链最大深度"
-    },
-    "descriptions": {
-      "modelParamsUrl": "自定义模型参数数据表的 URL。留空使用默认值。",
-      "pricingSyncInterval": "从数据表 URL 同步定价数据的频率。",
-      "modelDiscoveryInterval": "每个提供商的模型列表在后台重新获取的频率，使提供商新提供的模型无需重启即可使用。设置为 0 关闭，仅从提供商页面刷新。",
-      "modelDiscoveryOff": "后台发现已关闭。模型列表仅在启动时、密钥更改时以及手动刷新时更新。",
-      "routingChainMaxDepth": "每个请求的最大链式路由规则评估次数。防止循环规则定义导致无限循环。"
-    },
-    "placeholder": {
-      "pricingUrl": "https://example.com/pricing.json",
-      "modelParamsUrl": "https://example.com/model-parameters.json"
-    },
-    "validation": {
-      "urlPrefix": "URL 必须以 http://、https:// 或 file:// 开头",
-      "pricingSyncRequired": "定价同步间隔为必填项",
-      "pricingSyncMin": "同步间隔必须至少为 1 小时",
-      "pricingSyncMax": "同步间隔不能超过 8760 小时（1 年）",
-      "modelDiscoveryRequired": "模型发现间隔为必填项",
-      "modelDiscoveryMin": "间隔必须为 0（禁用）或至少 {n} 分钟",
-      "modelDiscoveryMax": "间隔不能超过 1440 分钟（24 小时）",
-      "routingDepthRequired": "路由链最大深度为必填项",
-      "routingDepthMin": "必须至少为 1",
-      "routingDepthMax": "不能超过 100"
-    }
-  },
-  "actions": {
-    "saveChanges": "保存更改",
-    "saving": "保存中...",
-    "syncing": "同步中...",
-    "forceSyncNow": "立即强制同步"
-  },
-  "descriptions": {
-    "performanceTuning": "配置性能相关设置。",
-    "initialPoolSize": "初始连接池大小。",
-    "maxRequestBodySize": "请求体的最大大小（MB）。",
-    "pricingConfig": "配置自定义定价数据表和同步间隔。",
-    "pricingDatasheetUrl": "自定义定价数据表的 URL。留空使用默认定价。",
-    "featureFlags": "切换进程内功能开关。开关在代码中声明；也可以通过 config.json 或 Helm 设置，此时会显示为锁定状态。",
-    "logsSettings": "配置请求和响应的日志记录设置。",
-    "compatibility": "配置请求转换和兼容性回退。"
-  },
-  "fields": {
-    "initialPoolSize": "初始池大小",
-    "maxRequestBodySize": "最大请求体大小 (MB)",
-    "pricingDatasheetUrl": "定价数据表 URL",
-    "flag": "开关",
-    "enabled": "已启用"
-  },
-  "state": {
-    "noFeatureFlags": "未找到功能开关。",
-    "loading": "正在加载功能开关...",
-    "loadFailed": "加载功能开关失败"
-  },
-  "restart": {
-    "description": "这些设置需要重启 Bifrost 服务才能生效。当前连接将继续使用现有设置直到重启。",
-    "warning": "需要重启 Bifrost 才能使更改生效。"
-  },
-  "toast": {
-    "settingsSaved": "设置保存成功",
-    "settingsSaveFailed": "保存设置失败",
-    "settingsLoaded": "设置加载成功",
-    "resetConfig": "配置重置成功",
-    "configExported": "配置导出成功",
-    "configNotLoaded": "配置未加载",
-    "logRetentionDaysMin": "日志保留天数至少为 1 天",
-    "loggingUpdated": "日志配置更新成功。",
-    "poolSizePositive": "初始池大小必须为正数。",
-    "maxBodySizePositive": "最大请求体大小必须为正数。",
-    "performanceUpdated": "性能设置更新成功。",
-    "pricingUpdated": "定价配置更新成功。",
-    "pricingSynced": "定价同步成功。",
-    "compatibilityUpdated": "兼容性设置更新成功。",
-    "observabilityUpdated": "可观测性设置更新成功。",
-    "proxyUpdated": "代理配置更新成功。",
-    "modelSettingsUpdated": "模型设置更新成功。"
-  }
+	"page": {
+		"title": "配置",
+		"performanceTuning": "性能调优",
+		"pricingConfig": "定价配置",
+		"featureFlags": "功能开关",
+		"logsSettings": "日志设置",
+		"compatibility": "兼容性",
+		"clientSettings": "客户端设置",
+		"caching": "缓存",
+		"security": "安全设置",
+		"mcpGateway": "MCP 网关",
+		"observability": "可观测性",
+		"largePayload": "大载荷"
+	},
+	"providers": {
+		"default": {
+			"placeholder": "例如：gpt-4, gpt-3.5-turbo。留空表示所有模型。"
+		},
+		"anthropic": {
+			"placeholder": "例如：claude-3-haiku, claude-2.1"
+		},
+		"azure": {
+			"placeholder": "例如：gpt-4, gpt-35-turbo（必须与别名密钥匹配）"
+		},
+		"bedrock": {
+			"placeholder": "例如：claude-v2, titan-text-express-v1, ai21-j2-mid"
+		},
+		"bedrock_mantle": {
+			"placeholder": "例如：anthropic.claude-opus-4-8, openai.gpt-oss-120b"
+		},
+		"cerebras": {
+			"placeholder": "例如：cerebras-2, cerebras-2-vision"
+		},
+		"cohere": {
+			"placeholder": "例如：command-r, command-r-plus"
+		},
+		"deepseek": {
+			"placeholder": "例如：deepseek-v4-flash, deepseek-v4-pro"
+		},
+		"gemini": {
+			"placeholder": "例如：gemini-1.5-pro, gemini-1.5-flash"
+		},
+		"groq": {
+			"placeholder": "例如：llama3-70b-8192, mixtral-8x7b-32768"
+		},
+		"huggingface": {
+			"placeholder": "例如：sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B"
+		},
+		"mistral": {
+			"placeholder": "例如：mistral-7b-instruct, mixtral-8x7b"
+		},
+		"openrouter": {
+			"placeholder": "例如：openai/gpt-4, anthropic/claude-3-haiku"
+		},
+		"sgl": {
+			"placeholder": "例如：sgl-2, sgl-vision"
+		},
+		"parasail": {
+			"placeholder": "例如：parasail-2, parasail-vision"
+		},
+		"elevenlabs": {
+			"placeholder": "例如：eleven_multilingual_v2, eleven_turbo_v2"
+		},
+		"perplexity": {
+			"placeholder": "例如：sonar-pro, sonar-deep-research"
+		},
+		"ollama": {
+			"placeholder": "例如：llama3.1, llama2"
+		},
+		"opencode_go": {
+			"placeholder": "例如：gpt-5.5, claude-sonnet-4-6"
+		},
+		"opencode_zen": {
+			"placeholder": "例如：gpt-5.5, claude-sonnet-4-6"
+		},
+		"openai": {
+			"placeholder": "例如：gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo"
+		},
+		"vertex": {
+			"placeholder": "例如：gemini-1.5-pro, text-bison, chat-bison"
+		},
+		"nebius": {
+			"placeholder": "例如：openai/gpt-oss-120b, google/gemma-2-9b-it-fast, Qwen/Qwen2.5-VL-72B-Instruct"
+		},
+		"xai": {
+			"placeholder": "例如：grok-4-0709, grok-3-mini, grok-3, grok-2-vision-1212"
+		},
+		"replicate": {
+			"placeholder": "例如：meta/llama3-1-8b-instruct, black-forest-labs/flux-dev"
+		},
+		"vllm": {
+			"placeholder": "例如：Qwen/Qwen3-0.6B, Qwen/Qwen3-1.5B"
+		},
+		"runway": {
+			"placeholder": "例如：gen4_turbo_image_to_video, gen3a_turbo_image_to_video"
+		},
+		"runware": {
+			"placeholder": "例如：runware:100@1, runware:101@1"
+		},
+		"fireworks": {
+			"placeholder": "例如：accounts/fireworks/models/deepseek-v3p2"
+		},
+		"sarvam": {
+			"placeholder": "例如：sarvam-30b, sarvam-105b"
+		},
+		"wafer": {
+			"placeholder": "例如：glm-5.2, kimi-k2.6"
+		}
+	},
+	"mcp": {
+		"status": {
+			"healthy": {
+				"label": "健康"
+			},
+			"error": {
+				"label": "错误"
+			},
+			"unstable": {
+				"label": "不稳定"
+			},
+			"pending_verification": {
+				"label": "待验证"
+			},
+			"disabled": {
+				"label": "已禁用"
+			},
+			"needs_reauth": {
+				"label": "需要重新认证"
+			},
+			"degraded": {
+				"label": "降级"
+			}
+		}
+	},
+	"apiKeys": {
+		"title": "API 密钥",
+		"description": "管理 API 密钥认证",
+		"createKey": "创建 API 密钥",
+		"editKey": "编辑 API 密钥",
+		"deleteKey": "删除 API 密钥",
+		"keyName": "密钥名称",
+		"keyValue": "密钥值",
+		"status": "状态",
+		"created": "创建时间",
+		"lastUsed": "最后使用",
+		"noKeys": "未配置 API 密钥",
+		"active": "活跃",
+		"inactive": "不活跃",
+		"loading": "加载中...",
+		"setupFirst": "要生成 API 密钥，您需要先设置管理员用户名和密码。",
+		"configureSecurity": "配置安全设置",
+		"usageInstructions": "生成后，您需要在所有对 Bifrost 管理 API 和 UI 的 API 调用中使用此 API 密钥。",
+		"authDisabledForInference": "推理 API 调用的身份验证当前已禁用。您可以在没有身份验证的情况下进行推理请求。仪表板和管理 API 调用仍需使用您的管理员凭据以标准 <0>username:password</0> 格式进行 base64 编码的 Basic 身份验证。",
+		"authEnabledForInference": "在对 Bifrost 进行 API 调用时，使用您的管理员凭据进行 Basic 身份验证。以标准 <0>username:password</0> 格式对您的凭据进行 base64 编码。",
+		"example": "示例："
+	},
+	"caching": {
+		"title": "缓存",
+		"description": "配置响应缓存设置",
+		"enableCache": "启用缓存",
+		"ttl": "缓存 TTL",
+		"maxSize": "最大缓存大小",
+		"strategies": "缓存策略",
+		"noConfig": "无缓存配置",
+		"pageTitle": "本地缓存",
+		"pageDescription": "通过两种互补的查找路径在本地缓存响应：用于精确重放的直接哈希匹配，以及用于相关内容的语义相似度搜索。发送 x-bf-cache-key 头将缓存响应限定到特定租户或功能。",
+		"requiresVectorStore": "需要在 config.json 中配置并启用向量存储。",
+		"loadFailed": "加载配置失败",
+		"unexpectedError": "发生意外错误，请重试。",
+		"enableCaching": "启用缓存",
+		"enableCachingDesc": "无需重启服务器即可加载（或卸载）插件。您所做的配置更改会就地修改运行中的插件，无需重新部署。",
+		"cacheMode": "缓存模式",
+		"directOnly": "仅直接模式",
+		"directSemantic": "直接 + 语义模式",
+		"embeddingRequired": "请配置支持嵌入的提供商以启用语义模式。",
+		"directModeDesc": "仅直接模式对每个请求进行哈希处理并重放精确匹配。无需嵌入，无需提供商。成本最低，适合稳定的提示词。",
+		"semanticModeDesc": "直接 + 语义模式在直接哈希匹配的基础上增加了向量相似度搜索。需要支持嵌入的提供商和模型的真实维度。仍优先服务直接命中；语义搜索仅在直接查找未命中时运行。",
+		"embeddingProvider": "嵌入提供商和模型",
+		"configuredProviders": "已配置的提供商",
+		"selectProvider": "选择提供商",
+		"embeddingModel": "嵌入模型*",
+		"searchModel": "搜索或输入嵌入模型...",
+		"selectProviderFirst": "请先选择提供商",
+		"apiKeysInherited": "API 密钥从嵌入提供商的主配置继承，无需在此处重新添加。",
+		"dimension": "维度",
+		"dimensionDesc": "嵌入模型产生的向量大小。必须与模型完全匹配（例如 OpenAI text-embedding-3-small 为 1536，text-embedding-3-large 为 3072，许多 Cohere/Voyage 模型为 768）。",
+		"headsUp": "注意：向量存储命名空间只能容纳一种维度的向量。每当您更改嵌入提供商、模型或维度时，请确保维度仍然与模型产生的值匹配，否则写入现有命名空间将失败，读取将静默未命中。命名空间不会自动重建；请使用新的命名空间，或在保存前删除向量存储中的现有类/索引。",
+		"cacheSettings": "缓存设置",
+		"ttl": "TTL（秒）",
+		"ttlDesc": "缓存条目在过期前的存活时间。可通过 x-bf-cache-ttl 头按请求覆盖。",
+		"similarityThreshold": "相似度阈值",
+		"thresholdDesc": "语义命中的最小余弦相似度。可通过 x-bf-cache-threshold 头按请求覆盖。",
+		"storageAndKey": "存储和缓存键",
+		"vectorStoreNamespace": "向量存储命名空间",
+		"namespacePlaceholder": "BifrostLocalCachePlugin",
+		"namespaceDesc": "缓存条目所在的存储桶/索引名称。留空使用默认值（BifrostLocalCachePlugin）。修改此值将使插件指向不同的（可能为空）存储桶。旧条目不会被删除，只是不再被查询。",
+		"defaultCacheKey": "默认缓存键",
+		"cacheKeyPlaceholder": "（无）",
+		"cacheKeyDesc": "当请求未设置 x-bf-cache-key 时使用的回退分区键。缓存键隔离条目：相同的键 ↔ 共享缓存池。留空以禁用任何未发送该头的请求的缓存。",
+		"conversationSettings": "对话设置",
+		"conversationThreshold": "对话历史阈值",
+		"conversationThresholdDesc": "跳过超过此消息数的对话的缓存。长历史记录很少精确匹配，会膨胀缓存而收益不大。",
+		"excludeSystemPrompt": "排除系统提示词",
+		"excludeSystemPromptDesc": "从缓存键中去除系统消息。",
+		"cacheKeyComposition": "缓存键组成",
+		"cacheByModel": "按模型缓存",
+		"cacheByModelDesc": "在缓存键中包含模型名称。不同模型不会共享缓存响应。",
+		"cacheByProvider": "按提供商缓存",
+		"cacheByProviderDesc": "在缓存键中包含提供商名称。不同提供商不会共享缓存响应。",
+		"perRequestOverrides": "按请求覆盖",
+		"overrideKey": "x-bf-cache-key：将此请求限定到特定缓存分区。",
+		"overrideTtl": "x-bf-cache-ttl：仅为此请求覆盖 TTL。",
+		"overrideThreshold": "x-bf-cache-threshold：覆盖语义相似度阈值。",
+		"overrideType": "x-bf-cache-type：发送 direct 或 semantic 以将查找限制为一种路径。",
+		"overrideNoStore": "x-bf-cache-no-store：true 表示跳过写入响应（仍提供缓存命中）。",
+		"toast": {
+			"loadProvidersFailed": "加载提供商失败：{error}",
+			"enabled": "本地缓存已启用",
+			"enableFailed": "启用本地缓存失败：{error}",
+			"disabled": "本地缓存已禁用",
+			"disableFailed": "禁用本地缓存失败：{error}",
+			"configUpdated": "缓存配置已更新",
+			"configUpdateFailed": "更新缓存配置失败：{error}"
+		},
+		"validation": {
+			"providerRequired": "请为语义模式选择嵌入提供商，或切换到仅直接模式。",
+			"modelRequired": "请为语义模式选择嵌入模型。",
+			"dimensionRequired": "语义模式需要嵌入模型的真实维度（必须大于 1）。",
+			"ttlNonNegative": "TTL 必须为非负数。",
+			"thresholdRange": "相似度阈值必须在 0 到 1 之间。",
+			"conversationThresholdRange": "对话历史阈值必须在 1 到 50 之间。"
+		}
+	},
+	"clientSettings": {
+		"title": "客户端设置",
+		"description": "配置客户端连接设置",
+		"timeout": "客户端超时",
+		"maxRetries": "最大重试次数",
+		"connectionPool": "连接池",
+		"noConfig": "未配置客户端设置",
+		"dropExcessRequests": "丢弃超额请求",
+		"dropExcessRequestsDesc": "启用后，Bifrost 将丢弃超过池容量的请求。",
+		"droppedRequests": "自上次重启以来已丢弃 <1>{{count}} 个请求</1>。",
+		"disableDbPings": "健康检查中禁用数据库 Ping",
+		"disableDbPingsDesc": "启用后，/health 端点将跳过数据库连接检查并立即返回 OK。",
+		"dumpErrors": "将错误输出到控制台日志",
+		"dumpErrorsDesc": "启用后，完整的错误详情将写入服务器控制台日志。有助于调试，但在生产环境中可能过于嘈杂。",
+		"asyncJobResultTtl": "异步任务结果 TTL（秒）",
+		"asyncJobResultTtlDesc": "异步任务结果的默认存活时间（秒）。结果在过期后会自动清理。",
+		"headerForwarding": "请求头转发",
+		"headerForwardingDesc": "控制哪些额外的请求头被转发给 LLM 提供商。",
+		"aboutHeaderForwarding": "关于请求头转发",
+		"twoWaysToForward": "两种转发请求头的方式：",
+		"prefixedHeaders": "带前缀的请求头：",
+		"prefixedHeadersDesc": "使用 <1>x-bf-eh-*</1> 前缀。例如 <3>x-bf-eh-custom-id</3> 将作为 <5>custom-id</5> 转发。",
+		"directHeaders": "直接请求头：",
+		"directHeadersDesc": "任何显式添加到白名单的请求头都可以不带前缀直接转发（例如 <1>anthropic-beta</1>）。",
+		"howAllowlistDenylistWork": "白名单和黑名单如何工作：",
+		"allowlistEmpty": "白名单为空：",
+		"allowlistEmptyDesc": "仅转发带 <1>x-bf-eh-*</1> 前缀的请求头（默认行为）",
+		"allowlistConfigured": "已配置白名单：",
+		"allowlistConfiguredDesc": "由白名单过滤的带前缀请求头，加上白名单中的任何直接请求头都会被转发",
+		"denylistRule": "黑名单：",
+		"denylistRuleDesc": "黑名单中的请求头始终被阻止转发",
+		"wildcards": "通配符：",
+		"wildcardsDesc": "在模式末尾使用 <1>*</1> 匹配前缀（例如 <3>anthropic-*</3> 匹配所有以 <5>anthropic-</5> 开头的请求头）。单独使用 <7>*</7> 匹配所有请求头。",
+		"important": "重要：",
+		"importantDesc1": "白名单/黑名单条目应为 <1>不带</1> <3>x-bf-eh-</3> 前缀的请求头名称",
+		"importantDesc2": "示例：要允许 <1>x-bf-eh-custom-id</1> 或直接 <3>custom-id</3>，请将 <5>custom-id</5> 添加到白名单",
+		"securityNote": "安全提示",
+		"securityNoteDesc": "出于安全原因，某些请求头始终被阻止，无论配置如何。这些请求头不能添加到白名单或黑名单：",
+		"allowlist": "白名单",
+		"allowlistDesc": "允许的请求头。输入不带 <1>x-bf-eh-</1> 前缀的名称。此列表中的任何请求头也可以不带前缀直接发送。",
+		"denylist": "黑名单",
+		"denylistDesc": "要阻止的请求头。输入不带 <1>x-bf-eh-</1> 前缀的名称。适用于带前缀和直接请求头转发。",
+		"addHeader": "添加请求头",
+		"saveChanges": "保存更改",
+		"saving": "保存中...",
+		"removeSecurityHeaders": "移除安全请求头",
+		"removeSecurityHeaders_plural": "移除安全请求头",
+		"configNotLoaded": "配置未加载。请刷新并重试。",
+		"saveFailed": "保存客户端配置失败：{{error}}",
+		"saved": "客户端设置更新成功。",
+		"placeholderAllowlist": "例如：anthropic-*, custom-id",
+		"placeholderDenylist": "例如：x-internal-*",
+		"userAgentMappings": {
+			"title": "用户代理映射",
+			"description": "将传入的 User-Agent 字符串映射到应用名称和日志中使用的可选徽标。",
+			"add": "添加",
+			"editTitle": "编辑用户代理映射",
+			"addTitle": "添加用户代理映射",
+			"sheetDescription": "定义 User-Agent 值如何映射到日志中的应用标签。",
+			"saveChanges": "保存更改",
+			"addMapping": "添加映射",
+			"cancel": "取消",
+			"pattern": "模式",
+			"match": "匹配",
+			"app": "应用",
+			"logo": "徽标",
+			"active": "活跃",
+			"inactive": "不活跃",
+			"actions": "操作",
+			"loading": "正在加载映射...",
+			"empty": "未配置用户代理映射。",
+			"edit": "编辑",
+			"delete": "删除",
+			"deleteConfirmTitle": "确定要删除此映射吗？",
+			"deleteConfirmDesc": "此操作无法撤销。这将永久删除用户代理映射。",
+			"patternPlaceholder": "User-Agent 字符串或正则表达式",
+			"matchType": "匹配类型",
+			"appPlaceholder": "应用",
+			"activeDesc": "不活跃的映射会被保存但不会被检测。",
+			"uploadLogo": "上传徽标",
+			"removeLogo": "移除徽标",
+			"logoTooLarge": "徽标必须为 256KB 或更小。",
+			"logoReadFailed": "读取徽标文件失败。",
+			"patternAndAppRequired": "模式和应用为必填项。",
+			"regexInvalid": "正则表达式无效。",
+			"matchTypes": {
+				"contains": "包含",
+				"starts_with": "以...开头",
+				"exact": "精确匹配",
+				"regex": "正则表达式"
+			},
+			"mappingActionsAriaLabel": "映射操作",
+			"toast": {
+				"updated": "用户代理映射已更新。",
+				"added": "用户代理映射已添加。",
+				"deleted": "用户代理映射已删除。",
+				"addFailed": "添加映射失败：{{error}}",
+				"updateFailed": "更新映射失败：{{error}}",
+				"deleteFailed": "删除映射失败：{{error}}"
+			}
+		}
+	},
+	"compatibility": {
+		"title": "兼容性",
+		"description": "配置 API 兼容性设置",
+		"mode": "兼容模式",
+		"openai": "OpenAI 兼容",
+		"anthropic": "Anthropic 兼容",
+		"bedrock": "Bedrock 兼容",
+		"genai": "Google GenAI 兼容",
+		"noConfig": "未配置兼容性设置",
+		"convertTextToChat": "转换文本为对话",
+		"convertTextToChatDesc": "将文本补全请求转换为对话，适用于仅支持对话的模型。",
+		"convertChatToResponses": "转换对话为响应",
+		"convertChatToResponsesDesc": "将对话补全请求转换为响应，适用于仅支持响应的模型。",
+		"dropUnsupportedParams": "丢弃不支持的参数",
+		"dropUnsupportedParamsDesc": "基于模型目录白名单丢弃不支持的参数。",
+		"convertUnsupportedParamValues": "转换不支持的参数值",
+		"convertUnsupportedParamValuesDesc": "转换模型不支持的参数值。",
+		"saveChanges": "保存更改",
+		"saving": "保存中..."
+	},
+	"featureFlags": {
+		"title": "功能开关",
+		"description": "管理功能开关",
+		"enableFeature": "启用功能",
+		"flagName": "开关名称",
+		"status": "状态",
+		"noFlags": "未配置功能开关"
+	},
+	"largePayload": {
+		"title": "大载荷",
+		"description": "配置大载荷处理",
+		"maxSize": "最大载荷大小",
+		"storage": "存储后端",
+		"noConfig": "无大载荷配置"
+	},
+	"logging": {
+		"title": "日志记录",
+		"description": "配置日志记录设置",
+		"logLevel": "日志级别",
+		"logStore": "日志存储",
+		"retention": "保留期限",
+		"sampling": "采样率",
+		"noConfig": "无日志配置",
+		"enableLogs": "启用日志",
+		"enableLogsDesc": "启用对 SQL 数据库的请求和响应日志记录。这可能会增加 40-60MB 的系统内存开销。",
+		"requiresLogsStore": "需要在 config.json 中配置并启用日志存储。",
+		"disableContentLogging": "禁用内容日志记录",
+		"disableContentLoggingDesc": "启用后，仅记录使用元数据（延迟、成本、词元数、状态、路由 ID 等）。请求/响应内容（消息、参数、工具调用及任何原始提供商字节）会从日志记录中丢弃，即使 <1>store_raw_request_response</1> 已开启也不受影响。通过 <3>send_back_raw_*</3> 向调用方回传原始字节不受影响。",
+		"retainContentInObjectStorage": "在对象存储中保留内容",
+		"retainContentInObjectStorageDesc": "启用后，内容日志记录已禁用（通过上述全局设置或 <1>x-bf-disable-content-logging</1> 头部）的请求，其完整内容仍会卸载到对象存储，但内容永远不会在日志中显示：数据库行保持仅元数据，UI/API 永远不会取回载荷。内容只能通过直接访问存储桶来读取。禁用后，此类请求的内容将被完全丢弃（当前行为）。",
+		"requiresObjectStorage": "需要在 config.json 的日志存储中配置对象存储。",
+		"allowPerRequestContentStorageOverride": "允许按请求覆盖内容存储",
+		"allowPerRequestContentStorageOverrideDesc": "启用后，单个请求可以使用 <1>x-bf-disable-content-logging</1> 头部或上下文键覆盖全局内容日志记录设置，并可以使用 <3>x-bf-store-raw-request-response</3> 头部选择在日志中保留原始提供商字节。原始字节存储需要内容日志记录处于开启状态——全局开启，或通过同一请求上的 <5>x-bf-disable-content-logging: false</5> 开启。如果内容日志记录已关闭，即使 <7>x-bf-store-raw-request-response: true</7>，原始字节也会从日志记录中丢弃。不影响向调用方回传原始字节；请参阅“允许按请求原始覆盖”。",
+		"allowPerRequestRawOverride": "允许按请求原始覆盖",
+		"allowPerRequestRawOverrideDesc": "启用后，单个请求可以使用 <1>x-bf-send-back-raw-request</1> 和 <3>x-bf-send-back-raw-response</3> 头部将原始提供商请求/响应字节回传给调用方。不影响日志存储；日志中的原始字节持久化由“允许按请求内容存储覆盖”控制。",
+		"logRetentionDays": "日志保留天数",
+		"logRetentionDaysDesc": "日志在数据库中保留的天数。最少为 1 天。较早的日志将被自动删除。",
+		"hideDeletedVirtualKeys": "不在筛选器中显示已删除的虚拟密钥",
+		"hideDeletedVirtualKeysDesc": "启用后，已删除的虚拟密钥不会显示在日志、仪表盘和 MCP 日志的虚拟密钥筛选选项中。",
+		"loggingHeaders": "日志记录头部",
+		"loggingHeadersDesc": "逗号分隔的请求头部列表，用于在日志元数据中捕获。支持精确名称和通配符模式（例如 <1>x-custom-*</1> 捕获所有具有该前缀的头部，<3>*</3> 记录所有头部；注意 <5>*</5> 会捕获 Authorization 等敏感头部）。值从传入请求中提取并存储在日志条目的元数据字段中。以 <7>x-bf-lh-</7> 前缀开头的头部始终自动捕获。",
+		"loggingHeadersPlaceholder": "X-Tenant-ID, X-Request-Source, x-custom-*",
+		"saving": "保存中...",
+		"saveChanges": "保存更改",
+		"restartWarning": "需要重启 Bifrost 才能使更改生效。"
+	},
+	"mcpGateway": {
+		"title": "MCP 网关",
+		"description": "配置 MCP 网关设置",
+		"maxDepth": "最大代理深度",
+		"timeout": "工具执行超时",
+		"autoApprove": "自动批准工具",
+		"noConfig": "无 MCP 网关配置"
+	},
+	"observability": {
+		"title": "可观测性",
+		"description": "配置可观测性设置",
+		"tracing": "链路追踪",
+		"metrics": "指标",
+		"exporters": "导出器",
+		"noConfig": "无可观测性配置",
+		"fields": {
+			"prometheusLabels": "Prometheus 标签"
+		},
+		"descriptions": {
+			"prometheusLabels": "逗号分隔的自定义标签列表，将添加到 Prometheus 指标中。"
+		},
+		"placeholder": {
+			"prometheusLabels": "teamId, projectId, environment"
+		}
+	},
+	"performanceTuning": {
+		"title": "性能调优",
+		"description": "配置性能调优设置",
+		"concurrency": "并发数",
+		"poolSize": "池大小",
+		"bufferSize": "缓冲区大小",
+		"noConfig": "无性能调优配置"
+	},
+	"pricingConfig": {
+		"title": "定价配置",
+		"description": "配置定价设置",
+		"modelPricing": "模型定价",
+		"customPricing": "自定义定价",
+		"overrides": "定价覆盖",
+		"noConfig": "无定价配置"
+	},
+	"security": {
+		"title": "安全",
+		"description": "配置安全设置",
+		"tls": "TLS 设置",
+		"cors": "CORS 设置",
+		"rateLimiting": "速率限制",
+		"noConfig": "无安全配置",
+		"pageTitle": "安全设置",
+		"pageDescription": "配置安全和访问控制设置。",
+		"passwordProtect": "仪表盘密码保护",
+		"beta": "测试版",
+		"passwordProtectDesc": "设置身份验证凭据以保护您的 Bifrost 仪表盘。配置后，使用生成的令牌进行所有管理 API 调用。",
+		"username": "用户名",
+		"usernamePlaceholder": "输入管理员用户名或 env.VAR_NAME",
+		"password": "密码",
+		"passwordPlaceholder": "输入管理员密码或 env.VAR_NAME",
+		"passwordHint": "至少使用 12 个字符，包含大写字母、小写字母、数字和特殊字符。支持环境变量引用。",
+		"passwordPolicyError": "密码必须包含 {failures}。",
+		"setupToken": "设置令牌",
+		"setupTokenPlaceholder": "粘贴由运维人员配置的设置令牌",
+		"setupTokenDesc": "尚无管理员账户，因此此实例无需密码即可访问。要完成设置，请向运维人员索取通过 config.json 中的 setup_token（或 BIFROST_SETUP_TOKEN 环境变量）配置的设置令牌，并粘贴在此处。",
+		"setupTokenRequired": "需要设置令牌",
+		"setupTokenError": "输入由运维人员配置的设置令牌以创建第一个管理员账户。通过 config.json 中的 setup_token 或 BIFROST_SETUP_TOKEN 环境变量设置。",
+		"enforceVirtualKeys": "强制推理使用虚拟密钥",
+		"enforceVirtualKeysDesc": "要求所有推理请求使用虚拟密钥。详情请参阅文档。",
+		"documentation": "文档",
+		"allowDirectKeys": "允许直接使用 API 密钥",
+		"allowDirectKeysDesc": "启用后，调用方可以在 Authorization、x-api-key 或 x-goog-api-key 头部中直接传递提供商 API 密钥，同时附带 x-bf-direct-key: true。Bifrost 将直接使用该密钥，绕过已注册的密钥池。",
+		"allowedOrigins": "允许的来源",
+		"allowedOriginsDesc": "逗号分隔的 CORS 和 WebSocket 连接允许的来源列表。本地主机来源始终允许。每个来源必须是包含协议的完整 URL（例如 https://app.example.com、http://10.0.0.100:3000）。子域名支持通配符（例如 https://*.example.com），或使用 \"*\" 允许所有来源。",
+		"allowedOriginsPlaceholder": "https://app.example.com, https://*.example.com, *",
+		"allowedHeaders": "允许的头部",
+		"allowedHeadersDesc": "逗号分隔的 CORS 允许的头部列表。",
+		"allowedHeadersPlaceholder": "X-Stainless-Timeout",
+		"requiredHeaders": "必需的头部",
+		"requiredHeadersDesc": "逗号分隔的每个请求必须包含的头部列表。缺少其中任何头部的请求将被拒绝并返回 400 错误。头部名称不区分大小写。",
+		"requiredHeadersPlaceholder": "X-Tenant-ID, X-Custom-Header",
+		"whitelistedRoutes": "白名单路由",
+		"whitelistedRoutesDesc": "逗号分隔的绕过认证中间件的路由列表。对这些路由的请求不需要认证。系统路由如 /health、/api/session/login 和 /api/session/is-auth-enabled 始终被列入白名单，不受此设置影响。",
+		"whitelistedRoutesPlaceholder": "/api/custom-webhook, /api/public-endpoint",
+		"invalidOrigins": "无效的来源：{origins}。来源必须是有效的 URL，如 https://example.com，通配符模式如 https://*.example.com，或 \"*\" 以允许所有来源",
+		"restartWarning": "需要重启 Bifrost 才能使更改生效。",
+		"close": "关闭",
+		"viewDocs": "查看文档",
+		"toast": {
+			"settingsUpdated": "安全设置更新成功。"
+		}
+	},
+	"customPricing": {
+		"title": "自定义定价",
+		"description": "配置自定义定价覆盖",
+		"addOverride": "添加定价覆盖",
+		"editOverride": "编辑定价覆盖",
+		"deleteOverride": "删除定价覆盖",
+		"model": "模型",
+		"provider": "提供商",
+		"inputPrice": "输入价格",
+		"outputPrice": "输出价格",
+		"noOverrides": "未配置定价覆盖",
+		"noOverridesDesc": "添加您的第一个定价覆盖以开始使用"
+	},
+	"mcpSettings": {
+		"title": "MCP 设置",
+		"description": "配置 MCP 服务器设置",
+		"serverUrl": "服务器 URL",
+		"transport": "传输协议",
+		"timeout": "超时时间",
+		"noSettings": "未配置 MCP 设置"
+	},
+	"routingRules": {},
+	"proxy": {
+		"title": "代理设置",
+		"description": "配置出站请求的全局代理设置。",
+		"enableProxy": "启用代理",
+		"enableProxyDesc": "为出站 HTTP 请求启用全局代理。",
+		"configSection": "代理配置",
+		"type": "代理类型",
+		"typePlaceholder": "选择类型",
+		"typeHttp": "HTTP / HTTPS",
+		"typeSocks5": "SOCKS5",
+		"typeTcp": "TCP",
+		"comingSoon": "即将推出",
+		"typeDescription": "选择代理协议类型。目前仅支持 HTTP 代理。",
+		"unsupportedType": "{type} 代理暂不支持。请使用 HTTP 代理。",
+		"url": "代理 URL",
+		"urlPlaceholder": "http://proxy.example.com:8080",
+		"urlDescription": "代理服务器的完整 URL，包括协议和端口。",
+		"authSection": "认证（可选）",
+		"username": "用户名",
+		"usernamePlaceholder": "代理用户名",
+		"password": "密码",
+		"passwordPlaceholder": "代理密码",
+		"advancedSection": "高级设置",
+		"noProxyHosts": "无需代理的主机",
+		"noProxyPlaceholder": "localhost, 127.0.0.1, .internal.example.com",
+		"noProxyDesc": "逗号分隔的主机列表，这些主机应绕过代理。",
+		"timeout": "连接超时（秒）",
+		"timeoutPlaceholder": "30",
+		"timeoutDesc": "建立代理连接的超时时间。0 表示无超时。默认值为 60 秒。",
+		"caCert": "CA 证书 (PEM)（可选）",
+		"caCertPlaceholder": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----",
+		"caCertDesc": "PEM 编码的 CA 证书，用于信任通过 SSL 拦截代理的 TLS 连接。",
+		"skipTlsVerify": "跳过 TLS 验证",
+		"skipTlsVerifyDesc": "禁用 HTTPS 代理的 TLS 证书验证。不建议在生产环境中使用。",
+		"enableFor": "为以下功能启用代理",
+		"enableForDesc": "选择哪些组件应使用代理进行出站请求。",
+		"scim": "SCIM",
+		"scimDesc": "使用代理进行 SCIM 目录同步请求。",
+		"inference": "推理",
+		"inferenceDesc": "使用代理向模型提供商发送 LLM 推理请求。",
+		"api": "API",
+		"apiDesc": "使用代理进行外部 API 调用和 Webhook。",
+		"scimEnterprise": "SCIM 代理支持在 Bifrost Enterprise 中可用。",
+		"noPermission": "您没有权限更新设置",
+		"enterprise": "企业版"
+	},
+	"modelSettings": {
+		"title": "模型设置",
+		"description": "配置定价和路由行为。",
+		"fields": {
+			"modelParamsUrl": "模型参数 URL",
+			"pricingSyncInterval": "定价同步间隔（小时）",
+			"modelDiscoveryInterval": "模型发现间隔（分钟）",
+			"routingChainMaxDepth": "路由链最大深度"
+		},
+		"descriptions": {
+			"modelParamsUrl": "自定义模型参数数据表的 URL。留空使用默认值。",
+			"pricingSyncInterval": "从数据表 URL 同步定价数据的频率。",
+			"modelDiscoveryInterval": "每个提供商的模型列表在后台重新获取的频率，使提供商新提供的模型无需重启即可使用。设置为 0 关闭，仅从提供商页面刷新。",
+			"modelDiscoveryOff": "后台发现已关闭。模型列表仅在启动时、密钥更改时以及手动刷新时更新。",
+			"routingChainMaxDepth": "每个请求的最大链式路由规则评估次数。防止循环规则定义导致无限循环。"
+		},
+		"placeholder": {
+			"pricingUrl": "https://example.com/pricing.json",
+			"modelParamsUrl": "https://example.com/model-parameters.json"
+		},
+		"validation": {
+			"urlPrefix": "URL 必须以 http://、https:// 或 file:// 开头",
+			"pricingSyncRequired": "定价同步间隔为必填项",
+			"pricingSyncMin": "同步间隔必须至少为 1 小时",
+			"pricingSyncMax": "同步间隔不能超过 8760 小时（1 年）",
+			"modelDiscoveryRequired": "模型发现间隔为必填项",
+			"modelDiscoveryMin": "间隔必须为 0（禁用）或至少 {n} 分钟",
+			"modelDiscoveryMax": "间隔不能超过 1440 分钟（24 小时）",
+			"routingDepthRequired": "路由链最大深度为必填项",
+			"routingDepthMin": "必须至少为 1",
+			"routingDepthMax": "不能超过 100"
+		}
+	},
+	"actions": {
+		"saveChanges": "保存更改",
+		"saving": "保存中...",
+		"syncing": "同步中...",
+		"forceSyncNow": "立即强制同步"
+	},
+	"descriptions": {
+		"performanceTuning": "配置性能相关设置。",
+		"initialPoolSize": "初始连接池大小。",
+		"maxRequestBodySize": "请求体的最大大小（MB）。",
+		"pricingConfig": "配置自定义定价数据表和同步间隔。",
+		"pricingDatasheetUrl": "自定义定价数据表的 URL。留空使用默认定价。",
+		"featureFlags": "切换进程内功能开关。开关在代码中声明；也可以通过 config.json 或 Helm 设置，此时会显示为锁定状态。",
+		"logsSettings": "配置请求和响应的日志记录设置。",
+		"compatibility": "配置请求转换和兼容性回退。"
+	},
+	"fields": {
+		"initialPoolSize": "初始池大小",
+		"maxRequestBodySize": "最大请求体大小 (MB)",
+		"pricingDatasheetUrl": "定价数据表 URL",
+		"flag": "开关",
+		"enabled": "已启用"
+	},
+	"state": {
+		"noFeatureFlags": "未找到功能开关。",
+		"loading": "正在加载功能开关...",
+		"loadFailed": "加载功能开关失败"
+	},
+	"restart": {
+		"description": "这些设置需要重启 Bifrost 服务才能生效。当前连接将继续使用现有设置直到重启。",
+		"warning": "需要重启 Bifrost 才能使更改生效。"
+	},
+	"toast": {
+		"settingsSaved": "设置保存成功",
+		"settingsSaveFailed": "保存设置失败",
+		"settingsLoaded": "设置加载成功",
+		"resetConfig": "配置重置成功",
+		"configExported": "配置导出成功",
+		"configNotLoaded": "配置未加载",
+		"logRetentionDaysMin": "日志保留天数至少为 1 天",
+		"loggingUpdated": "日志配置更新成功。",
+		"poolSizePositive": "初始池大小必须为正数。",
+		"maxBodySizePositive": "最大请求体大小必须为正数。",
+		"performanceUpdated": "性能设置更新成功。",
+		"pricingUpdated": "定价配置更新成功。",
+		"pricingSynced": "定价同步成功。",
+		"compatibilityUpdated": "兼容性设置更新成功。",
+		"observabilityUpdated": "可观测性设置更新成功。",
+		"proxyUpdated": "代理配置更新成功。",
+		"modelSettingsUpdated": "模型设置更新成功。"
+	}
 }

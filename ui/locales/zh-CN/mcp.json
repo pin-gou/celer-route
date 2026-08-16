@@ -1,63 +1,63 @@
 {
-  "page": {
-    "title": "MCP 网关",
-    "description": "管理 MCP 服务器、客户端和配置"
-  },
-  "clients": {
-    "title": "MCP 客户端",
-    "addClient": "添加客户端",
-    "editClient": "编辑客户端",
-    "deleteClient": "删除客户端",
-    "clientName": "客户端名称",
-    "clientType": "客户端类型",
-    "status": "状态",
-    "lastActive": "最后活跃",
-    "noClients": "未配置客户端",
-    "noClientsDesc": "添加您的第一个 MCP 客户端以开始使用"
-  },
-  "servers": {
-    "title": "MCP 服务器",
-    "addServer": "添加服务器",
-    "editServer": "编辑服务器",
-    "deleteServer": "删除服务器",
-    "serverName": "服务器名称",
-    "serverUrl": "服务器 URL",
-    "transport": "传输协议",
-    "status": "状态",
-    "tools": "工具",
-    "noServers": "未配置服务器",
-    "noServersDesc": "添加您的第一个 MCP 服务器以开始使用",
-    "library": "服务器库",
-    "browseLibrary": "浏览库",
-    "installServer": "安装服务器",
-    "uninstallServer": "卸载服务器"
-  },
-  "sessions": {
-    "title": "MCP 会话",
-    "sessionId": "会话 ID",
-    "status": "状态",
-    "created": "创建时间",
-    "expires": "过期时间",
-    "noSessions": "无活跃会话",
-    "noSessionsDesc": "客户端连接后会显示会话",
-    "description": "MCP 服务器的用户凭据存储（OAuth 令牌和提交的标头），以及任何待处理的认证流程。"
-  },
-  "settings": {
-    "title": "MCP 设置",
-    "autoApprove": "自动批准工具",
-    "maxDepth": "最大代理深度",
-    "timeout": "工具执行超时",
-    "agentMode": "代理模式",
-    "agentModeDesc": "启用预批准工具的自动执行"
-  },
-  "permissionDenied": "您没有访问 MCP 网关的权限",
-  "registry": {
-    "title": "MCP 注册"
-  },
-  "toast": {
-    "clientAdded": "MCP 客户端添加成功",
-    "clientUpdated": "MCP 客户端更新成功",
-    "clientDeleted": "MCP 客户端删除成功",
-    "syncTriggered": "同步已触发"
-  }
+	"page": {
+		"title": "MCP 网关",
+		"description": "管理 MCP 服务器、客户端和配置"
+	},
+	"clients": {
+		"title": "MCP 客户端",
+		"addClient": "添加客户端",
+		"editClient": "编辑客户端",
+		"deleteClient": "删除客户端",
+		"clientName": "客户端名称",
+		"clientType": "客户端类型",
+		"status": "状态",
+		"lastActive": "最后活跃",
+		"noClients": "未配置客户端",
+		"noClientsDesc": "添加您的第一个 MCP 客户端以开始使用"
+	},
+	"servers": {
+		"title": "MCP 服务器",
+		"addServer": "添加服务器",
+		"editServer": "编辑服务器",
+		"deleteServer": "删除服务器",
+		"serverName": "服务器名称",
+		"serverUrl": "服务器 URL",
+		"transport": "传输协议",
+		"status": "状态",
+		"tools": "工具",
+		"noServers": "未配置服务器",
+		"noServersDesc": "添加您的第一个 MCP 服务器以开始使用",
+		"library": "服务器库",
+		"browseLibrary": "浏览库",
+		"installServer": "安装服务器",
+		"uninstallServer": "卸载服务器"
+	},
+	"sessions": {
+		"title": "MCP 会话",
+		"sessionId": "会话 ID",
+		"status": "状态",
+		"created": "创建时间",
+		"expires": "过期时间",
+		"noSessions": "无活跃会话",
+		"noSessionsDesc": "客户端连接后会显示会话",
+		"description": "MCP 服务器的用户凭据存储（OAuth 令牌和提交的标头），以及任何待处理的认证流程。"
+	},
+	"settings": {
+		"title": "MCP 设置",
+		"autoApprove": "自动批准工具",
+		"maxDepth": "最大代理深度",
+		"timeout": "工具执行超时",
+		"agentMode": "代理模式",
+		"agentModeDesc": "启用预批准工具的自动执行"
+	},
+	"permissionDenied": "您没有访问 MCP 网关的权限",
+	"registry": {
+		"title": "MCP 注册"
+	},
+	"toast": {
+		"clientAdded": "MCP 客户端添加成功",
+		"clientUpdated": "MCP 客户端更新成功",
+		"clientDeleted": "MCP 客户端删除成功",
+		"syncTriggered": "同步已触发"
+	}
 }

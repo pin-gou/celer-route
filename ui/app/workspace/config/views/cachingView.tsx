@@ -229,7 +229,7 @@ export default function CachingView() {
 			toast.success(checked ? t("caching.toast.enabled") : t("caching.toast.disabled"));
 		} catch (error) {
 			toast.error(
-				(checked ? t("caching.toast.enableFailed") : t("caching.toast.disableFailed")).replace("{error}", getErrorMessage(error))
+				(checked ? t("caching.toast.enableFailed") : t("caching.toast.disableFailed")).replace("{error}", getErrorMessage(error)),
 			);
 		}
 	};
@@ -272,20 +272,14 @@ export default function CachingView() {
 				<h2 className="text-lg font-semibold tracking-tight">{t("caching.pageTitle")}</h2>
 				<p className="text-muted-foreground text-sm">
 					{t("caching.pageDescription")}{" "}
-					{!isVectorStoreEnabled && (
-						<span className="text-destructive font-medium">
-							{t("caching.requiresVectorStore")}
-						</span>
-					)}
+					{!isVectorStoreEnabled && <span className="text-destructive font-medium">{t("caching.requiresVectorStore")}</span>}
 				</p>
 			</div>
 
 			{configError !== undefined && (
 				<div className="border-destructive/50 bg-destructive/10 rounded-sm border p-4">
 					<p className="text-destructive text-sm font-medium">{t("caching.loadFailed")}</p>
-					<p className="text-muted-foreground mt-1 text-sm">
-						{getErrorMessage(configError) || t("caching.unexpectedError")}
-					</p>
+					<p className="text-muted-foreground mt-1 text-sm">{getErrorMessage(configError) || t("caching.unexpectedError")}</p>
 				</div>
 			)}
 
@@ -305,9 +299,7 @@ export default function CachingView() {
 							<label htmlFor="enable-caching" className="text-sm font-medium">
 								{t("caching.enableCaching")}
 							</label>
-							<p className="text-muted-foreground text-sm">
-								{t("caching.enableCachingDesc")}{" "}
-							</p>
+							<p className="text-muted-foreground text-sm">{t("caching.enableCachingDesc")} </p>
 						</div>
 						<Switch
 							id="enable-caching"
@@ -338,9 +330,7 @@ export default function CachingView() {
 												value="semantic"
 												data-testid="caching-mode-semantic-tab"
 												disabled={embeddingProviders.length === 0}
-												title={
-													embeddingProviders.length === 0 ? t("caching.embeddingRequired") : undefined
-												}
+												title={embeddingProviders.length === 0 ? t("caching.embeddingRequired") : undefined}
 											>
 												{t("caching.directSemantic")}
 											</TabsTrigger>
@@ -411,9 +401,7 @@ export default function CachingView() {
 													/>
 												</div>
 											</div>
-											<p className="text-muted-foreground text-xs">
-												{t("caching.apiKeysInherited")}
-											</p>
+											<p className="text-muted-foreground text-xs">{t("caching.apiKeysInherited")}</p>
 											<div className="space-y-2">
 												<Label htmlFor="dimension">{t("caching.dimension")}</Label>
 												<Input
@@ -434,9 +422,7 @@ export default function CachingView() {
 														}
 													}}
 												/>
-												<p className="text-muted-foreground text-xs">
-													{t("caching.dimensionDesc")}
-												</p>
+												<p className="text-muted-foreground text-xs">{t("caching.dimensionDesc")}</p>
 											</div>
 										</div>
 									</>
@@ -466,9 +452,7 @@ export default function CachingView() {
 													}
 												}}
 											/>
-											<p className="text-muted-foreground text-xs">
-												{t("caching.ttlDesc")}
-											</p>
+											<p className="text-muted-foreground text-xs">{t("caching.ttlDesc")}</p>
 										</div>
 										{mode === "semantic" && (
 											<div className="space-y-2">
@@ -493,9 +477,7 @@ export default function CachingView() {
 														}
 													}}
 												/>
-												<p className="text-muted-foreground text-xs">
-													{t("caching.thresholdDesc")}
-												</p>
+												<p className="text-muted-foreground text-xs">{t("caching.thresholdDesc")}</p>
 											</div>
 										)}
 									</div>
@@ -515,9 +497,7 @@ export default function CachingView() {
 												value={cacheConfig.vector_store_namespace ?? ""}
 												onChange={(e) => updateLocal({ vector_store_namespace: e.target.value })}
 											/>
-											<p className="text-muted-foreground text-xs">
-												{t("caching.namespaceDesc")}
-											</p>
+											<p className="text-muted-foreground text-xs">{t("caching.namespaceDesc")}</p>
 										</div>
 										<div className="space-y-2">
 											<Label htmlFor="default_cache_key">{t("caching.defaultCacheKey")}</Label>
@@ -529,9 +509,7 @@ export default function CachingView() {
 												value={cacheConfig.default_cache_key ?? ""}
 												onChange={(e) => updateLocal({ default_cache_key: e.target.value })}
 											/>
-											<p className="text-muted-foreground text-xs">
-												{t("caching.cacheKeyDesc")}
-											</p>
+											<p className="text-muted-foreground text-xs">{t("caching.cacheKeyDesc")}</p>
 										</div>
 									</div>
 								</div>
@@ -566,9 +544,7 @@ export default function CachingView() {
 													}
 												}}
 											/>
-											<p className="text-muted-foreground text-xs">
-												{t("caching.conversationThresholdDesc")}
-											</p>
+											<p className="text-muted-foreground text-xs">{t("caching.conversationThresholdDesc")}</p>
 										</div>
 									</div>
 									<div className="space-y-2">
@@ -594,9 +570,7 @@ export default function CachingView() {
 										<div className="flex items-center justify-between space-x-2 rounded-sm border p-3">
 											<div className="space-y-0.5">
 												<Label className="text-sm font-medium">{t("caching.cacheByModel")}</Label>
-												<p className="text-muted-foreground text-xs">
-													{t("caching.cacheByModelDesc")}
-												</p>
+												<p className="text-muted-foreground text-xs">{t("caching.cacheByModelDesc")}</p>
 											</div>
 											<Switch
 												data-testid="caching-cache-by-model-switch"
@@ -608,9 +582,7 @@ export default function CachingView() {
 										<div className="flex items-center justify-between space-x-2 rounded-sm border p-3">
 											<div className="space-y-0.5">
 												<Label className="text-sm font-medium">{t("caching.cacheByProvider")}</Label>
-												<p className="text-muted-foreground text-xs">
-													{t("caching.cacheByProviderDesc")}
-												</p>
+												<p className="text-muted-foreground text-xs">{t("caching.cacheByProviderDesc")}</p>
 											</div>
 											<Switch
 												data-testid="caching-cache-by-provider-switch"

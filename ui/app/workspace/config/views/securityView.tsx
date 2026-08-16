@@ -167,7 +167,9 @@ export default function SecurityView() {
 		if (field === "admin_password") {
 			passwordUnchangedRef.current = false;
 			const passwordPolicyFailures = !value.ref && value.value ? getPasswordPolicyFailures(value.value, false) : [];
-			setPasswordError(passwordPolicyFailures.length > 0 ? t("security.passwordPolicyError", { failures: passwordPolicyFailures.join(", ") }) : "");
+			setPasswordError(
+				passwordPolicyFailures.length > 0 ? t("security.passwordPolicyError", { failures: passwordPolicyFailures.join(", ") }) : "",
+			);
 		}
 		setAuthConfig((prev) => ({ ...prev, [field]: value }));
 	}, []);
@@ -177,9 +179,7 @@ export default function SecurityView() {
 			const validation = validateOrigins(localConfig.allowed_origins);
 
 			if (!validation.isValid && localConfig.allowed_origins.length > 0) {
-				toast.error(
-					t("security.invalidOrigins", { origins: validation.invalidOrigins.join(", ") }),
-				);
+				toast.error(t("security.invalidOrigins", { origins: validation.invalidOrigins.join(", ") }));
 				return;
 			}
 			const hasUsername = authConfig.admin_username?.value || authConfig.admin_username?.ref;
@@ -196,9 +196,7 @@ export default function SecurityView() {
 				return;
 			}
 			if (isFirstTimeSetup && authConfig.is_enabled && !setupToken.trim()) {
-				setSetupTokenErrorMessage(
-					t("security.setupTokenError"),
-				);
+				setSetupTokenErrorMessage(t("security.setupTokenError"));
 				return;
 			}
 			setPasswordError("");
@@ -244,9 +242,7 @@ export default function SecurityView() {
 									<Label htmlFor="auth-enabled" className="text-sm font-medium">
 										{t("security.passwordProtect")} <Badge variant="secondary">{t("security.beta")}</Badge>
 									</Label>
-									<p className="text-muted-foreground text-sm">
-										{t("security.passwordProtectDesc")}
-									</p>
+									<p className="text-muted-foreground text-sm">{t("security.passwordProtectDesc")}</p>
 								</div>
 								<Switch id="auth-enabled" checked={authConfig.is_enabled} onCheckedChange={handleAuthToggle} />
 							</div>
@@ -275,9 +271,7 @@ export default function SecurityView() {
 										disabled={!authConfig.is_enabled}
 										onChange={(value) => handleAuthFieldChange("admin_password", value)}
 									/>
-									<p className="text-muted-foreground text-xs">
-										{t("security.passwordHint")}
-									</p>
+									<p className="text-muted-foreground text-xs">{t("security.passwordHint")}</p>
 									{passwordError ? (
 										<p id="admin-password-error" className="text-destructive text-xs" role="alert">
 											{passwordError}
@@ -296,9 +290,7 @@ export default function SecurityView() {
 											value={setupToken}
 											onChange={(e) => setSetupToken(e.target.value)}
 										/>
-										<p className="text-muted-foreground text-xs">
-											{t("security.setupTokenDesc")}
-										</p>
+										<p className="text-muted-foreground text-xs">{t("security.setupTokenDesc")}</p>
 									</div>
 								) : null}
 							</div>
@@ -311,10 +303,7 @@ export default function SecurityView() {
 						<label htmlFor="enforce-auth-on-inference" className="text-sm font-medium">
 							{t("security.enforceVirtualKeys")}
 						</label>
-						<p className="text-muted-foreground text-sm">
-							{t("security.enforceVirtualKeysDesc")}{" "}
-							
-						</p>
+						<p className="text-muted-foreground text-sm">{t("security.enforceVirtualKeysDesc")} </p>
 					</div>
 					<Switch
 						id="enforce-auth-on-inference"
@@ -330,9 +319,7 @@ export default function SecurityView() {
 						<label htmlFor="allow-direct-keys" className="text-sm font-medium">
 							{t("security.allowDirectKeys")}
 						</label>
-						<p className="text-muted-foreground text-sm">
-							{t("security.allowDirectKeysDesc")}
-						</p>
+						<p className="text-muted-foreground text-sm">{t("security.allowDirectKeysDesc")}</p>
 					</div>
 					<Switch
 						id="allow-direct-keys"
@@ -349,9 +336,7 @@ export default function SecurityView() {
 							<label htmlFor="allowed-origins" className="text-sm font-medium">
 								{t("security.allowedOrigins")}
 							</label>
-							<p className="text-muted-foreground text-sm">
-								{t("security.allowedOriginsDesc")}
-							</p>
+							<p className="text-muted-foreground text-sm">{t("security.allowedOriginsDesc")}</p>
 						</div>
 						<Textarea
 							id="allowed-origins"
@@ -387,9 +372,7 @@ export default function SecurityView() {
 							<label htmlFor="required-headers" className="text-sm font-medium">
 								{t("security.requiredHeaders")}
 							</label>
-							<p className="text-muted-foreground text-sm">
-								{t("security.requiredHeadersDesc")}
-							</p>
+							<p className="text-muted-foreground text-sm">{t("security.requiredHeadersDesc")}</p>
 						</div>
 						<Textarea
 							id="required-headers"
@@ -408,9 +391,7 @@ export default function SecurityView() {
 							<label htmlFor="whitelisted-routes" className="text-sm font-medium">
 								{t("security.whitelistedRoutes")}
 							</label>
-							<p className="text-muted-foreground text-sm">
-								{t("security.whitelistedRoutesDesc")}
-							</p>
+							<p className="text-muted-foreground text-sm">{t("security.whitelistedRoutesDesc")}</p>
 						</div>
 						<Textarea
 							id="whitelisted-routes"
@@ -438,7 +419,6 @@ export default function SecurityView() {
 						<Button variant="outline" onClick={() => setSetupTokenErrorMessage(null)} data-testid="setup-token-error-close">
 							{t("security.close")}
 						</Button>
-						
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>

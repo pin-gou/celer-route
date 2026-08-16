@@ -1,21 +1,21 @@
 {
-  "page": {
-    "title": "可观测性",
-    "description": "监控和配置可观测性设置"
-  },
-  "settings": {
-    "title": "可观测性设置",
-    "logging": "日志记录",
-    "tracing": "链路追踪",
-    "metrics": "指标",
-    "alerts": "告警",
-    "logStore": "日志存储",
-    "logStoreDesc": "配置日志存储位置",
-    "retention": "保留期限",
-    "sampling": "采样率",
-    "exporters": "导出器",
-    "noConfig": "无可观测性配置",
-    "noConfigDesc": "配置您的可观测性设置以开始使用"
-  },
-  "permissionDenied": "您没有访问可观测性设置的权限"
+	"page": {
+		"title": "可观测性",
+		"description": "监控和配置可观测性设置"
+	},
+	"settings": {
+		"title": "可观测性设置",
+		"logging": "日志记录",
+		"tracing": "链路追踪",
+		"metrics": "指标",
+		"alerts": "告警",
+		"logStore": "日志存储",
+		"logStoreDesc": "配置日志存储位置",
+		"retention": "保留期限",
+		"sampling": "采样率",
+		"exporters": "导出器",
+		"noConfig": "无可观测性配置",
+		"noConfigDesc": "配置您的可观测性设置以开始使用"
+	},
+	"permissionDenied": "您没有访问可观测性设置的权限"
 }

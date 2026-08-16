@@ -133,24 +133,24 @@ export default function PluginsView(props: Props) {
 		props.onDelete();
 	};
 
-if (!selectedPlugin) {
-			return (
-				<div className="ml-4 flex w-full items-center justify-center">
-					<p className="text-muted-foreground">No plugin selected</p>
-				</div>
-			);
-		}
+	if (!selectedPlugin) {
+		return (
+			<div className="ml-4 flex w-full items-center justify-center">
+				<p className="text-muted-foreground">No plugin selected</p>
+			</div>
+		);
+	}
 
-		// Render the dedicated fragment for the provider-cooldown built-in plugin
-		if (selectedPlugin.name === PROVIDER_COOLDOWN_PLUGIN) {
-			return (
-				<div className="ml-4 w-full">
-					<ProvidercooldownFragment plugin={selectedPlugin} />
-				</div>
-			);
-		}
+	// Render the dedicated fragment for the provider-cooldown built-in plugin
+	if (selectedPlugin.name === PROVIDER_COOLDOWN_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<ProvidercooldownFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
 
-		const isErrorLog = (log: string) => {
+	const isErrorLog = (log: string) => {
 		const errorKeywords = ["error", "failed", "exception", "panic", "fatal", "ERR"];
 		return errorKeywords.some((keyword) => log.toLowerCase().includes(keyword.toLowerCase()));
 	};

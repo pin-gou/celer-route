@@ -254,7 +254,10 @@ export const bedrockMantleKeyConfigSchema = z
 export const vllmKeyConfigSchema = z
 	.object({
 		url: secretVarSchema.optional(),
-		model_name: z.string().trim().min(1, t("validation.fieldRequired", { field: "Model name" })),
+		model_name: z
+			.string()
+			.trim()
+			.min(1, t("validation.fieldRequired", { field: "Model name" })),
 	})
 	.refine((data) => isSecretVarSet(data.url), {
 		message: t("validation.fieldRequired", { field: "Server URL" }),
@@ -304,7 +307,10 @@ export const modelFamilySchema = z.enum([
 // provider sub-configs flattened to top-level optional fields (matches Go's
 // embedded-pointer-struct JSON output).
 const aliasConfigObjectSchema = z.object({
-	model_id: z.string().trim().min(1, t("validation.fieldRequired", { field: "Model ID" })),
+	model_id: z
+		.string()
+		.trim()
+		.min(1, t("validation.fieldRequired", { field: "Model ID" })),
 	model_name: z.string().trim().optional(),
 	model_family: modelFamilySchema.optional(),
 	description: z.string().optional(),
@@ -358,7 +364,12 @@ export const modelProviderKeySchema = z
 				}
 				return num;
 			})
-			.pipe(z.number().min(0, t("validation.minNumber", { n: "0" })).max(1, t("validation.maxNumber", { n: "1" }))),
+			.pipe(
+				z
+					.number()
+					.min(0, t("validation.minNumber", { n: "0" }))
+					.max(1, t("validation.maxNumber", { n: "1" })),
+			),
 		aliases: z.record(z.string(), aliasConfigSchema).optional(),
 		azure_key_config: azureKeyConfigSchema.optional(),
 		vertex_key_config: vertexKeyConfigSchema.optional(),
@@ -425,7 +436,10 @@ export const networkConfigSchema = z
 			.number()
 			.min(1, t("validation.minNumber", { n: "0" }))
 			.max(3600, t("validation.maxNumber", { n: "3600" })),
-		max_retries: z.number().min(0, t("validation.minNumber", { n: "0" })).max(10, t("validation.maxNumber", { n: "10" })),
+		max_retries: z
+			.number()
+			.min(0, t("validation.minNumber", { n: "0" }))
+			.max(10, t("validation.maxNumber", { n: "10" })),
 		retry_backoff_initial: z.number().min(100),
 		retry_backoff_max: z.number().min(100),
 		insecure_skip_verify: z.boolean().optional(),
@@ -529,8 +543,14 @@ export const networkFormConfigSchema = z
 
 // Concurrency and buffer size schema
 export const concurrencyAndBufferSizeSchema = z.object({
-	concurrency: z.number().min(1, t("validation.minNumber", { n: "0" })).max(100, t("validation.maxNumber", { n: "100" })),
-	buffer_size: z.number().min(1, t("validation.minNumber", { n: "0" })).max(1000, t("validation.maxNumber", { n: "1000" })),
+	concurrency: z
+		.number()
+		.min(1, t("validation.minNumber", { n: "0" }))
+		.max(100, t("validation.maxNumber", { n: "100" })),
+	buffer_size: z
+		.number()
+		.min(1, t("validation.minNumber", { n: "0" }))
+		.max(1000, t("validation.maxNumber", { n: "1000" })),
 });
 
 // Proxy type schema
@@ -800,7 +820,10 @@ const providerBackedCacheConfigSchema = baseCacheConfigSchema
 		provider: modelProviderNameSchema,
 		keys: z.array(modelProviderKeySchema).optional(),
 		embedding_model: z.string().min(1, t("validation.fieldRequired", { field: "Embedding model" })),
-		dimension: z.number().int().min(2, t("validation.minNumber", { n: "1" })),
+		dimension: z
+			.number()
+			.int()
+			.min(2, t("validation.minNumber", { n: "1" })),
 	})
 	.strict();
 
@@ -1144,7 +1167,12 @@ export const mcpClientUpdateSchema = z
 			}),
 		headers: z.record(z.string(), secretVarSchema).optional().nullable(),
 		per_user_header_keys: z
-			.array(z.string().trim().min(1, t("validation.fieldRequired", { field: "Header name" })))
+			.array(
+				z
+					.string()
+					.trim()
+					.min(1, t("validation.fieldRequired", { field: "Header name" })),
+			)
 			.optional()
 			.refine(
 				(headers) => {
@@ -1226,7 +1254,10 @@ export const mcpClientUpdateSchema = z
 			.optional(),
 		token_exchange: z
 			.object({
-				audience: z.string().trim().min(1, t("validation.fieldRequired", { field: "Audience" })),
+				audience: z
+					.string()
+					.trim()
+					.min(1, t("validation.fieldRequired", { field: "Audience" })),
 				use_idp_credentials: z.boolean().optional(),
 				client_id: secretVarSchema.optional(),
 				client_secret: secretVarSchema.optional(),
@@ -1330,15 +1361,24 @@ export const globalHeaderFilterFormSchema = z.object({
 // Routing rule creation schema
 export const routingRuleSchema = z
 	.object({
-		name: z.string().min(1, t("validation.fieldRequired", { field: "Rule name" })).max(255, t("validation.maxCharacters", { n: "255" })),
-		description: z.string().max(1000, t("validation.maxCharacters", { n: "1000" })).optional(),
+		name: z
+			.string()
+			.min(1, t("validation.fieldRequired", { field: "Rule name" }))
+			.max(255, t("validation.maxCharacters", { n: "255" })),
+		description: z
+			.string()
+			.max(1000, t("validation.maxCharacters", { n: "1000" }))
+			.optional(),
 		cel_expression: z.string().optional(),
 		provider: z.string().min(1, t("validation.fieldRequired", { field: "Provider" })),
 		model: z.string().optional(),
 		fallbacks: z.array(z.string()).optional().default([]),
 		scope: z.enum(["global", "team", "customer", "virtual_key"]),
 		scope_id: z.string().optional(),
-		priority: z.number().min(0, t("validation.minNumber", { n: "0" })).max(1000, t("validation.maxNumber", { n: "1000" })),
+		priority: z
+			.number()
+			.min(0, t("validation.minNumber", { n: "0" }))
+			.max(1000, t("validation.maxNumber", { n: "1000" })),
 		enabled: z.boolean().default(true),
 		chain_rule: z.boolean().default(false),
 	})

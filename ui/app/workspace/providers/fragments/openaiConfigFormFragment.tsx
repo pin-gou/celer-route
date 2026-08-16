@@ -74,9 +74,7 @@ export function OpenAIConfigFormFragment({ provider, onCancel }: OpenAIConfigFor
 								<div className="flex items-center justify-between space-x-2">
 									<div className="space-y-0.5">
 										<FormLabel>{t("fragments.openaiConfig.disableStore")}</FormLabel>
-										<p className="text-muted-foreground text-xs">
-											{t("fragments.openaiConfig.disableStoreDescription")}
-										</p>
+										<p className="text-muted-foreground text-xs">{t("fragments.openaiConfig.disableStoreDescription")}</p>
 									</div>
 									<FormControl>
 										<Switch
@@ -100,7 +98,7 @@ export function OpenAIConfigFormFragment({ provider, onCancel }: OpenAIConfigFor
 				<div className="flex items-center justify-end gap-2 pb-6">
 					{onCancel && (
 						<Button type="button" variant="outline" size="sm" onClick={onCancel}>
-{t("fragments.openaiConfig.cancel")}
+							{t("fragments.openaiConfig.cancel")}
 						</Button>
 					)}
 					<Button

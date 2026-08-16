@@ -2,15 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-	CheckCircle2,
-	Copy,
-	PencilIcon,
-	PlusIcon,
-	RefreshCwIcon,
-	SearchIcon,
-	XCircle,
-} from "lucide-react";
+import { CheckCircle2, Copy, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, XCircle } from "lucide-react";
 import {
 	getErrorMessage,
 	ModelDetails,
@@ -50,7 +42,11 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 	// Server-side substring search via the query param. When the user types
 	// nothing, the server returns up to DISPLAY_LIMIT models for this provider.
 	// Status filtering is client-side since the endpoint has no deprecated flag.
-	const { data: modelsData, isLoading, refetch } = useGetModelDetailsQuery({
+	const {
+		data: modelsData,
+		isLoading,
+		refetch,
+	} = useGetModelDetailsQuery({
 		provider: provider.name,
 		query: debouncedQuery.trim() || undefined,
 		limit: DISPLAY_LIMIT,
@@ -69,7 +65,8 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 	const [testingAll, setTestingAll] = useState(false);
 	const [testProgress, setTestProgress] = useState<{ done: number; total: number } | null>(null);
 
-	const filteredModels = statusFilter === "all" ? models : models.filter((m) => (statusFilter === "deprecated" ? !!m.is_deprecated : !m.is_deprecated));
+	const filteredModels =
+		statusFilter === "all" ? models : models.filter((m) => (statusFilter === "deprecated" ? !!m.is_deprecated : !m.is_deprecated));
 
 	const syncStatus = (modelNames: string[], results: { model: string; success: boolean; latency_ms?: number; error?: string }[]) => {
 		setTestStatus((prev) => {
@@ -126,7 +123,10 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 				provider: provider.name,
 				models: targets.map((m) => m.name),
 			}).unwrap();
-			syncStatus(targets.map((m) => m.name), results.results);
+			syncStatus(
+				targets.map((m) => m.name),
+				results.results,
+			);
 			const passed = results.results.filter((r) => r.success).length;
 			const failed = results.results.length - passed;
 			toast.success(t("providers2.modelsTab.toast.modelsTested", { count: results.results.length, passed, failed }));
@@ -151,14 +151,14 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 				<div className="flex flex-wrap items-center gap-2">
 					{/* Search */}
 					<div className="relative">
-						<SearchIcon className="text-muted-foreground absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+						<SearchIcon className="text-muted-foreground absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
 						<input
 							data-testid="providers2-models-search"
 							type="text"
 							value={query}
 							onChange={(e) => setQuery(e.target.value)}
 							placeholder={t("providers2.modelsTab.searchPlaceholder")}
-							className="border-input w-52 rounded-md border py-1.5 pl-7 pr-3 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+							className="border-input w-52 rounded-md border py-1.5 pr-3 pl-7 text-xs outline-none focus:ring-1 focus:ring-blue-500"
 						/>
 					</div>
 					{/* Status filter pills */}
@@ -168,9 +168,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 								key={opt.value}
 								onClick={() => setStatusFilter(opt.value)}
 								className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-									statusFilter === opt.value
-										? "bg-primary text-primary-foreground"
-										: "bg-muted text-muted-foreground hover:bg-muted/80"
+									statusFilter === opt.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
 								}`}
 							>
 								{opt.label}
@@ -204,12 +202,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 						{isRefreshing ? t("providers2.modelsTab.syncing") : t("providers2.modelsTab.sync")}
 					</Button>
 					{hasCreateAccess && (
-						<Button
-							size="sm"
-							data-testid="providers2-models-add-btn"
-							onClick={() => setShowAddModelSheet(true)}
-							className="gap-1 text-xs"
-						>
+						<Button size="sm" data-testid="providers2-models-add-btn" onClick={() => setShowAddModelSheet(true)} className="gap-1 text-xs">
 							<PlusIcon className="h-3 w-3" />
 							{t("providers2.modelsTab.addModel")}
 						</Button>
@@ -220,30 +213,23 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 			{/* Test progress */}
 			{testProgress && (
 				<div className="border-b px-4 py-2">
-					<div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+					<div className="text-muted-foreground mb-1 flex items-center justify-between text-xs">
 						<span>{t("providers2.modelsTab.testProgress")}</span>
 						<span>
 							{testProgress.done} / {testProgress.total}
 						</span>
 					</div>
-					<div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-						<div
-							className="h-full bg-primary transition-all"
-							style={{ width: `${(testProgress.done / testProgress.total) * 100}%` }}
-						/>
+					<div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+						<div className="bg-primary h-full transition-all" style={{ width: `${(testProgress.done / testProgress.total) * 100}%` }} />
 					</div>
 				</div>
 			)}
 
 			{isLoading ? (
-				<div className="text-muted-foreground flex h-20 items-center justify-center text-xs">
-					{t("providers2.modelsTab.loading")}
-				</div>
+				<div className="text-muted-foreground flex h-20 items-center justify-center text-xs">{t("providers2.modelsTab.loading")}</div>
 			) : filteredModels.length === 0 ? (
 				<div className="text-muted-foreground flex h-20 items-center justify-center text-xs">
-					{query
-						? t("providers2.modelsTab.noModelsMatch", { query })
-						: t("providers2.modelsTab.noModels", { provider: provider.name })}
+					{query ? t("providers2.modelsTab.noModelsMatch", { query }) : t("providers2.modelsTab.noModels", { provider: provider.name })}
 				</div>
 			) : (
 				<div className="overflow-x-auto">
@@ -261,7 +247,11 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 								const status = testStatus[model.name];
 								const isTesting = status?.state === "testing";
 								return (
-									<tr key={`${model.provider}-${model.name}`} className="border-b last:border-0 hover:bg-muted/30" data-testid={`providers2-models-row-${model.name}`}>
+									<tr
+										key={`${model.provider}-${model.name}`}
+										className="hover:bg-muted/30 border-b last:border-0"
+										data-testid={`providers2-models-row-${model.name}`}
+									>
 										<td className="max-w-[300px] truncate px-4 py-2 font-mono text-xs" title={model.name}>
 											<span className="inline-flex items-center gap-1">
 												<span className="truncate">{model.name}</span>
@@ -285,7 +275,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 												<span className="text-green-600">{t("providers2.modelsTab.status.active")}</span>
 											)}
 											{status?.state === "ok" && (
-												<span className="text-green-600 ml-2 whitespace-nowrap">
+												<span className="ml-2 whitespace-nowrap text-green-600">
 													<CheckCircle2 className="mr-0.5 inline h-3 w-3" />
 													{status.latencyMs}ms
 												</span>
@@ -293,7 +283,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 											{status?.state === "error" && (
 												<Tooltip>
 													<TooltipTrigger asChild>
-														<span className="text-red-500 ml-2 cursor-help whitespace-nowrap underline decoration-dotted">
+														<span className="ml-2 cursor-help whitespace-nowrap text-red-500 underline decoration-dotted">
 															<XCircle className="mr-0.5 inline h-3 w-3" />
 															{t("providers2.modelsTab.status.failed")}
 														</span>

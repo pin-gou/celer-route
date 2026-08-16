@@ -70,7 +70,13 @@ describe("MonitoringPanel — stats rendering (task 11.2)", () => {
 		mocks.unfreeze.mockReset();
 		mocks.stateData = [
 			{ provider: "openai", keyId: "key-abc-123", keyName: "prod-openai-key", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" },
-			{ provider: "anthropic", keyId: "key-def-456", keyName: "prod-anthropic-key", expireAt: "2026-08-15T18:30:00Z", reason: "rate_limited" },
+			{
+				provider: "anthropic",
+				keyId: "key-def-456",
+				keyName: "prod-anthropic-key",
+				expireAt: "2026-08-15T18:30:00Z",
+				reason: "rate_limited",
+			},
 		];
 		mocks.statsData = { markCount: 12, suppressedCount: 8, activeCount: 3 };
 	});
@@ -99,7 +105,13 @@ describe("MonitoringPanel — state list rendering (task 11.2)", () => {
 		mocks.unfreeze.mockReset();
 		mocks.stateData = [
 			{ provider: "openai", keyId: "key-abc-123", keyName: "prod-openai-key", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" },
-			{ provider: "anthropic", keyId: "key-def-456", keyName: "prod-anthropic-key", expireAt: "2026-08-15T18:30:00Z", reason: "rate_limited" },
+			{
+				provider: "anthropic",
+				keyId: "key-def-456",
+				keyName: "prod-anthropic-key",
+				expireAt: "2026-08-15T18:30:00Z",
+				reason: "rate_limited",
+			},
 		];
 	});
 

@@ -13,7 +13,7 @@ export function LogsTab({ provider }: LogsTabProps) {
 	const navigate = useNavigate();
 
 	const handleViewLogs = () => {
-		navigate({ to: "/workspace/logs", search: { provider: provider.name } });
+		navigate({ to: "/workspace/logs", search: { providers: [provider.name] } });
 	};
 
 	return (

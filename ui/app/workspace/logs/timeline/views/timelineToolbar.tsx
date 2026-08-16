@@ -35,11 +35,14 @@ export function TimelineToolbar({
 }: TimelineToolbarProps) {
 	const { t } = useTranslation("logs");
 
-	const modeDescriptions = useMemo((): Record<TimelineMode, string> => ({
-		follow: t("timeline.toolbar.followDesc"),
-		live: t("timeline.toolbar.liveDesc"),
-		pan: t("timeline.toolbar.panDesc"),
-	}), [t]);
+	const modeDescriptions = useMemo(
+		(): Record<TimelineMode, string> => ({
+			follow: t("timeline.toolbar.followDesc"),
+			live: t("timeline.toolbar.liveDesc"),
+			pan: t("timeline.toolbar.panDesc"),
+		}),
+		[t],
+	);
 
 	return (
 		<div className="flex flex-col gap-1">

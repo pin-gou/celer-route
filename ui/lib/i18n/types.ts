@@ -22,23 +22,23 @@ import type oauthGrants from "@/locales/en/oauth-grants.json";
 import type modelCatalog from "@/locales/en/model-catalog.json";
 
 export interface Resources {
-  common: typeof common;
-  logs: typeof logs;
-  config: typeof config;
-  governance: typeof governance;
-  providers: typeof providers;
-  dashboard: typeof dashboard;
-  "governance-ui": typeof governanceUi;
-  mcp: typeof mcp;
-  routing: typeof routing;
-  skills: typeof skills;
-  plugins: typeof plugins;
-  observability: typeof observability;
-  webhooks: typeof webhooks;
-  "oauth-grants": typeof oauthGrants;
-  "model-catalog": typeof modelCatalog;
+	common: typeof common;
+	logs: typeof logs;
+	config: typeof config;
+	governance: typeof governance;
+	providers: typeof providers;
+	dashboard: typeof dashboard;
+	"governance-ui": typeof governanceUi;
+	mcp: typeof mcp;
+	routing: typeof routing;
+	skills: typeof skills;
+	plugins: typeof plugins;
+	observability: typeof observability;
+	webhooks: typeof webhooks;
+	"oauth-grants": typeof oauthGrants;
+	"model-catalog": typeof modelCatalog;
 }
 
 export type KeysWithNamespace = {
-  [NS in keyof Resources]: `${NS}:${string}`;
+	[NS in keyof Resources]: `${NS}:${string}`;
 }[keyof Resources];

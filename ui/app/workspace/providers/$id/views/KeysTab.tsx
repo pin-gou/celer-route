@@ -249,7 +249,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 				<div className="flex items-center gap-2">
 					{/* Search */}
 					<div className="relative">
-						<SearchIcon className="text-muted-foreground absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+						<SearchIcon className="text-muted-foreground absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
 						<input
 							type="text"
 							value={search}
@@ -258,7 +258,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								setPage(0);
 							}}
 							placeholder={t("providers2.keysTab.searchPlaceholder")}
-							className="border-input w-48 rounded-md border py-1.5 pl-7 pr-3 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+							className="border-input w-48 rounded-md border py-1.5 pr-3 pl-7 text-xs outline-none focus:ring-1 focus:ring-blue-500"
 						/>
 					</div>
 					{/* Health filter pills */}
@@ -271,9 +271,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 									setPage(0);
 								}}
 								className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-									healthFilter === opt.value
-										? "bg-primary text-primary-foreground"
-										: "bg-muted text-muted-foreground hover:bg-muted/80"
+									healthFilter === opt.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
 								}`}
 							>
 								{opt.label}
@@ -303,13 +301,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 							>
 								{t("providers2.keysTab.bulk.disable")}
 							</Button>
-							<Button
-								variant="outline"
-								size="sm"
-								className="text-xs"
-								disabled={isBulkBusy || !hasUpdateAccess}
-								onClick={handleBatchRetest}
-							>
+							<Button variant="outline" size="sm" className="text-xs" disabled={isBulkBusy || !hasUpdateAccess} onClick={handleBatchRetest}>
 								{t("providers2.keysTab.bulk.retest")}
 							</Button>
 							<Button
@@ -324,24 +316,12 @@ export function KeysTab({ provider }: KeysTabProps) {
 						</>
 					)}
 					{keys.length > 0 && (
-						<Button
-							variant="outline"
-							size="sm"
-							className="gap-1 text-xs"
-							onClick={handleTestAll}
-							disabled={testingAll}
-						>
+						<Button variant="outline" size="sm" className="gap-1 text-xs" onClick={handleTestAll} disabled={testingAll}>
 							<RefreshCwIcon className={`h-3 w-3 ${testingAll ? "animate-spin" : ""}`} />
 							{testingAll ? t("providers2.keysTab.testing") : t("providers2.keysTab.testAll")}
 						</Button>
 					)}
-					<Button
-						variant="outline"
-						size="sm"
-						className="gap-1 text-xs"
-						onClick={handleRefreshAll}
-						disabled={isRefreshingAll}
-					>
+					<Button variant="outline" size="sm" className="gap-1 text-xs" onClick={handleRefreshAll} disabled={isRefreshingAll}>
 						<RefreshCwIcon className={`h-3 w-3 ${isRefreshingAll ? "animate-spin" : ""}`} />
 						{isRefreshingAll ? t("providers2.keysTab.syncing") : t("providers2.keysTab.syncModels")}
 					</Button>
@@ -387,7 +367,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 									const healthy = isKeyHealthy(key);
 									const isTesting = testingKeyId === key.id;
 									return (
-										<tr key={key.id} className="border-b last:border-0 hover:bg-muted/30">
+										<tr key={key.id} className="hover:bg-muted/30 border-b last:border-0">
 											<td className="px-3 py-2">
 												<input
 													type="checkbox"
@@ -417,7 +397,9 @@ export function KeysTab({ provider }: KeysTabProps) {
 																{t("providers2.keysTab.status.listModelsFailed")}
 															</span>
 														</TooltipTrigger>
-														<TooltipContent className="max-w-xs">{key.description || t("providers2.keysTab.status.listModelsFailed")}</TooltipContent>
+														<TooltipContent className="max-w-xs">
+															{key.description || t("providers2.keysTab.status.listModelsFailed")}
+														</TooltipContent>
 													</Tooltip>
 												) : (
 													<span className="text-red-500">{t("providers2.keysTab.status.error")}</span>
@@ -438,7 +420,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 													variant="outline"
 													size="sm"
 													className="text-xs"
-													disabled={isTesting || (key.enabled === false)}
+													disabled={isTesting || key.enabled === false}
 													onClick={() => handleTestKey(key.id)}
 												>
 													<RefreshCwIcon className={`mr-1 h-3 w-3 ${isTesting ? "animate-spin" : ""}`} />
@@ -465,7 +447,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 															<TooltipTrigger asChild>
 																<button
 																	onClick={() => setDeleteConfirmKeyId(key.id)}
-																	className="text-muted-foreground hover:text-red-500 rounded p-1 transition-colors"
+																	className="text-muted-foreground rounded p-1 transition-colors hover:text-red-500"
 																>
 																	<TrashIcon className="h-3.5 w-3.5" />
 																</button>
@@ -492,7 +474,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								<button
 									disabled={clampedPage === 0}
 									onClick={() => setPage((p) => Math.max(0, p - 1))}
-									className="disabled:text-muted-foreground/30 rounded px-2 py-1 hover:bg-muted"
+									className="disabled:text-muted-foreground/30 hover:bg-muted rounded px-2 py-1"
 								>
 									{t("providers2.keysTab.pagination.prev")}
 								</button>
@@ -502,7 +484,7 @@ export function KeysTab({ provider }: KeysTabProps) {
 								<button
 									disabled={clampedPage >= totalPages - 1}
 									onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-									className="disabled:text-muted-foreground/30 rounded px-2 py-1 hover:bg-muted"
+									className="disabled:text-muted-foreground/30 hover:bg-muted rounded px-2 py-1"
 								>
 									{t("providers2.keysTab.pagination.next")}
 								</button>
@@ -514,21 +496,9 @@ export function KeysTab({ provider }: KeysTabProps) {
 
 			{/* Add / Edit key sheet */}
 			{showAddKeySheet && (
-				<AddNewKeySheet
-					show={showAddKeySheet}
-					onCancel={() => setShowAddKeySheet(false)}
-					provider={provider}
-					keyId={null}
-				/>
+				<AddNewKeySheet show={showAddKeySheet} onCancel={() => setShowAddKeySheet(false)} provider={provider} keyId={null} />
 			)}
-			{editKeyId && (
-				<AddNewKeySheet
-					show={!!editKeyId}
-					onCancel={() => setEditKeyId(null)}
-					provider={provider}
-					keyId={editKeyId}
-				/>
-			)}
+			{editKeyId && <AddNewKeySheet show={!!editKeyId} onCancel={() => setEditKeyId(null)} provider={provider} keyId={editKeyId} />}
 
 			{/* Delete confirmation */}
 			{deleteConfirmKeyId && (
@@ -536,16 +506,13 @@ export function KeysTab({ provider }: KeysTabProps) {
 					<AlertDialogContent onClick={(e) => e.stopPropagation()}>
 						<AlertDialogHeader>
 							<AlertDialogTitle>{t("providers2.keysTab.deleteConfirm.title")}</AlertDialogTitle>
-							<AlertDialogDescription>
-								{t("providers2.keysTab.deleteConfirm.description")}
-							</AlertDialogDescription>
+							<AlertDialogDescription>{t("providers2.keysTab.deleteConfirm.description")}</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter className="pt-4">
-							<AlertDialogCancel onClick={() => setDeleteConfirmKeyId(null)}>{t("providers2.keysTab.deleteConfirm.cancel")}</AlertDialogCancel>
-							<AlertDialogAction
-								className="bg-red-600 text-white hover:bg-red-700"
-								onClick={() => handleDeleteKey(deleteConfirmKeyId)}
-							>
+							<AlertDialogCancel onClick={() => setDeleteConfirmKeyId(null)}>
+								{t("providers2.keysTab.deleteConfirm.cancel")}
+							</AlertDialogCancel>
+							<AlertDialogAction className="bg-red-600 text-white hover:bg-red-700" onClick={() => handleDeleteKey(deleteConfirmKeyId)}>
 								{t("providers2.keysTab.deleteConfirm.confirm")}
 							</AlertDialogAction>
 						</AlertDialogFooter>

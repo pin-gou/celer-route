@@ -746,7 +746,7 @@ export default function MCPClientSheet({
 														<FormItem className="flex flex-row items-center justify-between gap-4 px-4 py-3">
 															<div className="flex items-center gap-2">
 																<FormLabel>Code Mode Server</FormLabel>
-																</div>
+															</div>
 															<FormControl>
 																<Switch checked={field.value || false} onCheckedChange={field.onChange} />
 															</FormControl>
@@ -1370,7 +1370,6 @@ export default function MCPClientSheet({
 																<TableHead className="w-28 text-center">
 																	<div className="flex items-center justify-center gap-1.5">
 																		<span>Auto-execute</span>
-																		
 																	</div>
 																</TableHead>
 																<TableHead className="w-32 text-center">Cost (USD)</TableHead>

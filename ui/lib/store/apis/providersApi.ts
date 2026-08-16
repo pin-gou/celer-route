@@ -521,10 +521,7 @@ export const providersApi = baseApi.injectEndpoints({
 		// Test multiple models in one request via a bounded-concurrency pass on
 		// the server. Each probe runs the full inference pipeline (so every call
 		// is recorded in the LLM logs) and results are returned in request order.
-		testProviderModels: builder.mutation<
-			TestModelsResponse,
-			{ provider: string; models: string[] }
-		>({
+		testProviderModels: builder.mutation<TestModelsResponse, { provider: string; models: string[] }>({
 			query: ({ provider, models }) => ({
 				url: `/providers/${encodeURIComponent(provider)}/test-models`,
 				method: "POST",

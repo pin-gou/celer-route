@@ -17,7 +17,16 @@ export interface OverviewTabProps {
 
 const ANTHROPIC_FAMILY_PROVIDERS = ["anthropic", "vertex", "bedrock", "bedrock_mantle", "azure"];
 
-type EditableSection = "network" | "proxy" | "performance" | "governance" | "beta-headers" | "openai-config" | "debugging" | "api-structure" | null;
+type EditableSection =
+	| "network"
+	| "proxy"
+	| "performance"
+	| "governance"
+	| "beta-headers"
+	| "openai-config"
+	| "debugging"
+	| "api-structure"
+	| null;
 
 function Section({
 	testId,
@@ -38,11 +47,7 @@ function Section({
 			<div className="mb-3 flex items-center justify-between">
 				<h3 className="text-sm font-medium">{title}</h3>
 				{editTestId && onEdit && (
-					<button
-						data-testid={editTestId}
-						className="text-primary text-xs underline"
-						onClick={onEdit}
-					>
+					<button data-testid={editTestId} className="text-primary text-xs underline" onClick={onEdit}>
 						{t("providers2.overview.edit")}
 					</button>
 				)}
@@ -303,7 +308,9 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 					editTestId="providers2-overview-governance-edit"
 					onEdit={() => setEditingSection("governance")}
 				>
-					<p className="text-muted-foreground text-xs">{t("providers2.overview.governanceDescription", { provider: String(provider.name) })}</p>
+					<p className="text-muted-foreground text-xs">
+						{t("providers2.overview.governanceDescription", { provider: String(provider.name) })}
+					</p>
 				</Section>
 
 				<Section

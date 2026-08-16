@@ -845,7 +845,6 @@ export default function MCPClientsTable({
 													retained admin credential (used only to periodically refresh the tool list), not any individual user's own
 													session, which is unaffected either way.
 												</p>
-												
 											</>
 										}
 									/>

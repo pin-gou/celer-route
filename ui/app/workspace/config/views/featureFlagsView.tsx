@@ -31,13 +31,15 @@ export default function FeatureFlagsView() {
 		<div className="w-full space-y-4">
 			<div>
 				<h2 className="text-lg font-semibold tracking-tight">{t("page.featureFlags")}</h2>
-				<p className="text-muted-foreground text-sm">
-					{t("descriptions.featureFlags")}
-				</p>
+				<p className="text-muted-foreground text-sm">{t("descriptions.featureFlags")}</p>
 			</div>
 
 			{isLoading && <p className="text-muted-foreground text-sm">{t("state.loading")}</p>}
-			{isError && <p className="text-sm text-red-500">{t("state.loadFailed")}: {getErrorMessage(error)}</p>}
+			{isError && (
+				<p className="text-sm text-red-500">
+					{t("state.loadFailed")}: {getErrorMessage(error)}
+				</p>
+			)}
 
 			{!isLoading && !isError && (
 				<div className="overflow-auto rounded-sm border">

@@ -215,28 +215,23 @@ export default function ClientSettingsView() {
 			</div>
 
 			<div className="space-y-4">
-{/* Drop Excess Requests */}
-			<div className="flex items-center justify-between space-x-2">
-				<div className="space-y-0.5">
-					<label htmlFor="drop-excess-requests" className="text-sm font-medium">
-						{t("clientSettings.dropExcessRequests")}
-					</label>
-					<p className="text-muted-foreground text-sm">
-						{t("clientSettings.dropExcessRequestsDesc")}{" "}
-						{localConfig.drop_excess_requests && droppedRequests > 0 ? (
-							<span>
-								<Trans
-									t={t}
-									i18nKey="clientSettings.droppedRequests"
-									count={droppedRequests}
-									components={{ 1: <b /> }}
-								/>
-							</span>
-						) : (
-							<></>
-						)}
-					</p>
-				</div>
+				{/* Drop Excess Requests */}
+				<div className="flex items-center justify-between space-x-2">
+					<div className="space-y-0.5">
+						<label htmlFor="drop-excess-requests" className="text-sm font-medium">
+							{t("clientSettings.dropExcessRequests")}
+						</label>
+						<p className="text-muted-foreground text-sm">
+							{t("clientSettings.dropExcessRequestsDesc")}{" "}
+							{localConfig.drop_excess_requests && droppedRequests > 0 ? (
+								<span>
+									<Trans t={t} i18nKey="clientSettings.droppedRequests" count={droppedRequests} components={{ 1: <b /> }} />
+								</span>
+							) : (
+								<></>
+							)}
+						</p>
+					</div>
 					<Switch
 						id="drop-excess-requests"
 						size="md"
@@ -252,9 +247,7 @@ export default function ClientSettingsView() {
 						<label htmlFor="disable-db-pings-in-health" className="text-sm font-medium">
 							{t("clientSettings.disableDbPings")}
 						</label>
-						<p className="text-muted-foreground text-sm">
-							{t("clientSettings.disableDbPingsDesc")}
-						</p>
+						<p className="text-muted-foreground text-sm">{t("clientSettings.disableDbPingsDesc")}</p>
 					</div>
 					<Switch
 						id="disable-db-pings-in-health"
@@ -271,9 +264,7 @@ export default function ClientSettingsView() {
 						<label htmlFor="dump-errors-in-console-logs" className="text-sm font-medium">
 							{t("clientSettings.dumpErrors")}
 						</label>
-						<p className="text-muted-foreground text-sm">
-							{t("clientSettings.dumpErrorsDesc")}
-						</p>
+						<p className="text-muted-foreground text-sm">{t("clientSettings.dumpErrorsDesc")}</p>
 					</div>
 					<Switch
 						id="dump-errors-in-console-logs"
@@ -290,9 +281,7 @@ export default function ClientSettingsView() {
 						<label htmlFor="async-job-result-ttl" className="text-sm font-medium">
 							{t("clientSettings.asyncJobResultTtl")}
 						</label>
-						<p className="text-muted-foreground text-sm">
-							{t("clientSettings.asyncJobResultTtlDesc")}
-						</p>
+						<p className="text-muted-foreground text-sm">{t("clientSettings.asyncJobResultTtlDesc")}</p>
 					</div>
 					<Input
 						id="async-job-result-ttl"
@@ -333,7 +322,11 @@ export default function ClientSettingsView() {
 										<Trans
 											t={t}
 											i18nKey="clientSettings.prefixedHeadersDesc"
-											components={{ 1: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />, 3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />, 5: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" /> }}
+											components={{
+												1: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+												3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+												5: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+											}}
 										/>
 									</li>
 									<li>
@@ -362,15 +355,19 @@ export default function ClientSettingsView() {
 										{t("clientSettings.allowlistConfiguredDesc")}
 									</li>
 									<li>
-										<span className="font-medium">{t("clientSettings.denylistRule")}</span>{" "}
-										{t("clientSettings.denylistRuleDesc")}
+										<span className="font-medium">{t("clientSettings.denylistRule")}</span> {t("clientSettings.denylistRuleDesc")}
 									</li>
 									<li>
 										<span className="font-medium">{t("clientSettings.wildcards")}</span>{" "}
 										<Trans
 											t={t}
 											i18nKey="clientSettings.wildcardsDesc"
-											components={{ 1: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />, 3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />, 5: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />, 7: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" /> }}
+											components={{
+												1: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+												3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+												5: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+												7: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+											}}
 										/>
 									</li>
 								</ul>
@@ -382,14 +379,21 @@ export default function ClientSettingsView() {
 										<Trans
 											t={t}
 											i18nKey="clientSettings.importantDesc1"
-											components={{ 1: <span className="font-medium" />, 3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" /> }}
+											components={{
+												1: <span className="font-medium" />,
+												3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+											}}
 										/>
 									</li>
 									<li>
 										<Trans
 											t={t}
 											i18nKey="clientSettings.importantDesc2"
-											components={{ 1: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />, 3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />, 5: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" /> }}
+											components={{
+												1: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+												3: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+												5: <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs" />,
+											}}
 										/>
 									</li>
 								</ul>
@@ -405,9 +409,7 @@ export default function ClientSettingsView() {
 							</span>
 						</AccordionTrigger>
 						<AccordionContent>
-							<p className="text-sm">
-								{t("clientSettings.securityNoteDesc")}
-							</p>
+							<p className="text-sm">{t("clientSettings.securityNoteDesc")}</p>
 							<p className="text-muted-foreground mt-1 font-mono text-xs">
 								proxy-authorization, cookie, host, content-length, connection, transfer-encoding, x-api-key, x-goog-api-key, x-bf-api-key,
 								x-bf-vk
@@ -468,11 +470,7 @@ export default function ClientSettingsView() {
 					<div className="space-y-1">
 						<h4 className="text-sm font-medium">{t("clientSettings.denylist")}</h4>
 						<p className="text-muted-foreground text-xs">
-							<Trans
-								t={t}
-								i18nKey="clientSettings.denylistDesc"
-								components={{ 1: <code className="bg-muted rounded px-1 font-mono" /> }}
-							/>
+							<Trans t={t} i18nKey="clientSettings.denylistDesc" components={{ 1: <code className="bg-muted rounded px-1 font-mono" /> }} />
 						</p>
 					</div>
 

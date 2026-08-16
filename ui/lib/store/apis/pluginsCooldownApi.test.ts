@@ -26,12 +26,7 @@ import { configureStore } from "@reduxjs/toolkit";
 // Red phase: the following hooks are not yet exported from pluginsApi.
 // In the TDD red phase this import will fail at load time.
 // ---------------------------------------------------------------------------
-import {
-	pluginsApi,
-	useGetCooldownStateQuery,
-	useGetCooldownStatsQuery,
-	useUnfreezeCooldownMutation,
-} from "./pluginsApi";
+import { pluginsApi, useGetCooldownStateQuery, useGetCooldownStatsQuery, useUnfreezeCooldownMutation } from "./pluginsApi";
 
 // ---------------------------------------------------------------------------
 // Types for response shape assertions (contract from design.md)
@@ -77,9 +72,7 @@ const jsonResponse = (body: unknown) =>
 	});
 
 const stateBody: CooldownStateResponse = {
-	state: [
-		{ provider: "openai", keyId: "key-abc-123", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" },
-	],
+	state: [{ provider: "openai", keyId: "key-abc-123", expireAt: "2026-08-15T18:00:00Z", reason: "quota_exhausted" }],
 };
 
 const statsBody: CooldownStatsResponse = {
@@ -169,9 +162,7 @@ describe("pluginsApi cooldown endpoint registration (task 11.3)", () => {
 		fetchMock.mockResolvedValue(jsonResponse(stateBody));
 		const store = createApiStore();
 
-		const data = (await store.dispatch(
-			pluginsApi.endpoints.getCooldownState.initiate(undefined),
-		).unwrap()) as CooldownStateResponse;
+		const data = (await store.dispatch(pluginsApi.endpoints.getCooldownState.initiate(undefined)).unwrap()) as CooldownStateResponse;
 
 		expect(data.state).toHaveLength(1);
 		expect(data.state[0]).toMatchObject({
@@ -195,9 +186,7 @@ describe("pluginsApi cooldown endpoint registration (task 11.3)", () => {
 		fetchMock.mockResolvedValue(jsonResponse(statsBody));
 		const store = createApiStore();
 
-		const data = (await store.dispatch(
-			pluginsApi.endpoints.getCooldownStats.initiate(undefined),
-		).unwrap()) as CooldownStatsResponse;
+		const data = (await store.dispatch(pluginsApi.endpoints.getCooldownStats.initiate(undefined)).unwrap()) as CooldownStatsResponse;
 
 		expect(data.stats).toMatchObject({
 			markCount: 12,
@@ -220,9 +209,9 @@ describe("pluginsApi cooldown endpoint registration (task 11.3)", () => {
 		fetchMock.mockResolvedValue(jsonResponse(unfreezeBody));
 		const store = createApiStore();
 
-		const result = (await store.dispatch(
-			pluginsApi.endpoints.unfreezeCooldown.initiate({ provider: "openai", keyId: "key-abc-123" }),
-		).unwrap()) as UnfreezeCooldownResponse;
+		const result = (await store
+			.dispatch(pluginsApi.endpoints.unfreezeCooldown.initiate({ provider: "openai", keyId: "key-abc-123" }))
+			.unwrap()) as UnfreezeCooldownResponse;
 
 		expect(result).toMatchObject({
 			message: "key unfrozen",

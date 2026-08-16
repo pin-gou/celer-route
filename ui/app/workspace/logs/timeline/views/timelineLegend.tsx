@@ -13,12 +13,15 @@ export interface TimelineLegendProps {
 export function TimelineLegend({ className }: TimelineLegendProps) {
 	const { t } = useTranslation("logs");
 
-	const legendItems = useMemo(() => [
-		{ label: t("timeline.legend.success"), key: "success", color: "bg-green-500" },
-		{ label: t("timeline.legend.error"), key: "error", color: "bg-red-500" },
-		{ label: t("timeline.legend.processing"), key: "processing", color: "bg-blue-400" },
-		{ label: t("timeline.legend.other"), key: "other", color: "bg-gray-400" },
-	], [t]);
+	const legendItems = useMemo(
+		() => [
+			{ label: t("timeline.legend.success"), key: "success", color: "bg-green-500" },
+			{ label: t("timeline.legend.error"), key: "error", color: "bg-red-500" },
+			{ label: t("timeline.legend.processing"), key: "processing", color: "bg-blue-400" },
+			{ label: t("timeline.legend.other"), key: "other", color: "bg-gray-400" },
+		],
+		[t],
+	);
 
 	return (
 		<div data-testid="timeline-legend" className={cn("flex items-center gap-3", className)}>

@@ -91,9 +91,7 @@ export function ProxyFormFragment({ provider, onCancel }: ProxyFormFragmentProps
 				{/* Proxy Configuration */}
 				<Alert>
 					<Info className="h-4 w-4" />
-					<AlertDescription>
-						{t("fragments.proxy.alertDescription")}
-					</AlertDescription>
+					<AlertDescription>{t("fragments.proxy.alertDescription")}</AlertDescription>
 				</Alert>
 				<div className="space-y-4">
 					<div className="space-y-4">
@@ -213,9 +211,7 @@ export function ProxyFormFragment({ provider, onCancel }: ProxyFormFragmentProps
 													data-testid="env-var-proxy-ca-cert-pem"
 												/>
 											</FormControl>
-											<FormDescription>
-												{t("fragments.proxy.caCertDescription")}
-											</FormDescription>
+											<FormDescription>{t("fragments.proxy.caCertDescription")}</FormDescription>
 											<FormMessage />
 										</FormItem>
 									)}

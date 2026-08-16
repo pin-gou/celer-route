@@ -29,7 +29,6 @@ export function PluginFormFragment({ form, isEditMode = false }: PluginFormFragm
 					{isEditMode
 						? "Update your plugin configuration. Plugin name and path are read-only."
 						: "Install a custom plugin by providing an absolute file path or HTTP URL accessible to Bifrost deployment (.so)."}{" "}
-					
 				</p>
 			</div>
 

@@ -370,13 +370,11 @@ export default function ComplexityRouterPage() {
 						<h1 className="text-2xl font-semibold tracking-tight">{t("complexityRouter.title")}</h1>
 						<p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
 							{t("complexityRouter.headerDescription")}{" "}
-							<code className="bg-muted rounded-sm px-1 py-0.5 font-mono text-xs">
-								{t("complexityRouter.headerDescriptionCode")}
-							</code>{" "}
+							<code className="bg-muted rounded-sm px-1 py-0.5 font-mono text-xs">{t("complexityRouter.headerDescriptionCode")}</code>{" "}
 							{t("complexityRouter.headerDescriptionSuffix")}
 						</p>
 					</div>
-					</div>
+				</div>
 
 				{/* ── Complexity Spectrum ── */}
 				<div className="bg-card space-y-4 rounded-sm border p-5">
@@ -510,13 +508,10 @@ export default function ComplexityRouterPage() {
 												<div className="flex items-center justify-between">
 													<span className="text-xs font-medium">{t(labelKey)}</span>
 													<span className="text-muted-foreground font-mono text-[11px] tabular-nums">
-														{field.value.length}{" "}
-														{field.value.length === 1
-															? t("complexityRouter.entry")
-															: t("complexityRouter.entries")}
+														{field.value.length} {field.value.length === 1 ? t("complexityRouter.entry") : t("complexityRouter.entries")}
 													</span>
 												</div>
-<p className="text-muted-foreground text-xs leading-relaxed">{t(descriptionKey)}</p>
+												<p className="text-muted-foreground text-xs leading-relaxed">{t(descriptionKey)}</p>
 												<TagInput
 													data-testid={`complexity-router-keywords-${testIdPart(key)}-input`}
 													value={field.value}

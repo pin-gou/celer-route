@@ -5,6 +5,6 @@ function RouteComponent() {
 	return <ProviderDetailPage />;
 }
 
-export const Route = createFileRoute("/workspace/providers2/$id")({
+export const Route = createFileRoute("/workspace/providers/$id")({
 	component: RouteComponent,
 });

@@ -150,7 +150,7 @@ export function PerformanceFormFragment({ provider, onCancel }: PerformanceFormF
 				<div className="mb-6 flex items-center justify-end gap-2">
 					{onCancel && (
 						<Button type="button" variant="outline" size="sm" onClick={onCancel}>
-{t("fragments.performance.cancel")}
+							{t("fragments.performance.cancel")}
 						</Button>
 					)}
 					<Button

@@ -232,9 +232,7 @@ export function GovernanceFormFragment({ provider, onCancel }: GovernanceFormFra
 							<Label className="text-sm" htmlFor="provider-calendar-aligned">
 								{t("fragments.governance.alignToCalendarCycle")}
 							</Label>
-							<p className="text-muted-foreground text-xs">
-								{t("fragments.governance.alignToCalendarCycleDescription")}
-							</p>
+							<p className="text-muted-foreground text-xs">{t("fragments.governance.alignToCalendarCycleDescription")}</p>
 						</div>
 						<Switch
 							id="provider-calendar-aligned"

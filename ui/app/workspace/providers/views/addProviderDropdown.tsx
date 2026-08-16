@@ -42,18 +42,12 @@ export function AddProviderDropdown({
 					variant="outline"
 					size={variant === "empty" ? "default" : "sm"}
 					data-testid="add-provider-btn"
-					className={
-						variant === "empty" ? "" : variant === "toolbar" ? "gap-1 text-xs" : "w-full justify-start"
-					}
+					className={variant === "empty" ? "" : variant === "toolbar" ? "gap-1 text-xs" : "w-full justify-start"}
 					aria-label="Add new provider"
 					disabled={disabled}
 				>
 					<PlusIcon className="h-4 w-4" />
-					{variant === "empty" ? (
-						<span>Add provider</span>
-					) : (
-						<div className="text-xs">Add New Provider</div>
-					)}
+					{variant === "empty" ? <span>Add provider</span> : <div className="text-xs">Add New Provider</div>}
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent

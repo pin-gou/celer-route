@@ -178,10 +178,7 @@ function AzureSection({ config, onChange, disabled }: ProviderSectionProps) {
 	const { t } = useTranslation("providers");
 	return (
 		<div className="space-y-4">
-			<SectionHeader
-				title={t("fragments.deployments.azureTitle")}
-				description={t("fragments.deployments.azureDescription")}
-			/>
+			<SectionHeader title={t("fragments.deployments.azureTitle")} description={t("fragments.deployments.azureDescription")} />
 			<FieldRow label={t("fragments.deployments.azureApiVersion")} hint={t("fragments.deployments.azureApiVersionHint")}>
 				<StringField
 					value={config.api_version}
@@ -214,10 +211,7 @@ function VertexSection({ config, onChange, disabled }: ProviderSectionProps) {
 	const { t } = useTranslation("providers");
 	return (
 		<div className="space-y-4">
-			<SectionHeader
-				title={t("fragments.deployments.vertexTitle")}
-				description={t("fragments.deployments.vertexDescription")}
-			/>
+			<SectionHeader title={t("fragments.deployments.vertexTitle")} description={t("fragments.deployments.vertexDescription")} />
 			<FieldRow label={t("fragments.deployments.vertexProjectId")}>
 				<SecretVarField
 					value={config.project_id}
@@ -245,9 +239,7 @@ function VertexSection({ config, onChange, disabled }: ProviderSectionProps) {
 			<div className="flex items-start justify-between gap-4 rounded-md border p-3">
 				<div className="space-y-0.5">
 					<label className="text-sm font-medium">{t("fragments.deployments.vertexForceSingleRegion")}</label>
-					<p className="text-muted-foreground text-xs">
-						{t("fragments.deployments.vertexForceSingleRegionHint")}
-					</p>
+					<p className="text-muted-foreground text-xs">{t("fragments.deployments.vertexForceSingleRegionHint")}</p>
 				</div>
 				<Switch
 					checked={config.force_single_region ?? false}
@@ -263,10 +255,7 @@ function BedrockSection({ config, onChange, disabled }: ProviderSectionProps) {
 	const { t } = useTranslation("providers");
 	return (
 		<div className="space-y-4">
-			<SectionHeader
-				title={t("fragments.deployments.bedrockTitle")}
-				description={t("fragments.deployments.bedrockDescription")}
-			/>
+			<SectionHeader title={t("fragments.deployments.bedrockTitle")} description={t("fragments.deployments.bedrockDescription")} />
 			<FieldRow label={t("fragments.deployments.bedrockRegion")}>
 				<SecretVarField
 					value={config.region}
@@ -275,7 +264,10 @@ function BedrockSection({ config, onChange, disabled }: ProviderSectionProps) {
 					disabled={disabled}
 				/>
 			</FieldRow>
-			<FieldRow label={t("fragments.deployments.bedrockInferenceProfileArn")} hint={t("fragments.deployments.bedrockInferenceProfileArnHint")}>
+			<FieldRow
+				label={t("fragments.deployments.bedrockInferenceProfileArn")}
+				hint={t("fragments.deployments.bedrockInferenceProfileArnHint")}
+			>
 				<SecretVarField
 					value={config.inference_profile_arn}
 					onChange={(v) => onChange({ inference_profile_arn: v })}
@@ -283,10 +275,7 @@ function BedrockSection({ config, onChange, disabled }: ProviderSectionProps) {
 					disabled={disabled}
 				/>
 			</FieldRow>
-			<FieldRow
-				label={t("fragments.deployments.bedrockProjectId")}
-				hint={t("fragments.deployments.bedrockProjectIdHint")}
-			>
+			<FieldRow label={t("fragments.deployments.bedrockProjectId")} hint={t("fragments.deployments.bedrockProjectIdHint")}>
 				<SecretVarField
 					value={config.project_id}
 					onChange={(v) => onChange({ project_id: v })}
@@ -314,10 +303,7 @@ function BedrockMantleSection({ config, onChange, disabled }: ProviderSectionPro
 					disabled={disabled}
 				/>
 			</FieldRow>
-			<FieldRow
-				label={t("fragments.deployments.bedrockMantleProjectId")}
-				hint={t("fragments.deployments.bedrockMantleProjectIdHint")}
-			>
+			<FieldRow label={t("fragments.deployments.bedrockMantleProjectId")} hint={t("fragments.deployments.bedrockMantleProjectIdHint")}>
 				<SecretVarField
 					value={config.project_id}
 					onChange={(v) => onChange({ project_id: v })}
@@ -350,7 +336,10 @@ function UseAnthropicEndpointsToggleSection({ config, onChange, disabled, provid
 	const { t } = useTranslation("providers");
 	return (
 		<div className="space-y-4">
-			<SectionHeader title={t("fragments.deployments.providerOverrides", { provider: providerName })} description={t("fragments.deployments.providerOverridesDescription", { provider: providerName })} />
+			<SectionHeader
+				title={t("fragments.deployments.providerOverrides", { provider: providerName })}
+				description={t("fragments.deployments.providerOverridesDescription", { provider: providerName })}
+			/>
 			<TriStateOverrideRow
 				label={t("fragments.deployments.useAnthropicEndpoints")}
 				hint={t("fragments.deployments.useAnthropicEndpointsHint")}
@@ -683,9 +672,7 @@ export function DeploymentsTable({ value, onChange, providerName, disabled = fal
 						</div>
 						{(draftRow.name.trim() !== "" || draftRow.config.model_id.trim() !== "") &&
 							!(draftRow.name.trim() && draftRow.config.model_id.trim()) && (
-								<p className="text-muted-foreground px-4 pb-2 text-xs">
-									{t("fragments.deployments.draftHint")}
-								</p>
+								<p className="text-muted-foreground px-4 pb-2 text-xs">{t("fragments.deployments.draftHint")}</p>
 							)}
 						<CollapsibleContent>
 							<ExpandedConfigPanel config={draftRow.config} onChange={patchDraftConfig} providerName={providerName} disabled={disabled} />

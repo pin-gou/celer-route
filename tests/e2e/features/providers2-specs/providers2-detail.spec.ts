@@ -1,19 +1,15 @@
 import { expect, test } from "../../core/fixtures/base.fixture";
 
 /**
- * @file TDD Red Phase — Providers2 detail page E2E tests
+ * @file Provider detail page E2E tests (new view)
  *
- * These tests verify the new providers2 detail page:
- * - 6 Tabs (Overview/Keys/Models/Usage/Governance/Logs) all render
+ * These tests verify the provider detail page:
+ * - Tabs (Overview/Keys/Models/Governance) all render
  * - Each tab switch updates content area
  * - No console.error on tab switches
- *
- * In the TDD red phase, the /workspace/providers2/:id route does not exist yet,
- * so these tests will fail when the page returns 404 or cannot find elements.
- * This is the expected result — the dev phase will implement the route.
  */
 
-test.describe("Providers2 Detail", () => {
+test.describe("Provider Detail", () => {
 	test.describe.configure({ mode: "serial" });
 
 	// Collect console errors across all tests in this describe
@@ -42,10 +38,10 @@ test.describe("Providers2 Detail", () => {
 		});
 	});
 
-	test("should navigate to provider detail page at /workspace/providers2/openai", async ({
+	test("should navigate to provider detail page at /workspace/providers/openai", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// The detail page should show the provider name
@@ -56,7 +52,7 @@ test.describe("Providers2 Detail", () => {
 	test("should display the Overview tab by default", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// Overview tab should be active by default
@@ -72,7 +68,7 @@ test.describe("Providers2 Detail", () => {
 	test("should display all 6 tab buttons", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		const tabs = [
@@ -92,7 +88,7 @@ test.describe("Providers2 Detail", () => {
 	test("should switch to Keys tab when clicking Keys tab", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// Click Keys tab
@@ -110,7 +106,7 @@ test.describe("Providers2 Detail", () => {
 	test("should switch to Models tab when clicking Models tab", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// Click Models tab
@@ -127,7 +123,7 @@ test.describe("Providers2 Detail", () => {
 	test("should switch to Usage tab when clicking Usage tab", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// Click Usage tab
@@ -144,7 +140,7 @@ test.describe("Providers2 Detail", () => {
 	test("should switch to Governance tab when clicking Governance tab", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// Click Governance tab
@@ -161,7 +157,7 @@ test.describe("Providers2 Detail", () => {
 	test("should switch to Logs tab when clicking Logs tab", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// Click Logs tab
@@ -178,7 +174,7 @@ test.describe("Providers2 Detail", () => {
 	test("should cycle through all 6 tabs without console errors", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
 		// Cycle through all tabs
@@ -216,10 +212,10 @@ test.describe("Providers2 Detail", () => {
 	test("should display breadcrumb with link back to providers list", async ({
 		page,
 	}) => {
-		await page.goto("/workspace/providers2/openai");
+		await page.goto("/workspace/providers/openai");
 		await page.waitForLoadState("networkidle");
 
-		// Breadcrumb should contain a link back to providers2 list
+		// Breadcrumb should contain a link back to providers list
 		const breadcrumb = page.getByTestId("providers2-detail-breadcrumb");
 		await expect(breadcrumb).toBeVisible();
 
@@ -230,24 +226,6 @@ test.describe("Providers2 Detail", () => {
 		await page.waitForTimeout(500);
 
 		// Should be on the list page
-		await expect(page).toHaveURL(/\/workspace\/providers2$/);
-	});
-
-	test("should display the legacy view button to switch back to old providers page", async ({
-		page,
-	}) => {
-		await page.goto("/workspace/providers2/openai");
-		await page.waitForLoadState("networkidle");
-
-		// Legacy view button should be visible
-		const legacyBtn = page.getByTestId("providers2-legacy-view-btn");
-		await expect(legacyBtn).toBeVisible();
-
-		// Clicking should navigate to the old providers page
-		await legacyBtn.click();
-		await page.waitForTimeout(500);
-
-		// Should be on the old providers page with the provider param
-		await expect(page).toHaveURL(/\/workspace\/providers/);
+		await expect(page).toHaveURL(/\/workspace\/providers$/);
 	});
 });

@@ -280,7 +280,9 @@ export function BetaHeadersFormFragment({ provider, onCancel }: BetaHeadersFormF
 										<td className="px-3 py-2">
 											<div className="flex flex-col gap-0.5">
 												<span className="font-mono text-xs">{row.prefix}*</span>
-												<span className="text-muted-foreground text-xs">{t(`fragments.betaHeaders.knownHeaders.${row.descriptionKey}`)}</span>
+												<span className="text-muted-foreground text-xs">
+													{t(`fragments.betaHeaders.knownHeaders.${row.descriptionKey}`)}
+												</span>
 											</div>
 										</td>
 										<td className="px-3 py-2">

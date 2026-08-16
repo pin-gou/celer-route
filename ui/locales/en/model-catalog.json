@@ -1,50 +1,50 @@
 {
-  "page": {
-    "title": "Model Catalog",
-    "description": "Browse and manage AI models"
-  },
-  "tabs": {
-    "overview": "Overview",
-    "models": "Models"
-  },
-  "table": {
-    "title": "Model Catalog",
-    "description": "Overview of all configured providers, models, and usage.",
-    "totalProviders": "Total Providers",
-    "totalModels": "Total Models",
-    "totalRequests24h": "Total Requests (24h)",
-    "totalCost24h": "Total Cost (24h)",
-    "allProviders": "All Providers",
-    "totalTraffic24h": "Total Traffic (24h)",
-    "modelsUsedTooltip": "Models used in the last 30 days",
-    "noMatchingProviders": "No matching providers found.",
-    "custom": "CUSTOM",
-    "moreCount": "+{count} more"
-  },
-  "catalog": {
-    "title": "Model Catalog",
-    "searchModels": "Search models...",
-    "provider": "Provider",
-    "modelName": "Model Name",
-    "capabilities": "Capabilities",
-    "pricing": "Pricing",
-    "contextWindow": "Context Window",
-    "status": "Status",
-    "noModels": "No models found",
-    "noModelsDesc": "Try adjusting your search or filter criteria",
-    "supported": "Supported",
-    "unsupported": "Unsupported",
-    "chat": "Chat",
-    "embedding": "Embedding",
-    "image": "Image",
-    "audio": "Audio",
-    "video": "Video"
-  },
-  "permissionDenied": "You don't have permission to access the model catalog",
-  "toast": {
-    "catalogRefreshed": "Model catalog refreshed successfully",
-    "catalogRefreshFailed": "Failed to refresh model catalog",
-    "modelUpdated": "Model updated successfully",
-    "attributeSaved": "Attribute saved successfully"
-  }
+	"page": {
+		"title": "Model Catalog",
+		"description": "Browse and manage AI models"
+	},
+	"tabs": {
+		"overview": "Overview",
+		"models": "Models"
+	},
+	"table": {
+		"title": "Model Catalog",
+		"description": "Overview of all configured providers, models, and usage.",
+		"totalProviders": "Total Providers",
+		"totalModels": "Total Models",
+		"totalRequests24h": "Total Requests (24h)",
+		"totalCost24h": "Total Cost (24h)",
+		"allProviders": "All Providers",
+		"totalTraffic24h": "Total Traffic (24h)",
+		"modelsUsedTooltip": "Models used in the last 30 days",
+		"noMatchingProviders": "No matching providers found.",
+		"custom": "CUSTOM",
+		"moreCount": "+{count} more"
+	},
+	"catalog": {
+		"title": "Model Catalog",
+		"searchModels": "Search models...",
+		"provider": "Provider",
+		"modelName": "Model Name",
+		"capabilities": "Capabilities",
+		"pricing": "Pricing",
+		"contextWindow": "Context Window",
+		"status": "Status",
+		"noModels": "No models found",
+		"noModelsDesc": "Try adjusting your search or filter criteria",
+		"supported": "Supported",
+		"unsupported": "Unsupported",
+		"chat": "Chat",
+		"embedding": "Embedding",
+		"image": "Image",
+		"audio": "Audio",
+		"video": "Video"
+	},
+	"permissionDenied": "You don't have permission to access the model catalog",
+	"toast": {
+		"catalogRefreshed": "Model catalog refreshed successfully",
+		"catalogRefreshFailed": "Failed to refresh model catalog",
+		"modelUpdated": "Model updated successfully",
+		"attributeSaved": "Attribute saved successfully"
+	}
 }

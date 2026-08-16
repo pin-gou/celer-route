@@ -1,24 +1,24 @@
 {
-  "page": {
-    "title": "Skills Repository",
-    "description": "Manage and configure AI skills"
-  },
-  "skills": {
-    "title": "Skills",
-    "installSkill": "Install Skill",
-    "editSkill": "Edit Skill",
-    "deleteSkill": "Delete Skill",
-    "skillName": "Skill Name",
-    "description": "Description",
-    "version": "Version",
-    "author": "Author",
-    "status": "Status",
-    "noSkills": "No skills installed",
-    "noSkillsDesc": "Install your first skill to get started",
-    "active": "Active",
-    "inactive": "Inactive",
-    "installed": "Installed",
-    "notInstalled": "Not Installed"
-  },
-  "permissionDenied": "You don't have permission to access the skills repository"
+	"page": {
+		"title": "Skills Repository",
+		"description": "Manage and configure AI skills"
+	},
+	"skills": {
+		"title": "Skills",
+		"installSkill": "Install Skill",
+		"editSkill": "Edit Skill",
+		"deleteSkill": "Delete Skill",
+		"skillName": "Skill Name",
+		"description": "Description",
+		"version": "Version",
+		"author": "Author",
+		"status": "Status",
+		"noSkills": "No skills installed",
+		"noSkillsDesc": "Install your first skill to get started",
+		"active": "Active",
+		"inactive": "Inactive",
+		"installed": "Installed",
+		"notInstalled": "Not Installed"
+	},
+	"permissionDenied": "You don't have permission to access the skills repository"
 }

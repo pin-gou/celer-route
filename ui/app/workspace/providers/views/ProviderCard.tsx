@@ -37,7 +37,7 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 	const healthStatus = provider.keys_health_status;
 
 	const handleCardClick = () => {
-		navigate({ to: "/workspace/providers2/$id", params: { id: provider.name } });
+		navigate({ to: "/workspace/providers/$id", params: { id: provider.name } });
 	};
 
 	const getHealthColor = (status: string) => {
@@ -139,7 +139,7 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 									e.stopPropagation();
 									onDelete();
 								}}
-								className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500"
+								className="text-muted-foreground h-7 w-7 p-0 hover:text-red-500"
 							>
 								<Trash2 className="h-3.5 w-3.5" />
 							</Button>
@@ -159,7 +159,9 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 			{/* Last error row — below actions so cards are consistent height */}
 			{provider.last_error_at && (
 				<div className="text-xs text-red-500">
-					<span data-testid="providers2-card-last-error">{t("providers2.card.lastError", { time: formatLastError(provider.last_error_at) })}</span>
+					<span data-testid="providers2-card-last-error">
+						{t("providers2.card.lastError", { time: formatLastError(provider.last_error_at) })}
+					</span>
 				</div>
 			)}
 		</div>

@@ -158,7 +158,12 @@ export default function ProxyView() {
 											<FormItem>
 												<FormLabel>{t("proxy.username")}</FormLabel>
 												<FormControl>
-													<Input placeholder={t("proxy.usernamePlaceholder")} disabled={!watchedEnabled} {...field} value={field.value || ""} />
+													<Input
+														placeholder={t("proxy.usernamePlaceholder")}
+														disabled={!watchedEnabled}
+														{...field}
+														value={field.value || ""}
+													/>
 												</FormControl>
 												<FormMessage />
 											</FormItem>
@@ -232,9 +237,7 @@ export default function ProxyView() {
 													onChange={(e) => field.onChange(e.target.value !== "" ? parseInt(e.target.value, 10) : undefined)}
 												/>
 											</FormControl>
-											<FormDescription>
-												{t("proxy.timeoutDesc")}
-											</FormDescription>
+											<FormDescription>{t("proxy.timeoutDesc")}</FormDescription>
 											<FormMessage />
 										</FormItem>
 									)}
@@ -257,9 +260,7 @@ export default function ProxyView() {
 													value={field.value || ""}
 												/>
 											</FormControl>
-											<FormDescription>
-												{t("proxy.caCertDesc")}
-											</FormDescription>
+											<FormDescription>{t("proxy.caCertDesc")}</FormDescription>
 											<FormMessage />
 										</FormItem>
 									)}
@@ -269,9 +270,7 @@ export default function ProxyView() {
 								<div className="flex items-center justify-between">
 									<div className="space-y-0.5">
 										<FormLabel className="text-sm font-medium">{t("proxy.skipTlsVerify")}</FormLabel>
-										<p className="text-muted-foreground text-sm">
-											{t("proxy.skipTlsVerifyDesc")}
-										</p>
+										<p className="text-muted-foreground text-sm">{t("proxy.skipTlsVerifyDesc")}</p>
 									</div>
 									<FormField
 										control={form.control}

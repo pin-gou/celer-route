@@ -37,88 +37,80 @@ const noUnlocalizedTextRule = noUnlocalizedTextRules["no-unlocalized-text"] as a
 // ─── 测试用例 ──────────────────────────────────────────────────
 
 describe("eslint.no-unlocalized-text", () => {
-  const ruleTester = new RuleTester({
-    languageOptions: {
-      sourceType: "module",
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
-      },
-    },
-  });
+	const ruleTester = new RuleTester({
+		languageOptions: {
+			sourceType: "module",
+			parserOptions: {
+				ecmaFeatures: { jsx: true },
+			},
+		},
+	});
 
-  it("should flag bare English string literal 'Save' as error", () => {
-    const result = ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
-      valid: [],
-      invalid: [
-        {
-          code: `const label = "Save";`,
-          errors: [{ message: /unlocalized/i }],
-        },
-      ],
-    });
-    // RuleTester.run internally validates that invalid cases produce errors
-    // matching the expected messages — if it doesn't throw, all assertions pass
-    expect(result).toBeUndefined();
-  });
+	it("should flag bare English string literal 'Save' as error", () => {
+		const result = ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
+			valid: [],
+			invalid: [
+				{
+					code: `const label = "Save";`,
+					errors: [{ message: /unlocalized/i }],
+				},
+			],
+		});
+		// RuleTester.run internally validates that invalid cases produce errors
+		// matching the expected messages — if it doesn't throw, all assertions pass
+		expect(result).toBeUndefined();
+	});
 
-  it("should NOT flag t('common:action.save') as error", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
-      valid: [
-        `const label = t("common:action.save");`,
-      ],
-      invalid: [],
-    });
-    // No throw = valid cases produce no errors — test passes
-  });
+	it("should NOT flag t('common:action.save') as error", () => {
+		ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
+			valid: [`const label = t("common:action.save");`],
+			invalid: [],
+		});
+		// No throw = valid cases produce no errors — test passes
+	});
 
-  it("should respect eslint-disable-next-line exemption", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
-      valid: [
-        `// eslint-disable-next-line no-unlocalized-text\nconst label = "Save";`,
-      ],
-      invalid: [],
-    });
-  });
+	it("should respect eslint-disable-next-line exemption", () => {
+		ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
+			valid: [`// eslint-disable-next-line no-unlocalized-text\nconst label = "Save";`],
+			invalid: [],
+		});
+	});
 
-  it("should flag bare JSX text content", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
-      valid: [],
-      invalid: [
-        {
-          code: `export function Button() { return <button>Save</button>; }`,
-          errors: [{ message: /unlocalized/i }],
-        },
-      ],
-    });
-  });
+	it("should flag bare JSX text content", () => {
+		ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
+			valid: [],
+			invalid: [
+				{
+					code: `export function Button() { return <button>Save</button>; }`,
+					errors: [{ message: /unlocalized/i }],
+				},
+			],
+		});
+	});
 
-  it("should NOT flag JSX with t() call", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
-      valid: [
-        `export function Button() { return <button>{t("common:action.save")}</button>; }`,
-      ],
-      invalid: [],
-    });
-  });
+	it("should NOT flag JSX with t() call", () => {
+		ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
+			valid: [`export function Button() { return <button>{t("common:action.save")}</button>; }`],
+			invalid: [],
+		});
+	});
 
-  it("should flag toast.success('Done') as error", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
-      valid: [],
-      invalid: [
-        {
-          code: `toast.success("Done");`,
-          errors: [{ message: /unlocalized/i }],
-        },
-      ],
-    });
-  });
+	it("should flag toast.success('Done') as error", () => {
+		ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
+			valid: [],
+			invalid: [
+				{
+					code: `toast.success("Done");`,
+					errors: [{ message: /unlocalized/i }],
+				},
+			],
+		});
+	});
 
-  it("should NOT flag toast.success(t('...'))", () => {
-    ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
-      valid: [
-        `toast.success(t("common:action.save"));`,
-      ],
-      invalid: [],
-    });
-  });
+	it("should NOT flag toast.success(t('...'))", () => {
+		ruleTester.run("no-unlocalized-text", noUnlocalizedTextRule, {
+			valid: [`toast.success(t("common:action.save"));`],
+			invalid: [],
+		});
+	});
 });

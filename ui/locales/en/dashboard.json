@@ -1,55 +1,55 @@
 {
-  "title": "Dashboard",
-  "tabs": {
-    "overview": "Overview",
-    "providerUsage": "Provider Usage",
-    "modelRankings": "Model Rankings",
-    "mcpUsage": "MCP usage",
-    "teamRankings": "Team Rankings",
-    "userRankings": "User Rankings",
-    "virtualKeyRankings": "Virtual Key Rankings",
-    "customerRankings": "Customer Rankings",
-    "buRankings": "BU Rankings",
-    "appRankings": "App Rankings"
-  },
-  "filters": {
-    "allTools": "All Tools",
-    "allServers": "All Servers",
-    "allModels": "All Models",
-    "allProviders": "All Providers",
-    "dateRange": "Date Range",
-    "period": "Period",
-    "timezone": "Timezone"
-  },
-  "charts": {
-    "volume": "Volume",
-    "tokens": "Tokens",
-    "cost": "Cost",
-    "latency": "Latency",
-    "throughput": "Throughput",
-    "cacheRate": "of input tokens cached by provider",
-    "cacheRateInfo": "More information about external cache hit rate",
-    "cacheRateTooltip": "This reflects provider-level caching, not Bifrost semantic cache hits.",
-    "cached": "Cached",
-    "input": "Input"
-  },
-  "export": {
-    "title": "Export",
-    "exporting": "Exporting...",
-    "pdf": "PDF",
-    "csv": "CSV",
-    "thisTab": "This tab ({tab})",
-    "allTabs": "All tabs",
-    "poweredBy": "Powered by"
-  },
-  "empty": {
-    "title": "No data available",
-    "description": "There is no data for the selected time period. Try adjusting your filters or time range."
-  },
-  "toast": {
-    "exportStarted": "Export started",
-    "exportFailed": "Export failed",
-    "exportCompleted": "Export completed",
-    "dataRefreshed": "Dashboard data refreshed"
-  }
+	"title": "Dashboard",
+	"tabs": {
+		"overview": "Overview",
+		"providerUsage": "Provider Usage",
+		"modelRankings": "Model Rankings",
+		"mcpUsage": "MCP usage",
+		"teamRankings": "Team Rankings",
+		"userRankings": "User Rankings",
+		"virtualKeyRankings": "Virtual Key Rankings",
+		"customerRankings": "Customer Rankings",
+		"buRankings": "BU Rankings",
+		"appRankings": "App Rankings"
+	},
+	"filters": {
+		"allTools": "All Tools",
+		"allServers": "All Servers",
+		"allModels": "All Models",
+		"allProviders": "All Providers",
+		"dateRange": "Date Range",
+		"period": "Period",
+		"timezone": "Timezone"
+	},
+	"charts": {
+		"volume": "Volume",
+		"tokens": "Tokens",
+		"cost": "Cost",
+		"latency": "Latency",
+		"throughput": "Throughput",
+		"cacheRate": "of input tokens cached by provider",
+		"cacheRateInfo": "More information about external cache hit rate",
+		"cacheRateTooltip": "This reflects provider-level caching, not Bifrost semantic cache hits.",
+		"cached": "Cached",
+		"input": "Input"
+	},
+	"export": {
+		"title": "Export",
+		"exporting": "Exporting...",
+		"pdf": "PDF",
+		"csv": "CSV",
+		"thisTab": "This tab ({tab})",
+		"allTabs": "All tabs",
+		"poweredBy": "Powered by"
+	},
+	"empty": {
+		"title": "No data available",
+		"description": "There is no data for the selected time period. Try adjusting your filters or time range."
+	},
+	"toast": {
+		"exportStarted": "Export started",
+		"exportFailed": "Export failed",
+		"exportCompleted": "Export completed",
+		"dataRefreshed": "Dashboard data refreshed"
+	}
 }

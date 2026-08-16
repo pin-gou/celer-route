@@ -9,13 +9,7 @@ interface ModelFilterSelectProps {
 	"data-testid"?: string;
 }
 
-export function ModelFilterSelect({
-	models,
-	selectedModel,
-	onModelChange,
-	placeholder,
-	"data-testid": testId,
-}: ModelFilterSelectProps) {
+export function ModelFilterSelect({ models, selectedModel, onModelChange, placeholder, "data-testid": testId }: ModelFilterSelectProps) {
 	const { t } = useTranslation("dashboard");
 	const defaultPlaceholder = t("filters.allModels");
 

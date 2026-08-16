@@ -598,13 +598,6 @@ export default function AppSidebar() {
 						hasAccess: hasModelProvidersAccess,
 					},
 					{
-						title: t("nav.browseProvidersNew"),
-						url: "/workspace/providers2",
-						icon: Boxes,
-						description: "Browse providers in the new grouped view",
-						hasAccess: hasModelProvidersAccess,
-					},
-					{
 						title: t("nav.budgetsAndLimits"),
 						url: "/workspace/model-limits",
 						icon: Wallet,
@@ -1065,9 +1058,7 @@ export default function AppSidebar() {
 				title: t("sidebar.setupIncomplete"),
 				description: (
 					<div className="flex h-full flex-col gap-2 text-xs text-amber-700 dark:text-amber-300/80">
-						<p>
-							{t("sidebar.setupStepsLeft", { n: String(remainingSteps) })}
-						</p>
+						<p>{t("sidebar.setupStepsLeft", { n: String(remainingSteps) })}</p>
 						<button
 							type="button"
 							onClick={handleResumeOnboarding}

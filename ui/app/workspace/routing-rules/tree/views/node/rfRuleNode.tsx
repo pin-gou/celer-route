@@ -62,7 +62,9 @@ export function RFRuleNode({ data }: { data: any }) {
 				{/* rule name */}
 				<div className="px-3 py-2">
 					<p className="text-foreground truncate text-xs font-semibold">{rule.name}</p>
-					{rule.priority > 0 && <p className="text-muted-foreground mt-0.5 text-[10px]">{t("tree.priorityLabel", { priority: rule.priority })}</p>}
+					{rule.priority > 0 && (
+						<p className="text-muted-foreground mt-0.5 text-[10px]">{t("tree.priorityLabel", { priority: rule.priority })}</p>
+					)}
 				</div>
 
 				{/* targets footer */}
@@ -82,9 +84,7 @@ export function RFRuleNode({ data }: { data: any }) {
 							)}
 						{rule.targets.length > 4 && <span className="text-muted-foreground text-[9px]">+{rule.targets.length - 4}</span>}
 					</div>
-					<span className="text-muted-foreground ml-auto text-[10px]">
-						{t("tree.targetCount", { count: rule.targets.length })}
-					</span>
+					<span className="text-muted-foreground ml-auto text-[10px]">{t("tree.targetCount", { count: rule.targets.length })}</span>
 				</div>
 
 				{/* hover popover */}
@@ -106,9 +106,7 @@ export function RFRuleNode({ data }: { data: any }) {
 						{rule.chain_rule && (
 							<div className="mb-1 flex items-start gap-2 border-b px-3 pb-1.5">
 								<Link2 className="mt-0.5 h-3 w-3 shrink-0" style={{ color: scopeColor }} />
-								<p className="text-muted-foreground text-[10px] leading-snug">
-									{t("tree.chainRuleDescription")}
-								</p>
+								<p className="text-muted-foreground text-[10px] leading-snug">{t("tree.chainRuleDescription")}</p>
 							</div>
 						)}
 						<p className="mb-1 px-3 text-[10px] font-semibold tracking-wide uppercase" style={{ color: scopeColor }}>

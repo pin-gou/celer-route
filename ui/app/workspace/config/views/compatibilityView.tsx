@@ -61,10 +61,7 @@ export default function CompatibilityView() {
 		<div className="mx-auto w-full max-w-4xl space-y-6">
 			<div>
 				<h2 className="text-lg font-semibold tracking-tight">{t("page.compatibility")}</h2>
-				<p className="text-muted-foreground text-sm">
-					{t("descriptions.compatibility")}{" "}
-					
-				</p>
+				<p className="text-muted-foreground text-sm">{t("descriptions.compatibility")} </p>
 			</div>
 
 			<div className="space-y-4">
@@ -90,9 +87,7 @@ export default function CompatibilityView() {
 						<label htmlFor="compat-convert-chat-to-responses" className="text-sm font-medium">
 							{t("compatibility.convertChatToResponses")}
 						</label>
-						<p className="text-muted-foreground text-sm">
-							{t("compatibility.convertChatToResponsesDesc")}
-						</p>
+						<p className="text-muted-foreground text-sm">{t("compatibility.convertChatToResponsesDesc")}</p>
 					</div>
 					<Switch
 						id="compat-convert-chat-to-responses"

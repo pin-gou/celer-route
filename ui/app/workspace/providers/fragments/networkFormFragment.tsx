@@ -37,8 +37,13 @@ const secondsToHumanReadable = (seconds: number, t: (key: string) => string) => 
 	if (seconds < 3600) {
 		const minutes = Math.floor(seconds / 60);
 		const remainingSeconds = seconds % 60;
-		const parts: string[] = [`${minutes} ${minutes === 1 ? t("fragments.network.timeUnits.minute") : t("fragments.network.timeUnits.minutes")}`];
-		if (remainingSeconds > 0) parts.push(`${remainingSeconds} ${remainingSeconds === 1 ? t("fragments.network.timeUnits.second") : t("fragments.network.timeUnits.seconds")}`);
+		const parts: string[] = [
+			`${minutes} ${minutes === 1 ? t("fragments.network.timeUnits.minute") : t("fragments.network.timeUnits.minutes")}`,
+		];
+		if (remainingSeconds > 0)
+			parts.push(
+				`${remainingSeconds} ${remainingSeconds === 1 ? t("fragments.network.timeUnits.second") : t("fragments.network.timeUnits.seconds")}`,
+			);
 		return parts.join(" ");
 	}
 	if (seconds < 86400) {
@@ -46,8 +51,12 @@ const secondsToHumanReadable = (seconds: number, t: (key: string) => string) => 
 		const minutes = Math.floor((seconds % 3600) / 60);
 		const remainingSeconds = seconds % 60;
 		const parts: string[] = [`${hours} ${hours === 1 ? t("fragments.network.timeUnits.hour") : t("fragments.network.timeUnits.hours")}`];
-		if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? t("fragments.network.timeUnits.minute") : t("fragments.network.timeUnits.minutes")}`);
-		if (remainingSeconds > 0) parts.push(`${remainingSeconds} ${remainingSeconds === 1 ? t("fragments.network.timeUnits.second") : t("fragments.network.timeUnits.seconds")}`);
+		if (minutes > 0)
+			parts.push(`${minutes} ${minutes === 1 ? t("fragments.network.timeUnits.minute") : t("fragments.network.timeUnits.minutes")}`);
+		if (remainingSeconds > 0)
+			parts.push(
+				`${remainingSeconds} ${remainingSeconds === 1 ? t("fragments.network.timeUnits.second") : t("fragments.network.timeUnits.seconds")}`,
+			);
 		return parts.join(" ");
 	}
 	const days = Math.floor(seconds / 86400);
@@ -57,8 +66,12 @@ const secondsToHumanReadable = (seconds: number, t: (key: string) => string) => 
 	const parts: string[] = [];
 	parts.push(`${days} ${days === 1 ? t("fragments.network.timeUnits.day") : t("fragments.network.timeUnits.days")}`);
 	if (hours > 0) parts.push(`${hours} ${hours === 1 ? t("fragments.network.timeUnits.hour") : t("fragments.network.timeUnits.hours")}`);
-	if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? t("fragments.network.timeUnits.minute") : t("fragments.network.timeUnits.minutes")}`);
-	if (remainingSeconds > 0) parts.push(`${remainingSeconds} ${remainingSeconds === 1 ? t("fragments.network.timeUnits.second") : t("fragments.network.timeUnits.seconds")}`);
+	if (minutes > 0)
+		parts.push(`${minutes} ${minutes === 1 ? t("fragments.network.timeUnits.minute") : t("fragments.network.timeUnits.minutes")}`);
+	if (remainingSeconds > 0)
+		parts.push(
+			`${remainingSeconds} ${remainingSeconds === 1 ? t("fragments.network.timeUnits.second") : t("fragments.network.timeUnits.seconds")}`,
+		);
 	return parts.join(" ");
 };
 
@@ -183,10 +196,14 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 								name="network_config.base_url"
 								render={({ field }) => (
 									<FormItem>
-										<FormLabel>{baseURLRequired ? t("fragments.network.baseUrlRequired") : t("fragments.network.baseUrlOptional")}</FormLabel>
+										<FormLabel>
+											{baseURLRequired ? t("fragments.network.baseUrlRequired") : t("fragments.network.baseUrlOptional")}
+										</FormLabel>
 										<FormControl>
 											<Input
-												placeholder={isCustomProvider ? t("fragments.network.baseUrlPlaceholderCustom") : t("fragments.network.baseUrlPlaceholder")}
+												placeholder={
+													isCustomProvider ? t("fragments.network.baseUrlPlaceholderCustom") : t("fragments.network.baseUrlPlaceholder")
+												}
 												{...field}
 												value={field.value || ""}
 												disabled={!hasUpdateProviderAccess}
@@ -384,9 +401,7 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 												}}
 											/>
 										</FormControl>
-										<FormDescription>
-											{t("fragments.network.maxConnectionsPerHostDescription")}
-										</FormDescription>
+										<FormDescription>{t("fragments.network.maxConnectionsPerHostDescription")}</FormDescription>
 										<FormMessage />
 									</FormItem>
 								)}
@@ -433,9 +448,7 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 								<FormItem className="flex flex-row items-center justify-between">
 									<div className="space-y-0.5">
 										<FormLabel>{t("fragments.network.enforceHttp2")}</FormLabel>
-										<FormDescription>
-											{t("fragments.network.enforceHttp2Description")}
-										</FormDescription>
+										<FormDescription>{t("fragments.network.enforceHttp2Description")}</FormDescription>
 									</div>
 									<FormControl>
 										<Switch
@@ -455,9 +468,7 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 								<FormItem className="flex flex-row items-center justify-between">
 									<div className="space-y-0.5">
 										<FormLabel>{t("fragments.network.allowPrivateNetwork")}</FormLabel>
-										<FormDescription>
-											{t("fragments.network.allowPrivateNetworkDescription")}
-										</FormDescription>
+										<FormDescription>{t("fragments.network.allowPrivateNetworkDescription")}</FormDescription>
 									</div>
 									<FormControl>
 										<Switch
@@ -502,9 +513,7 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 											<FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
 												<div className="space-y-0.5">
 													<FormLabel>{t("fragments.network.skipTlsVerification")}</FormLabel>
-													<FormDescription>
-														{t("fragments.network.skipTlsVerificationDescription")}
-													</FormDescription>
+													<FormDescription>{t("fragments.network.skipTlsVerificationDescription")}</FormDescription>
 												</div>
 												<FormControl>
 													<Switch
@@ -537,9 +546,7 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 														data-testid="network-config-ca-cert-pem"
 													/>
 												</FormControl>
-												<FormDescription>
-													{t("fragments.network.caCertificateDescription")}
-												</FormDescription>
+												<FormDescription>{t("fragments.network.caCertificateDescription")}</FormDescription>
 												<FormMessage />
 											</FormItem>
 										)}
@@ -579,26 +586,26 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 						</Button>
 					)}
 					<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button type="submit" disabled={!form.formState.isDirty || !hasUpdateProviderAccess} isLoading={isUpdatingProvider}>
-										{t("fragments.network.saveConfiguration")}
-									</Button>
-								</TooltipTrigger>
-								{(!form.formState.isDirty || !form.formState.isValid) && (
-									<TooltipContent>
-										<p>
-											{!form.formState.isDirty && !form.formState.isValid
-												? t("fragments.network.tooltip.noChangesAndErrors")
-												: !form.formState.isDirty
-													? t("fragments.network.tooltip.noChanges")
-													: t("fragments.network.tooltip.fixErrors")}
-										</p>
-									</TooltipContent>
-								)}
-							</Tooltip>
-						</TooltipProvider>
-					</div>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button type="submit" disabled={!form.formState.isDirty || !hasUpdateProviderAccess} isLoading={isUpdatingProvider}>
+									{t("fragments.network.saveConfiguration")}
+								</Button>
+							</TooltipTrigger>
+							{(!form.formState.isDirty || !form.formState.isValid) && (
+								<TooltipContent>
+									<p>
+										{!form.formState.isDirty && !form.formState.isValid
+											? t("fragments.network.tooltip.noChangesAndErrors")
+											: !form.formState.isDirty
+												? t("fragments.network.tooltip.noChanges")
+												: t("fragments.network.tooltip.fixErrors")}
+									</p>
+								</TooltipContent>
+							)}
+						</Tooltip>
+					</TooltipProvider>
+				</div>
 			</form>
 		</Form>
 	);

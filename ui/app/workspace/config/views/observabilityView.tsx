@@ -69,9 +69,7 @@ export default function ObservabilityView() {
 
 			<Alert variant="destructive">
 				<AlertTriangle className="h-4 w-4" />
-				<AlertDescription>
-					{t("restart.description")}
-				</AlertDescription>
+				<AlertDescription>{t("restart.description")}</AlertDescription>
 			</Alert>
 
 			<div className="space-y-4">
