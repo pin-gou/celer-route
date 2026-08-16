@@ -17,8 +17,8 @@ export function ProviderFamilyGroup({ familyName, providers, onToggle, onQuickTe
 
 	const familyLabel = t(
 		{
-			"Custom": "providers2.family.custom",
-			"Other": "providers2.family.other",
+			Custom: "providers2.family.custom",
+			Other: "providers2.family.other",
 			"OpenAI Family": "providers2.family.openai",
 			"Anthropic Family": "providers2.family.anthropic",
 			"Google Family": "providers2.family.google",

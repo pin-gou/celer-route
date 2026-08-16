@@ -335,10 +335,7 @@ export function LogsTimeline({
 				const leftPct = isProcessing ? nowLineX - widthPct : plainLeftPct;
 				const lane = laneMap.get(log.id) ?? 0;
 				const tps = calcTps(log);
-				const borderColor =
-					log.status === "success" && tps != null
-						? getTpsBorderColor(tps)
-						: getStatusBorderColor(log.status);
+				const borderColor = log.status === "success" && tps != null ? getTpsBorderColor(tps) : getStatusBorderColor(log.status);
 				return {
 					log,
 					lane,
@@ -640,11 +637,25 @@ export function LogsTimeline({
 						<div className="text-muted-foreground mt-1 flex gap-3">
 							<span>Input: {tooltipLog.token_usage.prompt_tokens.toLocaleString()}</span>
 							<span>Output: {tooltipLog.token_usage.completion_tokens.toLocaleString()}</span>
-							{tooltipLog.status !== "processing" && tooltipLog.latency != null && tooltipLog.latency > 0 && (() => {
-								const tps = (tooltipLog.token_usage.completion_tokens / (tooltipLog.latency / 1000));
-								const cls = tps < 20 ? "text-red-500 dark:text-red-400" : tps < 50 ? "text-amber-500 dark:text-amber-400" : tps < 80 ? "text-blue-500 dark:text-blue-400" : "text-green-600 dark:text-green-400";
-								return <span>TPS: <strong className={cls}>{tps.toFixed(1)}</strong>/s</span>;
-							})()}
+							{tooltipLog.status !== "processing" &&
+								tooltipLog.latency != null &&
+								tooltipLog.latency > 0 &&
+								(() => {
+									const tps = tooltipLog.token_usage.completion_tokens / (tooltipLog.latency / 1000);
+									const cls =
+										tps < 20
+											? "text-red-500 dark:text-red-400"
+											: tps < 50
+												? "text-amber-500 dark:text-amber-400"
+												: tps < 80
+													? "text-blue-500 dark:text-blue-400"
+													: "text-green-600 dark:text-green-400";
+									return (
+										<span>
+											TPS: <strong className={cls}>{tps.toFixed(1)}</strong>/s
+										</span>
+									);
+								})()}
 						</div>
 					)}
 				</div>

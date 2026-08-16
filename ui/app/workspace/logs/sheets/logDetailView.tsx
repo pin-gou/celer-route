@@ -541,7 +541,9 @@ function EncryptedReveal({ text, label }: { text: string; label: string }) {
 				<ChevronDown className={cn("h-3 w-3 transition-transform", open ? "rotate-180" : "-rotate-90")} />
 				{label}
 				{!open ? (
-					<span className="text-muted-foreground/70 ml-1 font-mono text-[10px] tracking-normal normal-case">{text.length} {t("detailView.chars", { count: text.length })}</span>
+					<span className="text-muted-foreground/70 ml-1 font-mono text-[10px] tracking-normal normal-case">
+						{text.length} {t("detailView.chars", { count: text.length })}
+					</span>
 				) : null}
 			</button>
 			{open ? <pre className="font-mono text-[12.5px] leading-[1.6] break-all whitespace-pre-wrap">{text}</pre> : null}
@@ -574,7 +576,8 @@ function CollapsibleCode({ text, preview = 3, lang, mono = true }: { text: strin
 						<ChevronDown className={cn("h-3 w-3 transition-transform", open && "rotate-180")} />
 					</button>
 					<span className="text-muted-foreground font-mono text-[10.5px]">
-						{t("detailView.lines", { count: lines.length })}{lang ? ` · ${lang}` : ""}
+						{t("detailView.lines", { count: lines.length })}
+						{lang ? ` · ${lang}` : ""}
 					</span>
 				</div>
 			)}
@@ -592,7 +595,9 @@ function MessageRow({ role, meta, children, last = false }: { role: MessageRole;
 			</div>
 			<div className="min-w-0 flex-1 pb-4">
 				<div className="mb-1 flex items-center gap-2">
-					<span className="text-foreground text-[11.5px] font-semibold">{role === "tool" ? t("detailView.toolResult") : t("detailView." + role)}</span>
+					<span className="text-foreground text-[11.5px] font-semibold">
+						{role === "tool" ? t("detailView.toolResult") : t("detailView." + role)}
+					</span>
 					{meta ? <span className="text-muted-foreground text-[11px]">{meta}</span> : null}
 				</div>
 				<div className={cn("rounded-sm border p-3 text-[13px] leading-relaxed", messageToneClass[role])}>{children}</div>
@@ -870,7 +875,9 @@ export function LogDetailView({
 							)}
 						</div>
 						<div className="mt-3 flex items-center gap-2">
-							<div className="text-muted-foreground w-24 shrink-0 text-[10.5px] font-semibold tracking-wider uppercase">{t("detailView.request")}</div>
+							<div className="text-muted-foreground w-24 shrink-0 text-[10.5px] font-semibold tracking-wider uppercase">
+								{t("detailView.request")}
+							</div>
 							<code className="text-foreground truncate font-mono text-[13px]">{log.id || "—"}</code>
 							{log.id ? <CopyInlineButton text={log.id} testId="logdetails-copy-request-id-button" /> : null}
 						</div>
@@ -885,7 +892,9 @@ export function LogDetailView({
 						)}
 						{log.routing_rule && (
 							<div className="mt-1 flex items-center gap-2">
-								<div className="text-muted-foreground w-24 shrink-0 text-[10.5px] font-semibold tracking-wider uppercase">{t("detailView.rule")}</div>
+								<div className="text-muted-foreground w-24 shrink-0 text-[10.5px] font-semibold tracking-wider uppercase">
+									{t("detailView.rule")}
+								</div>
 								<Link
 									to="/workspace/logs"
 									search={(prev) => ({ ...prev, offset: 0, selected_log: "", routing_rule_ids: [log.routing_rule!.id] })}
@@ -898,7 +907,9 @@ export function LogDetailView({
 						)}
 						{log.selected_key && (
 							<div className="mt-1 flex items-center gap-2">
-								<div className="text-muted-foreground w-24 shrink-0 text-[10.5px] font-semibold tracking-wider uppercase">{t("detailView.key")}</div>
+								<div className="text-muted-foreground w-24 shrink-0 text-[10.5px] font-semibold tracking-wider uppercase">
+									{t("detailView.key")}
+								</div>
 								<Link
 									to="/workspace/logs"
 									search={(prev) => ({ ...prev, offset: 0, selected_log: "", selected_key_ids: [log.selected_key_id] })}
@@ -948,20 +959,29 @@ export function LogDetailView({
 								: "—"
 						}
 						sub={
-							log.token_usage
-								? (
-									<>
-										<span>{t("detailView.tokenSubTotal")} </span>
-										<strong>{formatTokensAdaptive(log.token_usage.total_tokens ?? 0)}</strong>
-										{log.token_usage.completion_tokens_details?.reasoning_tokens
-											? <><span> {t("detailView.tokenSubReasoning")} </span><strong>{formatCompactNumber(log.token_usage.completion_tokens_details.reasoning_tokens)}</strong></>
-											: null}
-										{log.latency != null && log.latency > 0 && log.token_usage.total_tokens
-											? <><span> · </span><strong className={rateColorClass((log.token_usage.total_tokens / log.latency) * 1000)}>{((log.token_usage.total_tokens / log.latency) * 1000).toFixed(1)}</strong><span> {t("detailView.tokenSubRate")}</span></>
-											: null}
-									</>
-								)
-								: "\u2014"
+							log.token_usage ? (
+								<>
+									<span>{t("detailView.tokenSubTotal")} </span>
+									<strong>{formatTokensAdaptive(log.token_usage.total_tokens ?? 0)}</strong>
+									{log.token_usage.completion_tokens_details?.reasoning_tokens ? (
+										<>
+											<span> {t("detailView.tokenSubReasoning")} </span>
+											<strong>{formatCompactNumber(log.token_usage.completion_tokens_details.reasoning_tokens)}</strong>
+										</>
+									) : null}
+									{log.latency != null && log.latency > 0 && log.token_usage.total_tokens ? (
+										<>
+											<span> · </span>
+											<strong className={rateColorClass((log.token_usage.total_tokens / log.latency) * 1000)}>
+												{((log.token_usage.total_tokens / log.latency) * 1000).toFixed(1)}
+											</strong>
+											<span> {t("detailView.tokenSubRate")}</span>
+										</>
+									) : null}
+								</>
+							) : (
+								"\u2014"
+							)
 						}
 						hasRightBorder
 					/>
@@ -985,7 +1005,11 @@ export function LogDetailView({
 						<HeroStat
 							label={t("detailView.toolsAvailable")}
 							value={declaredTools.length.toString()}
-							sub={(log.params as any)?.tool_choice != null ? t("detailView.toolChoice", { value: formatToolChoice((log.params as any).tool_choice) }) : ""}
+							sub={
+								(log.params as any)?.tool_choice != null
+									? t("detailView.toolChoice", { value: formatToolChoice((log.params as any).tool_choice) })
+									: ""
+							}
 						/>
 					)}
 				</div>
@@ -1261,7 +1285,9 @@ export function LogDetailView({
 									}
 								/>
 							)}
-							{log.fallback_index > 0 && <LogEntryDetailsView className="w-full" label={t("detailView.fallbackIndex")} value={log.fallback_index} />}
+							{log.fallback_index > 0 && (
+								<LogEntryDetailsView className="w-full" label={t("detailView.fallbackIndex")} value={log.fallback_index} />
+							)}
 							{log.virtual_key && (
 								<LogEntryDetailsView
 									className="w-full"
@@ -1391,8 +1417,12 @@ export function LogDetailView({
 
 							{passthroughParams && (
 								<>
-									{passthroughParams.method && <LogEntryDetailsView className="w-full" label={t("detailView.method")} value={passthroughParams.method} />}
-									{passthroughParams.path && <LogEntryDetailsView className="w-full" label={t("detailView.path")} value={passthroughParams.path} />}
+									{passthroughParams.method && (
+										<LogEntryDetailsView className="w-full" label={t("detailView.method")} value={passthroughParams.method} />
+									)}
+									{passthroughParams.path && (
+										<LogEntryDetailsView className="w-full" label={t("detailView.path")} value={passthroughParams.path} />
+									)}
 									{passthroughParams.raw_query && (
 										<LogEntryDetailsView className="w-full" label={t("detailView.query")} value={passthroughParams.raw_query} />
 									)}
@@ -1421,9 +1451,21 @@ export function LogDetailView({
 							<div className="space-y-4">
 								<BlockHeader title={t("detailView.tokens")} />
 								<div className="grid w-full grid-cols-3 items-center justify-between gap-4">
-									<LogEntryDetailsView className="w-full" label={t("detailView.inputTokens")} value={log.token_usage?.prompt_tokens != null ? formatTokensAdaptive(log.token_usage.prompt_tokens) : "-"} />
-									<LogEntryDetailsView className="w-full" label={t("detailView.outputTokens")} value={log.token_usage?.completion_tokens != null ? formatTokensAdaptive(log.token_usage.completion_tokens) : "-"} />
-									<LogEntryDetailsView className="w-full" label={t("detailView.totalTokens")} value={log.token_usage?.total_tokens != null ? formatTokensAdaptive(log.token_usage.total_tokens) : "-"} />
+									<LogEntryDetailsView
+										className="w-full"
+										label={t("detailView.inputTokens")}
+										value={log.token_usage?.prompt_tokens != null ? formatTokensAdaptive(log.token_usage.prompt_tokens) : "-"}
+									/>
+									<LogEntryDetailsView
+										className="w-full"
+										label={t("detailView.outputTokens")}
+										value={log.token_usage?.completion_tokens != null ? formatTokensAdaptive(log.token_usage.completion_tokens) : "-"}
+									/>
+									<LogEntryDetailsView
+										className="w-full"
+										label={t("detailView.totalTokens")}
+										value={log.token_usage?.total_tokens != null ? formatTokensAdaptive(log.token_usage.total_tokens) : "-"}
+									/>
 									<LogEntryDetailsView
 										className="w-full"
 										label={t("detailView.cost")}
@@ -1568,7 +1610,9 @@ export function LogDetailView({
 														}
 													/>
 												)}
-												{reasoning.max_tokens && <LogEntryDetailsView className="w-full" label={t("detailView.maxTokens")} value={reasoning.max_tokens} />}
+												{reasoning.max_tokens && (
+													<LogEntryDetailsView className="w-full" label={t("detailView.maxTokens")} value={reasoning.max_tokens} />
+												)}
 											</div>
 										</div>
 									</>
@@ -1578,7 +1622,9 @@ export function LogDetailView({
 								<>
 									<DottedSeparator />
 									<div className="space-y-4">
-										<BlockHeader title={log.cache_debug.cache_hit ? t("detailView.cachingDetailsHit") : t("detailView.cachingDetailsMiss")} />
+										<BlockHeader
+											title={log.cache_debug.cache_hit ? t("detailView.cachingDetailsHit") : t("detailView.cachingDetailsMiss")}
+										/>
 										<div className="grid w-full grid-cols-3 items-center justify-between gap-4">
 											{log.cache_debug.cache_hit ? (
 												<>
@@ -1605,10 +1651,18 @@ export function LogDetailView({
 																/>
 															)}
 															{log.cache_debug.model_used && (
-																<LogEntryDetailsView className="w-full" label={t("detailView.embeddingModel")} value={log.cache_debug.model_used} />
+																<LogEntryDetailsView
+																	className="w-full"
+																	label={t("detailView.embeddingModel")}
+																	value={log.cache_debug.model_used}
+																/>
 															)}
 															{log.cache_debug.threshold && (
-																<LogEntryDetailsView className="w-full" label={t("detailView.threshold")} value={log.cache_debug.threshold || "-"} />
+																<LogEntryDetailsView
+																	className="w-full"
+																	label={t("detailView.threshold")}
+																	value={log.cache_debug.threshold || "-"}
+																/>
 															)}
 															{log.cache_debug.similarity && (
 																<LogEntryDetailsView
@@ -1641,10 +1695,18 @@ export function LogDetailView({
 														/>
 													)}
 													{log.cache_debug.model_used && (
-														<LogEntryDetailsView className="w-full" label={t("detailView.embeddingModel")} value={log.cache_debug.model_used} />
+														<LogEntryDetailsView
+															className="w-full"
+															label={t("detailView.embeddingModel")}
+															value={log.cache_debug.model_used}
+														/>
 													)}
 													{log.cache_debug.input_tokens && (
-														<LogEntryDetailsView className="w-full" label={t("detailView.embeddingInputTokens")} value={log.cache_debug.input_tokens} />
+														<LogEntryDetailsView
+															className="w-full"
+															label={t("detailView.embeddingInputTokens")}
+															value={log.cache_debug.input_tokens}
+														/>
 													)}
 												</>
 											)}
@@ -1688,7 +1750,9 @@ export function LogDetailView({
 													}
 												/>
 											)}
-											{call.guardrail_name && <LogEntryDetailsView className="w-full" label={t("detailView.guardrail")} value={call.guardrail_name} />}
+											{call.guardrail_name && (
+												<LogEntryDetailsView className="w-full" label={t("detailView.guardrail")} value={call.guardrail_name} />
+											)}
 											{call.guardrail_provider && (
 												<LogEntryDetailsView className="w-full" label={t("detailView.guardrailProvider")} value={call.guardrail_provider} />
 											)}
@@ -1703,11 +1767,27 @@ export function LogDetailView({
 													}
 												/>
 											)}
-											{call.judge_model && <LogEntryDetailsView className="w-full" label={t("detailView.judgeModel")} value={call.judge_model} />}
-											<LogEntryDetailsView className="w-full" label={t("detailView.promptTokens")} value={call.prompt_tokens != null ? formatTokensAdaptive(call.prompt_tokens) : 0} />
-											<LogEntryDetailsView className="w-full" label={t("detailView.completionTokens")} value={call.completion_tokens != null ? formatTokensAdaptive(call.completion_tokens) : 0} />
-											<LogEntryDetailsView className="w-full" label={t("detailView.totalTokens")} value={call.total_tokens != null ? formatTokensAdaptive(call.total_tokens) : 0} />
-											{call.reason && <LogEntryDetailsView className="w-full md:col-span-3" label={t("detailView.reason")} value={call.reason} />}
+											{call.judge_model && (
+												<LogEntryDetailsView className="w-full" label={t("detailView.judgeModel")} value={call.judge_model} />
+											)}
+											<LogEntryDetailsView
+												className="w-full"
+												label={t("detailView.promptTokens")}
+												value={call.prompt_tokens != null ? formatTokensAdaptive(call.prompt_tokens) : 0}
+											/>
+											<LogEntryDetailsView
+												className="w-full"
+												label={t("detailView.completionTokens")}
+												value={call.completion_tokens != null ? formatTokensAdaptive(call.completion_tokens) : 0}
+											/>
+											<LogEntryDetailsView
+												className="w-full"
+												label={t("detailView.totalTokens")}
+												value={call.total_tokens != null ? formatTokensAdaptive(call.total_tokens) : 0}
+											/>
+											{call.reason && (
+												<LogEntryDetailsView className="w-full md:col-span-3" label={t("detailView.reason")} value={call.reason} />
+											)}
 										</div>
 									))}
 								</div>
@@ -1852,9 +1932,7 @@ export function LogDetailView({
 									{t("detailView.showAllMessages")}
 								</DropdownMenuCheckboxItem>
 								<DropdownMenuSeparator />
-								{(
-									["system", "user", "assistant", "tool", "reasoning"] as MessageRole[]
-								).map((role) => (
+								{(["system", "user", "assistant", "tool", "reasoning"] as MessageRole[]).map((role) => (
 									<DropdownMenuCheckboxItem
 										key={role}
 										checked={visibleRoles.has(role)}
@@ -2064,7 +2142,14 @@ export function LogDetailView({
 														.map((b, i) => {
 															const src = b.image_url?.url;
 															if (!src) return null;
-															return <img key={`${i}-${src}`} src={src} alt={t("views.attachedImage")} className="mt-2 max-w-full rounded border" />;
+															return (
+																<img
+																	key={`${i}-${src}`}
+																	src={src}
+																	alt={t("views.attachedImage")}
+																	className="mt-2 max-w-full rounded border"
+																/>
+															);
 														})}
 												{text &&
 													Array.isArray(message.content) &&
@@ -2265,14 +2350,20 @@ export function LogDetailView({
 														))}
 														{reasoningParts.encrypted ? (
 															<div className="space-y-1">
-																<div className="text-muted-foreground text-[10.5px] font-semibold tracking-wider uppercase">{t("detailView.encrypted")}</div>
+																<div className="text-muted-foreground text-[10.5px] font-semibold tracking-wider uppercase">
+																	{t("detailView.encrypted")}
+																</div>
 																<CollapsibleCode text={reasoningParts.encrypted} preview={2} />
 															</div>
 														) : null}
 														{reasoningParts.signatures.length > 0 ? (
 															<EncryptedReveal
 																text={reasoningParts.signatures.join("\n\n")}
-																label={reasoningParts.signatures.length > 1 ? t("detailView.encryptedSignatures") : t("detailView.encryptedSignature")}
+																label={
+																	reasoningParts.signatures.length > 1
+																		? t("detailView.encryptedSignatures")
+																		: t("detailView.encryptedSignature")
+																}
 															/>
 														) : null}
 													</div>
@@ -2344,7 +2435,10 @@ export function LogDetailView({
 						</div>
 					)}
 					{log.status !== "processing" && log.rerank_output && !log.error_details?.error.message && (
-						<CollapsibleBox title={t("detailView.rerankOutput", { count: log.rerank_output.length })} onCopy={() => JSON.stringify(log.rerank_output, null, 2)}>
+						<CollapsibleBox
+							title={t("detailView.rerankOutput", { count: log.rerank_output.length })}
+							onCopy={() => JSON.stringify(log.rerank_output, null, 2)}
+						>
 							<CodeEditor
 								className="z-0 w-full"
 								shouldAdjustInitialHeight={true}
@@ -2553,7 +2647,9 @@ export function LogDetailView({
 							<div className="text-muted-foreground text-[12px]">
 								{t("detailView.rawRequestSentTo")} <span className="text-foreground font-medium capitalize">{log.provider}</span>
 								{log.is_large_payload_request && (
-									<span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">{t("detailView.truncatedPreviewParen")}</span>
+									<span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+										{t("detailView.truncatedPreviewParen")}
+									</span>
 								)}
 							</div>
 							<CollapsibleBox
@@ -2584,7 +2680,9 @@ export function LogDetailView({
 							<div className="text-muted-foreground pt-4 text-[12px]">
 								{t("detailView.rawResponseFrom")} <span className="text-foreground font-medium capitalize">{log.provider}</span>
 								{log.is_large_payload_response && (
-									<span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">{t("detailView.truncatedPreviewParen")}</span>
+									<span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+										{t("detailView.truncatedPreviewParen")}
+									</span>
 								)}
 							</div>
 							<CollapsibleBox

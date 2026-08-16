@@ -92,14 +92,14 @@ export function LogDetailSheet({
 						headerAction={
 							<>
 								{displayLog.parent_request_id && onViewSession ? (
-<Button
-									variant="outline"
-									size="sm"
-									data-testid="session-button-view"
-									onClick={() => onViewSession(displayLog.parent_request_id as string, displayLog.id)}
-								>
-									{t("detailSheet.viewSession")}
-								</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										data-testid="session-button-view"
+										onClick={() => onViewSession(displayLog.parent_request_id as string, displayLog.id)}
+									>
+										{t("detailSheet.viewSession")}
+									</Button>
 								) : null}
 								<SheetNavigationButtons
 									hasPrev={hasPrev}

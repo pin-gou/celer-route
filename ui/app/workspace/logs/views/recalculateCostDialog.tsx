@@ -53,9 +53,7 @@ export function RecalculateCostDialog({ open, onOpenChange, filters, totalLogs, 
 			>
 				<DialogHeader className="pb-2">
 					<DialogTitle>{t("recalculate.title")}</DialogTitle>
-					<DialogDescription>
-						{t("recalculate.description")}
-					</DialogDescription>
+					<DialogDescription>{t("recalculate.description")}</DialogDescription>
 				</DialogHeader>
 
 				<div className="flex flex-col gap-2">

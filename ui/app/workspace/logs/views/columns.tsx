@@ -462,7 +462,14 @@ export const createColumns = (
 					return <div className="text-right font-mono text-xs" />;
 				}
 				const tps = (output / latency) * 1000;
-				const colorClass = tps < 20 ? "text-red-500 dark:text-red-400" : tps < 50 ? "text-amber-500 dark:text-amber-400" : tps < 80 ? "text-blue-500 dark:text-blue-400" : "text-green-600 dark:text-green-400";
+				const colorClass =
+					tps < 20
+						? "text-red-500 dark:text-red-400"
+						: tps < 50
+							? "text-amber-500 dark:text-amber-400"
+							: tps < 80
+								? "text-blue-500 dark:text-blue-400"
+								: "text-green-600 dark:text-green-400";
 				return (
 					<div className="text-right font-mono text-[12px] tabular-nums">
 						<strong className={colorClass}>{tps >= 100 ? Math.round(tps).toLocaleString() : tps.toFixed(1)}</strong> t/s

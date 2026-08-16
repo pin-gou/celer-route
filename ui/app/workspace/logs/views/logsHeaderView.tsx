@@ -201,13 +201,15 @@ export function LogsHeaderView({
 			} else if (recalcJobStatus.status === "cancelled") {
 				toast.info(t("toast.recalcCancelled"), {
 					id: RECALC_TOAST_ID,
-					description: recalcJobStatus.message || t("toast.stoppedAfter", { updated: recalcJobStatus.updated, skipped: recalcJobStatus.skipped }),
+					description:
+						recalcJobStatus.message || t("toast.stoppedAfter", { updated: recalcJobStatus.updated, skipped: recalcJobStatus.skipped }),
 					duration: 5000,
 				});
 			} else {
 				toast.success(t("toast.recalcComplete"), {
 					id: RECALC_TOAST_ID,
-					description: recalcJobStatus.message || t("toast.updatedSkipped", { updated: recalcJobStatus.updated, skipped: recalcJobStatus.skipped }),
+					description:
+						recalcJobStatus.message || t("toast.updatedSkipped", { updated: recalcJobStatus.updated, skipped: recalcJobStatus.skipped }),
 					duration: 5000,
 				});
 			}
@@ -360,7 +362,11 @@ export function LogsHeaderView({
 								)}
 								<div className="flex flex-col">
 									<span className="text-sm">
-										{recalcCancelRequested ? t("header.cancelling") : isRecalcRunning ? t("header.cancelRecalculation") : t("header.recalculateCosts")}
+										{recalcCancelRequested
+											? t("header.cancelling")
+											: isRecalcRunning
+												? t("header.cancelRecalculation")
+												: t("header.recalculateCosts")}
 									</span>
 									<span className="text-muted-foreground text-xs">
 										{recalcCancelRequested

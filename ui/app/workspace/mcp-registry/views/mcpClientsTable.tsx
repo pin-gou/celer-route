@@ -36,19 +36,7 @@ import { MCPClient } from "@/lib/types/mcp";
 import { titleCaseFromSnakeCase } from "@/lib/utils/strings";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Link } from "@tanstack/react-router";
-import {
-	Box,
-	Info,
-	KeyRound,
-	Loader2,
-	MoreHorizontal,
-	PencilIcon,
-	Plus,
-	RefreshCcw,
-	Search,
-	Trash2,
-	X,
-} from "lucide-react";
+import { Box, Info, KeyRound, Loader2, MoreHorizontal, PencilIcon, Plus, RefreshCcw, Search, Trash2, X } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { IconWrap, InfoBox } from "./authorizerUi";
 import MCPClientSheet from "./mcpClientSheet";
@@ -1005,13 +993,7 @@ export default function MCPClientsTable({
 					</Table>
 				</div>
 
-				<Pagination
-					offset={offset}
-					limit={limit}
-					totalCount={totalCount}
-					onOffsetChange={onOffsetChange}
-					dataTestIdPrefix="mcp-clients"
-				/>
+				<Pagination offset={offset} limit={limit} totalCount={totalCount} onOffsetChange={onOffsetChange} dataTestIdPrefix="mcp-clients" />
 			</div>
 
 			{formOpen && <ClientForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={handleSaved} />}

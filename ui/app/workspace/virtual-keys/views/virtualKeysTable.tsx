@@ -42,7 +42,6 @@ import {
 	ArrowDown,
 	ArrowUp,
 	ArrowUpDown,
-	
 	Copy,
 	Download,
 	Edit,
@@ -912,13 +911,7 @@ export default function VirtualKeysTable({
 					</Table>
 				</div>
 
-				<Pagination
-					offset={offset}
-					limit={limit}
-					totalCount={totalCount}
-					onOffsetChange={onOffsetChange}
-					dataTestIdPrefix="vk"
-				/>
+				<Pagination offset={offset} limit={limit} totalCount={totalCount} onOffsetChange={onOffsetChange} dataTestIdPrefix="vk" />
 			</div>
 		</>
 	);

@@ -86,8 +86,7 @@ export function Pagination({
 		<div className={`flex shrink-0 items-center justify-between text-xs ${className}`} data-testid={dataTestIdPrefix}>
 			{showItemsInfo && totalCount > 0 && (
 				<div className="text-muted-foreground flex items-center gap-2">
-					{startItem.toLocaleString()}-{endItem.toLocaleString()} / {totalCount.toLocaleString()}{" "}
-					{t("pagination.entries")}
+					{startItem.toLocaleString()}-{endItem.toLocaleString()} / {totalCount.toLocaleString()} {t("pagination.entries")}
 				</div>
 			)}
 			{showItemsInfo && totalCount === 0 && <div />}

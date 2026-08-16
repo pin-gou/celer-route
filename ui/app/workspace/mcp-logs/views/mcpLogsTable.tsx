@@ -17,7 +17,6 @@ import { ColumnDef, flexRender, getCoreRowModel, SortingState, useReactTable } f
 import { RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
-
 interface DataTableProps {
 	columns: ColumnDef<MCPToolLogEntry>[];
 	data: MCPToolLogEntry[];

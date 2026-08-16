@@ -123,9 +123,9 @@ export function AddCustomProviderSheetContent({ show = true, onClose, onSave }: 
 				form.reset();
 			})
 			.catch((err) => {
-toast.error(t("toast.failedToAddProvider"), {
-						description: getErrorMessage(err),
-					});
+				toast.error(t("toast.failedToAddProvider"), {
+					description: getErrorMessage(err),
+				});
 			});
 	};
 
@@ -134,39 +134,44 @@ toast.error(t("toast.failedToAddProvider"), {
 
 	return (
 		<>
-<SheetHeader className="flex shrink-0 flex-col items-start px-8 py-4" headerClassName="mb-0 sticky -top-4 bg-card z-10">
-					<SheetTitle>{t("list.addCustomProvider")}</SheetTitle>
-					<SheetDescription>{t("providers2.addCustomProviderSheet.description")}</SheetDescription>
-				</SheetHeader>
+			<SheetHeader className="flex shrink-0 flex-col items-start px-8 py-4" headerClassName="mb-0 sticky -top-4 bg-card z-10">
+				<SheetTitle>{t("list.addCustomProvider")}</SheetTitle>
+				<SheetDescription>{t("providers2.addCustomProviderSheet.description")}</SheetDescription>
+			</SheetHeader>
 			<Form {...form}>
 				<form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col">
 					<div className="min-h-0 flex-1 space-y-4 px-8 pb-4">
-<FormField
-								control={form.control}
-								name="name"
-								render={({ field }) => (
-									<FormItem className="flex flex-col gap-3">
-										<FormLabel className="text-right">{t("providers2.addCustomProviderSheet.name")}</FormLabel>
-										<div className="col-span-3">
-											<FormControl>
-												<Input placeholder={t("providers2.addCustomProviderSheet.name")} data-testid="custom-provider-name" disabled={!hasProviderCreateAccess} {...field} />
+						<FormField
+							control={form.control}
+							name="name"
+							render={({ field }) => (
+								<FormItem className="flex flex-col gap-3">
+									<FormLabel className="text-right">{t("providers2.addCustomProviderSheet.name")}</FormLabel>
+									<div className="col-span-3">
+										<FormControl>
+											<Input
+												placeholder={t("providers2.addCustomProviderSheet.name")}
+												data-testid="custom-provider-name"
+												disabled={!hasProviderCreateAccess}
+												{...field}
+											/>
 										</FormControl>
 										<FormMessage />
 									</div>
 								</FormItem>
 							)}
 						/>
-<FormField
-								control={form.control}
-								name="baseFormat"
-								render={({ field }) => (
-									<FormItem className="flex flex-col gap-3">
-										<FormLabel>{t("providers2.addCustomProviderSheet.baseFormat")}</FormLabel>
-										<div>
-											<FormControl>
-												<Select onValueChange={field.onChange} value={field.value} disabled={!hasProviderCreateAccess}>
-													<SelectTrigger className="w-full" data-testid="base-provider-select">
-														<SelectValue placeholder={t("providers2.addCustomProviderSheet.selectBaseFormat")} />
+						<FormField
+							control={form.control}
+							name="baseFormat"
+							render={({ field }) => (
+								<FormItem className="flex flex-col gap-3">
+									<FormLabel>{t("providers2.addCustomProviderSheet.baseFormat")}</FormLabel>
+									<div>
+										<FormControl>
+											<Select onValueChange={field.onChange} value={field.value} disabled={!hasProviderCreateAccess}>
+												<SelectTrigger className="w-full" data-testid="base-provider-select">
+													<SelectValue placeholder={t("providers2.addCustomProviderSheet.selectBaseFormat")} />
 												</SelectTrigger>
 												<SelectContent>
 													<SelectItem value="openai">OpenAI</SelectItem>
@@ -183,16 +188,16 @@ toast.error(t("toast.failedToAddProvider"), {
 								</FormItem>
 							)}
 						/>
-<FormField
-								control={form.control}
-								name="base_url"
-								render={({ field }) => (
-									<FormItem className="flex flex-col gap-3">
-										<FormLabel>{t("providers2.addCustomProviderSheet.baseUrl")}</FormLabel>
-										<div>
-											<FormControl>
-												<Input
-													placeholder={t("providers2.addCustomProviderSheet.baseUrlPlaceholder")}
+						<FormField
+							control={form.control}
+							name="base_url"
+							render={({ field }) => (
+								<FormItem className="flex flex-col gap-3">
+									<FormLabel>{t("providers2.addCustomProviderSheet.baseUrl")}</FormLabel>
+									<div>
+										<FormControl>
+											<Input
+												placeholder={t("providers2.addCustomProviderSheet.baseUrlPlaceholder")}
 												data-testid="base-url-input"
 												disabled={!hasProviderCreateAccess}
 												{...field}
@@ -211,12 +216,10 @@ toast.error(t("toast.failedToAddProvider"), {
 								<FormItem>
 									<div className="flex items-center justify-between space-x-2 rounded-lg border p-3">
 										<div className="space-y-0.5">
-<label htmlFor="allow-private-network" className="text-sm font-medium">
-													{t("providers2.addCustomProviderSheet.allowPrivateNetwork")}
-												</label>
-												<p className="text-muted-foreground text-sm">
-													{t("providers2.addCustomProviderSheet.allowPrivateNetworkDesc")}
-												</p>
+											<label htmlFor="allow-private-network" className="text-sm font-medium">
+												{t("providers2.addCustomProviderSheet.allowPrivateNetwork")}
+											</label>
+											<p className="text-muted-foreground text-sm">{t("providers2.addCustomProviderSheet.allowPrivateNetworkDesc")}</p>
 										</div>
 										<Switch
 											id="allow-private-network"
@@ -238,10 +241,10 @@ toast.error(t("toast.failedToAddProvider"), {
 									<FormItem>
 										<div className="flex items-center justify-between space-x-2 rounded-lg border p-3">
 											<div className="space-y-0.5">
-<label htmlFor="drop-excess-requests" className="text-sm font-medium">
-														{t("providers2.addCustomProviderSheet.isKeyless")}
-													</label>
-													<p className="text-muted-foreground text-sm">{t("providers2.addCustomProviderSheet.isKeylessDesc")}</p>
+												<label htmlFor="drop-excess-requests" className="text-sm font-medium">
+													{t("providers2.addCustomProviderSheet.isKeyless")}
+												</label>
+												<p className="text-muted-foreground text-sm">{t("providers2.addCustomProviderSheet.isKeylessDesc")}</p>
 											</div>
 											<Switch
 												id="drop-excess-requests"
@@ -264,12 +267,12 @@ toast.error(t("toast.failedToAddProvider"), {
 						/>
 					</div>
 					<div className="bg-card sticky bottom-0 ml-auto flex w-full flex-row gap-2 border-t px-8 py-4">
-<Button type="button" variant="outline" onClick={onClose} className="ml-auto" data-testid="custom-provider-cancel-btn">
-								{t("providers2.addCustomProviderSheet.cancel")}
-							</Button>
-							<Button type="submit" isLoading={isAddingProvider} disabled={!hasProviderCreateAccess} data-testid="custom-provider-save-btn">
-								{t("providers2.addCustomProviderSheet.add")}
-							</Button>
+						<Button type="button" variant="outline" onClick={onClose} className="ml-auto" data-testid="custom-provider-cancel-btn">
+							{t("providers2.addCustomProviderSheet.cancel")}
+						</Button>
+						<Button type="submit" isLoading={isAddingProvider} disabled={!hasProviderCreateAccess} data-testid="custom-provider-save-btn">
+							{t("providers2.addCustomProviderSheet.add")}
+						</Button>
 					</div>
 				</form>
 			</Form>

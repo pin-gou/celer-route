@@ -610,21 +610,63 @@ export default function LogsPage() {
 			},
 			{
 				title: t("statCards.totalTokens"),
-				value: <NumberFlow value={(stats?.total_tokens ?? 0) >= 1_000_000 ? (stats?.total_tokens ?? 0) / 1_000_000 : (stats?.total_tokens ?? 0) >= 1_000 ? (stats?.total_tokens ?? 0) / 1_000 : (stats?.total_tokens ?? 0)} format={(stats?.total_tokens ?? 0) >= 1_000 ? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true } : { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }} suffix={(stats?.total_tokens ?? 0) >= 1_000_000 ? " 兆" : (stats?.total_tokens ?? 0) >= 1_000 ? " 千" : ""} />,
+				value: (
+					<NumberFlow
+						value={
+							(stats?.total_tokens ?? 0) >= 1_000_000
+								? (stats?.total_tokens ?? 0) / 1_000_000
+								: (stats?.total_tokens ?? 0) >= 1_000
+									? (stats?.total_tokens ?? 0) / 1_000
+									: (stats?.total_tokens ?? 0)
+						}
+						format={
+							(stats?.total_tokens ?? 0) >= 1_000
+								? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
+								: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
+						}
+						suffix={(stats?.total_tokens ?? 0) >= 1_000_000 ? " 兆" : (stats?.total_tokens ?? 0) >= 1_000 ? " 千" : ""}
+					/>
+				),
 				icon: <Hash className="size-4" />,
 				subValue: (
 					<>
 						<span>{t("statCards.in")}：</span>
 						<strong>
-							<NumberFlow value={(stats?.prompt_tokens ?? 0) >= 1_000_000 ? (stats?.prompt_tokens ?? 0) / 1_000_000 : (stats?.prompt_tokens ?? 0) >= 1_000 ? (stats?.prompt_tokens ?? 0) / 1_000 : (stats?.prompt_tokens ?? 0)} format={(stats?.prompt_tokens ?? 0) >= 1_000 ? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true } : { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }} />
+							<NumberFlow
+								value={
+									(stats?.prompt_tokens ?? 0) >= 1_000_000
+										? (stats?.prompt_tokens ?? 0) / 1_000_000
+										: (stats?.prompt_tokens ?? 0) >= 1_000
+											? (stats?.prompt_tokens ?? 0) / 1_000
+											: (stats?.prompt_tokens ?? 0)
+								}
+								format={
+									(stats?.prompt_tokens ?? 0) >= 1_000
+										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
+										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
+								}
+							/>
 						</strong>
-						<span>{ (stats?.prompt_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.prompt_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
+						<span>{(stats?.prompt_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.prompt_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
 						<span className="mx-1">·</span>
 						<span>{t("statCards.out")}：</span>
 						<strong>
-							<NumberFlow value={(stats?.completion_tokens ?? 0) >= 1_000_000 ? (stats?.completion_tokens ?? 0) / 1_000_000 : (stats?.completion_tokens ?? 0) >= 1_000 ? (stats?.completion_tokens ?? 0) / 1_000 : (stats?.completion_tokens ?? 0)} format={(stats?.completion_tokens ?? 0) >= 1_000 ? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true } : { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }} />
+							<NumberFlow
+								value={
+									(stats?.completion_tokens ?? 0) >= 1_000_000
+										? (stats?.completion_tokens ?? 0) / 1_000_000
+										: (stats?.completion_tokens ?? 0) >= 1_000
+											? (stats?.completion_tokens ?? 0) / 1_000
+											: (stats?.completion_tokens ?? 0)
+								}
+								format={
+									(stats?.completion_tokens ?? 0) >= 1_000
+										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
+										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
+								}
+							/>
 						</strong>
-						<span>{ (stats?.completion_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.completion_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
+						<span>{(stats?.completion_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.completion_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
 					</>
 				),
 				description: t("statCards.totalTokensDesc"),

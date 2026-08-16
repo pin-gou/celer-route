@@ -560,13 +560,7 @@ export default function ModelLimitsTable({
 					</Table>
 				</div>
 
-				<Pagination
-					offset={offset}
-					limit={limit}
-					totalCount={totalCount}
-					onOffsetChange={onOffsetChange}
-					dataTestIdPrefix="model-limits"
-				/>
+				<Pagination offset={offset} limit={limit} totalCount={totalCount} onOffsetChange={onOffsetChange} dataTestIdPrefix="model-limits" />
 			</div>
 		</>
 	);
