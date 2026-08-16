@@ -67,7 +67,7 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 
 	// Collapsed: thin rail with vertical "Filters" label — whole rail is clickable to expand
 	if (collapsed) {
-		const showFiltersLabel = t("logs.filterSidebar.showFilters");
+		const showFiltersLabel = t("filterSidebar.showFilters");
 		return (
 			<button
 				type="button"
@@ -77,7 +77,7 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 				aria-label={showFiltersLabel}
 			>
 				<PanelLeftOpen className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
-				<span className="rotate-180 select-none [writing-mode:vertical-rl]">{t("logs.filterSidebar.title")}</span>
+				<span className="rotate-180 select-none [writing-mode:vertical-rl]">{t("filterSidebar.title")}</span>
 				{activeFilterCount > 0 && (
 					<span className="bg-primary/10 text-primary flex size-6 items-center justify-center rounded-full text-xs font-medium">
 						{activeFilterCount}
@@ -91,12 +91,12 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 		<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
 			{/* Header */}
 			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
-				<span className="text-sm font-semibold">{t("logs.filterSidebar.title")}</span>
+				<span className="text-sm font-semibold">{t("filterSidebar.title")}</span>
 				<div className="flex items-center gap-1">
 					{activeFilterCount > 0 && (
 						<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
 							<RotateCcw className="size-3" />
-							{t("logs.filterSidebar.reset")}
+							{t("filterSidebar.reset")}
 						</Button>
 					)}
 					<Button
@@ -104,8 +104,8 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 						size="icon"
 						className="size-7"
 						onClick={toggleCollapsed}
-						title={t("logs.filterSidebar.hideFilters")}
-						aria-label={t("logs.filterSidebar.hideFilters")}
+						title={t("filterSidebar.hideFilters")}
+						aria-label={t("filterSidebar.hideFilters")}
 					>
 						<PanelLeftClose className="size-4" />
 					</Button>
@@ -356,7 +356,7 @@ function SearchableCheckboxList({
 				/>
 			))}
 			{filtered.length === 0 && !showAddCustom && (
-				<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">{t("logs.filterSidebar.noResults")}</div>
+				<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">{t("filterSidebar.noResults")}</div>
 			)}
 			{showAddCustom && (
 				<button
@@ -367,7 +367,7 @@ function SearchableCheckboxList({
 				>
 					<Plus className="text-muted-foreground size-3.5 shrink-0" />
 					<span className="truncate">
-						{t("logs.filterSidebar.use")} <span className="font-medium">&quot;{trimmed}&quot;</span>
+						{t("filterSidebar.use")} <span className="font-medium">&quot;{trimmed}&quot;</span>
 					</span>
 				</button>
 			)}
@@ -383,7 +383,7 @@ function StatusFilter({ filters, onFiltersChange, defaultOpen }: FilterComponent
 	const { t } = useTranslation("logs");
 	const hasActive = (filters.status || []).length > 0;
 	return (
-		<FilterSection title={t("logs.filterSidebar.status")} defaultOpen={defaultOpen || hasActive} testId="status-filter-toggle">
+		<FilterSection title={t("filterSidebar.status")} defaultOpen={defaultOpen || hasActive} testId="status-filter-toggle">
 			{Statuses.map((status) => (
 				<CheckboxFilterItem
 					key={status}
@@ -429,7 +429,7 @@ function StopReasonFilter({ filters, onFiltersChange, defaultOpen }: FilterCompo
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.stopReason")}
+			title={t("filterSidebar.stopReason")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -437,7 +437,7 @@ function StopReasonFilter({ filters, onFiltersChange, defaultOpen }: FilterCompo
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.stopReason") })}
+				placeholder={t("filterSidebar.searchOrAdd", { label: t("filterSidebar.stopReason") })}
 				items={items}
 				allowCustom
 				isSelected={(reason) => (filters.stop_reasons || []).includes(reason)}
@@ -480,7 +480,7 @@ function AppFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPro
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.app")}
+			title={t("filterSidebar.app")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -488,7 +488,7 @@ function AppFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPro
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.app") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.app") })}
 				items={items}
 				isSelected={(appName) => selectedSet.has(appName)}
 				onToggle={(appName) => {
@@ -520,7 +520,7 @@ function ProvidersFilter({ filters, onFiltersChange, defaultOpen }: FilterCompon
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.providers")}
+			title={t("filterSidebar.providers")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -528,7 +528,7 @@ function ProvidersFilter({ filters, onFiltersChange, defaultOpen }: FilterCompon
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.providers") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.providers") })}
 				items={availableProviders.map((p) => ({ key: p.name, label: p.name }))}
 				isSelected={(name) => (filters.providers || []).includes(name)}
 				onToggle={(name) => {
@@ -550,7 +550,7 @@ function TypeFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 	const { t } = useTranslation("logs");
 	const hasActive = (filters.objects || []).length > 0;
 	return (
-		<FilterSection title={t("logs.filterSidebar.type")} defaultOpen={defaultOpen || hasActive} testId="type-filter-toggle">
+		<FilterSection title={t("filterSidebar.type")} defaultOpen={defaultOpen || hasActive} testId="type-filter-toggle">
 			{RequestTypes.map((type) => {
 				const label = RequestTypeLabels[type as keyof typeof RequestTypeLabels] ?? type;
 				return (
@@ -598,7 +598,7 @@ function ModelsFilter({ filters, onFiltersChange, defaultOpen }: FilterComponent
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.models")}
+			title={t("filterSidebar.models")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -606,7 +606,7 @@ function ModelsFilter({ filters, onFiltersChange, defaultOpen }: FilterComponent
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.model") })}
+				placeholder={t("filterSidebar.searchOrAdd", { label: t("filterSidebar.model") })}
 				items={items}
 				allowCustom
 				isSelected={(model) => (filters.models || []).includes(model)}
@@ -650,7 +650,7 @@ function AliasesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponen
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.aliases")}
+			title={t("filterSidebar.aliases")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -658,7 +658,7 @@ function AliasesFilter({ filters, onFiltersChange, defaultOpen }: FilterComponen
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.alias") })}
+				placeholder={t("filterSidebar.searchOrAdd", { label: t("filterSidebar.alias") })}
 				items={items}
 				allowCustom
 				isSelected={(alias) => (filters.aliases || []).includes(alias)}
@@ -714,7 +714,7 @@ function SelectedKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.selectedKeys")}
+			title={t("filterSidebar.selectedKeys")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -722,7 +722,7 @@ function SelectedKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.key") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.key") })}
 				items={dedup(availableSelectedKeys).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -773,7 +773,7 @@ function VirtualKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterComp
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.virtualKeys")}
+			title={t("filterSidebar.virtualKeys")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -781,7 +781,7 @@ function VirtualKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterComp
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.virtualKeys") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.virtualKeys") })}
 				items={dedup(availableVirtualKeys).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -815,7 +815,7 @@ function RoutingEnginesFilter({ filters, onFiltersChange, defaultOpen }: FilterC
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.routingEngines")}
+			title={t("filterSidebar.routingEngines")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -823,7 +823,7 @@ function RoutingEnginesFilter({ filters, onFiltersChange, defaultOpen }: FilterC
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.engine") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.engine") })}
 				items={availableRoutingEngines.map((engine) => ({
 					key: engine,
 					label: RoutingEngineUsedLabels[engine as keyof typeof RoutingEngineUsedLabels] ?? engine,
@@ -881,7 +881,7 @@ function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.routingRules")}
+			title={t("filterSidebar.routingRules")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -889,7 +889,7 @@ function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchPlaceholder", { label: t("logs.filterSidebar.rule") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.rule") })}
 				items={dedup(availableRoutingRules).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -909,13 +909,13 @@ function SessionFilter({ filters, onFiltersChange, defaultOpen }: FilterComponen
 	const { t } = useTranslation("logs");
 	const hasActive = !!filters.parent_request_id;
 	return (
-		<FilterSection title={t("logs.filterSidebar.session")} defaultOpen={defaultOpen || hasActive} testId="session-filter-toggle">
+		<FilterSection title={t("filterSidebar.session")} defaultOpen={defaultOpen || hasActive} testId="session-filter-toggle">
 			<div className="relative">
 				<Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
 				<Input
 					value={filters.parent_request_id || ""}
 					onChange={(e) => onFiltersChange({ ...filters, parent_request_id: e.target.value })}
-					placeholder={t("logs.filterSidebar.parentRequestIdPlaceholder")}
+					placeholder={t("filterSidebar.parentRequestIdPlaceholder")}
 					className="h-8 border-0 pl-8 text-sm"
 					data-testid="session-filter-input"
 					autoFocus
@@ -952,7 +952,7 @@ function UserFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.user")}
+			title={t("filterSidebar.user")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -960,7 +960,7 @@ function UserFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.user") })}
+				placeholder={t("filterSidebar.searchOrAdd", { label: t("filterSidebar.user") })}
 				items={items}
 				allowCustom
 				isSelected={(id) => (filters.user_ids || []).includes(id)}
@@ -1016,7 +1016,7 @@ function TeamFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.teams")}
+			title={t("filterSidebar.teams")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -1024,7 +1024,7 @@ function TeamFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.team") })}
+				placeholder={t("filterSidebar.searchOrAdd", { label: t("filterSidebar.team") })}
 				items={dedup(availableTeams).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -1075,7 +1075,7 @@ function CustomerFilter({ filters, onFiltersChange, defaultOpen }: FilterCompone
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.customers")}
+			title={t("filterSidebar.customers")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -1083,7 +1083,7 @@ function CustomerFilter({ filters, onFiltersChange, defaultOpen }: FilterCompone
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.customer") })}
+				placeholder={t("filterSidebar.searchOrAdd", { label: t("filterSidebar.customer") })}
 				items={dedup(availableCustomers).map((name) => ({ key: name, label: name }))}
 				allowCustom
 				isSelected={isSelected}
@@ -1135,7 +1135,7 @@ function BusinessUnitFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.businessUnits")}
+			title={t("filterSidebar.businessUnits")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
@@ -1143,7 +1143,7 @@ function BusinessUnitFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("logs.filterSidebar.searchOrAdd", { label: t("logs.filterSidebar.businessUnit") })}
+				placeholder={t("filterSidebar.searchOrAdd", { label: t("filterSidebar.businessUnit") })}
 				items={dedup(availableBusinessUnits).map((name) => ({ key: name, label: name }))}
 				allowCustom
 				isSelected={isSelected}
@@ -1164,9 +1164,9 @@ function CostFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentPr
 	const { t } = useTranslation("logs");
 	const hasActive = !!filters.missing_cost_only;
 	return (
-		<FilterSection title={t("logs.filterSidebar.cost")} defaultOpen={defaultOpen || hasActive} testId="cost-filter-toggle">
+		<FilterSection title={t("filterSidebar.cost")} defaultOpen={defaultOpen || hasActive} testId="cost-filter-toggle">
 			<CheckboxFilterItem
-				label={t("logs.filterSidebar.showMissingCostOnly")}
+				label={t("filterSidebar.showMissingCostOnly")}
 				checked={!!filters.missing_cost_only}
 				onCheckedChange={(checked) => onFiltersChange({ ...filters, missing_cost_only: !!checked })}
 				testId="cost-filter-missing-only-checkbox"
@@ -1183,14 +1183,14 @@ function LocalCachingFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 	const { t } = useTranslation("logs");
 	const localCachingOptions: { key: string; label: string }[] = useMemo(
 		() => [
-			{ key: "direct", label: t("logs.filterSidebar.directCache") },
-			{ key: "semantic", label: t("logs.filterSidebar.semanticCache") },
+			{ key: "direct", label: t("filterSidebar.directCache") },
+			{ key: "semantic", label: t("filterSidebar.semanticCache") },
 		],
 		[t],
 	);
 	const hasActive = (filters.cache_hit_types || []).length > 0;
 	return (
-		<FilterSection title={t("logs.filterSidebar.localCaching")} defaultOpen={defaultOpen || hasActive} testId="local-caching-filter-toggle">
+		<FilterSection title={t("filterSidebar.localCaching")} defaultOpen={defaultOpen || hasActive} testId="local-caching-filter-toggle">
 			{localCachingOptions.map((option) => (
 				<CheckboxFilterItem
 					key={option.key}
@@ -1254,14 +1254,14 @@ function MetadataFilters({ filters, onFiltersChange, defaultOpen }: FilterCompon
 
 	return (
 		<FilterSection
-			title={t("logs.filterSidebar.metadata")}
+			title={t("filterSidebar.metadata")}
 			defaultOpen={defaultOpen || hasActive}
 			loading={isLoading}
 			onOpenChange={setOpened}
 			testId="metadata-filter-toggle"
 		>
 			{isEmpty ? (
-				<div className="text-muted-foreground px-3 py-2 text-xs">{t("logs.filterSidebar.noMetadataKeys")}</div>
+				<div className="text-muted-foreground px-3 py-2 text-xs">{t("filterSidebar.noMetadataKeys")}</div>
 			) : (
 				<>
 					<div className="relative border-b">
@@ -1273,13 +1273,13 @@ function MetadataFilters({ filters, onFiltersChange, defaultOpen }: FilterCompon
 						<Input
 							value={searchQuery}
 							onChange={(e) => setSearchQuery(e.target.value)}
-							placeholder={t("logs.filterSidebar.searchMetadata")}
+							placeholder={t("filterSidebar.searchMetadata")}
 							className="h-8 border-0 pl-8 text-xs"
 							data-testid="metadata-search-input"
 						/>
 					</div>
 					{entries.length === 0 && !isFetching && (
-						<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">{t("logs.filterSidebar.noResults")}</div>
+						<div className="text-muted-foreground flex h-9 items-center px-3 text-xs">{t("filterSidebar.noResults")}</div>
 					)}
 					{entries.map(([metadataKey, values]) => (
 						<div key={metadataKey} data-testid={`metadata-${metadataKey}-filter-group`}>
@@ -1299,7 +1299,7 @@ function MetadataFilters({ filters, onFiltersChange, defaultOpen }: FilterCompon
 							<div className="px-3 py-2.5">
 								<Input
 									className="placeholder:text-muted-foreground h-7 w-full rounded border bg-transparent px-2 text-sm"
-									placeholder={t("logs.filterSidebar.customValue")}
+									placeholder={t("filterSidebar.customValue")}
 									value={
 										customInputs[metadataKey] ??
 										(filters.metadata_filters?.[metadataKey] && !values.includes(filters.metadata_filters[metadataKey])
