@@ -61,8 +61,19 @@
 		"failedToAddProvider": "添加提供商失败"
 	},
 	"providers2": {
-		"pageTitle": "提供商（新版）",
-		"breadcrumb": "提供商（新版）",
+		"pageTitle": "提供商",
+		"breadcrumb": "提供商",
+		"addProvider": "添加提供商",
+		"customProviderOption": "自定义提供商...",
+		"family": {
+			"custom": "自定义",
+			"other": "其他",
+			"openai": "OpenAI 系列",
+			"anthropic": "Anthropic 系列",
+			"google": "Google 系列",
+			"metaLlama": "Meta-Llama 系列",
+			"aws": "AWS 系列"
+		},
 		"filter": {
 			"all": "全部",
 			"active": "活跃",
@@ -281,6 +292,20 @@
 				"modelRegistered": "已注册模型 {{id}}",
 				"failedToRegister": "注册模型失败"
 			}
+		},
+		"addCustomProviderSheet": {
+			"description": "输入自定义提供商的详细信息。",
+			"name": "名称",
+			"baseFormat": "基础格式",
+			"selectBaseFormat": "选择基础格式",
+			"baseUrl": "基础 URL",
+			"baseUrlPlaceholder": "https://api.your-provider.com",
+			"allowPrivateNetwork": "允许私有网络",
+			"allowPrivateNetworkDesc": "允许连接到私有网络 IP（例如 192.168.x.x、10.x.x.x）。链接本地地址仍会被阻止。",
+			"isKeyless": "是否需要密钥？",
+			"isKeylessDesc": "自定义提供商是否需要密钥",
+			"cancel": "取消",
+			"add": "添加"
 		}
 	},
 	"failedToLoad": "加载提供商失败",

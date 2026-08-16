@@ -61,8 +61,19 @@
 		"failedToAddProvider": "Failed to add provider"
 	},
 	"providers2": {
-		"pageTitle": "Providers (New)",
-		"breadcrumb": "Providers (New)",
+		"pageTitle": "Providers",
+		"breadcrumb": "Providers",
+		"addProvider": "Add New Provider",
+		"customProviderOption": "Custom provider...",
+		"family": {
+			"custom": "Custom",
+			"other": "Other",
+			"openai": "OpenAI Family",
+			"anthropic": "Anthropic Family",
+			"google": "Google Family",
+			"metaLlama": "Meta-Llama Family",
+			"aws": "AWS Family"
+		},
 		"filter": {
 			"all": "All",
 			"active": "Active",
@@ -281,6 +292,20 @@
 				"modelRegistered": "Registered model {{id}}",
 				"failedToRegister": "Failed to register model"
 			}
+		},
+		"addCustomProviderSheet": {
+			"description": "Enter the details of your custom provider.",
+			"name": "Name",
+			"baseFormat": "Base Format",
+			"selectBaseFormat": "Select base format",
+			"baseUrl": "Base URL",
+			"baseUrlPlaceholder": "https://api.your-provider.com",
+			"allowPrivateNetwork": "Allow Private Network",
+			"allowPrivateNetworkDesc": "Allow connecting to private network IPs (e.g. 192.168.x.x, 10.x.x.x). Link-local addresses remain blocked.",
+			"isKeyless": "Is Keyless?",
+			"isKeylessDesc": "Whether the custom provider requires a key",
+			"cancel": "Cancel",
+			"add": "Add"
 		}
 	},
 	"failedToLoad": "Failed to load providers",
