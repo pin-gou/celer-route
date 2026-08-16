@@ -29,15 +29,6 @@ modules:
     test:
       unit: cd transports/bifrost-http && go test ./... -short -count=1
       integration: make test
-  cli:
-    root: cli
-    language: go
-    description: CLI 工具
-    build: go build ./...
-    lint: cd cli && go vet ./...
-    test:
-      unit: go test ./... -short -count=1
-      integration: make test-cli
   plugins:
     root: plugins
     language: go
@@ -120,12 +111,6 @@ tracks:
     - transports
     max_fix_retries: 5
     description: HTTP 传输层开发与测试
-  cli:
-    type: standard
-    modules:
-    - cli
-    max_fix_retries: 5
-    description: CLI 工具开发与测试
   plugins:
     type: standard
     modules:
@@ -144,7 +129,6 @@ tracks:
     - core
     - framework
     - transports
-    - cli
     - plugins
     - ui
     max_fix_retries: 3
@@ -155,7 +139,6 @@ stages:
   - core
   - framework
   - transports
-  - cli
   - plugins
   - ui
   gate: all_pass

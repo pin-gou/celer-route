@@ -68,7 +68,7 @@ define EXPOSE_ENV
 	fi
 endef
 
-.PHONY: all help dev dev-pulse build-ui build build-cli run run-cli install-air install-pulse clean test test-cli install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner helm-index install-microsocks socks5-proxy install-tinyproxy http-proxy
+.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner helm-index install-microsocks socks5-proxy install-tinyproxy http-proxy
 
 all: help
 
@@ -402,11 +402,7 @@ build: build-ui ## Build bifrost-http binary
 		$(MAKE) _build-with-docker TARGET_OS=$$TARGET_OS TARGET_ARCH=$$TARGET_ARCH $(if $(DYNAMIC),DYNAMIC=$(DYNAMIC)); \
 	fi
 
-build-cli: ## Build bifrost CLI binary
-	@$(ECHO) "$(GREEN)Building bifrost CLI...$(NC)"
-	@mkdir -p ./tmp
-	@cd cli && $(if $(LOCAL),,GOWORK=off) go build -ldflags "-X main.version=v0.1.1-dev" -o ../tmp/bifrost .
-	@$(ECHO) "$(GREEN)Built: tmp/bifrost$(NC)"
+
 
 _build-with-docker: # Internal target for Docker-based cross-compilation
 	@$(ECHO) "$(CYAN)Using Docker for cross-compilation...$(NC)"; \
@@ -490,9 +486,7 @@ run: build ## Build and run bifrost-http (no hot reload)
 		$(if $(PROMETHEUS_LABELS),-prometheus-labels "$(PROMETHEUS_LABELS)") \
 		$(if $(APP_DIR),-app-dir "$(abspath $(APP_DIR))")
 
-run-cli: build-cli ## Run bifrost CLI (Usage: make run-cli [ARGS="--config ~/.bifrost/config.json"])
-	@$(ECHO) "$(GREEN)Running bifrost CLI...$(NC)"
-	@./tmp/bifrost $(ARGS)
+
 
 clean: ## Clean build artifacts and temporary files
 	@$(ECHO) "$(YELLOW)Cleaning build artifacts...$(NC)"
@@ -1234,7 +1228,7 @@ test-mcp: install-gotestsum setup-mcp-tests ## Run MCP tests (Usage: make test-m
 		exit 1; \
 	fi
 
-test-all: test-core test-framework test-plugins test-http-transport test test-cli ## Run all tests
+test-all: test-core test-framework test-plugins test-http-transport test ## Run all tests
 	@$(ECHO) ""
 	@$(ECHO) "$(GREEN)═══════════════════════════════════════════════════════════$(NC)"
 	@$(ECHO) "$(GREEN)              All Tests Complete - Summary                 $(NC)"
@@ -1691,7 +1685,7 @@ setup-workspace: ## Set up Go workspace with all local modules for development
 	@$(ECHO) "$(YELLOW)Cleaning existing workspace...$(NC)"
 	@rm -f go.work go.work.sum || true
 	@$(ECHO) "$(YELLOW)Initializing new workspace...$(NC)"
-	@go work init ./cli ./core ./framework ./transports
+	@go work init ./core ./framework ./transports
 	@$(ECHO) "$(YELLOW)Adding plugin modules...$(NC)"
 	@for plugin_dir in ./plugins/*/; do \
 		if [ -d "$$plugin_dir" ] && [ -f "$$plugin_dir/go.mod" ]; then \
@@ -1729,12 +1723,8 @@ work-clean: ## Remove local go.work
 # Module parameter for mod-tidy (all/core/plugins/framework/transport/tests)
 MODULE ?= all
 
-mod-tidy: ## Run go mod tidy on modules (Usage: make mod-tidy [MODULE=all|cli|core|plugins|framework|transport|tests])
+mod-tidy: ## Run go mod tidy on modules (Usage: make mod-tidy [MODULE=all|core|plugins|framework|transport|tests])
 	@$(ECHO) "$(GREEN)Running go mod tidy...$(NC)"
-	@if [ "$(MODULE)" = "all" ] || [ "$(MODULE)" = "cli" ]; then \
-		$(ECHO) "$(CYAN)Tidying cli...$(NC)"; \
-		cd cli && $(if $(LOCAL),,GOWORK=off) go mod tidy && $(ECHO) "$(GREEN)  ✓ cli$(NC)"; \
-	fi
 	@if [ "$(MODULE)" = "all" ] || [ "$(MODULE)" = "core" ]; then \
 		$(ECHO) "$(CYAN)Tidying core...$(NC)"; \
 		cd core && go mod tidy && $(ECHO) "$(GREEN)  ✓ core$(NC)"; \
@@ -1768,13 +1758,7 @@ mod-tidy: ## Run go mod tidy on modules (Usage: make mod-tidy [MODULE=all|cli|co
 	@$(ECHO) ""
 	@$(ECHO) "$(GREEN)✓ go mod tidy complete$(NC)"
 
-test-cli: install-gotestsum ## Run CLI tests
-	@$(ECHO) "$(GREEN)Running CLI tests...$(NC)"
-	@mkdir -p $(TEST_REPORTS_DIR)
-	@cd cli && GOWORK=off gotestsum \
-		--format=$(GOTESTSUM_FORMAT) \
-		--junitfile=../$(TEST_REPORTS_DIR)/cli.xml \
-		-- ./...
+
 
 # The CLI harness always runs `go test -v`, because without it `go test` buffers
 # the whole package's stdout AND stderr and discards it when the package passes -
