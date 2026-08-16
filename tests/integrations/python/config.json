@@ -1,5 +1,5 @@
 {
-  "$schema": "https://www.getbifrost.ai/schema",
+  "$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "env_label":"Development",
   "mcp": {
     "client_configs": [

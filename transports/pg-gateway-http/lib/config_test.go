@@ -12021,7 +12021,7 @@ func TestSQLite_VKMCPConfig_MCPClientNameResolution(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "config.db")
 	cfgPath := filepath.Join(tempDir, "config.json")
 	configJSON := fmt.Sprintf(`{
-		"$schema": "https://www.getbifrost.ai/schema",
+		"$schema": "https://pin-gou.github.io/pg-gateway/schema",
 		"config_store": {
 			"enabled": true,
 			"type": "sqlite",
@@ -12160,7 +12160,7 @@ func TestSQLite_VKMCPConfig_MCPClientNameNotFound(t *testing.T) {
 
 	// Create config.json with a virtual key that references a non-existent MCP client
 	configJSON := fmt.Sprintf(`{
-		"$schema": "https://www.getbifrost.ai/schema",
+		"$schema": "https://pin-gou.github.io/pg-gateway/schema",
 		"config_store": {
 			"enabled": true,
 			"type": "sqlite",

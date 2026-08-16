@@ -189,7 +189,7 @@ bifrost:
 VALS
 
 render_config "$TMPDIR/values-client.yaml"
-assert_field_value 'schema field' '.$schema' '"https://www.getbifrost.ai/schema"'
+assert_field_value 'schema field' '.$schema' '"https://pin-gou.github.io/pg-gateway/schema"'
 assert_field_value 'encryption_key' '.encryption_key' '"my-secret-passphrase"'
 assert_field_value 'client.drop_excess_requests' '.client.drop_excess_requests' 'true'
 assert_field_value 'client.initial_pool_size' '.client.initial_pool_size' '500'

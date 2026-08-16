@@ -344,7 +344,7 @@ create_config() {
 
   cat > "${WORK_DIR}/config.json" << 'EOF'
 {
-  "$schema": "https://www.getbifrost.ai/schema",
+  "$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "client": {
     "enable_logging": false,
     "disable_content_logging": true,

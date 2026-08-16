@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	DefaultConfigSchemaURL = "https://www.getbifrost.ai/schema"
+	DefaultConfigSchemaURL = "https://pin-gou.github.io/pg-gateway/schema"
 	ConfigSchemaURLEnv     = "BIFROST_SCHEMA_URL"
 )
 

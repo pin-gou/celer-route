@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2019-09/schema",
-  "$id": "https://www.getbifrost.ai/schema",
-  "title": "Bifrost Configuration Schema",
-  "description": "Schema for Bifrost HTTP transport configuration",
+  "$id": "https://pin-gou.github.io/pg-gateway/schema",
+  "title": "pg-gateway Configuration Schema",
+  "description": "Schema for pg-gateway HTTP transport configuration",
   "type": "object",
   "properties": {
     "$schema": {
       "type": "string",
-      "description": "Schema location for IDE validation. Defaults to \"https://www.getbifrost.ai/schema\" and can be set to a mirrored URL, file:// URL, or filesystem path for isolated deployments.",
-      "default": "https://www.getbifrost.ai/schema"
+      "description": "Schema location for IDE validation. Defaults to \"https://pin-gou.github.io/pg-gateway/schema\" and can be set to a mirrored URL, file:// URL, or filesystem path for isolated deployments.",
+      "default": "https://pin-gou.github.io/pg-gateway/schema"
     },
     "server": {
       "type": "object",

@@ -5611,7 +5611,7 @@ run_postgres_migration_tests() {
   local config_file="$TEMP_DIR/config.json"
   cat > "$config_file" << EOF
 {
-  "\$schema": "https://www.getbifrost.ai/schema",
+  "\$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "config_store": {
     "enabled": true,
     "type": "postgres",
@@ -5826,7 +5826,7 @@ run_sqlite_migration_tests() {
   local config_file="$TEMP_DIR/config.json"
   cat > "$config_file" << EOF
 {
-  "\$schema": "https://www.getbifrost.ai/schema",
+  "\$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "config_store": {
     "enabled": true,
     "type": "sqlite",

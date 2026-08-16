@@ -166,7 +166,7 @@ write_config() {
   mkdir -p "${APP_DIR}"
   cat > "${APP_DIR}/config.json" <<EOF
 {
-  "\$schema": "https://www.getbifrost.ai/schema",
+  "\$schema": "https://pin-gou.github.io/pg-gateway/schema",
   "client": {
     "enable_logging": true,
     "drop_excess_requests": false,

@@ -211,9 +211,9 @@ func (h *SkillsServingHandler) claudeCodeMarketplace(ctx *fasthttp.RequestCtx) {
 	}
 
 	result := map[string]any{
-		"name": "bifrost-skills",
+		"name": "pg-gateway-skills",
 		"owner": map[string]any{
-			"name": "Bifrost Gateway",
+			"name": "pg-gateway",
 		},
 		"plugins": plugins,
 	}
@@ -351,8 +351,8 @@ func buildGitRepo(spec *GitRepoSpec) (*memory.Storage, error) {
 	// git upload-pack fails with "not our ref".
 	_, err = w.Commit("serve "+spec.Label, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "Bifrost Gateway",
-			Email: "bifrost@getbifrost.ai",
+			Name:  "pg-gateway",
+			Email: "shaohq@foxmail.com",
 			When:  time.Unix(0, 0),
 		},
 	})

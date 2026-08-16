@@ -144,7 +144,7 @@ func TestFilePathFromSchemaLocation(t *testing.T) {
 		"file:///opt/bifrost/config.schema.json":        "/opt/bifrost/config.schema.json",
 		"file://localhost/opt/config.schema.json":       "/opt/config.schema.json",
 		"file:///opt/my%20dir/config.schema.json":       "/opt/my dir/config.schema.json",
-		"https://www.getbifrost.ai/schema-as-path-only": "https://www.getbifrost.ai/schema-as-path-only",
+		"https://pin-gou.github.io/pg-gateway/schema-as-path-only": "https://pin-gou.github.io/pg-gateway/schema-as-path-only",
 	}
 	for input, want := range cases {
 		if got := filePathFromSchemaLocation(input); got != want {

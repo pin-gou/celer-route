@@ -119,7 +119,7 @@ export function MCPLibrarySettingsSheet({ open, onClose }: MCPLibrarySettingsShe
 							<Input
 								id="mcp-library-url"
 								type="text"
-								placeholder="https://getbifrost.ai/mcp-library"
+								placeholder="https://pin-gou.github.io/pg-gateway/mcp-library"
 								data-testid="mcp-library-url-input"
 								{...register("mcp_library_url")}
 								className={errors.mcp_library_url ? "border-destructive" : ""}
