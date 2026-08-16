@@ -31,8 +31,8 @@ const FETCH_RANGE_MS = 20 * 60 * 1000;
 // center we debounce-refetch centered on the new position.
 const REFETCH_DRIFT_RATIO = 0.25;
 const REFETCH_DEBOUNCE_MS = 300;
-// Follow mode: NOW line pinned at 75% of the canvas, window scrolls with time.
-const FOLLOW_LINE_X = 0.75;
+// Follow mode: NOW line pinned at 85% of the canvas, window scrolls with time.
+const FOLLOW_LINE_X = 0.85;
 // Live mode: NOW line snaps to 90%, window scrolls in whole slots.
 const LIVE_LINE_FRACTION = 0.9;
 

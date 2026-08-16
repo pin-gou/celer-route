@@ -223,7 +223,7 @@ describe("LogsTimeline — Gantt component", () => {
 				timeRange={{ start: t("2026-08-15T10:00:00Z"), end: t("2026-08-15T10:02:00Z") }}
 			/>,
 		);
-		// In follow mode, NOW line is at 75%
+		// NOW line renders at the window-relative position of nowMs
 		const nowLine = container.querySelector("[class*='bg-red-500']");
 		expect(nowLine).toBeTruthy();
 		expect(container.textContent).toContain("NOW");

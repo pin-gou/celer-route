@@ -255,13 +255,14 @@ export function LogsTimeline({
 		return { timeStart: start, timeEnd: end, rangeDuration: end - start };
 	}, [timeRange]);
 
-	// NOW line position (percentage from left)
+	// NOW line position (percentage from left). Computed from the window so it
+	// always matches the page's FOLLOW_LINE_X placement (follow mode keeps the
+	// window pinned such that nowMs lands at exactly that fraction).
 	const nowLineX = useMemo(() => {
-		if (mode === "follow") return 75;
 		const totalMs = timeEnd - timeStart;
 		if (totalMs <= 0) return 50;
 		return Math.max(0, Math.min(100, ((nowMs - timeStart) / totalMs) * 100));
-	}, [mode, nowMs, timeStart, timeEnd]);
+	}, [nowMs, timeStart, timeEnd]);
 
 	// Axis ticks
 	const axisTicks = useMemo(() => computeAxisTicks(timeStart, timeEnd), [timeStart, timeEnd]);
