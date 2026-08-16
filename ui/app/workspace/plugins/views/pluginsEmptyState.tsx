@@ -22,12 +22,12 @@ export function PluginsEmptyState({ onCreateClick, canCreate = true }: PluginsEm
 				<div className="text-muted-foreground mx-auto mt-2 max-w-[600px] text-sm font-normal">{t("emptyState.description")}</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
 					<Button
-						aria-label="Create your first plugin"
+						aria-label={t("emptyState.installAriaLabel")}
 						data-testid="plugins-button-install-new"
 						onClick={onCreateClick}
 						disabled={!canCreate}
 					>
-						Install New Plugin
+						{t("emptyState.installNewPlugin")}
 					</Button>
 				</div>
 			</div>

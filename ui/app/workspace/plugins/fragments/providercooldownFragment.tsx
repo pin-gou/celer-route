@@ -11,6 +11,7 @@ import { PROVIDER_COOLDOWN_PLUGIN, providerCooldownConfigSchema, type Plugin } f
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useGetCooldownStateQuery, useGetCooldownStatsQuery, useUnfreezeCooldownMutation } from "@/lib/store/apis/pluginsApi";
@@ -26,6 +27,7 @@ type ProviderCooldownFormValues = z.infer<typeof providerCooldownConfigSchema>;
 // ---------------------------------------------------------------------------
 
 export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
+	const { t } = useTranslation("plugins");
 	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
 	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
 
@@ -36,17 +38,17 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 				name: PROVIDER_COOLDOWN_PLUGIN,
 				data: { enabled: checked },
 			}).unwrap();
-			toast.success(`Provider cooldown ${checked ? "enabled" : "disabled"}`);
+			toast.success(checked ? t("providerCooldown.enabledToast") : t("providerCooldown.disabledToast"));
 		} catch {
-			toast.error("Failed to update provider cooldown");
+			toast.error(t("providerCooldown.updateFailedToast"));
 		}
 	};
 
 	return (
 		<div className="flex flex-row items-center justify-between rounded-lg border p-4">
 			<div className="space-y-0.5">
-				<label className="text-sm font-medium">Enable Provider Cooldown</label>
-				<p className="text-muted-foreground text-sm">Automatically cool down providers that return quota errors</p>
+				<label className="text-sm font-medium">{t("providerCooldown.enableTitle")}</label>
+				<p className="text-muted-foreground text-sm">{t("providerCooldown.enableDescription")}</p>
 			</div>
 			<Switch
 				data-testid="providercooldown-enabled-switch"
@@ -63,6 +65,7 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 // ---------------------------------------------------------------------------
 
 export function ConfigForm({ plugin }: { plugin: Plugin }) {
+	const { t } = useTranslation("plugins");
 	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
 	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
 	const { data: providers = [] } = useGetProvidersQuery();
@@ -118,14 +121,14 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 					},
 				},
 			}).unwrap();
-			toast.success("Provider cooldown configuration saved");
+			toast.success(t("providerCooldown.savedToast"));
 		} catch {
-			toast.error("Failed to save configuration");
+			toast.error(t("providerCooldown.saveFailedToast"));
 		}
 	};
 
 	const onError = () => {
-		toast.error("Please fix the form errors before submitting");
+		toast.error(t("providerCooldown.formErrorToast"));
 	};
 
 	return (
@@ -137,21 +140,19 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 					name="default_ttl_seconds"
 					render={({ field }) => (
 						<FormItem>
-							<FormLabel>Default TTL (seconds)</FormLabel>
+							<FormLabel>{t("providerCooldown.defaultTTLLabel")}</FormLabel>
 							<FormControl>
 								<Input
 									data-testid="providercooldown-field-default-ttl"
 									type="number"
 									min={1}
 									max={86400}
-									placeholder="600"
+									placeholder={t("providerCooldown.defaultTTLPlaceholder")}
 									{...field}
 									onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
 								/>
 							</FormControl>
-							<p className="text-muted-foreground text-xs">
-								Seconds before a cooled-down provider key is automatically re-enabled (1–86400)
-							</p>
+							<p className="text-muted-foreground text-xs">{t("providerCooldown.defaultTTLDescription")}</p>
 							<FormMessage />
 						</FormItem>
 					)}
@@ -159,11 +160,11 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 
 				{/* ttl_overrides */}
 				<FormItem>
-					<FormLabel>TTL Overrides</FormLabel>
-					<p className="text-muted-foreground mb-2 text-xs">Per-provider TTL overrides (seconds)</p>
+					<FormLabel>{t("providerCooldown.ttlOverridesLabel")}</FormLabel>
+					<p className="text-muted-foreground mb-2 text-xs">{t("providerCooldown.ttlOverridesDescription")}</p>
 					<FormControl>
 						<div className="space-y-2">
-							{ttlOverrideKeys.length === 0 && <p className="text-muted-foreground text-sm">No overrides configured</p>}
+							{ttlOverrideKeys.length === 0 && <p className="text-muted-foreground text-sm">{t("providerCooldown.noOverrides")}</p>}
 							{ttlOverrideKeys.map((providerKey) => {
 								const otherKeys = ttlOverrideKeys.filter((k) => k !== providerKey);
 								const otherSet = new Set<string>(otherKeys);
@@ -175,7 +176,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 									<div key={providerKey} className="flex items-center gap-2">
 										<Select value={providerKey} onValueChange={(next) => renameOverride(providerKey, next)}>
 											<SelectTrigger className="w-1/3" data-testid={`providercooldown-field-ttl-overrides-provider-${providerKey}`}>
-												<SelectValue placeholder="Select provider" />
+												<SelectValue placeholder={t("providerCooldown.selectProviderPlaceholder")} />
 											</SelectTrigger>
 											<SelectContent>
 												{rowOptionNames.map((name) => (
@@ -189,7 +190,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 											data-testid={`providercooldown-field-ttl-overrides-value-${providerKey}`}
 											type="number"
 											min={1}
-											placeholder="TTL seconds"
+											placeholder={t("providerCooldown.ttlSecondsPlaceholder")}
 											value={ttlOverrides[providerKey]}
 											onChange={(e) => {
 												const num = e.target.valueAsNumber;
@@ -219,9 +220,9 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 								);
 							})}
 							{allProvidersConsumed && providers.length > 0 && (
-								<p className="text-muted-foreground text-xs">All configured providers already have an override</p>
+								<p className="text-muted-foreground text-xs">{t("providerCooldown.allProvidersConsumed")}</p>
 							)}
-							{providers.length === 0 && <p className="text-muted-foreground text-xs">No providers configured yet</p>}
+							{providers.length === 0 && <p className="text-muted-foreground text-xs">{t("providerCooldown.noProviders")}</p>}
 							<Button
 								type="button"
 								variant="outline"
@@ -238,7 +239,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 								}}
 							>
 								<PlusIcon className="mr-1 h-3 w-3" />
-								Add Override
+								{t("providerCooldown.addOverride")}
 							</Button>
 						</div>
 					</FormControl>
@@ -247,8 +248,8 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 
 				{/* quota_patterns */}
 				<FormItem>
-					<FormLabel>Quota Patterns</FormLabel>
-					<p className="text-muted-foreground mb-2 text-xs">Error message patterns that trigger cooldown (at least 1 required)</p>
+					<FormLabel>{t("providerCooldown.quotaPatternsLabel")}</FormLabel>
+					<p className="text-muted-foreground mb-2 text-xs">{t("providerCooldown.quotaPatternsDescription")}</p>
 					<FormControl>
 						<div className="space-y-2">
 							{quotaFields.map((field, index) => (
@@ -260,7 +261,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 											<>
 												<Input
 													data-testid={`providercooldown-field-quota-patterns-${index}`}
-													placeholder="e.g. insufficient_quota"
+													placeholder={t("providerCooldown.quotaPatternPlaceholder")}
 													{...innerField}
 												/>
 												<Button type="button" variant="ghost" size="sm" onClick={() => removeQuota(index)}>
@@ -273,7 +274,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 							))}
 							<Button type="button" variant="outline" size="sm" onClick={() => appendQuota("")}>
 								<PlusIcon className="mr-1 h-3 w-3" />
-								Add Pattern
+								{t("providerCooldown.addPattern")}
 							</Button>
 						</div>
 					</FormControl>
@@ -283,7 +284,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 				{/* Save button */}
 				<div className="flex justify-end">
 					<Button type="submit" disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess}>
-						{isLoading ? "Saving..." : "Save Configuration"}
+						{isLoading ? t("providerCooldown.saving") : t("providerCooldown.saveConfiguration")}
 					</Button>
 				</div>
 			</form>
@@ -296,6 +297,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 // ---------------------------------------------------------------------------
 
 export function MonitoringPanel() {
+	const { t } = useTranslation("plugins");
 	const { data: stateData, isLoading: stateLoading } = useGetCooldownStateQuery(undefined, {
 		pollingInterval: 5000,
 	});
@@ -310,14 +312,14 @@ export function MonitoringPanel() {
 	const handleUnfreeze = async (provider: string, keyId: string) => {
 		try {
 			await unfreeze({ provider, keyId }).unwrap();
-			toast.success(`Unfrozen ${provider}/${keyId}`);
+			toast.success(t("providerCooldown.unfreezeSuccessToast", { provider, keyId }));
 		} catch {
-			toast.error("Failed to unfreeze key");
+			toast.error(t("providerCooldown.unfreezeFailedToast"));
 		}
 	};
 
 	if (stateLoading || statsLoading) {
-		return <div className="text-muted-foreground py-4 text-sm">Loading monitoring data...</div>;
+		return <div className="text-muted-foreground py-4 text-sm">{t("providerCooldown.monitoringLoading")}</div>;
 	}
 
 	return (
@@ -326,23 +328,23 @@ export function MonitoringPanel() {
 			<div className="grid grid-cols-3 gap-4">
 				<div data-testid="providercooldown-stats-mark" className="rounded-lg border p-4 text-center">
 					<div className="text-2xl font-bold">{stats.markCount}</div>
-					<div className="text-muted-foreground text-xs">Total Marked</div>
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.totalMarked")}</div>
 				</div>
 				<div data-testid="providercooldown-stats-suppressed" className="rounded-lg border p-4 text-center">
 					<div className="text-2xl font-bold">{stats.suppressedCount}</div>
-					<div className="text-muted-foreground text-xs">Suppressed Requests</div>
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.suppressedRequests")}</div>
 				</div>
 				<div data-testid="providercooldown-stats-active" className="rounded-lg border p-4 text-center">
 					<div className="text-2xl font-bold">{stats.activeCount}</div>
-					<div className="text-muted-foreground text-xs">Currently Active</div>
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.currentlyActive")}</div>
 				</div>
 			</div>
 
 			{/* State entries */}
 			<div>
-				<h4 className="mb-2 text-sm font-medium">Active Cooldown State</h4>
+				<h4 className="mb-2 text-sm font-medium">{t("providerCooldown.activeStateTitle")}</h4>
 				{entries.length === 0 ? (
-					<p className="text-muted-foreground py-4 text-center text-sm">No keys are currently in cooldown</p>
+					<p className="text-muted-foreground py-4 text-center text-sm">{t("providerCooldown.noActiveKeys")}</p>
 				) : (
 					<div className="space-y-2">
 						{entries.map((entry) => (
@@ -360,8 +362,8 @@ export function MonitoringPanel() {
 										</span>
 									</div>
 									<div className="text-muted-foreground mt-1 text-xs">
-										<span>Reason: {entry.reason}</span>
-										<span className="ml-3">Expires: {entry.expireAt}</span>
+										<span>{t("providerCooldown.reason", { reason: entry.reason })}</span>
+										<span className="ml-3">{t("providerCooldown.expires", { expireAt: entry.expireAt })}</span>
 									</div>
 								</div>
 								<Button
@@ -372,7 +374,7 @@ export function MonitoringPanel() {
 									onClick={() => handleUnfreeze(entry.provider, entry.keyId)}
 									disabled={unfreezeLoading}
 								>
-									Unfreeze
+									{t("providerCooldown.unfreeze")}
 								</Button>
 							</div>
 						))}
@@ -388,22 +390,23 @@ export function MonitoringPanel() {
 // ---------------------------------------------------------------------------
 
 export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
+	const { t } = useTranslation("plugins");
 	return (
 		<div className="space-y-8">
-			<h3 className="text-lg font-semibold">Provider Cooldown Configuration</h3>
+			<h3 className="text-lg font-semibold">{t("providerCooldown.title")}</h3>
 
 			{/* Section 1: enabled switch */}
 			<EnabledSwitch plugin={plugin} />
 
 			{/* Section 2: config form */}
 			<div className="rounded-lg border p-4">
-				<h4 className="mb-4 text-sm font-medium">Cooldown Settings</h4>
+				<h4 className="mb-4 text-sm font-medium">{t("providerCooldown.settingsTitle")}</h4>
 				<ConfigForm plugin={plugin} />
 			</div>
 
 			{/* Section 3: monitoring panel */}
 			<div className="rounded-lg border p-4">
-				<h4 className="mb-4 text-sm font-medium">Monitoring</h4>
+				<h4 className="mb-4 text-sm font-medium">{t("providerCooldown.monitoringTitle")}</h4>
 				<MonitoringPanel />
 			</div>
 		</div>

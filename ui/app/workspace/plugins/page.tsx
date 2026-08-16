@@ -72,7 +72,7 @@ export default function PluginsPage() {
 				<div className="flex min-w-[250px] flex-col gap-2 pb-10">
 					<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
 						<div className="mb-4">
-							<div className="text-muted-foreground mb-2 text-xs font-medium">Plugins</div>
+							<div className="text-muted-foreground mb-2 text-xs font-medium">{t("sidebar.title")}</div>
 							{allPlugins.map((plugin) => (
 								<button
 									type="button"
@@ -94,7 +94,7 @@ export default function PluginsPage() {
 										<span className="truncate">{plugin.name}</span>
 										{!plugin.isCustom && (
 											<Badge variant="secondary" className="text-muted-foreground h-4 px-1 text-[10px] leading-none font-normal">
-												built-in
+												{t("sidebar.builtIn")}
 											</Badge>
 										)}
 									</div>
@@ -120,7 +120,7 @@ export default function PluginsPage() {
 									}}
 								>
 									<PlusIcon className="h-4 w-4" />
-									<div className="text-xs">Install New Plugin</div>
+									<div className="text-xs">{t("sidebar.installNewPlugin")}</div>
 								</Button>
 								{hasCustomPlugins && (
 									<Button
@@ -132,7 +132,7 @@ export default function PluginsPage() {
 										data-testid="plugins-sequence-button"
 									>
 										<ListOrdered className="h-4 w-4" />
-										<div className="text-xs">Edit Plugin Sequence</div>
+										<div className="text-xs">{t("sidebar.editPluginSequence")}</div>
 									</Button>
 								)}
 							</div>

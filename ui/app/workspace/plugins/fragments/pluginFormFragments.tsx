@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/codeEditor";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useTranslation } from "react-i18next";
 import { Info, PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { UseFormReturn } from "react-hook-form";
@@ -19,17 +20,14 @@ interface PluginFormFragmentProps {
 }
 
 export function PluginFormFragment({ form, isEditMode = false }: PluginFormFragmentProps) {
+	const { t } = useTranslation("plugins");
 	const [showConfig, setShowConfig] = useState(form.getValues("hasConfig") || false);
 
 	return (
 		<div className="space-y-4">
 			<div className="bg-muted/50 flex items-start gap-2 rounded-md border p-3">
 				<Info className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-				<p className="text-muted-foreground text-sm">
-					{isEditMode
-						? "Update your plugin configuration. Plugin name and path are read-only."
-						: "Install a custom plugin by providing an absolute file path or HTTP URL accessible to Bifrost deployment (.so)."}{" "}
-				</p>
+				<p className="text-muted-foreground text-sm">{isEditMode ? t("form.infoEdit") : t("form.infoInstall")}</p>
 			</div>
 
 			<FormField
@@ -37,9 +35,9 @@ export function PluginFormFragment({ form, isEditMode = false }: PluginFormFragm
 				name="name"
 				render={({ field }) => (
 					<FormItem>
-						<FormLabel>Plugin Name *</FormLabel>
+						<FormLabel>{t("form.nameLabel")}</FormLabel>
 						<FormControl>
-							<Input placeholder="e.g., my-custom-plugin" {...field} disabled={isEditMode} />
+							<Input placeholder={t("form.namePlaceholder")} {...field} disabled={isEditMode} />
 						</FormControl>
 						<FormMessage />
 					</FormItem>
@@ -51,9 +49,9 @@ export function PluginFormFragment({ form, isEditMode = false }: PluginFormFragm
 				name="path"
 				render={({ field }) => (
 					<FormItem>
-						<FormLabel>Plugin Path/URL *</FormLabel>
+						<FormLabel>{t("form.pathLabel")}</FormLabel>
 						<FormControl>
-							<Input placeholder="e.g., /path/to/plugin.so or https://example.com/plugin.so" {...field} disabled={isEditMode} />
+							<Input placeholder={t("form.pathPlaceholder")} {...field} disabled={isEditMode} />
 						</FormControl>
 						<FormMessage />
 					</FormItem>
@@ -75,7 +73,7 @@ export function PluginFormFragment({ form, isEditMode = false }: PluginFormFragm
 					className="w-full"
 				>
 					<PlusIcon className="mr-2 h-4 w-4" />
-					Add Configuration
+					{t("form.addConfiguration")}
 				</Button>
 			) : (
 				<FormField
@@ -84,7 +82,7 @@ export function PluginFormFragment({ form, isEditMode = false }: PluginFormFragm
 					render={({ field }) => (
 						<FormItem>
 							<div className="flex items-center justify-between">
-								<FormLabel>Configuration (JSON)</FormLabel>
+								<FormLabel>{t("form.configLabel")}</FormLabel>
 								<Button
 									type="button"
 									variant="ghost"
@@ -96,7 +94,7 @@ export function PluginFormFragment({ form, isEditMode = false }: PluginFormFragm
 									}}
 									className="h-auto p-1 text-xs"
 								>
-									Remove
+									{t("form.removeConfig")}
 								</Button>
 							</div>
 							<FormControl>
