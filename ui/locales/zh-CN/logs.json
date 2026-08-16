@@ -438,7 +438,7 @@
 			"follow": "跟随",
 			"live": "实时",
 			"pan": "平移",
-			"followDesc": "随时间滚动 — NOW 线保持在 75%",
+			"followDesc": "随时间滚动 — NOW 线保持在 85%",
 			"liveDesc": "实时更新 — NOW 线靠近右侧边缘",
 			"panDesc": "自由探索 — 拖动以平移可见窗口",
 			"refresh": "刷新",

@@ -438,7 +438,7 @@
 			"follow": "Follow",
 			"live": "Live",
 			"pan": "Pan",
-			"followDesc": "Scrolling with time — NOW line stays at 75%",
+			"followDesc": "Scrolling with time — NOW line stays at 85%",
 			"liveDesc": "Live updates — NOW line snaps close to the right edge",
 			"panDesc": "Free exploration — drag to pan through the visible window",
 			"refresh": "Refresh",
