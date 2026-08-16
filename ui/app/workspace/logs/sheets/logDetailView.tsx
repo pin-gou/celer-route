@@ -43,7 +43,7 @@ import { ContentBlock, LogEntry, ResponsesMessage } from "@/lib/types/logs";
 import { useGetUserAgentMappingsQuery } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { downloadAsJson } from "@/lib/utils/browser-download";
-import { formatCompactNumber } from "@/lib/utils/numbers";
+import { formatCompactNumber, formatTokensAdaptive } from "@/lib/utils/numbers";
 import { applyRedactionMapping, hasRedactionMappingEntries } from "@/lib/utils/redaction";
 import { isJson } from "@/lib/utils/validation";
 import { Link } from "@tanstack/react-router";
@@ -944,7 +944,7 @@ export function LogDetailView({
 						mono
 						value={
 							log.token_usage
-								? `${formatCompactNumber(log.token_usage.prompt_tokens ?? 0)} / ${formatCompactNumber(log.token_usage.completion_tokens ?? 0)}`
+								? `${formatTokensAdaptive(log.token_usage.prompt_tokens ?? 0)} / ${formatTokensAdaptive(log.token_usage.completion_tokens ?? 0)}`
 								: "—"
 						}
 						sub={
@@ -952,7 +952,7 @@ export function LogDetailView({
 								? (
 									<>
 										<span>{t("detailView.tokenSubTotal")} </span>
-										<strong>{formatCompactNumber(log.token_usage.total_tokens ?? 0)}</strong>
+										<strong>{formatTokensAdaptive(log.token_usage.total_tokens ?? 0)}</strong>
 										{log.token_usage.completion_tokens_details?.reasoning_tokens
 											? <><span> {t("detailView.tokenSubReasoning")} </span><strong>{formatCompactNumber(log.token_usage.completion_tokens_details.reasoning_tokens)}</strong></>
 											: null}
@@ -1421,9 +1421,9 @@ export function LogDetailView({
 							<div className="space-y-4">
 								<BlockHeader title={t("detailView.tokens")} />
 								<div className="grid w-full grid-cols-3 items-center justify-between gap-4">
-									<LogEntryDetailsView className="w-full" label={t("detailView.inputTokens")} value={log.token_usage?.prompt_tokens || "-"} />
-									<LogEntryDetailsView className="w-full" label={t("detailView.outputTokens")} value={log.token_usage?.completion_tokens || "-"} />
-									<LogEntryDetailsView className="w-full" label={t("detailView.totalTokens")} value={log.token_usage?.total_tokens || "-"} />
+									<LogEntryDetailsView className="w-full" label={t("detailView.inputTokens")} value={log.token_usage?.prompt_tokens != null ? formatTokensAdaptive(log.token_usage.prompt_tokens) : "-"} />
+									<LogEntryDetailsView className="w-full" label={t("detailView.outputTokens")} value={log.token_usage?.completion_tokens != null ? formatTokensAdaptive(log.token_usage.completion_tokens) : "-"} />
+									<LogEntryDetailsView className="w-full" label={t("detailView.totalTokens")} value={log.token_usage?.total_tokens != null ? formatTokensAdaptive(log.token_usage.total_tokens) : "-"} />
 									<LogEntryDetailsView
 										className="w-full"
 										label={t("detailView.cost")}
@@ -1704,9 +1704,9 @@ export function LogDetailView({
 												/>
 											)}
 											{call.judge_model && <LogEntryDetailsView className="w-full" label={t("detailView.judgeModel")} value={call.judge_model} />}
-											<LogEntryDetailsView className="w-full" label={t("detailView.promptTokens")} value={call.prompt_tokens ?? 0} />
-											<LogEntryDetailsView className="w-full" label={t("detailView.completionTokens")} value={call.completion_tokens ?? 0} />
-											<LogEntryDetailsView className="w-full" label={t("detailView.totalTokens")} value={call.total_tokens ?? 0} />
+											<LogEntryDetailsView className="w-full" label={t("detailView.promptTokens")} value={call.prompt_tokens != null ? formatTokensAdaptive(call.prompt_tokens) : 0} />
+											<LogEntryDetailsView className="w-full" label={t("detailView.completionTokens")} value={call.completion_tokens != null ? formatTokensAdaptive(call.completion_tokens) : 0} />
+											<LogEntryDetailsView className="w-full" label={t("detailView.totalTokens")} value={call.total_tokens != null ? formatTokensAdaptive(call.total_tokens) : 0} />
 											{call.reason && <LogEntryDetailsView className="w-full md:col-span-3" label={t("detailView.reason")} value={call.reason} />}
 										</div>
 									))}

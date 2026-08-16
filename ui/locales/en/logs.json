@@ -53,6 +53,8 @@
 		"userSuccessRate": "User Success Rate",
 		"userSuccessRateDesc": "Success rate as perceived by the end user. It includes fallback chains as one request.",
 		"avgLatency": "Avg Latency",
+		"avgLatencyDesc": "Average latency of successful requests",
+		"maxLatency": "max",
 		"totalTokens": "Total Tokens",
 		"totalTokensDesc": "Total tokens used, split into input (prompt) and output (completion) tokens.",
 		"totalCost": "Total Cost",

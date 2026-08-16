@@ -53,6 +53,8 @@
 		"userSuccessRate": "用户成功率",
 		"userSuccessRateDesc": "最终用户感知的成功率。将回退链视为一次请求。",
 		"avgLatency": "平均耗时",
+		"avgLatencyDesc": "成功请求的平均耗时",
+		"maxLatency": "最大",
 		"totalTokens": "总词元数",
 		"totalTokensDesc": "使用的总词元数，分为输入（提示词）和输出（完成）词元。",
 		"totalCost": "总成本",

@@ -138,6 +138,8 @@ type SearchStats struct {
 	UserFacingSuccessRate     float64 `json:"user_facing_success_rate"`                // Percentage of user requests that ultimately succeeded (fallback chains counted as one request)
 	UserFacingTotalRequests   int64   `json:"user_facing_total_requests"`              // Count of root requests (fallback_index = 0) used as denominator for UserFacingSuccessRate
 	AverageLatency            float64 `json:"average_latency"`                         // Average latency in milliseconds
+	MinLatency                float64 `json:"min_latency,omitempty"`                   // Minimum latency in milliseconds across successful requests
+	MaxLatency                float64 `json:"max_latency,omitempty"`                   // Maximum latency in milliseconds across successful requests
 	TotalTokens               int64   `json:"total_tokens"`                            // Total tokens used
 	PromptTokens              int64   `json:"prompt_tokens"`                           // Input tokens used
 	CompletionTokens          int64   `json:"completion_tokens"`                       // Output tokens used

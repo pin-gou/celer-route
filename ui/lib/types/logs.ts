@@ -677,6 +677,8 @@ export interface LogStats {
 	user_facing_success_rate: number;
 	user_facing_total_requests: number;
 	average_latency: number;
+	min_latency?: number;
+	max_latency?: number;
 	total_tokens: number;
 	prompt_tokens: number;
 	completion_tokens: number;

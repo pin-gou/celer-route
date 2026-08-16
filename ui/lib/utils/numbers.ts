@@ -34,6 +34,25 @@ function formatTokenPriceValue(cost: number): string {
 	})}`;
 }
 
+export function formatTokensAdaptive(value: number): string {
+	if (!Number.isFinite(value)) return "0";
+	if (value >= 1_000_000) {
+		const millionValue = value / 1_000_000;
+		return `${millionValue.toLocaleString("en-US", {
+			minimumFractionDigits: 1,
+			maximumFractionDigits: 1,
+		})} 兆`;
+	}
+	if (value >= 1_000) {
+		const thousandValue = value / 1_000;
+		return `${thousandValue.toLocaleString("en-US", {
+			minimumFractionDigits: 1,
+			maximumFractionDigits: 1,
+		})} 千`;
+	}
+	return value.toLocaleString("en-US");
+}
+
 export function formatTokenPriceCompact(cost?: number): string {
 	if (cost === undefined || cost === null) return "—";
 	return formatTokenPriceValue(cost);

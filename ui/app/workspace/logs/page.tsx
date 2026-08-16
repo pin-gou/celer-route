@@ -1,6 +1,7 @@
 import { LogDetailSheet } from "@/app/workspace/logs/sheets/logDetailsSheet";
 import { SessionDetailsSheet } from "@/app/workspace/logs/sheets/sessionDetailsSheet";
 import { createColumns } from "@/app/workspace/logs/views/columns";
+import { formatLatency } from "@/app/workspace/dashboard/utils/chartUtils";
 import { EmptyState } from "@/app/workspace/logs/views/emptyState";
 import { LogsHeaderView } from "@/app/workspace/logs/views/logsHeaderView";
 import { LogsDataTable } from "@/app/workspace/logs/views/logsTable";
@@ -27,7 +28,7 @@ import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import NumberFlow from "@number-flow/react";
 import { useLocation } from "@tanstack/react-router";
-import { AlertCircle, BarChart, CheckCircle, Clock, DollarSign, Hash, Info } from "lucide-react";
+import { AlertCircle, BarChart, CheckCircle, Clock, Hash, Info } from "lucide-react";
 import { parseAsSafeArrayOf, parseAsSafeString } from "@/lib/queryParamsParser";
 import { parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useTranslation } from "react-i18next";
@@ -595,37 +596,38 @@ export default function LogsPage() {
 			{
 				title: t("statCards.avgLatency"),
 				value: (
-					<NumberFlow value={stats?.average_latency ?? 0} format={{ minimumFractionDigits: 2, maximumFractionDigits: 2 }} suffix="ms" />
+					<NumberFlow value={stats?.average_latency ?? 0} format={{ minimumFractionDigits: 0, maximumFractionDigits: 0 }} suffix="ms" />
 				),
 				icon: <Clock className="size-4" />,
+				description: t("statCards.avgLatencyDesc"),
+				subValue: (
+					<>
+						<span>
+							{t("statCards.maxLatency")}: {formatLatency(stats?.max_latency ?? 0)}
+						</span>
+					</>
+				),
 			},
 			{
 				title: t("statCards.totalTokens"),
-				value: <NumberFlow value={stats?.total_tokens ?? 0} format={COMPACT_NUMBER_FORMAT} />,
+				value: <NumberFlow value={(stats?.total_tokens ?? 0) >= 1_000_000 ? (stats?.total_tokens ?? 0) / 1_000_000 : (stats?.total_tokens ?? 0) >= 1_000 ? (stats?.total_tokens ?? 0) / 1_000 : (stats?.total_tokens ?? 0)} format={(stats?.total_tokens ?? 0) >= 1_000 ? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true } : { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }} suffix={(stats?.total_tokens ?? 0) >= 1_000_000 ? " 兆" : (stats?.total_tokens ?? 0) >= 1_000 ? " 千" : ""} />,
 				icon: <Hash className="size-4" />,
 				subValue: (
 					<>
-						<NumberFlow value={stats?.prompt_tokens ?? 0} format={COMPACT_NUMBER_FORMAT} />
-						<span> {t("statCards.in")} </span>
-						<NumberFlow value={stats?.completion_tokens ?? 0} format={COMPACT_NUMBER_FORMAT} />
-						<span> {t("statCards.out")}</span>
+						<span>{t("statCards.in")}：</span>
+						<strong>
+							<NumberFlow value={(stats?.prompt_tokens ?? 0) >= 1_000_000 ? (stats?.prompt_tokens ?? 0) / 1_000_000 : (stats?.prompt_tokens ?? 0) >= 1_000 ? (stats?.prompt_tokens ?? 0) / 1_000 : (stats?.prompt_tokens ?? 0)} format={(stats?.prompt_tokens ?? 0) >= 1_000 ? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true } : { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }} />
+						</strong>
+						<span>{ (stats?.prompt_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.prompt_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
+						<span className="mx-1">·</span>
+						<span>{t("statCards.out")}：</span>
+						<strong>
+							<NumberFlow value={(stats?.completion_tokens ?? 0) >= 1_000_000 ? (stats?.completion_tokens ?? 0) / 1_000_000 : (stats?.completion_tokens ?? 0) >= 1_000 ? (stats?.completion_tokens ?? 0) / 1_000 : (stats?.completion_tokens ?? 0)} format={(stats?.completion_tokens ?? 0) >= 1_000 ? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true } : { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }} />
+						</strong>
+						<span>{ (stats?.completion_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.completion_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
 					</>
 				),
 				description: t("statCards.totalTokensDesc"),
-			},
-			{
-				title: t("statCards.totalCost"),
-				value: (
-					<NumberFlow
-						value={stats?.total_cost ?? 0}
-						format={{
-							...COMPACT_NUMBER_FORMAT,
-							style: "currency",
-							currency: "USD",
-						}}
-					/>
-				),
-				icon: <DollarSign className="size-4" />,
 			},
 		],
 		[t, stats],
@@ -672,7 +674,6 @@ export default function LogsPage() {
 			app: t("column_labels.app"),
 			latency: t("column_labels.latency"),
 			tokens: t("column_labels.tokens"),
-			cost: t("column_labels.cost"),
 			virtual_key: t("column_labels.virtual_key"),
 			routing_rule: t("column_labels.routing_rule"),
 			team: t("column_labels.team"),
@@ -913,7 +914,7 @@ export default function LogsPage() {
 								onResetColumns={resetColumns}
 							/>
 						</div>
-						<div className="grid shrink-0 grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+						<div className="grid shrink-0 grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
 							{statCards.map((card) => (
 								<Card key={card.title} className="py-4 shadow-none">
 									<CardContent

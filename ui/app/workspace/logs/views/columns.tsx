@@ -1,4 +1,3 @@
-import { formatCost } from "@/app/workspace/dashboard/utils/chartUtils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
@@ -16,7 +15,7 @@ import {
 } from "@/lib/constants/logs";
 import { ChatMessageContent, DisplayLogEntry, LogEntry, ResponsesMessageContentBlock } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
-import { formatCompactNumber } from "@/lib/utils/numbers";
+import { formatCompactNumber, formatTokensAdaptive } from "@/lib/utils/numbers";
 import { ColumnDef } from "@tanstack/react-table";
 import { format, formatDistanceToNow } from "date-fns";
 import { enUS, zhCN, type Locale } from "date-fns/locale";
@@ -497,7 +496,7 @@ export const createColumns = (
 				return (
 					<div className="flex flex-col items-start gap-0.5 pl-4 leading-tight">
 						<div className="flex items-center gap-2">
-							<span className="font-mono text-[12px] tabular-nums">{formatCompactNumber(total)}</span>
+							<span className="font-mono text-[12px] tabular-nums">{formatTokensAdaptive(total)}</span>
 							{hasSplit && (
 								<div className="flex h-1.5 w-[64px] overflow-hidden rounded-sm">
 									<div className="bg-blue-400" style={{ width: `${inPct}%` }} />
@@ -507,32 +506,13 @@ export const createColumns = (
 						</div>
 						{hasSplit && (
 							<div className="text-muted-foreground font-mono text-[10.5px] tabular-nums">
-								<span className="text-blue-500">{formatCompactNumber(prompt)}</span>
+								<span className="text-blue-500">{formatTokensAdaptive(prompt)}</span>
 								<span> / </span>
-								<span className="text-violet-500">{formatCompactNumber(completion)}</span>
+								<span className="text-violet-500">{formatTokensAdaptive(completion)}</span>
 							</div>
 						)}
 					</div>
 				);
-			},
-		},
-		{
-			accessorKey: "cost",
-			header: ({ column }) => {
-				const { t } = useTranslation("logs");
-				return (
-					<Button variant="ghost" data-testid="logs-cost-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-						{t("column_labels.cost")}
-						<ArrowUpDown className="ml-2 h-4 w-4" />
-					</Button>
-				);
-			},
-			size: 120,
-			cell: ({ row }) => {
-				if (row.original.cost == null) {
-					return null;
-				}
-				return <div className="pl-4 font-mono text-sm tabular-nums">{formatCost(row.original.cost)}</div>;
 			},
 		},
 	];

@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatTokensAdaptive } from "@/lib/utils/numbers";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import type { ProviderName } from "@/lib/constants/logs";
 import { RequestTypeColors, RequestTypeLabels, Status, StatusBarColors } from "@/lib/constants/logs";
@@ -92,7 +93,7 @@ export function SessionDetailsSheet({
 			},
 			{
 				label: t("sessionSheet.totalTokens"),
-				value: (sessionSummary?.total_tokens || 0).toLocaleString(),
+				value: formatTokensAdaptive(sessionSummary?.total_tokens ?? 0),
 			},
 			{
 				label: t("sessionSheet.started"),

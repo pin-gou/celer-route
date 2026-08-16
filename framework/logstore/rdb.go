@@ -1374,6 +1374,8 @@ func (s *RDBLogStore) GetStats(ctx context.Context, filters SearchFilters) (*Sea
 			CompletedCount   sql.NullInt64   `gorm:"column:completed_count"`
 			SuccessCount     sql.NullInt64   `gorm:"column:success_count"`
 			AvgLatency       sql.NullFloat64 `gorm:"column:avg_latency"`
+			MinLatency       sql.NullFloat64 `gorm:"column:min_latency"`
+			MaxLatency       sql.NullFloat64 `gorm:"column:max_latency"`
 			TotalTokens      sql.NullInt64   `gorm:"column:total_tokens"`
 			PromptTokens     sql.NullInt64   `gorm:"column:prompt_tokens"`
 			CompletionTokens sql.NullInt64   `gorm:"column:completion_tokens"`
@@ -1387,7 +1389,9 @@ func (s *RDBLogStore) GetStats(ctx context.Context, filters SearchFilters) (*Sea
 		if err := statsQuery.Select(`
 			COUNT(*) as completed_count,
 			SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
-			AVG(latency) as avg_latency,
+			AVG(CASE WHEN status = 'success' THEN latency ELSE NULL END) as avg_latency,
+			MIN(CASE WHEN status = 'success' THEN latency ELSE NULL END) as min_latency,
+			MAX(CASE WHEN status = 'success' THEN latency ELSE NULL END) as max_latency,
 			SUM(total_tokens) as total_tokens,
 			SUM(prompt_tokens) as prompt_tokens,
 			SUM(completion_tokens) as completion_tokens,
@@ -1402,6 +1406,12 @@ func (s *RDBLogStore) GetStats(ctx context.Context, filters SearchFilters) (*Sea
 			stats.SuccessRate = float64(result.SuccessCount.Int64) / float64(completedCount) * 100
 			if result.AvgLatency.Valid {
 				stats.AverageLatency = result.AvgLatency.Float64
+			}
+			if result.MinLatency.Valid {
+				stats.MinLatency = result.MinLatency.Float64
+			}
+			if result.MaxLatency.Valid {
+				stats.MaxLatency = result.MaxLatency.Float64
 			}
 			if result.TotalTokens.Valid {
 				stats.TotalTokens = result.TotalTokens.Int64

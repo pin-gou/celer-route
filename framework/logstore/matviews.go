@@ -51,6 +51,11 @@ SELECT
     SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_count,
     SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count,
     COALESCE(AVG(latency), 0) AS avg_latency,
+    COALESCE(MIN(latency), 0) AS min_latency,
+    COALESCE(MAX(latency), 0) AS max_latency,
+    COALESCE(AVG(latency) FILTER (WHERE status = 'success'), 0) AS avg_success_latency,
+    COALESCE(MIN(latency) FILTER (WHERE status = 'success'), 0) AS min_success_latency,
+    COALESCE(MAX(latency) FILTER (WHERE status = 'success'), 0) AS max_success_latency,
     COALESCE(percentile_cont(0.90) WITHIN GROUP (ORDER BY latency), 0) AS p90_latency,
     COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency), 0) AS p95_latency,
     COALESCE(percentile_cont(0.99) WITHIN GROUP (ORDER BY latency), 0) AS p99_latency,
@@ -132,6 +137,11 @@ var mvLogsHourlyRequiredColumns = []string{
 	"error_count",
 	"cancelled_count",
 	"avg_latency",
+	"min_latency",
+	"max_latency",
+	"avg_success_latency",
+	"min_success_latency",
+	"max_success_latency",
 	"p90_latency",
 	"p95_latency",
 	"p99_latency",
@@ -1250,6 +1260,11 @@ type matViewStatsAgg struct {
 	Count             int64   `gorm:"column:total_count"`
 	SuccessCount      int64   `gorm:"column:success_count"`
 	LatencySum        float64 `gorm:"column:latency_sum"`
+	SuccessLatencySum float64 `gorm:"column:success_latency_sum"`
+	MinLatency        float64 `gorm:"column:min_latency"`
+	MaxLatency        float64 `gorm:"column:max_latency"`
+	MinSuccessLatency float64 `gorm:"column:min_success_latency"`
+	MaxSuccessLatency float64 `gorm:"column:max_success_latency"`
 	TotalTokens       int64   `gorm:"column:total_tokens"`
 	PromptTokens      int64   `gorm:"column:prompt_tokens"`
 	CompletionTokens  int64   `gorm:"column:completion_tokens"`
@@ -1260,9 +1275,29 @@ type matViewStatsAgg struct {
 }
 
 func (a *matViewStatsAgg) add(b matViewStatsAgg) {
+	if a.Count == 0 {
+		a.MinLatency = b.MinLatency
+		a.MaxLatency = b.MaxLatency
+		a.MinSuccessLatency = b.MinSuccessLatency
+		a.MaxSuccessLatency = b.MaxSuccessLatency
+	} else if b.Count > 0 {
+		if b.MinLatency < a.MinLatency {
+			a.MinLatency = b.MinLatency
+		}
+		if b.MaxLatency > a.MaxLatency {
+			a.MaxLatency = b.MaxLatency
+		}
+		if b.MinSuccessLatency < a.MinSuccessLatency {
+			a.MinSuccessLatency = b.MinSuccessLatency
+		}
+		if b.MaxSuccessLatency > a.MaxSuccessLatency {
+			a.MaxSuccessLatency = b.MaxSuccessLatency
+		}
+	}
 	a.Count += b.Count
 	a.SuccessCount += b.SuccessCount
 	a.LatencySum += b.LatencySum
+	a.SuccessLatencySum += b.SuccessLatencySum
 	a.TotalTokens += b.TotalTokens
 	a.PromptTokens += b.PromptTokens
 	a.CompletionTokens += b.CompletionTokens
@@ -1283,6 +1318,11 @@ func (s *RDBLogStore) matViewInteriorStatsAgg(ctx context.Context, dimFilters Se
 		COALESCE(SUM(count), 0) AS total_count,
 		COALESCE(SUM(success_count), 0) AS success_count,
 		COALESCE(SUM(avg_latency * count), 0) AS latency_sum,
+		COALESCE(SUM(avg_success_latency * success_count), 0) AS success_latency_sum,
+		COALESCE(MIN(min_latency), 0) AS min_latency,
+		COALESCE(MAX(max_latency), 0) AS max_latency,
+		COALESCE(MIN(min_success_latency), 0) AS min_success_latency,
+		COALESCE(MAX(max_success_latency), 0) AS max_success_latency,
 		COALESCE(SUM(total_tokens), 0) AS total_tokens,
 		COALESCE(SUM(total_prompt_tokens), 0) AS prompt_tokens,
 		COALESCE(SUM(total_completion_tokens), 0) AS completion_tokens,
@@ -1310,6 +1350,11 @@ func (s *RDBLogStore) rawTerminalStatsAgg(ctx context.Context, dimFilters Search
 		COUNT(*) AS total_count,
 		COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) AS success_count,
 		COALESCE(SUM(latency), 0) AS latency_sum,
+		COALESCE(SUM(latency) FILTER (WHERE status = 'success'), 0) AS success_latency_sum,
+		COALESCE(MIN(latency), 0) AS min_latency,
+		COALESCE(MAX(latency), 0) AS max_latency,
+		COALESCE(MIN(latency) FILTER (WHERE status = 'success'), 0) AS min_success_latency,
+		COALESCE(MAX(latency) FILTER (WHERE status = 'success'), 0) AS max_success_latency,
 		COALESCE(SUM(total_tokens), 0) AS total_tokens,
 		COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
 		COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
@@ -1369,10 +1414,13 @@ func (s *RDBLogStore) getStatsFromMatView(ctx context.Context, filters SearchFil
 	}
 
 	completed := agg.Count
+	var successCount = agg.SuccessCount
 	var successRate, avgLatency float64
 	if completed > 0 {
-		successRate = float64(agg.SuccessCount) / float64(completed) * 100
-		avgLatency = agg.LatencySum / float64(completed)
+		successRate = float64(successCount) / float64(completed) * 100
+	}
+	if successCount > 0 {
+		avgLatency = agg.SuccessLatencySum / float64(successCount)
 	}
 
 	// User-facing success rate requires per-request fallback chain data which is not
@@ -1386,6 +1434,8 @@ func (s *RDBLogStore) getStatsFromMatView(ctx context.Context, filters SearchFil
 		UserFacingSuccessRate:     successRate,
 		UserFacingTotalRequests:   completed, // matview approximation; no per-chain data available
 		AverageLatency:            avgLatency,
+		MinLatency:                agg.MinSuccessLatency,
+		MaxLatency:                agg.MaxSuccessLatency,
 		TotalTokens:               agg.TotalTokens,
 		PromptTokens:              agg.PromptTokens,
 		CompletionTokens:          agg.CompletionTokens,
