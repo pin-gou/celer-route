@@ -25,6 +25,7 @@
 		"complexityRouter": "Complexity Router",
 		"pricingOverrides": "Pricing Overrides",
 		"modelSettings": "Model Settings",
+		"routing": "Routing",
 		"mcpCatalog": "MCP Catalog",
 		"mcpLibrary": "MCP Library",
 		"authSessions": "Auth Sessions",

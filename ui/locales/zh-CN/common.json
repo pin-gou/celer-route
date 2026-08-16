@@ -25,6 +25,7 @@
 		"complexityRouter": "复杂度路由",
 		"pricingOverrides": "定价覆盖",
 		"modelSettings": "模型设置",
+		"routing": "路由",
 		"mcpCatalog": "MCP 目录",
 		"mcpLibrary": "MCP 库",
 		"authSessions": "认证会话",

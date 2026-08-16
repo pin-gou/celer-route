@@ -584,13 +584,6 @@ export default function AppSidebar() {
 				hasAccess: true,
 				subItems: [
 					{
-						title: t("nav.modelCatalog"),
-						url: "/workspace/model-catalog",
-						icon: LayoutGrid,
-						description: "Overview of providers, keys, and usage",
-						hasAccess: hasModelProvidersAccess,
-					},
-					{
 						title: t("nav.modelProviders"),
 						url: "/workspace/providers",
 						icon: Boxes,
@@ -598,12 +591,28 @@ export default function AppSidebar() {
 						hasAccess: hasModelProvidersAccess,
 					},
 					{
-						title: t("nav.budgetsAndLimits"),
-						url: "/workspace/model-limits",
-						icon: Wallet,
-						description: "Budgets and rate limits",
-						hasAccess: false, // hidden
+						title: t("nav.modelCatalog"),
+						url: "/workspace/model-catalog",
+						icon: LayoutGrid,
+						description: "Overview of providers, keys, and usage",
+						hasAccess: hasModelProvidersAccess,
 					},
+					{
+						title: t("nav.modelSettings"),
+						url: "/workspace/custom-pricing",
+						icon: Settings,
+						description: "Model and routing configuration",
+						hasAccess: hasSettingsAccess,
+					},
+				],
+			},
+			{
+				title: t("nav.routing"),
+				url: "/workspace/routing-rules",
+				icon: Network,
+				description: "Route configuration",
+				hasAccess: true,
+				subItems: [
 					{
 						title: t("nav.routingRules"),
 						url: "/workspace/routing-rules",
@@ -617,20 +626,6 @@ export default function AppSidebar() {
 						icon: GitCompareArrows,
 						description: "Complexity tier routing",
 						hasAccess: hasRoutingRulesAccess,
-					},
-					{
-						title: t("nav.pricingOverrides"),
-						url: "/workspace/custom-pricing/overrides",
-						icon: SlidersHorizontal,
-						description: "Scoped pricing overrides",
-						hasAccess: false, // hidden
-					},
-					{
-						title: t("nav.modelSettings"),
-						url: "/workspace/custom-pricing",
-						icon: Settings,
-						description: "Model and routing configuration",
-						hasAccess: hasSettingsAccess,
 					},
 				],
 			},
