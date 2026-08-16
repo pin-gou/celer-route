@@ -1,8 +1,6 @@
 .github/ @maximhq/bifrost-admin
 .claude/ @maximhq/bifrost-admin
-.nix/ @maximhq/bifrost-admin
 Makefile @maximhq/bifrost-admin
-flake.nix @maximhq/bifrost-admin
 tests/scripts/ @maximhq/bifrost-admin
 *.sh @maximhq/bifrost-admin
 terraform/ @maximhq/bifrost-admin

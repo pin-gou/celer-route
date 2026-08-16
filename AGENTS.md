@@ -237,18 +237,11 @@ bifrost/
 │   ├── plugins/                   # Plugin examples
 │   └── webhooks/                  # Webhook examples
 │
-├── nix/                           # Nix flake modules
-│   ├── devshells/                 # Development shells
-│   ├── modules/                   # NixOS modules
-│   └── packages/                  # Nix packages
-│
 ├── scripts/                       # Utility scripts
 │   └── realtime-test/             # Realtime test scripts
 │
 ├── community/                     # Community resources
 │   └── mcp-library/               # MCP server library
-│
-├── recipes/                       # Deployment recipes (ECS, Fly, k8s)
 │
 ├── cmd/                           # Auxiliary commands
 │   └── e2eseed/                   # E2E seed data command

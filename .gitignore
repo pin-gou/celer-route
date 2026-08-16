@@ -70,7 +70,6 @@ settings.local.json
 
 # Nix specific
 .direnv
-.nix-store
 
 # MCP servers
 examples/mcps/**/bin/
