@@ -60,22 +60,22 @@ environments:
       timeout_seconds: 30
       description: 探测 local 环境各角色健康状态与端口可用性，输出 env-description.yaml
     roles:
-    - name: bifrost-api
+    - name: pg-gateway-api
       instances:
-      - name: bifrost-api-1
+      - name: pg-gateway-api-1
         host: localhost
         port: 9080
         description: pg-gateway 实例端口
       actions:
         start:
           host: localhost
-          script: .pg/hooks/bifrost-api-start.sh
+          script: .pg/hooks/pg-gateway-api-start.sh
         stop:
           host: localhost
-          script: .pg/hooks/bifrost-api-stop.sh
+          script: .pg/hooks/pg-gateway-api-stop.sh
         health_check:
           host: localhost
-          script: .pg/hooks/bifrost-api-health-check.sh
+          script: .pg/hooks/pg-gateway-api-health-check.sh
     - name: ui-dev
       instances:
       - name: ui-dev-1

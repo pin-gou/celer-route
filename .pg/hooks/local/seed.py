@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-从 fixature 目录读取 fixture JSON，通过 bifrost-api 的 HTTP API 写入数据。
+从 fixature 目录读取 fixture JSON，通过 pg-gateway-api 的 HTTP API 写入数据。
 用法: seed.py <fixature_dir> <port> [host]
 """
 import json
@@ -227,10 +227,10 @@ def main():
             break
         time.sleep(1)
     else:
-        print("ERROR: bifrost-api 无法连接")
+        print("ERROR: pg-gateway-api 无法连接")
         sys.exit(1)
 
-    print("bifrost-api 已连接")
+    print("pg-gateway-api 已连接")
 
     # 2. Provider
     print("2. 创建 provider...")

@@ -30,7 +30,7 @@ described_for:
 environments:
   local:
     business_systems:
-      - name: bifrost-api
+      - name: pg-gateway-api
         type: rest-api
         category: upstream
         description: "pg-gateway AI 网关 HTTP API。prepare_env 阶段启动后通过 fixture 数据种子化，然后关闭。数据持久化在 data 目录"
@@ -86,7 +86,7 @@ environments:
     data_resources:
       - name: config-db
         type: db-table
-        owner: bifrost-api
+        owner: pg-gateway-api
         description: "SQLite 配置数据库，包含 providers、keys、routing_rules、model_configs、plugins 等表"
         state:
           status: seeded
@@ -101,7 +101,7 @@ environments:
 
       - name: logs-db
         type: db-table
-        owner: bifrost-api
+        owner: pg-gateway-api
         description: "SQLite 日志数据库，存储请求/响应日志"
         state:
           status: empty
@@ -230,7 +230,7 @@ environments:
           host: localhost
           ports:
             - port: 9080
-              role: bifrost-api
+              role: pg-gateway-api
               description: "pg-gateway HTTP API 端口（prepare_env 阶段使用后关闭）"
             - port: 3008
               role: ui-dev
@@ -243,13 +243,13 @@ environments:
 
     relations:
       - from: config-db
-        to: bifrost-api
+        to: pg-gateway-api
         type: owns
         criticality: required
         description: "pg-gateway 读取 config.db 获取配置"
 
       - from: logs-db
-        to: bifrost-api
+        to: pg-gateway-api
         type: owns
         criticality: required
         description: "pg-gateway 写入 logs.db 存储日志"
@@ -303,7 +303,7 @@ environments:
         description: "ui-dev 通过 localhost:3008 暴露 Vite 开发服务器"
 
       - from: ui-dev
-        to: bifrost-api
+        to: pg-gateway-api
         type: consumes
         criticality: required
         description: "ui-dev 通过 http://localhost:9080 调 pg-gateway REST API 加载数据"

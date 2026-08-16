@@ -13,7 +13,7 @@ fi
 
 pkill -f 'pg-gateway-http' 2>/dev/null || true
 pkill -f 'air' 2>/dev/null || true
-pg_stop_bg "$PID_DIR/bifrost-api.pid" "bifrost-api" 2>&1 || true
+pg_stop_bg "$PID_DIR/pg-gateway-api.pid" "pg-gateway-api" 2>&1 || true
 
 pg_exit --status=pass --duration=$(( $(date +%s) - $(date +%s) )) \
         --metadata="role=\"${PG_ROLE:-}\" instance=\"${PG_INSTANCE_NAME:-}\""

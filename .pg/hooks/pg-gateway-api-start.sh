@@ -76,23 +76,23 @@ fi
 # 清理占用端口
 if check_port "$PORT"; then
     echo "端口 $PORT 已被占用，清理中..."
-    kill_port "$PORT" "bifrost-api"
+    kill_port "$PORT" "pg-gateway-api"
     sleep 1
 fi
 
-if ! pid=$(pg_start_bg "$LOG_DIR/bifrost-api.log" "$PID_DIR/bifrost-api.pid" \
+if ! pid=$(pg_start_bg "$LOG_DIR/pg-gateway-api.log" "$PID_DIR/pg-gateway-api.pid" \
         "BIFROST_PORT=$PORT" "BIFROST_UI_DEV=true" "PATH=$PATH" -- \
         "$BIFROST_BIN" -app-dir "$DATA_DIR" -port "$PORT" -host "$HOST" -log-level info -log-style pretty); then
     pg_fail --category=service_start_failure --code=PG-E-0800 \
-        --message="启动 bifrost-api 失败" \
-        --hint="Check $LOG_DIR/bifrost-api.log" \
+        --message="启动 pg-gateway-api 失败" \
+        --hint="Check $LOG_DIR/pg-gateway-api.log" \
         --agent-recoverable=true
 fi
 
-if ! wait_for_port_with_monitor "$PORT" "bifrost-api" 120 \
-        "$PID_DIR/bifrost-api.pid" "$LOG_DIR/bifrost-api.log"; then
+if ! wait_for_port_with_monitor "$PORT" "pg-gateway-api" 120 \
+        "$PID_DIR/pg-gateway-api.pid" "$LOG_DIR/pg-gateway-api.log"; then
     pg_fail --category=service_start_timeout --code=PG-E-0801 \
-        --message="bifrost-api 启动超时 (120s)" \
+        --message="pg-gateway-api 启动超时 (120s)" \
         --agent-recoverable=true
 fi
 

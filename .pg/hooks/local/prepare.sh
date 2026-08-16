@@ -82,7 +82,7 @@ if ! pid=$(pg_start_bg "$LOG_DIR/bifrost-prepare.log" "$PID_DIR/bifrost-prepare.
         "BIFROST_PORT=$PORT" -- \
         "$BIFROST_BIN" -app-dir "$DATA_DIR" -port "$PORT" -host "$HOST" -log-level warn -log-style pretty); then
     pg_fail --category=service_start_failure --code=PG-E-0800 \
-        --message="启动 bifrost-api 失败" \
+        --message="启动 pg-gateway-api 失败" \
         --hint="Check $LOG_DIR/bifrost-prepare.log" \
         --agent-recoverable=true
 fi
@@ -93,7 +93,7 @@ if ! wait_for_port_with_monitor "$PORT" "bifrost-prepare" 120 \
         "$PID_DIR/bifrost-prepare.pid" "$LOG_DIR/bifrost-prepare.log"; then
     pg_stop_bg "$PID_DIR/bifrost-prepare.pid" "bifrost-prepare" 2>&1 || true
     pg_fail --category=service_start_timeout --code=PG-E-0801 \
-        --message="bifrost-api 启动超时 (120s)" \
+        --message="pg-gateway-api 启动超时 (120s)" \
         --hint="Check $LOG_DIR/bifrost-prepare.log" \
         --agent-recoverable=true
 fi
