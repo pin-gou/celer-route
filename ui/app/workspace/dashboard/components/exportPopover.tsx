@@ -70,7 +70,7 @@ export function ExportPopover({ getData, activeTab, onPreloadData, onPdfExport, 
 
 				await generatePdf(sections, fileName(scope), {
 					branding: {
-						logoSrc: "/bifrost-logo.webp",
+						logoSrc: "/pg-gateway-logo.webp",
 						text: t("export.poweredBy"),
 					},
 				});
