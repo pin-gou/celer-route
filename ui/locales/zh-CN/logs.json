@@ -463,6 +463,21 @@
 			"warn": "警告",
 			"error": "错误",
 			"ms": "毫秒"
+		},
+		"statCards": {
+			"totalRequests": "请求总数",
+			"successRate": "成功率",
+			"successRateDesc": "视图内请求的成功率，每次回退计为一次独立尝试。",
+			"avgLatency": "平均延迟",
+			"avgLatencyDesc": "成功请求的平均延迟",
+			"maxLatency": "最慢",
+			"totalTokens": "总词元数",
+			"totalTokensDesc": "视图内使用的总词元数，分为输入和输出。",
+			"in": "输入",
+			"out": "输出",
+			"errors": "错误",
+			"cancelled": "已取消",
+			"activeRequests": "活跃请求"
 		}
 	},
 	"toast": {

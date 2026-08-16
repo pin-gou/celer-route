@@ -14,6 +14,11 @@ import { LogDetailSheet } from "@/app/workspace/logs/sheets/logDetailsSheet";
 import { useLogsTimelineSSE, type ActiveLogEntry } from "@/hooks/useLogsTimelineSSE";
 import { useQueryStates, parseAsString } from "nuqs";
 import { useNavigate } from "@tanstack/react-router";
+import { summarizeTimelineStats } from "./views/timelineStats";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import NumberFlow from "@number-flow/react";
+import { Activity, BarChart, CheckCircle, Clock, Hash, Info, XCircle } from "lucide-react";
 
 // Visible window (ms) at zoom = 1. The total rendered span is VMS / zoom.
 // Matches OmniRoute's 5-minute default — tight enough to see individual bars,
@@ -200,6 +205,134 @@ export default function TimelinePage() {
 	}, [logsData, extraLogs]);
 	const totalLogs = logs.length;
 
+	// Stat cards: total requests comes from the backend's exact count over the
+	// fetch window (the list endpoint only stats-populates total_requests); the
+	// rest is aggregated client-side over the merged log list. Inputs (logs,
+	// logsData.stats, activeLogs) are stable during the rAF clock animation, so
+	// the summary does not recompute every frame.
+	const timelineStats = useMemo(
+		() => summarizeTimelineStats(logs, logsData?.stats?.total_requests || logs.length, activeLogs.length),
+		[logs, logsData?.stats?.total_requests, activeLogs.length],
+	);
+
+	const statCards = useMemo(
+		() => [
+			{
+				key: "active-requests",
+				title: t("timeline.statCards.activeRequests"),
+				value: <NumberFlow value={timelineStats.activeCount} format={{ notation: "compact" }} />,
+				icon: <Activity className="size-4" />,
+			},
+			{
+				key: "total-requests",
+				title: t("timeline.statCards.totalRequests"),
+				value: <NumberFlow value={timelineStats.totalRequests} format={{ notation: "compact" }} />,
+				icon: <BarChart className="size-4" />,
+			},
+			{
+				key: "success-rate",
+				title: t("timeline.statCards.successRate"),
+				value: <NumberFlow value={timelineStats.successRate} format={{ minimumFractionDigits: 1, maximumFractionDigits: 1 }} suffix="%" />,
+				icon: <CheckCircle className="size-4" />,
+				description: t("timeline.statCards.successRateDesc"),
+				subValue: (
+					<span className="text-muted-foreground">
+						{t("timeline.statCards.errors")}: <strong className="text-foreground font-bold">{timelineStats.errorCount}</strong> ·{" "}
+						{t("timeline.statCards.cancelled")}: <strong className="text-foreground font-bold">{timelineStats.cancelledCount}</strong>
+					</span>
+				),
+			},
+			{
+				key: "avg-latency",
+				title: t("timeline.statCards.avgLatency"),
+				value: <NumberFlow value={timelineStats.avgLatency} format={{ minimumFractionDigits: 0, maximumFractionDigits: 0 }} suffix="ms" />,
+				icon: <Clock className="size-4" />,
+				description: t("timeline.statCards.avgLatencyDesc"),
+				subValue: (
+					<span className="text-muted-foreground">
+						{t("timeline.statCards.maxLatency")}:{" "}
+						<strong className="text-foreground font-bold">
+							<NumberFlow
+								value={timelineStats.maxLatency >= 1000 ? timelineStats.maxLatency / 1000 : timelineStats.maxLatency}
+								format={
+									timelineStats.maxLatency >= 1000
+										? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+										: { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+								}
+							/>
+						</strong>
+						<span className="font-normal">{timelineStats.maxLatency >= 1000 ? "s" : "ms"}</span>
+					</span>
+				),
+			},
+			{
+				key: "total-tokens",
+				title: t("timeline.statCards.totalTokens"),
+				value: (
+					<NumberFlow
+						value={
+							timelineStats.totalTokens >= 1_000_000
+								? timelineStats.totalTokens / 1_000_000
+								: timelineStats.totalTokens >= 1_000
+									? timelineStats.totalTokens / 1_000
+									: timelineStats.totalTokens
+						}
+						format={
+							timelineStats.totalTokens >= 1_000
+								? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
+								: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
+						}
+						suffix={timelineStats.totalTokens >= 1_000_000 ? "M" : timelineStats.totalTokens >= 1_000 ? "K" : ""}
+					/>
+				),
+				icon: <Hash className="size-4" />,
+				description: t("timeline.statCards.totalTokensDesc"),
+				subValue: (
+					<div className="flex items-center gap-1">
+						<span className="text-muted-foreground">{t("timeline.statCards.in")}:</span>
+						<strong>
+							<NumberFlow
+								value={
+									timelineStats.promptTokens >= 1_000_000
+										? timelineStats.promptTokens / 1_000_000
+										: timelineStats.promptTokens >= 1_000
+											? timelineStats.promptTokens / 1_000
+											: timelineStats.promptTokens
+								}
+								format={
+									timelineStats.promptTokens >= 1_000
+										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
+										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
+								}
+							/>
+						</strong>
+						<span>{timelineStats.promptTokens >= 1_000_000 ? "M" : timelineStats.promptTokens >= 1_000 ? "K" : ""}</span>
+						<span className="text-muted-foreground mx-1">·</span>
+						<span className="text-muted-foreground">{t("timeline.statCards.out")}:</span>
+						<strong>
+							<NumberFlow
+								value={
+									timelineStats.completionTokens >= 1_000_000
+										? timelineStats.completionTokens / 1_000_000
+										: timelineStats.completionTokens >= 1_000
+											? timelineStats.completionTokens / 1_000
+											: timelineStats.completionTokens
+								}
+								format={
+									timelineStats.completionTokens >= 1_000
+										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
+										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
+								}
+							/>
+						</strong>
+						<span>{timelineStats.completionTokens >= 1_000_000 ? "M" : timelineStats.completionTokens >= 1_000 ? "K" : ""}</span>
+					</div>
+				),
+			},
+		],
+		[t, timelineStats],
+	);
+
 	const selectedLog = useMemo(
 		() => (urlState.selected_log ? (logs.find((l) => l.id === urlState.selected_log) ?? null) : null),
 		[urlState.selected_log, logs],
@@ -268,16 +401,31 @@ export default function TimelinePage() {
 				totalCount={totalLogs}
 			/>
 
-			{/* Active connections indicator */}
-			<div
-				data-testid="timeline-active-count"
-				className="flex items-center gap-2 rounded-sm border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
-			>
-				<span className="relative flex h-2 w-2">
-					<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-					<span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
-				</span>
-				{activeLogs.length} {t(activeLogs.length === 1 ? "timeline.page.activeRequest" : "timeline.page.activeRequests")}
+			{/* Stat cards */}
+			<div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+				{statCards.map((card) => (
+					<Card key={card.key} className="py-3 shadow-none" data-testid={`timeline-metric-${card.key}`}>
+						<CardContent className="flex items-center justify-between px-3 transition-opacity duration-200">
+							<div className="w-full min-w-0">
+								<div className="text-muted-foreground flex items-center gap-1 text-xs">
+									<span className="truncate">{card.title}</span>
+									{"description" in card && card.description && (
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<button type="button" aria-label={`${card.title} info`} className="inline-flex items-center">
+													<Info className="size-3 cursor-help" />
+												</button>
+											</TooltipTrigger>
+											<TooltipContent className="max-w-72 text-left text-xs text-wrap">{card.description}</TooltipContent>
+										</Tooltip>
+									)}
+								</div>
+								<div className="truncate font-mono text-lg font-medium sm:text-xl">{card.value}</div>
+								{"subValue" in card && card.subValue && <div className="truncate font-mono text-[10px] tabular-nums">{card.subValue}</div>}
+							</div>
+						</CardContent>
+					</Card>
+				))}
 			</div>
 
 			{/* Loading indicator */}

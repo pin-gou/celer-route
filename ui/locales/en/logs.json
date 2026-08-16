@@ -463,6 +463,21 @@
 			"warn": "warn",
 			"error": "error",
 			"ms": "ms"
+		},
+		"statCards": {
+			"totalRequests": "Total Requests",
+			"successRate": "Success Rate",
+			"successRateDesc": "Success rate of requests in view. Each fallback counts as a separate attempt.",
+			"avgLatency": "Avg Latency",
+			"avgLatencyDesc": "Average latency of successful requests",
+			"maxLatency": "max",
+			"totalTokens": "Total Tokens",
+			"totalTokensDesc": "Total tokens used in view, split into input and output tokens.",
+			"in": "in",
+			"out": "out",
+			"errors": "Errors",
+			"cancelled": "Cancelled",
+			"activeRequests": "Active Requests"
 		}
 	},
 	"toast": {
