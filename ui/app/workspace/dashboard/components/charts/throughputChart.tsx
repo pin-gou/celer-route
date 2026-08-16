@@ -1,5 +1,6 @@
 import type { ThroughputHistogramResponse } from "@/lib/types/logs";
 import { memo, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatFullTimestamp, formatTimestamp, formatTokensPerSecond, THROUGHPUT_COLOR } from "../../utils/chartUtils";
 import { ChartErrorBoundary } from "./chartErrorBoundary";
@@ -12,7 +13,7 @@ interface ThroughputChartProps {
 	endTime: number;
 }
 
-function CustomTooltip({ active, payload }: any) {
+function CustomTooltip({ active, payload, t }: any) {
 	if (!active || !payload || !payload.length) return null;
 
 	const data = payload[0]?.payload;
@@ -25,16 +26,16 @@ function CustomTooltip({ active, payload }: any) {
 				<div className="flex items-center justify-between gap-4">
 					<span className="flex items-center gap-1.5">
 						<span className="h-2 w-2 rounded-full" style={{ backgroundColor: THROUGHPUT_COLOR }} />
-						<span className="text-zinc-600 dark:text-zinc-400">Throughput</span>
+						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.throughput")}</span>
 					</span>
 					<span className="font-medium">{formatTokensPerSecond(data.tokens_per_second)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
-					<span className="text-zinc-600 dark:text-zinc-400">Completion tokens</span>
+					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.completionTokens")}</span>
 					<span className="font-medium">{data.total_completion_tokens.toLocaleString()}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-1 dark:border-zinc-700">
-					<span className="text-zinc-600 dark:text-zinc-400">Requests</span>
+					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.requests")}</span>
 					<span className="font-medium">{data.total_requests.toLocaleString()}</span>
 				</div>
 			</div>
@@ -43,6 +44,7 @@ function CustomTooltip({ active, payload }: any) {
 }
 
 function ThroughputChartImpl({ data, chartType, startTime, endTime }: ThroughputChartProps) {
+	const { t } = useTranslation("dashboard");
 	const chartData = useMemo(() => {
 		if (!data?.buckets || !data.bucket_size_seconds) {
 			return [];
@@ -56,7 +58,7 @@ function ThroughputChartImpl({ data, chartType, startTime, endTime }: Throughput
 	}, [data]);
 
 	if (!data?.buckets || chartData.length === 0) {
-		return <div className="text-muted-foreground flex h-full items-center justify-center text-sm">No data available</div>;
+		return <div className="text-muted-foreground flex h-full items-center justify-center text-sm">{t("empty.noData")}</div>;
 	}
 
 	const commonProps = {
@@ -89,7 +91,7 @@ function ThroughputChartImpl({ data, chartType, startTime, endTime }: Throughput
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>
-						<Tooltip content={<CustomTooltip />} cursor={{ fill: "#8c8c8f", fillOpacity: 0.15 }} />
+						<Tooltip content={<CustomTooltip t={t} />} cursor={{ fill: "#8c8c8f", fillOpacity: 0.15 }} />
 						<Bar
 							isAnimationActive={false}
 							dataKey="tokens_per_second"
@@ -121,7 +123,7 @@ function ThroughputChartImpl({ data, chartType, startTime, endTime }: Throughput
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>
-						<Tooltip content={<CustomTooltip />} cursor={{ fill: "#8c8c8f", fillOpacity: 0.15 }} />
+						<Tooltip content={<CustomTooltip t={t} />} cursor={{ fill: "#8c8c8f", fillOpacity: 0.15 }} />
 						<Area
 							isAnimationActive={false}
 							type="monotone"

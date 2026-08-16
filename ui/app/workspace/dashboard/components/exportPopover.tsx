@@ -13,7 +13,7 @@ import { buildCSV, downloadCSV } from "@/lib/utils/csv";
 import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { type DashboardData, type DashboardTab, type ExportTab, getCSVSections, getExportTabLabel } from "../utils/exportUtils";
+import { type DashboardData, type DashboardTab, type ExportTab, getCSVSections } from "../utils/exportUtils";
 
 interface ExportPopoverProps {
 	getData: () => DashboardData;
@@ -82,7 +82,8 @@ export function ExportPopover({ getData, activeTab, onPreloadData, onPdfExport, 
 		[onPdfExport, onExportDone, fileName],
 	);
 
-	const activeTabLabel = getExportTabLabel(activeTab);
+	const tabKey = activeTab === "overview" ? "overview" : activeTab === "provider-usage" ? "providerUsage" : activeTab === "rankings" ? "modelRankings" : activeTab === "virtual-key-rankings" ? "virtualKeyRankings" : "appRankings";
+	const activeTabLabel = t("tabs." + tabKey);
 
 	return (
 		<DropdownMenu>

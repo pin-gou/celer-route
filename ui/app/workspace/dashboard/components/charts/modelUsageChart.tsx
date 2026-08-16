@@ -1,6 +1,7 @@
 import type { ModelHistogramResponse } from "@/lib/types/logs";
 import { formatCompactNumber } from "@/lib/utils/numbers";
 import { memo, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
 	CHART_COLORS,
@@ -28,7 +29,7 @@ interface ModelUsageChartProps {
 	selectedModel: string;
 }
 
-function CustomTooltip({ active, payload, selectedModel, displayModels }: any) {
+function CustomTooltip({ active, payload, selectedModel, displayModels, t }: any) {
 	if (!active || !payload || !payload.length) return null;
 
 	const data = payload[0]?.payload;
@@ -62,7 +63,7 @@ function CustomTooltip({ active, payload, selectedModel, displayModels }: any) {
 						<div className="flex items-center justify-between gap-4">
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full bg-emerald-500" />
-								<span className="text-zinc-600 dark:text-zinc-400">Success</span>
+								<span className="text-zinc-600 dark:text-zinc-400">{t("charts.success")}</span>
 							</span>
 							<span className="font-medium text-emerald-600 dark:text-emerald-400">
 								{(data.by_model?.[selectedModel]?.success || 0).toLocaleString()}
@@ -71,7 +72,7 @@ function CustomTooltip({ active, payload, selectedModel, displayModels }: any) {
 						<div className="flex items-center justify-between gap-4">
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full bg-red-500" />
-								<span className="text-zinc-600 dark:text-zinc-400">Error</span>
+								<span className="text-zinc-600 dark:text-zinc-400">{t("charts.error")}</span>
 							</span>
 							<span className="font-medium text-red-600 dark:text-red-400">
 								{(data.by_model?.[selectedModel]?.error || 0).toLocaleString()}
@@ -80,7 +81,7 @@ function CustomTooltip({ active, payload, selectedModel, displayModels }: any) {
 						<div className="flex items-center justify-between gap-4">
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.cancelled }} />
-								<span className="text-zinc-600 dark:text-zinc-400">Cancelled</span>
+								<span className="text-zinc-600 dark:text-zinc-400">{t("charts.cancelled")}</span>
 							</span>
 							<span className="font-medium text-zinc-600 dark:text-zinc-400">
 								{(data.by_model?.[selectedModel]?.cancelled || 0).toLocaleString()}
@@ -94,6 +95,7 @@ function CustomTooltip({ active, payload, selectedModel, displayModels }: any) {
 }
 
 function ModelUsageChartImpl({ data, chartType, startTime, endTime, selectedModel }: ModelUsageChartProps) {
+	const { t } = useTranslation("dashboard");
 	const { chartData, displayModels } = useMemo(() => {
 		if (!data?.buckets || !data.bucket_size_seconds) {
 			return { chartData: [], displayModels: [] };
@@ -145,7 +147,7 @@ function ModelUsageChartImpl({ data, chartType, startTime, endTime, selectedMode
 	}, [data, selectedModel]);
 
 	if (!data?.buckets || chartData.length === 0) {
-		return <div className="text-muted-foreground flex h-full items-center justify-center text-sm">No data available</div>;
+		return <div className="text-muted-foreground flex h-full items-center justify-center text-sm">{t("empty.noData")}</div>;
 	}
 
 	const commonProps = {
@@ -179,7 +181,7 @@ function ModelUsageChartImpl({ data, chartType, startTime, endTime, selectedMode
 							allowDataOverflow={false}
 						/>
 						<Tooltip
-							content={<CustomTooltip selectedModel={selectedModel} displayModels={displayModels} />}
+							content={<CustomTooltip selectedModel={selectedModel} displayModels={displayModels} t={t} />}
 							cursor={{ fill: "#8c8c8f", fillOpacity: 0.15 }}
 						/>
 						{selectedModel === "all" ? (
@@ -250,7 +252,7 @@ function ModelUsageChartImpl({ data, chartType, startTime, endTime, selectedMode
 							allowDataOverflow={false}
 						/>
 						<Tooltip
-							content={<CustomTooltip selectedModel={selectedModel} displayModels={displayModels} />}
+							content={<CustomTooltip selectedModel={selectedModel} displayModels={displayModels} t={t} />}
 							cursor={{ fill: "#8c8c8f", fillOpacity: 0.15 }}
 						/>
 						{selectedModel === "all" ? (

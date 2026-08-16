@@ -10,7 +10,6 @@ import { getRangeForPeriod, getTimePeriods } from "@/lib/utils/timeRange";
 import { useLocation } from "@tanstack/react-router";
 import { parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { type ChartType } from "./components/charts/chartTypeToggle";
 import { ExportPopover } from "./components/exportPopover";
 import { type DimensionRankingsTabViewHandle, DimensionRankingsTabView } from "./components/tabViews/dimensionRankingsTabView";
@@ -18,6 +17,7 @@ import { type ModelRankingsTabViewHandle, ModelRankingsTabView } from "./compone
 import { type OverviewTabViewHandle, OverviewTabView } from "./components/tabViews/overviewTabView";
 import { type ProviderUsageTabViewHandle, ProviderUsageTabView } from "./components/tabViews/providerUsageTabView";
 import { type DashboardData, type DashboardTab, type ExportTab, DASHBOARD_EXPORT_TABS } from "./utils/exportUtils";
+import { useTranslation } from "react-i18next";
 
 const toChartType = (value: string): ChartType => (value === "line" ? "line" : "bar");
 
@@ -31,6 +31,11 @@ const nextFrames = () =>
 
 export default function DashboardPage() {
 	const { t } = useTranslation("dashboard");
+
+	const tabLabel = (tab: DashboardTab): string => {
+		const key = tab === "overview" ? "overview" : tab === "provider-usage" ? "providerUsage" : tab === "rankings" ? "modelRankings" : tab === "virtual-key-rankings" ? "virtualKeyRankings" : "appRankings";
+		return t("tabs." + key);
+	};
 
 	const defaultTimeRange = useMemo(() => dateUtils.getDefaultTimeRange(), []);
 
@@ -374,7 +379,7 @@ export default function DashboardPage() {
 
 			const tabs = scope === "all" ? DASHBOARD_EXPORT_TABS : DASHBOARD_EXPORT_TABS.filter((t) => t.value === scope);
 			return tabs
-				.map(({ sectionId, label }) => ({ element: document.getElementById(sectionId), label }))
+				.map(({ sectionId, value }) => ({ element: document.getElementById(sectionId), label: tabLabel(value) }))
 				.filter((s): s is { element: HTMLElement; label: string } => s.element !== null);
 		},
 		[handlePreloadData],
@@ -533,7 +538,7 @@ export default function DashboardPage() {
 									filters={filters}
 									active={activeTab === "virtual-key-rankings" || exportingAll}
 									dimension="virtual_key"
-									dimensionLabel="Virtual Key"
+									dimensionLabel={t("dimensions.virtualKey")}
 									testIdPrefix="dashboard-virtual-key-rankings"
 									dataKey="virtualKeyRankingsData"
 									pdfMode={isExportingTab("virtual-key-rankings")}
@@ -548,7 +553,7 @@ export default function DashboardPage() {
 									filters={filters}
 									active={activeTab === "app-rankings" || isExportingTab("app-rankings")}
 									dimension="app"
-									dimensionLabel="App"
+									dimensionLabel={t("dimensions.app")}
 									testIdPrefix="dashboard-app-rankings"
 									dataKey="appRankingsData"
 									pdfMode={isExportingTab("app-rankings")}

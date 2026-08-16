@@ -1,5 +1,6 @@
 import { COMPACT_NUMBER_FORMAT, formatCompactNumber as formatNumber } from "@/lib/utils/numbers";
 import { ArrowDown, ArrowUp, ArrowUpDown, Minus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export { formatNumber, COMPACT_NUMBER_FORMAT };
 
@@ -11,8 +12,9 @@ export function formatCost(value: number): string {
 }
 
 export function TrendBadge({ value, positiveIsGood = true, isNew = false }: { value: number; positiveIsGood?: boolean; isNew?: boolean }) {
+	const { t } = useTranslation("dashboard");
 	if (isNew) {
-		return <span className="inline-flex items-center gap-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">new</span>;
+		return <span className="inline-flex items-center gap-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">{t("rankings.new")}</span>;
 	}
 
 	if (value === 0) {

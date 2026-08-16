@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/card";
+import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { DimensionRankingEntry, DimensionRankingsResponse } from "@/lib/types/logs";
@@ -24,12 +25,13 @@ interface DimensionRankingsTabProps {
 
 function TopDimensionTooltip({ active, payload }: any) {
 	if (!active || !payload || !payload.length) return null;
+	const { t } = useTranslation("dashboard");
 	const data = payload[0]?.payload;
 	if (!data) return null;
 	return (
 		<div className="rounded-sm border border-zinc-200 bg-white px-3 py-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
 			<div className="mb-1 text-xs text-zinc-500">{data.displayName}</div>
-			<div className="text-sm font-medium">{data.total_requests.toLocaleString()} requests</div>
+			<div className="text-sm font-medium">{data.total_requests.toLocaleString()} {t("charts.requests")}</div>
 		</div>
 	);
 }
@@ -47,6 +49,7 @@ function TopDimensionChart({
 	testIdPrefix: string;
 	attributed?: boolean;
 }) {
+	const { t } = useTranslation("dashboard");
 	const { chartData, grandTotal, rankedItems, actualTotal, attributedTotal } = useMemo(() => {
 		if (!data?.rankings?.length) return { chartData: [], grandTotal: null, rankedItems: [], actualTotal: null, attributedTotal: null };
 
@@ -77,11 +80,11 @@ function TopDimensionChart({
 
 	return (
 		<ChartCard
-			title={`Top ${dimensionLabel}s`}
+			title={t("rankings.topDimension", { dimensionLabel })}
 			loading={loading}
 			testId={`${testIdPrefix}-top-chart`}
 			className="z-[1] h-full"
-			totalLabel={attributed && actualTotal === null ? "Total Requests (attributed)" : "Total Requests"}
+			totalLabel={attributed && actualTotal === null ? t("charts.totalRequestsAttributed") : t("charts.requests")}
 			total={
 				actualTotal !== null ? (
 					<NumberFlow value={actualTotal} format={COMPACT_NUMBER_FORMAT} />
@@ -91,25 +94,24 @@ function TopDimensionChart({
 			}
 			totalTooltip={
 				grandTotal === null ? undefined : actualTotal !== null ? (
-					<div className="max-w-[240px] text-xs opacity-80">Actual number of requests sent</div>
+					<div className="max-w-[240px] text-xs opacity-80">{t("charts.actualRequests")}</div>
 				) : attributed ? (
 					<div className="space-y-1">
 						<div className="max-w-[240px] text-xs opacity-80">
-							Attributed - a request counts toward each {dimensionLabel.toLowerCase()} it belongs to, so this can exceed the actual request
-							count.
+							{t("charts.attributedDescription", { dimensionLabel: dimensionLabel.toLowerCase() })}
 						</div>
 					</div>
 				) : (
 					grandTotal.toLocaleString("en-US")
 				)
 			}
-			secondaryTotalLabel="Attributed Requests"
+			secondaryTotalLabel={t("charts.attributedRequests")}
 			secondaryTotal={actualTotal !== null ? <NumberFlow value={attributedTotal ?? 0} format={COMPACT_NUMBER_FORMAT} /> : undefined}
 			secondaryTotalTooltip={
 				actualTotal === null ? undefined : (
 					<div className="space-y-1">
 						<div className="max-w-[240px] text-xs opacity-80">
-							A request counts toward each {dimensionLabel.toLowerCase()} it belongs to, so this can exceed the total request count.
+							{t("charts.attributedDescription", { dimensionLabel: dimensionLabel.toLowerCase() })}
 						</div>
 					</div>
 				)
@@ -160,7 +162,7 @@ function TopDimensionChart({
 						</ResponsiveContainer>
 					</ChartErrorBoundary>
 				) : (
-					<div className="text-muted-foreground flex h-full items-center justify-center text-sm">No data available</div>
+					<div className="text-muted-foreground flex h-full items-center justify-center text-sm">{t("empty.noData")}</div>
 				)}
 			</div>
 			<div className="py-2">
@@ -185,6 +187,7 @@ function TopDimensionChart({
 }
 
 function DimensionRankingsTabImpl({ data, loading, dimensionLabel, testIdPrefix, attributed }: DimensionRankingsTabProps) {
+	const { t } = useTranslation("dashboard");
 	const [sortField, setSortField] = useState<SortField>("total_requests");
 	const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
@@ -229,12 +232,12 @@ function DimensionRankingsTabImpl({ data, loading, dimensionLabel, testIdPrefix,
 			) : !data?.rankings?.length ? (
 				<Card className="rounded-sm p-4 shadow-none">
 					<div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
-						No {dimensionLabel.toLowerCase()} usage data available for this time period.
+						{t("empty.noDimensionUsage", { dimension: dimensionLabel.toLowerCase() })}
 					</div>
 				</Card>
 			) : (
 				<Card className="rounded-sm p-2 shadow-none" data-testid={`${testIdPrefix}-table`}>
-					<span className="text-primary pl-2 text-sm font-medium">{dimensionLabel} Rankings</span>
+					<span className="text-primary pl-2 text-sm font-medium">{t("rankings.dimensionRankings", { dimension: dimensionLabel })}</span>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -242,7 +245,7 @@ function DimensionRankingsTabImpl({ data, loading, dimensionLabel, testIdPrefix,
 								<TableHead>{dimensionLabel}</TableHead>
 								<TableHead className="text-right">
 									<SortableHeader
-										label="Requests"
+										label={t("rankings.requests")}
 										field="total_requests"
 										currentSort={sortField}
 										currentOrder={sortOrder}
@@ -251,7 +254,7 @@ function DimensionRankingsTabImpl({ data, loading, dimensionLabel, testIdPrefix,
 								</TableHead>
 								<TableHead className="text-right">
 									<SortableHeader
-										label="Tokens"
+										label={t("rankings.tokens")}
 										field="total_tokens"
 										currentSort={sortField}
 										currentOrder={sortOrder}
@@ -259,7 +262,7 @@ function DimensionRankingsTabImpl({ data, loading, dimensionLabel, testIdPrefix,
 									/>
 								</TableHead>
 								<TableHead className="text-right">
-									<SortableHeader label="Cost" field="total_cost" currentSort={sortField} currentOrder={sortOrder} onSort={handleSort} />
+									<SortableHeader label={t("rankings.cost")} field="total_cost" currentSort={sortField} currentOrder={sortOrder} onSort={handleSort} />
 								</TableHead>
 							</TableRow>
 						</TableHeader>

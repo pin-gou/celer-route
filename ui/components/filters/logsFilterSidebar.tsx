@@ -717,7 +717,7 @@ function SelectedKeysFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.key") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.selectedKey") })}
 				items={dedup(availableSelectedKeys).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
@@ -818,7 +818,7 @@ function RoutingEnginesFilter({ filters, onFiltersChange, defaultOpen }: FilterC
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.engine") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.routingEngine") })}
 				items={availableRoutingEngines.map((engine) => ({
 					key: engine,
 					label: RoutingEngineUsedLabels[engine as keyof typeof RoutingEngineUsedLabels] ?? engine,
@@ -884,7 +884,7 @@ function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 		>
 			<SearchableCheckboxList
 				inputRef={searchInputRef}
-				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.rule") })}
+				placeholder={t("filterSidebar.searchPlaceholder", { label: t("filterSidebar.routingRule") })}
 				items={dedup(availableRoutingRules).map((name) => ({ key: name, label: name }))}
 				isSelected={isSelected}
 				onToggle={toggle}
