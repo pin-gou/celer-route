@@ -203,7 +203,20 @@ export default function TimelinePage() {
 		}
 		return Array.from(merged.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	}, [logsData, extraLogs]);
-	const totalLogs = logs.length;
+
+	// Count of logs whose bars are visible in the current canvas window.
+	// Mirrors LogsTimeline's visibleLogs filter (logsTimeline.tsx) so the stat
+	// card matches the chart exactly, including in-flight processing bars that
+	// extend to the NOW line.
+	const visibleCount = useMemo(() => {
+		let count = 0;
+		for (const log of logs) {
+			const start = new Date(log.timestamp).getTime();
+			const end = log.status === "processing" ? nowMs : start + (log.latency ?? 0);
+			if (end >= visibleWindow.start && start <= visibleWindow.end) count++;
+		}
+		return count;
+	}, [logs, visibleWindow, nowMs]);
 
 	// Stat cards: total requests comes from the backend's exact count over the
 	// fetch window (the list endpoint only stats-populates total_requests); the
@@ -230,8 +243,7 @@ export default function TimelinePage() {
 				icon: <BarChart className="size-4" />,
 				subValue: (
 					<span className="text-muted-foreground">
-						{t("timeline.toolbar.visible")}: <strong className="text-foreground font-bold">{totalLogs}</strong> ·{" "}
-						{t("timeline.toolbar.total")}: <strong className="text-foreground font-bold">{timelineStats.totalRequests}</strong>
+						{t("timeline.toolbar.visible")}: <strong className="text-foreground font-bold">{visibleCount}</strong>
 					</span>
 				),
 			},
@@ -336,7 +348,7 @@ export default function TimelinePage() {
 				),
 			},
 		],
-		[t, timelineStats, totalLogs],
+		[t, timelineStats, visibleCount],
 	);
 
 	const selectedLog = useMemo(
