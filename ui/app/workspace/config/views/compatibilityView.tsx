@@ -71,9 +71,9 @@ export default function CompatibilityView() {
 				<div className="flex items-center justify-between space-x-2">
 					<div className="space-y-0.5">
 						<label htmlFor="compat-convert-text-to-chat" className="text-sm font-medium">
-							Convert Text to Chat
+							{t("compatibility.convertTextToChat")}
 						</label>
-						<p className="text-muted-foreground text-sm">Convert text completion requests to chat for models that only support chat.</p>
+						<p className="text-muted-foreground text-sm">{t("compatibility.convertTextToChatDesc")}</p>
 					</div>
 					<Switch
 						id="compat-convert-text-to-chat"
@@ -88,10 +88,10 @@ export default function CompatibilityView() {
 				<div className="flex items-center justify-between space-x-2">
 					<div className="space-y-0.5">
 						<label htmlFor="compat-convert-chat-to-responses" className="text-sm font-medium">
-							Convert Chat to Responses
+							{t("compatibility.convertChatToResponses")}
 						</label>
 						<p className="text-muted-foreground text-sm">
-							Convert chat completion requests to responses for models that only support responses.
+							{t("compatibility.convertChatToResponsesDesc")}
 						</p>
 					</div>
 					<Switch
@@ -107,9 +107,9 @@ export default function CompatibilityView() {
 				<div className="flex items-center justify-between space-x-2">
 					<div className="space-y-0.5">
 						<label htmlFor="compat-should-drop-params" className="text-sm font-medium">
-							Drop Unsupported Params
+							{t("compatibility.dropUnsupportedParams")}
 						</label>
-						<p className="text-muted-foreground text-sm">Drop unsupported parameters based on model catalog allowlist.</p>
+						<p className="text-muted-foreground text-sm">{t("compatibility.dropUnsupportedParamsDesc")}</p>
 					</div>
 					<Switch
 						id="compat-should-drop-params"
@@ -124,9 +124,9 @@ export default function CompatibilityView() {
 				<div className="flex items-center justify-between space-x-2">
 					<div className="space-y-0.5">
 						<label htmlFor="compat-should-convert-params" className="text-sm font-medium">
-							Convert Unsupported Param Values
+							{t("compatibility.convertUnsupportedParamValues")}
 						</label>
-						<p className="text-muted-foreground text-sm">Converts model parameter values that are not supported by the model.</p>
+						<p className="text-muted-foreground text-sm">{t("compatibility.convertUnsupportedParamValuesDesc")}</p>
 					</div>
 					<Switch
 						id="compat-should-convert-params"
@@ -141,7 +141,7 @@ export default function CompatibilityView() {
 
 			<div className="flex justify-end pt-2">
 				<Button onClick={handleSave} disabled={!hasChanges || isLoading || !hasSettingsUpdateAccess} data-testid="compat-save-button">
-					{isLoading ? "Saving..." : "Save Changes"}
+					{isLoading ? t("compatibility.saving") : t("compatibility.saveChanges")}
 				</Button>
 			</div>
 		</div>
