@@ -145,18 +145,6 @@ updates:
       interval: daily
     open-pull-requests-limit: 0
 
-  - package-ecosystem: npm
-    directory: /npx/bifrost-cli
-    schedule:
-      interval: daily
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: npm
-    directory: /npx/bifrost
-    schedule:
-      interval: daily
-    open-pull-requests-limit: 0
-
   - package-ecosystem: gomod
     directory: /plugins/governance
     schedule:
