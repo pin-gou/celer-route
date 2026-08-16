@@ -450,10 +450,7 @@
 			"success": "Success",
 			"error": "Error",
 			"processing": "Processing",
-			"other": "Other",
-			"minute": "minute",
-			"hour": "hour",
-			"day": "day"
+			"other": "Other"
 		},
 		"detail": {
 			"logId": "Log ID:",

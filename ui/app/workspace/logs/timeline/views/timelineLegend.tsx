@@ -31,14 +31,6 @@ export function TimelineLegend({ className }: TimelineLegendProps) {
 					<span className="text-muted-foreground text-[11px]">{item.label}</span>
 				</div>
 			))}
-			<div className="text-muted-foreground flex items-center gap-1.5" data-testid="timeline-legend-ticks">
-				<div className="h-px w-3 border-t border-dashed border-slate-400/60" />
-				<span className="text-[11px]">{t("timeline.legend.minute")}</span>
-				<div className="ml-1 h-px w-3 border-t border-slate-400/70" />
-				<span className="text-[11px]">{t("timeline.legend.hour")}</span>
-				<div className="ml-1 w-3 border-t-2 border-indigo-400/60" />
-				<span className="text-[11px]">{t("timeline.legend.day")}</span>
-			</div>
 		</div>
 	);
 }

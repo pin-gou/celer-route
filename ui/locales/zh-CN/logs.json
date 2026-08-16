@@ -450,10 +450,7 @@
 			"success": "成功",
 			"error": "错误",
 			"processing": "处理中",
-			"other": "其他",
-			"minute": "分钟",
-			"hour": "小时",
-			"day": "天"
+			"other": "其他"
 		},
 		"detail": {
 			"logId": "日志 ID：",
