@@ -458,16 +458,19 @@ export const createColumns = (
 			accessorKey: "tps",
 			header: "TPS",
 			size: 90,
+			minSize: 90,
+			maxSize: 90,
 			cell: ({ row }) => {
 				const { latency, token_usage } = row.original;
 				const output = token_usage?.completion_tokens;
 				if (latency == null || latency <= 0 || !output) {
-					return <div className="pl-4 font-mono text-xs">N/A</div>;
+					return <div className="text-right font-mono text-xs" />;
 				}
 				const tps = (output / latency) * 1000;
+				const colorClass = tps < 20 ? "text-red-500 dark:text-red-400" : tps < 50 ? "text-amber-500 dark:text-amber-400" : tps < 80 ? "text-blue-500 dark:text-blue-400" : "text-green-600 dark:text-green-400";
 				return (
-					<div className="pl-4 font-mono text-[12px] tabular-nums">
-						{tps >= 100 ? Math.round(tps).toLocaleString() : tps.toFixed(1)} t/s
+					<div className="text-right font-mono text-[12px] tabular-nums">
+						<strong className={colorClass}>{tps >= 100 ? Math.round(tps).toLocaleString() : tps.toFixed(1)}</strong> t/s
 					</div>
 				);
 			},

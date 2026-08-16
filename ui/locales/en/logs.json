@@ -459,7 +459,8 @@
 			"noEvents": "No events recorded for this request.",
 			"info": "info",
 			"warn": "warn",
-			"error": "error"
+			"error": "error",
+			"ms": "ms"
 		}
 	},
 	"toast": {
@@ -563,6 +564,15 @@
 		"observabilitySettings": "Observability settings"
 	},
 	"detailView": {
+		"tokenSubTotal": "total",
+		"tokenSubReasoning": "· reasoning",
+		"tokenSubRate": "tok/s",
+		"costPer1k": "≈ {{rate}} per 1k",
+		"toolChoice": "choice: {{value}}",
+		"async": "Async",
+		"directCache": "Direct Cache",
+		"semanticCache": "Semantic Cache",
+		"largePayload": "Large Payload",
 		"routingDecisionLogs": "Routing Decision Logs",
 		"requestDetails": "Request details",
 		"showOriginalValues": "Show original values",

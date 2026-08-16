@@ -64,6 +64,13 @@ import SpeechView from "../views/speechView";
 import TranscriptionView from "../views/transcriptionView";
 import VideoView from "../views/videoView";
 
+const rateColorClass = (rate: number): string => {
+	if (rate < 20) return "text-red-500 dark:text-red-400";
+	if (rate < 50) return "text-amber-500 dark:text-amber-400";
+	if (rate < 80) return "text-blue-500 dark:text-blue-400";
+	return "text-green-600 dark:text-green-400";
+};
+
 const formatRealtimeTransport = (value: unknown, t?: (k: string) => string): string => {
 	const transport = String(value ?? "").trim();
 	switch (transport.toLowerCase()) {
@@ -474,14 +481,6 @@ const messageDotClass: Record<MessageRole, string> = {
 	reasoning: "bg-violet-500",
 	tool: "bg-amber-500",
 };
-const messageRoleLabel: Record<MessageRole, string> = {
-	system: "System",
-	user: "User",
-	assistant: "Assistant",
-	reasoning: "Reasoning",
-	tool: "Tool Result",
-};
-
 function RoutingDecisionLogs({ logs }: { logs: string }) {
 	const { t } = useTranslation("logs");
 	const { copy } = useCopyToClipboard({ successMessage: t("detailView.copied") });
@@ -823,13 +822,13 @@ export function LogDetailView({
 									data-testid="logdetails-header-routing-rule-link"
 								>
 									<Badge variant="outline" className="bg-card text-muted-foreground rounded-sm px-2 py-0.5 font-normal hover:underline">
-										rule: {log.routing_rule.name}
+										{t("detailView.rule")}: {log.routing_rule.name}
 									</Badge>
 								</Link>
 							)}
 							{log.metadata?.isAsyncRequest ? (
 								<Badge variant="outline" className="rounded-sm bg-teal-100 px-2 py-0.5 text-teal-800 dark:bg-teal-900 dark:text-teal-200">
-									Async
+									{t("detailView.async")}
 								</Badge>
 							) : null}
 							{log.cache_debug?.hit_type === "direct" ? (
@@ -837,12 +836,12 @@ export function LogDetailView({
 									variant="outline"
 									className="rounded-sm bg-indigo-100 px-2 py-0.5 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
 								>
-									Direct Cache
+									{t("detailView.directCache")}
 								</Badge>
 							) : null}
 							{log.cache_debug?.hit_type === "semantic" ? (
 								<Badge variant="outline" className="rounded-sm bg-rose-100 px-2 py-0.5 text-rose-800 dark:bg-rose-900 dark:text-rose-200">
-									Semantic Cache
+									{t("detailView.semanticCache")}
 								</Badge>
 							) : null}
 							{(log.is_large_payload_request || log.is_large_payload_response) && (
@@ -850,7 +849,7 @@ export function LogDetailView({
 									variant="outline"
 									className="rounded-sm border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-700 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-400"
 								>
-									Large Payload
+									{t("detailView.largePayload")}
 								</Badge>
 							)}
 							{isRealtimeTurn && log.metadata?.realtime_transport && (
@@ -913,7 +912,8 @@ export function LogDetailView({
 					</div>
 					<div className="flex shrink-0 items-center gap-1.5 rounded-sm border bg-white px-2 py-1 text-[12px] font-medium dark:bg-zinc-900">
 						<RenderProviderIcon provider={log.provider as ProviderIconType} size="xs" />
-						<span className="uppercase">{log.provider}</span>
+						<span className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">{t("detailView.provider")}</span>
+						<span>{log.provider}</span>
 					</div>
 				</div>
 				<div className="border-border grid grid-cols-2 border-t md:grid-cols-5">
@@ -949,16 +949,19 @@ export function LogDetailView({
 						}
 						sub={
 							log.token_usage
-								? `total ${formatCompactNumber(log.token_usage.total_tokens ?? 0)}${
-										log.token_usage.completion_tokens_details?.reasoning_tokens
-											? ` · reasoning ${formatCompactNumber(log.token_usage.completion_tokens_details.reasoning_tokens)}`
-											: ""
-									}${
-										log.latency != null && log.latency > 0 && log.token_usage.total_tokens
-											? ` · ${((log.token_usage.total_tokens / log.latency) * 1000).toFixed(1)} tok/s`
-											: ""
-									}`
-								: "—"
+								? (
+									<>
+										<span>{t("detailView.tokenSubTotal")} </span>
+										<strong>{formatCompactNumber(log.token_usage.total_tokens ?? 0)}</strong>
+										{log.token_usage.completion_tokens_details?.reasoning_tokens
+											? <><span> {t("detailView.tokenSubReasoning")} </span><strong>{formatCompactNumber(log.token_usage.completion_tokens_details.reasoning_tokens)}</strong></>
+											: null}
+										{log.latency != null && log.latency > 0 && log.token_usage.total_tokens
+											? <><span> · </span><strong className={rateColorClass((log.token_usage.total_tokens / log.latency) * 1000)}>{((log.token_usage.total_tokens / log.latency) * 1000).toFixed(1)}</strong><span> {t("detailView.tokenSubRate")}</span></>
+											: null}
+									</>
+								)
+								: "\u2014"
 						}
 						hasRightBorder
 					/>
@@ -967,7 +970,7 @@ export function LogDetailView({
 						value={log.cost != null ? formatCost(log.cost) : "—"}
 						sub={
 							log.cost != null && log.token_usage?.total_tokens
-								? `≈ ${((log.cost / log.token_usage.total_tokens) * 1000).toFixed(6)}＄ per 1k`
+								? t("detailView.costPer1k", { rate: ((log.cost / log.token_usage.total_tokens) * 1000).toFixed(6) })
 								: ""
 						}
 						hasRightBorder
@@ -982,7 +985,7 @@ export function LogDetailView({
 						<HeroStat
 							label={t("detailView.toolsAvailable")}
 							value={declaredTools.length.toString()}
-							sub={(log.params as any)?.tool_choice != null ? `choice: ${formatToolChoice((log.params as any).tool_choice)}` : ""}
+							sub={(log.params as any)?.tool_choice != null ? t("detailView.toolChoice", { value: formatToolChoice((log.params as any).tool_choice) }) : ""}
 						/>
 					)}
 				</div>
@@ -1004,7 +1007,7 @@ export function LogDetailView({
 								label={t("detailView.startTimestamp")}
 								value={(() => {
 									const d = log.timestamp ? new Date(log.timestamp) : null;
-									return d && !isNaN(d.getTime()) ? format(d, "yyyy-MM-dd hh:mm:ss aa") : "N/A";
+									return d && !isNaN(d.getTime()) ? format(d, "yyyy-MM-dd HH:mm:ss") : "N/A";
 								})()}
 							/>
 							<LogEntryDetailsView
@@ -1012,7 +1015,7 @@ export function LogDetailView({
 								label={t("detailView.endTimestamp")}
 								value={(() => {
 									const d = log.timestamp ? new Date(log.timestamp) : null;
-									return d && !isNaN(d.getTime()) ? format(addMilliseconds(d, log.latency || 0), "yyyy-MM-dd hh:mm:ss aa") : "N/A";
+									return d && !isNaN(d.getTime()) ? format(addMilliseconds(d, log.latency || 0), "yyyy-MM-dd HH:mm:ss") : "N/A";
 								})()}
 							/>
 							<LogEntryDetailsView
@@ -1575,7 +1578,7 @@ export function LogDetailView({
 								<>
 									<DottedSeparator />
 									<div className="space-y-4">
-										<BlockHeader title={`Caching Details (${log.cache_debug.cache_hit ? "Hit" : "Miss"})`} />
+										<BlockHeader title={log.cache_debug.cache_hit ? t("detailView.cachingDetailsHit") : t("detailView.cachingDetailsMiss")} />
 										<div className="grid w-full grid-cols-3 items-center justify-between gap-4">
 											{log.cache_debug.cache_hit ? (
 												<>
@@ -1680,7 +1683,7 @@ export function LogDetailView({
 													label={t("detailView.action")}
 													value={
 														<Badge variant={call.action === "GUARDRAIL_INTERVENED" ? "destructive" : "success"}>
-															{call.action === "GUARDRAIL_INTERVENED" ? "Blocked" : "Allowed"}
+															{call.action === "GUARDRAIL_INTERVENED" ? t("detailView.blocked") : t("detailView.allowed")}
 														</Badge>
 													}
 												/>
@@ -1767,7 +1770,7 @@ export function LogDetailView({
 				<TabsList className="bg-muted/60 h-10 w-fit">
 					{showTabs && (
 						<TabsTrigger value="messages" className="px-3">
-							Messages
+							{t("detailView.messages")}
 							{log.input_history?.length ? (
 								<span className="bg-background text-muted-foreground ml-1.5 rounded-sm border px-2 py-0.5 text-[10px] tabular-nums">
 									{log.input_history.length + (log.output_message ? 1 : 0)}
@@ -1778,7 +1781,7 @@ export function LogDetailView({
 
 					{showTabs && !isPassthrough && !log.list_models_output && (
 						<TabsTrigger value="tools" className="px-3">
-							Tools
+							{t("detailView.tools")}
 							{declaredTools.length ? (
 								<span className="bg-background text-muted-foreground ml-1.5 rounded-sm border px-2 py-0.5 text-[10px] tabular-nums">
 									{declaredTools.length}
@@ -1788,7 +1791,7 @@ export function LogDetailView({
 					)}
 					{showTabs && (
 						<TabsTrigger value="routing" className="px-3">
-							Routing
+							{t("detailView.routing")}
 							{log.routing_engine_logs ? (
 								<span className="bg-background text-muted-foreground ml-1.5 rounded-sm border px-2 py-0.5 text-[10px] tabular-nums">
 									{log.routing_engine_logs.split("\n").filter(Boolean).length}
@@ -1797,7 +1800,7 @@ export function LogDetailView({
 						</TabsTrigger>
 					)}
 					<TabsTrigger value="plugins" className="px-3">
-						Plugin Logs
+						{t("detailView.pluginLogs")}
 						{pluginLogCount > 0 ? (
 							<span className="bg-background text-muted-foreground ml-1.5 rounded-sm border px-2 py-0.5 text-[10px] tabular-nums">
 								{pluginLogCount}
@@ -1806,18 +1809,18 @@ export function LogDetailView({
 					</TabsTrigger>
 					{!isPassthrough && (
 						<TabsTrigger value="raw" className="px-3">
-							Raw JSON
+							{t("detailView.rawJson")}
 						</TabsTrigger>
 					)}
 					<TabsTrigger value="timeline" className="px-3" data-testid="logdetails-tab-timeline">
-						Timeline
+						{t("detailView.timeline")}
 					</TabsTrigger>
 				</TabsList>
 
 				<TabsContent value="messages" className="space-y-4">
 					{log.content_hidden && (
 						<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">
-							Content logging has been disabled for this request.
+							{t("detailView.contentLoggingDisabled")}
 						</div>
 					)}
 					<div className={cn("flex justify-end", log.content_hidden && "hidden")}>
@@ -1832,7 +1835,7 @@ export function LogDetailView({
 											: "text-muted-foreground hover:text-foreground border-transparent hover:border-border",
 									)}
 								>
-									Messages
+									{t("detailView.messages")}
 									{visibleRoles.size < allRoles.length && (
 										<span className="bg-primary text-primary-foreground rounded-sm px-1 py-0.5 text-[10px] tabular-nums">
 											{visibleRoles.size}/{allRoles.length}
@@ -1846,18 +1849,12 @@ export function LogDetailView({
 									checked={visibleRoles.size === allRoles.length}
 									onCheckedChange={(checked) => setVisibleRoles(checked ? new Set(allRoles) : new Set())}
 								>
-									Show all messages
+									{t("detailView.showAllMessages")}
 								</DropdownMenuCheckboxItem>
 								<DropdownMenuSeparator />
 								{(
-									[
-										["system", "System"],
-										["user", "User"],
-										["assistant", "Assistant"],
-										["tool", "Tool"],
-										["reasoning", "Reasoning"],
-									] as [MessageRole, string][]
-								).map(([role, label]) => (
+									["system", "user", "assistant", "tool", "reasoning"] as MessageRole[]
+								).map((role) => (
 									<DropdownMenuCheckboxItem
 										key={role}
 										checked={visibleRoles.has(role)}
@@ -1870,12 +1867,12 @@ export function LogDetailView({
 										}
 									>
 										<span className={cn("mr-1.5 inline-block h-2 w-2 rounded-sm", messageDotClass[role])} />
-										{label}
+										{t("detailView." + role)}
 									</DropdownMenuCheckboxItem>
 								))}
 								<DropdownMenuSeparator />
 								<DropdownMenuItem onClick={() => setVisibleRoles(new Set())} className="text-muted-foreground justify-center text-[12px]">
-									Clear all
+									{t("detailView.clearAll")}
 								</DropdownMenuItem>
 							</DropdownMenuContent>
 						</DropdownMenu>
@@ -2067,7 +2064,7 @@ export function LogDetailView({
 														.map((b, i) => {
 															const src = b.image_url?.url;
 															if (!src) return null;
-															return <img key={`${i}-${src}`} src={src} alt="Attached image" className="mt-2 max-w-full rounded border" />;
+															return <img key={`${i}-${src}`} src={src} alt={t("views.attachedImage")} className="mt-2 max-w-full rounded border" />;
 														})}
 												{text &&
 													Array.isArray(message.content) &&
@@ -2260,7 +2257,7 @@ export function LogDetailView({
 															<div key={`s-${i}`} className="space-y-1">
 																{reasoningParts.summaries.length > 1 ? (
 																	<div className="text-muted-foreground text-[10.5px] font-semibold tracking-wider uppercase">
-																		Summary {i + 1}
+																		{t("detailView.summaryIndex", { count: i + 1 })}
 																	</div>
 																) : null}
 																<CollapsibleCode text={s} preview={3} mono={false} />
@@ -2275,7 +2272,7 @@ export function LogDetailView({
 														{reasoningParts.signatures.length > 0 ? (
 															<EncryptedReveal
 																text={reasoningParts.signatures.join("\n\n")}
-																label={reasoningParts.signatures.length > 1 ? "Encrypted signatures" : "Encrypted signature"}
+																label={reasoningParts.signatures.length > 1 ? t("detailView.encryptedSignatures") : t("detailView.encryptedSignature")}
 															/>
 														) : null}
 													</div>
@@ -2307,7 +2304,7 @@ export function LogDetailView({
 														<img
 															key={`${i}-${b.image_url}`}
 															src={b.image_url}
-															alt="Attached image"
+															alt={t("views.attachedImage")}
 															className="mt-2 max-w-full rounded border"
 														/>
 													))}
@@ -2347,7 +2344,7 @@ export function LogDetailView({
 						</div>
 					)}
 					{log.status !== "processing" && log.rerank_output && !log.error_details?.error.message && (
-						<CollapsibleBox title={`Rerank Output (${log.rerank_output.length})`} onCopy={() => JSON.stringify(log.rerank_output, null, 2)}>
+						<CollapsibleBox title={t("detailView.rerankOutput", { count: log.rerank_output.length })} onCopy={() => JSON.stringify(log.rerank_output, null, 2)}>
 							<CodeEditor
 								className="z-0 w-full"
 								shouldAdjustInitialHeight={true}
@@ -2369,7 +2366,7 @@ export function LogDetailView({
 
 					{log.list_models_output && (
 						<CollapsibleBox
-							title={`List Models Output (${log.list_models_output.length})`}
+							title={t("detailView.listModelsOutput", { count: log.list_models_output.length })}
 							onCopy={() => JSON.stringify(log.list_models_output, null, 2)}
 						>
 							<CodeEditor
@@ -2492,7 +2489,7 @@ export function LogDetailView({
 					)}
 					{!toolsParameter && !log.params?.instructions && (
 						<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">
-							No tools or instructions on this request.
+							{t("detailView.noToolsOrInstructions")}
 						</div>
 					)}
 				</TabsContent>
@@ -2500,7 +2497,7 @@ export function LogDetailView({
 				<TabsContent value="routing" className="space-y-3">
 					{log.attempt_trail && log.attempt_trail.length > 1 && (
 						<CollapsibleBox
-							title={`Attempt Trail (${log.attempt_trail.length} attempts)`}
+							title={t("detailView.attemptTrail", { count: log.attempt_trail.length })}
 							onCopy={() => JSON.stringify(log.attempt_trail, null, 2)}
 						>
 							<div className="overflow-x-auto px-6 py-3">
@@ -2535,7 +2532,7 @@ export function LogDetailView({
 						<RoutingDecisionLogs logs={log.routing_engine_logs} />
 					) : (
 						<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">
-							No routing logs for this request.
+							{t("detailView.noRoutingLogs")}
 						</div>
 					)}
 				</TabsContent>
@@ -2545,7 +2542,7 @@ export function LogDetailView({
 						<PluginLogsView pluginLogs={log.plugin_logs} />
 					) : (
 						<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">
-							No plugin logs for this request.
+							{t("detailView.noPluginLogs")}
 						</div>
 					)}
 				</TabsContent>

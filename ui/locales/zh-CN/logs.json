@@ -459,7 +459,8 @@
 			"noEvents": "此请求未记录事件。",
 			"info": "信息",
 			"warn": "警告",
-			"error": "错误"
+			"error": "错误",
+			"ms": "毫秒"
 		}
 	},
 	"toast": {
@@ -563,6 +564,15 @@
 		"observabilitySettings": "可观测性设置"
 	},
 	"detailView": {
+		"tokenSubTotal": "总计",
+		"tokenSubReasoning": "· 推理",
+		"tokenSubRate": "tok/s",
+		"costPer1k": "≈ {{rate}} / 千词元",
+		"toolChoice": "选择：{{value}}",
+		"async": "异步",
+		"directCache": "直接缓存",
+		"semanticCache": "语义缓存",
+		"largePayload": "大载荷",
 		"routingDecisionLogs": "路由决策日志",
 		"requestDetails": "请求详情",
 		"showOriginalValues": "显示原始值",
@@ -627,6 +637,8 @@
 		"inputTokens": "输入词元",
 		"outputTokens": "输出词元",
 		"totalTokens": "总词元",
+		"tokensInOut": "词元 in / out",
+		"toolsAvailable": "可用工具数",
 		"cost": "成本",
 		"inputTextTokens": "输入文本词元",
 		"inputAudioTokens": "输入音频词元",

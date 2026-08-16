@@ -51,6 +51,7 @@ interface LaneBar {
 	leftPct: number;
 	widthPct: number;
 	statusColor: string;
+	borderColor: string;
 	isProcessing: boolean;
 }
 
@@ -77,6 +78,36 @@ function getStatusColor(status: string): string {
 		default:
 			return "bg-gray-400";
 	}
+}
+
+function getStatusBorderColor(status: string): string {
+	switch (status) {
+		case "success":
+			return "border-green-500";
+		case "error":
+			return "border-red-500";
+		case "processing":
+			return "border-blue-400";
+		case "cancelled":
+			return "border-gray-400";
+		default:
+			return "border-gray-400";
+	}
+}
+
+function getTpsBorderColor(tps: number): string {
+	if (tps < 20) return "border-red-500 dark:border-red-400";
+	if (tps < 50) return "border-amber-500 dark:border-amber-400";
+	if (tps < 80) return "border-blue-500 dark:border-blue-400";
+	return "border-green-600 dark:border-green-400";
+}
+
+function calcTps(log: LogEntry): number | null {
+	if (log.status !== "success") return null;
+	if (log.latency == null || log.latency <= 0) return null;
+	const output = log.token_usage?.completion_tokens;
+	if (!output) return null;
+	return (output / log.latency) * 1000;
 }
 
 function allocateLanes(logs: LogEntry[], laneGapMs: number = 0): Map<string, number> {
@@ -303,12 +334,18 @@ export function LogsTimeline({
 				const plainLeftPct = ((logStart - timeStart) / rangeDuration) * 100;
 				const leftPct = isProcessing ? nowLineX - widthPct : plainLeftPct;
 				const lane = laneMap.get(log.id) ?? 0;
+				const tps = calcTps(log);
+				const borderColor =
+					log.status === "success" && tps != null
+						? getTpsBorderColor(tps)
+						: getStatusBorderColor(log.status);
 				return {
 					log,
 					lane,
 					leftPct,
 					widthPct,
 					statusColor: getStatusColor(log.status),
+					borderColor,
 					isProcessing,
 				};
 			}),
@@ -529,8 +566,9 @@ export function LogsTimeline({
 							data-bar-width={bar.widthPct.toFixed(2)}
 							data-status-color={bar.statusColor}
 							className={cn(
-								"absolute cursor-pointer rounded-sm transition-opacity hover:opacity-80 flex items-center overflow-hidden px-1",
+								"absolute cursor-pointer rounded-sm transition-opacity hover:opacity-80 flex items-center overflow-hidden px-1 border-2",
 								bar.statusColor,
+								bar.borderColor,
 								bar.isProcessing && "ring-1 ring-blue-300/60",
 							)}
 							style={{
@@ -602,9 +640,11 @@ export function LogsTimeline({
 						<div className="text-muted-foreground mt-1 flex gap-3">
 							<span>Input: {tooltipLog.token_usage.prompt_tokens.toLocaleString()}</span>
 							<span>Output: {tooltipLog.token_usage.completion_tokens.toLocaleString()}</span>
-							{tooltipLog.status !== "processing" && tooltipLog.latency != null && tooltipLog.latency > 0 && (
-								<span>TPS: {(tooltipLog.token_usage.completion_tokens / (tooltipLog.latency / 1000)).toFixed(1)}/s</span>
-							)}
+							{tooltipLog.status !== "processing" && tooltipLog.latency != null && tooltipLog.latency > 0 && (() => {
+								const tps = (tooltipLog.token_usage.completion_tokens / (tooltipLog.latency / 1000));
+								const cls = tps < 20 ? "text-red-500 dark:text-red-400" : tps < 50 ? "text-amber-500 dark:text-amber-400" : tps < 80 ? "text-blue-500 dark:text-blue-400" : "text-green-600 dark:text-green-400";
+								return <span>TPS: <strong className={cls}>{tps.toFixed(1)}</strong>/s</span>;
+							})()}
 						</div>
 					)}
 				</div>

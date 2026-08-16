@@ -89,8 +89,8 @@ function getLevelBadge(level: string, t: (key: string) => string) {
 // Format helpers
 // ---------------------------------------------------------------------------
 
-function formatMs(ms: number, decimals: number = 1): string {
-	return `${ms.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: false })} ms`;
+function formatMs(ms: number, t: (key: string) => string, decimals: number = 1): string {
+	return `${ms.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: false })} ${t("timeline.detail.ms")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +155,10 @@ export function TimelineDetail({ data, isLoading, error }: TimelineDetailProps) 
 								className={cn("flex items-start gap-3 rounded-sm px-3 py-2 text-xs", getLevelRowClass(event.level))}
 							>
 								{/* Time offset */}
-								<div className="text-muted-foreground w-20 shrink-0 font-mono tabular-nums">{formatMs(event.time_ms_offset)}</div>
+								<div className="text-muted-foreground w-20 shrink-0 font-mono tabular-nums">{formatMs(event.time_ms_offset, t)}</div>
 
 								{/* Duration */}
-								<div className="text-muted-foreground w-20 shrink-0 font-mono tabular-nums">{formatMs(event.duration_ms)}</div>
+								<div className="text-muted-foreground w-20 shrink-0 font-mono tabular-nums">{formatMs(event.duration_ms, t)}</div>
 
 								{/* Phase */}
 								<div className="w-24 shrink-0 font-medium">{event.phase}</div>
