@@ -7,7 +7,7 @@
      track=core (常驻, 无 on_conditions)
 -->
 
-- [ ] 1.1 编写 `core/schemas/chatcompletions_test.go` 单元测试：验证 `BifrostLLMUsage` 的 `OriginalPromptTokens` / `CompressedPromptTokens` 字段可正常序列化（JSON tag 路径正确）+ 与 `PromptTokens` 共存（omitempty 指针）
+- [x] 1.1 编写 `core/schemas/chatcompletions_test.go` 单元测试：验证 `BifrostLLMUsage` 的 `OriginalPromptTokens` / `CompressedPromptTokens` 字段可正常序列化（JSON tag 路径正确）+ 与 `PromptTokens` 共存（omitempty 指针）
 
 ## 2. dev.core:dev - 实现开发
 
