@@ -1,8 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
-	CostHistogramResponse,
 	LatencyHistogramResponse,
-	LogStats,
 	LogsHistogramResponse,
 	ModelHistogramResponse,
 	ThroughputHistogramResponse,
@@ -25,11 +23,9 @@ import {
 } from "../utils/chartUtils";
 import { ChartCard } from "./charts/chartCard";
 import { type ChartType, ChartTypeToggle } from "./charts/chartTypeToggle";
-import { CostChart } from "./charts/costChart";
 import ExternalCacheTokenMeterChart from "./charts/externalCacheTokenMeterChart";
 import { LatencyChart } from "./charts/latencyChart";
 import { ThroughputChart } from "./charts/throughputChart";
-import LocalCacheTokenMeterChart from "./charts/localCacheTokenMeterChart";
 import { LogVolumeChart } from "./charts/logVolumeChart";
 import { ModelFilterSelect } from "./charts/modelFilterSelect";
 import { ModelUsageChart } from "./charts/modelUsageChart";
@@ -39,20 +35,16 @@ export interface OverviewTabProps {
 	// Data
 	histogramData: LogsHistogramResponse | null;
 	tokenData: TokenHistogramResponse | null;
-	costData: CostHistogramResponse | null;
 	modelData: ModelHistogramResponse | null;
 	latencyData: LatencyHistogramResponse | null;
 	throughputData: ThroughputHistogramResponse | null;
-	logsStats: LogStats | null;
 
 	// Loading states
 	loadingHistogram: boolean;
 	loadingTokens: boolean;
-	loadingCost: boolean;
 	loadingModels: boolean;
 	loadingLatency: boolean;
 	loadingThroughput: boolean;
-	loadingStats: boolean;
 
 	// Time range
 	startTime: number;
@@ -61,68 +53,52 @@ export interface OverviewTabProps {
 	// Chart types
 	volumeChartType: ChartType;
 	tokenChartType: ChartType;
-	costChartType: ChartType;
 	modelChartType: ChartType;
 	latencyChartType: ChartType;
 	throughputChartType: ChartType;
 
 	// Model selections
-	costModel: string;
 	usageModel: string;
 
 	// Derived model lists
-	costModels: string[];
 	usageModels: string[];
-	availableModels: string[];
 
 	// Chart type toggle callbacks
 	onVolumeChartToggle: (type: ChartType) => void;
 	onTokenChartToggle: (type: ChartType) => void;
-	onCostChartToggle: (type: ChartType) => void;
 	onModelChartToggle: (type: ChartType) => void;
 	onLatencyChartToggle: (type: ChartType) => void;
 	onThroughputChartToggle: (type: ChartType) => void;
 
 	// Filter callbacks
-	onCostModelChange: (model: string) => void;
 	onUsageModelChange: (model: string) => void;
 }
 
 function OverviewTabImpl({
 	histogramData,
 	tokenData,
-	costData,
 	modelData,
 	latencyData,
 	throughputData,
-	logsStats,
 	loadingHistogram,
 	loadingTokens,
-	loadingCost,
 	loadingModels,
 	loadingLatency,
 	loadingThroughput,
-	loadingStats,
 	startTime,
 	endTime,
 	volumeChartType,
 	tokenChartType,
-	costChartType,
 	modelChartType,
 	latencyChartType,
 	throughputChartType,
-	costModel,
 	usageModel,
-	costModels,
 	usageModels,
-	availableModels,
 	onVolumeChartToggle,
 	onTokenChartToggle,
-	onCostChartToggle,
 	onModelChartToggle,
 	onLatencyChartToggle,
 	onThroughputChartToggle,
-	onCostModelChange,
 	onUsageModelChange,
 }: OverviewTabProps) {
 	const { t } = useTranslation("dashboard");
@@ -136,14 +112,6 @@ function OverviewTabImpl({
 		if (!tokenData?.buckets) return null;
 		return tokenData.buckets.reduce((sum, b) => sum + (b.total_tokens ?? 0), 0);
 	}, [tokenData]);
-
-	const costTotal = useMemo(() => {
-		if (!costData?.buckets) return null;
-		if (costModel === "all") {
-			return costData.buckets.reduce((sum, b) => sum + (b.total_cost ?? 0), 0);
-		}
-		return costData.buckets.reduce((sum, b) => sum + (b.by_model?.[costModel] ?? 0), 0);
-	}, [costData, costModel]);
 
 	const modelUsageTotal = useMemo(() => {
 		if (!modelData?.buckets) return null;
@@ -255,95 +223,6 @@ function OverviewTabImpl({
 					<ExternalCacheTokenMeterChart data={tokenData} />
 				</ChartCard>
 
-				{/* Local Cache Hit Rate Meter */}
-				<ChartCard title={t("charts.localCacheHitRate")} loading={loadingStats} testId="chart-cache-local">
-					<LocalCacheTokenMeterChart data={logsStats} />
-				</ChartCard>
-
-				{/* Cost Chart */}
-				<ChartCard
-					title={t("charts.cost")}
-					loading={loadingCost}
-					testId="chart-cost-total"
-					totalLabel={t("charts.total")}
-					total={
-						costTotal !== null ? (
-							<NumberFlow value={costTotal} format={{ ...COMPACT_NUMBER_FORMAT, style: "currency", currency: "USD" }} />
-						) : undefined
-					}
-					totalTooltip={
-						costTotal !== null
-							? costTotal.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 6 })
-							: undefined
-					}
-					legend={
-						<div className={CHART_HEADER_LEGEND_CLASS}>
-							{costModel === "all" ? (
-								costModels.length > 0 && (
-									<>
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<span tabIndex={0} data-testid="cost-legend-trigger" className="flex items-center gap-1">
-													<span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: getModelColor(0) }} />
-													<span className="text-muted-foreground max-w-[100px] truncate">{costModels[0]}</span>
-												</span>
-											</TooltipTrigger>
-											<TooltipContent>{costModels[0]}</TooltipContent>
-										</Tooltip>
-										{costModels.length > 1 && (
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<span tabIndex={0} data-testid="cost-legend-more-trigger" className="text-muted-foreground cursor-default">
-														{t("rankings.more", { count: costModels.length - 1 })}
-													</span>
-												</TooltipTrigger>
-												<TooltipContent>
-													<div className="flex flex-col gap-1">
-														{costModels.slice(1).map((model, idx) => (
-															<span key={model} className="flex items-center gap-1">
-																<span
-																	className="h-2 w-2 shrink-0 rounded-full"
-																	style={{
-																		backgroundColor: model === OTHER_SERIES_KEY ? OTHER_SERIES_COLOR : getModelColor(idx + 1),
-																	}}
-																/>
-																{model === OTHER_SERIES_KEY ? OTHER_SERIES_LABEL : model}
-															</span>
-														))}
-													</div>
-												</TooltipContent>
-											</Tooltip>
-										)}
-									</>
-								)
-							) : (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<span tabIndex={0} data-testid="cost-legend-single-trigger" className="flex items-center gap-1">
-											<span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: getModelColor(0) }} />
-											<span className="text-muted-foreground max-w-[100px] truncate">{costModel}</span>
-										</span>
-									</TooltipTrigger>
-									<TooltipContent>{costModel}</TooltipContent>
-								</Tooltip>
-							)}
-						</div>
-					}
-					controls={
-						<>
-							<ModelFilterSelect
-								models={availableModels}
-								selectedModel={costModel}
-								onModelChange={onCostModelChange}
-								data-testid="dashboard-cost-model-filter"
-							/>
-							<ChartTypeToggle chartType={costChartType} onToggle={onCostChartToggle} data-testid="dashboard-cost-chart-toggle" />
-						</>
-					}
-				>
-					<CostChart data={costData} chartType={costChartType} startTime={startTime} endTime={endTime} selectedModel={costModel} />
-				</ChartCard>
-
 				{/* Model Usage Chart */}
 				<ChartCard
 					title={t("charts.modelUsage")}
@@ -395,15 +274,15 @@ function OverviewTabImpl({
 							) : (
 								<>
 									<span className="flex items-center gap-1">
-										<span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CHART_COLORS.success }} />
+										<span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.success }} />
 										<span className="text-muted-foreground">{t("charts.success")}</span>
 									</span>
 									<span className="flex items-center gap-1">
-										<span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CHART_COLORS.error }} />
+										<span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.error }} />
 										<span className="text-muted-foreground">{t("charts.error")}</span>
 									</span>
 									<span className="flex items-center gap-1">
-										<span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CHART_COLORS.cancelled }} />
+										<span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.cancelled }} />
 										<span className="text-muted-foreground">{t("charts.cancelled")}</span>
 									</span>
 								</>
@@ -413,7 +292,7 @@ function OverviewTabImpl({
 					controls={
 						<>
 							<ModelFilterSelect
-								models={availableModels}
+								models={modelData?.models ?? []}
 								selectedModel={usageModel}
 								onModelChange={onUsageModelChange}
 								data-testid="dashboard-usage-model-filter"

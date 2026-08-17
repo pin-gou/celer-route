@@ -6,7 +6,6 @@
  */
 
 import type {
-	CostHistogramResponse,
 	DimensionRankingsResponse,
 	LatencyHistogramResponse,
 	LogsHistogramResponse,
@@ -29,13 +28,6 @@ export function overviewVolumeToCSV(data: LogsHistogramResponse | null): CSVData
 export function overviewTokensToCSV(data: TokenHistogramResponse | null): CSVData {
 	const headers = ["Timestamp", "Prompt Tokens", "Completion Tokens", "Total Tokens", "Cached Read Tokens"];
 	const rows = (data?.buckets ?? []).map((b) => [b.timestamp, b.prompt_tokens, b.completion_tokens, b.total_tokens, b.cached_read_tokens]);
-	return { headers, rows };
-}
-
-export function overviewCostToCSV(data: CostHistogramResponse | null): CSVData {
-	const models = data?.models ?? [];
-	const headers = ["Timestamp", "Total Cost", ...models];
-	const rows = (data?.buckets ?? []).map((b) => [b.timestamp, b.total_cost, ...models.map((m) => b.by_model?.[m] ?? 0)]);
 	return { headers, rows };
 }
 
@@ -167,7 +159,6 @@ export interface DashboardData {
 	// Overview
 	histogramData: LogsHistogramResponse | null;
 	tokenData: TokenHistogramResponse | null;
-	costData: CostHistogramResponse | null;
 	modelData: ModelHistogramResponse | null;
 	latencyData: LatencyHistogramResponse | null;
 	// Provider Usage
@@ -207,7 +198,6 @@ export function getCSVSections(data: DashboardData, tab: ExportTab): { name: str
 		sections.push(
 			{ name: "overview-volume", csv: overviewVolumeToCSV(data.histogramData) },
 			{ name: "overview-tokens", csv: overviewTokensToCSV(data.tokenData) },
-			{ name: "overview-cost", csv: overviewCostToCSV(data.costData) },
 			{ name: "overview-model-usage", csv: overviewModelUsageToCSV(data.modelData) },
 			{ name: "overview-latency", csv: overviewLatencyToCSV(data.latencyData) },
 		);

@@ -73,11 +73,9 @@ export default function DashboardPage() {
 			metadata_filters: parseAsString.withDefault(""),
 			volume_chart: parseAsString.withDefault("bar"),
 			token_chart: parseAsString.withDefault("bar"),
-			cost_chart: parseAsString.withDefault("bar"),
 			model_chart: parseAsString.withDefault("bar"),
 			latency_chart: parseAsString.withDefault("bar"),
 			throughput_chart: parseAsString.withDefault("bar"),
-			cost_model: parseAsString.withDefault("all"),
 			usage_model: parseAsString.withDefault("all"),
 			provider_cost_chart: parseAsString.withDefault("bar"),
 			provider_token_chart: parseAsString.withDefault("bar"),
@@ -186,7 +184,6 @@ export default function DashboardPage() {
 		return {
 			histogramData: null,
 			tokenData: null,
-			costData: null,
 			modelData: null,
 			latencyData: null,
 			providerCostData: null,
@@ -242,7 +239,6 @@ export default function DashboardPage() {
 	// Chart type toggles
 	const handleVolumeChartToggle = useCallback((type: ChartType) => setUrlState({ volume_chart: type }), [setUrlState]);
 	const handleTokenChartToggle = useCallback((type: ChartType) => setUrlState({ token_chart: type }), [setUrlState]);
-	const handleCostChartToggle = useCallback((type: ChartType) => setUrlState({ cost_chart: type }), [setUrlState]);
 	const handleModelChartToggle = useCallback((type: ChartType) => setUrlState({ model_chart: type }), [setUrlState]);
 	const handleLatencyChartToggle = useCallback((type: ChartType) => setUrlState({ latency_chart: type }), [setUrlState]);
 	const handleThroughputChartToggle = useCallback((type: ChartType) => setUrlState({ throughput_chart: type }), [setUrlState]);
@@ -254,7 +250,6 @@ export default function DashboardPage() {
 		[setUrlState],
 	);
 	// Model / provider filter changes
-	const handleCostModelChange = useCallback((model: string) => setUrlState({ cost_model: model }), [setUrlState]);
 	const handleUsageModelChange = useCallback((model: string) => setUrlState({ usage_model: model }), [setUrlState]);
 	const handleProviderCostProviderChange = useCallback(
 		(provider: string) => setUrlState({ provider_cost_provider: provider }),
@@ -469,19 +464,15 @@ export default function DashboardPage() {
 									endTime={urlState.end_time}
 									volumeChartType={toChartType(urlState.volume_chart)}
 									tokenChartType={toChartType(urlState.token_chart)}
-									costChartType={toChartType(urlState.cost_chart)}
 									modelChartType={toChartType(urlState.model_chart)}
 									latencyChartType={toChartType(urlState.latency_chart)}
 									throughputChartType={toChartType(urlState.throughput_chart)}
-									costModel={urlState.cost_model}
 									usageModel={urlState.usage_model}
 									onVolumeChartToggle={handleVolumeChartToggle}
 									onTokenChartToggle={handleTokenChartToggle}
-									onCostChartToggle={handleCostChartToggle}
 									onModelChartToggle={handleModelChartToggle}
 									onLatencyChartToggle={handleLatencyChartToggle}
 									onThroughputChartToggle={handleThroughputChartToggle}
-									onCostModelChange={handleCostModelChange}
 									onUsageModelChange={handleUsageModelChange}
 								/>
 							</div>

@@ -2150,3 +2150,33 @@ type NodeUsageAggregate struct {
 	MaxLogID          string             `json:"max_log_id"`          // log ID tiebreaker for MaxTimestamp
 	NextCursor        NodeUsageCursor    `json:"next_cursor"`         // stable cursor for the next incremental query
 }
+
+// DashboardBucketMetric is a pre-aggregated row written by DashboardAggregator.
+//
+// One row represents one (bucket_start, bucket_seconds, provider, model, object_type, status)
+// tuple with sums over the bucket. The dashboard reads from this table instead of scanning
+// the wide `logs` table, which makes dashboard queries O(bucket_count) instead of
+// O(row_count) and gives the SQLite backend an order-of-magnitude speedup.
+type DashboardBucketMetric struct {
+	ID               uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	BucketStart      time.Time `gorm:"index;not null" json:"bucket_start"`
+	BucketSeconds    int64     `gorm:"not null" json:"bucket_seconds"`
+	Provider         string    `gorm:"type:varchar(64);index:idx_dbm_provider_bucket,priority:1" json:"provider"`
+	Model            string    `gorm:"type:varchar(128);index:idx_dbm_model_bucket,priority:1" json:"model"`
+	ObjectType       string    `gorm:"type:varchar(64);index" json:"object_type"`
+	Status           string    `gorm:"type:varchar(32);index" json:"status"`
+	RequestCount     int64     `gorm:"default:0" json:"request_count"`
+	PromptTokens     int64     `gorm:"default:0" json:"prompt_tokens"`
+	CompletionTokens int64     `gorm:"default:0" json:"completion_tokens"`
+	TotalTokens      int64     `gorm:"default:0" json:"total_tokens"`
+	Cost             float64   `gorm:"default:0" json:"cost"`
+	TotalLatencyMS   float64   `gorm:"default:0" json:"total_latency_ms"` // sum over successful rows; divide by LatencyCount for the bucket avg
+	LatencyCount     int64     `gorm:"default:0" json:"latency_count"`     // number of successful rows that contributed to TotalLatencyMS
+	UpdatedAt        time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// TableName pins the table name so the migration's CREATE TABLE matches GORM's expectations
+// regardless of pluralization rules across the supported dialects.
+func (DashboardBucketMetric) TableName() string {
+	return "dashboard_bucket_metrics"
+}

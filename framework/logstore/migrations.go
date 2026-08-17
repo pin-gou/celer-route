@@ -267,6 +267,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"logs_add_cluster_governance_columns"}, run: migrationAddClusterGovernanceColumns},
 	{IDs: []string{"logs_add_inc_number_column"}, run: migrationAddLogIncNumberColumn},
 	{IDs: []string{"logs_recreate_filter_users_matview"}, run: migrationRecreateFilterUsersMatView},
+	{IDs: []string{"dashboard_bucket_metrics_init"}, run: migrationCreateDashboardBucketMetricsTable},
 	{IDs: []string{"logs_add_multi_team_business_unit_columns"}, run: migrationAddMultiTeamBusinessUnitColumns},
 	{IDs: []string{"logs_add_multi_team_bu_gin_indexes_v1"}, run: migrationAddMultiTeamBusinessUnitGINIndexes},
 	{IDs: []string{"logs_recreate_filter_team_bu_matviews_multivalue"}, run: migrationRecreateFilterTeamBUMatViews},
@@ -1648,6 +1649,57 @@ func migrationCreateAsyncJobsTable(ctx context.Context, db *gorm.DB, logger sche
 	err := m.Migrate()
 	if err != nil {
 		return fmt.Errorf("error while creating async_jobs table: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationCreateDashboardBucketMetricsTable creates the dashboard_bucket_metrics table
+// and its composite indexes if missing. This is the pre-aggregate the dashboard reads
+// instead of scanning the wide `logs` table on every page load.
+func migrationCreateDashboardBucketMetricsTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "dashboard_bucket_metrics_init"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			dbMigrator := tx.Migrator()
+			if !dbMigrator.HasTable(&DashboardBucketMetric{}) {
+				logger.Info("[logstore] %s: creating table DashboardBucketMetric", migrationName)
+				if err := dbMigrator.CreateTable(&DashboardBucketMetric{}); err != nil {
+					return fmt.Errorf("failed to create dashboard_bucket_metrics table: %w", err)
+				}
+			}
+
+			// Composite indexes not picked up by GORM tag ordering across dialects —
+			// explicitly create them so every backend has the right shape.
+			// Note: idx_dbm_status / idx_dbm_bucket_start / idx_dbm_object_type are
+			// created automatically from the struct's `index` tags, so we only need
+			// to add the cross-column composite indexes here.
+			indexes := []string{
+				"idx_dbm_provider_bucket",
+				"idx_dbm_model_bucket",
+			}
+			for _, idx := range indexes {
+				if !dbMigrator.HasIndex(&DashboardBucketMetric{}, idx) {
+					logger.Info("[logstore] %s: creating index %s on DashboardBucketMetric", migrationName, idx)
+					if err := dbMigrator.CreateIndex(&DashboardBucketMetric{}, idx); err != nil {
+						return fmt.Errorf("failed to create index %s: %w", idx, err)
+					}
+				}
+			}
+
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			logger.Info("[logstore] %s: dropping table DashboardBucketMetric", migrationName)
+			return tx.Migrator().DropTable(&DashboardBucketMetric{})
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while creating dashboard_bucket_metrics table: %s", err.Error())
 	}
 	return nil
 }

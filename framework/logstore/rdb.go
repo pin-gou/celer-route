@@ -76,6 +76,11 @@ type RDBLogStore struct {
 	// Self-heal state for the matview read path (see matviewheal.go).
 	matViewHealInFlight    atomic.Bool
 	matViewHealLastAttempt atomic.Int64 // unix nanos of the last repair attempt
+
+	// bucketReader is set by the server after constructing the aggregator. When
+	// non-nil, the Get* methods try the bucket-reader path first and fall back
+	// to the raw logs path when the reader returns errAggregatorStale.
+	bucketReader atomic.Pointer[DashboardBucketReader]
 }
 
 // generateBucketTimestamps generates all bucket timestamps for a time range.
@@ -554,6 +559,165 @@ func (s *RDBLogStore) BatchUpsert(ctx context.Context, entries []*Log) error {
 // Ping checks if the database is reachable.
 func (s *RDBLogStore) Ping(ctx context.Context) error {
 	return s.db.WithContext(ctx).Exec("SELECT 1").Error
+}
+
+// DB returns the underlying *gorm.DB. Exposed so the DashboardAggregator
+// (which lives outside the logstore scope but inside the same package) can
+// reach the same connection pool. Callers must not mutate the returned handle
+// in ways that would race with the logstore's own writers.
+func (s *RDBLogStore) DB() *gorm.DB {
+	return s.db
+}
+
+// SetBucketReader attaches a DashboardBucketReader. Passing nil detaches any
+// previously-set reader. Reads happen via the reader when set; the dispatch
+// in GetStats / GetHistogram / Get* falls back to the raw logs path when the
+// reader returns errAggregatorStale.
+func (s *RDBLogStore) SetBucketReader(r *DashboardBucketReader) {
+	if r == nil {
+		s.bucketReader.Store(nil)
+		return
+	}
+	s.bucketReader.Store(r)
+}
+
+// tryBucketStats runs the bucket-reader path for GetStats and returns
+// (result, true) on success or (nil, false) when the reader is missing,
+// stale, or doesn't support the filters. The caller falls back to the raw
+// path on false.
+func (s *RDBLogStore) tryBucketStats(ctx context.Context, filters SearchFilters) (*SearchStats, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetStats(ctx, filters)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+// tryBucketHistogram runs the bucket-reader path for GetHistogram and returns
+// (result, true) on success or (nil, false) on miss. The caller is
+// responsible for validating that requestedSize is supported by the reader.
+func (s *RDBLogStore) tryBucketHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*HistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketTokenHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*TokenHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetTokenHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketCostHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*CostHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetCostHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketLatencyHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*LatencyHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetLatencyHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketThroughputHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ThroughputHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetThroughputHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketModelHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ModelHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetModelHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketProviderCostHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderCostHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetProviderCostHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketProviderTokenHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderTokenHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetProviderTokenHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketProviderLatencyHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderLatencyHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetProviderLatencyHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (s *RDBLogStore) tryBucketProviderThroughputHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderThroughputHistogramResult, bool) {
+	r := s.bucketReader.Load()
+	if r == nil {
+		return nil, false
+	}
+	res, err := r.GetProviderThroughputHistogram(ctx, filters, bucketSizeSeconds)
+	if err != nil || res == nil {
+		return nil, false
+	}
+	return res, true
 }
 
 // Update updates a log entry in the database.
@@ -1346,6 +1510,12 @@ func billingPayloadColumnFor(objectType string) string {
 
 // GetStats calculates statistics for logs matching the given filters.
 func (s *RDBLogStore) GetStats(ctx context.Context, filters SearchFilters) (*SearchStats, error) {
+	// Fast path: pre-aggregated dashboard_bucket_metrics. Skipped when the
+	// reader is missing, stale, or doesn't support these filters (e.g. when
+	// content_search or metadata filters are present).
+	if stats, ok := s.tryBucketStats(ctx, filters); ok {
+		return stats, nil
+	}
 	// Stats has a stricter matview gate than other paths: short windows go to
 	// the raw table even if matview-eligible, so /api/logs/stats stays
 	// consistent with the real-time /api/logs row list. See
@@ -1541,6 +1711,12 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600 // Default to 1 hour
 	}
+	// Fast path: dashboard_bucket_metrics. Skipped when the reader is
+	// missing, stale, doesn't support the requested bucket size, or can't
+	// honour the filters.
+	if res, ok := s.tryBucketHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
+	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 && bucketSizeSeconds%3600 == 0 {
 		if res, err := s.getHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
 			return res, err
@@ -1654,6 +1830,9 @@ func (s *RDBLogStore) GetHistogram(ctx context.Context, filters SearchFilters, b
 func (s *RDBLogStore) GetTokenHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*TokenHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600 // Default to 1 hour
+	}
+	if res, ok := s.tryBucketTokenHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
 	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getTokenHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
@@ -1776,6 +1955,9 @@ func (s *RDBLogStore) GetThroughputHistogram(ctx context.Context, filters Search
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600 // Default to 1 hour
 	}
+	if res, ok := s.tryBucketThroughputHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
+	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getThroughputHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
 			return res, err
@@ -1864,6 +2046,9 @@ func (s *RDBLogStore) GetThroughputHistogram(ctx context.Context, filters Search
 func (s *RDBLogStore) GetProviderThroughputHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderThroughputHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600
+	}
+	if res, ok := s.tryBucketProviderThroughputHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
 	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getProviderThroughputHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
@@ -1959,6 +2144,9 @@ func (s *RDBLogStore) GetProviderThroughputHistogram(ctx context.Context, filter
 func (s *RDBLogStore) GetCostHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*CostHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600 // Default to 1 hour
+	}
+	if res, ok := s.tryBucketCostHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
 	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getCostHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
@@ -2067,6 +2255,9 @@ func (s *RDBLogStore) GetCostHistogram(ctx context.Context, filters SearchFilter
 func (s *RDBLogStore) GetModelHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ModelHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600 // Default to 1 hour
+	}
+	if res, ok := s.tryBucketModelHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
 	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getModelHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
@@ -2208,6 +2399,10 @@ func computePercentile(sorted []float64, p float64) float64 {
 func (s *RDBLogStore) GetLatencyHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*LatencyHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600
+	}
+	// Pre-aggregate only stores avg latency; p90/p95/p99 stay 0 in this path.
+	if res, ok := s.tryBucketLatencyHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
 	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getLatencyHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
@@ -2950,6 +3145,9 @@ func (s *RDBLogStore) GetProviderCostHistogram(ctx context.Context, filters Sear
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600
 	}
+	if res, ok := s.tryBucketProviderCostHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
+	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getProviderCostHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
 			return res, err
@@ -3046,6 +3244,9 @@ func (s *RDBLogStore) GetProviderCostHistogram(ctx context.Context, filters Sear
 func (s *RDBLogStore) GetProviderTokenHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderTokenHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600
+	}
+	if res, ok := s.tryBucketProviderTokenHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
 	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getProviderTokenHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {
@@ -3155,6 +3356,9 @@ func (s *RDBLogStore) GetProviderTokenHistogram(ctx context.Context, filters Sea
 func (s *RDBLogStore) GetProviderLatencyHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderLatencyHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {
 		bucketSizeSeconds = 3600
+	}
+	if res, ok := s.tryBucketProviderLatencyHistogram(ctx, filters, bucketSizeSeconds); ok {
+		return res, nil
 	}
 	if s.db.Dialector.Name() == "postgres" && s.canUseMatView(filters) && bucketSizeSeconds >= 3600 {
 		if res, err := s.getProviderLatencyHistogramFromMatView(ctx, filters, bucketSizeSeconds); !s.fallBackToRaw(err) {

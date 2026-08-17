@@ -202,6 +202,7 @@ type BifrostHTTPServer struct {
 	LogOutputStyle  string
 	LogsCleaner     *logstore.LogsCleaner
 	AsyncJobCleaner *logstore.AsyncJobCleaner
+	DashboardBucketAggregator *logstore.DashboardAggregator
 
 	Client *bifrost.Bifrost
 	Config *lib.Config
@@ -2468,6 +2469,29 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 					logRetentionDays)
 			}
 		}
+
+		// Spin up the dashboard bucket aggregator. It rolls logs into the
+		// dashboard_bucket_metrics pre-aggregate so dashboard reads on the
+		// SQLite backend don't have to scan the wide logs table on every page
+		// load. Falls back to the raw logs path when filters don't fit the
+		// pre-aggregate, so leaving it disabled is safe.
+		if rdbStore, ok := s.Config.LogsStore.(*logstore.RDBLogStore); ok {
+			s.DashboardBucketAggregator = logstore.NewDashboardAggregator(rdbStore.DB(), logstore.DashboardAggregatorConfig{
+				Interval:        1 * time.Minute,
+				BucketSeconds:   300,
+				LookbackBuckets: 6,
+				Logger:          logger,
+			})
+			reader := logstore.NewDashboardBucketReader(rdbStore.DB(), logstore.DashboardBucketReaderConfig{
+				AggregatorBucketSeconds: s.DashboardBucketAggregator.BucketSeconds(),
+				FreshnessMaxAge:         5 * time.Minute,
+				IsFresh:                 func() bool { return s.DashboardBucketAggregator.IsFresh(5 * time.Minute) },
+			})
+			rdbStore.SetBucketReader(reader)
+			s.DashboardBucketAggregator.Start()
+			logger.Info("dashboard bucket aggregator initialized (interval=%s, bucket=%ds)",
+				time.Minute, 300)
+		}
 	}
 	// Initialize async job cleaner if log store is configured
 	if s.Config.LogsStore != nil {
@@ -2821,6 +2845,10 @@ func (s *BifrostHTTPServer) Start() error {
 			if s.AsyncJobCleaner != nil {
 				logger.Info("stopping async job cleaner...")
 				s.AsyncJobCleaner.StopCleanupRoutine()
+			}
+			if s.DashboardBucketAggregator != nil {
+				logger.Info("stopping dashboard bucket aggregator...")
+				s.DashboardBucketAggregator.Stop()
 			}
 			if s.WebhookDispatcher != nil {
 				logger.Info("stopping webhook dispatcher...")
