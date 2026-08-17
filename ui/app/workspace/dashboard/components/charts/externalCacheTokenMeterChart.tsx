@@ -1,6 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TokenHistogramResponse } from "@/lib/types/logs";
-import { formatCompactNumber } from "@/lib/utils/numbers";
+import { formatTokensAdaptive } from "@/lib/utils/numbers";
 import { Info } from "lucide-react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -99,13 +99,13 @@ function ExternalCacheTokenMeterChartImpl({ data }: ExternalCacheTokenMeterChart
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: METER_COLORS.cached }} />
 								<span className="text-primary">
-									{t("charts.cached")}: {formatCompactNumber(totalCachedRead)}
+									{t("charts.cached")}: {formatTokensAdaptive(totalCachedRead)}
 								</span>
 							</span>
 							<span className="flex items-center gap-1.5">
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: METER_COLORS.input }} />
 								<span className="text-muted-foreground">
-									{t("charts.input")}: {formatCompactNumber(totalPromptTokens)}
+									{t("charts.input")}: {formatTokensAdaptive(totalPromptTokens)}
 								</span>
 							</span>
 						</div>

@@ -2,6 +2,7 @@ import type { ProviderThroughputHistogramResponse } from "@/lib/types/logs";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { formatTokensAdaptive } from "@/lib/utils/numbers";
 import {
 	formatFullTimestamp,
 	formatTimestamp,
@@ -69,7 +70,7 @@ function SingleProviderTooltip({ active, payload }: any) {
 				</div>
 				<div className="flex items-center justify-between gap-4">
 					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.completionTokens")}</span>
-					<span className="font-medium">{data.total_completion_tokens?.toLocaleString() || 0}</span>
+					<span className="font-medium">{formatTokensAdaptive(data.total_completion_tokens ?? 0)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-1 dark:border-zinc-700">
 					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.requests")}</span>

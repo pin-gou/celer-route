@@ -1,5 +1,5 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
+import { COMPACT_NUMBER_FORMAT, formatTokensAdaptive } from "@/lib/utils/numbers";
 import NumberFlow from "@number-flow/react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -272,8 +272,12 @@ function ProviderUsageTabImpl({
 				loading={loadingProviderTokens}
 				testId="chart-provider-tokens"
 				totalLabel={t("charts.total")}
-				total={providerTokenTotal !== null ? <NumberFlow value={providerTokenTotal} format={COMPACT_NUMBER_FORMAT} /> : undefined}
-				totalTooltip={providerTokenTotal !== null ? providerTokenTotal.toLocaleString("en-US") : undefined}
+				total={
+					providerTokenTotal !== null ? (
+						<span className="truncate whitespace-nowrap">{formatTokensAdaptive(providerTokenTotal)}</span>
+					) : undefined
+				}
+				totalTooltip={providerTokenTotal !== null ? formatTokensAdaptive(providerTokenTotal) : undefined}
 				legend={
 					<div className={CHART_HEADER_LEGEND_CLASS}>
 						{providerTokenProvider === "all" ? (

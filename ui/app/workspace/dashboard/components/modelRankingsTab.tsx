@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ProviderIcons, { type ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import type { ModelHistogramResponse, ModelRankingEntry, ModelRankingsResponse } from "@/lib/types/logs";
-import { COMPACT_NUMBER_FORMAT, formatCompactNumber as formatNumber } from "@/lib/utils/numbers";
+import { COMPACT_NUMBER_FORMAT, formatCompactNumber as formatNumber, formatTokensAdaptive } from "@/lib/utils/numbers";
 import NumberFlow from "@number-flow/react";
 import { memo, useCallback, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -393,7 +393,7 @@ function ModelRankingsTabImpl({ rankingsData, loading, modelData, loadingModels,
 									</TableCell>
 									<TableCell className="text-right">
 										<div className="flex items-center justify-end gap-2">
-											<span>{formatNumber(entry.total_tokens)}</span>
+											<span>{formatTokensAdaptive(entry.total_tokens)}</span>
 											<TrendBadge value={entry.trend.tokens_trend} isNew={!entry.trend.has_previous_period} />
 										</div>
 									</TableCell>

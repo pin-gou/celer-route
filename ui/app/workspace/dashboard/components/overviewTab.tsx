@@ -6,7 +6,7 @@ import type {
 	ThroughputHistogramResponse,
 	TokenHistogramResponse,
 } from "@/lib/types/logs";
-import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
+import { COMPACT_NUMBER_FORMAT, formatTokensAdaptive } from "@/lib/utils/numbers";
 import NumberFlow from "@number-flow/react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -195,8 +195,8 @@ function OverviewTabImpl({
 					loading={loadingTokens}
 					testId="chart-token-usage"
 					totalLabel={t("charts.total")}
-					total={tokenTotal !== null ? <NumberFlow value={tokenTotal} format={COMPACT_NUMBER_FORMAT} /> : undefined}
-					totalTooltip={tokenTotal !== null ? tokenTotal.toLocaleString("en-US") : undefined}
+					total={tokenTotal !== null ? <span className="truncate whitespace-nowrap">{formatTokensAdaptive(tokenTotal)}</span> : undefined}
+					totalTooltip={tokenTotal !== null ? formatTokensAdaptive(tokenTotal) : undefined}
 					legend={
 						<div className={CHART_HEADER_LEGEND_CLASS}>
 							<span className="flex items-center gap-1">

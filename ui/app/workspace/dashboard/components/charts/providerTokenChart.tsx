@@ -1,5 +1,5 @@
 import type { ProviderTokenHistogramResponse } from "@/lib/types/logs";
-import { formatCompactNumber } from "@/lib/utils/numbers";
+import { formatTokensAdaptive } from "@/lib/utils/numbers";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -44,7 +44,7 @@ function AllProvidersTooltip({ active, payload, displayProviders }: any) {
 								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: isOther ? OTHER_SERIES_COLOR : getModelColor(idx) }} />
 								<span className="max-w-[120px] truncate text-zinc-600 dark:text-zinc-400">{isOther ? OTHER_SERIES_LABEL : provider}</span>
 							</span>
-							<span className="font-medium">{formatCompactNumber(tokens)}</span>
+							<span className="font-medium">{formatTokensAdaptive(tokens)}</span>
 						</div>
 					);
 				})}
@@ -72,18 +72,18 @@ function SingleProviderTooltip({ active, payload, provider }: any) {
 						<span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.promptTokens }} />
 						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.input")}</span>
 					</span>
-					<span className="font-medium">{formatCompactNumber(stats.prompt_tokens || 0)}</span>
+					<span className="font-medium">{formatTokensAdaptive(stats.prompt_tokens || 0)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
 					<span className="flex items-center gap-1.5">
 						<span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.completionTokens }} />
 						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.output")}</span>
 					</span>
-					<span className="font-medium">{formatCompactNumber(stats.completion_tokens || 0)}</span>
+					<span className="font-medium">{formatTokensAdaptive(stats.completion_tokens || 0)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-1 dark:border-zinc-700">
 					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.total")}</span>
-					<span className="font-medium">{formatCompactNumber(stats.total_tokens || 0)}</span>
+					<span className="font-medium">{formatTokensAdaptive(stats.total_tokens || 0)}</span>
 				</div>
 			</div>
 		</div>
@@ -169,7 +169,7 @@ function ProviderTokenChartImpl({ data, chartType, startTime, endTime, selectedP
 							tickLine={false}
 							axisLine={false}
 							width={50}
-							tickFormatter={(v) => formatCompactNumber(v)}
+							tickFormatter={(v) => formatTokensAdaptive(v)}
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>
@@ -234,7 +234,7 @@ function ProviderTokenChartImpl({ data, chartType, startTime, endTime, selectedP
 							tickLine={false}
 							axisLine={false}
 							width={50}
-							tickFormatter={(v) => formatCompactNumber(v)}
+							tickFormatter={(v) => formatTokensAdaptive(v)}
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>

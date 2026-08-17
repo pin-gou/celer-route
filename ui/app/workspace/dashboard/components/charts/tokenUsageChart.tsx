@@ -2,7 +2,7 @@ import type { TokenHistogramResponse } from "@/lib/types/logs";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { formatCompactNumber } from "@/lib/utils/numbers";
+import { formatTokensAdaptive } from "@/lib/utils/numbers";
 import { CHART_COLORS, formatFullTimestamp, formatTimestamp } from "../../utils/chartUtils";
 import { ChartErrorBoundary } from "./chartErrorBoundary";
 import type { ChartType } from "./chartTypeToggle";
@@ -29,14 +29,14 @@ function CustomTooltip({ active, payload, t }: any) {
 						<span className="h-2 w-2 rounded-full bg-blue-500" />
 						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.input")}</span>
 					</span>
-					<span className="font-medium">{data.prompt_tokens.toLocaleString()}</span>
+					<span className="font-medium">{formatTokensAdaptive(data.prompt_tokens)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
 					<span className="flex items-center gap-1.5">
 						<span className="h-2 w-2 rounded-full bg-emerald-500" />
 						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.output")}</span>
 					</span>
-					<span className="font-medium">{data.completion_tokens.toLocaleString()}</span>
+					<span className="font-medium">{formatTokensAdaptive(data.completion_tokens)}</span>
 				</div>
 				{data.cached_read_tokens > 0 && (
 					<div className="flex items-center justify-between gap-4">
@@ -44,12 +44,12 @@ function CustomTooltip({ active, payload, t }: any) {
 							<span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.cachedReadTokens }} />
 							<span className="text-zinc-600 dark:text-zinc-400">{t("charts.cached")}</span>
 						</span>
-						<span className="font-medium">{data.cached_read_tokens.toLocaleString()}</span>
+						<span className="font-medium">{formatTokensAdaptive(data.cached_read_tokens)}</span>
 					</div>
 				)}
 				<div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-1 dark:border-zinc-700">
 					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.total")}</span>
-					<span className="font-medium">{data.total_tokens.toLocaleString()}</span>
+					<span className="font-medium">{formatTokensAdaptive(data.total_tokens)}</span>
 				</div>
 			</div>
 		</div>
@@ -101,7 +101,7 @@ function TokenUsageChartImpl({ data, chartType, startTime, endTime }: TokenUsage
 							tickLine={false}
 							axisLine={false}
 							width={50}
-							tickFormatter={(v) => formatCompactNumber(v)}
+							tickFormatter={(v) => formatTokensAdaptive(v)}
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>
@@ -152,7 +152,7 @@ function TokenUsageChartImpl({ data, chartType, startTime, endTime }: TokenUsage
 							tickLine={false}
 							axisLine={false}
 							width={50}
-							tickFormatter={(v) => formatCompactNumber(v)}
+							tickFormatter={(v) => formatTokensAdaptive(v)}
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>
