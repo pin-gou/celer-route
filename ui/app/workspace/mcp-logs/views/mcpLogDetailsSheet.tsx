@@ -252,9 +252,7 @@ export function MCPLogDetailSheet({
 								className="w-full"
 								label="Start Timestamp"
 								value={
-									isValid(new Date(displayLog.timestamp))
-										? format(new Date(displayLog.timestamp), "yyyy-MM-dd hh:mm:ss aa")
-										: "Invalid date"
+									isValid(new Date(displayLog.timestamp)) ? format(new Date(displayLog.timestamp), "yyyy-MM-dd HH:mm:ss") : "Invalid date"
 								}
 							/>
 							<LogEntryDetailsView

@@ -7,6 +7,7 @@ import { getErrorMessage } from "@/lib/store/apis/baseApi";
 import { Budget, BudgetOverrideRequest } from "@/lib/types/governance";
 import { budgetOverrideFormSchema } from "@/lib/types/schemas";
 import { formatCurrency, getBudgetOverrideValidUntil, getEffectiveBudgetLimit, hasActiveBudgetOverride } from "@/lib/utils/governance";
+import { format } from "date-fns";
 import { Pencil, Plus } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -158,7 +159,7 @@ export function BudgetOverrideDialog({ budget, onSave, onRemove, disabled, calen
 								<p className="text-muted-foreground text-xs">The current reset cycle counts as the first cycle.</p>
 								{validUntil ? (
 									<p className="text-muted-foreground text-xs">
-										Valid until <span className="text-foreground font-medium">{validUntil.toLocaleString()}</span>
+										Valid until <span className="text-foreground font-medium">{format(validUntil, "yyyy-MM-dd HH:mm:ss")}</span>
 									</p>
 								) : null}
 							</div>

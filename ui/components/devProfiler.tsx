@@ -15,6 +15,7 @@ import {
 	X,
 } from "lucide-react";
 import { formatBytes } from "@/lib/utils/strings";
+import { format } from "date-fns";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -26,15 +27,10 @@ function formatNs(ns: number): string {
 	return `${(ns / 1000000000).toFixed(2)}s`;
 }
 
-// Format timestamp to HH:MM:SS
+// Format timestamp to HH:mm:ss (browser local time)
 function formatTime(timestamp: string): string {
 	const date = new Date(timestamp);
-	return date.toLocaleTimeString("en-US", {
-		hour12: false,
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-	});
+	return format(date, "HH:mm:ss");
 }
 
 // Truncate function name for display

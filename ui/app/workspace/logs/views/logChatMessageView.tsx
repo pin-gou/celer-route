@@ -4,6 +4,7 @@ import { ChatMessage, ContentBlock } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import { cleanJson, isJson } from "@/lib/utils/validation";
 import { Download } from "lucide-react";
+import { format } from "date-fns";
 import AudioPlayer from "./audioPlayer";
 import CollapsibleBox from "./collapsibleBox";
 
@@ -326,7 +327,7 @@ export default function LogChatMessageView({ message, audioFormat }: LogChatMess
 							<div className="text-muted-foreground text-xs">
 								ID: {message.audio.id} | Expires:{" "}
 								{message.audio.expires_at && Number.isFinite(message.audio.expires_at)
-									? new Date(message.audio.expires_at * 1000).toLocaleString()
+									? format(new Date(message.audio.expires_at * 1000), "yyyy-MM-dd HH:mm:ss")
 									: "N/A"}
 							</div>
 						)}

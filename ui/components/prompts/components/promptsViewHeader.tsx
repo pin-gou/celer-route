@@ -10,6 +10,7 @@ import { useCreateSessionMutation, useGetSessionsQuery, useGetVersionsQuery, use
 import { ModelParams, PromptSession } from "@/lib/types/prompts";
 import { cn } from "@/lib/utils";
 import { Check, GitCommit, PencilIcon, Save, Trash2 } from "lucide-react";
+import { format } from "date-fns";
 import { parseAsInteger, useQueryStates } from "nuqs";
 import { useCallback, useRef, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
@@ -276,14 +277,7 @@ export default function PromptsViewHeader() {
 }
 
 function formatSessionDate(dateStr: string): string {
-	const date = new Date(dateStr);
-	const month = date.toLocaleString("en-US", { month: "short" });
-	const day = date.getDate();
-	const hours = date.getHours();
-	const minutes = date.getMinutes().toString().padStart(2, "0");
-	const ampm = hours >= 12 ? "pm" : "am";
-	const displayHours = (hours % 12 || 12).toString().padStart(2, "0");
-	return `${month} ${day}, ${displayHours}:${minutes}${ampm}`;
+	return format(new Date(dateStr), "yyyy-MM-dd HH:mm:ss");
 }
 
 function SessionItem({

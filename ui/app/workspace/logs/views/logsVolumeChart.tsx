@@ -5,6 +5,7 @@ import type { HistogramBucket, LogsHistogramResponse, MCPHistogramResponse } fro
 import { getUnixRangeForPeriod } from "@/lib/utils/timeRange";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, RotateCcw } from "lucide-react";
+import { format } from "date-fns";
 import { Component, type ErrorInfo, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -80,39 +81,22 @@ interface LogsVolumeChartProps {
 }
 
 // Format timestamp based on bucket size
-function formatTimestamp(timestamp: string, bucketSizeSeconds: number, locale: string = "en-US"): string {
+function formatTimestamp(timestamp: string, bucketSizeSeconds: number): string {
 	const date = new Date(timestamp);
 
 	if (bucketSizeSeconds >= 86400) {
-		// Daily buckets: "Jan 20"
-		return date.toLocaleDateString(locale, { month: "short", day: "numeric" });
+		return format(date, "yyyy-MM-dd");
 	} else if (bucketSizeSeconds >= 3600) {
-		// Hourly buckets: "10:00"
-		return date.toLocaleTimeString(locale, {
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: false,
-		});
+		return format(date, "HH:mm");
 	} else {
-		// Sub-hourly: "10:15"
-		return date.toLocaleTimeString(locale, {
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: false,
-		});
+		return format(date, "HH:mm");
 	}
 }
 
 // Format full timestamp for tooltip
-function formatFullTimestamp(timestamp: string, locale: string = "en-US"): string {
+function formatFullTimestamp(timestamp: string): string {
 	const date = new Date(timestamp);
-	return date.toLocaleString(locale, {
-		month: "short",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
-	});
+	return format(date, "yyyy-MM-dd HH:mm:ss");
 }
 
 type LogVolumeDataPoint = HistogramBucket & {
@@ -137,7 +121,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
 	return (
 		<div className="rounded-sm border border-zinc-200 bg-white px-3 py-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-			<div className="mb-1 text-xs text-zinc-500">{formatFullTimestamp(data.timestamp, i18n.language)}</div>
+			<div className="mb-1 text-xs text-zinc-500">{formatFullTimestamp(data.timestamp)}</div>
 			<div className="space-y-1 text-sm">
 				<div className="mt-2 flex items-center justify-between gap-4">
 					<span className="flex items-center gap-1.5">
@@ -230,7 +214,7 @@ export function LogsVolumeChart({
 				...bucket,
 				cancelled: bucket.cancelled ?? 0,
 				index,
-				formattedTime: formatTimestamp(bucket.timestamp, data.bucket_size_seconds, i18n.language),
+				formattedTime: formatTimestamp(bucket.timestamp, data.bucket_size_seconds),
 			}));
 			// Ensure at least 2 data points for Recharts
 			if (result.length === 1) {
@@ -242,7 +226,7 @@ export function LogsVolumeChart({
 					error: 0,
 					cancelled: 0,
 					index: 1,
-					formattedTime: formatTimestamp(nextTimestamp, data.bucket_size_seconds, i18n.language),
+					formattedTime: formatTimestamp(nextTimestamp, data.bucket_size_seconds),
 				});
 			}
 			return result;
@@ -259,7 +243,7 @@ export function LogsVolumeChart({
 				error: 0,
 				cancelled: 0,
 				index: idx,
-				formattedTime: formatTimestamp(timestamp, data.bucket_size_seconds, i18n.language),
+				formattedTime: formatTimestamp(timestamp, data.bucket_size_seconds),
 			});
 		}
 
@@ -275,7 +259,7 @@ export function LogsVolumeChart({
 					...bucket,
 					cancelled: bucket.cancelled ?? 0,
 					index: bucketIndex,
-					formattedTime: formatTimestamp(bucket.timestamp, data.bucket_size_seconds, i18n.language),
+					formattedTime: formatTimestamp(bucket.timestamp, data.bucket_size_seconds),
 				};
 			}
 		}
@@ -290,7 +274,7 @@ export function LogsVolumeChart({
 				error: 0,
 				cancelled: 0,
 				index: 1,
-				formattedTime: formatTimestamp(nextTimestamp, data.bucket_size_seconds, i18n.language),
+				formattedTime: formatTimestamp(nextTimestamp, data.bucket_size_seconds),
 			});
 		}
 

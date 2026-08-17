@@ -98,12 +98,12 @@ export function SessionDetailsSheet({
 			},
 			{
 				label: t("sessionSheet.started"),
-				value: sessionSummary?.started_at ? format(new Date(sessionSummary.started_at), "MMM d, yyyy HH:mm:ss") : "N/A",
+				value: sessionSummary?.started_at ? format(new Date(sessionSummary.started_at), "yyyy-MM-dd HH:mm:ss") : "N/A",
 				size: "sm",
 			},
 			{
 				label: t("sessionSheet.latestUpdate"),
-				value: sessionSummary?.latest_at ? format(new Date(sessionSummary.latest_at), "MMM d, yyyy HH:mm:ss") : "N/A",
+				value: sessionSummary?.latest_at ? format(new Date(sessionSummary.latest_at), "yyyy-MM-dd HH:mm:ss") : "N/A",
 				size: "sm",
 			},
 			{
@@ -282,7 +282,7 @@ export function SessionDetailsSheet({
 													{t("sessionSheet.current")}
 												</div>
 											) : null}
-											{format(new Date(log.timestamp), "yyyy-MM-dd HH:mm:ss (XXX)")}
+											{format(new Date(log.timestamp), "yyyy-MM-dd HH:mm:ss")}
 										</TableCell>
 										<TableCell>
 											<Badge variant="outline" className={`${RequestTypeColors[log.object as keyof typeof RequestTypeColors]} text-xs`}>

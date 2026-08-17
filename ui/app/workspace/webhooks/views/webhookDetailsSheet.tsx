@@ -446,7 +446,7 @@ export function WebhookDetailsSheet({ endpoint, isTesting, canManage, onTest, on
 																	/>
 																	<span className="text-sm font-medium">{send.label}</span>
 																	<span className="text-muted-foreground text-xs tabular-nums">
-																		{format(new Date(sendLatest.created_at), "MMM d, yyyy hh:mm:ss aa")}
+																		{format(new Date(sendLatest.created_at), "yyyy-MM-dd HH:mm:ss")}
 																	</span>
 																</div>
 															</TableCell>

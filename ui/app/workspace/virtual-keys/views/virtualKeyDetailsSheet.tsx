@@ -21,7 +21,7 @@ import {
 	parseResetPeriod,
 } from "@/lib/utils/governance";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { useVirtualKeyUsage } from "../hooks/useVirtualKeyUsage";
 
 function usageBarClass(pct: number, exhausted: boolean) {
@@ -158,7 +158,9 @@ export default function VirtualKeyDetailSheet({
 										{formatDistanceToNow(new Date(virtualKey.expires_at), {
 											addSuffix: true,
 										})}
-										<span className="text-muted-foreground ml-1 text-xs">({new Date(virtualKey.expires_at).toLocaleString()})</span>
+										<span className="text-muted-foreground ml-1 text-xs">
+											({format(new Date(virtualKey.expires_at), "yyyy-MM-dd HH:mm:ss")})
+										</span>
 									</div>
 								</div>
 							)}

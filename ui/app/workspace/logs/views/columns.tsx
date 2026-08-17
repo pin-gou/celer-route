@@ -329,7 +329,7 @@ export const createColumns = (
 					</Button>
 				);
 			},
-			size: 130,
+			size: 150,
 			cell: ({ row }) => {
 				const { i18n } = useTranslation("logs");
 				const dateLocale: Locale = i18n.language.startsWith("zh") ? zhCN : enUS;
@@ -341,7 +341,7 @@ export const createColumns = (
 				}
 				return (
 					<div className="flex flex-col leading-tight">
-						<span className="font-mono text-xs tabular-nums">{format(date, "MMM dd  HH:mm:ss", { locale: dateLocale })}</span>
+						<span className="font-mono text-xs tabular-nums">{format(date, "MM-dd HH:mm:ss.SSS", { locale: dateLocale })}</span>
 						<span className="text-muted-foreground text-[10.5px] tabular-nums">
 							{formatDistanceToNow(date, { addSuffix: true, locale: dateLocale })}
 						</span>
@@ -355,7 +355,7 @@ export const createColumns = (
 				const { t } = useTranslation("logs");
 				return t("column_labels.request_type");
 			},
-			size: 150,
+			size: 110,
 			cell: ({ row }) => {
 				return (
 					<Badge
@@ -376,7 +376,7 @@ export const createColumns = (
 				const { t } = useTranslation("logs");
 				return t("column_labels.input");
 			},
-			size: 350,
+			size: 330,
 			cell: ({ row }) => <LogMessageCell log={row.original} />,
 		},
 		{
@@ -385,7 +385,7 @@ export const createColumns = (
 				const { t } = useTranslation("logs");
 				return t("column_labels.model");
 			},
-			size: 220,
+			size: 170,
 			cell: ({ row }) => {
 				const provider = row.original.provider as ProviderName | undefined;
 				const model = row.original.model;
@@ -411,7 +411,7 @@ export const createColumns = (
 				const { t } = useTranslation("logs");
 				return t("column_labels.app");
 			},
-			size: 140,
+			size: 110,
 			cell: ({ row }) => {
 				const app = row.original.app ? mapAppToClientApp(row.original.app) : mapUserAgentToApp(row.original.user_agent);
 				const icon = row.original.app ? customAppIcons[row.original.app] || app.icon : app.icon;

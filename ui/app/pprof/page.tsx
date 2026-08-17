@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { format } from "date-fns";
 
 // ============================================================================
 // Utility Functions
@@ -38,12 +39,7 @@ function formatNs(ns: number): string {
 
 function formatTime(timestamp: string): string {
 	const date = new Date(timestamp);
-	return date.toLocaleTimeString("en-US", {
-		hour12: false,
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-	});
+	return format(date, "HH:mm:ss");
 }
 
 function getCategoryColor(category: string): string {

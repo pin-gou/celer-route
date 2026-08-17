@@ -11,6 +11,7 @@ import {
 	validateVersion,
 } from "@/lib/validators/skills";
 import { useEffect, useState } from "react";
+import { format, isValid } from "date-fns";
 
 // ---------- Constants ----------
 
@@ -19,11 +20,13 @@ export const PAGE_SIZE = 25;
 // ---------- Helpers ----------
 
 export function formatDate(dateStr: string) {
-	return new Date(dateStr).toLocaleString();
+	const d = new Date(dateStr);
+	return isValid(d) ? format(d, "yyyy-MM-dd HH:mm:ss") : "Invalid date";
 }
 
 export function formatDateShort(dateStr: string) {
-	return new Date(dateStr).toLocaleDateString();
+	const d = new Date(dateStr);
+	return isValid(d) ? format(d, "yyyy-MM-dd") : "Invalid date";
 }
 
 export function formatFileSize(bytes: number): string {

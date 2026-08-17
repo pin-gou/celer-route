@@ -75,7 +75,7 @@ function PluginSection({ name, entries }: { name: string; entries: PluginLogEntr
 				<div className="custom-scrollbar max-h-[300px] overflow-y-auto border-t">
 					{sorted.map((entry, idx) => (
 						<div key={idx} className="flex items-start gap-3 border-b px-4 py-1.5 font-mono text-xs last:border-b-0">
-							<span className="text-muted-foreground shrink-0">{format(new Date(entry.timestamp), "HH:mm:ss.SSS")}</span>
+							<span className="text-muted-foreground shrink-0">{format(new Date(entry.timestamp), "HH:mm:ss")}</span>
 							<span
 								className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${levelColors[entry.level] || levelColors.info}`}
 							>

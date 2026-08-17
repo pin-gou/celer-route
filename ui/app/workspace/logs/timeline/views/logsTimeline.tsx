@@ -7,6 +7,7 @@
 
 import { formatCost } from "@/app/workspace/dashboard/utils/chartUtils";
 import type { LogEntry } from "@/lib/types/logs";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -145,9 +146,8 @@ function formatAxisTime(ms: number): string {
 }
 
 function formatAxisDate(ms: number): string {
-	const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 	const d = new Date(ms);
-	return `${months[d.getMonth()]} ${d.getDate()}`;
+	return format(d, "yyyy-MM-dd");
 }
 
 function truncateModel(model: string | null): string {
