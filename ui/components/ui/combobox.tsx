@@ -608,8 +608,9 @@ function ComboboxSelect(props: ComboboxSelectProps) {
 					<span className="truncate">{selectedLabel || placeholder}</span>
 					<div className="ml-2 flex shrink-0 items-center gap-1">
 						{!props.hideClear && props.value && (
-							<button
-								type="button"
+							<span
+								role="button"
+								tabIndex={-1}
 								aria-label="Clear selection"
 								data-testid="combobox-select-clear-button"
 								className="rounded-sm opacity-50 hover:opacity-100"
@@ -618,9 +619,17 @@ function ComboboxSelect(props: ComboboxSelectProps) {
 									props.onValueChange?.(null);
 									setOpen(false);
 								}}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										e.stopPropagation();
+										props.onValueChange?.(null);
+										setOpen(false);
+									}
+								}}
 							>
 								<XIcon className="size-3.5" />
-							</button>
+							</span>
 						)}
 						<ChevronDownIcon className="size-4 opacity-50" />
 					</div>
