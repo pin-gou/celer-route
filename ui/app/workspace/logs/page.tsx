@@ -949,7 +949,6 @@ export default function LogsPage() {
 								onGroupedToggle={(enabled) => setUrlState({ grouped: enabled, offset: 0 })}
 								period={period}
 								onPeriodChange={handlePeriodChange}
-								totalLogs={totalItems}
 								columnEntries={columnEntries}
 								columnLabels={COLUMN_LABELS}
 								onToggleColumnVisibility={toggleColumnVisibility}
