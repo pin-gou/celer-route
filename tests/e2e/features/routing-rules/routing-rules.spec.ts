@@ -405,12 +405,12 @@ test.describe('Routing Rules', () => {
       expect(exists).toBe(false)
     })
 
-    test('should save rule with conditions successfully', async ({ routingRulesPage }) => {
+test('should save rule with conditions successfully', async ({ routingRulesPage }) => {
       const ruleName = `CEL Save Test ${Date.now()}`
       createdRules.push(ruleName)
 
       await routingRulesPage.createBtn.click()
-      await expect(routingRulesPage.sheet).toBeVisible()
+      await expect(routingRulesPage.sheet).toBeVisible({ timeout: 5000 })
       await routingRulesPage.waitForSheetAnimation()
       await routingRulesPage.waitForRuleBuilder()
 
@@ -433,6 +433,119 @@ test.describe('Routing Rules', () => {
       // Verify rule was created
       const exists = await routingRulesPage.ruleExists(ruleName)
       expect(exists).toBe(true)
+    })
+  })
+
+  test.describe('Fallback Reordering', () => {
+    test('should show position badges for each fallback', async ({ routingRulesPage }) => {
+      const ruleName = `Fallback Badges ${Date.now()}`
+      createdRules.push(ruleName)
+
+      await routingRulesPage.createBtn.click()
+      await expect(routingRulesPage.sheet).toBeVisible({ timeout: 5000 })
+      await routingRulesPage.waitForSheetAnimation()
+
+      await routingRulesPage.nameInput.fill(ruleName)
+      await routingRulesPage.addFallbackWithProvider('openai')
+      await routingRulesPage.addFallbackWithProvider('anthropic')
+      await routingRulesPage.addFallbackWithProvider('openai')
+
+      // Each row shows a sequential position badge starting at #1
+      await expect(routingRulesPage.fallbackPositionBadge(0)).toContainText('#1')
+      await expect(routingRulesPage.fallbackPositionBadge(1)).toContainText('#2')
+      await expect(routingRulesPage.fallbackPositionBadge(2)).toContainText('#3')
+
+      await routingRulesPage.cancelRule()
+    })
+
+    test('should disable up button on first row and down button on last row', async ({ routingRulesPage }) => {
+      const ruleName = `Fallback Buttons ${Date.now()}`
+      createdRules.push(ruleName)
+
+      await routingRulesPage.createBtn.click()
+      await expect(routingRulesPage.sheet).toBeVisible({ timeout: 5000 })
+      await routingRulesPage.waitForSheetAnimation()
+
+      await routingRulesPage.nameInput.fill(ruleName)
+      await routingRulesPage.addFallbackWithProvider('openai')
+      await routingRulesPage.addFallbackWithProvider('anthropic')
+
+      await expect(routingRulesPage.fallbackMoveUpBtn(0)).toBeDisabled()
+      await expect(routingRulesPage.fallbackMoveDownBtn(1)).toBeDisabled()
+      // Middle row has both enabled
+      await expect(routingRulesPage.fallbackMoveUpBtn(1)).toBeEnabled()
+      await expect(routingRulesPage.fallbackMoveDownBtn(0)).toBeEnabled()
+
+      await routingRulesPage.cancelRule()
+    })
+
+    test('should reorder fallbacks via up/down buttons and persist across save and reload', async ({ routingRulesPage }) => {
+      const ruleName = `Fallback Persist ${Date.now()}`
+      createdRules.push(ruleName)
+
+      await routingRulesPage.createBtn.click()
+      await expect(routingRulesPage.sheet).toBeVisible({ timeout: 5000 })
+      await routingRulesPage.waitForSheetAnimation()
+
+      await routingRulesPage.nameInput.fill(ruleName)
+      await routingRulesPage.addFallbackWithProvider('openai')
+      await routingRulesPage.addFallbackWithProvider('anthropic')
+
+      let labels = await routingRulesPage.getFallbackProviderLabels()
+      expect(labels[0]).toMatch(/openai/i)
+      expect(labels[1]).toMatch(/anthropic/i)
+
+      // Move the first row down — order should swap
+      await routingRulesPage.fallbackMoveDownBtn(0).click()
+      await expect(routingRulesPage.fallbackPositionBadge(0)).toContainText('#1')
+      await expect(routingRulesPage.fallbackPositionBadge(1)).toContainText('#2')
+
+      labels = await routingRulesPage.getFallbackProviderLabels()
+      expect(labels[0]).toMatch(/anthropic/i)
+      expect(labels[1]).toMatch(/openai/i)
+
+      // Move the second row up — back to the original order
+      await routingRulesPage.fallbackMoveUpBtn(1).click()
+      labels = await routingRulesPage.getFallbackProviderLabels()
+      expect(labels[0]).toMatch(/openai/i)
+      expect(labels[1]).toMatch(/anthropic/i)
+
+      // Reverse so the saved order is anthropic, openai
+      await routingRulesPage.fallbackMoveDownBtn(0).click()
+      await routingRulesPage.saveBtn.click()
+      await routingRulesPage.waitForSuccessToast()
+      await expect(routingRulesPage.sheet).not.toBeVisible({ timeout: 10000 })
+
+      // Re-open and verify the persisted order
+      await routingRulesPage.openEditSheet(ruleName)
+      labels = await routingRulesPage.getFallbackProviderLabels()
+      expect(labels[0]).toMatch(/anthropic/i)
+      expect(labels[1]).toMatch(/openai/i)
+      await routingRulesPage.cancelRule()
+    })
+
+    test('should reorder fallbacks via drag handle', async ({ routingRulesPage }) => {
+      const ruleName = `Fallback Drag ${Date.now()}`
+      createdRules.push(ruleName)
+
+      await routingRulesPage.createBtn.click()
+      await expect(routingRulesPage.sheet).toBeVisible({ timeout: 5000 })
+      await routingRulesPage.waitForSheetAnimation()
+
+      await routingRulesPage.nameInput.fill(ruleName)
+      await routingRulesPage.addFallbackWithProvider('openai')
+      await routingRulesPage.addFallbackWithProvider('anthropic')
+
+      // Drag handle of the second row up over the first row.
+      const source = routingRulesPage.fallbackHandle(1)
+      const target = routingRulesPage.fallbackRow(0)
+      await source.dragTo(target)
+
+      // dnd-kit may not visibly swap on the very first frame; allow a small window
+      // for the live onDragOver handler to mutate the order.
+      await expect
+        .poll(async () => (await routingRulesPage.getFallbackProviderLabels())[0], { timeout: 3000 })
+        .toMatch(/anthropic/i)
     })
   })
 })

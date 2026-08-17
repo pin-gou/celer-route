@@ -738,4 +738,62 @@ export class RoutingRulesPage extends BasePage {
 
     return names
   }
+
+  /**
+   * Fallback list reordering helpers — exercised by the Fallback Reordering suite.
+   */
+  fallbackRow(index: number): Locator {
+    return this.sheet.getByTestId(`routing-rule-fallback-${index}`)
+  }
+
+  fallbackProvider(index: number): Locator {
+    return this.fallbackRow(index).locator('[role="combobox"]').first()
+  }
+
+  fallbackPositionBadge(index: number): Locator {
+    return this.sheet.getByTestId(`routing-rule-fallback-position-${index}`)
+  }
+
+  fallbackMoveUpBtn(index: number): Locator {
+    return this.sheet.getByTestId(`routing-rule-fallback-up-${index}`)
+  }
+
+  fallbackMoveDownBtn(index: number): Locator {
+    return this.sheet.getByTestId(`routing-rule-fallback-down-${index}`)
+  }
+
+  fallbackHandle(index: number): Locator {
+    return this.sheet.getByTestId(`routing-rule-fallback-handle-${index}`)
+  }
+
+  fallbackRemoveBtn(index: number): Locator {
+    return this.sheet.getByTestId(`routing-rule-fallback-remove-${index}`)
+  }
+
+  addFallbackButton(): Locator {
+    return this.sheet.getByTestId('routing-rule-add-fallback-button')
+  }
+
+  async addFallbackWithProvider(provider: string): Promise<void> {
+    const beforeCount = await this.sheet.getByTestId(/^routing-rule-fallback-\d+$/).count()
+    await this.addFallbackButton().click()
+    await expect(this.sheet.getByTestId(`routing-rule-fallback-${beforeCount}`)).toBeVisible({ timeout: 5000 })
+
+    const providerCombo = this.fallbackProvider(beforeCount)
+    await providerCombo.click()
+    await this.page.waitForSelector('[role="listbox"]', { timeout: 5000 })
+    const option = this.page.getByRole('option', { name: new RegExp(provider, 'i') }).first()
+    await option.click({ force: true })
+    await this.page.waitForSelector('[role="listbox"]', { state: 'hidden', timeout: 5000 }).catch(() => {})
+  }
+
+  async getFallbackProviderLabels(): Promise<string[]> {
+    const count = await this.sheet.getByTestId(/^routing-rule-fallback-\d+$/).count()
+    const labels: string[] = []
+    for (let i = 0; i < count; i++) {
+      const combo = this.fallbackProvider(i)
+      labels.push(((await combo.textContent()) ?? '').trim())
+    }
+    return labels
+  }
 }
