@@ -1189,6 +1189,7 @@ cd ui && npm run build
 4. 如果 commit hook 拒绝提交，修复问题后重新创建新 commit，不要 `--amend` 失败的 commit。
 5. 禁止使用 `--force-push`、`--no-verify`、交互式 `-i` 或创建空 commit，除非明确要求。
 6. 不要修改 git config。
+7. **每次提交代码前，必须先在 `ui/` 目录下执行格式化命令**（oxfmt）：`cd ui && npm run format`，确保前端代码已格式化后再提交。
 
 ### 提交信息格式
 
