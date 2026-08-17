@@ -16,8 +16,8 @@
      track=core (常驻, 无 on_conditions)
 -->
 
-- [ ] 2.1 在 `core/schemas/chatcompletions.go` 的 `BifrostLLMUsage` struct 上新增 `OriginalPromptTokens *int` 与 `CompressedPromptTokens *int` 字段（JSON tag `original_prompt_tokens,omitempty` / `compressed_prompt_tokens,omitempty`）
-- [ ] 2.2 在 `core/schemas/bifrost.go` 的 `BifrostContextKey` 常量块新增 `BifrostContextKeyOriginalPromptTokens` 与 `BifrostContextKeyCompressedPromptTokens`（值：`x-bf-original-prompt-tokens` / `x-bf-compressed-prompt-tokens`）
+- [x] 2.1 在 `core/schemas/chatcompletions.go` 的 `BifrostLLMUsage` struct 上新增 `OriginalPromptTokens *int` 与 `CompressedPromptTokens *int` 字段（JSON tag `original_prompt_tokens,omitempty` / `compressed_prompt_tokens,omitempty`）
+- [x] 2.2 在 `core/schemas/bifrost.go` 的 `BifrostContextKey` 常量块新增 `BifrostContextKeyOriginalPromptTokens` 与 `BifrostContextKeyCompressedPromptTokens`（值：`x-bf-original-prompt-tokens` / `x-bf-compressed-prompt-tokens`）
 - [ ] 2.3 跑 `cd core && go build ./...` 确认编译通过
 
 ## 3. dev.core:review - 静态代码审查

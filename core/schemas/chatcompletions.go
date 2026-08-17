@@ -1672,6 +1672,14 @@ type BifrostLLMUsage struct {
 	// (CalculateCostForUsage) never sees RoutingInfo, so without it a fallback-served
 	// turn is priced at the requested model's rates.
 	ServerSideFallbackModel *string `json:"-"`
+	// OriginalPromptTokens is the number of tokens in the original (uncompressed) prompt
+	// before RTK compression was applied. Present only when a compression plugin is active
+	// and the request was compressed.
+	OriginalPromptTokens *int `json:"original_prompt_tokens,omitempty"`
+	// CompressedPromptTokens is the number of tokens in the compressed prompt after RTK
+	// compression was applied. Present only when a compression plugin is active
+	// and the request was compressed.
+	CompressedPromptTokens *int `json:"compressed_prompt_tokens,omitempty"`
 }
 
 type ChatPromptTokensDetails struct {
