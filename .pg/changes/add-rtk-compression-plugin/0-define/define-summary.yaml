@@ -1,0 +1,213 @@
+schema_version: 1
+change_id: add-rtk-compression-plugin
+defined_at: "2026-08-18T06:15:00Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  pg-gateway 作为 AI 网关，接收到的 LLM 请求中常包含大量冗长的工具输出
+  （如 git status、npm install、docker logs 等）。这部分内容占用大量 input
+  token，但携带的关键信息（错误、变更摘要）只占小部分。当前 Bifrost
+  没有对请求做压缩的机制，导致 token 浪费与成本上升。
+
+solution: >-
+  新增独立 plugin 模块 `plugins/rtk/`，实现 Rule-based Tool-output
+  Kompression（RTK），对齐 OmniRoute 的 RTK 引擎能力：
+
+  - 在 PreLLMHook 中遍历 BifrostRequest.ChatRequest.Input，识别
+    role=tool 消息以及 ChatContentBlock 中 role=user 含 tool_result 块
+    的消息（Anthropic 风格）。
+  - 通过 assistant 消息的 tool_calls 构建 tool_call_id → tool metadata
+    lookup 表，区分 shell 类工具（应用命令感知过滤器）与非 shell 类工具
+    （跳过内容过滤）。
+  - 应用命令检测器（commandDetector）→ 过滤器匹配（filterLoader）→
+    行级规则（lineFilter）→ 去重（deduplicator）→ 智能截断
+    （smartTruncate）流水线。
+  - 复用 OmniRoute 的 50+ 内置 JSON 过滤器（filters/*.json），按
+    project > global > builtin 优先级匹配，generic-output 作 fallback。
+  - 保留 ChatContentBlock.CacheControl != nil 的块，原样返回以避免破坏
+    Anthropic prompt caching。
+  - 重写 resp.Usage.PromptTokens 为压缩后的 token 数（计费按压缩后），
+    同时通过 BifrostContext 注入 originalPromptTokens 供 logging plugin
+    记录到 logs-db。
+  - Token 估算：默认 char/4（参考 Bifrost Bedrock 的 fallback 估算），
+    可选 tiktoken 精确计数。
+
+  实现位置：
+  - 独立 Go module：plugins/rtk/（参考 plugins/semanticcache 模板）
+  - 接入 LLMPlugin.PreLLMHook 与 PostLLMHook
+  - schema 扩展：transports/config.schema.json 加 rtk plugin 块；
+    core/schemas/chatcompletions.go 加 BifrostLLMUsage 扩展字段
+
+boundary:
+  in_scope:
+    - 新建 plugins/rtk/ 独立 Go module（LlmPlugin 实现）
+    - 移植 OmniRoute 的 RTK 核心引擎（applyRtkCompression、processRtkText）
+    - 移植 50+ 内置过滤器 JSON（filters/*.json，打包进 plugin）
+    - 移植命令检测器（commandDetector.ts → Go）
+    - 移植 lineFilter / deduplicator / smartTruncate / grouper / codeStripper
+    - 移植 filterLoader（含 ReDoS 保护）
+    - 在 transport 层注册 RTK plugin（init 路径）
+    - 扩展 transports/config.schema.json 增 rtk 配置块
+    - 扩展 BifrostLLMUsage 增 OriginalPromptTokens / CompressedPromptTokens
+      字段（仅 schema 字段，不改 provider wire 行为）
+    - PostLLMHook 重写 usage.PromptTokens 为压缩后 + ctx.SetValue 透传
+      originalPromptTokens 给 logging plugin
+    - 单元测试覆盖核心引擎、过滤器匹配、cache_control 保护
+    - transport 层集成测试（fixture 场景）
+  out_of_scope:
+    - response 侧压缩（思考过程折叠、output 去重）
+    - LLMLingua 等模型化压缩（本变更只做规则化）
+    - tiktoken 精确计数（仅留 char/4 fallback，预留接口）
+    - stacked pipeline（rtk + 其他压缩器串行）
+    - UI 改版（plugin 配置页面、压缩统计图表）
+    - i18n 翻译
+    - 持久化原始 raw output（OmniRoute 的 rawOutputRetention 功能）
+    - 自定义过滤器上传 / 信任管理 UI
+
+verification_needs:
+  - id: V-plugins-1
+    track_id: plugins
+    name: RTK 核心压缩逻辑正确
+    what: >-
+      输入已知命令输出（git status、npm install、docker logs），调用
+      RTK 引擎，断言压缩后行数 / 字符数减少、关键信息（错误、分支名、
+      变更文件）保留、无信息丢失。
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+        description: Go 编译产物 + 单元测试运行能力
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-2
+    track_id: plugins
+    name: RTK Plugin 注册 & PreLLMHook 修改 messages
+    what: >-
+      通过 e2e 接口发送一个带长 tool result 的 chat request 给
+      pg-gateway-api，验证：1) RTK plugin 被正确加载；2) Provider 收到的
+      request 中 tool 消息内容已压缩；3) Response 中 usage 字段
+      prompt_tokens 小于原始 tool result token 数。
+    requires_capabilities:
+      - capability: rest_api_endpoint
+        min_quantity: 1
+      - capability: bifrost_openai_compatible_api
+        min_quantity: 1
+      - capability: sse_streaming
+        min_quantity: 1
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      pg-gateway-api 不可达 → 通过 plugins/semanticcache 风格的
+      mock-based test 验证 plugin 逻辑（不依赖 live API）。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=pg-gateway-api]}"
+      - "{env.config_resources[name=bifrost-binary]}"
+      - "{env.config_resources[name=fixture-data-dir]}"
+
+  - id: V-core-1
+    track_id: core
+    name: BifrostLLMUsage 扩展字段 schema 通过
+    what: >-
+      在 core/schemas/chatcompletions.go 的 BifrostLLMUsage 上加
+      OriginalPromptTokens / CompressedPromptTokens 字段（Optional），跑
+      `go build ./...` 验证编译通过，schema 字段不破坏现有 wire 兼容性
+      （无 JSON marshal 报错）。
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-3
+    track_id: plugins
+    name: RTK PostLLMHook 重写 usage + ctx 透传
+    what: >-
+      PostLLMHook 中将 resp.Usage.PromptTokens 改写为压缩后 token 数，
+      并通过 ctx.SetValue 设置 OriginalPromptTokens 给 logging plugin
+      读取并写入 logs-db。验证 logs-db 中 log 行 metadata JSON 包含
+      originalPromptTokens 字段。
+    requires_capabilities:
+      - capability: sqlite_logs_db
+        min_quantity: 1
+      - capability: llm_request_logging
+        min_quantity: 1
+    downgrade_when_missing: >-
+      logs-db schema 不支持 → 用 sqlite 直接 ALTER TABLE 增
+      metadata JSON 列（runner 手工迁移）。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.data_resources[name=logs-db]}"
+      - "{env.business_systems[name=pg-gateway-api]}"
+
+  - id: V-plugins-4
+    track_id: plugins
+    name: config.schema.json 注入 rtk 块校验通过
+    what: >-
+      在 transports/config.schema.json 加 if/then 块（name=rtk），写一
+      个 RTK plugin config 实例，用 JSON schema 校验器验证该 config 不
+      报错。验证：通过 pg-gateway 启动读取 config.json 能正常加载 RTK
+      plugin。
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+      - capability: sample_dataset
+        min_quantity: 1
+        description: fixture-plugins 提供 plugin 配置种子
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=fixture-data-dir]}"
+      - "{env.data_resources[name=fixture-plugins]}"
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-5
+    track_id: plugins
+    name: cache_control 块保护逻辑
+    what: >-
+      发送一个 tool 消息 content 中含 cache_control 字段的请求，验证
+      RTK 压缩后该 block 原封不动（未被修改、未被去重）。同时验证非
+      cache_control 的相邻 block 被正常压缩。
+    requires_capabilities:
+      - capability: bifrost_openai_compatible_api
+        min_quantity: 1
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+      - capability: sse_streaming
+        min_quantity: 1
+    downgrade_when_missing: >-
+      无法构造含 cache_control 的真实请求 → 用单元测试 mock
+      ChatContentBlock 数组，验证保护逻辑。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=pg-gateway-api]}"
+      - "{env.config_resources[name=bifrost-binary]}"
+
+risks:
+  - BifrostLLMUsage 字段扩展是 schema 变更，需要确保现有 logging /
+    governance plugin 在压力测试下不出现 nil dereference。建议新字段
+    全部用 omitempty + 指针类型。
+  - OmniRoute 的 filter JSON 是手工维护的 50+ 文件，移植时需要保证
+    JSON 兼容性（UTF-8、字段顺序）。建议生成时用嵌入资源（embed.FS）。
+  - RTK 引擎涉及大量正则表达式，可能存在 ReDoS 风险。需要从
+    OmniRoute 移植 isReDoSProne 检查逻辑。
+  - RTX 的过滤器按 project > global > builtin 优先级，目前 pg-gateway
+    没有 project filter 概念，阶段 1 只支持 builtin + global（global
+    从 config 加载）。
+  - 压缩后的 token 估算有误差（char/4），对 Gemini 等非 4 字节/token
+    的模型计费可能偏差。预留 tiktoken 接口，待后续迭代。
+  - PreLLMHook 中修改 messages 是 in-place 操作，fallback 重试时
+    会被反复压缩。需要先在 PreRequestHook 中做一次，或在
+    sync.Map 的 compressionState 中记录已压缩 requestID。
+
+open_questions:
+  - filters/*.json 50+ 文件是否需要分层（builtin vs custom）？当前
+    全部打包为 builtin，后续看是否需要 admin 上传接口。
+  - 是否需要在 PreRequestHook 还是 PreLLMHook 中执行？建议 PreLLMHook
+    以利用 BifrostContext 的 requestID + provider/model；但需要避免
+    fallback 重试时重复压缩。
+  - Anthropic tool_result blocks 在 Bifrost 中如何识别？Bifrost 的
+    ChatContentBlock 没有 type=tool_use 枚举，需要在 plugin 内做
+    shape 识别（content[].type=="tool_result"）。

@@ -1,0 +1,264 @@
+scenarios:
+- scenario_id: S-rtk-compress-git-status
+  critical: true
+  description: RTK 压缩 git status 工具输出，验证 PromptTokens 减少且关键信息保留（happy 路径）
+  given:
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 已启动并启用 rtk plugin'
+  - fixture 中含 provider 配置（fixture-providers）及对应 API key
+  - '已构造 chat request，含 assistant 消息（tool_calls 含 bash）与对应 tool 消息（git status 长输出，>500 tokens）'
+  covers:
+  - V-plugins-1
+  - V-plugins-2
+  when:
+  - name: 发送带长 git status tool result 的 chat request
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: user
+        content: '请简述当前 git 状态'
+      - role: assistant
+        tool_calls:
+        - id: call_001
+          type: function
+          function:
+            name: bash
+            arguments: '{"command": "git status"}'
+      - role: tool
+        tool_call_id: call_001
+        content: <500+ token 的 git status 输出含分支与变更文件列表>
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.choices[0].message.content != null
+  - response.usage.prompt_tokens < 100
+  - response.usage.original_prompt_tokens matches "^[1-9][0-9]{2,}$"
+  - response.usage.compressed_prompt_tokens == response.usage.prompt_tokens
+  and:
+  - name: 无 cleanup（plugin 端无状态变更）
+  evidence:
+  - 2-build/<report_seq>-S-rtk-compress-git-status-evidence.json
+
+- scenario_id: S-rtk-compress-npm-install
+  critical: false
+  description: RTK 压缩 npm install 长输出，验证依赖列表被截断但错误信息保留
+  given:
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 已启动并启用 rtk plugin'
+  - 已构造 chat request，含 tool 消息（npm install 输出 >1000 tokens，含 ERR! 错误）
+  covers:
+  - V-plugins-1
+  when:
+  - name: 发送带 npm install 输出的 chat request
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: assistant
+        tool_calls:
+        - id: call_002
+          type: function
+          function:
+            name: bash
+            arguments: '{"command": "npm install"}'
+      - role: tool
+        tool_call_id: call_002
+        content: <npm install 长输出含 ERR! 错误>
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.usage.prompt_tokens < 200
+  - response.usage.original_prompt_tokens > response.usage.prompt_tokens
+  and:
+  - name: 无 cleanup
+  evidence:
+  - 2-build/<report_seq>-S-rtk-compress-npm-install-evidence.json
+
+- scenario_id: S-rtk-compress-docker-logs
+  critical: false
+  description: RTK 压缩 docker logs 大量重复输出，验证去重与截断
+  given:
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 已启动并启用 rtk plugin'
+  - 已构造 chat request，含 tool 消息（docker logs >2000 tokens，含 100+ 行重复日志）
+  covers:
+  - V-plugins-1
+  when:
+  - name: 发送带 docker logs 输出的 chat request
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: assistant
+        tool_calls:
+        - id: call_003
+          type: function
+          function:
+            name: bash
+            arguments: '{"command": "docker logs api-server"}'
+      - role: tool
+        tool_call_id: call_003
+        content: <docker logs 含 100+ 行重复日志>
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.usage.prompt_tokens < 250
+  - response.usage.original_prompt_tokens > response.usage.compressed_prompt_tokens
+  and:
+  - name: 无 cleanup
+  evidence:
+  - 2-build/<report_seq>-S-rtk-compress-docker-logs-evidence.json
+
+- scenario_id: S-rtk-usage-rewrite-and-logging
+  critical: true
+  description: RTK PostLLMHook 重写 usage + ctx 透传跨模块联调场景，logs-db metadata 含 original_prompt_tokens
+  given:
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 已启动并启用 rtk plugin + logging plugin'
+  - '{env.data_resources[name=logs-db]} 可查询'
+  - 成功执行过 S-rtk-compress-git-status（plugin state 已建立）
+  covers:
+  - V-plugins-3
+  - V-transports-2
+  when:
+  - name: 发送压缩请求后查询 logs-db
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: assistant
+        tool_calls:
+        - id: call_004
+          type: function
+          function:
+            name: bash
+            arguments: '{"command": "git log --oneline | head -100"}'
+      - role: tool
+        tool_call_id: call_004
+        content: <长 git log 输出>
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.usage.prompt_tokens < 100
+  - response.usage.original_prompt_tokens > 100
+  and:
+  - name: 验证 logs-db metadata 含 original_prompt_tokens
+    type: db
+    action: SQL SELECT
+    url: '{env.data_resources[name=logs-db].schema_ref}'
+    query: "SELECT metadata FROM logs WHERE metadata LIKE '%original_prompt_tokens%' ORDER BY created_at DESC LIMIT 1"
+  - name: logs-db metadata 必须含 original_prompt_tokens 字段
+  evidence:
+  - 2-build/<report_seq>-S-rtk-usage-rewrite-and-logging-evidence.json
+
+- scenario_id: S-rtk-cache-control-protection
+  critical: true
+  description: RTK 压缩时跳过 cache_control 块的 Anthropic 工具结果，验证该块字节完全相同（negative 路径：cache_control 块必须不受破坏）
+  given:
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 已启动并启用 rtk plugin'
+  - 已构造 chat request，含 role=user 消息（content blocks 含 tool_result + cache_control 标记）
+  covers:
+  - V-plugins-5
+  when:
+  - name: 发送带 cache_control 块的 Anthropic 风格工具结果
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/messages'
+    body:
+      model: '{env.fixture_anthropic_model}'
+      messages:
+      - role: user
+        content:
+        - type: tool_result
+          tool_use_id: toolu_001
+          content: <短 tool 输出>
+          cache_control: {type: ephemeral}
+        - type: tool_result
+          tool_use_id: toolu_002
+          content: <长 tool 输出>
+      - role: assistant
+        content:
+        - type: tool_use
+          id: toolu_001
+          name: bash
+          input: {command: 'git status'}
+        - type: tool_use
+          id: toolu_002
+          name: bash
+          input: {command: 'npm install'}
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.usage.prompt_tokens < 200
+  - response.usage.original_prompt_tokens > response.usage.prompt_tokens
+  and:
+  - name: 单元测试断言 cache_control 块字节级相同（plugins/rtk/cache_control_test.go 已覆盖）
+  evidence:
+  - 2-build/<report_seq>-S-rtk-cache-control-protection-evidence.json
+
+- scenario_id: S-rtk-config-loaded
+  critical: false
+  description: pg-gateway 启动时正确加载 rtk plugin config（含 50+ 内置过滤器）
+  given:
+  - "config.json 中含 plugins 配置块（name: rtk, enabled: true, intensity: standard）"
+  - '{env.config_resources[name=bifrost-binary]} 已编译'
+  covers:
+  - V-plugins-4
+  - V-transports-1
+  when:
+  - name: 启动 pg-gateway 并查询健康检查
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/health'
+    body:
+      include_log: true
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.status == 'healthy'
+  and:
+  - name: 验证启动日志含 RTK plugin loaded
+  - name: 验证 plugins/rtk/filters/builtin/*.json 至少 50 个文件被嵌入
+  evidence:
+  - 2-build/<report_seq>-S-rtk-config-loaded-evidence.json
+
+- scenario_id: S-rtk-schema-fields-exposure
+  critical: false
+  description: response.usage 暴露 original_prompt_tokens / compressed_prompt_tokens 字段跨模块联调验证 schema 扩展生效
+  given:
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 已启动（pg-gateway 二进制含 V-core-1 字段扩展）'
+  - 成功执行过任意 chat request
+  covers:
+  - V-core-1
+  when:
+  - name: 发送普通 chat request 并检查 usage 字段
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: user
+        content: 'hello'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.usage has_field original_prompt_tokens
+  - response.usage has_field compressed_prompt_tokens
+  - response.usage.prompt_tokens matches "^[0-9]+$"
+  and:
+  - name: 无 cleanup
+  evidence:
+  - 2-build/<report_seq>-S-rtk-schema-fields-exposure-evidence.json
+_meta:
+  _comment: 'scenario-scr.yaml 由 LLM 填充完成。v_count=8（V-plugins-1..5, V-core-1, V-transports-1..2），共 7 个 Scenario。
+    v3.10 数量上限 7。覆盖 5 个维度：happy（4 个）、cross-module（2 个）、negative（1 个）。
+    所有 given/when 引用 env-description.yaml 中的 {env...} 占位。'
+  change: add-rtk-compression-plugin
+  track_id: scr
+  schema_version: v3.10

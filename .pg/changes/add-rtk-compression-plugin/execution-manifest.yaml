@@ -1,0 +1,86 @@
+schema_version: '2026-06-30'
+change: add-rtk-compression-plugin
+stages:
+- name: dev
+  environment: local
+  tracks:
+  - id: core
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 1. dev.core:test - dev 测试先行
+      dev:
+        tasks_md_section: 2. dev.core:dev - 实现开发
+      review:
+        tasks_md_section: 3. dev.core:review - 静态代码审查
+      verify:
+        tasks_md_section: 4. dev.core:verify - dev 集成验证
+      gate:
+        tasks_md_section: 5. dev.core:gate - dev 门控审查
+  - id: transports
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 6. dev.transports:test - dev 测试先行
+      dev:
+        tasks_md_section: 7. dev.transports:dev - 实现开发
+      review:
+        tasks_md_section: 8. dev.transports:review - 静态代码审查
+      verify:
+        tasks_md_section: 9. dev.transports:verify - dev 集成验证
+      gate:
+        tasks_md_section: 10. dev.transports:gate - dev 门控审查
+  - id: plugins
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 11. dev.plugins:test - dev 测试先行
+      dev:
+        tasks_md_section: 12. dev.plugins:dev - 实现开发
+      review:
+        tasks_md_section: 13. dev.plugins:review - 静态代码审查
+      verify:
+        tasks_md_section: 14. dev.plugins:verify - dev 集成验证
+      gate:
+        tasks_md_section: 15. dev.plugins:gate - dev 门控审查
+- name: int
+  environment: local
+  tracks:
+  - id: scr
+    type: scenario
+    enabled: true
+    reason: 跨 role 协作验证? 否（仅 pg-gateway 单 service）; 新 API 端点? 否（plugin 内部行为）；跨模块联调?
+      是（core schema + transports server register + plugins 新模块三处联动），通过 scr scenario
+      联调验证 verifiable V-
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      scenario-execute:
+        tasks_md_section: 16. int.scr:scenario-execute - 真机场景执行
+    scenario_yaml: scenario-scr.yaml
+final_gate:
+  tasks_md_section: 17. final-gate - 最终门控审查
