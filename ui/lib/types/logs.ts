@@ -1432,7 +1432,17 @@ export interface ActiveLogStreamEvent {
 	status: string;
 	provider?: string;
 	model?: string;
+	object?: string;
+	stream?: boolean;
 	timestamp?: string;
 	latency_ms?: number | null;
 	token_usage?: LLMUsage | null;
+	app?: string;
+	user_agent?: string;
+	cost?: number | null;
+	virtual_key_name?: string;
+	number_of_retries?: number;
+	fallback_index?: number;
+	content_summary?: string;
+	message?: string;
 }

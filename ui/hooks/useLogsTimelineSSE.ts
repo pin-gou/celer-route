@@ -19,9 +19,19 @@ export interface ActiveLogEntry {
 	status: string;
 	provider?: string;
 	model?: string;
+	object?: string;
+	stream?: boolean;
 	latency?: number | null;
 	timestamp?: string;
 	token_usage?: LLMUsage | null;
+	app?: string;
+	user_agent?: string;
+	cost?: number | null;
+	virtual_key_name?: string;
+	number_of_retries?: number;
+	fallback_index?: number;
+	content_summary?: string;
+	message?: string;
 }
 
 export interface UseLogsTimelineSSEOptions {
@@ -43,9 +53,19 @@ function toActiveEntry(log: LogEntry): ActiveLogEntry {
 		status: log.status,
 		provider: log.provider,
 		model: log.model,
+		object: log.object,
+		stream: log.stream,
 		latency: log.latency,
 		timestamp: log.timestamp,
 		token_usage: log.token_usage,
+		app: log.app,
+		user_agent: log.user_agent,
+		cost: log.cost ?? null,
+		virtual_key_name: log.virtual_key_name,
+		number_of_retries: log.number_of_retries,
+		fallback_index: log.fallback_index,
+		content_summary: log.content_summary,
+		message: undefined,
 	};
 }
 
@@ -55,9 +75,19 @@ function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
 		status: update.status,
 		provider: update.provider,
 		model: update.model,
+		object: update.object,
+		stream: update.stream,
 		latency: update.latency_ms ?? null,
 		timestamp: update.timestamp,
 		token_usage: update.token_usage ?? null,
+		app: update.app,
+		user_agent: update.user_agent,
+		cost: update.cost ?? null,
+		virtual_key_name: update.virtual_key_name,
+		number_of_retries: update.number_of_retries ?? 0,
+		fallback_index: update.fallback_index ?? 0,
+		content_summary: update.content_summary,
+		message: update.message,
 	};
 }
 
@@ -117,10 +147,27 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 						return next;
 					}
 					const next = [...prev];
+					const fresh = toActiveEntryFromEvent(update);
 					next[idx] = {
 						...next[idx],
-						status: update.status,
+						...fresh,
+						// Only overwrite a field when the update actually carries it;
+						// otherwise keep the already-known value (initial "processing"
+						// snapshot is authoritative for fields the update omits).
 						latency: update.latency_ms ?? next[idx].latency,
+						provider: fresh.provider ?? next[idx].provider,
+						model: fresh.model ?? next[idx].model,
+						object: fresh.object ?? next[idx].object,
+						stream: fresh.stream ?? next[idx].stream,
+						token_usage: fresh.token_usage ?? next[idx].token_usage,
+						app: fresh.app ?? next[idx].app,
+						user_agent: fresh.user_agent ?? next[idx].user_agent,
+						cost: fresh.cost ?? next[idx].cost,
+						virtual_key_name: fresh.virtual_key_name ?? next[idx].virtual_key_name,
+						number_of_retries: fresh.number_of_retries ?? next[idx].number_of_retries,
+						fallback_index: fresh.fallback_index ?? next[idx].fallback_index,
+						content_summary: fresh.content_summary ?? next[idx].content_summary,
+						message: fresh.message ?? next[idx].message,
 					};
 					return next;
 				}

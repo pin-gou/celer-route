@@ -439,9 +439,16 @@ export const createColumns = (
 			cell: ({ row }) => {
 				const latency = row.original.latency;
 				if (latency === undefined || latency === null) {
-					return <div className="pr-3 text-right font-mono text-xs">N/A</div>;
+					return null;
 				}
-				const tone = latency >= 5000 ? "text-red-500" : latency >= 2000 ? "text-amber-500" : "text-emerald-500";
+				const isSuccess = row.original.status === "success";
+				const tone = isSuccess
+					? latency >= 5000
+						? "text-red-500"
+						: latency >= 2000
+							? "text-amber-500"
+							: "text-emerald-500"
+					: "text-muted-foreground";
 				return (
 					<div className="text-right font-mono text-[12px] tabular-nums">
 						<strong className={tone}>{Math.round(latency).toLocaleString()}</strong> ms

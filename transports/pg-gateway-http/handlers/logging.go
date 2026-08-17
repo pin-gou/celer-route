@@ -3081,6 +3081,137 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 	})
 }
 
+// activeLogEntry is the wire shape of a log row pushed over
+// /api/logs/active/stream. It carries the full lightweight dimension set a logs
+// table row renders (app, message preview, cost, virtual key, stream flag), not
+// just id/status/provider/model — so the UI can render a complete in-flight and
+// just-completed row immediately via SSE instead of waiting on the next 30 s
+// polling cycle for its message/app columns to appear.
+type activeLogEntry struct {
+	// Timestamp is the RFC3339Nano event time. Populated for log_updated events
+	// (which carry a moment in time); left empty on snapshot/recent rows, whose
+	// rows already render timestamps from the log store.
+	Timestamp       string                   `json:"timestamp,omitempty"`
+	ID              string                   `json:"id"`
+	Status          string                   `json:"status"`
+	Provider        string                   `json:"provider"`
+	Model           string                   `json:"model"`
+	Object          string                   `json:"object,omitempty"`
+	Stream          bool                     `json:"stream"`
+	LatencyMs       *float64                 `json:"latency_ms"`
+	TokenUsage      *schemas.BifrostLLMUsage `json:"token_usage,omitempty"`
+	App             *string                  `json:"app,omitempty"`
+	UserAgent       *string                  `json:"user_agent,omitempty"`
+	Cost            *float64                 `json:"cost,omitempty"`
+	VirtualKeyName  *string                  `json:"virtual_key_name,omitempty"`
+	NumberOfRetries int                      `json:"number_of_retries"`
+	FallbackIndex   int                      `json:"fallback_index"`
+	ContentSummary  string                   `json:"content_summary,omitempty"`
+	Message         string                   `json:"message,omitempty"`
+}
+
+// activeEntryMessage extracts a short user-facing message preview for the log
+// row's "message" cell from the entry's parsed payload fields. The UI's
+// LogMessageCell builds the same preview client-side from input_history /
+// output_message / content_summary; here we precompute it server-side so a live
+// SSE row can render it without round-tripping the full input payload.
+func activeEntryMessage(l *logstore.Log) string {
+	if l == nil {
+		return ""
+	}
+	// Chat: prefer the last user message from input history.
+	if inputs := l.InputHistoryParsed; len(inputs) > 0 {
+		for i := len(inputs) - 1; i >= 0; i-- {
+			msg := inputs[i]
+			if msg.Role != schemas.ChatMessageRoleUser {
+				continue
+			}
+			if text := chatMessageContentText(msg.Content); text != "" {
+				return text
+			}
+		}
+	}
+	// Responses API input.
+	if inputs := l.ResponsesInputHistoryParsed; len(inputs) > 0 {
+		return responsesInputPreview(inputs)
+	}
+	// Fall back to the output message, then the content summary.
+	if l.OutputMessageParsed != nil {
+		if text := chatMessageContentText(l.OutputMessageParsed.Content); text != "" {
+			return text
+		}
+	}
+	return l.ContentSummary
+}
+
+func chatMessageContentText(c *schemas.ChatMessageContent) string {
+	if c == nil {
+		return ""
+	}
+	if c.ContentStr != nil && *c.ContentStr != "" {
+		return *c.ContentStr
+	}
+	for _, block := range c.ContentBlocks {
+		if block.Text != nil && *block.Text != "" {
+			return *block.Text
+		}
+	}
+	return ""
+}
+
+func responsesInputPreview(inputs []schemas.ResponsesMessage) string {
+	for i := len(inputs) - 1; i >= 0; i-- {
+		msg := inputs[i]
+		if msg.Role != nil && *msg.Role != schemas.ResponsesInputMessageRoleUser {
+			continue
+		}
+		if text := responsesMessageText(msg); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func responsesMessageText(msg schemas.ResponsesMessage) string {
+	if msg.Content == nil {
+		return ""
+	}
+	if msg.Content.ContentStr != nil && *msg.Content.ContentStr != "" {
+		return *msg.Content.ContentStr
+	}
+	for _, block := range msg.Content.ContentBlocks {
+		if block.Text != nil && *block.Text != "" {
+			return *block.Text
+		}
+	}
+	return ""
+}
+
+// buildActiveLogEntry maps a logstore.Log onto the SSE wire shape.
+func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
+	if l == nil {
+		return activeLogEntry{}
+	}
+	return activeLogEntry{
+		ID:              l.ID,
+		Status:          l.Status,
+		Provider:        l.Provider,
+		Model:           l.Model,
+		Object:          l.Object,
+		Stream:          l.Stream,
+		LatencyMs:       l.Latency,
+		TokenUsage:      l.TokenUsageParsed,
+		App:             l.App,
+		UserAgent:       l.UserAgent,
+		Cost:            l.Cost,
+		VirtualKeyName:  l.VirtualKeyName,
+		NumberOfRetries: l.NumberOfRetries,
+		FallbackIndex:   l.FallbackIndex,
+		ContentSummary:  l.ContentSummary,
+		Message:         activeEntryMessage(l),
+	}
+}
+
 // getActiveLogStream handles GET /api/logs/active/stream (SSE) - Pushes log
 // status changes to clients using Server-Sent Events.
 // The stream sends:
@@ -3104,25 +3235,9 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	type activeLogEntry struct {
-		ID         string                   `json:"id"`
-		Status     string                   `json:"status"`
-		Provider   string                   `json:"provider"`
-		Model      string                   `json:"model"`
-		LatencyMs  *float64                 `json:"latency_ms"`
-		TokenUsage *schemas.BifrostLLMUsage `json:"token_usage,omitempty"`
-	}
-
 	entries := make([]activeLogEntry, 0, len(activeLogs))
 	for _, l := range activeLogs {
-		entries = append(entries, activeLogEntry{
-			ID:         l.ID,
-			Status:     l.Status,
-			Provider:   l.Provider,
-			Model:      l.Model,
-			LatencyMs:  l.Latency,
-			TokenUsage: l.TokenUsageParsed,
-		})
+		entries = append(entries, buildActiveLogEntry(l))
 	}
 
 	// Subscribe to the log stream for incremental updates
@@ -3164,14 +3279,8 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 			recentEntries := make([]activeLogEntry, 0, len(recentResult.Logs))
 			for _, l := range recentResult.Logs {
 				if l.Status != "processing" {
-					recentEntries = append(recentEntries, activeLogEntry{
-						ID:         l.ID,
-						Status:     l.Status,
-						Provider:   l.Provider,
-						Model:      l.Model,
-						LatencyMs:  l.Latency,
-						TokenUsage: l.TokenUsageParsed,
-					})
+					entry := l
+					recentEntries = append(recentEntries, buildActiveLogEntry(&entry))
 				}
 			}
 			if len(recentEntries) > 0 {
@@ -3187,15 +3296,9 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 				if !ok {
 					return
 				}
-				updateData, _ := sonic.Marshal(map[string]interface{}{
-					"id":          updatedLog.ID,
-					"status":      updatedLog.Status,
-					"provider":    updatedLog.Provider,
-					"model":       updatedLog.Model,
-					"timestamp":   updatedLog.Timestamp.Format(time.RFC3339Nano),
-					"latency_ms":  updatedLog.Latency,
-					"token_usage": updatedLog.TokenUsageParsed,
-				})
+				updateEntry := buildActiveLogEntry(updatedLog)
+				updateEntry.Timestamp = updatedLog.Timestamp.Format(time.RFC3339Nano)
+				updateData, _ := sonic.Marshal(updateEntry)
 				if !reader.SendEvent("log_updated", updateData) {
 					return
 				}

@@ -53,20 +53,24 @@ function matchesFilters(entry: { id: string; status: string; provider?: string; 
 function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 	return {
 		id: a.id,
-		object: "chat.completion",
+		object: a.object ?? "chat.completion",
 		timestamp: a.timestamp ?? new Date().toISOString(),
 		provider: a.provider ?? "",
 		model: a.model ?? "",
 		status: "processing",
 		latency: null as unknown as number,
 		cost: null as unknown as number,
-		stream: false,
-		number_of_retries: 0,
-		fallback_index: 0,
+		stream: a.stream ?? false,
+		number_of_retries: a.number_of_retries ?? 0,
+		fallback_index: a.fallback_index ?? 0,
 		input_history: [],
 		responses_input_history: [],
 		created_at: a.timestamp ?? new Date().toISOString(),
 		token_usage: a.token_usage ?? undefined,
+		app: a.app,
+		user_agent: a.user_agent,
+		virtual_key_name: a.virtual_key_name,
+		content_summary: a.content_summary || a.message || "",
 		__processing: true,
 	} as DisplayLogEntry;
 }
@@ -406,6 +410,10 @@ export default function LogsPage() {
 				__processing: false,
 				status: entry.status,
 				latency: entry.latency ?? (null as unknown as number),
+				cost: entry.cost ?? (null as unknown as number),
+				stream: entry.stream ?? false,
+				number_of_retries: entry.number_of_retries ?? 0,
+				fallback_index: entry.fallback_index ?? 0,
 			};
 			return [log, ...prev];
 		});
