@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow",
+  "lsp": true,
+  "model": "pg-router/pg-expert",
+  "plugin": ["list"],
+  "agent": {
+    "explore": {
+      "model": "pg-router/pg-associate"
+    },
+    "build": {
+      "model": "pg-router/pg-expert"
+    },
+    "plan": {
+      "model": "pg-router/pg-expert"
+    }
+  }
+}
