@@ -8,10 +8,13 @@ import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { ProviderLabels } from "@/lib/constants/logs";
 import { PROVIDER_COOLDOWN_PLUGIN, providerCooldownConfigSchema, type Plugin } from "@/lib/types/plugins";
+import { formatLocalDateTime, formatRelativeDistanceToNow, getDateLocale } from "@/lib/utils/date";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { Locale } from "date-fns";
 import { Info, PlusIcon, Trash2Icon } from "lucide-react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useGetCooldownStateQuery, useGetCooldownStatsQuery, useUnfreezeCooldownMutation } from "@/lib/store/apis/pluginsApi";
@@ -317,8 +320,32 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 // MonitoringPanel — cooldown state + stats + unfreeze
 // ---------------------------------------------------------------------------
 
+/**
+ * Renders the cooldown `expireAt` line as a locale-aware absolute timestamp
+ * plus an approximate relative-distance phrase.
+ *
+ * `expireAt` arrives from the API as an ISO 8601 string (UTC, e.g.
+ * `2026-08-17T06:50:25.010460549Z`). Browsers render `new Date(...)` in the
+ * user's local time zone, so we format that Date with date-fns — that's what
+ * gives "2026-08-17 14:51:23" instead of the raw ISO string.
+ *
+ * The relative phrase is recomputed every render, and the RTK Query state poll
+ * (5s) refreshes the parent, so it drifts naturally ("about 1 hour 3 minutes"
+ * → "about 1 hour 2 minutes" → …) without a separate timer.
+ *
+ * Falls back to a single i18n string when the timestamp is missing/invalid.
+ */
+function formatExpires(t: TFunction, expireAt: string, dateLocale: Locale): string {
+	const date = formatLocalDateTime(expireAt, "yyyy-MM-dd HH:mm:ss", dateLocale);
+	const relative = formatRelativeDistanceToNow(expireAt, dateLocale);
+	if (!date || !relative) {
+		return t("providerCooldown.invalidExpireAt");
+	}
+	return t("providerCooldown.expires", { date, in: relative });
+}
+
 export function MonitoringPanel() {
-	const { t } = useTranslation("plugins");
+	const { t, i18n } = useTranslation("plugins");
 	const { data: stateData, isLoading: stateLoading } = useGetCooldownStateQuery(undefined, {
 		pollingInterval: 5000,
 	});
@@ -326,6 +353,7 @@ export function MonitoringPanel() {
 		pollingInterval: 5000,
 	});
 	const [unfreeze, { isLoading: unfreezeLoading }] = useUnfreezeCooldownMutation();
+	const dateLocale = getDateLocale(i18n.language);
 
 	const entries = stateData?.state ?? [];
 	const stats = statsData?.stats ?? { markCount: 0, suppressedCount: 0, activeCount: 0 };
@@ -384,7 +412,7 @@ export function MonitoringPanel() {
 									</div>
 									<div className="text-muted-foreground mt-1 text-xs">
 										<span>{t("providerCooldown.reason", { reason: entry.reason })}</span>
-										<span className="ml-3">{t("providerCooldown.expires", { expireAt: entry.expireAt })}</span>
+										<span className="ml-3">{formatExpires(t, entry.expireAt, dateLocale)}</span>
 									</div>
 								</div>
 								<Button
