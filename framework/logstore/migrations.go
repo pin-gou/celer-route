@@ -297,6 +297,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"mcp_tool_logs_add_endpoint_columns"}, run: migrationAddEndpointColumnsToMCPToolLogs},
 	{IDs: []string{"mcp_tool_logs_add_plugin_logs_column"}, run: migrationAddMCPPluginLogsColumn},
 	{IDs: []string{"timeline_events_init"}, run: migrationCreateTimelineEventsTable},
+	{IDs: []string{"dashboard_bucket_metrics_add_unique_index"}, run: migrationAddDashboardBucketMetricsUniqueIndex},
 }
 
 // areThereAnyPendingMigrations returns true if there are any pending migrations to be applied.
@@ -1700,6 +1701,49 @@ func migrationCreateDashboardBucketMetricsTable(ctx context.Context, db *gorm.DB
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while creating dashboard_bucket_metrics table: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddDashboardBucketMetricsUniqueIndex adds the UNIQUE composite index
+// on (bucket_start, bucket_seconds, provider, model, object_type, status) that
+// the aggregator's ON CONFLICT DO UPDATE upsert requires. Without this index
+// the aggregator fails on every refresh and the dashboard pre-aggregate stays
+// empty — all dashboard charts show "暂无数据" despite log data existing.
+func migrationAddDashboardBucketMetricsUniqueIndex(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "dashboard_bucket_metrics_add_unique_index"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			dbMigrator := tx.Migrator()
+			if !dbMigrator.HasTable(&DashboardBucketMetric{}) {
+				logger.Info("[logstore] %s: table DashboardBucketMetric does not exist, skipping", migrationName)
+				return nil
+			}
+			if dbMigrator.HasIndex(&DashboardBucketMetric{}, "idx_dbm_unique_metric") {
+				logger.Info("[logstore] %s: unique index already exists, skipping", migrationName)
+				return nil
+			}
+			logger.Info("[logstore] %s: creating unique index idx_dbm_unique_metric", migrationName)
+			if err := dbMigrator.CreateIndex(&DashboardBucketMetric{}, "idx_dbm_unique_metric"); err != nil {
+				return fmt.Errorf("failed to create unique index idx_dbm_unique_metric: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			dbMigrator := tx.Migrator()
+			if dbMigrator.HasIndex(&DashboardBucketMetric{}, "idx_dbm_unique_metric") {
+				return dbMigrator.DropIndex(&DashboardBucketMetric{}, "idx_dbm_unique_metric")
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while adding dashboard_bucket_metrics unique index: %s", err.Error())
 	}
 	return nil
 }

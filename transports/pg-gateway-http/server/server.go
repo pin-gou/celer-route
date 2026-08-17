@@ -2488,6 +2488,28 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 				IsFresh:                 func() bool { return s.DashboardBucketAggregator.IsFresh(5 * time.Minute) },
 			})
 			rdbStore.SetBucketReader(reader)
+			// The per-tick Refresh only covers the trailing lookback window, so
+			// pre-existing log history is invisible to the dashboard until every
+			// historical bucket rotates through — on first deployment that is
+			// effectively never for a wide range. Sync the pre-aggregate up to
+			// "now" on startup: backfill the whole 30-day window when the table
+			// is empty, otherwise continue from the newest aggregated bucket so
+			// a restart with stale/partial coverage closes the gap. The upserts
+			// are idempotent and the aggregation query is index-backed.
+			var maxBucketStart *time.Time
+			rdbStore.DB().WithContext(context.Background()).
+				Model(&logstore.DashboardBucketMetric{}).
+				Select("MAX(bucket_start) AS max_bucket_start").
+				Scan(&maxBucketStart)
+			if maxBucketStart == nil || maxBucketStart.IsZero() {
+				if err := s.DashboardBucketAggregator.Backfill(context.Background(), time.Now().Add(-30*24*time.Hour)); err != nil {
+					logger.Warn("[dashboard-aggregator] backfill failed (non-fatal): %v", err)
+				}
+			} else if since := maxBucketStart.UTC().Truncate(time.Minute); since.Before(time.Now().Add(-5 * time.Minute)) {
+				if err := s.DashboardBucketAggregator.Backfill(context.Background(), since); err != nil {
+					logger.Warn("[dashboard-aggregator] incremental backfill failed (non-fatal): %v", err)
+				}
+			}
 			s.DashboardBucketAggregator.Start()
 			logger.Info("dashboard bucket aggregator initialized (interval=%s, bucket=%ds)",
 				time.Minute, 300)

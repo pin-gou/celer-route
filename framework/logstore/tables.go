@@ -2159,12 +2159,12 @@ type NodeUsageAggregate struct {
 // O(row_count) and gives the SQLite backend an order-of-magnitude speedup.
 type DashboardBucketMetric struct {
 	ID               uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	BucketStart      time.Time `gorm:"index;not null" json:"bucket_start"`
-	BucketSeconds    int64     `gorm:"not null" json:"bucket_seconds"`
-	Provider         string    `gorm:"type:varchar(64);index:idx_dbm_provider_bucket,priority:1" json:"provider"`
-	Model            string    `gorm:"type:varchar(128);index:idx_dbm_model_bucket,priority:1" json:"model"`
-	ObjectType       string    `gorm:"type:varchar(64);index" json:"object_type"`
-	Status           string    `gorm:"type:varchar(32);index" json:"status"`
+	BucketStart      time.Time `gorm:"uniqueIndex:idx_dbm_unique_metric,priority:1;index;not null" json:"bucket_start"`
+	BucketSeconds    int64     `gorm:"uniqueIndex:idx_dbm_unique_metric,priority:2;not null" json:"bucket_seconds"`
+	Provider         string    `gorm:"type:varchar(64);uniqueIndex:idx_dbm_unique_metric,priority:3;index:idx_dbm_provider_bucket,priority:1" json:"provider"`
+	Model            string    `gorm:"type:varchar(128);uniqueIndex:idx_dbm_unique_metric,priority:4;index:idx_dbm_model_bucket,priority:1" json:"model"`
+	ObjectType       string    `gorm:"type:varchar(64);uniqueIndex:idx_dbm_unique_metric,priority:5;index" json:"object_type"`
+	Status           string    `gorm:"type:varchar(32);uniqueIndex:idx_dbm_unique_metric,priority:6;index" json:"status"`
 	RequestCount     int64     `gorm:"default:0" json:"request_count"`
 	PromptTokens     int64     `gorm:"default:0" json:"prompt_tokens"`
 	CompletionTokens int64     `gorm:"default:0" json:"completion_tokens"`
