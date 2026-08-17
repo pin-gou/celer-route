@@ -2,22 +2,22 @@ import FullPageLoader from "@/components/fullPageLoader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebouncedValue } from "@/hooks/useDebounce";
+import { useTablePageSizePreference } from "@/lib/hooks/useTablePageSizePreference";
 import { RenderProviderIcon } from "@/lib/constants/icons";
 import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
 import { ModelDetails, useGetModelDetailsQuery, useGetProvidersQuery } from "@/lib/store";
 import { KnownProvider } from "@/lib/types/config";
 import { formatTokenPriceCompact } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { ChevronLeft, ChevronRight, Edit, Search } from "lucide-react";
+import { Edit, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AttributeSheet from "./attributeSheet";
-
-const PAGE_SIZE = 25;
 
 const toTestIdPart = (value: string) =>
 	value
@@ -48,6 +48,7 @@ export function ModelsSection() {
 
 	const [search, setSearch] = useState("");
 	const [providerFilter, setProviderFilter] = useState<string>("");
+	const [limit, setLimit] = useTablePageSizePreference("bifrost.modelCatalog.pageSize");
 	const [offset, setOffset] = useState(0);
 	const [editing, setEditing] = useState<ModelDetails | null>(null);
 
@@ -61,7 +62,7 @@ export function ModelsSection() {
 	const { data, isLoading, error, refetch } = useGetModelDetailsQuery({
 		query: debouncedSearch || undefined,
 		provider: providerFilter || undefined,
-		limit: PAGE_SIZE,
+		limit,
 		offset,
 		unfiltered: true,
 	});
@@ -71,8 +72,8 @@ export function ModelsSection() {
 
 	useEffect(() => {
 		if (offset < totalCount) return;
-		setOffset(totalCount === 0 ? 0 : Math.floor((totalCount - 1) / PAGE_SIZE) * PAGE_SIZE);
-	}, [totalCount, offset]);
+		setOffset(totalCount === 0 ? 0 : Math.floor((totalCount - 1) / limit) * limit);
+	}, [totalCount, offset, limit]);
 
 	const providerOptions = useMemo(() => Array.from(new Set((providersData ?? []).map((p) => p.name))).sort(), [providersData]);
 
@@ -221,39 +222,17 @@ export function ModelsSection() {
 				</div>
 
 				{totalCount > 0 && (
-					<div className="flex shrink-0 items-center justify-between text-xs" data-testid="model-catalog-pagination">
-						<div className="text-muted-foreground">
-							{(offset + 1).toLocaleString()}–{Math.min(offset + PAGE_SIZE, totalCount).toLocaleString()} of {totalCount.toLocaleString()}{" "}
-							{t("modelsSection.entries")}
-						</div>
-						<div className="flex items-center gap-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-								disabled={offset === 0}
-								data-testid="model-catalog-pagination-prev-btn"
-								aria-label={t("modelsSection.previousPage")}
-							>
-								<ChevronLeft className="size-3" />
-							</Button>
-							<div className="flex items-center gap-1">
-								<span>{t("modelsSection.page")}</span>
-								<span>{Math.floor(offset / PAGE_SIZE) + 1}</span>
-								<span>{t("modelsSection.pageOf", { total: Math.ceil(totalCount / PAGE_SIZE) })}</span>
-							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setOffset(offset + PAGE_SIZE)}
-								disabled={offset + PAGE_SIZE >= totalCount}
-								data-testid="model-catalog-pagination-next-btn"
-								aria-label={t("modelsSection.nextPage")}
-							>
-								<ChevronRight className="size-3" />
-							</Button>
-						</div>
-					</div>
+					<Pagination
+						offset={offset}
+						limit={limit}
+						totalCount={totalCount}
+						onOffsetChange={setOffset}
+						onLimitChange={(newLimit) => {
+							setLimit(newLimit);
+							setOffset(0);
+						}}
+						dataTestIdPrefix="model-catalog-pagination"
+					/>
 				)}
 			</div>
 		</>

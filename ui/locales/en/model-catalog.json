@@ -29,12 +29,7 @@
 		"failedToLoad": "Failed to load models",
 		"retry": "Retry",
 		"attribute": "attribute",
-		"attributes": "attributes",
-		"entries": "entries",
-		"page": "Page",
-		"pageOf": "of {{total}}",
-		"previousPage": "Previous page",
-		"nextPage": "Next page"
+		"attributes": "attributes"
 	},
 	"permissionDenied": "You don't have permission to access the model catalog",
 	"toast": {

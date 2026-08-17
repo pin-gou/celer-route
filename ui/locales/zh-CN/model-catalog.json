@@ -29,12 +29,7 @@
 		"failedToLoad": "加载模型失败",
 		"retry": "重试",
 		"attribute": "属性",
-		"attributes": "个属性",
-		"entries": "条",
-		"page": "第",
-		"pageOf": "页，共 {{total}} 页",
-		"previousPage": "上一页",
-		"nextPage": "下一页"
+		"attributes": "个属性"
 	},
 	"permissionDenied": "您没有访问模型目录的权限",
 	"toast": {
