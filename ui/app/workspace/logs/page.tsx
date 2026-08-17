@@ -394,6 +394,11 @@ export default function LogsPage() {
 	isLiveViewRef.current = isLiveView;
 	const filtersRef = useRef(filters);
 	filtersRef.current = filters;
+	const refetchStatsRef = useRef(refetchStats);
+	refetchStatsRef.current = refetchStats;
+	const refetchHistogramRef = useRef(refetchHistogram);
+	refetchHistogramRef.current = refetchHistogram;
+	const refetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	// SSE subscription for real-time log updates. Always connected (the timeline
 	// page pattern); the hooks' every other page/filter/sort configuration simply
@@ -417,6 +422,14 @@ export default function LogsPage() {
 			};
 			return [log, ...prev];
 		});
+		// Debounce refetch of stats and histogram so the stat cards and volume
+		// chart update within ~1.5 s of the latest completion, not just at the
+		// next 10 s polling cycle.
+		if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
+		refetchDebounceRef.current = setTimeout(() => {
+			refetchStatsRef.current();
+			refetchHistogramRef.current();
+		}, 1500);
 	}, []);
 
 	const { activeLogs: sseActiveLogs } = useLogsTimelineSSE({ onNewLog: handleSseNewLog });
@@ -426,6 +439,13 @@ export default function LogsPage() {
 	useEffect(() => {
 		if (!isLiveView) setSseNewLogs([]);
 	}, [isLiveView]);
+
+	// Clear any pending debounced stats/histogram refetch on unmount.
+	useEffect(() => {
+		return () => {
+			if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
+		};
+	}, []);
 
 	// Set showEmptyState on first response; clear it as soon as logs appear.
 	useEffect(() => {
