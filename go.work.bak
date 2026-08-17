@@ -1,0 +1,23 @@
+go 1.26.6
+
+use (
+	./cli
+	./core
+	./framework
+	./plugins/compat
+	./plugins/governance
+	./plugins/jsonparser
+	./plugins/logging
+	./plugins/maxim
+	./plugins/mocker
+	./plugins/modelcatalogresolver
+	./plugins/otel
+	./plugins/prompts
+	./plugins/providercooldown
+	./plugins/semanticcache
+	./plugins/telemetry
+	./tests/cmd/e2eseed
+	./tests/cmd/seed
+	./tests/cmd/seedvks
+	./transports
+)

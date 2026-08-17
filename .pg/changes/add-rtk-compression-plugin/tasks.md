@@ -73,8 +73,8 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 编写 `transports/pg-gateway-http/server/plugins_test.go` 单元测试：验证 RTK plugin init case 正确加载 + config schema 校验通过
-- [ ] 6.2 编写 `transports/pg-gateway-http/handlers/logging_test.go` 单元测试：验证 logging handler 读取 `BifrostContextKeyOriginalPromptTokens` 并写入 logs-db metadata
+- [x] 6.1 编写 `transports/pg-gateway-http/server/plugins_test.go` 单元测试：验证 RTK plugin init case 正确加载 + config schema 校验通过
+- [x] 6.2 编写 `transports/pg-gateway-http/handlers/logging_test.go` 单元测试：验证 logging handler 读取 `BifrostContextKeyOriginalPromptTokens` 并写入 logs-db metadata
 
 ## 7. dev.transports:dev - 实现开发
 

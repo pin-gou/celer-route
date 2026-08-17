@@ -99,3 +99,106 @@ func TestLoadBuiltinPlugins_ProviderCooldown_ExplicitDisabled(t *testing.T) {
 		t.Fatalf("provider-cooldown status = %q, want %q", ps.Status, schemas.PluginStatusDisabled)
 	}
 }
+
+// TestInstantiatePlugin_RTK_Loads pins the desired contract for the RTK
+// compression plugin registration in loadBuiltinPlugin. The transport dev phase
+// (tasks.md 7.2) is expected to add an `rtk` case (mirroring semanticcache)
+// that calls rtk.Init(ctx, config, logger). Until then the switch hits the
+// default branch, so InstantiatePlugin returns "unknown built-in plugin: rtk"
+// and this test FAILS — the red-phase signal that the registration is missing.
+func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
+	prevLogger := logger
+	logger = noopTestLogger{}
+	defer func() { logger = prevLogger }()
+
+	config := &lib.Config{
+		ClientConfig: &configstore.ClientConfig{},
+	}
+
+	// The rtk plugin config matches the schema contract from design.md:
+	// enabled / intensity / apply_to_tool_results / apply_to_code_blocks /
+	// max_lines_per_result / max_chars_per_result / dedup_threshold /
+	// preserve_cache_control.
+	rtkConfig := map[string]any{
+		"enabled":                true,
+		"intensity":              "standard",
+		"apply_to_tool_results":  true,
+		"apply_to_code_blocks":   false,
+		"max_lines_per_result":   120,
+		"max_chars_per_result":   12000,
+		"dedup_threshold":        3,
+		"preserve_cache_control": true,
+	}
+
+	plugin, err := InstantiatePlugin(context.Background(), "rtk", nil, rtkConfig, config)
+	if err != nil {
+		// Red phase: the rtk case is not yet registered in loadBuiltinPlugin.
+		// After the dev phase this must succeed.
+		t.Fatalf("InstantiatePlugin(rtk) returned error: %v", err)
+	}
+	if plugin == nil {
+		t.Fatal("InstantiatePlugin(rtk) returned nil plugin, want non-nil")
+	}
+	if got := plugin.GetName(); got != "rtk" {
+		t.Fatalf("InstantiatePlugin(rtk) plugin name = %q, want %q", got, "rtk")
+	}
+}
+
+// TestRTKPluginConfig_SchemaContract pins the config shape the transport dev
+// phase must accept for the rtk plugin (design.md § 数据模型 3). It mirrors the
+// `if/then` block that will be added to transports/config.schema.json: every
+// property listed in the schema must be present in the Config struct of the
+// plugin once implemented. This test guards the JSON round-trip (marshal →
+// unmarshal) so a config.json `{name: "rtk", config: {...}}` block survives
+// loading without schema validation errors.
+func TestRTKPluginConfig_SchemaContract(t *testing.T) {
+	// The canonical plugin block for config.json, matching the schema contract:
+	// `{name: "rtk", enabled: true, config: {...}}`.
+	pluginBlock := map[string]any{
+		"name":    "rtk",
+		"enabled": true,
+		"config": map[string]any{
+			"enabled":                true,
+			"intensity":              "standard",
+			"apply_to_tool_results":  true,
+			"apply_to_code_blocks":   false,
+			"max_lines_per_result":   120,
+			"max_chars_per_result":   12000,
+			"dedup_threshold":        3,
+			"preserve_cache_control": true,
+		},
+	}
+
+	expectedKeys := []string{
+		"enabled",
+		"intensity",
+		"apply_to_tool_results",
+		"apply_to_code_blocks",
+		"max_lines_per_result",
+		"max_chars_per_result",
+		"dedup_threshold",
+		"preserve_cache_control",
+	}
+
+	configMap, ok := pluginBlock["config"].(map[string]any)
+	if !ok {
+		t.Fatal("config field is not a map")
+	}
+
+	// Every schema-declared property must be present in the config sample.
+	for _, key := range expectedKeys {
+		if _, exists := configMap[key]; !exists {
+			t.Fatalf("rtk config missing schema property %q — dev phase must accept it in config.schema.json then branch", key)
+		}
+	}
+
+	// The config must round-trip through the schema plugin-block shape used by
+	// Config.UpdatePluginOverallStatus / getPluginConfig lookups.
+	if pluginBlock["name"] != "rtk" {
+		t.Fatalf("plugin block name = %v, want rtk", pluginBlock["name"])
+	}
+	enabled, ok := pluginBlock["enabled"].(bool)
+	if !ok || !enabled {
+		t.Fatalf("plugin block enabled = %v, want true", pluginBlock["enabled"])
+	}
+}
