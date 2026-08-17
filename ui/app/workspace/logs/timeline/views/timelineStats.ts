@@ -19,9 +19,17 @@ export interface TimelineStatsSummary {
 	errorCount: number;
 	cancelledCount: number;
 	activeCount: number;
+	/** Max number of completed requests concurrently in-flight within the window. */
+	maxConcurrency: number;
 }
 
-export function summarizeTimelineStats(logs: LogEntry[], totalRequests: number, activeCount: number): TimelineStatsSummary {
+export function summarizeTimelineStats(
+	logs: LogEntry[],
+	totalRequests: number,
+	activeCount: number,
+	windowStartMs?: number,
+	windowEndMs?: number,
+): TimelineStatsSummary {
 	let success = 0;
 	let error = 0;
 	let cancelled = 0;
@@ -32,7 +40,19 @@ export function summarizeTimelineStats(logs: LogEntry[], totalRequests: number, 
 	let promptTokens = 0;
 	let completionTokens = 0;
 
+	// Sweep-line events over the in-flight interval [timestamp, timestamp + latency]
+	// of each completed request, clipped to the window. At each transition we count
+	// how many requests are running simultaneously and track the running maximum.
+	// +1 posted at the start, -1 at the end; ties resolve +1 first so a request
+	// that starts exactly when another ends counts as overlapping.
+	const events: Array<{ ms: number; delta: number }> = [];
+
+	const hasWindow = typeof windowStartMs === "number" && typeof windowEndMs === "number";
+	const winStart = hasWindow ? (windowStartMs as number) : -Infinity;
+	const winEnd = hasWindow ? (windowEndMs as number) : Infinity;
+
 	for (const log of logs) {
+		const isTerminal = log.status === "success" || log.status === "error" || log.status === "cancelled";
 		switch (log.status) {
 			case "success":
 				success++;
@@ -57,6 +77,35 @@ export function summarizeTimelineStats(logs: LogEntry[], totalRequests: number, 
 			completionTokens += usage.completion_tokens ?? 0;
 			totalTokens += usage.total_tokens ?? 0;
 		}
+
+		// Concurrency only counts completed (non-processing) requests.
+		if (isTerminal) {
+			const start = new Date(log.timestamp).getTime();
+			const startClipped = Math.max(start, winStart);
+			if (startClipped <= winEnd) {
+				events.push({ ms: startClipped, delta: 1 });
+				const end = start + (typeof log.latency === "number" && log.latency >= 0 ? log.latency : 0);
+				const endClipped = Math.min(end, winEnd);
+				if (endClipped < startClipped) {
+					// Interval lies fully outside the window after clipping — drop both.
+					events.pop();
+				} else if (endClipped < winEnd) {
+					events.push({ ms: endClipped, delta: -1 });
+				} else if (typeof windowEndMs === "number") {
+					// End beyond window end — emit at the window boundary so the
+					// window-view concurrency is measured correctly.
+					events.push({ ms: winEnd, delta: -1 });
+				}
+			}
+		}
+	}
+
+	events.sort((a, b) => a.ms - b.ms || b.delta - a.delta);
+	let maxConcurrency = 0;
+	let cur = 0;
+	for (const e of events) {
+		cur += e.delta;
+		if (cur > maxConcurrency) maxConcurrency = cur;
 	}
 
 	const terminalCount = success + error + cancelled;
@@ -71,5 +120,6 @@ export function summarizeTimelineStats(logs: LogEntry[], totalRequests: number, 
 		errorCount: error,
 		cancelledCount: cancelled,
 		activeCount,
+		maxConcurrency,
 	};
 }

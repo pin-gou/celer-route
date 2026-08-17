@@ -40,6 +40,7 @@ describe("summarizeTimelineStats", () => {
 			errorCount: 0,
 			cancelledCount: 0,
 			activeCount: 0,
+			maxConcurrency: 0,
 		});
 	});
 
@@ -88,5 +89,70 @@ describe("summarizeTimelineStats", () => {
 		expect(result.totalTokens).toBe(0);
 		expect(result.promptTokens).toBe(0);
 		expect(result.completionTokens).toBe(0);
+	});
+
+	// --- maxConcurrency (sweep-line over completed request in-flight intervals) ---
+
+	const epoch = new Date("2026-08-15T10:00:00Z").getTime();
+
+	function logAt(
+		id: string,
+		startMsFromEpoch: number,
+		latency: number,
+		status: "success" | "error" | "cancelled" | "processing" = "success",
+	) {
+		return baseLog({
+			id,
+			status,
+			latency,
+			timestamp: new Date(epoch + startMsFromEpoch).toISOString(),
+		});
+	}
+
+	it("maxConcurrency is 0 for an empty or processing-only list", () => {
+		expect(summarizeTimelineStats([], 0, 0).maxConcurrency).toBe(0);
+		expect(summarizeTimelineStats([logAt("1", 0, 500, "processing")], 0, 1).maxConcurrency).toBe(0);
+	});
+
+	it("maxConcurrency counts sequential requests as 1", () => {
+		const logs = [logAt("1", 0, 500), logAt("2", 600, 500), logAt("3", 1200, 500)];
+		const result = summarizeTimelineStats(logs, 3, 0);
+		expect(result.maxConcurrency).toBe(1);
+	});
+
+	it("maxConcurrency counts overlapping requests", () => {
+		const logs = [logAt("1", 0, 1000), logAt("2", 200, 1000), logAt("3", 400, 1000)];
+		const result = summarizeTimelineStats(logs, 3, 0);
+		expect(result.maxConcurrency).toBe(3);
+	});
+
+	it("maxConcurrency resolves same-instant boundaries as overlapping", () => {
+		// A ends exactly when B starts → peak 2 at that instant.
+		const logs = [logAt("1", 0, 500), logAt("2", 500, 500)];
+		expect(summarizeTimelineStats(logs, 2, 0).maxConcurrency).toBe(2);
+	});
+
+	it("maxConcurrency clips intervals to the window and excludes out-of-window peaks", () => {
+		// Three overlapping requests live entirely inside the window [0, 4000]…
+		const inner = [logAt("1", 500, 1000), logAt("2", 700, 1000), logAt("3", 900, 1000)];
+		// …while a request outside the window produces a high outside peak that must not count.
+		const outside = [logAt("o1", -5000, 1000)];
+		const logs = [...inner, ...outside];
+		const windowStart = epoch + 0;
+		const windowEnd = epoch + 4000;
+		expect(summarizeTimelineStats(logs, 4, 0, windowStart, windowEnd).maxConcurrency).toBe(3);
+	});
+
+	it("maxConcurrency clips a request straddling the window end", () => {
+		// Request runs [3000, 6000), window ends at 4000 → inside-window portion is 1000ms.
+		const logs = [logAt("1", 3000, 3000)];
+		const windowStart = epoch + 0;
+		const windowEnd = epoch + 4000;
+		expect(summarizeTimelineStats(logs, 1, 0, windowStart, windowEnd).maxConcurrency).toBe(1);
+	});
+
+	it("maxConcurrency treats missing latency as a zero-duration point event", () => {
+		const missing = baseLog({ id: "1", status: "success", latency: undefined, timestamp: new Date(epoch + 100).toISOString() });
+		expect(summarizeTimelineStats([missing], 1, 0).maxConcurrency).toBe(1);
 	});
 });

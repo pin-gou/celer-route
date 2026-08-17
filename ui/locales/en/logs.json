@@ -475,6 +475,7 @@
 			"avgLatencyDesc": "Average latency of successful requests",
 			"maxLatency": "max",
 			"totalTokens": "Total Tokens",
+			"maxConcurrency": "Max concurrency",
 			"totalTokensDesc": "Total tokens used in view, split into input and output tokens.",
 			"in": "in",
 			"out": "out",

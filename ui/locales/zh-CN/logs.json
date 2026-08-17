@@ -475,6 +475,7 @@
 			"avgLatencyDesc": "成功请求的平均延迟",
 			"maxLatency": "最慢",
 			"totalTokens": "总词元数",
+			"maxConcurrency": "最大并发",
 			"totalTokensDesc": "视图内使用的总词元数，分为输入和输出。",
 			"in": "输入",
 			"out": "输出",

@@ -46,6 +46,39 @@ function formatTimeOfDay(ms: number): string {
 	return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+// Fields that SSE can update on an existing log entry. These are the only
+// fields we overwrite during merge — rich fields like input_history,
+// output_message, created_at, raw_request, raw_response are preserved from
+// the authoritative API fetch.
+const SSE_LIVE_FIELDS: (keyof LogEntry)[] = [
+	"status",
+	"provider",
+	"model",
+	"object",
+	"stream",
+	"latency",
+	"timestamp",
+	"token_usage",
+	"cost",
+	"number_of_retries",
+	"fallback_index",
+	"virtual_key_name",
+	"app",
+	"user_agent",
+	"content_summary",
+];
+
+function mergeLogEntry(existing: LogEntry, live: Partial<LogEntry>): LogEntry {
+	const merged = { ...existing };
+	for (const field of SSE_LIVE_FIELDS) {
+		const val = live[field];
+		if (val !== undefined) {
+			(merged as Record<string, unknown>)[field] = val;
+		}
+	}
+	return merged;
+}
+
 export default function TimelinePage() {
 	const { t } = useTranslation("logs");
 	const navigate = useNavigate();
@@ -202,42 +235,50 @@ export default function TimelinePage() {
 
 	const logs = useMemo(() => {
 		const apiLogs = logsData?.logs ?? [];
-		// Merge extra logs from SSE, deduplicating by id
+		// Merge logs from SSE, deduplicating by id. When SSE carries a newer
+		// update for an id already present from the API fetch (e.g. a
+		// processing → terminal transition), overwrite only the live fields so
+		// the authoritative row (input_history, raw payload, etc.) is kept.
 		const merged = new Map<string, LogEntry>();
 		for (const l of apiLogs) merged.set(l.id, l);
 		for (const l of extraLogs) {
-			if (!merged.has(l.id)) merged.set(l.id, l);
+			const existing = merged.get(l.id);
+			merged.set(l.id, existing ? mergeLogEntry(existing, l) : l);
 		}
 		return Array.from(merged.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	}, [logsData, extraLogs]);
 
-	// Visible-window summary for the stat cards: count of logs whose bars are
-	// in the current canvas window, plus the timestamp of the first visible
-	// request. Mirrors LogsTimeline's visibleLogs filter (logsTimeline.tsx) so
-	// the card matches the chart exactly, including in-flight processing bars
-	// that extend to the NOW line.
-	const [visibleCount, firstVisibleTimeMs] = useMemo(() => {
-		let count = 0;
-		let firstMs: number | null = null;
-		for (const log of logs) {
-			const start = new Date(log.timestamp).getTime();
-			const end = log.status === "processing" ? nowMs : start + (log.latency ?? 0);
-			if (end >= visibleWindow.start && start <= visibleWindow.end) {
-				count++;
-				if (firstMs === null || start < firstMs) firstMs = start;
-			}
-		}
-		return [count, firstMs] as const;
-	}, [logs, visibleWindow, nowMs]);
+	// Visible-window logs for stat cards: filter the merged log list to the
+	// current canvas window so all stat cards reflect the same visible range.
+	// Mirrors LogsTimeline's visibleLogs filter (logsTimeline.tsx).
+	const visibleLogsForStats = useMemo(
+		() =>
+			logs.filter((log) => {
+				const start = new Date(log.timestamp).getTime();
+				const end = log.status === "processing" ? nowMs : start + (log.latency ?? 0);
+				return end >= visibleWindow.start && start <= visibleWindow.end;
+			}),
+		[logs, visibleWindow, nowMs],
+	);
 
-	// Stat cards: total requests comes from the backend's exact count over the
-	// fetch window (the list endpoint only stats-populates total_requests); the
-	// rest is aggregated client-side over the merged log list. Inputs (logs,
-	// logsData.stats, activeLogs) are stable during the rAF clock animation, so
-	// the summary does not recompute every frame.
+	const [firstVisibleTimeMs] = useMemo(() => {
+		let firstMs: number | null = null;
+		for (const log of visibleLogsForStats) {
+			const start = new Date(log.timestamp).getTime();
+			if (firstMs === null || start < firstMs) firstMs = start;
+		}
+		return [firstMs] as const;
+	}, [visibleLogsForStats]);
+
+	// Stat cards: all computed from the visible-window log list so the cards
+	// match the Gantt chart exactly. totalRequests is the live count of logs
+	// in the visible window, not a stale backend snapshot. Window bounds are
+	// passed so maxConcurrency measures concurrency within the visible window
+	// only.
 	const timelineStats = useMemo(
-		() => summarizeTimelineStats(logs, logsData?.stats?.total_requests || logs.length, activeLogs.length),
-		[logs, logsData?.stats?.total_requests, activeLogs.length],
+		() =>
+			summarizeTimelineStats(visibleLogsForStats, visibleLogsForStats.length, activeLogs.length, visibleWindow.start, visibleWindow.end),
+		[visibleLogsForStats, activeLogs.length, visibleWindow],
 	);
 
 	const statCards = useMemo(
@@ -247,6 +288,11 @@ export default function TimelinePage() {
 				title: t("timeline.statCards.activeRequests"),
 				value: <NumberFlow value={timelineStats.activeCount} format={{ notation: "compact" }} />,
 				icon: <Activity className="size-4" />,
+				subValue: (
+					<span className="text-muted-foreground">
+						{t("timeline.statCards.maxConcurrency")}: <strong className="text-foreground font-bold">{timelineStats.maxConcurrency}</strong>
+					</span>
+				),
 			},
 			{
 				key: "total-requests",
@@ -255,7 +301,7 @@ export default function TimelinePage() {
 				icon: <BarChart className="size-4" />,
 				subValue: (
 					<span className="text-muted-foreground">
-						{t("timeline.toolbar.visible")}: <strong className="text-foreground font-bold">{visibleCount}</strong> ·{" "}
+						{t("timeline.toolbar.visible")}: <strong className="text-foreground font-bold">{visibleLogsForStats.length}</strong> ·{" "}
 						{t("timeline.statCards.firstRequest")}:{" "}
 						<strong className="text-foreground font-bold">{firstVisibleTimeMs !== null ? formatTimeOfDay(firstVisibleTimeMs) : "—"}</strong>
 					</span>
@@ -362,7 +408,7 @@ export default function TimelinePage() {
 				),
 			},
 		],
-		[t, timelineStats, visibleCount, firstVisibleTimeMs],
+		[t, timelineStats, visibleLogsForStats, firstVisibleTimeMs],
 	);
 
 	const selectedLog = useMemo(
