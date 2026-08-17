@@ -3,42 +3,38 @@
 		"title": "Model Catalog",
 		"description": "Browse and manage AI models"
 	},
-	"tabs": {
-		"overview": "Overview",
-		"models": "Models"
-	},
-	"table": {
-		"title": "Model Catalog",
-		"description": "Overview of all configured providers, models, and usage.",
+	"summary": {
 		"totalProviders": "Total Providers",
 		"totalModels": "Total Models",
-		"totalRequests24h": "Total Requests (24h)",
-		"totalCost24h": "Total Cost (24h)",
-		"allProviders": "All Providers",
-		"totalTraffic24h": "Total Traffic (24h)",
-		"modelsUsedTooltip": "Models used in the last 30 days",
-		"noMatchingProviders": "No matching providers found.",
-		"custom": "CUSTOM",
-		"moreCount": "+{{count}} more"
+		"totalRequests1h": "Total Requests (1h)"
 	},
-	"catalog": {
-		"title": "Model Catalog",
-		"searchModels": "Search models...",
+	"table": {
 		"provider": "Provider",
-		"modelName": "Model Name",
-		"capabilities": "Capabilities",
-		"pricing": "Pricing",
-		"contextWindow": "Context Window",
-		"status": "Status",
-		"noModels": "No models found",
-		"noModelsDesc": "Try adjusting your search or filter criteria",
-		"supported": "Supported",
-		"unsupported": "Unsupported",
-		"chat": "Chat",
-		"embedding": "Embedding",
-		"image": "Image",
-		"audio": "Audio",
-		"video": "Video"
+		"model": "Model",
+		"input": "Input",
+		"output": "Output",
+		"cacheWrite": "Cache Write",
+		"cacheRead": "Cache Read",
+		"description": "Description",
+		"other": "Other"
+	},
+	"modelsSection": {
+		"title": "Models",
+		"subtitle": "Attach descriptions and tags to specific models.",
+		"searchAriaLabel": "Search models",
+		"searchPlaceholder": "Search by model name...",
+		"allProviders": "All providers",
+		"noModels": "No models loaded yet.",
+		"noMatching": "No matching models.",
+		"failedToLoad": "Failed to load models",
+		"retry": "Retry",
+		"attribute": "attribute",
+		"attributes": "attributes",
+		"entries": "entries",
+		"page": "Page",
+		"pageOf": "of {{total}}",
+		"previousPage": "Previous page",
+		"nextPage": "Next page"
 	},
 	"permissionDenied": "You don't have permission to access the model catalog",
 	"toast": {
