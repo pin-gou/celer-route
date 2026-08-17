@@ -24,6 +24,7 @@ import { useLazyGetLogByIdQuery, useLazyGetLogsQuery } from "@/lib/store/apis/lo
 import type { DisplayLogEntry, LogEntry, LogFilters, Pagination } from "@/lib/types/logs";
 import { useLogsTimelineSSE, type ActiveLogEntry } from "@/hooks/useLogsTimelineSSE";
 import { dateUtils } from "@/lib/types/logs";
+import { getRangeForPeriod } from "@/lib/utils/timeRange";
 import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import NumberFlow from "@number-flow/react";
@@ -192,13 +193,8 @@ export default function LogsPage() {
 						}
 					})()
 				: undefined,
-			// Use a period if present
-			...(urlState.period
-				? { period: urlState.period }
-				: {
-						start_time: dateUtils.toISOString(urlState.start_time),
-						end_time: dateUtils.toISOString(urlState.end_time),
-					}),
+			start_time: dateUtils.toISOString(urlState.start_time),
+			...(urlState.period ? {} : { end_time: dateUtils.toISOString(urlState.end_time) }),
 		}),
 		// Only re-derive filters when filter-related URL params change (not pagination)
 		[
@@ -550,8 +546,12 @@ export default function LogsPage() {
 	const handlePeriodChange = useCallback(
 		(p?: string, from?: Date, to?: Date) => {
 			if (p) {
+				const { from: computedFrom } = getRangeForPeriod(p);
+				const startTs = from ? Math.floor(from.getTime() / 1000) : Math.floor(computedFrom.getTime() / 1000);
 				setUrlState({
 					period: p,
+					start_time: startTs,
+					end_time: null,
 					offset: 0,
 					polling: true,
 				});

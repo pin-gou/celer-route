@@ -15,6 +15,7 @@ import {
 import { useLazyGetMCPLogsQuery } from "@/lib/store/apis/mcpLogsApi";
 import type { MCPToolLogEntry, MCPToolLogFilters, Pagination } from "@/lib/types/logs";
 import { dateUtils } from "@/lib/types/logs";
+import { getRangeForPeriod } from "@/lib/utils/timeRange";
 import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import NumberFlow from "@number-flow/react";
@@ -88,12 +89,8 @@ export default function MCPLogsPage() {
 			status: urlState.status,
 			virtual_key_ids: urlState.virtual_key_ids,
 			content_search: urlState.content_search,
-			...(urlState.period
-				? { period: urlState.period }
-				: {
-						start_time: dateUtils.toISOString(urlState.start_time),
-						end_time: dateUtils.toISOString(urlState.end_time),
-					}),
+			start_time: dateUtils.toISOString(urlState.start_time),
+			...(urlState.period ? {} : { end_time: dateUtils.toISOString(urlState.end_time) }),
 		}),
 		[
 			urlState.tool_names,
@@ -266,8 +263,12 @@ export default function MCPLogsPage() {
 	const handlePeriodChange = useCallback(
 		(p?: string, from?: Date, to?: Date) => {
 			if (p) {
+				const { from: computedFrom } = getRangeForPeriod(p);
+				const startTs = from ? Math.floor(from.getTime() / 1000) : Math.floor(computedFrom.getTime() / 1000);
 				setUrlState({
 					period: p,
+					start_time: startTs,
+					end_time: null,
 					offset: 0,
 					polling: true,
 				});

@@ -17,49 +17,27 @@ interface TimePickerProps {
 export const TimePicker = React.forwardRef<HTMLDivElement, TimePickerProps>((props, forwardedRef) => {
 	const { value, onChange, className } = props;
 
-	// Convert 24-hour to 12-hour format
-	const hour24 = value?.hour ?? 0;
-	const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
-	const period = hour24 >= 12 ? "PM" : "AM";
+	const hour = value?.hour ?? 0;
 	const minute = value?.minute ?? 0;
 
 	const handleHourChange = (newHourStr: string) => {
 		if (!onChange) return;
-		const newHour = Number(newHourStr);
-		// Convert 12-hour back to 24-hour
-		let hour24 = newHour;
-		if (period === "PM" && newHour !== 12) {
-			hour24 = newHour + 12;
-		} else if (period === "AM" && newHour === 12) {
-			hour24 = 0;
-		}
-		onChange({ hour: hour24, minute });
+		onChange({ hour: Number(newHourStr), minute });
 	};
 
 	const handleMinuteChange = (newMinuteStr: string) => {
 		if (!onChange) return;
-		onChange({ hour: hour24, minute: Number(newMinuteStr) });
-	};
-
-	const handlePeriodChange = (newPeriod: "AM" | "PM") => {
-		if (!onChange) return;
-		let newHour24 = hour24;
-		if (newPeriod === "PM" && hour24 < 12) {
-			newHour24 = hour24 + 12;
-		} else if (newPeriod === "AM" && hour24 >= 12) {
-			newHour24 = hour24 - 12;
-		}
-		onChange({ hour: newHour24, minute });
+		onChange({ hour, minute: Number(newMinuteStr) });
 	};
 
 	return (
 		<div ref={forwardedRef} className={cn("inline-flex h-9 w-full items-center gap-1", className)}>
-			<Select value={hour12.toString()} onValueChange={handleHourChange}>
+			<Select value={hour.toString()} onValueChange={handleHourChange}>
 				<SelectTrigger size="sm" className="h-9 w-[70px]">
 					<SelectValue placeholder="HH" />
 				</SelectTrigger>
 				<SelectContent>
-					{Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+					{Array.from({ length: 24 }, (_, i) => i).map((h) => (
 						<SelectItem key={h} value={h.toString()}>
 							{h.toString().padStart(2, "0")}
 						</SelectItem>
@@ -77,15 +55,6 @@ export const TimePicker = React.forwardRef<HTMLDivElement, TimePickerProps>((pro
 							{m.toString().padStart(2, "0")}
 						</SelectItem>
 					))}
-				</SelectContent>
-			</Select>
-			<Select value={period} onValueChange={(v) => handlePeriodChange(v as "AM" | "PM")}>
-				<SelectTrigger size="sm" className="h-9 w-[70px]">
-					<SelectValue placeholder="AM" />
-				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value="AM">AM</SelectItem>
-					<SelectItem value="PM">PM</SelectItem>
 				</SelectContent>
 			</Select>
 		</div>

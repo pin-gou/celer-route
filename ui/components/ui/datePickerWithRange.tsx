@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { getSupportedTimezones } from "@/lib/timezones";
 import { TZDate, tz, tzName } from "@date-fns/tz";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Globe } from "lucide-react";
+import { Calendar as CalendarIcon, Globe, RotateCcw } from "lucide-react";
 import React, { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { DateRange } from "react-day-picker";
@@ -102,19 +102,6 @@ export function DateTimePickerWithRange(props: DateTimePickerWithRangeProps) {
 		return range;
 	}, [props.disabledBefore, props.disabledAfter]);
 
-	const printTimeValue = (timeObj: TimeValue): string => {
-		// Validate input
-		if (!timeObj || timeObj.hour < 0 || timeObj.hour >= 24 || timeObj.minute < 0 || timeObj.minute >= 60) {
-			return "";
-		}
-
-		let hour = ((timeObj.hour + 11) % 12) + 1; // Convert hour to 12-hour format
-		let period = timeObj.hour >= 12 ? "PM" : "AM"; // Determine AM/PM
-		let minute = timeObj.minute.toString().padStart(2, "0"); // Ensure the minute has two digits
-
-		return `${hour}:${minute} ${period}`;
-	};
-
 	/**
 	 * Combine a calendar date and a wall-clock time into an absolute Date.
 	 * When `activeTimezone` is set, the wall-clock is interpreted in that zone
@@ -164,6 +151,24 @@ export function DateTimePickerWithRange(props: DateTimePickerWithRangeProps) {
 		setPredefinedPeriod(props.predefinedPeriod);
 	}, [props.predefinedPeriod]);
 
+	/**
+	 * Reset both time pickers to the day's boundaries (00:00 / 23:59) while
+	 * keeping the selected calendar dates. Clears the active predefined period
+	 * since this opts back into the explicit-range path.
+	 */
+	const handleResetDayTimes = () => {
+		const resetFrom = { hour: 0, minute: 0 };
+		const resetTo = { hour: 23, minute: 59 };
+		setTimeValue({ from: resetFrom, to: resetTo });
+		if (!date?.from || !date?.to) return;
+		const nextFrom = getDateTime(date.from, resetFrom);
+		const nextTo = getDateTime(date.to, resetTo);
+		if (nextFrom?.toISOString() !== props.dateTime?.from?.toISOString() || nextTo?.toISOString() !== props.dateTime?.to?.toISOString()) {
+			props.onDateTimeUpdate?.({ from: nextFrom, to: nextTo });
+			props.onPredefinedPeriodChange?.(undefined);
+		}
+	};
+
 	return (
 		<div className={cn("grid gap-2", className)}>
 			<Popover
@@ -195,12 +200,11 @@ export function DateTimePickerWithRange(props: DateTimePickerWithRangeProps) {
 								{dateTime?.from ? (
 									dateTime.to ? (
 										<>
-											{formatDate(dateTime.from, "LLL dd, y")} {printTimeValue(timeValue?.from)} - {formatDate(dateTime.to, "LLL dd, y")}{" "}
-											{printTimeValue(timeValue?.to)}
+											{formatDate(dateTime.from, "yyyy-MM-dd HH:mm")} - {formatDate(dateTime.to, "yyyy-MM-dd HH:mm")}
 											{props.showTimezone && tzAbbreviation ? ` · ${tzAbbreviation}` : ""}
 										</>
 									) : (
-										formatDate(dateTime.from, "LLL dd, y")
+										formatDate(dateTime.from, "yyyy-MM-dd HH:mm")
 									)
 								) : (
 									<span>{t("datePicker.pickADate")}</span>
@@ -283,6 +287,19 @@ export function DateTimePickerWithRange(props: DateTimePickerWithRangeProps) {
 											}
 										}}
 									/>
+								</div>
+								<div className="flex items-end self-stretch pt-5 pb-1">
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon"
+										className="size-8"
+										data-testid="datepicker-reset-day-times"
+										title={t("datePicker.resetToDayBoundaries")}
+										onClick={handleResetDayTimes}
+									>
+										<RotateCcw className="size-4" />
+									</Button>
 								</div>
 							</div>
 						</div>
@@ -403,19 +420,6 @@ export function DateTimePicker(props: DateTimePickerProps) {
 		return range;
 	}, [props.disabledBefore, props.disabledAfter]);
 
-	const printTimeValue = (timeObj: TimeValue): string => {
-		// Validate input
-		if (!timeObj || timeObj.hour < 0 || timeObj.hour >= 24 || timeObj.minute < 0 || timeObj.minute >= 60) {
-			return "";
-		}
-
-		let hour = ((timeObj.hour + 11) % 12) + 1; // Convert hour to 12-hour format
-		let period = timeObj.hour >= 12 ? "PM" : "AM"; // Determine AM/PM
-		let minute = timeObj.minute.toString().padStart(2, "0"); // Ensure the minute has two digits
-
-		return `${hour}:${minute} ${period}`;
-	};
-
 	const getDateTime = (date: Date | undefined | null, time: TimeValue | undefined | null): Date | undefined => {
 		if (!date) return undefined;
 		const dateTime = new Date(date);
@@ -451,11 +455,7 @@ export function DateTimePicker(props: DateTimePickerProps) {
 						)}
 					>
 						<CalendarIcon className="h-4 w-4" strokeWidth={1.5} />
-						{date ? (
-							<>
-								{format(date, "LLL dd, y")} {printTimeValue(timeValue)}
-							</>
-						) : (
+						{date ? <>{format(date, "yyyy-MM-dd HH:mm")}</> : (
 							<span>{t("datePicker.pickADateAndTime")}</span>
 						)}
 					</Button>

@@ -175,7 +175,8 @@
 		"toTime": "To Time",
 		"time": "Time",
 		"timezone": "Timezone",
-		"selectTimezone": "Select timezone"
+		"selectTimezone": "Select timezone",
+		"resetToDayBoundaries": "Reset to start of day (00:00) and end of day (23:59)"
 	},
 	"timePeriods": {
 		"lastHour": "Last hour",

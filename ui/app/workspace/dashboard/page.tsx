@@ -112,12 +112,8 @@ export default function DashboardPage() {
 
 	const filters: LogFilters = useMemo(
 		() => ({
-			...(urlState.period
-				? { period: urlState.period }
-				: {
-						start_time: dateUtils.toISOString(urlState.start_time),
-						end_time: dateUtils.toISOString(urlState.end_time),
-					}),
+			start_time: dateUtils.toISOString(urlState.start_time),
+			...(urlState.period ? {} : { end_time: dateUtils.toISOString(urlState.end_time) }),
 			...(urlState.providers.length > 0 && { providers: urlState.providers }),
 			...(urlState.models.length > 0 && { models: urlState.models }),
 			...(urlState.selected_key_ids.length > 0 && { selected_key_ids: urlState.selected_key_ids }),
@@ -328,11 +324,11 @@ export default function DashboardPage() {
 	const handlePeriodChange = useCallback(
 		(period: string | undefined) => {
 			if (!period) return;
-			const { from, to } = getRangeForPeriod(period);
+			const { from } = getRangeForPeriod(period);
 			setUrlState({
 				period,
 				start_time: Math.floor(from.getTime() / 1000),
-				end_time: Math.floor(to.getTime() / 1000),
+				end_time: null,
 			});
 		},
 		[setUrlState],
