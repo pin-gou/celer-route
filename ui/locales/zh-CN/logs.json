@@ -450,7 +450,13 @@
 			"success": "成功",
 			"error": "错误",
 			"processing": "处理中",
-			"other": "其他"
+			"other": "其他",
+			"fillStatus": "填充 = 状态",
+			"borderTps": "边框 = 输出速率",
+			"tpsVerySlow": "< 20 TPS",
+			"tpsSlow": "< 50 TPS",
+			"tpsMedium": "< 80 TPS",
+			"tpsFast": "≥ 80 TPS"
 		},
 		"detail": {
 			"logId": "日志 ID：",

@@ -450,7 +450,13 @@
 			"success": "Success",
 			"error": "Error",
 			"processing": "Processing",
-			"other": "Other"
+			"other": "Other",
+			"fillStatus": "Fill = status",
+			"borderTps": "Border = tokens/s",
+			"tpsVerySlow": "< 20 TPS",
+			"tpsSlow": "< 50 TPS",
+			"tpsMedium": "< 80 TPS",
+			"tpsFast": "≥ 80 TPS"
 		},
 		"detail": {
 			"logId": "Log ID:",
