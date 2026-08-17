@@ -455,9 +455,7 @@ export function DateTimePicker(props: DateTimePickerProps) {
 						)}
 					>
 						<CalendarIcon className="h-4 w-4" strokeWidth={1.5} />
-						{date ? <>{format(date, "yyyy-MM-dd HH:mm")}</> : (
-							<span>{t("datePicker.pickADateAndTime")}</span>
-						)}
+						{date ? <>{format(date, "yyyy-MM-dd HH:mm")}</> : <span>{t("datePicker.pickADateAndTime")}</span>}
 					</Button>
 				</PopoverTrigger>
 				<PopoverContent className="w-auto p-0" align={props.popupAlignment ? props.popupAlignment : "start"}>
