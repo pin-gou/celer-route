@@ -199,8 +199,16 @@ export default function LogsPage() {
 						}
 					})()
 				: undefined,
-			start_time: dateUtils.toISOString(urlState.start_time),
-			...(urlState.period ? {} : { end_time: dateUtils.toISOString(urlState.end_time) }),
+			// Use a period if present so the backend resolves a fresh [now-period, now]
+			// window and picks a fine bucket size. Sending only start_time leaves end_time
+			// nil server-side, which forces the 3600s default bucket and collapses a
+			// "last hour" histogram into ~2 bars.
+			...(urlState.period
+				? { period: urlState.period }
+				: {
+						start_time: dateUtils.toISOString(urlState.start_time),
+						end_time: dateUtils.toISOString(urlState.end_time),
+					}),
 		}),
 		// Only re-derive filters when filter-related URL params change (not pagination)
 		[

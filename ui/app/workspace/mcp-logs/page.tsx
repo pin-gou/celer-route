@@ -89,8 +89,16 @@ export default function MCPLogsPage() {
 			status: urlState.status,
 			virtual_key_ids: urlState.virtual_key_ids,
 			content_search: urlState.content_search,
-			start_time: dateUtils.toISOString(urlState.start_time),
-			...(urlState.period ? {} : { end_time: dateUtils.toISOString(urlState.end_time) }),
+			// Use a period if present so the backend resolves a fresh [now-period, now]
+			// window and picks a fine bucket size. Sending only start_time leaves end_time
+			// nil server-side, which forces the 3600s default bucket and collapses a
+			// "last hour" histogram into ~2 bars.
+			...(urlState.period
+				? { period: urlState.period }
+				: {
+						start_time: dateUtils.toISOString(urlState.start_time),
+						end_time: dateUtils.toISOString(urlState.end_time),
+					}),
 		}),
 		[
 			urlState.tool_names,
