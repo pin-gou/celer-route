@@ -106,7 +106,7 @@ func TestInitValidatesConfig(t *testing.T) {
 		Enabled:   true,
 		Intensity: "standard",
 	}
-	plugin, err := Init(nil, validConfig, nil)
+	plugin, err := Init(nil, validConfig, nil, t.TempDir())
 	if err != nil {
 		t.Fatalf("Init() with valid config should succeed, got: %v", err)
 	}
@@ -119,13 +119,13 @@ func TestInitValidatesConfig(t *testing.T) {
 		Enabled:   true,
 		Intensity: "bogus-intensity",
 	}
-	_, err = Init(nil, invalidConfig, nil)
+	_, err = Init(nil, invalidConfig, nil, "")
 	if err == nil {
 		t.Fatal("Init() with invalid intensity should return error, got nil")
 	}
 
 	// Nil config should fail
-	_, err = Init(nil, nil, nil)
+	_, err = Init(nil, nil, nil, "")
 	if err == nil {
 		t.Fatal("Init() with nil config should return error, got nil")
 	}
@@ -230,5 +230,109 @@ func TestConfigGroupingFieldsValidates(t *testing.T) {
 	}
 	if err := valid.Validate(); err != nil {
 		t.Errorf("Config.Validate() unexpected error for valid grouping config: %v", err)
+	}
+}
+// ============================================================================
+// Phase 3: Custom filter config fields (V-plugins-2/3)
+// The 4 new fields (CustomFiltersEnabled / TrustProjectFilters /
+// EnabledFilters / DisabledFilters) must validate — empty values are valid,
+// non-empty values are valid, and the mutual-exclusion combo is accepted
+// (validation only checks types, per design.md).
+// ============================================================================
+
+// TestConfigCustomFilterFieldsEmpty validates that empty/nil values for the
+// 4 new fields pass Validate (all optional).
+func TestConfigCustomFilterFieldsEmpty(t *testing.T) {
+	cfg := &Config{
+		Enabled:   true,
+		Intensity: "standard",
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Config.Validate() should accept empty custom-filter fields, got: %v", err)
+	}
+	if cfg.CustomFiltersEnabled {
+		t.Error("zero-value CustomFiltersEnabled should be false before defaults are applied")
+	}
+	if cfg.TrustProjectFilters {
+		t.Error("zero-value TrustProjectFilters should be false")
+	}
+	if len(cfg.EnabledFilters) != 0 {
+		t.Errorf("zero-value EnabledFilters should be empty, got %v", cfg.EnabledFilters)
+	}
+	if len(cfg.DisabledFilters) != 0 {
+		t.Errorf("zero-value DisabledFilters should be empty, got %v", cfg.DisabledFilters)
+	}
+}
+
+// TestConfigCustomFilterFieldsNonEmpty verifies that non-empty values for the
+// 4 new fields pass Validate and are preserved verbatim.
+func TestConfigCustomFilterFieldsNonEmpty(t *testing.T) {
+	cfg := &Config{
+		Enabled:              true,
+		Intensity:            "standard",
+		CustomFiltersEnabled: true,
+		TrustProjectFilters:  true,
+		EnabledFilters:       []string{"git-status", "npm-install"},
+		DisabledFilters:      []string{"generic-output"},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Config.Validate() should accept non-empty custom-filter fields, got: %v", err)
+	}
+	if len(cfg.EnabledFilters) != 2 {
+		t.Errorf("EnabledFilters = %v, want 2 entries preserved", cfg.EnabledFilters)
+	}
+	if len(cfg.DisabledFilters) != 1 {
+		t.Errorf("DisabledFilters = %v, want 1 entry preserved", cfg.DisabledFilters)
+	}
+}
+
+// TestConfigCustomFilterMutualExclusion verifies that setting both
+// EnabledFilters and DisabledFilters simultaneously is accepted by Validate
+// (the loader applies whitelist first then blacklist). The config validator
+// does not reject the combination — only type-checks the fields.
+func TestConfigCustomFilterMutualExclusion(t *testing.T) {
+	cfg := &Config{
+		Enabled:            true,
+		Intensity:          "standard",
+		EnabledFilters:     []string{"git-status", "npm-install"},
+		DisabledFilters:    []string{"npm-install"},
+		TrustProjectFilters: true,
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Config.Validate() should accept EnabledFilters + DisabledFilters together, got: %v", err)
+	}
+}
+
+// TestConfigCustomFiltersInvalidIntensityStillRejected verifies the new fields
+// do not weaken fail-fast validation: an invalid intensity combined with the
+// new fields is still rejected.
+func TestConfigCustomFiltersInvalidIntensityStillRejected(t *testing.T) {
+	cfg := &Config{
+		Enabled:              true,
+		Intensity:            "bogus",
+		CustomFiltersEnabled: true,
+		EnabledFilters:       []string{"git-status"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("Config.Validate() should still reject invalid intensity with custom-filter fields set")
+	}
+}
+
+// TestConfigCustomFiltersDefaults verifies the documented defaults via
+// applyConfigDefaults: CustomFiltersEnabled stays false at the Config level
+// (the loader treats zero-value as enabled-by-design), TrustProjectFilters
+// stays false, and the filter lists stay empty.
+func TestConfigCustomFiltersDefaults(t *testing.T) {
+	cfg := &Config{Enabled: true}
+	applyConfigDefaults(cfg)
+
+	if cfg.TrustProjectFilters {
+		t.Error("applyConfigDefaults() should leave TrustProjectFilters false (default)")
+	}
+	if len(cfg.EnabledFilters) != 0 {
+		t.Errorf("applyConfigDefaults() should leave EnabledFilters empty, got %v", cfg.EnabledFilters)
+	}
+	if len(cfg.DisabledFilters) != 0 {
+		t.Errorf("applyConfigDefaults() should leave DisabledFilters empty, got %v", cfg.DisabledFilters)
 	}
 }

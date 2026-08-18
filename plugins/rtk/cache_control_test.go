@@ -101,12 +101,12 @@ Changes not staged for commit:
 				},
 			}
 
-			state := applyRtkCompression(req, &Config{
+			state := applyRtkCompression(req, newTestPluginWithConfig(t, &Config{
 				Enabled:              true,
 				Intensity:            "standard",
 				ApplyToToolResults:   true,
 				PreserveCacheControl: true,
-			})
+			}))
 			if state == nil {
 				t.Fatal("applyRtkCompression returned nil state")
 			}
@@ -186,12 +186,12 @@ Changes not staged for commit:
 		},
 	}
 
-	state := applyRtkCompression(req, &Config{
+	state := applyRtkCompression(req, newTestPluginWithConfig(t, &Config{
 		Enabled:              true,
 		Intensity:            "standard",
 		ApplyToToolResults:   true,
 		PreserveCacheControl: false, // disabled: can compress
-	})
+	}))
 	if state == nil {
 		t.Fatal("applyRtkCompression returned nil state")
 	}

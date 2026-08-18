@@ -25,13 +25,13 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		if req.ChatRequest == nil {
 			return req, nil, nil
 		}
-		state := applyRtkCompression(req, p.config)
+		state := applyRtkCompression(req, p)
 		p.setState(ctx, state)
 	case schemas.ResponsesRequest, schemas.ResponsesStreamRequest:
 		if req.ResponsesRequest == nil {
 			return req, nil, nil
 		}
-		state := applyRtkCompressionResponses(req, p.config)
+		state := applyRtkCompressionResponses(req, p)
 		p.setState(ctx, state)
 	}
 

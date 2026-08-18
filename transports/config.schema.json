@@ -3199,6 +3199,32 @@
                       "type": "boolean",
                       "description": "Apply compression to assistant messages (full text mode)",
                       "default": false
+                    },
+                    "custom_filters_enabled": {
+                      "type": "boolean",
+                      "description": "Enable loading of project/global custom filter files from the filesystem",
+                      "default": true
+                    },
+                    "trust_project_filters": {
+                      "type": "boolean",
+                      "description": "Bypass the trust.json SHA256 check for project-level filters",
+                      "default": false
+                    },
+                    "enabled_filters": {
+                      "type": "array",
+                      "description": "Whitelist of filter IDs or names to load. Empty means all filters are enabled",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": []
+                    },
+                    "disabled_filters": {
+                      "type": "array",
+                      "description": "Blacklist of filter IDs or names to exclude from loading. Empty means no filters are disabled",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": []
                     }
                   },
                   "additionalProperties": false

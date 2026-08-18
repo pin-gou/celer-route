@@ -2,7 +2,6 @@ package rtk
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
 )
@@ -14,20 +13,6 @@ type ProcessStats struct {
 	Techniques       []string
 }
 
-var (
-	loaderOnce    sync.Once
-	globalLoader  *FilterLoader
-	defaultConfig = &Config{Enabled: true}
-)
-
-// getFilterLoader returns the package-level singleton FilterLoader.
-func getFilterLoader() *FilterLoader {
-	loaderOnce.Do(func() {
-		globalLoader = NewFilterLoader(defaultConfig)
-	})
-	return globalLoader
-}
-
 // applyRtkCompression is the top-level entry point for the RTK compression
 // pipeline. It scans the request's messages for tool output (both OpenAI
 // role=tool and Anthropic tool_result blocks), applies the compression
@@ -36,11 +21,14 @@ func getFilterLoader() *FilterLoader {
 // The request is mutated in place: compressed message content is written
 // directly to the input slice. The returned CompressionState carries the
 // aggregate token counts for the request.
-func applyRtkCompression(req *schemas.BifrostRequest, config *Config) *CompressionState {
+func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionState {
 	state := NewCompressionState()
-	if req == nil || config == nil || !config.Enabled {
+	if req == nil || p == nil || p.config == nil || !p.config.Enabled {
 		return state
 	}
+	config := p.config
+	loader := p.loader
+
 	if req.ChatRequest == nil || len(req.ChatRequest.Input) == 0 {
 		return state
 	}
@@ -73,9 +61,9 @@ func applyRtkCompression(req *schemas.BifrostRequest, config *Config) *Compressi
 			var result string
 			var stats *ProcessStats
 			if hasCommand {
-				result, stats = processRtkTextWithCommand(text, config, command)
+				result, stats = processRtkTextWithCommand(text, config, loader, command)
 			} else {
-				result, stats = processRtkText(text, config)
+				result, stats = processRtkTextWithCommand(text, config, loader, "")
 			}
 
 			// Apply the result if savings are meaningful and we didn't
@@ -120,9 +108,9 @@ func applyRtkCompression(req *schemas.BifrostRequest, config *Config) *Compressi
 				var result string
 				var stats *ProcessStats
 				if hasCommand {
-					result, stats = processRtkTextWithCommand(text, config, command)
+					result, stats = processRtkTextWithCommand(text, config, loader, command)
 				} else {
-					result, stats = processRtkText(text, config)
+					result, stats = processRtkTextWithCommand(text, config, loader, "")
 				}
 
 				if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
@@ -231,11 +219,14 @@ func applyRtkCompression(req *schemas.BifrostRequest, config *Config) *Compressi
 // cache_control protection is honoured: function_call_output items carrying a
 // CacheControl (Anthropic tool_result with cache_control) are preserved
 // verbatim when config.PreserveCacheControl is enabled.
-func applyRtkCompressionResponses(req *schemas.BifrostRequest, config *Config) *CompressionState {
+func applyRtkCompressionResponses(req *schemas.BifrostRequest, p *Plugin) *CompressionState {
 	state := NewCompressionState()
-	if req == nil || config == nil || !config.Enabled {
+	if req == nil || p == nil || p.config == nil || !p.config.Enabled {
 		return state
 	}
+	config := p.config
+	loader := p.loader
+
 	if req.ResponsesRequest == nil || len(req.ResponsesRequest.Input) == 0 {
 		return state
 	}
@@ -298,9 +289,9 @@ func applyRtkCompressionResponses(req *schemas.BifrostRequest, config *Config) *
 		var result string
 		var stats *ProcessStats
 		if hasCommand {
-			result, stats = processRtkTextWithCommand(text, config, command)
+			result, stats = processRtkTextWithCommand(text, config, loader, command)
 		} else {
-			result, stats = processRtkText(text, config)
+			result, stats = processRtkTextWithCommand(text, config, loader, "")
 		}
 
 		if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
@@ -395,13 +386,14 @@ func applyResponsesToolOutput(out *schemas.ResponsesToolMessageOutputStruct, con
 // detects the command, applies the matched filter, deduplicates, and
 // truncates. Used by tests directly.
 func processRtkText(input string, config *Config) (string, *ProcessStats) {
-	return processRtkTextWithCommand(input, config, "")
+	return processRtkTextWithCommand(input, config, nil, "")
 }
 
 // processRtkTextWithCommand is the internal pipeline that accepts an optional
 // command hint from the tool call lookup. When commandHint is empty, content
-// detection is used.
-func processRtkTextWithCommand(input string, config *Config, commandHint string) (string, *ProcessStats) {
+// detection is used. When loader is nil, a throwaway builtin-only loader is
+// created (for backward-compat test paths).
+func processRtkTextWithCommand(input string, config *Config, loader *FilterLoader, commandHint string) (string, *ProcessStats) {
 	stats := &ProcessStats{
 		OriginalTokens: estimateTokens(input),
 		Techniques:     make([]string, 0),
@@ -469,7 +461,9 @@ func processRtkTextWithCommand(input string, config *Config, commandHint string)
 	}
 
 	// 6. Match a filter.
-	loader := getFilterLoader()
+	if loader == nil {
+		loader = NewFilterLoader(config)
+	}
 	filter := loader.Match(detection.Type, cmd)
 	if filter == nil {
 		stats.CompressedTokens = stats.OriginalTokens

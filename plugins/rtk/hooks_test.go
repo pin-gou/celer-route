@@ -11,10 +11,26 @@ import (
 // newTestPlugin creates a Plugin with default config for tests.
 func newTestPlugin(t *testing.T) *Plugin {
 	t.Helper()
+	cfg := DefaultConfig()
+	loader := NewFilterLoader(cfg)
 	return &Plugin{
 		name:   PluginName,
-		config: DefaultConfig(),
+		config: cfg,
 		logger: nil,
+		loader: loader,
+	}
+}
+
+// newTestPluginWithConfig creates a Plugin with the given config for tests.
+// The loader is initialised with builtin filters only (no Load call).
+func newTestPluginWithConfig(t *testing.T, cfg *Config) *Plugin {
+	t.Helper()
+	loader := NewFilterLoader(cfg)
+	return &Plugin{
+		name:   PluginName,
+		config: cfg,
+		logger: nil,
+		loader: loader,
 	}
 }
 
