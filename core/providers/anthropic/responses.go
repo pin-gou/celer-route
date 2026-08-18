@@ -4077,6 +4077,17 @@ func ConvertBifrostUsageToAnthropicUsage(bifrostUsage *schemas.ResponsesResponse
 		OutputTokens: bifrostUsage.OutputTokens,
 	}
 
+	// Forward RTK compression annotations (original/compressed prompt tokens)
+	// so the Anthropic-format response exposes the same fields as the OpenAI
+	// chat completions path. PromptTokens mirrors the (already rewritten)
+	// InputTokens for clients that read the OpenAI-style key.
+	if bifrostUsage.OriginalPromptTokens != nil || bifrostUsage.CompressedPromptTokens != nil {
+		promptTokens := bifrostUsage.InputTokens
+		anthropicUsage.PromptTokens = &promptTokens
+		anthropicUsage.OriginalPromptTokens = bifrostUsage.OriginalPromptTokens
+		anthropicUsage.CompressedPromptTokens = bifrostUsage.CompressedPromptTokens
+	}
+
 	// Handle cache read tokens
 	if bifrostUsage.InputTokensDetails != nil {
 		if bifrostUsage.InputTokensDetails.CachedReadTokens > 0 {

@@ -624,6 +624,135 @@ func TestApplyRtkCompressionAnthropicStyle(t *testing.T) {
 	}
 }
 
+// TestApplyRtkCompressionResponses verifies compression of Responses-API-style
+// function_call_output items (Anthropic tool_result → function_call_output).
+func TestApplyRtkCompressionResponses(t *testing.T) {
+	text := `On branch feature/foo
+Changes not staged for commit:
+  modified:   src/main.go
+  modified:   src/utils.go
+  modified:   go.mod
+  modified:   go.sum
+  modified:   Makefile
+  modified:   README.md
+  modified:   .gitignore
+  modified:   docker-compose.yml
+  modified:   config.json
+  modified:   tests/test_main.go
+  modified:   docs/README.md
+  modified:   scripts/build.sh
+`
+	req := &schemas.BifrostRequest{
+		ResponsesRequest: &schemas.BifrostResponsesRequest{
+			Input: []schemas.ResponsesMessage{
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCall),
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID:    strPtr("call_1"),
+						Name:      strPtr("bash"),
+						Arguments: strPtr(`{"command":"git status"}`),
+					},
+				},
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCallOutput),
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID: strPtr("call_1"),
+						Output: &schemas.ResponsesToolMessageOutputStruct{
+							ResponsesToolCallOutputStr: &text,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	state := applyRtkCompressionResponses(req, DefaultConfig())
+	if state == nil {
+		t.Fatal("applyRtkCompressionResponses returned nil state")
+	}
+	if !state.Compressed {
+		t.Error("expected compression to be applied for git status output")
+	}
+	if state.OriginalTokens <= state.CompressedTokens {
+		t.Errorf("expected compressed tokens (%d) < original tokens (%d)", state.CompressedTokens, state.OriginalTokens)
+	}
+}
+
+// TestApplyRtkCompressionResponsesCacheControl verifies that function_call_output
+// items carrying a CacheControl are preserved verbatim.
+func TestApplyRtkCompressionResponsesCacheControl(t *testing.T) {
+	text := "very long output that should be compressed if not for cache_control"
+	req := &schemas.BifrostRequest{
+		ResponsesRequest: &schemas.BifrostResponsesRequest{
+			Input: []schemas.ResponsesMessage{
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCall),
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID:    strPtr("call_1"),
+						Name:      strPtr("bash"),
+						Arguments: strPtr(`{"command":"git status"}`),
+					},
+				},
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCallOutput),
+					CacheControl: &schemas.CacheControl{Type: "ephemeral"},
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID: strPtr("call_1"),
+						Output: &schemas.ResponsesToolMessageOutputStruct{
+							ResponsesToolCallOutputStr: &text,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	state := applyRtkCompressionResponses(req, DefaultConfig())
+	if state == nil {
+		t.Fatal("applyRtkCompressionResponses returned nil state")
+	}
+	if state.Compressed {
+		t.Error("output with cache_control should not be compressed")
+	}
+}
+
+// TestApplyRtkCompressionResponsesNilRequest verifies nil safety for the responses path.
+func TestApplyRtkCompressionResponsesNilRequest(t *testing.T) {
+	state := applyRtkCompressionResponses(nil, DefaultConfig())
+	if state == nil {
+		t.Fatal("applyRtkCompressionResponses(nil, config) should return non-nil state")
+	}
+	if state.Compressed {
+		t.Error("compression of nil request should not be marked as compressed")
+	}
+}
+
+// TestApplyRtkCompressionResponsesNilConfig verifies nil config safety for the responses path.
+func TestApplyRtkCompressionResponsesNilConfig(t *testing.T) {
+	req := &schemas.BifrostRequest{
+		ResponsesRequest: &schemas.BifrostResponsesRequest{
+			Input: []schemas.ResponsesMessage{
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCallOutput),
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID: strPtr("call_1"),
+						Output: &schemas.ResponsesToolMessageOutputStruct{
+							ResponsesToolCallOutputStr: strPtr("some output"),
+						},
+					},
+				},
+			},
+		},
+	}
+	state := applyRtkCompressionResponses(req, nil)
+	if state == nil {
+		t.Fatal("applyRtkCompressionResponses(req, nil) should return non-nil state")
+	}
+	if state.Compressed {
+		t.Error("compression with nil config should not be marked as compressed")
+	}
+}
+
 // Helper functions
 
 func strContent(s string) *schemas.ChatMessageContent {

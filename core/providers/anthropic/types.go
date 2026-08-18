@@ -1879,6 +1879,15 @@ type AnthropicUsage struct {
 	Speed                    *string                       `json:"speed,omitempty"`                 // "fast" or "standard" — which speed was actually served (fast mode research preview)
 	InferenceGeo             *string                       `json:"inference_geo,omitempty"`         // the geographic region for inference processing. If not specified, the workspace's default_inference_geo is used.
 	Iterations               []AnthropicUsage              `json:"iterations,omitempty"`            // Iterations statistics
+
+	// Bifrost RTK-annotated fields. When the request was compressed by the RTK
+	// plugin, PromptTokens aliases the (rewritten) input token count and the
+	// original/compressed pair records the before/after counts of the compressed
+	// tool output. These are additive gateway annotations; the Anthropic API does
+	// not define them and strict clients ignore unknown fields.
+	PromptTokens             *int `json:"prompt_tokens,omitempty"`
+	OriginalPromptTokens     *int `json:"original_prompt_tokens,omitempty"`
+	CompressedPromptTokens   *int `json:"compressed_prompt_tokens,omitempty"`
 }
 
 // AnthropicOutputTokensDetails breaks down output_tokens for extended-thinking responses.

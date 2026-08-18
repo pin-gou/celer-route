@@ -155,6 +155,176 @@ func applyRtkCompression(req *schemas.BifrostRequest, config *Config) *Compressi
 	return state
 }
 
+// applyRtkCompressionResponses is the Responses-API / Anthropic-route entry
+// point for the RTK compression pipeline. It scans the responses-format input
+// items for tool output (Anthropic tool_result blocks normalise into
+// function_call_output items carrying the tool text in
+// ResponsesToolMessage.Output), applies the compression pipeline, and returns
+// the per-request compression state. The request is mutated in place.
+//
+// cache_control protection is honoured: function_call_output items carrying a
+// CacheControl (Anthropic tool_result with cache_control) are preserved
+// verbatim when config.PreserveCacheControl is enabled.
+func applyRtkCompressionResponses(req *schemas.BifrostRequest, config *Config) *CompressionState {
+	state := NewCompressionState()
+	if req == nil || config == nil || !config.Enabled {
+		return state
+	}
+	if req.ResponsesRequest == nil || len(req.ResponsesRequest.Input) == 0 {
+		return state
+	}
+
+	input := req.ResponsesRequest.Input
+
+	// Build tool-name lookup from function_call items so we can recover the
+	// shell command for each tool output (positional correlation for
+	// function_call_output items whose preceding function_call carries name +
+	// arguments).
+	pendingCommands := buildResponsesCommandLookup(input)
+
+	originalTotal := 0
+	compressedTotal := 0
+	anyCompressed := false
+	// Positional index across tool messages, used together with
+	// pendingCommands to correlate a tool output back to its command.
+	callIdx := 0
+
+	for i := range input {
+		msg := &input[i]
+		if msg.Type == nil || *msg.Type != schemas.ResponsesMessageTypeFunctionCallOutput {
+			// function_call items advance the positional correlation index.
+			if msg.Type != nil && *msg.Type == schemas.ResponsesMessageTypeFunctionCall {
+				callIdx++
+			}
+			continue
+		}
+		if msg.ResponsesToolMessage == nil || msg.ResponsesToolMessage.Output == nil {
+			continue
+		}
+		out := msg.ResponsesToolMessage.Output
+
+		// Preserve cache_control-marked tool outputs verbatim.
+		if config.PreserveCacheControl && msg.CacheControl != nil {
+			callIdx++
+			continue
+		}
+
+		// Extract the tool output text.
+		var text string
+		if out.ResponsesToolCallOutputStr != nil {
+			text = *out.ResponsesToolCallOutputStr
+		} else if len(out.ResponsesFunctionToolCallOutputBlocks) > 0 {
+			for _, block := range out.ResponsesFunctionToolCallOutputBlocks {
+				if block.Text != nil {
+					text += *block.Text
+				}
+			}
+		}
+		if text == "" {
+			callIdx++
+			continue
+		}
+
+		origTokens := estimateTokens(text)
+		originalTotal += origTokens
+
+		command, hasCommand := responsesCommandAt(pendingCommands, callIdx)
+		var result string
+		var stats *ProcessStats
+		if hasCommand {
+			result, stats = processRtkTextWithCommand(text, config, command)
+		} else {
+			result, stats = processRtkText(text, config)
+		}
+
+		if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
+			ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
+			if ratio >= 0.05 {
+				applyResponsesToolOutput(out, config, result)
+				anyCompressed = true
+				compressedTotal += estimateTokens(result)
+				state.Techniques = append(state.Techniques, stats.Techniques...)
+				callIdx++
+				continue
+			}
+		}
+		compressedTotal += origTokens
+		callIdx++
+	}
+
+	if anyCompressed {
+		state.Compressed = true
+		state.OriginalTokens = originalTotal
+		state.CompressedTokens = compressedTotal
+	}
+	return state
+}
+
+// buildResponsesCommandLookup scans input items for function_call messages and
+// returns a slice of commands keyed by call index, in order. The command is the
+// full tool-call arguments JSON — the same convention the OpenAI chat adapter
+// (getOpenAICommand) uses — so filter matching behaves identically on both
+// request paths. Non-shell tools contribute an empty slot (no command hint).
+func buildResponsesCommandLookup(input []schemas.ResponsesMessage) []string {
+	var commands []string
+	for i := range input {
+		msg := &input[i]
+		if msg.Type == nil || *msg.Type != schemas.ResponsesMessageTypeFunctionCall {
+			continue
+		}
+		if msg.ResponsesToolMessage == nil {
+			commands = append(commands, "")
+			continue
+		}
+		name := ""
+		if msg.ResponsesToolMessage.Name != nil {
+			name = *msg.ResponsesToolMessage.Name
+		}
+		if !isShellTool(name) || msg.ResponsesToolMessage.Arguments == nil {
+			commands = append(commands, "")
+			continue
+		}
+		commands = append(commands, *msg.ResponsesToolMessage.Arguments)
+	}
+	return commands
+}
+
+// responsesCommandAt returns the command at the given call index (positional
+// correlation), or empty when out of range.
+func responsesCommandAt(commands []string, idx int) (string, bool) {
+	if idx < 0 || idx >= len(commands) {
+		return "", false
+	}
+	return commands[idx], commands[idx] != ""
+}
+
+// applyResponsesToolOutput writes the compressed text back to a
+// function_call_output item, preserving the block/kangourou shape and cache_control.
+func applyResponsesToolOutput(out *schemas.ResponsesToolMessageOutputStruct, config *Config, text string) {
+	if out == nil {
+		return
+	}
+	if out.ResponsesToolCallOutputStr != nil {
+		out.ResponsesToolCallOutputStr = &text
+		return
+	}
+	if len(out.ResponsesFunctionToolCallOutputBlocks) > 0 {
+		// Preserve per-block cache_control (compress the text on the first
+		// text block, leave cache_control-marked text blocks untouched to
+		// honour cache_control protection).
+		for i := range out.ResponsesFunctionToolCallOutputBlocks {
+			block := &out.ResponsesFunctionToolCallOutputBlocks[i]
+			if block.Type == schemas.ResponsesInputMessageContentBlockTypeText && block.Text != nil {
+				if config.PreserveCacheControl && block.CacheControl != nil {
+					continue
+				}
+				block.Text = &text
+				return
+			}
+		}
+	}
+}
+
 // processRtkText is the external text processing pipeline. It strips ANSI,
 // detects the command, applies the matched filter, deduplicates, and
 // truncates. Used by tests directly.
