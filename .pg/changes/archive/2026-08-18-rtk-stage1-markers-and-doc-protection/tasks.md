@@ -47,10 +47,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 3.2 review agent 对 git diff feat/pg/rtk-stage1-markers-and-doc-protection 做静态审查
-- [ ] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 3.2 review agent 对 git diff feat/pg/rtk-stage1-markers-and-doc-protection 做静态审查
+- [x] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 ## 4. dev.plugins:verify - dev 集成验证
 
@@ -59,10 +59,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules.plugins.lint 注入命令）：`for d in plugins/*/; do (cd "$d" && go vet ./...); done`
-- [ ] 4.2 执行测试（runner 通过 modules.plugins.test.unit 注入命令）：`for d in plugins/*/; do (cd "$d" && go test ./... -short -count=1); done`
-- [ ] 4.3 启动服务：无需启动（纯 plugins 单元测试驱动）
-- [ ] 4.4 验证 V-plugins-N：来自 design.md Verification Criteria（N 由 design.md 决定，非章节号）
+- [x] 4.1 执行 lint（runner 通过 modules.plugins.lint 注入命令）：`for d in plugins/*/; do (cd "$d" && go vet ./...); done`
+- [x] 4.2 执行测试（runner 通过 modules.plugins.test.unit 注入命令）：`for d in plugins/*/; do (cd "$d" && go test ./... -short -count=1); done`
+- [x] 4.3 启动服务：无需启动（纯 plugins 单元测试驱动）
+- [x] 4.4 验证 V-plugins-N：来自 design.md Verification Criteria（N 由 design.md 决定，非章节号）
 
   **define-summary 对账**（自动生成）:
   - verifiable: V-plugins-1, V-plugins-2, V-plugins-3, V-plugins-4, V-plugins-5, V-plugins-6, V-plugins-7
@@ -87,6 +87,6 @@
      stage=final (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 收集所有 stage 的 Gate Assessment
-- [ ] 6.2 检查跨 stage 依赖项
-- [ ] 6.3 输出 Final Gate Assessment
+- [x] 6.1 收集所有 stage 的 Gate Assessment
+- [x] 6.2 检查跨 stage 依赖项
+- [x] 6.3 输出 Final Gate Assessment

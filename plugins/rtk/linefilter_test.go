@@ -1,6 +1,8 @@
 package rtk
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -102,7 +104,8 @@ func TestLineFilterReplace(t *testing.T) {
 	}
 }
 
-// TestLineFilterDedup verifies consecutive duplicate lines are merged.
+// TestLineFilterDedup verifies consecutive duplicate lines are merged and
+// markers are appended.
 func TestLineFilterDedup(t *testing.T) {
 	input := `Compiling...
 Compiling...
@@ -112,10 +115,17 @@ Compiling...
 Done!
 `
 
-	result := applyDedup(input, 3)
-	expected := "Compiling...\nDone!\n"
-	if result != expected {
-		t.Errorf("applyDedup (threshold=3):\ngot:\n%q\nwant:\n%q", result, expected)
+	result, _ := applyDedup(input, 3)
+	// With threshold=3, 5 consecutive "Compiling..." lines collapse to 1 line
+	// plus markers: [line repeated 4x] + [rtk:dropped 4 repeated lines]
+	if !strings.Contains(result, "[line repeated 4x]") {
+		t.Errorf("applyDedup (threshold=3): missing [line repeated 4x] marker in:\n%q", result)
+	}
+	if !strings.Contains(result, "[rtk:dropped 4 repeated lines]") {
+		t.Errorf("applyDedup (threshold=3): missing [rtk:dropped 4 repeated lines] marker in:\n%q", result)
+	}
+	if !strings.Contains(result, "Done!") {
+		t.Errorf("applyDedup (threshold=3): missing Done! in:\n%q", result)
 	}
 }
 
@@ -126,7 +136,7 @@ func TestLineFilterDedupBelowThreshold(t *testing.T) {
 Compiling...
 Done!
 `
-	result := applyDedup(input, 3)
+	result, _ := applyDedup(input, 3)
 	// With threshold=3 and only 2 identical lines, nothing should be deduplicated
 	expected := input
 	if result != expected {
@@ -148,7 +158,7 @@ line5
 		Head: 3,
 	}
 
-	result := applySmartTruncate(input, filter)
+	result, _ := applySmartTruncate(input, filter)
 	expected := "line1\nline2\nline3\n"
 	if result != expected {
 		t.Errorf("applySmartTruncate head=3:\ngot:\n%q\nwant:\n%q", result, expected)
@@ -169,14 +179,15 @@ line5
 		Tail: 2,
 	}
 
-	result := applySmartTruncate(input, filter)
+	result, _ := applySmartTruncate(input, filter)
 	expected := "line4\nline5\n"
 	if result != expected {
 		t.Errorf("applySmartTruncate tail=2:\ngot:\n%q\nwant:\n%q", result, expected)
 	}
 }
 
-// TestLineFilterHeadAndTail verifies both head and tail truncation.
+// TestLineFilterHeadAndTail verifies both head and tail truncation with
+// truncation marker.
 func TestLineFilterHeadAndTail(t *testing.T) {
 	input := `line1
 line2
@@ -196,17 +207,21 @@ line10
 		Tail: 2,
 	}
 
-	result := applySmartTruncate(input, filter)
-	// Should keep first 3 and last 2 lines
-	if !contains(result, "line1") || !contains(result, "line2") || !contains(result, "line3") {
+	result, _ := applySmartTruncate(input, filter)
+	// Should keep first 3 and last 2 lines, with a truncation marker in between
+	if !strings.Contains(result, "line1") || !strings.Contains(result, "line2") || !strings.Contains(result, "line3") {
 		t.Errorf("head lines missing from result:\n%q", result)
 	}
-	if !contains(result, "line9") || !contains(result, "line10") {
+	if !strings.Contains(result, "line9") || !strings.Contains(result, "line10") {
 		t.Errorf("tail lines missing from result:\n%q", result)
 	}
 	// Middle lines should be truncated
-	if contains(result, "line5") || contains(result, "line6") {
+	if strings.Contains(result, "line5") || strings.Contains(result, "line6") {
 		t.Errorf("middle lines should be truncated, but found in:\n%q", result)
+	}
+	// The truncation marker should be present
+	if !strings.Contains(result, "[rtk:truncated 5 lines]") {
+		t.Errorf("expected truncation marker [rtk:truncated 5 lines] in result:\n%q", result)
 	}
 }
 
@@ -298,9 +313,9 @@ line10
 		},
 	}
 
-	result := applySmartTruncate(input, filter)
+	result, _ := applySmartTruncate(input, filter)
 	// The priority pattern should survive even though it's in the middle
-	if !contains(result, "ERROR: critical failure") {
+	if !strings.Contains(result, "ERROR: critical failure") {
 		t.Errorf("priority pattern should survive truncation, but was not found in:\n%q", result)
 	}
 }
@@ -314,7 +329,7 @@ func TestLineFilterMaxLines(t *testing.T) {
 		MaxLines: 5,
 	}
 
-	result := applySmartTruncate(input, filter)
+	result, _ := applySmartTruncate(input, filter)
 	lineCount := countLines(result)
 	if lineCount > 5 {
 		t.Errorf("expected at most 5 lines, got %d", lineCount)
@@ -365,6 +380,146 @@ func TestLineFilterNilRules(t *testing.T) {
 	result := applyLineFilter("some text", filter)
 	if result != "some text" {
 		t.Errorf("applyLineFilter with nil rules should return original text, got %q", result)
+	}
+}
+
+// TestDocumentReadNotTruncated verifies that document-like reads (no error markers)
+// are not truncated and retain the full text without truncation markers.
+func TestDocumentReadNotTruncated(t *testing.T) {
+	// Build a ~147 line document-like input that has no error markers.
+	// Detection will fall back to {Type:"shell", Command:""} (generic fallback).
+	// When isDocumentLikeRead is true, the pipeline skips truncation.
+	var lines []string
+	lines = append(lines, "package main")
+	lines = append(lines, "")
+	lines = append(lines, "import (")
+	lines = append(lines, "	\"fmt\"")
+	lines = append(lines, "	\"net/http\"")
+	lines = append(lines, ")")
+	lines = append(lines, "")
+	lines = append(lines, "func main() {")
+	lines = append(lines, "	http.HandleFunc(\"/\", handler)")
+	lines = append(lines, "	fmt.Println(\"Starting server on :8080\")")
+	lines = append(lines, "	log.Fatal(http.ListenAndServe(\":8080\", nil))")
+	lines = append(lines, "}")
+	lines = append(lines, "")
+	for i := 0; i < 135; i++ {
+		lines = append(lines, fmt.Sprintf("// line %d: some documentation content", i+1))
+	}
+	input := strings.Join(lines, "\n") + "\n"
+
+	cfg := &Config{
+		Enabled:           true,
+		Intensity:         "standard",
+		DedupThreshold:    3,
+		MaxCharsPerResult: 50000,
+	}
+
+	result, _ := processRtkTextWithCommand(input, cfg, "")
+	// The result should contain the full text (no truncation markers)
+	if strings.Contains(result, "[rtk:truncated") {
+		t.Errorf("document-like read should not contain truncation marker, got:\n...%s...", result[len(result)-200:])
+	}
+	// The result should be at least as long as the input (no truncation)
+	if len(result) < len(input)-100 {
+		t.Errorf("document-like read should preserve full text, got len=%d, want >= %d", len(result), len(input)-100)
+	}
+}
+
+// TestIsDocumentLikeReadWithErrorMarkers verifies that input containing
+// generic error markers (Traceback) is NOT treated as document-like and
+// goes through the full pipeline.
+func TestIsDocumentLikeReadWithErrorMarkers(t *testing.T) {
+	input := `Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/user/app/main.py", line 42, in <module>
+    main()
+  File "/home/user/app/main.py", line 38, in main
+    result = process_data(data)
+  File "/home/user/app/process.py", line 24, in process_data
+    raise ValueError("invalid input")
+ValueError: invalid input
+`
+	// hasGenericErrorMarkers should detect the Traceback line
+	if !hasGenericErrorMarkers(input) {
+		t.Errorf("hasGenericErrorMarkers should return true for input with Traceback")
+	}
+
+	cfg := DefaultConfig()
+	result, _ := processRtkTextWithCommand(input, cfg, "")
+	// The result should go through the full pipeline (filter + smartTruncate + char limit)
+	// and may be truncated, but should NOT be treated as document-like
+	if !strings.Contains(result, "Traceback") {
+		t.Errorf("result should contain Traceback, got:\n%q", result)
+	}
+}
+
+// TestTruncateMarker verifies that applySmartTruncate inserts the
+// [rtk:truncated N lines] marker between head and tail.
+func TestTruncateMarker(t *testing.T) {
+	input := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n"
+
+	filter := &Filter{
+		Name: "test-truncate-marker",
+		Head: 3,
+		Tail: 2,
+	}
+
+	result, _ := applySmartTruncate(input, filter)
+	// Should contain the head lines
+	if !strings.Contains(result, "line1") || !strings.Contains(result, "line2") || !strings.Contains(result, "line3") {
+		t.Errorf("head lines missing from result:\n%q", result)
+	}
+	// Should contain the tail lines
+	if !strings.Contains(result, "line9") || !strings.Contains(result, "line10") {
+		t.Errorf("tail lines missing from result:\n%q", result)
+	}
+	// Should contain the truncation marker with N = 10 - 3 - 2 = 5
+	if !strings.Contains(result, "[rtk:truncated 5 lines]") {
+		t.Errorf("expected [rtk:truncated 5 lines] marker in result:\n%q", result)
+	}
+}
+
+// TestDedupMarker verifies that applyDedup appends [line repeated Nx] and
+// [rtk:dropped N repeated lines] markers for consecutive duplicate lines.
+func TestDedupMarker(t *testing.T) {
+	input := "A\nA\nA\nA\nA\nB\n"
+
+	result, _ := applyDedup(input, 3)
+	// With threshold=3 and 5 consecutive identical lines, the run collapses to
+	// 1 line + markers: [line repeated 4x] + [rtk:dropped 4 repeated lines]
+	if !strings.Contains(result, "[line repeated 4x]") {
+		t.Errorf("expected [line repeated 4x] marker in result:\n%q", result)
+	}
+	if !strings.Contains(result, "[rtk:dropped 4 repeated lines]") {
+		t.Errorf("expected [rtk:dropped 4 repeated lines] marker in result:\n%q", result)
+	}
+	if !strings.Contains(result, "B") {
+		t.Errorf("expected 'B' in result:\n%q", result)
+	}
+}
+
+// TestCharTruncateMarker verifies that processRtkTextWithCommand appends
+// [rtk:truncated by chars] when the output exceeds MaxCharsPerResult.
+func TestCharTruncateMarker(t *testing.T) {
+	// Build a long input that will exceed MaxCharsPerResult=100
+	longLine := strings.Repeat("this is a very long line that will be truncated ", 10)
+	input := longLine + "\n" + longLine + "\n" + longLine + "\n"
+
+	cfg := &Config{
+		Enabled:           true,
+		Intensity:         "standard",
+		MaxCharsPerResult: 100,
+		DedupThreshold:    3,
+	}
+
+	result, _ := processRtkTextWithCommand(input, cfg, "")
+	// The result should contain the char truncation marker
+	if !strings.Contains(result, "[rtk:truncated by chars]") {
+		t.Errorf("expected [rtk:truncated by chars] marker in result:\n%q", result)
 	}
 }
 

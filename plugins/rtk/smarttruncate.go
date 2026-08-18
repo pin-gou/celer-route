@@ -1,6 +1,7 @@
 package rtk
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -13,15 +14,18 @@ import (
 // Head selects the first N lines; Tail selects the last M lines. A value of
 // 0 for both means "no truncation" unless MaxLines is set, in which case the
 // first MaxLines lines are kept. If head and tail windows overlap, all lines
-// are kept.
-func applySmartTruncate(input string, filter *Filter) string {
+// are kept. When both windows are retained and lines were dropped, the
+// marker "[rtk:truncated N lines]" is inserted between the kept head and the
+// kept tail sections (N = dropped line count). The second return value is
+// the number of dropped lines.
+func applySmartTruncate(input string, filter *Filter) (string, int) {
 	if input == "" || filter == nil {
-		return input
+		return input, 0
 	}
 
 	content := contentLines(input)
 	if len(content) == 0 {
-		return input
+		return input, 0
 	}
 
 	head := filter.Head
@@ -34,13 +38,13 @@ func applySmartTruncate(input string, filter *Filter) string {
 		if maxLines > 0 && maxLines < len(content) {
 			head = maxLines
 		} else {
-			return input
+			return input, 0
 		}
 	}
 
 	// If head+tail covers all lines, no truncation is needed.
 	if head+tail >= len(content) {
-		return input
+		return input, 0
 	}
 
 	headEnd := head
@@ -72,6 +76,19 @@ func applySmartTruncate(input string, filter *Filter) string {
 		}
 	}
 
+	// Count dropped lines: total minus kept head, kept tail, and rescued
+	// priority lines.
+	priorityKept := 0
+	for i := headEnd; i < tailStart; i++ {
+		if kept[i] {
+			priorityKept++
+		}
+	}
+	dropped := len(content) - headEnd - (len(content) - tailStart) - priorityKept
+	if dropped < 0 {
+		dropped = 0
+	}
+
 	result := make([]string, 0, len(content))
 	for i, ok := range kept {
 		if ok {
@@ -80,7 +97,20 @@ func applySmartTruncate(input string, filter *Filter) string {
 	}
 
 	if len(result) == 0 {
-		return ""
+		return "", dropped
+	}
+
+	// Insert the truncation marker between the kept head and kept tail
+	// sections when both windows are retained and lines were dropped.
+	if dropped > 0 && head > 0 && tail > 0 {
+		marker := fmt.Sprintf("[rtk:truncated %d lines]", dropped)
+		insertAt := headEnd
+		if insertAt > len(result) {
+			insertAt = len(result)
+		}
+		result = append(result, "")
+		copy(result[insertAt+1:], result[insertAt:])
+		result[insertAt] = marker
 	}
 
 	// Apply the MaxLines cap if the result still exceeds it.
@@ -92,5 +122,5 @@ func applySmartTruncate(input string, filter *Filter) string {
 	if hasTrailingNewline(input) {
 		out += "\n"
 	}
-	return out
+	return out, dropped
 }

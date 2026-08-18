@@ -368,7 +368,33 @@ func processRtkTextWithCommand(input string, config *Config, commandHint string)
 		return input, stats
 	}
 
-	// 5. Match a filter.
+	// 5. Document-like read protection: when detection falls back to the
+	// generic shell output ({Type:"shell", Command:""}) and the text carries
+	// no generic error markers, treat it as a document read. Preserve the
+	// full text — only ANSI strip (already done) + dedup + the hard char
+	// safety cap apply; the filter, line-filter, and smart head/tail
+	// truncation steps are skipped so the document is not cut.
+	isDocumentLikeRead := detection.Type == "shell" && detection.Command == "" && !hasGenericErrorMarkers(text)
+	if isDocumentLikeRead {
+		threshold := config.DedupThreshold
+		if threshold <= 1 {
+			threshold = 3
+		}
+		deduped, _ := applyDedup(text, threshold)
+		if deduped != text && deduped != "" {
+			stats.Techniques = append(stats.Techniques, "dedup")
+		}
+		result := deduped
+		if config.MaxCharsPerResult > 0 && len(result) > config.MaxCharsPerResult {
+			result = truncateToCharLimit(result, config.MaxCharsPerResult)
+			result += "\n[rtk:truncated by chars]\n"
+			stats.Techniques = append(stats.Techniques, "charlimit")
+		}
+		stats.CompressedTokens = estimateTokens(result)
+		return result, stats
+	}
+
+	// 6. Match a filter.
 	loader := getFilterLoader()
 	filter := loader.Match(detection.Type, cmd)
 	if filter == nil {
@@ -376,33 +402,34 @@ func processRtkTextWithCommand(input string, config *Config, commandHint string)
 		return input, stats
 	}
 
-	// 6. Apply line filter rules.
+	// 7. Apply line filter rules.
 	stripped := applyLineFilter(text, filter)
 	if stripped != text {
 		stats.Techniques = append(stats.Techniques, "linefilter")
 	}
 
-	// 7. Deduplicate consecutive identical lines.
+	// 8. Deduplicate consecutive identical lines.
 	threshold := config.DedupThreshold
 	if threshold <= 1 {
 		threshold = 3
 	}
-	deduped := applyDedup(stripped, threshold)
+	deduped, _ := applyDedup(stripped, threshold)
 	if deduped != stripped && deduped != "" {
 		stats.Techniques = append(stats.Techniques, "dedup")
 	}
 
-	// 8. Smart truncate with intensity-adjusted head/tail.
+	// 9. Smart truncate with intensity-adjusted head/tail.
 	effectiveFilter := scaleFilterForIntensity(filter, config.Intensity)
-	truncated := applySmartTruncate(deduped, effectiveFilter)
+	truncated, _ := applySmartTruncate(deduped, effectiveFilter)
 	if truncated != deduped && truncated != "" {
 		stats.Techniques = append(stats.Techniques, "smarttruncate")
 	}
 
-	// 9. Apply the char hard limit from config.
+	// 10. Apply the char hard limit from config.
 	result := truncated
 	if config.MaxCharsPerResult > 0 && len(result) > config.MaxCharsPerResult {
 		result = truncateToCharLimit(result, config.MaxCharsPerResult)
+		result += "\n[rtk:truncated by chars]\n"
 		stats.Techniques = append(stats.Techniques, "charlimit")
 	}
 
