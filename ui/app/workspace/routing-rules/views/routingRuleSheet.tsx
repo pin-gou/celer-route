@@ -27,6 +27,7 @@ import { validateRateLimitAndBudgetRules, validateRoutingRules } from "@/lib/uti
 import { isValidRuleGroupType, normalizeRoutingRuleGroupQuery } from "@/lib/utils/routingRuleGroupQuery";
 import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+import { v4 as uuidv4 } from "uuid";
 import { DragDropProvider } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2, X } from "lucide-react";
@@ -132,7 +133,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 			setValue("description", editingRule.description);
 			setValue("cel_expression", editingRule.cel_expression);
 			setValue("fallbacks", editingRule.fallbacks || []);
-			setFallbackIds((editingRule.fallbacks || []).map(() => crypto.randomUUID()));
+			setFallbackIds((editingRule.fallbacks || []).map(() => uuidv4()));
 			setValue("scope", editingRule.scope);
 			setValue("scope_id", editingRule.scope_id || "");
 			setValue("priority", editingRule.priority);
@@ -210,7 +211,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 	};
 
 	const handleAddFallback = () => {
-		setFallbackIds([...fallbackIds, crypto.randomUUID()]);
+		setFallbackIds([...fallbackIds, uuidv4()]);
 		setValue("fallbacks", [...(fallbacks || []), ""], { shouldDirty: true });
 	};
 
