@@ -143,39 +143,63 @@ export default function TimelinePage() {
 	const extraLogsRef = useRef<LogEntry[]>(extraLogs);
 	extraLogsRef.current = extraLogs;
 
-	const onNewLog = useCallback((entry: ActiveLogEntry) => {
-		const log: LogEntry = {
-			id: entry.id,
-			object: "chat.completion",
-			parent_request_id: "",
-			timestamp: entry.timestamp ?? new Date().toISOString(),
-			provider: entry.provider ?? "",
-			model: entry.model ?? "",
-			status: entry.status,
-			latency: entry.latency ?? (null as unknown as number),
-			stream: false,
-			number_of_retries: 0,
-			fallback_index: 0,
-			cost: 0,
-			input_history: [],
-			responses_input_history: [],
-			created_at: entry.timestamp ?? new Date().toISOString(),
-			token_usage: entry.token_usage ?? undefined,
-		};
+	// Batch SSE completions so a burst of terminal events costs one
+	// setExtraLogs (one re-render) instead of one per event.
+	const pendingExtraLogsRef = useRef<Map<string, LogEntry>>(new Map());
+	const extraLogsFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const flushPendingExtraLogs = useCallback(() => {
+		extraLogsFlushTimerRef.current = null;
+		const pending = pendingExtraLogsRef.current;
+		if (pending.size === 0) return;
+		pendingExtraLogsRef.current = new Map();
 		setExtraLogs((prev) => {
-			const idx = prev.findIndex((l) => l.id === entry.id);
-			if (idx >= 0) {
-				const next = [...prev];
-				next[idx] = { ...next[idx], ...log };
-				return next;
+			let next = prev;
+			for (const log of pending.values()) {
+				const idx = next.findIndex((l) => l.id === log.id);
+				if (idx >= 0) {
+					if (next === prev) next = [...prev];
+					next[idx] = { ...next[idx], ...log };
+				} else {
+					if (next === prev) next = [...prev];
+					next.push(log);
+				}
 			}
-			const next = [...prev, log];
 			// Cap at 500 — older rows age out of the visible window as the clock
 			// advances, and they are re-fetched if the user pans back. Keeping the
 			// extra rows bounded prevents unbounded memory growth on the timeline.
 			return next.length > 500 ? next.slice(next.length - 500) : next;
 		});
 	}, []);
+
+	const onNewLog = useCallback(
+		(entry: ActiveLogEntry) => {
+			const log: LogEntry = {
+				id: entry.id,
+				object: "chat.completion",
+				parent_request_id: "",
+				timestamp: entry.timestamp ?? new Date().toISOString(),
+				provider: entry.provider ?? "",
+				model: entry.model ?? "",
+				status: entry.status,
+				latency: entry.latency ?? (null as unknown as number),
+				stream: false,
+				number_of_retries: 0,
+				fallback_index: 0,
+				cost: 0,
+				input_history: [],
+				responses_input_history: [],
+				created_at: entry.timestamp ?? new Date().toISOString(),
+				token_usage: entry.token_usage ?? undefined,
+			};
+			// Latest event per id wins inside the flush window.
+			pendingExtraLogsRef.current.set(log.id, log);
+			if (!extraLogsFlushTimerRef.current) {
+				extraLogsFlushTimerRef.current = setTimeout(flushPendingExtraLogs, 300);
+			}
+		},
+		[flushPendingExtraLogs],
+	);
 
 	// SSE hook — always connected, no polling needed
 	const { activeLogs } = useLogsTimelineSSE({ onNewLog });
@@ -241,6 +265,17 @@ export default function TimelinePage() {
 			if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
 		};
 	}, [visibleWindow, syncFetchRangeOnDrift]);
+
+	// Clear the extraLogs flush timer on unmount and discard pending entries.
+	useEffect(() => {
+		return () => {
+			if (extraLogsFlushTimerRef.current) {
+				clearTimeout(extraLogsFlushTimerRef.current);
+				extraLogsFlushTimerRef.current = null;
+			}
+			pendingExtraLogsRef.current.clear();
+		};
+	}, []);
 
 	const {
 		data: logsData,
