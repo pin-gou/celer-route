@@ -340,13 +340,3 @@ func TestCacheControlBlockTypeFunctions(t *testing.T) {
 		})
 	}
 }
-
-// shouldPreserveCacheControl checks whether a content block must be preserved
-// byte-for-byte because it carries a cache_control marker. Implemented in
-// anthropic.go / compression.go.
-func shouldPreserveCacheControl(block *schemas.ChatContentBlock) bool {
-	if block == nil {
-		return false
-	}
-	return block.CacheControl != nil
-}

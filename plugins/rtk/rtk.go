@@ -5,6 +5,7 @@ package rtk
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
 )
@@ -13,15 +14,14 @@ import (
 const PluginName = "rtk"
 
 // Plugin implements schemas.LLMPlugin for rule-based tool output compression.
-// This is a minimal stub; the full implementation is in the dev.plugins track.
 type Plugin struct {
-	name   string
-	config *Config
-	logger schemas.Logger
+	name       string
+	config     *Config
+	logger     schemas.Logger
+	stateStore sync.Map // map[string]*CompressionState, keyed by requestID
 }
 
 // Init creates a new RTK plugin instance with the given configuration.
-// This is a minimal stub; the full implementation is in the dev.plugins track.
 // Init validates the config before constructing the plugin to fail fast on
 // misconfiguration (malicious input, out-of-range values, etc.).
 func Init(ctx context.Context, config *Config, logger schemas.Logger) (*Plugin, error) {
@@ -31,10 +31,14 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger) (*Plugin, 
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("rtk: invalid config: %w", err)
 	}
+	// Apply defaults for zero-value fields so the compression pipeline has
+	// sane limits even when the config omits them.
+	applyConfigDefaults(config)
 	return &Plugin{
-		name:   PluginName,
-		config: config,
-		logger: logger,
+		name:       PluginName,
+		config:     config,
+		logger:     logger,
+		stateStore: sync.Map{},
 	}, nil
 }
 
@@ -43,8 +47,12 @@ func (p *Plugin) GetName() string {
 	return PluginName
 }
 
-// Cleanup performs plugin cleanup.
+// Cleanup performs plugin cleanup — drains the state store.
 func (p *Plugin) Cleanup() error {
+	p.stateStore.Range(func(k, _ interface{}) bool {
+		p.stateStore.Delete(k)
+		return true
+	})
 	return nil
 }
 

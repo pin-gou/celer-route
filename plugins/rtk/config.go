@@ -49,3 +49,22 @@ func (c *Config) Validate() error {
 	}
 	return nil
 }
+
+// applyConfigDefaults fills in zero-value fields with sensible defaults.
+func applyConfigDefaults(c *Config) {
+	if c.Intensity == "" {
+		c.Intensity = "standard"
+	}
+	if c.MaxLinesPerResult == 0 {
+		c.MaxLinesPerResult = 120
+	}
+	if c.MaxCharsPerResult == 0 {
+		c.MaxCharsPerResult = 12000
+	}
+	if c.DedupThreshold == 0 {
+		c.DedupThreshold = 3
+	}
+	if !c.ApplyToToolResults && !c.ApplyToCodeBlocks {
+		c.ApplyToToolResults = true
+	}
+}
