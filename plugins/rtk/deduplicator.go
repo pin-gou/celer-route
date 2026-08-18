@@ -1,29 +1,33 @@
 package rtk
 
 import (
+	"fmt"
 	"strings"
 )
 
 // applyDedup collapses consecutive identical lines when the number of
 // consecutive duplicates reaches or exceeds the threshold. A run of k >=
-// threshold identical lines collapses to a single line; a run of k <
-// threshold is left untouched.
+// threshold identical lines collapses to a single line plus the markers
+// "[line repeated Nx]" and "[rtk:dropped N repeated lines]" (N = k-1); a run
+// of k < threshold is left untouched. The second return value is the total
+// number of collapsed (dropped) lines.
 //
 // Example with threshold=3:
 //
 //	Input:  "A\nA\nA\nA\nB\n"
-//	Output: "A\nB\n"
-func applyDedup(input string, threshold int) string {
+//	Output: "A\n[line repeated 3x]\n[rtk:dropped 3 repeated lines]\nB\n", 3
+func applyDedup(input string, threshold int) (string, int) {
 	if input == "" || threshold <= 1 {
-		return input
+		return input, 0
 	}
 
 	content := contentLines(input)
 	if len(content) <= 1 {
-		return input
+		return input, 0
 	}
 
 	var result []string
+	collapsed := 0
 	runStart := 0
 	for i := 1; i <= len(content); i++ {
 		// Extend the run while consecutive lines are identical.
@@ -33,8 +37,12 @@ func applyDedup(input string, threshold int) string {
 		// Run is content[runStart:i].
 		runLen := i - runStart
 		if runLen >= threshold {
-			// Collapse the whole run to its first line.
+			// Collapse the whole run to its first line, appending markers.
+			n := runLen - 1
+			collapsed += n
 			result = append(result, content[runStart])
+			result = append(result, fmt.Sprintf("[line repeated %dx]", n))
+			result = append(result, fmt.Sprintf("[rtk:dropped %d repeated lines]", n))
 		} else {
 			result = append(result, content[runStart:i]...)
 		}
@@ -42,14 +50,14 @@ func applyDedup(input string, threshold int) string {
 	}
 
 	if len(result) == 0 {
-		return ""
+		return "", collapsed
 	}
 
 	out := strings.Join(result, "\n")
 	if hasTrailingNewline(input) {
 		out += "\n"
 	}
-	return out
+	return out, collapsed
 }
 
 // contentLines splits a string into its content lines, dropping the empty

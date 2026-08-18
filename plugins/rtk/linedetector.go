@@ -212,6 +212,16 @@ func (d *commandDetector) detect(text string) CommandDetection {
 	return CommandDetection{Type: "shell", Command: "", Confidence: 0.5}
 }
 
+// genericErrorMarkersRe matches generic error markers used to distinguish
+// error output from document-like reads. Pre-compiled for hot-path reuse.
+var genericErrorMarkersRe = regexp.MustCompile(`Error:|Exception:|Traceback \(most recent call last\):`)
+
+// hasGenericErrorMarkers returns true when the text contains any generic
+// error marker (Error:, Exception:, or a Python Traceback header).
+func hasGenericErrorMarkers(text string) bool {
+	return genericErrorMarkersRe.MatchString(text)
+}
+
 // isShortErrorMessage returns true when the text is a single-line short error
 // message that should be preserved verbatim (not compressed).
 func isShortErrorMessage(text string) bool {
