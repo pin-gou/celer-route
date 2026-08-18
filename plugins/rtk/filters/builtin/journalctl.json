@@ -7,5 +7,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["\\bERROR\\b", "\\berror\\b", "\\bFATAL\\b", "\\bCRITICAL\\b", "\\bWARN\\b", "\\bException\\b", "\\bpanic\\b"]
+  "priority_patterns": ["\\bERROR\\b", "\\berror\\b", "\\bFATAL\\b", "\\bCRITICAL\\b", "\\bWARN\\b", "\\bException\\b", "\\bpanic\\b"],
+  "tests": [{"name":"strips-debug-trace-lines","input":"Jan 01 12:00:01 host app[123]: DEBUG verbose logging\nJan 01 12:00:02 host app[123]: INFO service started\nJan 01 12:00:03 host app[123]: TRACE query plan\nJan 01 12:00:04 host app[123]: ERROR upstream timeout","expected":"Jan 01 12:00:02 host app[123]: INFO service started\nJan 01 12:00:04 host app[123]: ERROR upstream timeout"}]
 }

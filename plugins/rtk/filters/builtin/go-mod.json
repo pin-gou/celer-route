@@ -3,5 +3,6 @@
   "command": "go mod",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^go: ", "updates to go.mod", "missing go.sum entry", "download"]
+  "priority_patterns": ["^go: ", "updates to go.mod", "missing go.sum entry", "download"],
+  "tests": [{"name":"preserves-mod-download","input":"go mod tidy: downloading golang.org/x/net v0.30.0","expected":"go mod tidy: downloading golang.org/x/net v0.30.0"}]
 }

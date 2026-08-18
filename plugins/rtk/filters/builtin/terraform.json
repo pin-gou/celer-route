@@ -3,5 +3,6 @@
   "command": "terraform",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["Error:", "error:", "failed", "Plan: \\d+ to add", "Apply complete", "No changes", "Terraform has been successfully initialized"]
+  "priority_patterns": ["Error:", "error:", "failed", "Plan: \\d+ to add", "Apply complete", "No changes", "Terraform has been successfully initialized"],
+  "tests": [{"name":"preserves-plan-summary","input":"Terraform will perform the following actions:\n  # aws_instance.web will be created","expected":"Terraform will perform the following actions:\n  # aws_instance.web will be created"}]
 }

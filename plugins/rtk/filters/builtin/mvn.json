@@ -7,5 +7,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["\\[WARN\\]", "\\[ERROR\\]", "BUILD FAILURE", "BUILD SUCCESS", "FAILURE", "ERROR:", "Failed to execute"]
+  "priority_patterns": ["\\[WARN\\]", "\\[ERROR\\]", "BUILD FAILURE", "BUILD SUCCESS", "FAILURE", "ERROR:", "Failed to execute"],
+  "tests": [{"name":"strips-info-prefix-and-blanks","input":"[INFO] Scanning for projects...\n[INFO] Building demo 1.0.0\n[INFO] \n[INFO] BUILD SUCCESS in 2s","expected":"Scanning for projects...\nBuilding demo 1.0.0\nBUILD SUCCESS in 2s"}]
 }

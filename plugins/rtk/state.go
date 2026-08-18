@@ -5,16 +5,18 @@ import "github.com/pin-gou/pg-gateway/core/schemas"
 // CompressionState holds per-request compression state, stored in the Plugin's
 // sync.Map keyed by request ID. Populated by PreLLMHook and consumed by PostLLMHook.
 type CompressionState struct {
-	OriginalTokens   int
-	CompressedTokens int
-	Compressed       bool
-	Techniques       []string
+	OriginalTokens     int
+	CompressedTokens   int
+	Compressed         bool
+	Techniques         []string
+	RawOutputPointers []*RtkRawOutputPointer
 }
 
 // NewCompressionState creates a new CompressionState with default values.
 func NewCompressionState() *CompressionState {
 	return &CompressionState{
-		Techniques: make([]string, 0),
+		Techniques:        make([]string, 0),
+		RawOutputPointers: make([]*RtkRawOutputPointer, 0),
 	}
 }
 

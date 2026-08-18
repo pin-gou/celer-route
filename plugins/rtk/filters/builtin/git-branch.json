@@ -5,5 +5,6 @@
     {"type": "keep", "pattern": "^\\* |^  \\S|^\\S+$"}
   ],
   "head": 10,
-  "tail": 5
+  "tail": 5,
+  "tests": [{"name":"keeps-branch-lines","input":"  feature/foo\n* main","expected":"  feature/foo\n* main"}]
 }

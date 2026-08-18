@@ -8,5 +8,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["rejected", "^error:", "^fatal:", "non-fast-forward", "protected branch"]
+  "priority_patterns": ["rejected", "^error:", "^fatal:", "non-fast-forward", "protected branch"],
+  "tests": [{"name":"strips-remote-transport-lines","input":"remote: \nTo https://github.com/user/repo.git\n   abc1234..def5678  main -\u003e main","expected":"   abc1234..def5678  main -\u003e main"}]
 }

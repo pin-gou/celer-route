@@ -3,5 +3,6 @@
   "command": "git reset",
   "head": 4,
   "tail": 2,
-  "priority_patterns": ["^fatal:", "^error:"]
+  "priority_patterns": ["^fatal:", "^error:"],
+  "tests": [{"name":"preserves-reset-state","input":"Unstaged changes after reset:\nM\tsrc/main.go","expected":"Unstaged changes after reset:\nM\tsrc/main.go"}]
 }

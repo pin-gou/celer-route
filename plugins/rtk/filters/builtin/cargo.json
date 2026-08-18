@@ -7,5 +7,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^error", "^Error:", "error\\[E", "warning:", "aborting", "could not compile"]
+  "priority_patterns": ["^error", "^Error:", "error\\[E", "warning:", "aborting", "could not compile"],
+  "tests": [{"name":"strips-compile-finished-lines","input":"   Compiling libc v0.2.154\n   Compiling myapp v0.1.0 (src)\n   Finished `dev` profile [unoptimized + debuginfo]\n    Running `target/debug/myapp`","expected":"    Running `target/debug/myapp`"}]
 }

@@ -3,5 +3,6 @@
   "command": "git blame",
   "head": 10,
   "tail": 5,
-  "priority_patterns": ["^error:", "^fatal:"]
+  "priority_patterns": ["^error:", "^fatal:"],
+  "tests": [{"name":"preserves-blame-lines","input":"abc1234 (author 2024-01-01) line one\nabc1235 (author 2024-01-02) line two","expected":"abc1234 (author 2024-01-01) line one\nabc1235 (author 2024-01-02) line two"}]
 }

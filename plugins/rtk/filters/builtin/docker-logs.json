@@ -7,5 +7,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["\\bERROR\\b", "\\bFATAL\\b", "\\bCRITICAL\\b", "\\bWARN\\b", "\\bException\\b", "Traceback"]
+  "priority_patterns": ["\\bERROR\\b", "\\bFATAL\\b", "\\bCRITICAL\\b", "\\bWARN\\b", "\\bException\\b", "Traceback"],
+  "tests": [{"name":"strips-debug-trace-lines","input":"DEBUG connecting to db\nINFO db connected\nTRACE query: SELECT 1\nERROR timeout reading rows","expected":"INFO db connected\nERROR timeout reading rows"}]
 }

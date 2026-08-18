@@ -10,5 +10,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^ERROR:", "^error:", "failed", "Requirement already satisfied"]
+  "priority_patterns": ["^ERROR:", "^error:", "failed", "Requirement already satisfied"],
+  "tests": [{"name":"strips-download-lines","input":"Collecting requests\n  Downloading requests-2.31.0-py3-none-any.whl (62 kB)\n  Installing build dependencies... done\nInstalling collected packages: requests\nSuccessfully installed requests-2.31.0","expected":"Installing collected packages: requests\nSuccessfully installed requests-2.31.0"}]
 }

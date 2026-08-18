@@ -3,5 +3,6 @@
   "command": "helm",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^Error:", "^error:", "failed", "already exists", "not found", "deployed", "installed", "upgraded"]
+  "priority_patterns": ["^Error:", "^error:", "failed", "already exists", "not found", "deployed", "installed", "upgraded"],
+  "tests": [{"name":"preserves-release-table","input":"NAME  REVISION  UPDATED  STATUS  CHART  APP VERSION\nweb   1         ...      deployed  nginx 4.0","expected":"NAME  REVISION  UPDATED  STATUS  CHART  APP VERSION\nweb   1         ...      deployed  nginx 4.0"}]
 }

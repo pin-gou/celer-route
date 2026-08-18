@@ -3,5 +3,6 @@
   "command": "git log",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^commit [0-9a-f]", "^Author: ", "^Date: ", "^Merge: "]
+  "priority_patterns": ["^commit [0-9a-f]", "^Author: ", "^Date: ", "^Merge: "],
+  "tests": [{"name":"preserves-commit-header","input":"commit 12ab34cd56ef7890abcdef12\nAuthor: Dev \u003cdev@example.com\u003e\nDate: Sun Jan 1 00:00:00 2024","expected":"commit 12ab34cd56ef7890abcdef12\nAuthor: Dev \u003cdev@example.com\u003e\nDate: Sun Jan 1 00:00:00 2024"}]
 }

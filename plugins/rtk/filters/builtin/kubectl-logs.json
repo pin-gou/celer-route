@@ -3,5 +3,6 @@
   "command": "kubectl logs",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["\\bERROR\\b", "\\berror\\b", "\\bFATAL\\b", "\\bfatal\\b", "\\bWARN\\b", "Exception", "Traceback", "panic:"]
+  "priority_patterns": ["\\bERROR\\b", "\\berror\\b", "\\bFATAL\\b", "\\bfatal\\b", "\\bWARN\\b", "Exception", "Traceback", "panic:"],
+  "tests": [{"name":"preserves-log-lines","input":"2024-01-01T00:00:00Z INFO starting server\n2024-01-01T00:00:01Z INFO listening on :8080","expected":"2024-01-01T00:00:00Z INFO starting server\n2024-01-01T00:00:01Z INFO listening on :8080"}]
 }

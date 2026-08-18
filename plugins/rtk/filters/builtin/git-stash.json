@@ -3,5 +3,6 @@
   "command": "git stash",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^Saved working directory", "^stash@\\{", "^Dropped ", "^CONFLICT"]
+  "priority_patterns": ["^Saved working directory", "^stash@\\{", "^Dropped ", "^CONFLICT"],
+  "tests": [{"name":"preserves-stash-state","input":"Saved working directory and index state WIP on main: abc1234 feat: stuff\nHEAD is now at abc1234 feat: stuff","expected":"Saved working directory and index state WIP on main: abc1234 feat: stuff\nHEAD is now at abc1234 feat: stuff"}]
 }

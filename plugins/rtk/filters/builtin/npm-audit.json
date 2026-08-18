@@ -3,5 +3,6 @@
   "command": "npm audit",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["critical", "high", "severe", "npm ERR", "vulnerabilities"]
+  "priority_patterns": ["critical", "high", "severe", "npm ERR", "vulnerabilities"],
+  "tests": [{"name":"preserves-audit-summary","input":"up to date: found 0 vulnerabilities","expected":"up to date: found 0 vulnerabilities"}]
 }

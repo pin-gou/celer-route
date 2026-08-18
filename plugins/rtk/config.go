@@ -59,6 +59,15 @@ type Config struct {
 	// DisabledFilters blacklists filter IDs (canonical) or names (legacy) from loading.
 	// Empty means no filters are disabled. Applied after EnabledFilters.
 	DisabledFilters []string `json:"disabled_filters"`
+
+	// RawOutputRetention controls when raw tool outputs are persisted to disk
+	// under <appDir>/rtk/raw-output/ for debugging: "never" (default) |
+	// "failures" | "always".
+	RawOutputRetention string `json:"raw_output_retention"`
+
+	// RawOutputMaxBytes caps the persisted raw output size in UTF-8 bytes
+	// (default 1048576, minimum 1024).
+	RawOutputMaxBytes int `json:"raw_output_max_bytes"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -82,6 +91,22 @@ func (c *Config) Validate() error {
 	// DisabledFilters) are validated for type only — they can be nil/empty/false.
 	// CustomFiltersEnabled and TrustProjectFilters are booleans (no invalid states).
 	// EnabledFilters/DisabledFilters are string slices — empty is valid.
+
+	// RawOutputRetention validation: must be one of never, failures, always.
+	if c.RawOutputRetention != "" {
+		switch c.RawOutputRetention {
+		case "never", "failures", "always":
+		default:
+			return fmt.Errorf("rtk: invalid raw_output_retention %q: must be one of never, failures, always", c.RawOutputRetention)
+		}
+	}
+	// RawOutputMaxBytes validation: negative is invalid, positive but < 1024 is invalid.
+	if c.RawOutputMaxBytes < 0 {
+		return fmt.Errorf("rtk: raw_output_max_bytes must be >= 0, got %d", c.RawOutputMaxBytes)
+	}
+	if c.RawOutputMaxBytes > 0 && c.RawOutputMaxBytes < 1024 {
+		return fmt.Errorf("rtk: raw_output_max_bytes must be >= 1024 when set, got %d", c.RawOutputMaxBytes)
+	}
 	return nil
 }
 
@@ -116,4 +141,14 @@ func applyConfigDefaults(c *Config) {
 	// leaves all four custom-filter fields at zero is treated as "defaults
 	// enabled". We deliberately do NOT force the field here so an explicit
 	// custom_filters_enabled=false in config.json survives to the loader.
+
+	// RawOutputRetention defaults to "never".
+	if c.RawOutputRetention == "" {
+		c.RawOutputRetention = "never"
+	}
+
+	// RawOutputMaxBytes defaults to 1048576.
+	if c.RawOutputMaxBytes == 0 {
+		c.RawOutputMaxBytes = 1048576
+	}
 }

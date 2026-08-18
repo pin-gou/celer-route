@@ -3,5 +3,6 @@
   "command": "git bisect",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["first bad commit", "bisect run success", "bisect run failed", "^error:", "^fatal:"]
+  "priority_patterns": ["first bad commit", "bisect run success", "bisect run failed", "^error:", "^fatal:"],
+  "tests": [{"name":"preserves-bisect-header","input":"Bisecting: 3 revisions left to test after this (roughly 2 steps)\n[c0ffee12] fix: adjust allocator sizing","expected":"Bisecting: 3 revisions left to test after this (roughly 2 steps)\n[c0ffee12] fix: adjust allocator sizing"}]
 }

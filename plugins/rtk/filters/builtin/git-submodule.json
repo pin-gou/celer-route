@@ -3,5 +3,6 @@
   "command": "git submodule",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^error:", "^fatal:", "^Submodule path .* checked out"]
+  "priority_patterns": ["^error:", "^fatal:", "^Submodule path .* checked out"],
+  "tests": [{"name":"preserves-submodule-status","input":" a1b2c3d add submodule dependency\nSubmodule path 'lib': checked out 'a1b2c3d'","expected":" a1b2c3d add submodule dependency\nSubmodule path 'lib': checked out 'a1b2c3d'"}]
 }

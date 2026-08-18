@@ -7,5 +7,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^Error:", "^error:", "Warning:", "failed"]
+  "priority_patterns": ["^Error:", "^error:", "Warning:", "failed"],
+  "tests": [{"name":"strips-download-install-lines","input":"==\u003e Downloading https://ghcr.io/v2/homebrew/core/foo/manifests/1.0\n==\u003e Installing foo from homebrew/core\n🍺  /usr/local/Cellar/foo/1.0","expected":"🍺  /usr/local/Cellar/foo/1.0"}]
 }

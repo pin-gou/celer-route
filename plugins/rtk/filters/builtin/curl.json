@@ -3,5 +3,6 @@
   "command": "curl",
   "head": 10,
   "tail": 5,
-  "priority_patterns": ["^error:", "^Error:", "failed", "Connection refused", "Could not resolve", "timeout", "HTTP/\\d+\\.\\d+ \\d+"]
+  "priority_patterns": ["^error:", "^Error:", "failed", "Connection refused", "Could not resolve", "timeout", "HTTP/\\d+\\.\\d+ \\d+"],
+  "tests": [{"name":"preserves-http-response","input":"HTTP/2 200\ncontent-type: application/json\n{\"ok\": true}","expected":"HTTP/2 200\ncontent-type: application/json\n{\"ok\": true}"}]
 }

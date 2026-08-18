@@ -9,5 +9,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "Pending", "Terminating", "Evicted", "OOMKilled", "Init:Error", "CreateContainerConfigError", "Error", "Failed"]
+  "priority_patterns": ["CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "Pending", "Terminating", "Evicted", "OOMKilled", "Init:Error", "CreateContainerConfigError", "Error", "Failed"],
+  "tests": [{"name":"strips-header-and-steady-rows","input":"NAME   READY   STATUS    RESTARTS   AGE\nweb-1  1/1     Running   0          2d\nweb-2  1/1     Completed 0          3d\ndb-1   0/1     CrashLoopBackOff   3   1h","expected":"db-1   0/1     CrashLoopBackOff   3   1h"}]
 }

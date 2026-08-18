@@ -3,5 +3,6 @@
   "command": "git merge",
   "head": 3,
   "tail": 3,
-  "priority_patterns": ["^CONFLICT", "^fatal:", "^error:", "^Auto-merging", "^Merge made by", "Fast-forward", "Already up to date"]
+  "priority_patterns": ["^CONFLICT", "^fatal:", "^error:", "^Auto-merging", "^Merge made by", "Fast-forward", "Already up to date"],
+  "tests": [{"name":"preserves-merge-result","input":"Auto-merging src/main.go\nMerge made by the 'recursive' strategy.","expected":"Auto-merging src/main.go\nMerge made by the 'recursive' strategy."}]
 }
