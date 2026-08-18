@@ -59,10 +59,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules.plugins.lint 注入命令）：`for d in plugins/*/; do (cd "$d" && go vet ./...); done`
-- [ ] 4.2 执行测试（runner 通过 modules.plugins.test.unit 注入命令）：`for d in plugins/*/; do (cd "$d" && go test ./... -short -count=1); done`
-- [ ] 4.3 启动服务：无需启动（纯 plugins 单元测试驱动）
-- [ ] 4.4 验证 V-plugins-N：来自 design.md Verification Criteria（N 由 design.md 决定，非章节号）
+- [x] 4.1 执行 lint（runner 通过 modules.plugins.lint 注入命令）：`for d in plugins/*/; do (cd "$d" && go vet ./...); done`
+- [x] 4.2 执行测试（runner 通过 modules.plugins.test.unit 注入命令）：`for d in plugins/*/; do (cd "$d" && go test ./... -short -count=1); done`
+- [x] 4.3 启动服务：无需启动（纯 plugins 单元测试驱动）
+- [x] 4.4 验证 V-plugins-N：来自 design.md Verification Criteria（N 由 design.md 决定，非章节号）
 
   **define-summary 对账**（自动生成）:
   - verifiable: V-plugins-1, V-plugins-2, V-plugins-3, V-plugins-4, V-plugins-5, V-plugins-6, V-plugins-7
