@@ -16,7 +16,7 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 2.1 更新 transports/config.schema.json rtk 配置块（if/then name=rtk 段，约 3134-3189 行）：properties 新增 `enable_grouping`（boolean, default false）、`grouping_threshold`（integer, minimum 2, default 3）、`apply_to_assistant_messages`（boolean, default false），保持 `additionalProperties: false` 与既有 8 个字段定义不变，使 1.1 测试转绿
+- [x] 2.1 更新 transports/config.schema.json rtk 配置块（if/then name=rtk 段，约 3134-3189 行）：properties 新增 `enable_grouping`（boolean, default false）、`grouping_threshold`（integer, minimum 2, default 3）、`apply_to_assistant_messages`（boolean, default false），保持 `additionalProperties: false` 与既有 8 个字段定义不变，使 1.1 测试转绿
 
 ## 3. dev.transports:review - 静态代码审查
 
