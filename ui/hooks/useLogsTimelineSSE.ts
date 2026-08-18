@@ -117,6 +117,45 @@ function isTerminalStatus(status: string): boolean {
 const ACTIVE_LOG_TTL_MS = 10 * 60 * 1000;
 const ACTIVE_LOG_SWEEP_INTERVAL_MS = 30 * 1000;
 
+// log_updated state changes are coalesced over this window so a burst of
+// progress events costs consumers a single re-render instead of one per event.
+// Callbacks (onNewLog/onLogRemoved) and lastSeen bookkeeping still run
+// immediately at event time — only the activeLogs array update is deferred.
+const LOG_UPDATED_FLUSH_INTERVAL_MS = 300;
+
+interface PendingLogUpdate {
+	entry: ActiveLogEntry;
+	terminal: boolean;
+}
+
+// Merge a fresh log_updated snapshot into an existing active entry. Only
+// overwrite a field when the update actually carries it; otherwise keep the
+// already-known value (the initial "processing" snapshot is authoritative for
+// fields the update omits).
+function mergeActiveEntry(existing: ActiveLogEntry, fresh: ActiveLogEntry): ActiveLogEntry {
+	return {
+		...existing,
+		...fresh,
+		latency: fresh.latency ?? existing.latency,
+		provider: fresh.provider ?? existing.provider,
+		model: fresh.model ?? existing.model,
+		object: fresh.object ?? existing.object,
+		stream: fresh.stream ?? existing.stream,
+		token_usage: fresh.token_usage ?? existing.token_usage,
+		app: fresh.app ?? existing.app,
+		user_agent: fresh.user_agent ?? existing.user_agent,
+		cost: fresh.cost ?? existing.cost,
+		virtual_key_name: fresh.virtual_key_name ?? existing.virtual_key_name,
+		virtual_key_id: fresh.virtual_key_id ?? existing.virtual_key_id,
+		routing_rule_id: fresh.routing_rule_id ?? existing.routing_rule_id,
+		routing_rule_name: fresh.routing_rule_name ?? existing.routing_rule_name,
+		number_of_retries: fresh.number_of_retries ?? existing.number_of_retries,
+		fallback_index: fresh.fallback_index ?? existing.fallback_index,
+		content_summary: fresh.content_summary ?? existing.content_summary,
+		message: fresh.message ?? existing.message,
+	};
+}
+
 export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogsTimelineSSEResult {
 	const [activeLogs, setActiveLogs] = useState<ActiveLogEntry[]>([]);
 	const [error, setError] = useState<string | null>(null);
@@ -129,6 +168,36 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 	// setState-updater timing (updaters run during render, not at call time).
 	const activeLogsRef = useRef<ActiveLogEntry[]>([]);
 	activeLogsRef.current = activeLogs;
+	// Batched log_updated state changes, keyed by log id (latest event wins).
+	// Flushed on a short timer so a burst of events triggers one re-render.
+	const pendingUpdatesRef = useRef<Map<string, PendingLogUpdate>>(new Map());
+	const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const flushPendingLogUpdates = useCallback(() => {
+		flushTimerRef.current = null;
+		const pending = pendingUpdatesRef.current;
+		if (pending.size === 0) return;
+		pendingUpdatesRef.current = new Map();
+		setActiveLogs((prev) => {
+			let next = prev;
+			for (const [id, upd] of pending) {
+				const idx = next.findIndex((l) => l.id === id);
+				if (upd.terminal) {
+					if (idx >= 0) {
+						if (next === prev) next = [...prev];
+						next.splice(idx, 1);
+					}
+				} else if (idx >= 0) {
+					if (next === prev) next = [...prev];
+					next[idx] = mergeActiveEntry(next[idx], upd.entry);
+				} else {
+					if (next === prev) next = [...prev];
+					next.push(upd.entry);
+				}
+			}
+			return next;
+		});
+	}, []);
 
 	const handleActiveLogs = useCallback((data: unknown) => {
 		setError(null);
@@ -141,6 +210,13 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 				seen.set(log.id, now);
 				return toActiveEntry(log);
 			});
+			// A handshake is a full resync — drop any batched incremental
+			// updates, which are now stale relative to this snapshot.
+			pendingUpdatesRef.current.clear();
+			if (flushTimerRef.current) {
+				clearTimeout(flushTimerRef.current);
+				flushTimerRef.current = null;
+			}
 			setActiveLogs(entries);
 		} catch {
 			// Silently ignore malformed data
@@ -160,67 +236,41 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 		}
 	}, []);
 
-	const handleLogUpdated = useCallback((data: unknown) => {
-		try {
-			const update = data as ActiveLogStreamEvent;
-			const { onNewLog, onLogRemoved } = optionsRef.current ?? {};
-			const seen = lastSeenRef.current;
-			const now = Date.now();
+	const handleLogUpdated = useCallback(
+		(data: unknown) => {
+			try {
+				const update = data as ActiveLogStreamEvent;
+				const { onNewLog, onLogRemoved } = optionsRef.current ?? {};
+				const seen = lastSeenRef.current;
+				const now = Date.now();
+				const terminal = isTerminalStatus(update.status);
+				const entry = toActiveEntryFromEvent(update);
 
-			setActiveLogs((prev) => {
-				const idx = prev.findIndex((l) => l.id === update.id);
-
-				if (idx >= 0) {
-					if (isTerminalStatus(update.status)) {
-						onLogRemoved?.(update.id);
-						onNewLog?.(toActiveEntryFromEvent(update));
-						seen.delete(update.id);
-						const next = [...prev];
-						next.splice(idx, 1);
-						return next;
-					}
-					const next = [...prev];
-					const fresh = toActiveEntryFromEvent(update);
-					next[idx] = {
-						...next[idx],
-						...fresh,
-						// Only overwrite a field when the update actually carries it;
-						// otherwise keep the already-known value (initial "processing"
-						// snapshot is authoritative for fields the update omits).
-						latency: update.latency_ms ?? next[idx].latency,
-						provider: fresh.provider ?? next[idx].provider,
-						model: fresh.model ?? next[idx].model,
-						object: fresh.object ?? next[idx].object,
-						stream: fresh.stream ?? next[idx].stream,
-						token_usage: fresh.token_usage ?? next[idx].token_usage,
-						app: fresh.app ?? next[idx].app,
-						user_agent: fresh.user_agent ?? next[idx].user_agent,
-						cost: fresh.cost ?? next[idx].cost,
-						virtual_key_name: fresh.virtual_key_name ?? next[idx].virtual_key_name,
-						virtual_key_id: fresh.virtual_key_id ?? next[idx].virtual_key_id,
-						routing_rule_id: fresh.routing_rule_id ?? next[idx].routing_rule_id,
-						routing_rule_name: fresh.routing_rule_name ?? next[idx].routing_rule_name,
-						number_of_retries: fresh.number_of_retries ?? next[idx].number_of_retries,
-						fallback_index: fresh.fallback_index ?? next[idx].fallback_index,
-						content_summary: fresh.content_summary ?? next[idx].content_summary,
-						message: fresh.message ?? next[idx].message,
-					};
+				// Callbacks and lastSeen bookkeeping run at event time (exactly
+				// once per event). Firing them inside a setState updater would
+				// double-invoke under StrictMode and defer them until render.
+				if (terminal) {
+					const exists = activeLogsRef.current.some((l) => l.id === update.id) || pendingUpdatesRef.current.has(update.id);
+					if (exists) onLogRemoved?.(update.id);
+					onNewLog?.(entry);
+					seen.delete(update.id);
+				} else {
 					seen.set(update.id, now);
-					return next;
 				}
 
-				if (isTerminalStatus(update.status)) {
-					onNewLog?.(toActiveEntryFromEvent(update));
-					return prev;
+				// Buffer the state change; the flush window coalesces a burst of
+				// log_updated events into a single setActiveLogs call. Latest
+				// event per id wins.
+				pendingUpdatesRef.current.set(update.id, { entry, terminal });
+				if (!flushTimerRef.current) {
+					flushTimerRef.current = setTimeout(flushPendingLogUpdates, LOG_UPDATED_FLUSH_INTERVAL_MS);
 				}
-
-				seen.set(update.id, now);
-				return [...prev, toActiveEntryFromEvent(update)];
-			});
-		} catch {
-			// Silently ignore malformed data
-		}
-	}, []);
+			} catch {
+				// Silently ignore malformed data
+			}
+		},
+		[flushPendingLogUpdates],
+	);
 
 	useEffect(() => {
 		const baseUrl = getApiBaseUrl();
@@ -295,6 +345,11 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 
 		return () => {
 			clearInterval(sweepTimer);
+			if (flushTimerRef.current) {
+				clearTimeout(flushTimerRef.current);
+				flushTimerRef.current = null;
+			}
+			pendingUpdatesRef.current.clear();
 			es.close();
 			eventSourceRef.current = null;
 			setIsConnected(false);

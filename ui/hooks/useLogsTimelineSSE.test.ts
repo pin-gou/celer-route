@@ -58,7 +58,14 @@ const mockCompletedLog: LogEntry = {
 };
 
 describe("useLogsTimelineSSE — SSE hook", () => {
+	// log_updated state changes are coalesced over a 300 ms flush window (see
+	// LOG_UPDATED_FLUSH_INTERVAL_MS). Fake timers let tests advance past it;
+	// callbacks (onNewLog/onLogRemoved) and the active_logs handshake still
+	// fire synchronously.
+	const FLUSH_MS = 300;
+
 	beforeEach(() => {
+		vi.useFakeTimers();
 		vi.stubGlobal(
 			"EventSource",
 			vi.fn(function () {
@@ -84,6 +91,7 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.unstubAllGlobals();
 	});
 
@@ -162,6 +170,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 				latency_ms: 500.0,
 			});
 		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
 
 		expect(result.current.activeLogs).toHaveLength(1);
 		expect(result.current.activeLogs[0].status).toBe("processing");
@@ -186,6 +197,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 				latency_ms: null,
 			});
 		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
 
 		expect(result.current.activeLogs).toHaveLength(1);
 		expect(result.current.activeLogs[0].id).toBe("new-request-1");
@@ -208,6 +222,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 				status: "success",
 				latency_ms: 1234.0,
 			});
+		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
 		});
 
 		expect(result.current.activeLogs).toHaveLength(0);
@@ -267,6 +284,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		expect(onNewLog).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "active-1", status: "success", provider: "openai", model: "gpt-4" }),
 		);
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
 		expect(result.current.activeLogs).toHaveLength(0);
 	});
 
@@ -299,6 +319,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		expect(onNewLog).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "active-1", status: "cancelled", provider: "openai", model: "gpt-4" }),
 		);
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
 		expect(result.current.activeLogs).toHaveLength(0);
 	});
 
@@ -394,6 +417,9 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 				latency_ms: 250,
 			});
 		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
 
 		const entry = result.current.activeLogs[0];
 		expect(entry.virtual_key_id).toBe("vk-9");
@@ -401,6 +427,106 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		expect(entry.routing_rule_id).toBe("rule-tier-cheap");
 		expect(entry.routing_rule_name).toBe("Tier → cheap");
 		expect(entry.latency).toBe(250);
+	});
+
+	// -----------------------------------------------------------------------
+	// log_updated batching — a burst of progress events must coalesce into a
+	// single deferred state update (one consumer re-render), not one per event.
+	// Regression guard for the logs-page memory/jank issue.
+	// -----------------------------------------------------------------------
+
+	it("should buffer log_updated state changes until the flush window elapses", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
+
+		act(() => {
+			eventSource._dispatch("log_updated", { id: "active-1", status: "processing", latency_ms: 100 });
+		});
+
+		// Before the flush window the state is untouched.
+		expect(result.current.activeLogs[0].latency).toBeNull();
+
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
+
+		expect(result.current.activeLogs[0].latency).toBe(100);
+	});
+
+	it("should coalesce a burst of log_updated events, latest per id wins", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
+
+		// Three rapid progress updates for the same id within one flush window.
+		act(() => {
+			eventSource._dispatch("log_updated", { id: "active-1", status: "processing", latency_ms: 100 });
+			eventSource._dispatch("log_updated", { id: "active-1", status: "processing", latency_ms: 200 });
+			eventSource._dispatch("log_updated", { id: "active-1", status: "processing", latency_ms: 300 });
+		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
+
+		// Only the latest event survives the merge.
+		expect(result.current.activeLogs).toHaveLength(1);
+		expect(result.current.activeLogs[0].latency).toBe(300);
+	});
+
+	it("should drop a pending non-terminal update superseded by a terminal one", () => {
+		const onNewLog = vi.fn();
+		const { result } = renderHook(() => useLogsTimelineSSE({ onNewLog }));
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		act(() => {
+			eventSource._dispatch("active_logs", []);
+		});
+
+		act(() => {
+			// New log starts processing, then completes inside the same window.
+			eventSource._dispatch("log_updated", { id: "burst-1", status: "processing", provider: "openai", model: "gpt-4" });
+			eventSource._dispatch("log_updated", { id: "burst-1", status: "success", provider: "openai", model: "gpt-4", latency_ms: 42 });
+		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
+
+		// The terminal event wins: nothing is left in activeLogs, and the
+		// completed log was still surfaced via onNewLog.
+		expect(result.current.activeLogs).toHaveLength(0);
+		expect(onNewLog).toHaveBeenCalledWith(expect.objectContaining({ id: "burst-1", status: "success" }));
+	});
+
+	it("should discard pending log_updated updates when a full handshake resync arrives", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
+
+		// Buffer an update, then a fresh handshake resync arrives before flush.
+		act(() => {
+			eventSource._dispatch("log_updated", { id: "active-1", status: "processing", latency_ms: 999 });
+		});
+		act(() => {
+			eventSource._dispatch("active_logs", [{ ...mockActiveLog, provider: "anthropic", model: "claude-3" }]);
+		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
+
+		// The handshake snapshot wins; the stale buffered update never applies.
+		expect(result.current.activeLogs).toHaveLength(1);
+		expect(result.current.activeLogs[0].provider).toBe("anthropic");
+		expect(result.current.activeLogs[0].latency).toBeNull();
 	});
 });
 

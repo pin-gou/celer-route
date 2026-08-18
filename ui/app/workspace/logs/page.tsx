@@ -411,16 +411,39 @@ export default function LogsPage() {
 	refetchHistogramRef.current = refetchHistogram;
 	const refetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+	// Batch SSE completions: under load many logs finish within the same
+	// second, and one setState per event re-renders the whole page (table
+	// reconciliation included) each time. Buffer arrivals and flush on a short
+	// timer so a burst costs a single re-render.
+	const pendingSseLogsRef = useRef<DisplayLogEntry[]>([]);
+	const sseFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const flushPendingSseLogs = useCallback(() => {
+		sseFlushTimerRef.current = null;
+		const batch = pendingSseLogsRef.current;
+		pendingSseLogsRef.current = [];
+		if (batch.length === 0) return;
+		setSseNewLogs((prev) => {
+			const existing = new Set(prev.map((l) => l.id));
+			const fresh = batch.filter((l) => !existing.has(l.id));
+			if (fresh.length === 0) return prev;
+			const next = [...fresh, ...prev];
+			// Cap at 500 — the poll (30s) reconciles these into the API data and
+			// displayLogs filters out already-API rows, so we never need more than
+			// one poll cycle's worth of headroom.
+			return next.length > 500 ? next.slice(0, 500) : next;
+		});
+	}, []);
+
 	// SSE subscription for real-time log updates. Always connected (the timeline
 	// page pattern); the hooks' every other page/filter/sort configuration simply
 	// ignores the events. New completed logs arrive via onNewLog instead of
 	// waiting for the next poll cycle.
-	const handleSseNewLog = useCallback((entry: ActiveLogEntry) => {
-		if (!isLiveViewRef.current) return;
-		if (entry.status === "processing") return;
-		if (!matchesFilters(entry, filtersRef.current)) return;
-		setSseNewLogs((prev) => {
-			if (prev.some((l) => l.id === entry.id)) return prev;
+	const handleSseNewLog = useCallback(
+		(entry: ActiveLogEntry) => {
+			if (!isLiveViewRef.current) return;
+			if (entry.status === "processing") return;
+			if (!matchesFilters(entry, filtersRef.current)) return;
 			const log: DisplayLogEntry = {
 				...toProcessingEntry(entry),
 				__processing: false,
@@ -431,34 +454,44 @@ export default function LogsPage() {
 				number_of_retries: entry.number_of_retries ?? 0,
 				fallback_index: entry.fallback_index ?? 0,
 			};
-			const next = [log, ...prev];
-			// Cap at 500 — the poll (30s) reconciles these into the API data and
-			// displayLogs filters out already-API rows, so we never need more than
-			// one poll cycle's worth of headroom.
-			return next.length > 500 ? next.slice(0, 500) : next;
-		});
-		// Debounce refetch of stats and histogram so the stat cards and volume
-		// chart update within ~1.5 s of the latest completion, not just at the
-		// next 10 s polling cycle.
-		if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
-		refetchDebounceRef.current = setTimeout(() => {
-			refetchStatsRef.current();
-			refetchHistogramRef.current();
-		}, 1500);
-	}, []);
+			pendingSseLogsRef.current.push(log);
+			if (!sseFlushTimerRef.current) {
+				sseFlushTimerRef.current = setTimeout(flushPendingSseLogs, 300);
+			}
+			// Debounce refetch of stats and histogram so the stat cards and volume
+			// chart update within ~1.5 s of the latest completion, not just at the
+			// next 10 s polling cycle.
+			if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
+			refetchDebounceRef.current = setTimeout(() => {
+				refetchStatsRef.current();
+				refetchHistogramRef.current();
+			}, 1500);
+		},
+		[flushPendingSseLogs],
+	);
 
 	const { activeLogs: sseActiveLogs } = useLogsTimelineSSE({ onNewLog: handleSseNewLog });
 
 	// Clear SSE-injected rows when the live view is exited — the next poll will
 	// shadow them with full entries from the API.
 	useEffect(() => {
-		if (!isLiveView) setSseNewLogs([]);
+		if (!isLiveView) {
+			setSseNewLogs([]);
+			pendingSseLogsRef.current = [];
+			if (sseFlushTimerRef.current) {
+				clearTimeout(sseFlushTimerRef.current);
+				sseFlushTimerRef.current = null;
+			}
+		}
 	}, [isLiveView]);
 
-	// Clear any pending debounced stats/histogram refetch on unmount.
+	// Clear any pending debounced stats/histogram refetch and SSE flush on unmount.
 	useEffect(() => {
 		return () => {
 			if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
+			if (sseFlushTimerRef.current) clearTimeout(sseFlushTimerRef.current);
+			sseFlushTimerRef.current = null;
+			pendingSseLogsRef.current = [];
 		};
 	}, []);
 

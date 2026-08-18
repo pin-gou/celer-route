@@ -144,6 +144,10 @@ export const logsApi = baseApi.injectEndpoints({
 				},
 			}),
 			providesTags: ["Logs"],
+			// Each response carries full conversation histories for every row; a
+			// filter/pagination combo that scrolls off-screen should be freed
+			// quickly instead of lingering for the 60 s default.
+			keepUnusedDataFor: 10,
 		}),
 
 		getLogSessionById: builder.query<
@@ -162,6 +166,9 @@ export const logsApi = baseApi.injectEndpoints({
 				},
 			}),
 			providesTags: ["Logs"],
+			// Sessions are browsed one at a time and each page carries full log
+			// rows; drop them soon after the sheet moves on.
+			keepUnusedDataFor: 10,
 		}),
 
 		getLogSessionSummaryById: builder.query<LogSessionSummaryResponse, string>({
@@ -451,12 +458,18 @@ export const logsApi = baseApi.injectEndpoints({
 		getLogById: builder.query<LogEntry, string>({
 			query: (id) => `/logs/${encodeURIComponent(id)}`,
 			providesTags: (result, error, id) => [{ type: "Logs", id }],
+			// raw_request/raw_response can be megabytes (images, audio, long
+			// conversations). Browsing many logs back-to-back would otherwise
+			// stack one full-size entry per id in the cache for the 60 s
+			// default — the dominant source of the logs page memory bloat.
+			keepUnusedDataFor: 5,
 		}),
 
 		// Get timeline events for a specific log
 		getLogTimeline: builder.query<TimelineResponse, string>({
 			query: (id) => `/logs/${encodeURIComponent(id)}/timeline`,
 			providesTags: (result, error, id) => [{ type: "Logs", id }],
+			keepUnusedDataFor: 5,
 		}),
 	}),
 });
