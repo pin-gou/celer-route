@@ -1,6 +1,7 @@
 package rtk
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
@@ -14,9 +15,9 @@ type ProcessStats struct {
 }
 
 var (
-	loaderOnce     sync.Once
-	globalLoader   *FilterLoader
-	defaultConfig  = &Config{Enabled: true}
+	loaderOnce    sync.Once
+	globalLoader  *FilterLoader
+	defaultConfig = &Config{Enabled: true}
 )
 
 // getFilterLoader returns the package-level singleton FilterLoader.
@@ -137,6 +138,71 @@ func applyRtkCompression(req *schemas.BifrostRequest, config *Config) *Compressi
 				}
 				compressedTotal += origTokens
 				blockIdx++
+			}
+		}
+
+		// --- Assistant message compression (V-plugins-2) ---
+		// Compress assistant text when ApplyToAssistantMessages or
+		// ApplyToCodeBlocks (with ``` fences) is enabled.
+		if msg.Role == schemas.ChatMessageRoleAssistant && msg.Content != nil {
+			mode := assistantCompressionMode(msg, config)
+			if mode != "" {
+				codeOnly := mode == "codeOnly"
+				// OpenAI-style: ContentStr
+				if msg.Content.ContentStr != nil {
+					text := *msg.Content.ContentStr
+					if text != "" {
+						origTokens := estimateTokens(text)
+						originalTotal += origTokens
+						result, stats := compressAssistantText(text, config, codeOnly)
+						if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
+							ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
+							if ratio >= 0.05 {
+								msg.Content.ContentStr = &result
+								anyCompressed = true
+								compressedTotal += estimateTokens(result)
+								state.Techniques = append(state.Techniques, stats.Techniques...)
+							} else {
+								compressedTotal += origTokens
+							}
+						} else {
+							compressedTotal += origTokens
+						}
+					}
+				}
+				// Anthropic-style: ContentBlocks with text blocks
+				if len(msg.Content.ContentBlocks) > 0 {
+					for j := range msg.Content.ContentBlocks {
+						block := &msg.Content.ContentBlocks[j]
+						if block.Type != schemas.ChatContentBlockTypeText || block.Text == nil {
+							continue
+						}
+						// Preserve cache_control-marked text blocks verbatim.
+						if config.PreserveCacheControl && block.CacheControl != nil {
+							continue
+						}
+						text := *block.Text
+						if text == "" {
+							continue
+						}
+						origTokens := estimateTokens(text)
+						originalTotal += origTokens
+						result, stats := compressAssistantText(text, config, codeOnly)
+						if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
+							ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
+							if ratio >= 0.05 {
+								block.Text = &result
+								anyCompressed = true
+								compressedTotal += estimateTokens(result)
+								state.Techniques = append(state.Techniques, stats.Techniques...)
+							} else {
+								compressedTotal += origTokens
+							}
+						} else {
+							compressedTotal += origTokens
+						}
+					}
+				}
 			}
 		}
 
@@ -371,8 +437,8 @@ func processRtkTextWithCommand(input string, config *Config, commandHint string)
 	// 5. Document-like read protection: when detection falls back to the
 	// generic shell output ({Type:"shell", Command:""}) and the text carries
 	// no generic error markers, treat it as a document read. Preserve the
-	// full text — only ANSI strip (already done) + dedup + the hard char
-	// safety cap apply; the filter, line-filter, and smart head/tail
+	// full text — only ANSI strip (already done) + dedup + grouping + the
+	// hard char safety cap apply; the filter, line-filter, and smart head/tail
 	// truncation steps are skipped so the document is not cut.
 	isDocumentLikeRead := detection.Type == "shell" && detection.Command == "" && !hasGenericErrorMarkers(text)
 	if isDocumentLikeRead {
@@ -385,6 +451,14 @@ func processRtkTextWithCommand(input string, config *Config, commandHint string)
 			stats.Techniques = append(stats.Techniques, "dedup")
 		}
 		result := deduped
+		// R5: grouping — opt-in via enable_grouping flag (default OFF).
+		if config.EnableGrouping {
+			groupResult := groupSimilarLines(result, GroupingOptions{Threshold: config.GroupingThreshold})
+			if groupResult.Grouped > 0 {
+				result = groupResult.Text
+				stats.Techniques = append(stats.Techniques, "rtk-grouping")
+			}
+		}
 		if config.MaxCharsPerResult > 0 && len(result) > config.MaxCharsPerResult {
 			result = truncateToCharLimit(result, config.MaxCharsPerResult)
 			result += "\n[rtk:truncated by chars]\n"
@@ -418,10 +492,30 @@ func processRtkTextWithCommand(input string, config *Config, commandHint string)
 		stats.Techniques = append(stats.Techniques, "dedup")
 	}
 
+	// 8b. R5: grouping — opt-in via enable_grouping flag (default OFF).
+	// Grouping runs after dedup and before intensity-scaled truncation so
+	// near-equivalent lines (differing only by timestamps/hex/numbers) are
+	// collapsed before the line budget is applied.
+	grouped := deduped
+	if config.EnableGrouping {
+		groupResult := groupSimilarLines(deduped, GroupingOptions{Threshold: config.GroupingThreshold})
+		if groupResult.Grouped > 0 {
+			grouped = groupResult.Text
+			stats.Techniques = append(stats.Techniques, "rtk-grouping")
+		}
+	}
+
 	// 9. Smart truncate with intensity-adjusted head/tail.
 	effectiveFilter := scaleFilterForIntensity(filter, config.Intensity)
-	truncated, _ := applySmartTruncate(deduped, effectiveFilter)
-	if truncated != deduped && truncated != "" {
+	// If the filter has no MaxLines, fall back to Config.MaxLinesPerResult
+	// scaled by the intensity factor (aligns with OmniRoute index.ts:250).
+	if effectiveFilter.MaxLines == 0 && config.MaxLinesPerResult > 0 {
+		eff := *effectiveFilter
+		eff.MaxLines = effectiveMaxLines(config.MaxLinesPerResult, config.Intensity)
+		effectiveFilter = &eff
+	}
+	truncated, _ := applySmartTruncate(grouped, effectiveFilter)
+	if truncated != grouped && truncated != "" {
 		stats.Techniques = append(stats.Techniques, "smarttruncate")
 	}
 
@@ -437,6 +531,27 @@ func processRtkTextWithCommand(input string, config *Config, commandHint string)
 	return result, stats
 }
 
+// effectiveMaxLines scales a line budget by the compression intensity.
+// Returns max(1, round(base * factor)) where factor depends on intensity:
+//   - minimal:   ×1.5
+//   - standard:  ×1.0
+//   - aggressive: ×0.5
+//
+// This ensures minimal/standard/aggressive produce meaningfully different
+// output on truncation-based filters (V-plugins-3).
+func effectiveMaxLines(base int, intensity string) int {
+	switch intensity {
+	case "minimal":
+		// round(base * 1.5) = (base*3 + 1) / 2
+		return max(1, (base*3+1)/2)
+	case "aggressive":
+		// round(base * 0.5) = (base + 1) / 2
+		return max(1, (base+1)/2)
+	default:
+		return max(1, base)
+	}
+}
+
 // scaleFilterForIntensity returns a copy of the filter with head/tail windows
 // adjusted for the given compression intensity.
 func scaleFilterForIntensity(f *Filter, intensity string) *Filter {
@@ -448,6 +563,11 @@ func scaleFilterForIntensity(f *Filter, intensity string) *Filter {
 	}
 	c := *f
 	switch intensity {
+	case "minimal":
+		// Minimal: scale only MaxLines (×1.5), leave Head/Tail/maxChars untouched.
+		if c.MaxLines > 0 {
+			c.MaxLines = effectiveMaxLines(c.MaxLines, intensity)
+		}
 	case "aggressive":
 		if c.Head > 0 {
 			c.Head = max(1, c.Head/2)
@@ -456,7 +576,7 @@ func scaleFilterForIntensity(f *Filter, intensity string) *Filter {
 			c.Tail = max(1, c.Tail/2)
 		}
 		if c.MaxLines > 0 {
-			c.MaxLines = max(1, c.MaxLines/2)
+			c.MaxLines = effectiveMaxLines(c.MaxLines, intensity)
 		}
 	}
 	return &c
@@ -550,4 +670,108 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// assistantCompressionMode determines whether an assistant message should be
+// compressed and if so, in which mode:
+//   - "full": apply_to_assistant_messages=true — compress the entire text
+//   - "codeOnly": apply_to_code_blocks=true AND the text contains ``` fences
+//   - "" (empty): no compression applies
+func assistantCompressionMode(msg *schemas.ChatMessage, config *Config) string {
+	if msg == nil || config == nil || msg.Content == nil {
+		return ""
+	}
+	if config.ApplyToAssistantMessages {
+		// Always compress in full mode when the admin switch is on.
+		return "full"
+	}
+	if config.ApplyToCodeBlocks && hasCodeFence(msg) {
+		return "codeOnly"
+	}
+	return ""
+}
+
+// hasCodeFence returns true when the message content contains a ``` fence
+// marker in any text block.
+func hasCodeFence(msg *schemas.ChatMessage) bool {
+	if msg == nil || msg.Content == nil {
+		return false
+	}
+	if msg.Content.ContentStr != nil {
+		return strings.Contains(*msg.Content.ContentStr, "```")
+	}
+	for _, block := range msg.Content.ContentBlocks {
+		if block.Text != nil && strings.Contains(*block.Text, "```") {
+			return true
+		}
+	}
+	return false
+}
+
+// compressAssistantText applies the RTK compression pipeline to assistant
+// text. When codeOnly is true, only the inside of ``` code fences is
+// compressed; text outside the fences is preserved verbatim.
+func compressAssistantText(text string, config *Config, codeOnly bool) (string, *ProcessStats) {
+	if codeOnly {
+		return compressCodeFences(text, config)
+	}
+	return processRtkText(text, config)
+}
+
+// compressCodeFences performs light-weight fence-splitting: it scans the text
+// for ``` ... ``` blocks and compresses only the interior of each fence. Text
+// outside fences is preserved byte-for-byte. A single O(text) pass is used to
+// avoid extra whole-text copies.
+func compressCodeFences(text string, config *Config) (string, *ProcessStats) {
+	stats := &ProcessStats{
+		OriginalTokens: estimateTokens(text),
+		Techniques:     make([]string, 0),
+	}
+	if text == "" {
+		stats.CompressedTokens = 0
+		return text, stats
+	}
+
+	var sb strings.Builder
+	rest := text
+	changed := false
+
+	for {
+		openIdx := strings.Index(rest, "```")
+		if openIdx < 0 {
+			sb.WriteString(rest)
+			break
+		}
+		// Write everything before the opening fence verbatim.
+		sb.WriteString(rest[:openIdx])
+		// Find the closing fence.
+		fenceStart := openIdx
+		closeIdx := strings.Index(rest[fenceStart+3:], "```")
+		if closeIdx < 0 {
+			// Unclosed fence: write the rest verbatim and stop.
+			sb.WriteString(rest[fenceStart:])
+			break
+		}
+		fenceEnd := fenceStart + 3 + closeIdx
+		// The contents include the opening and closing fence delimiters.
+		fullFence := rest[fenceStart : fenceEnd+3]
+
+		// Compress the fence contents (including delimiters — the pipeline
+		// treats the ``` as regular text).
+		result, _ := processRtkText(fullFence, config)
+		sb.WriteString(result)
+		if result != fullFence {
+			changed = true
+		}
+
+		// Move past the closing fence.
+		rest = rest[fenceEnd+3:]
+	}
+
+	output := sb.String()
+	stats.CompressedTokens = estimateTokens(output)
+	if changed {
+		stats.Techniques = append(stats.Techniques, "codeFence")
+	}
+	return output, stats
 }

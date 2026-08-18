@@ -12,12 +12,12 @@ import (
 // information preserved.
 func TestApplyRtkCompression(t *testing.T) {
 	tests := []struct {
-		name          string
-		messages      []schemas.ChatMessage
-		config        *Config
+		name           string
+		messages       []schemas.ChatMessage
+		config         *Config
 		wantCompressed bool
-		minReduction  float64 // minimum token reduction ratio (e.g. 0.3 = 30%)
-		keyPhrases    []string // phrases that MUST survive compression
+		minReduction   float64  // minimum token reduction ratio (e.g. 0.3 = 30%)
+		keyPhrases     []string // phrases that MUST survive compression
 	}{
 		{
 			name: "git_status_compressed",
@@ -59,16 +59,16 @@ Changes not staged for commit:
 			name: "git_status_with_error",
 			messages: []schemas.ChatMessage{
 				{
-					Role: schemas.ChatMessageRoleTool,
+					Role:    schemas.ChatMessageRoleTool,
 					Content: strContent(`fatal: not a git repository (or any of the parent directories): .git`),
 					ChatToolMessage: &schemas.ChatToolMessage{
 						ToolCallID: strPtr("call_2"),
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: false, // error messages should be preserved as-is
-			keyPhrases:    []string{"fatal: not a git repository"},
+			keyPhrases:     []string{"fatal: not a git repository"},
 		},
 		{
 			name: "npm_install_compressed",
@@ -85,7 +85,7 @@ found 0 vulnerabilities
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: true,
 			minReduction:   0.3,
 			keyPhrases:     []string{"deprecated old-package@1.0.0", "added 1 package"},
@@ -108,7 +108,7 @@ found 0 vulnerabilities
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: true,
 			minReduction:   0.3,
 			keyPhrases:     []string{"ERROR Failed to connect", "Server started on port 8080"},
@@ -129,7 +129,7 @@ gcc -o program main.o utils.o parser.o lexer.o
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: true,
 			minReduction:   0.3,
 			keyPhrases:     []string{"gcc -o program"},
@@ -149,7 +149,7 @@ api-server-6d9f8c7b4f-xyz789     0/1     CrashLoopBackOff   3          1h
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: true,
 			minReduction:   0.3,
 			keyPhrases:     []string{"CrashLoopBackOff", "api-server-6d9f8c7b4f"},
@@ -201,14 +201,14 @@ ERROR: Module B failed: undefined symbol 'foo'
 			name: "short_output_no_compression_needed",
 			messages: []schemas.ChatMessage{
 				{
-					Role: schemas.ChatMessageRoleTool,
+					Role:    schemas.ChatMessageRoleTool,
 					Content: strContent(`ok`),
 					ChatToolMessage: &schemas.ChatToolMessage{
 						ToolCallID: strPtr("call_8"),
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: false,
 			keyPhrases:     []string{"ok"},
 		},
@@ -216,7 +216,7 @@ ERROR: Module B failed: undefined symbol 'foo'
 			name: "mixed_tool_and_user_messages",
 			messages: []schemas.ChatMessage{
 				{
-					Role: schemas.ChatMessageRoleAssistant,
+					Role:    schemas.ChatMessageRoleAssistant,
 					Content: strContent("I'll check the git status"),
 					ChatAssistantMessage: &schemas.ChatAssistantMessage{
 						ToolCalls: []schemas.ChatAssistantMessageToolCall{
@@ -233,7 +233,7 @@ nothing to commit, working tree clean`),
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: false, // already short
 			keyPhrases:     []string{"nothing to commit", "working tree clean"},
 		},
@@ -256,7 +256,7 @@ FAIL
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: true,
 			minReduction:   0.3,
 			keyPhrases:     []string{"FAIL: TestBar", "expected 42, got 0"},
@@ -346,9 +346,9 @@ ERROR: Module B failed
 				},
 			},
 			config: &Config{
-				Enabled:        true,
-				Intensity:      "aggressive",
-				DedupThreshold: 2,
+				Enabled:           true,
+				Intensity:         "aggressive",
+				DedupThreshold:    2,
 				MaxLinesPerResult: 5,
 			},
 			wantCompressed: true,
@@ -359,14 +359,14 @@ ERROR: Module B failed
 			name: "non_shell_tool_not_compressed",
 			messages: []schemas.ChatMessage{
 				{
-					Role: schemas.ChatMessageRoleTool,
+					Role:    schemas.ChatMessageRoleTool,
 					Content: strContent(`{"result": "success", "data": {"id": 1, "name": "test"}}`),
 					ChatToolMessage: &schemas.ChatToolMessage{
 						ToolCallID: strPtr("call_api"),
 					},
 				},
 			},
-			config:        DefaultConfig(),
+			config:         DefaultConfig(),
 			wantCompressed: false,
 			keyPhrases:     []string{`"result": "success"`},
 		},
@@ -448,8 +448,8 @@ func TestProcessRtkText(t *testing.T) {
 			keyPhrases:  []string{"ERROR: something went wrong", "OK: all good"},
 		},
 		{
-			name: "collapse_whitespace",
-			input: "line1\n\n\n\n\nline2\n    \nline3\n",
+			name:        "collapse_whitespace",
+			input:       "line1\n\n\n\n\nline2\n    \nline3\n",
 			config:      DefaultConfig(),
 			wantShorter: false, // doc-like read: generic shell fallback without error markers is preserved verbatim
 			keyPhrases:  []string{"line1", "line2", "line3"},
@@ -476,7 +476,7 @@ func TestProcessRtkText(t *testing.T) {
 			wantShorter: false,
 		},
 		{
-			name: "only_whitespace",
+			name:  "only_whitespace",
 			input: "   \n  \n  \n",
 			config: &Config{
 				Enabled: true,
@@ -601,7 +601,7 @@ func TestApplyRtkCompressionNilConfig(t *testing.T) {
 		ChatRequest: &schemas.BifrostChatRequest{
 			Input: []schemas.ChatMessage{
 				{
-					Role: schemas.ChatMessageRoleTool,
+					Role:    schemas.ChatMessageRoleTool,
 					Content: strContent("some output"),
 					ChatToolMessage: &schemas.ChatToolMessage{
 						ToolCallID: strPtr("call_1"),
@@ -714,7 +714,7 @@ func TestApplyRtkCompressionResponsesCacheControl(t *testing.T) {
 					},
 				},
 				{
-					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCallOutput),
+					Type:         schemas.Ptr(schemas.ResponsesMessageTypeFunctionCallOutput),
 					CacheControl: &schemas.CacheControl{Type: "ephemeral"},
 					ResponsesToolMessage: &schemas.ResponsesToolMessage{
 						CallID: strPtr("call_1"),
@@ -1006,7 +1006,10 @@ func TestApplyToAssistantMessages(t *testing.T) {
 	t.Run("code_only_mode_fence_compressed", func(t *testing.T) {
 		// apply_to_code_blocks=true, apply_to_assistant_messages=false
 		// Only code inside ``` fences should be compressed; outside verbatim.
-		codeContent := "Here is the result:\n```\nLine 1\nLine 2\nLine 3\nLine 4\n```\nDone.\n"
+		// The fence interior is repetitive (compressible via dedup) so the
+		// code-only path genuinely exercises the compression pipeline.
+		codeLine := "const value = computeResult(inputArg1) // repeated compressible line\n"
+		codeContent := "Here is the result:\n```\n" + codeLine + codeLine + codeLine + codeLine + "```\nDone.\n"
 		cfg := &Config{
 			Enabled:                  true,
 			ApplyToToolResults:       false,
@@ -1289,7 +1292,7 @@ func TestIntensityScalingMaxCharsNotScaled(t *testing.T) {
 		})
 	}
 }
-	func strContent(s string) *schemas.ChatMessageContent {
+func strContent(s string) *schemas.ChatMessageContent {
 	return &schemas.ChatMessageContent{
 		ContentStr: &s,
 	}
