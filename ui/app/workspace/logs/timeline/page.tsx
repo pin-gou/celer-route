@@ -191,6 +191,11 @@ export default function TimelinePage() {
 				responses_input_history: [],
 				created_at: entry.timestamp ?? new Date().toISOString(),
 				token_usage: entry.token_usage ?? undefined,
+				// Prefer the SSE `message` preview (last user prompt, computed by
+				// the backend's activeEntryMessage): on non-hybrid log stores
+				// content_summary is every message concatenated with the system
+				// prompt first, so the tooltip would render the system prompt.
+				content_summary: entry.message || entry.content_summary || "",
 			};
 			// Latest event per id wins inside the flush window.
 			pendingExtraLogsRef.current.set(log.id, log);

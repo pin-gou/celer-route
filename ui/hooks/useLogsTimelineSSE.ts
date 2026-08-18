@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { ActiveLogStreamEvent, LogEntry, LLMUsage } from "@/lib/types/logs";
+import type { ActiveLogStreamEvent, LLMUsage } from "@/lib/types/logs";
 import { getApiBaseUrl } from "@/lib/utils/port";
 
 export interface ActiveLogEntry {
@@ -48,31 +48,6 @@ export interface UseLogsTimelineSSEResult {
 	activeLogs: ActiveLogEntry[];
 	error: string | null;
 	isConnected: boolean;
-}
-
-function toActiveEntry(log: LogEntry): ActiveLogEntry {
-	return {
-		id: log.id,
-		status: log.status,
-		provider: log.provider,
-		model: log.model,
-		object: log.object,
-		stream: log.stream,
-		latency: log.latency,
-		timestamp: log.timestamp,
-		token_usage: log.token_usage,
-		app: log.app,
-		user_agent: log.user_agent,
-		cost: log.cost ?? null,
-		virtual_key_name: log.virtual_key_name,
-		virtual_key_id: log.virtual_key_id,
-		routing_rule_id: log.routing_rule_id,
-		routing_rule_name: log.routing_rule_name,
-		number_of_retries: log.number_of_retries,
-		fallback_index: log.fallback_index,
-		content_summary: log.content_summary,
-		message: undefined,
-	};
 }
 
 function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
@@ -202,13 +177,17 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 	const handleActiveLogs = useCallback((data: unknown) => {
 		setError(null);
 		try {
-			const logs = data as LogEntry[];
+			// The active_logs handshake carries the same activeLogEntry wire shape as
+			// log_updated events (latency_ms, message, content_summary), so reuse
+			// toActiveEntryFromEvent — mapping it as LogEntry previously dropped the
+			// `message` (last-user-prompt) preview and mis-read latency.
+			const logs = data as ActiveLogStreamEvent[];
 			const now = Date.now();
 			const seen = lastSeenRef.current;
 			seen.clear();
 			const entries = logs.map((log) => {
 				seen.set(log.id, now);
-				return toActiveEntry(log);
+				return toActiveEntryFromEvent(log);
 			});
 			// A handshake is a full resync — drop any batched incremental
 			// updates, which are now stale relative to this snapshot.

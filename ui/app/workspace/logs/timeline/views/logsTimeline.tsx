@@ -36,7 +36,16 @@ export interface LogsTimelineProps {
 	logs: LogEntry[];
 	timeRange: { start: number; end: number };
 	onBarClick?: (log: LogEntry) => void;
-	activeLogs: Array<{ id: string; status: string; provider?: string; model?: string; latency?: number | null; timestamp?: string }>;
+	activeLogs: Array<{
+		id: string;
+		status: string;
+		provider?: string;
+		model?: string;
+		latency?: number | null;
+		timestamp?: string;
+		message?: string;
+		content_summary?: string;
+	}>;
 	nowMs: number;
 	mode: TimelineMode;
 	zoom: number;
@@ -291,6 +300,11 @@ export function LogsTimeline({
 					input_history: [],
 					responses_input_history: [],
 					created_at: startTime,
+					// Prefer the SSE `message` preview (last user prompt, computed
+					// by the backend's activeEntryMessage): on non-hybrid log stores
+					// content_summary is every message concatenated with the system
+					// prompt first, so the tooltip would render the system prompt.
+					content_summary: active.message || active.content_summary || "",
 				} as LogEntry);
 			}
 		}

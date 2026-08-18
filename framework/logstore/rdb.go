@@ -1393,26 +1393,61 @@ func (s *RDBLogStore) listSelectColumns() string {
 		responsesInputExpr = `responses_input_history AS responses_input_history`
 		outputMessageExpr = `CASE WHEN object_type = 'realtime.turn' THEN output_message ELSE NULL END AS output_message`
 	default: // sqlite
-		inputHistoryExpr = `CASE
-			WHEN object_type = 'realtime.turn' THEN input_history
-			WHEN input_history IS NOT NULL AND input_history != '' AND input_history != '[]'
-			     AND json_valid(input_history) = 1
-			     AND json_type(input_history) = 'array'
-			     AND json_array_length(input_history) > 0
-			THEN json_array(json_extract(input_history, '$[' || (json_array_length(input_history) - 1) || ']'))
-			ELSE input_history END AS input_history`
-		responsesInputExpr = `CASE
-			WHEN object_type = 'realtime.turn' THEN responses_input_history
-			WHEN responses_input_history IS NOT NULL AND responses_input_history != '' AND responses_input_history != '[]'
-			     AND json_valid(responses_input_history) = 1
-			     AND json_type(responses_input_history) = 'array'
-			     AND json_array_length(responses_input_history) > 0
-			THEN json_array(json_extract(responses_input_history, '$[' || (json_array_length(responses_input_history) - 1) || ']'))
-			ELSE responses_input_history END AS responses_input_history`
+		inputHistoryExpr = sqliteLastUserInputHistoryExpr("input_history")
+		responsesInputExpr = sqliteLastUserInputHistoryExpr("responses_input_history")
 		outputMessageExpr = `CASE WHEN object_type = 'realtime.turn' THEN output_message ELSE NULL END AS output_message`
 	}
 
 	return baseCols + ", " + inputHistoryExpr + ", " + responsesInputExpr + ", " + outputMessageExpr
+}
+
+// sqliteLastUserInputHistoryExpr returns the SQLite-only projection used by
+// listSelectColumns for input_history / responses_input_history.
+//
+// The logs list renders each row's last user prompt in its preview cell — the
+// same value the SSE path computes (BuildInputContentSummary for the stored
+// content_summary, activeEntryMessage for live entries). Truncating to the
+// literal last array element broke that agreement whenever the conversation
+// ends on a non-user message: a trailing "<system-reminder>"-style injection,
+// a developer block, or an assistant/tool message then surfaced as the row
+// preview after the request completed, even though the in-flight view had
+// shown the user prompt.
+//
+// We scan the JSON array with json_each, pick the entry whose role is "user"
+// closest to the end, and re-wrap it as a single-element array so downstream
+// AfterFind unmarshalling is unchanged (input_history stays an array on the
+// wire even when only one element survives the projection).
+//
+// Fallbacks: a malformed / empty / non-array column passes through unchanged
+// (the list query must never abort on bad data); an array with no user-role
+// entry falls back to the literal last element so a developer-only or
+// assistant-only conversation still gets a preview instead of an empty cell.
+func sqliteLastUserInputHistoryExpr(column string) string {
+	lastElement := fmt.Sprintf(`json_array(json_extract(%s, '$[' || (json_array_length(%s) - 1) || ']'))`, column, column)
+	return fmt.Sprintf(`CASE
+		WHEN object_type = 'realtime.turn' THEN %s
+		WHEN %s IS NOT NULL AND %s != '' AND %s != '[]'
+		     AND json_valid(%s) = 1
+		     AND json_type(%s) = 'array'
+		     AND json_array_length(%s) > 0
+		THEN COALESCE(
+			(SELECT json_array(je.value)
+			 FROM json_each(%s) je
+			 WHERE json_extract(je.value, '$.role') = 'user'
+			 ORDER BY je.key DESC
+			 LIMIT 1),
+			%s
+		)
+		ELSE %s
+	END AS %s`,
+		column,
+		column, column, column,
+		column, column, column,
+		column,
+		lastElement,
+		column,
+		column,
+	)
 }
 
 // billingPayloadColumns are the payload columns cost recomputation reads to recover a

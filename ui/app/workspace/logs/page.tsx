@@ -73,7 +73,12 @@ function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 		virtual_key_id: a.virtual_key_id,
 		routing_rule_id: a.routing_rule_id,
 		routing_rule_name: a.routing_rule_name,
-		content_summary: a.content_summary || a.message || "",
+		// Prefer the SSE `message` preview (last user prompt, computed by the
+		// backend's activeEntryMessage) over content_summary: on non-hybrid log
+		// stores content_summary is BuildContentSummary() — every message
+		// concatenated with the system prompt first — so a completed row would
+		// render the system prompt instead of the user's last prompt.
+		content_summary: a.message || a.content_summary || "",
 		__processing: true,
 	} as DisplayLogEntry;
 }

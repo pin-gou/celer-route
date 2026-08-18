@@ -197,6 +197,44 @@ describe("LogsTimeline — Gantt component", () => {
 		expect(await screen.findByText(/\$0\.002/)).toBeTruthy();
 	});
 
+	it("should show the last user prompt in the tooltip, not a trailing system message", async () => {
+		const logsWithHistory: LogEntry[] = [
+			{
+				...mockLogs[0],
+				id: "log-msg",
+				input_history: [
+					{ role: "system", content: "You are a helpful assistant." },
+					{ role: "user", content: "what is the capital of France?" },
+					{ role: "system", content: "<system-reminder>trailing injection</system-reminder>" },
+				],
+			},
+		];
+		render(<LogsTimeline {...defaultProps} logs={logsWithHistory} />);
+
+		fireEvent.mouseEnter(screen.getByTestId("timeline-bar-log-msg"));
+
+		const preview = await screen.findByTestId("timeline-tooltip-last-user-message");
+		expect(preview.textContent).toBe("what is the capital of France?");
+	});
+
+	it("should fall back to content_summary in the tooltip when input history is empty", async () => {
+		const logsWithSummary: LogEntry[] = [
+			{
+				...mockLogs[0],
+				id: "log-summary",
+				input_history: [],
+				responses_input_history: [],
+				content_summary: "summary of the last user prompt",
+			},
+		];
+		render(<LogsTimeline {...defaultProps} logs={logsWithSummary} />);
+
+		fireEvent.mouseEnter(screen.getByTestId("timeline-bar-log-summary"));
+
+		const preview = await screen.findByTestId("timeline-tooltip-last-user-message");
+		expect(preview.textContent).toBe("summary of the last user prompt");
+	});
+
 	// -----------------------------------------------------------------------
 	// Click callback
 	// -----------------------------------------------------------------------
