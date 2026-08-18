@@ -106,9 +106,6 @@ export default function LogsPage() {
 		}
 	}, []);
 	const [isChartOpen, setIsChartOpen] = useState(true);
-	// TEMP: temporarily hide the request-volume histogram to rule out chart
-	// (Recharts ResponsiveContainer) related memory/perf issues. Set false to restore.
-	const chartHidden = true;
 	const [triggerGetLogById] = useLazyGetLogByIdQuery();
 	const [fetchedLog, setFetchedLog] = useState<LogEntry | null>(null);
 
@@ -363,10 +360,10 @@ export default function LogsPage() {
 			rootsOnly: grouped,
 		},
 		{
-			// 30s: new rows arrive near-instantly via SSE; this poll reconciles the
-			// full entries and pagination instead of being the primary update path.
-			pollingInterval: showEmptyState || polling ? 30000 : 0,
-			skipPollingIfUnfocused: true,
+			// No polling — SSE delivers new completions in real time and the live
+			// window (processing + latest 25) is fed from sseActiveLogs/sseNewLogs.
+			// Arg changes (filters/sort/pagination) still refetch on demand.
+			pollingInterval: 0,
 		},
 	);
 
@@ -426,10 +423,10 @@ export default function LogsPage() {
 			const fresh = batch.filter((l) => !existing.has(l.id));
 			if (fresh.length === 0) return prev;
 			const next = [...fresh, ...prev];
-			// Cap at 500 — the poll (30s) reconciles these into the API data and
-			// displayLogs filters out already-API rows, so we never need more than
-			// one poll cycle's worth of headroom.
-			return next.length > 500 ? next.slice(0, 500) : next;
+			// Cap at 25 — the live window keeps at most a page's worth of SSE
+			// completions; displayLogs merges them with the seeded API rows and
+			// shows only the latest page-size entries.
+			return next.length > 25 ? next.slice(0, 25) : next;
 		});
 	}, []);
 
@@ -827,7 +824,7 @@ export default function LogsPage() {
 	useEffect(() => {
 		if (!grouped || logs.length === 0 || autoExpandDoneRef.current) return;
 
-		const toExpand = logs.filter((log) => (log.child_count ?? 0) > 0);
+		const toExpand = logs.filter((log) => (log.child_count ?? 0) > 0).slice(0, 5);
 		if (toExpand.length === 0) return;
 		autoExpandDoneRef.current = true;
 
@@ -859,24 +856,31 @@ export default function LogsPage() {
 	const displayLogs: DisplayLogEntry[] = useMemo(() => {
 		if (!isLiveView) return logs;
 
-		// Ids already served by the API — SSE rows are only ever a fill-in until
-		// the next poll returns their full entry.
 		const apiIds = new Set(logs.map((l) => l.id));
 
-		// 1. Processing rows from SSE active logs (client-filtered).
+		// 1. Processing rows from SSE active logs (client-filtered). Bounded by
+		// the number of in-flight requests (a handful), never grows.
 		const processingRows: DisplayLogEntry[] = sseActiveLogs
 			.filter((a) => !apiIds.has(a.id))
 			.filter((a) => matchesFilters(a, filters))
 			.map(toProcessingEntry);
 
-		// 2. SSE new completed logs not yet returned by the API.
-		const newCompletedRows: DisplayLogEntry[] = sseNewLogs.filter((l) => !apiIds.has(l.id));
+		// 2. Latest completed rows = API-seeded snapshot merged with SSE
+		// completions, keeping at most a page's worth (25) by newest timestamp.
+		// Without the 30s poll this is the bounded sliding window that replaces
+		// the old unbounded SSE-accumulation + polling reconciliation.
+		const merged = new Map<string, LogEntry>();
+		for (const l of logs) merged.set(l.id, l);
+		for (const l of sseNewLogs) merged.set(l.id, l);
+		const latestCompleted: LogEntry[] = [...merged.values()]
+			.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+			.slice(0, pagination.limit);
 
-		const out: DisplayLogEntry[] = [...processingRows, ...newCompletedRows];
+		const out: DisplayLogEntry[] = [...processingRows];
 
 		// 3. Grouped view: expand chains below their expanded root.
 		if (grouped && expandedChainIds.size > 0) {
-			for (const log of logs) {
+			for (const log of latestCompleted) {
 				out.push(log);
 				if (expandedChainIds.has(log.id)) {
 					for (const child of chainChildren[log.id] ?? []) {
@@ -887,8 +891,8 @@ export default function LogsPage() {
 			return out;
 		}
 
-		return [...out, ...logs];
-	}, [logs, grouped, expandedChainIds, chainChildren, sseActiveLogs, sseNewLogs, filters, isLiveView]);
+		return [...out, ...latestCompleted];
+	}, [logs, grouped, expandedChainIds, chainChildren, sseActiveLogs, sseNewLogs, filters, isLiveView, pagination.limit]);
 
 	const tableMeta = useMemo(
 		() => ({ expandedChainIds, loadingChainIds, onToggleChain: handleToggleChain }),
@@ -1055,22 +1059,20 @@ export default function LogsPage() {
 							))}
 						</div>
 
-						{!chartHidden && (
-							<div className="shrink-0">
-								<LogsVolumeChart
-									data={histogram ?? null}
-									loading={histogramIsLoading}
-									onTimeRangeChange={handleTimeRangeChange}
-									onResetZoom={handleResetZoom}
-									isZoomed={isZoomed}
-									startTime={urlState.start_time}
-									endTime={urlState.end_time}
-									period={urlState.period}
-									isOpen={isChartOpen}
-									onOpenChange={setIsChartOpen}
-								/>
-							</div>
-						)}
+						<div className="shrink-0">
+							<LogsVolumeChart
+								data={histogram ?? null}
+								loading={histogramIsLoading}
+								onTimeRangeChange={handleTimeRangeChange}
+								onResetZoom={handleResetZoom}
+								isZoomed={isZoomed}
+								startTime={urlState.start_time}
+								endTime={urlState.end_time}
+								period={urlState.period}
+								isOpen={isChartOpen}
+								onOpenChange={setIsChartOpen}
+							/>
+						</div>
 
 						{(error || !!logsError) && (
 							<Alert variant="destructive" className="shrink-0">
