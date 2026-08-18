@@ -121,7 +121,7 @@ const ACTIVE_LOG_SWEEP_INTERVAL_MS = 30 * 1000;
 // progress events costs consumers a single re-render instead of one per event.
 // Callbacks (onNewLog/onLogRemoved) and lastSeen bookkeeping still run
 // immediately at event time — only the activeLogs array update is deferred.
-const LOG_UPDATED_FLUSH_INTERVAL_MS = 300;
+const LOG_UPDATED_FLUSH_INTERVAL_MS = 500;
 
 interface PendingLogUpdate {
 	entry: ActiveLogEntry;

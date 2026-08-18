@@ -147,7 +147,7 @@ export const logsApi = baseApi.injectEndpoints({
 			// Each response carries full conversation histories for every row; a
 			// filter/pagination combo that scrolls off-screen should be freed
 			// quickly instead of lingering for the 60 s default.
-			keepUnusedDataFor: 10,
+			keepUnusedDataFor: 5,
 		}),
 
 		getLogSessionById: builder.query<

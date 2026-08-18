@@ -58,11 +58,11 @@ const mockCompletedLog: LogEntry = {
 };
 
 describe("useLogsTimelineSSE — SSE hook", () => {
-	// log_updated state changes are coalesced over a 300 ms flush window (see
+	// log_updated state changes are coalesced over a 500 ms flush window (see
 	// LOG_UPDATED_FLUSH_INTERVAL_MS). Fake timers let tests advance past it;
 	// callbacks (onNewLog/onLogRemoved) and the active_logs handshake still
 	// fire synchronously.
-	const FLUSH_MS = 300;
+	const FLUSH_MS = 500;
 
 	beforeEach(() => {
 		vi.useFakeTimers();

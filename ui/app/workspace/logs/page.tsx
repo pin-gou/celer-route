@@ -106,6 +106,9 @@ export default function LogsPage() {
 		}
 	}, []);
 	const [isChartOpen, setIsChartOpen] = useState(true);
+	// TEMP: temporarily hide the request-volume histogram to rule out chart
+	// (Recharts ResponsiveContainer) related memory/perf issues. Set false to restore.
+	const chartHidden = true;
 	const [triggerGetLogById] = useLazyGetLogByIdQuery();
 	const [fetchedLog, setFetchedLog] = useState<LogEntry | null>(null);
 
@@ -405,11 +408,6 @@ export default function LogsPage() {
 	isLiveViewRef.current = isLiveView;
 	const filtersRef = useRef(filters);
 	filtersRef.current = filters;
-	const refetchStatsRef = useRef(refetchStats);
-	refetchStatsRef.current = refetchStats;
-	const refetchHistogramRef = useRef(refetchHistogram);
-	refetchHistogramRef.current = refetchHistogram;
-	const refetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	// Batch SSE completions: under load many logs finish within the same
 	// second, and one setState per event re-renders the whole page (table
@@ -456,16 +454,8 @@ export default function LogsPage() {
 			};
 			pendingSseLogsRef.current.push(log);
 			if (!sseFlushTimerRef.current) {
-				sseFlushTimerRef.current = setTimeout(flushPendingSseLogs, 300);
+				sseFlushTimerRef.current = setTimeout(flushPendingSseLogs, 500);
 			}
-			// Debounce refetch of stats and histogram so the stat cards and volume
-			// chart update within ~1.5 s of the latest completion, not just at the
-			// next 10 s polling cycle.
-			if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
-			refetchDebounceRef.current = setTimeout(() => {
-				refetchStatsRef.current();
-				refetchHistogramRef.current();
-			}, 1500);
 		},
 		[flushPendingSseLogs],
 	);
@@ -485,10 +475,9 @@ export default function LogsPage() {
 		}
 	}, [isLiveView]);
 
-	// Clear any pending debounced stats/histogram refetch and SSE flush on unmount.
+	// Clear any pending SSE flush on unmount.
 	useEffect(() => {
 		return () => {
-			if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
 			if (sseFlushTimerRef.current) clearTimeout(sseFlushTimerRef.current);
 			sseFlushTimerRef.current = null;
 			pendingSseLogsRef.current = [];
@@ -1066,20 +1055,22 @@ export default function LogsPage() {
 							))}
 						</div>
 
-						<div className="shrink-0">
-							<LogsVolumeChart
-								data={histogram ?? null}
-								loading={histogramIsLoading}
-								onTimeRangeChange={handleTimeRangeChange}
-								onResetZoom={handleResetZoom}
-								isZoomed={isZoomed}
-								startTime={urlState.start_time}
-								endTime={urlState.end_time}
-								period={urlState.period}
-								isOpen={isChartOpen}
-								onOpenChange={setIsChartOpen}
-							/>
-						</div>
+						{!chartHidden && (
+							<div className="shrink-0">
+								<LogsVolumeChart
+									data={histogram ?? null}
+									loading={histogramIsLoading}
+									onTimeRangeChange={handleTimeRangeChange}
+									onResetZoom={handleResetZoom}
+									isZoomed={isZoomed}
+									startTime={urlState.start_time}
+									endTime={urlState.end_time}
+									period={urlState.period}
+									isOpen={isChartOpen}
+									onOpenChange={setIsChartOpen}
+								/>
+							</div>
+						)}
 
 						{(error || !!logsError) && (
 							<Alert variant="destructive" className="shrink-0">

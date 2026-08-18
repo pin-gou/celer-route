@@ -195,7 +195,7 @@ export default function TimelinePage() {
 			// Latest event per id wins inside the flush window.
 			pendingExtraLogsRef.current.set(log.id, log);
 			if (!extraLogsFlushTimerRef.current) {
-				extraLogsFlushTimerRef.current = setTimeout(flushPendingExtraLogs, 300);
+				extraLogsFlushTimerRef.current = setTimeout(flushPendingExtraLogs, 500);
 			}
 		},
 		[flushPendingExtraLogs],
