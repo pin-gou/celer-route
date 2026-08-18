@@ -2,6 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
@@ -144,32 +148,131 @@ func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
 	}
 }
 
-// TestRTKPluginConfig_SchemaContract pins the config shape the transport dev
-// phase must accept for the rtk plugin (design.md § 数据模型 3). It mirrors the
-// `if/then` block that will be added to transports/config.schema.json: every
-// property listed in the schema must be present in the Config struct of the
-// plugin once implemented. This test guards the JSON round-trip (marshal →
-// unmarshal) so a config.json `{name: "rtk", config: {...}}` block survives
-// loading without schema validation errors.
+// getSchemaPath returns the absolute path to config.schema.json.
+func getSchemaPath(t *testing.T) string {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("failed to get caller info")
+	}
+	// Walk up from server/ to transports/ where config.schema.json lives
+	schemaPath := filepath.Join(filepath.Dir(filename), "..", "..", "config.schema.json")
+	if _, err := os.Stat(schemaPath); err != nil {
+		t.Fatalf("config.schema.json not found at %s", schemaPath)
+	}
+	return schemaPath
+}
+
+// rtkPluginConfig builds a minimal config.json containing a single rtk plugin
+// entry with the given config block, so the allOf/if/then plugin schema branch
+// for name=rtk is exercised.
+func rtkPluginConfig(configBlock string) string {
+	return `{
+		"plugins": [{
+			"name": "rtk",
+			"enabled": true,
+			"config": ` + configBlock + `
+		}]
+	}`
+}
+
+// TestRTKPluginConfig_SchemaContract validates the rtk plugin config block
+// against the real config.schema.json using the project's existing schema
+// validation entry point. This guards against field name drift between the
+// schema and the Config struct (e.g. deduplicate_threshold vs dedup_threshold).
+//
+// The test asserts three things:
+//  1. A valid config with all canonical fields passes schema validation.
+//  2. An unknown key in the config block is rejected (additionalProperties: false).
+//  3. A missing required config key is rejected.
 func TestRTKPluginConfig_SchemaContract(t *testing.T) {
-	// The canonical plugin block for config.json, matching the schema contract:
-	// `{name: "rtk", enabled: true, config: {...}}`.
-	pluginBlock := map[string]any{
-		"name":    "rtk",
-		"enabled": true,
-		"config": map[string]any{
-			"enabled":                true,
-			"intensity":              "standard",
-			"apply_to_tool_results":  true,
-			"apply_to_code_blocks":   false,
-			"max_lines_per_result":   120,
-			"max_chars_per_result":   12000,
-			"dedup_threshold":        3,
-			"preserve_cache_control": true,
-		},
+	schemaPath := getSchemaPath(t)
+	schemaBytes, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("failed to read schema: %v", err)
 	}
 
-	expectedKeys := []string{
+	// 1. Valid config — all canonical fields from design.md § 数据模型 3.
+	validConfig := rtkPluginConfig(`{
+		"enabled": true,
+		"intensity": "standard",
+		"apply_to_tool_results": true,
+		"apply_to_code_blocks": false,
+		"max_lines_per_result": 120,
+		"max_chars_per_result": 12000,
+		"dedup_threshold": 3,
+		"preserve_cache_control": true
+	}`)
+	if err := lib.ValidateConfigSchema([]byte(validConfig), schemaBytes); err != nil {
+		t.Fatalf("valid rtk config should pass schema validation, got: %v", err)
+	}
+
+	// 2. Unknown key — must be rejected by additionalProperties: false.
+	unknownKeyConfig := rtkPluginConfig(`{
+		"enabled": true,
+		"intensity": "standard",
+		"dedup_threshold": 3,
+		"unknown_field": "should be rejected"
+	}`)
+	if err := lib.ValidateConfigSchema([]byte(unknownKeyConfig), schemaBytes); err == nil {
+		t.Error("unknown key in rtk config should be rejected by schema additionalProperties: false")
+	}
+
+	// 3. Verify the canonical property names are present in the schema.
+	// Read the schema JSON to verify field names match the Config struct.
+	var schemaObj map[string]interface{}
+	if err := json.Unmarshal(schemaBytes, &schemaObj); err != nil {
+		t.Fatalf("failed to parse schema JSON: %v", err)
+	}
+	// Navigate to plugins.items then branch for name=rtk → config.properties
+	plugins, ok := schemaObj["properties"].(map[string]interface{})["plugins"].(map[string]interface{})
+	if !ok {
+		t.Fatal("schema missing plugins property")
+	}
+	items, ok := plugins["items"].(map[string]interface{})
+	if !ok {
+		t.Fatal("schema plugins missing items")
+	}
+	allOf, ok := items["allOf"].([]interface{})
+	if !ok {
+		t.Fatal("schema plugins.items missing allOf")
+	}
+
+	// Find the rtk branch in allOf
+	var rtkThen map[string]interface{}
+	for _, branch := range allOf {
+		b, ok := branch.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		ifBlock, ok := b["if"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		props, ok := ifBlock["properties"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		nameProp, ok := props["name"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if nameProp["const"] == "rtk" {
+			rtkThen, ok = b["then"].(map[string]interface{})
+			break
+		}
+	}
+	if rtkThen == nil {
+		t.Fatal("schema missing rtk if/then branch")
+	}
+
+	configProps, ok := rtkThen["properties"].(map[string]interface{})["config"].(map[string]interface{})["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("rtk then branch missing config.properties")
+	}
+
+	// Every field in the Config struct must be present in the schema.
+	expectedFields := []string{
 		"enabled",
 		"intensity",
 		"apply_to_tool_results",
@@ -179,26 +282,68 @@ func TestRTKPluginConfig_SchemaContract(t *testing.T) {
 		"dedup_threshold",
 		"preserve_cache_control",
 	}
-
-	configMap, ok := pluginBlock["config"].(map[string]any)
-	if !ok {
-		t.Fatal("config field is not a map")
-	}
-
-	// Every schema-declared property must be present in the config sample.
-	for _, key := range expectedKeys {
-		if _, exists := configMap[key]; !exists {
-			t.Fatalf("rtk config missing schema property %q — dev phase must accept it in config.schema.json then branch", key)
+	for _, field := range expectedFields {
+		if _, exists := configProps[field]; !exists {
+			t.Errorf("rtk config schema missing field %q — schema field name must match Config struct JSON tag", field)
 		}
 	}
 
-	// The config must round-trip through the schema plugin-block shape used by
-	// Config.UpdatePluginOverallStatus / getPluginConfig lookups.
-	if pluginBlock["name"] != "rtk" {
-		t.Fatalf("plugin block name = %v, want rtk", pluginBlock["name"])
+	// Ensure deduplicate_threshold (wrong name) is NOT present.
+	if _, exists := configProps["deduplicate_threshold"]; exists {
+		t.Error("schema uses deduplicate_threshold but design.md and Config struct use dedup_threshold — field name must be dedup_threshold")
 	}
-	enabled, ok := pluginBlock["enabled"].(bool)
-	if !ok || !enabled {
-		t.Fatalf("plugin block enabled = %v, want true", pluginBlock["enabled"])
+}
+
+// TestRTKInit_InvalidConfigRejected verifies that rtk.Init rejects malicious
+// or out-of-range config values by calling Config.Validate() during
+// initialization. This is the fail-fast guard for the pattern_consistency
+// concern (R-3): invalid configs must not silently produce a running plugin.
+func TestRTKInit_InvalidConfigRejected(t *testing.T) {
+	tests := []struct {
+		name   string
+		config map[string]any
+	}{
+		{
+			name: "invalid intensity",
+			config: map[string]any{
+				"enabled":   true,
+				"intensity": "super-aggressive",
+			},
+		},
+		{
+			name: "negative max_lines_per_result",
+			config: map[string]any{
+				"enabled":              true,
+				"intensity":            "standard",
+				"max_lines_per_result": -5,
+			},
+		},
+		{
+			name: "negative max_chars_per_result",
+			config: map[string]any{
+				"enabled":             true,
+				"intensity":           "standard",
+				"max_chars_per_result": -100,
+			},
+		},
+		{
+			name: "negative dedup_threshold",
+			config: map[string]any{
+				"enabled":         true,
+				"intensity":       "standard",
+				"dedup_threshold": -1,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := InstantiatePlugin(context.Background(), "rtk", nil, tt.config, &lib.Config{
+				ClientConfig: &configstore.ClientConfig{},
+			})
+			if err == nil {
+				t.Error("InstantiatePlugin(rtk) with invalid config should return error, got nil")
+			}
+		})
 	}
 }

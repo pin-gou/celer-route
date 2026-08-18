@@ -4,6 +4,7 @@ package rtk
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
 )
@@ -21,7 +22,15 @@ type Plugin struct {
 
 // Init creates a new RTK plugin instance with the given configuration.
 // This is a minimal stub; the full implementation is in the dev.plugins track.
+// Init validates the config before constructing the plugin to fail fast on
+// misconfiguration (malicious input, out-of-range values, etc.).
 func Init(ctx context.Context, config *Config, logger schemas.Logger) (*Plugin, error) {
+	if config == nil {
+		return nil, fmt.Errorf("rtk: config is nil")
+	}
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("rtk: invalid config: %w", err)
+	}
 	return &Plugin{
 		name:   PluginName,
 		config: config,

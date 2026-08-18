@@ -1,5 +1,7 @@
 package rtk
 
+import "fmt"
+
 // Config holds the configuration for the RTK (Rule-based Tool-output Kompression) plugin.
 // It controls which tool outputs are compressed and how aggressively.
 type Config struct {
@@ -26,4 +28,24 @@ type Config struct {
 
 	// PreserveCacheControl preserves cache_control blocks during compression (Anthropic prompt caching).
 	PreserveCacheControl bool `json:"preserve_cache_control"`
+}
+
+// Validate checks the config for valid values and returns an error if any field
+// is out of range or invalid. This is called during Init to fail fast on
+// misconfiguration, protecting against malicious or accidental bad config.
+func (c *Config) Validate() error {
+	validIntensities := map[string]bool{"minimal": true, "standard": true, "aggressive": true}
+	if c.Intensity != "" && !validIntensities[c.Intensity] {
+		return fmt.Errorf("rtk: invalid intensity %q: must be one of minimal, standard, aggressive", c.Intensity)
+	}
+	if c.MaxLinesPerResult < 0 {
+		return fmt.Errorf("rtk: max_lines_per_result must be >= 0, got %d", c.MaxLinesPerResult)
+	}
+	if c.MaxCharsPerResult < 0 {
+		return fmt.Errorf("rtk: max_chars_per_result must be >= 0, got %d", c.MaxCharsPerResult)
+	}
+	if c.DedupThreshold < 0 {
+		return fmt.Errorf("rtk: dedup_threshold must be >= 0, got %d", c.DedupThreshold)
+	}
+	return nil
 }

@@ -263,7 +263,9 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	// 7. RTK (if configured in PluginConfigs)
 	rtkConfig := s.getPluginConfig(rtk.PluginName)
 	if rtkConfig != nil && rtkConfig.Enabled {
-		s.registerPluginWithStatus(ctx, rtk.PluginName, nil, rtkConfig.Config, false)
+		if err := s.registerPluginWithStatus(ctx, rtk.PluginName, nil, rtkConfig.Config, true); err != nil {
+			return fmt.Errorf("failed to initialize rtk plugin: %w", err)
+		}
 	} else {
 		s.markPluginDisabled(rtk.PluginName)
 	}

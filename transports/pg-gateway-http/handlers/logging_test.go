@@ -1425,3 +1425,97 @@ func TestLoggingHandler_NoCompressionKeysLeavesMetadataUnchanged(t *testing.T) {
 		t.Fatal("metadata must not contain compressed_prompt_tokens for an uncompressed request")
 	}
 }
+
+// TestLoggingHandler_OriginalPromptTokensInStreamingFinalChunk verifies that the
+// streaming final-chunk path also persists the RTK compression metadata. A
+// streaming request's PostLLMHook is invoked per chunk; non-final chunks are
+// processed by the accumulator and skipped, while the final chunk (marked by
+// BifrostContextKeyStreamEndIndicator) reaches the metadata merge that reads
+// BifrostContextKeyOriginalPromptTokens / BifrostContextKeyCompressedPromptTokens.
+func TestLoggingHandler_OriginalPromptTokensInStreamingFinalChunk(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	store := newLoggingPluginStore(t)
+	t.Cleanup(func() { _ = store.Close(context.Background()) })
+
+	loggingHeaders := []string{}
+	plugin, err := loggingplugin.Init(context.Background(), &loggingplugin.Config{LoggingHeaders: &loggingHeaders}, &mockLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("loggingplugin.Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("plugin.Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	requestID := "req-rtk-streaming-final"
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
+	// Materialize the metadata map so the assertions below fail exactly on the
+	// missing compression keys, not on a nil metadata map.
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-bf-lh-tenant": "rtk-streaming-test",
+	})
+	ctx.SetValue(schemas.BifrostContextKeyDimensions, map[string]string{
+		"region": "us-west",
+	})
+	// The RTK plugin's PostLLMHook sets these on the request context.
+	ctx.SetValue(schemas.BifrostContextKeyOriginalPromptTokens, 5000)
+	ctx.SetValue(schemas.BifrostContextKeyCompressedPromptTokens, 1500)
+	// Mark this as the streaming final chunk so the PostLLMHook writes the
+	// full log entry instead of skipping on the accumulator path.
+	ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
+
+	_, _, err = plugin.PreLLMHook(ctx, &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionStreamRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o",
+			Params:   &schemas.ChatParameters{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreLLMHook() error = %v", err)
+	}
+
+	result := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType:            schemas.ChatCompletionStreamRequest,
+				Provider:               schemas.OpenAI,
+				OriginalModelRequested: "gpt-4o",
+				ResolvedModelUsed:      "gpt-4o",
+				Latency:                88,
+			},
+		},
+	}
+	_, _, err = plugin.PostLLMHook(ctx, result, nil)
+	if err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("plugin.Cleanup() error = %v", err)
+	}
+
+	logEntry, err := store.FindByID(context.Background(), requestID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if logEntry.MetadataParsed == nil {
+		t.Fatal("expected metadata to be persisted for the streaming final chunk")
+	}
+
+	if got := logEntry.MetadataParsed["original_prompt_tokens"]; got == nil {
+		t.Fatal("expected metadata[\"original_prompt_tokens\"] in streaming final chunk — the logging handler must read BifrostContextKeyOriginalPromptTokens into logs-db metadata")
+	} else if fmt.Sprintf("%v", got) != "5000" {
+		t.Fatalf("metadata original_prompt_tokens = %#v, want 5000", got)
+	}
+
+	if got := logEntry.MetadataParsed["compressed_prompt_tokens"]; got == nil {
+		t.Fatal("expected metadata[\"compressed_prompt_tokens\"] in streaming final chunk — the logging handler must read BifrostContextKeyCompressedPromptTokens into logs-db metadata")
+	} else if fmt.Sprintf("%v", got) != "1500" {
+		t.Fatalf("metadata compressed_prompt_tokens = %#v, want 1500", got)
+	}
+}

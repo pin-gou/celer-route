@@ -3173,7 +3173,7 @@
                       "minimum": 1,
                       "default": 12000
                     },
-                    "deduplicate_threshold": {
+                    "dedup_threshold": {
                       "type": "integer",
                       "description": "Number of consecutive identical lines before deduplication kicks in",
                       "minimum": 1,
