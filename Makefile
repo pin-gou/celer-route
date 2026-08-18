@@ -11,9 +11,20 @@ TEST_REPORTS_DIR ?= test-reports
 GOTESTSUM_FORMAT ?= standard-verbose
 FLOW ?=
 VERSION ?= dev-build
+# VERSION_TAG is the literal value used for docker image tags (e.g. "v0.9.0").
+# VERSION_ARG strips a leading "v" for the Dockerfile build-arg, since the
+# Dockerfile already prepends "v" in -X main.Version=v${VERSION}.
+# Example: VERSION=v0.9.0 → VERSION_TAG=v0.9.0, VERSION_ARG=0.9.0
+VERSION_TAG := $(VERSION)
+VERSION_ARG := $(VERSION:v%=%)
 LOCAL ?=
 DEBUG ?=
 COMPAT ?=
+
+# Docker image build settings
+PLATFORMS ?=
+DOCKER_BUILDER ?= pg-gateway-builder
+DOCKER_MULTIARCH_PLATFORMS ?= linux/amd64,linux/arm64
 
 # Colors for output
 RED=\033[0;31m
@@ -68,7 +79,7 @@ define EXPOSE_ENV
 	fi
 endef
 
-.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-push docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy
+.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-image-multiarch docker-push docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy
 
 all: help
 
@@ -89,6 +100,8 @@ help: ## Show this help message
 	@$(ECHO) "  APP_DIR           App data directory inside container (default: /app/data)"
 	@$(ECHO) "  LOCAL             Use local go.work for builds (e.g., make build LOCAL=1)"
 	@$(ECHO) "  DEBUG             Enable delve debugger on port 2345 (e.g., make dev DEBUG=1, make test-core DEBUG=1, make test-governance DEBUG=1)"
+	@$(ECHO) "  PLATFORMS         Comma-separated platforms for docker-image multi-arch build (e.g., make docker-image PLATFORMS=linux/amd64,linux/arm64)"
+	@$(ECHO) "  DOCKER_BUILDER    buildx builder name for docker-image (default: pg-gateway-builder)"
 	@$(ECHO) ""
 	@$(ECHO) "$(YELLOW)Test Configuration:$(NC)"
 	@$(ECHO) "  TEST_REPORTS_DIR  Directory for HTML test reports (default: test-reports)"
@@ -370,14 +383,14 @@ build: build-ui ## Build pg-gateway-http binary
 		if [ -n "$(DYNAMIC)" ]; then \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with dynamic linking...$(NC)"; \
 			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
-				-ldflags="-w -s -X main.Version=v$(VERSION)" \
+				-ldflags="-w -s -X main.Version=v$(VERSION_ARG)" \
 				-a -trimpath \
 				-o ../../tmp/pg-gateway-http \
 				.; \
 		else \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with static linking...$(NC)"; \
 			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
-				-ldflags="-w -s -extldflags "-static" -X main.Version=v$(VERSION)" \
+				-ldflags="-w -s -extldflags "-static" -X main.Version=v$(VERSION_ARG)" \
 				-a -trimpath \
 				-tags "sqlite_static" \
 				-o ../../tmp/pg-gateway-http \
@@ -387,12 +400,12 @@ build: build-ui ## Build pg-gateway-http binary
 	elif [ "$$TARGET_OS" = "$$HOST_OS" ] && [ "$$TARGET_ARCH" = "$$HOST_ARCH" ]; then \
 		$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH (native build with CGO)...$(NC)"; \
 		cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
-			-ldflags="-w -s -X main.Version=v$(VERSION)" \
+			-ldflags="-w -s -X main.Version=v$(VERSION_ARG)" \
 			-a -trimpath \
 			-tags "sqlite_static" \
 			-o ../../tmp/pg-gateway-http \
 			.; \
-		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION_ARG))$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Cross-compilation detected: $$HOST_OS/$$HOST_ARCH -> $$TARGET_OS/$$TARGET_ARCH$(NC)"; \
 		$(ECHO) "$(CYAN)Using Docker for cross-compilation...$(NC)"; \
@@ -417,7 +430,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 				golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc \
 				sh -c "apk add --no-cache gcc musl-dev && \
 				go build \
-					-ldflags='-w -s -X main.Version=v$(VERSION)' \
+					-ldflags='-w -s -X main.Version=v$(VERSION_ARG)' \
 					-a -trimpath \
 					-o ../../tmp/pg-gateway-http \
 					."; \
@@ -434,13 +447,13 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 				golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc \
 				sh -c "apk add --no-cache gcc musl-dev && \
 				go build \
-					-ldflags='-w -s -extldflags "-static" -X main.Version=v$(VERSION)' \
+					-ldflags='-w -s -extldflags "-static" -X main.Version=v$(VERSION_ARG)' \
 					-a -trimpath \
 					-tags sqlite_static \
 					-o ../../tmp/pg-gateway-http \
 					."; \
 		fi; \
-		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION_ARG))$(NC)"; \
 	else \
 		$(ECHO) "$(RED)Error: Docker cross-compilation only supports Linux targets$(NC)"; \
 		$(ECHO) "$(YELLOW)For $(TARGET_OS), please build on a native $(TARGET_OS) machine$(NC)"; \
@@ -449,19 +462,86 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 
 DOCKER_IMAGE ?= ghcr.io/pin-gou/pg-gateway
 
-docker-image: build-ui ## Build Docker image (LOCAL=1 to use Dockerfile.local)
-	@$(ECHO) "$(GREEN)Building Docker image...$(NC)"
-	$(eval GIT_SHA=$(shell git rev-parse --short HEAD))
-	$(eval DOCKERFILE=$(if $(LOCAL),transports/Dockerfile.local,transports/Dockerfile))
-	@docker build -f $(DOCKERFILE) -t $(DOCKER_IMAGE) -t $(DOCKER_IMAGE):$(GIT_SHA) -t $(DOCKER_IMAGE):latest .
-	@$(ECHO) "$(GREEN)Docker image built: $(DOCKER_IMAGE), $(DOCKER_IMAGE):$(GIT_SHA), $(DOCKER_IMAGE):latest (using $(DOCKERFILE))$(NC)"
+_docker-image-setup-builder: # Internal: ensure a named buildx builder exists (idempotent)
+	@docker buildx inspect $(DOCKER_BUILDER) >/dev/null 2>&1 || \
+		docker buildx create --name $(DOCKER_BUILDER) --driver docker-container --bootstrap
 
-docker-push: docker-image ## Build and push Docker image to GHCR (login first: docker login ghcr.io -u pin-gou)
-	@$(ECHO) "$(GREEN)Pushing Docker image to $(DOCKER_IMAGE)...$(NC)"
-	$(eval GIT_SHA=$(shell git rev-parse --short HEAD))
-	@docker push $(DOCKER_IMAGE):$(GIT_SHA)
-	@docker push $(DOCKER_IMAGE):latest
-	@$(ECHO) "$(GREEN)Docker image pushed: $(DOCKER_IMAGE):$(GIT_SHA), $(DOCKER_IMAGE):latest$(NC)"
+_docker-push-check-version: # Internal: refuse docker-push without an explicit VERSION (runs before buildx bootstrap to avoid wasted buildkit pulls)
+	@if [ -z "$(VERSION)" ] || [ "$(VERSION)" = "dev-build" ]; then \
+		$(ECHO) "$(RED)Error: docker-push requires VERSION=... (got '$(VERSION)'). Refusing to push dev-build/empty version.$(NC)"; \
+		exit 1; \
+	fi
+
+DOCKERFILE ?= transports/Dockerfile
+USE_LOCAL_MODULES_FLAG := $(if $(LOCAL),1,0)
+
+docker-image: _docker-image-setup-builder ## Build Docker image. LOCAL=1: use go.work + local sources (pre-release). PLATFORMS=a,b: multi-arch -> local manifest list. VERSION=... sets binary version + image tag (e.g. VERSION=v0.9.0 = tag :v0.9.0, binary version v0.9.0)
+	@$(ECHO) "$(GREEN)Building Docker image (VERSION='$(VERSION)': tag=$(VERSION_TAG), arg=$(VERSION_ARG), PLATFORMS='$(PLATFORMS)', USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG))...$(NC)"
+	@if [ -z "$(PLATFORMS)" ]; then \
+		$(ECHO) "$(CYAN)Single-platform build (host arch) using $(DOCKERFILE)$(NC)"; \
+		docker buildx build --builder $(DOCKER_BUILDER) \
+			-f $(DOCKERFILE) --load \
+			--build-arg VERSION=$(VERSION_ARG) \
+			--build-arg USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG) \
+			-t $(DOCKER_IMAGE) -t $(DOCKER_IMAGE):$(VERSION_TAG) -t $(DOCKER_IMAGE):latest . ; \
+	else \
+		$(ECHO) "$(CYAN)Multi-platform build: $(PLATFORMS) -> local manifest list$(NC)"; \
+		$(MAKE) _docker-image-build \
+			PLATFORMS='$(PLATFORMS)' \
+			VERSION_ARG='$(VERSION_ARG)' \
+			VERSION_TAG='$(VERSION_TAG)' \
+			USE_LOCAL_MODULES_FLAG='$(USE_LOCAL_MODULES_FLAG)' \
+			DOCKERFILE='$(DOCKERFILE)' \
+			DOCKER_IMAGE='$(DOCKER_IMAGE)' \
+			DOCKER_BUILDER='$(DOCKER_BUILDER)' ; \
+	fi
+	@$(ECHO) "$(GREEN)Docker image built: $(DOCKER_IMAGE):$(VERSION_TAG), $(DOCKER_IMAGE):latest (PLATFORMS=$(if $(PLATFORMS),$(PLATFORMS),host))$(NC)"
+
+docker-image-multiarch: _docker-push-check-version _docker-image-setup-builder ## Build multi-arch Docker image and push directly to $(DOCKER_IMAGE) (no local tar, no docker load). Requires VERSION=vX.Y.Z (refuses dev-build) and `docker login ghcr.io` on the host. LOCAL=1: use go.work + local sources. PLATFORMS=... overrides default $(DOCKER_MULTIARCH_PLATFORMS)
+	@$(ECHO) "$(GREEN)Building and pushing multi-arch Docker image (VERSION='$(VERSION)': tag=$(VERSION_TAG), arg=$(VERSION_ARG), USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG))...$(NC)"
+	$(eval EFFECTIVE_PLATFORMS=$(if $(PLATFORMS),$(PLATFORMS),$(DOCKER_MULTIARCH_PLATFORMS)))
+	@$(ECHO) "$(CYAN)Multi-platform build + push: $(EFFECTIVE_PLATFORMS) -> $(DOCKER_IMAGE):$(VERSION_TAG), $(DOCKER_IMAGE):latest (using $(DOCKERFILE))$(NC)"
+	@docker buildx build --builder $(DOCKER_BUILDER) \
+		-f $(DOCKERFILE) \
+		--platform $(EFFECTIVE_PLATFORMS) \
+		--push \
+		--provenance=false \
+		--build-arg VERSION=$(VERSION_ARG) \
+		--build-arg USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG) \
+		-t $(DOCKER_IMAGE):$(VERSION_TAG) \
+		-t $(DOCKER_IMAGE):latest \
+		.
+	@$(ECHO) "$(GREEN)Docker image pushed: $(DOCKER_IMAGE):$(VERSION_TAG), $(DOCKER_IMAGE):latest (PLATFORMS=$(EFFECTIVE_PLATFORMS))$(NC)"
+
+_docker-image-build: # Internal: buildx multi-platform --output type=oci (tar) -> docker load -> retag as VERSION_TAG+latest. Requires VERSION_ARG=, VERSION_TAG=, PLATFORMS=, DOCKERFILE=. Uses --output type=oci + docker load because 'docker buildx build --load' rejects multi-platform, and 'docker manifest create' cannot read OCI-format manifests.
+	@set -e; \
+	TAR=$$(mktemp --suffix=.tar); \
+	trap 'rm -f $$TAR' EXIT INT TERM; \
+	$(ECHO) "  $(CYAN)buildx multi-platform -> OCI tar -> $$TAR$(NC)"; \
+	docker buildx build --builder '$(DOCKER_BUILDER)' \
+		-f '$(DOCKERFILE)' --platform $(PLATFORMS) \
+		--build-arg VERSION='$(VERSION_ARG)' \
+		--build-arg USE_LOCAL_MODULES='$(USE_LOCAL_MODULES_FLAG)' \
+		-t '$(DOCKER_IMAGE):$(VERSION_TAG)' \
+		-t '$(DOCKER_IMAGE):latest' \
+		--output "type=oci,dest=$$TAR" . ; \
+	$(ECHO) "  $(CYAN)docker load -> local daemon (manifest list)$(NC)"; \
+	docker load < $$TAR ; \
+	rm -f $$TAR
+
+docker-push: _docker-push-check-version build-ui _docker-image-setup-builder ## Build multi-arch image and push to GHCR. Requires VERSION=vX.Y.Z (refuses dev-build). LOCAL=1: use go.work + local sources. PLATFORMS=...: override default linux/amd64,linux/arm64
+	@$(ECHO) "$(GREEN)Building and pushing multi-arch Docker image (VERSION=$(VERSION_TAG), USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG))...$(NC)"
+	@$(ECHO) "$(CYAN)Multi-platform build + push: $(if $(PLATFORMS),$(PLATFORMS),$(DOCKER_MULTIARCH_PLATFORMS)) -> $(DOCKER_IMAGE):$(VERSION_TAG), $(DOCKER_IMAGE):latest (using $(DOCKERFILE))$(NC)"
+	@docker buildx build --builder $(DOCKER_BUILDER) \
+		-f $(DOCKERFILE) \
+		--platform $(if $(PLATFORMS),$(PLATFORMS),$(DOCKER_MULTIARCH_PLATFORMS)) \
+		--push \
+		--build-arg VERSION=$(VERSION_ARG) \
+		--build-arg USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG) \
+		-t $(DOCKER_IMAGE):$(VERSION_TAG) \
+		-t $(DOCKER_IMAGE):latest \
+		.
+	@$(ECHO) "$(GREEN)Docker image pushed: $(DOCKER_IMAGE):$(VERSION_TAG), $(DOCKER_IMAGE):latest$(NC)"
 
 docker-run: ## Run Docker container (Usage: make docker-run [CONFIG=path/to/config.json or path/to/dir/])
 	@$(ECHO) "$(GREEN)Running Docker container...$(NC)"
@@ -475,12 +555,6 @@ docker-run: ## Run Docker container (Usage: make docker-run [CONFIG=path/to/conf
 		CONFIG_MOUNT=""; \
 	fi; \
 	docker run -e APP_PORT=$(PORT) -e APP_HOST=0.0.0.0 -p $(PORT):$(PORT) -e LOG_LEVEL=$(LOG_LEVEL) -e LOG_STYLE=$(LOG_STYLE) -v $(shell pwd):/app/data $$CONFIG_MOUNT $(DOCKER_IMAGE)
-
-docs: ## Prepare local docs (bundles OpenAPI spec then starts Mintlify dev server)
-	@$(ECHO) "$(GREEN)Bundling OpenAPI spec...$(NC)"
-	@cd docs/openapi && python3 bundle.py
-	@$(ECHO) "$(GREEN)Preparing local docs...$(NC)"
-	@cd docs && npx --yes mintlify@latest dev
 
 run: build ## Build and run pg-gateway-http (no hot reload)
 	@$(ECHO) "$(GREEN)Running pg-gateway-http...$(NC)"

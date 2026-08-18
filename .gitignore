@@ -253,3 +253,5 @@ tests/e2e/clis/reports
 deploy-yinyue.sh
 deploy-yinyue.md
 WORK_IN_PROGRESS.md
+
+*.tar

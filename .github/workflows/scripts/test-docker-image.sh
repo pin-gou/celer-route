@@ -60,7 +60,8 @@ trap cleanup EXIT
 echo "Building Docker image (local modules)..."
 docker build \
   --platform "${PLATFORM}" \
-  -f transports/Dockerfile.local \
+  -f transports/Dockerfile \
+  --build-arg USE_LOCAL_MODULES=1 \
   -t "${IMAGE_TAG}" \
   .
 
