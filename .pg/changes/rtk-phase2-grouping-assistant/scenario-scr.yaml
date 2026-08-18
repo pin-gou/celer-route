@@ -1,0 +1,97 @@
+scenarios:
+- scenario_id: S-enable-rtk-plugin-config-roundtrip
+  critical: true
+  description: 经 plugins API 启用 rtk 插件并写入阶段二新配置字段，读写往返一致，证明 schema 更新与配置解析链路生效
+  given:
+  - '{env.business_systems[name=pg-gateway-api]} 已由编排器启动且 {env.business_systems[name=pg-gateway-api].endpoints[name=health]} 返回 200'
+  - '{env.data_resources[name=fixture-plugins]} 已种子化（rtk 未在 fixture 中，需经 API 创建/启用）'
+  covers:
+  - V-plugins-5
+  - V-transports-1
+  when:
+  - name: 启用 rtk 插件并写入新字段
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/plugins'
+    body: '{"name":"rtk","enabled":true,"config":{"enabled":true,"intensity":"standard","enable_grouping":true,"grouping_threshold":3,"apply_to_assistant_messages":true}}'
+    expect_status: 201
+  - name: 读取插件列表确认配置往返
+    type: api
+    method: GET
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/plugins'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response 中 name=rtk 的插件 config 含 enable_grouping == true、grouping_threshold == 3、apply_to_assistant_messages == true
+  and:
+  - name: 恢复插件配置现场
+    action: HTTP DELETE {env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/plugins/rtk
+  evidence:
+  - 2-build/<report_seq>-S-enable-rtk-plugin-config-roundtrip-evidence.json
+- scenario_id: S-group-tool-output-in-live-request
+  critical: false
+  description: 真实网关链路冒烟——含重复行 tool 输出的 chat 请求经 PreLLMHook 压缩后，请求日志可观察分组标记或压缩统计生效
+  given:
+  - S-enable-rtk-plugin-config-roundtrip 已通过（rtk 启用且 enable_grouping=true）
+  - '{env.data_resources[name=logs-db]} 可写（state.status 为 empty 或 seeded 均可，本场景写入新记录）'
+  - '{env.data_resources[name=fixture-providers]} 与 {env.data_resources[name=fixture-keys]} 已种子化，chat 请求可路由到 fixture provider（若 provider key 不可用导致上游错误，压缩仍发生在 PreLLMHook，日志断言优先于响应码断言）'
+  covers:
+  - V-plugins-5
+  when:
+  - name: 发送含重复 tool 输出的 chat 请求
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body: '{"model":"default","messages":[{"role":"user","content":"run download"},{"role":"assistant","content":null,"tool_calls":[{"id":"call_smoke_1","type":"function","function":{"name":"bash","arguments":"{\"command\":\"download-all\"}"}}]},{"role":"tool","tool_call_id":"call_smoke_1","content":"$ download-all\nDownloaded chunk 1\nDownloaded chunk 2\nDownloaded chunk 3\nDownloaded chunk 4\nDownloaded chunk 5\nDownloaded chunk 6\nDone"}]}],"stream":false}'
+    expect_status: 200
+  - name: 查询请求日志观察压缩效果
+    type: api
+    method: db query
+    url: SELECT request FROM {env.data_resources[name=logs-db].schema_ref} ORDER BY id DESC LIMIT 1
+    expect_status: 200
+  then:
+  - 最近一条请求日志的 request 体中 role=tool 内容含 "[rtk:grouped ×6]" 标记，或日志压缩统计字段记录到压缩发生（二者其一即证明链路工作）
+  - 日志中 tool 输出不再含逐条完整的 Downloaded chunk 2..6 行
+  and:
+  - name: 无数据残留需清理（日志记录保留供审计）
+    action: NONE
+  evidence:
+  - 2-build/<report_seq>-S-group-tool-output-in-live-request-evidence.json
+- scenario_id: S-grouping-disabled-keeps-output-verbatim
+  critical: false
+  description: 负向验证——enable_grouping=false 时相同请求的 tool 输出逐字保留，不出现分组标记
+  given:
+  - rtk 插件经 plugins API 更新为 enable_grouping=false（其余配置不变）
+  - '{env.data_resources[name=logs-db]} 可写'
+  covers:
+  - V-plugins-5
+  when:
+  - name: 关闭分组开关
+    type: api
+    method: PUT
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/plugins/rtk'
+    body: '{"name":"rtk","enabled":true,"config":{"enabled":true,"intensity":"standard","enable_grouping":false,"grouping_threshold":3,"apply_to_assistant_messages":true}}'
+    expect_status: 200
+  - name: 重发相同 chat 请求
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body: '{"model":"default","messages":[{"role":"user","content":"run download"},{"role":"assistant","content":null,"tool_calls":[{"id":"call_smoke_2","type":"function","function":{"name":"bash","arguments":"{\"command\":\"download-all\"}"}}]},{"role":"tool","tool_call_id":"call_smoke_2","content":"$ download-all\nDownloaded chunk 1\nDownloaded chunk 2\nDownloaded chunk 3\nDownloaded chunk 4\nDownloaded chunk 5\nDownloaded chunk 6\nDone"}]}],"stream":false}'
+    expect_status: 200
+  - name: 查询请求日志确认未分组
+    type: api
+    method: db query
+    url: SELECT request FROM {env.data_resources[name=logs-db].schema_ref} ORDER BY id DESC LIMIT 1
+    expect_status: 200
+  then:
+  - 最近一条请求日志的 tool 内容不含 "[rtk:grouped" 标记
+  and:
+  - name: 恢复 enable_grouping=true 现场
+    action: HTTP PUT {env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/plugins/rtk
+  evidence:
+  - 2-build/<report_seq>-S-grouping-disabled-keeps-output-verbatim-evidence.json
+_meta:
+  _comment: 'scenario-scr.yaml 由 pg-gen-scenario.py 生成 skeleton，LLM 填充。V-plugins-1~4 为 degraded（单测验证，见 design.md 环境限制与验证策略段），不出现在 scenario covers；V-plugins-5 为 verifiable，由本文件三个 scenario 覆盖。数量 3 低于建议值 5（design V-*=6），原因：其余 V-* 均为 degraded 单测项，强行编写 scenario 会违反其降级状态。'
+  change: rtk-phase2-grouping-assistant
+  track_id: scr
+  schema_version: v3.10

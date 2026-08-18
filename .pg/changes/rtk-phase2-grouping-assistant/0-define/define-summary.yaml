@@ -1,0 +1,146 @@
+schema_version: 1
+change_id: rtk-phase2-grouping-assistant
+defined_at: "2026-08-18T09:52:56Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  oc2-gateway plugins/rtk 压缩管线缺少 OmniRoute RTK 引擎的三项能力：
+  相似行（时间戳/hex/版本号变体）无模糊分组、assistant 消息内容完全不被压缩、
+  强度缩放仅 aggressive 档生效（minimal 无效）且 Config.MaxLinesPerResult 未接入管线，
+  与 OmniRoute 参考实现持续 drift。
+
+solution: >-
+  对照 OmniRoute open-sse/services/compression/engines/rtk/ 源码移植三项能力：
+  (1) 新增 grouper.go——normalizeLine 7 步归一化（ISO 时间戳/括号时间→<N>、hex 6-40→<N>、
+  semver→<N>、整数→<N>、空白折叠、trim）+ groupSimilarLines（threshold 默认 3、运行时下限 2，
+  runLength >= threshold 合并为「首行 [rtk:grouped ×N]」），插入管线去重之后、smartTruncate 之前，
+  文档保护（isDocumentLikeRead）路径同样应用，受 enable_grouping 开关控制（默认关）。
+  (2) Chat 路径（OpenAI tool/assistant + Anthropic ContentBlocks）assistant 消息压缩：
+  apply_to_assistant_messages=true 压缩全文；否则 apply_to_code_blocks=true 且含 ``` 围栏时
+  走轻量 fence 切分仅压缩代码块内部（不移植完整 codeStripper）；不触碰 reasoning/tool_use/
+  带 cache_control 的块；默认关闭。Responses API 路径不做。
+  (3) 强度缩放修正：新增 effectiveMaxLines(base, intensity)（minimal×1.5 / standard×1 /
+  aggressive×0.5，max(1, round)），scaleFilterForIntensity 补 minimal 分支（仅缩放 MaxLines，
+  Head/Tail/maxChars 不动），并将 Config.MaxLinesPerResult 接线为匹配 filter 无 max_lines 时的
+  fallback（对齐 OmniRoute effectiveMaxLines(filter.maxLines || config.maxLinesPerResult, intensity)）。
+  同步更新 transports/config.schema.json rtk 配置块（additionalProperties: false，必须加字段）。
+
+boundary:
+  in_scope:
+    - plugins/rtk/grouper.go 新文件：normalizeLine + groupSimilarLines（移植 OmniRoute grouper.ts）
+    - plugins/rtk/config.go 新增 enable_grouping / grouping_threshold / apply_to_assistant_messages 字段、默认值与校验（threshold 下限 clamp 2）
+    - plugins/rtk/compression.go 管线在去重后、smartTruncate 前插入分组阶段（含文档保护路径）
+    - Chat 路径 assistant 消息压缩：整文本模式 + 围栏感知 code-only 模式（OpenAI ContentStr 与 Anthropic text block）
+    - effectiveMaxLines 强度缩放公式 + scaleFilterForIntensity minimal 分支 + Config.MaxLinesPerResult fallback 接线
+    - transports/config.schema.json rtk 配置块新增三个字段
+    - 单测：grouper_test.go 新文件 + compression/config 测试增补（OmniRoute 种子用例：数字/hex/时间戳/版本变体）
+  out_of_scope:
+    - Responses API 路径（function_call_output 之外的 assistant 项压缩）
+    - codeStripper.ts 完整移植（代码注释剥离/docstring 保留等）
+    - renderers 语义渲染器、TOML 兼容、外部自定义过滤器与 trust 信任模型（阶段三）
+    - Raw Output 保留、密钥脱敏、过滤器内联测试 benchmark（阶段四）
+    - Learn/Discover 过滤器自学习（阶段五）
+    - 跨引擎堆叠、主动触发、UI 管理面板（阶段六）
+    - filterloader.go 加载逻辑与内置 filter JSON 内容变更
+
+verification_needs:
+  - id: V-plugins-1
+    track_id: plugins
+    name: 模糊分组语义正确
+    what: >-
+      normalizeLine 按 OmniRoute 7 步规则归一化（时间戳/括号时间/hex/semver/整数→<N>）；
+      groupSimilarLines 在 runLength >= threshold 时合并为「首行 [rtk:grouped ×N]」、
+      低于阈值不合并、threshold 运行时下限 2；分组位于去重后、smartTruncate 前，
+      enable_grouping 关闭时管线行为与现状完全一致。
+    requires_capabilities:
+      - capability: bifrost_openai_compatible_api
+        min_quantity: 1
+        description: >-
+          完整环境级验证需经网关 API 观察压缩输出；因压缩语义无法经 API 精确断言
+          （需真实 provider 往返），实际验证降级为插件模块单测
+    downgrade_when_missing: >-
+      压缩语义经 API 不可精确断言 → 用 plugins 模块单测（go test plugins/rtk，
+      TestGroupSimilarLines 覆盖数字/hex/时间戳/版本变体与阈值边界）验证，scenario 标 @skip。
+    post_discussion_status: degraded
+
+  - id: V-plugins-2
+    track_id: plugins
+    name: assistant 消息压缩生效且不误伤
+    what: >-
+      apply_to_assistant_messages=true 时 OpenAI assistant 全文与 Anthropic text block 被压缩；
+      apply_to_code_blocks=true 且含围栏时仅压缩代码块内部；reasoning/tool_use/带 cache_control
+      的块不被触碰；两开关默认 false 时 assistant 消息保持原样（现状行为）。
+    requires_capabilities:
+      - capability: bifrost_openai_compatible_api
+        min_quantity: 1
+        description: >-
+          完整环境级验证需经网关 API 观察 assistant 消息压缩；实际验证降级为插件模块单测
+    downgrade_when_missing: >-
+      assistant 压缩属请求体内部改写，经 API 无法直接断言改写结果 → 用 plugins 模块单测
+      （TestApplyToAssistantMessages 覆盖 OpenAI/Anthropic/code-only 三路）验证，scenario 标 @skip。
+    post_discussion_status: degraded
+
+  - id: V-plugins-3
+    track_id: plugins
+    name: 强度缩放三档生效且 MaxLinesPerResult fallback 接线
+    what: >-
+      minimal 档 MaxLines×1.5、standard 不变、aggressive×0.5（max(1, round)）；
+      Head/Tail/maxChars 不受 minimal 缩放；匹配 filter 无 max_lines 时回退
+      Config.MaxLinesPerResult 再应用强度系数；非法 intensity 值校验拒绝。
+    requires_capabilities:
+      - capability: bifrost_openai_compatible_api
+        min_quantity: 1
+        description: >-
+          完整环境级验证需经网关 API 对比不同 intensity 的压缩输出；实际验证降级为插件模块单测
+    downgrade_when_missing: >-
+      强度缩放为纯函数语义 → 用 plugins 模块单测（TestIntensityScaling 三档表驱动）验证，
+      scenario 标 @skip。
+    post_discussion_status: degraded
+
+  - id: V-plugins-4
+    track_id: plugins
+    name: 既有压缩行为无回归
+    what: >-
+      plugins/rtk 既有约 70 个测试用例全绿：cache_control 字节级保护、去重/截断标记行、
+      文档保护路径、52 个内置 filter 的匹配与压缩行为在 MaxLinesPerResult fallback 接线后不变。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: >-
+          回归依赖内置 filter 数据集（embed filters/builtin/*.json）与既有测试夹具，
+          不依赖环境运行时资源
+    downgrade_when_missing: >-
+      回归完全由 go test 覆盖，无环境依赖；若模块测试命令不可用则无法交付（无降级路径）。
+    post_discussion_status: degraded
+
+  - id: V-plugins-5
+    track_id: plugins
+    name: 真实网关链路压缩冒烟
+    what: >-
+      local 环境启动 pg-gateway，经 plugins API 启用 rtk（enable_grouping/
+      apply_to_assistant_messages 打开），发送含重复 tool 输出的 chat 请求，
+      请求日志中可观察到分组标记或压缩后的请求体，证明配置解析→PreLLMHook→压缩链路端到端工作。
+    requires_capabilities:
+      - capability: bifrost_openai_compatible_api
+        min_quantity: 1
+        description: pg-gateway chat completions 端点，用于注入含重复行的 tool 消息
+      - capability: llm_request_logging
+        min_quantity: 1
+        description: 请求日志落库，用于断言压缩后的请求体
+    downgrade_when_missing: >-
+      rtk 插件无法经 API 启用或日志无法观察压缩结果 → 退回 V-plugins-1~4 单测覆盖，
+      scenario 标 @skip。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=pg-gateway-api]}"
+      - "{env.data_resources[name=logs-db]}"
+
+risks:
+  - 接线 MaxLinesPerResult fallback 会改变「匹配 filter 无 max_lines」时的 smartTruncate 行为，需全量回归既有 52 个内置 filter 相关用例
+  - assistant 压缩必须跳过带 cache_control 的块与 reasoning/tool_use 内容，否则破坏 Anthropic prompt 缓存命中或请求结构
+  - grouping_threshold 需运行时 clamp 下限 2（对齐 OmniRoute Zod 校验），配置非法值不得导致行为漂移
+
+open_questions:
+  - V-plugins-5 scenario 启用 rtk 插件的具体 API 路径（plugins CRUD handler）与配置注入方式，propose 设计阶段确认
+  - code-only 模式的围栏切分实现位置（compression.go 内联或独立函数）由 design 阶段决定
