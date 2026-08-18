@@ -1,0 +1,143 @@
+schema_version: 1
+change_id: rtk-stage1-markers-and-doc-protection
+defined_at: "2026-08-18T07:30:00Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  oc2-gateway RTK 压缩管线已实现核心 pipeline（ANSI 剥离 → 命令检测 → 过滤器 → 行过滤 → 去重 → 智能截断 → 字符硬限），但输出缺少可见性 marker：(1) 文档/文件读取（典型 ~147 行代码/prose）被 generic-output filter fallback 误命中并强行 head/tail 截断，导致中间内容被静默丢弃；(2) 截断/去重/字符限三个步骤不向 LLM 透露"中间砍了多少行"的事实，模型可能误判输出完整性。
+
+solution: >-
+  按 temp/rtk.md 阶段一规格，新增 4 项可观测性产出：
+  (1) isDocumentLikeRead 保护：linedetector.go 新增 hasGenericErrorMarkers 函数（正则 Error:|Exception:|Traceback）；compression.go 在 detection 后判定 `Type=="shell" && Command=="" && !hasGenericErrorMarkers` 时跳过 step 5/6/8/9，保留 step 1-3 + step 7 dedup；
+  (2) smartTruncate marker：smarttruncate.go 返回 (string, int)，在 head/tail 之间插入 `[rtk:truncated N lines]`（N 为 dropped 行数）；
+  (3) dedup marker：deduplicator.go 返回 (string, int)，对 runLen>=threshold 的行在首行后追加 `[line repeated Nx]` 与 `[rtk:dropped N repeated lines]`；
+  (4) char-truncation marker：truncateToCharLimit 命中后追加 `[rtk:truncated by chars]`。
+  全程保持内部 RTK filter 行为不变，仅替换压缩管线输出文本。现有 27 个测试用例 3 处需更新断言（TestLineFilterDedup / TestLineFilterHeadAndTail / TestLineFilterMaxLines），其余 24 个不受影响；新增 5 个测试覆盖四项 marker 与 doc-read 分支。
+
+boundary:
+  in_scope:
+    - isDocumentLikeRead 文档读取保护：linedetector.go 新增 hasGenericErrorMarkers 辅助函数
+    - isDocumentLikeRead 保护逻辑接入：compression.go processRtkTextWithCommand 增加分支跳过 filter/smartTruncate/charlimit
+    - smartTruncate marker：smarttruncate.go applySmartTruncate 改返回 (string, int) 并插入 `[rtk:truncated N lines]`
+    - dedup marker：deduplicator.go applyDedup 改返回 (string, int) 并追加 `[line repeated Nx]` + `[rtk:dropped N repeated lines]`
+    - char-truncation marker：compression.go step 9 命中 truncateToCharLimit 后追加 `[rtk:truncated by chars]`
+    - 更新 3 处现有测试断言（linefilter_test.go）以反映新 marker 文本
+    - 新增 5 个测试用例：TestDocumentReadNotTruncated / TestIsDocumentLikeReadWithErrorMarkers / TestTruncateMarker / TestDedupMarker / TestCharTruncateMarker
+  out_of_scope:
+    - 模糊分组（grouper.ts，阶段二）
+    - apply_to_assistant_messages assistant 消息压缩（阶段二）
+    - intensity 缩放修正（阶段二）
+    - 自定义过滤器 + 多级信任模型（filterLoader 重写，阶段三）
+    - Canonical RtkFilterPack 双格式 schema（阶段三）
+    - Raw Output 落盘 + 密钥脱敏（rawOutput.ts，阶段四）
+    - 内联过滤器测试与 savings benchmark（verify.ts，阶段四）
+    - Learn/Discover 过滤器自学习（discover.ts / learn.ts，阶段五）
+    - 跨引擎堆叠管线（阶段六）
+    - 主动触发（autoTriggerTokens，阶段六）
+    - UI/API 管理面板（阶段六）
+    - 修改 filterloader.go / config.go / hooks.go / openai.go / anthropic.go 等其他文件
+    - 引入新的 config 字段、env vars、config.schema.json 变更
+
+verification_needs:
+  - id: V-plugins-1
+    name: isDocumentLikeRead 文档读取不被截断
+    what: >-
+      对一段 ~147 行的代码/prose 文本（无 Error/Exception/Traceback 标记），RTK pipeline 不应通过 generic filter 强行 head/tail 截断，输出应保留全文（仅 ANSI 剥离 + 必要 dedup）。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: 本地 Go 源码树可访问 + plugins/rtk 包路径存在
+    downgrade_when_missing: >-
+      无降级，纯 Go 单元测试。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-2
+    name: 截断 marker 插入正确
+    what: >-
+      当 smartTruncate 因 head+tail 窗口或 MaxLines cap 丢弃中间行时，输出应在 head 与 tail 之间插入 `[rtk:truncated N lines]`，N 等于实际 dropped 行数。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+    downgrade_when_missing: >-
+      无降级。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-3
+    name: 去重 marker 追加正确
+    what: >-
+      applyDedup 命中 runLen>=threshold 时，输出应在首行后追加 `[line repeated Nx]` 与 `[rtk:dropped N repeated lines]`（N = runLen-1），runLen<threshold 不追加。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+    downgrade_when_missing: >-
+      无降级。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-4
+    name: 字符截断 marker 追加正确
+    what: >-
+      truncateToCharLimit 命中（result 长度超过 MaxCharsPerResult）时，输出应追加 `[rtk:truncated by chars]` 标记。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+    downgrade_when_missing: >-
+      无降级。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-5
+    name: plugins/rtk 包 go build 通过
+    what: >-
+      在 plugins/rtk 子模块目录执行 `go build ./...` 成功无错（验证签名变更后调用点已同步）。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+    downgrade_when_missing: >-
+      无降级。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-6
+    name: plugins/rtk 包 go vet 通过
+    what: >-
+      在 plugins/rtk 子模块目录执行 `go vet ./...` 无错。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+    downgrade_when_missing: >-
+      无降级。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-7
+    name: plugins/rtk 单元测试全部通过
+    what: >-
+      在 plugins/rtk 子模块目录执行 `go test ./... -short -count=1` 全部通过。覆盖：现有 24 个未受影响测试 + 3 个更新断言测试 + 5 个新增 marker/doc-read 测试，共 32 个测试用例。
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+    downgrade_when_missing: >-
+      无降级。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+risks:
+  - applySmartTruncate / applyDedup 返回签名从 string 改为 (string, int)，blast radius 限于 compression.go 调用点与直接调用这两个函数的测试
+  - isDocumentLikeRead 的 Type 判定条件使用 'shell' 而非 OmniRoute 的 'unknown'——比 OmniRoute 更宽（任何未识别命令的 shell 输出都会进入保护路径），需在 design.md 中显式说明与 OmniRoute 的语义差
+  - new marker 文本会被估计 token 计入 CompressedTokens（compression.go:409），边界 case 下压缩率阈值（5%）可能更难达到——属于 token accounting drift，不影响功能正确性
+  - priority patterns 与 truncate marker 交互：被抢救的中间 priority line 会出现在 marker 之后，与 OmniRoute 行为一致但需要在测试中明确验证
+  - 单行输出（len(content)<=1）走 early return，dedup 不应添加 marker——需测试覆盖
+
+open_questions:
+  - 无
