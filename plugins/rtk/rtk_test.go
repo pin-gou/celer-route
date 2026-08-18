@@ -773,9 +773,523 @@ func TestApplyRtkCompressionResponsesNilConfig(t *testing.T) {
 	}
 }
 
-// Helper functions
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 2: Assistant message compression (V-plugins-2)
+// TDD red phase: applyRtkCompression does not yet handle assistant messages.
+// All assertions that compression occurred will fail at runtime (UNCOMPRESSED
+// vs COMPRESSED), while assertions referencing new symbols (effectiveMaxLines)
+// fail at compile time.
+// ────────────────────────────────────────────────────────────────────────────
 
-func strContent(s string) *schemas.ChatMessageContent {
+// TestApplyToAssistantMessages verifies that the assistant message compression
+// path (V-plugins-2) correctly compresses OpenAI assistant ContentStr and
+// Anthropic text blocks, while leaving tool_use, reasoning, and cache_control
+// blocks untouched. TDD red phase: today applyRtkCompression skips assistant
+// messages entirely, so all compression assertions fail.
+func TestApplyToAssistantMessages(t *testing.T) {
+	// Build repetitive text that would benefit from compression
+	repetitiveText := ""
+	for i := 0; i < 20; i++ {
+		repetitiveText += "This is a repeated message line that should be compressed " + "when assistant compression is enabled\n"
+	}
+
+	t.Run("openai_assistant_content_str_compressed", func(t *testing.T) {
+		// OpenAI-style: assistant message with ContentStr, apply_to_assistant_messages=true
+		cfg := &Config{
+			Enabled:                  true,
+			ApplyToToolResults:       false,
+			ApplyToCodeBlocks:        false,
+			ApplyToAssistantMessages: true,
+			Intensity:                "aggressive",
+			MaxLinesPerResult:        120,
+			MaxCharsPerResult:        12000,
+			DedupThreshold:           3,
+		}
+		req := &schemas.BifrostRequest{
+			ChatRequest: &schemas.BifrostChatRequest{
+				Input: []schemas.ChatMessage{
+					{
+						Role:    schemas.ChatMessageRoleAssistant,
+						Content: strContent(repetitiveText),
+					},
+				},
+			},
+		}
+
+		state := applyRtkCompression(req, cfg)
+		if state == nil {
+			t.Fatal("applyRtkCompression returned nil state")
+		}
+
+		// Today: assistant messages are not compressed → state.Compressed=false
+		// After dev: should be compressed → state.Compressed=true
+		if !state.Compressed {
+			t.Fatal("expected assistant message to be compressed when ApplyToAssistantMessages=true, but state.Compressed=false")
+		}
+
+		// The content should be shorter after compression
+		compressed := *req.ChatRequest.Input[0].Content.ContentStr
+		if len(compressed) >= len(repetitiveText) {
+			t.Errorf("assistant content should be compressed, original len=%d compressed len=%d",
+				len(repetitiveText), len(compressed))
+		}
+	})
+
+	t.Run("anthropic_text_blocks_compressed", func(t *testing.T) {
+		// Anthropic-style: assistant message with ContentBlocks containing text blocks
+		cfg := &Config{
+			Enabled:                  true,
+			ApplyToToolResults:       false,
+			ApplyToCodeBlocks:        false,
+			ApplyToAssistantMessages: true,
+			Intensity:                "aggressive",
+			MaxLinesPerResult:        120,
+			MaxCharsPerResult:        12000,
+			DedupThreshold:           3,
+		}
+		req := &schemas.BifrostRequest{
+			ChatRequest: &schemas.BifrostChatRequest{
+				Input: []schemas.ChatMessage{
+					{
+						Role: schemas.ChatMessageRoleAssistant,
+						Content: &schemas.ChatMessageContent{
+							ContentBlocks: []schemas.ChatContentBlock{
+								{
+									Type: "text",
+									Text: &repetitiveText,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		state := applyRtkCompression(req, cfg)
+		if state == nil {
+			t.Fatal("applyRtkCompression returned nil state")
+		}
+
+		if !state.Compressed {
+			t.Fatal("expected Anthropic assistant text block to be compressed when ApplyToAssistantMessages=true")
+		}
+
+		// The text block should be shorter
+		blocks := req.ChatRequest.Input[0].Content.ContentBlocks
+		if len(blocks) > 0 && blocks[0].Text != nil {
+			if len(*blocks[0].Text) >= len(repetitiveText) {
+				t.Errorf("assistant text block should be compressed, original len=%d compressed len=%d",
+					len(repetitiveText), len(*blocks[0].Text))
+			}
+		}
+	})
+
+	t.Run("tool_use_block_unchanged", func(t *testing.T) {
+		// Assistant message with both text blocks (compressible) and tool_use
+		// (must remain intact). After dev: text compressed, tool_use preserved.
+		textBlock := "A short line\n" + repetitiveText
+		cfg := &Config{
+			Enabled:                  true,
+			ApplyToToolResults:       false,
+			ApplyToAssistantMessages: true,
+			Intensity:                "aggressive",
+			MaxLinesPerResult:        120,
+			MaxCharsPerResult:        12000,
+			DedupThreshold:           3,
+		}
+		req := &schemas.BifrostRequest{
+			ChatRequest: &schemas.BifrostChatRequest{
+				Input: []schemas.ChatMessage{
+					{
+						Role: schemas.ChatMessageRoleAssistant,
+						Content: &schemas.ChatMessageContent{
+							ContentBlocks: []schemas.ChatContentBlock{
+								{
+									Type: "text",
+									Text: &textBlock,
+								},
+							},
+						},
+						ChatAssistantMessage: &schemas.ChatAssistantMessage{
+							ToolCalls: []schemas.ChatAssistantMessageToolCall{
+								{
+									ID: strPtr("toolu_1"),
+									Function: schemas.ChatAssistantMessageToolCallFunction{
+										Name:      strPtr("bash"),
+										Arguments: `{"command":"git status"}`,
+									},
+								},
+							},
+							Reasoning: strPtr("reasoning content that should not be compressed"),
+						},
+					},
+				},
+			},
+		}
+
+		state := applyRtkCompression(req, cfg)
+		if state == nil {
+			t.Fatal("applyRtkCompression returned nil state")
+		}
+
+		// Text block should be compressed (overall text shorter)
+		if !state.Compressed {
+			t.Fatal("expected assistant message with text+tool_use to be compressed")
+		}
+
+		// Tool calls must remain intact
+		if req.ChatRequest.Input[0].ChatAssistantMessage == nil {
+			t.Fatal("ChatAssistantMessage should not be nil (tool_use preserved)")
+		}
+		if len(req.ChatRequest.Input[0].ChatAssistantMessage.ToolCalls) != 1 {
+			t.Errorf("expected 1 tool call preserved, got %d",
+				len(req.ChatRequest.Input[0].ChatAssistantMessage.ToolCalls))
+		}
+		if req.ChatRequest.Input[0].ChatAssistantMessage.ToolCalls[0].ID == nil ||
+			*req.ChatRequest.Input[0].ChatAssistantMessage.ToolCalls[0].ID != "toolu_1" {
+			t.Error("tool_use call ID should be preserved unchanged")
+		}
+		// Reasoning must remain intact
+		if req.ChatRequest.Input[0].ChatAssistantMessage.Reasoning == nil ||
+			*req.ChatRequest.Input[0].ChatAssistantMessage.Reasoning != "reasoning content that should not be compressed" {
+			t.Error("reasoning content should be preserved unchanged")
+		}
+	})
+
+	t.Run("cache_control_block_byte_identical", func(t *testing.T) {
+		// Assistant message with a text block carrying cache_control.
+		// After dev: cache_control blocks must remain byte-identical.
+		cacheBlockText := "Cache controlled content that must be preserved verbatim\nLine 2\nLine 3\n"
+		cfg := &Config{
+			Enabled:                  true,
+			ApplyToToolResults:       false,
+			ApplyToAssistantMessages: true,
+			PreserveCacheControl:     true,
+			Intensity:                "aggressive",
+			MaxLinesPerResult:        120,
+			MaxCharsPerResult:        12000,
+			DedupThreshold:           3,
+		}
+		req := &schemas.BifrostRequest{
+			ChatRequest: &schemas.BifrostChatRequest{
+				Input: []schemas.ChatMessage{
+					{
+						Role: schemas.ChatMessageRoleAssistant,
+						Content: &schemas.ChatMessageContent{
+							ContentBlocks: []schemas.ChatContentBlock{
+								{
+									Type: "text",
+									Text: &cacheBlockText,
+									CacheControl: &schemas.CacheControl{
+										Type: "ephemeral",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		_ = applyRtkCompression(req, cfg)
+
+		// Cache control block must remain byte-identical
+		blocks := req.ChatRequest.Input[0].Content.ContentBlocks
+		if len(blocks) > 0 && blocks[0].Text != nil {
+			if *blocks[0].Text != cacheBlockText {
+				t.Errorf("cache_control block should be byte-identical, got %q, want %q",
+					*blocks[0].Text, cacheBlockText)
+			}
+		}
+	})
+
+	t.Run("code_only_mode_fence_compressed", func(t *testing.T) {
+		// apply_to_code_blocks=true, apply_to_assistant_messages=false
+		// Only code inside ``` fences should be compressed; outside verbatim.
+		codeContent := "Here is the result:\n```\nLine 1\nLine 2\nLine 3\nLine 4\n```\nDone.\n"
+		cfg := &Config{
+			Enabled:                  true,
+			ApplyToToolResults:       false,
+			ApplyToCodeBlocks:        true,
+			ApplyToAssistantMessages: false,
+			Intensity:                "aggressive",
+			MaxLinesPerResult:        120,
+			MaxCharsPerResult:        12000,
+			DedupThreshold:           3,
+		}
+		req := &schemas.BifrostRequest{
+			ChatRequest: &schemas.BifrostChatRequest{
+				Input: []schemas.ChatMessage{
+					{
+						Role:    schemas.ChatMessageRoleAssistant,
+						Content: strContent(codeContent),
+					},
+				},
+			},
+		}
+
+		state := applyRtkCompression(req, cfg)
+		if state == nil {
+			t.Fatal("applyRtkCompression returned nil state")
+		}
+
+		// Code-only mode should compress the content (fence contents)
+		if !state.Compressed {
+			t.Fatal("expected code-only mode to compress assistant message with fences")
+		}
+
+		// "Here is the result:" outside fences must survive
+		compressed := *req.ChatRequest.Input[0].Content.ContentStr
+		if !contains(compressed, "Here is the result:") {
+			t.Error("text outside fences should be preserved verbatim, but 'Here is the result:' is missing")
+		}
+		// "Done." outside fences must survive
+		if !contains(compressed, "Done.") {
+			t.Error("text outside fences should be preserved verbatim, but 'Done.' is missing")
+		}
+	})
+
+	t.Run("both_switches_false_verbatim", func(t *testing.T) {
+		// Both switches false → assistant message must remain verbatim unchanged.
+		cfg := &Config{
+			Enabled:                  true,
+			ApplyToToolResults:       false,
+			ApplyToCodeBlocks:        false,
+			ApplyToAssistantMessages: false,
+			Intensity:                "aggressive",
+			MaxLinesPerResult:        120,
+			MaxCharsPerResult:        12000,
+			DedupThreshold:           3,
+		}
+		original := repetitiveText
+		req := &schemas.BifrostRequest{
+			ChatRequest: &schemas.BifrostChatRequest{
+				Input: []schemas.ChatMessage{
+					{
+						Role:    schemas.ChatMessageRoleAssistant,
+						Content: strContent(original),
+					},
+				},
+			},
+		}
+
+		_ = applyRtkCompression(req, cfg)
+
+		// Content must be byte-identical to original
+		got := *req.ChatRequest.Input[0].Content.ContentStr
+		if got != original {
+			t.Errorf("assistant message should be verbatim when both switches are false, got len=%d want len=%d",
+				len(got), len(original))
+		}
+	})
+}
+
+// TestAssistantCompressionConfigPreserved verifies that the presence of
+// assistant compression config fields does not break existing tool compression.
+func TestAssistantCompressionConfigPreserved(t *testing.T) {
+	cfg := &Config{
+		Enabled:                  true,
+		ApplyToToolResults:       true,
+		ApplyToAssistantMessages: true,
+		ApplyToCodeBlocks:        false,
+		Intensity:                "standard",
+		MaxLinesPerResult:        120,
+		MaxCharsPerResult:        12000,
+		DedupThreshold:           3,
+		PreserveCacheControl:     true,
+	}
+	// Short git status — existing tool compression should still work
+	gitOutput := "On branch main\n  modified:   src/main.go\n"
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: &schemas.ChatMessageContent{
+						ContentStr: &gitOutput,
+					},
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_1"),
+					},
+				},
+			},
+		},
+	}
+
+	state := applyRtkCompression(req, cfg)
+	if state == nil {
+		t.Fatal("applyRtkCompression returned nil state")
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 2: Intensity scaling and effectiveMaxLines (V-plugins-3)
+// TDD red phase: effectiveMaxLines is a new function not yet defined (compile
+// error → whole package fails to build). scaleFilterForIntensity minimal
+// branch does not exist yet (runtime assertion failure).
+// ────────────────────────────────────────────────────────────────────────────
+
+// TestIntensityScaling verifies the corrected intensity scaling formulas:
+//   - effectiveMaxLines(base, intensity) produces correct results for all
+//     three intensity levels (minimal ×1.5, standard ×1, aggressive ×0.5)
+//     with max(1, round(...)) lower bound.
+//   - scaleFilterForIntensity minimal branch scales only MaxLines, leaving
+//     Head/Tail/maxChars untouched.
+//   - filter without max_lines falls back to Config.MaxLinesPerResult scaled
+//     by intensity (pipeline integration).
+//   - maxChars is not affected by intensity scaling.
+//
+// TDD red phase: effectiveMaxLines is undefined (compile error); the minimal
+// scaleFilterForIntensity branch does not exist (runtime assertion failure).
+func TestIntensityScaling(t *testing.T) {
+	t.Run("effective_max_lines_minimal", func(t *testing.T) {
+		got := effectiveMaxLines(100, "minimal")
+		want := 150
+		if got != want {
+			t.Errorf("effectiveMaxLines(100, minimal) = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("effective_max_lines_standard", func(t *testing.T) {
+		got := effectiveMaxLines(100, "standard")
+		want := 100
+		if got != want {
+			t.Errorf("effectiveMaxLines(100, standard) = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("effective_max_lines_aggressive", func(t *testing.T) {
+		got := effectiveMaxLines(100, "aggressive")
+		want := 50
+		if got != want {
+			t.Errorf("effectiveMaxLines(100, aggressive) = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("effective_max_lines_default_intensity", func(t *testing.T) {
+		got := effectiveMaxLines(100, "")
+		want := 100 // default factor = 1
+		if got != want {
+			t.Errorf("effectiveMaxLines(100, \"\") = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("effective_max_lines_aggressive_base_1", func(t *testing.T) {
+		got := effectiveMaxLines(1, "aggressive")
+		if got < 1 {
+			t.Errorf("effectiveMaxLines(1, aggressive) = %d, want >= 1", got)
+		}
+	})
+
+	t.Run("effective_max_lines_aggressive_base_0", func(t *testing.T) {
+		got := effectiveMaxLines(0, "aggressive")
+		if got < 1 {
+			t.Errorf("effectiveMaxLines(0, aggressive) = %d, want >= 1", got)
+		}
+	})
+
+	t.Run("scale_filter_minimal_maxlines_scaled", func(t *testing.T) {
+		f := &Filter{Head: 10, Tail: 5, MaxLines: 100}
+		scaled := scaleFilterForIntensity(f, "minimal")
+
+		// Minimal should scale MaxLines up (×1.5) but leave Head/Tail untouched
+		if scaled.MaxLines != 150 {
+			t.Errorf("scaleFilterForIntensity(minimal).MaxLines = %d, want 150", scaled.MaxLines)
+		}
+		if scaled.Head != 10 {
+			t.Errorf("scaleFilterForIntensity(minimal).Head = %d, want 10 (unchanged)", scaled.Head)
+		}
+		if scaled.Tail != 5 {
+			t.Errorf("scaleFilterForIntensity(minimal).Tail = %d, want 5 (unchanged)", scaled.Tail)
+		}
+	})
+
+	t.Run("fallback_max_lines_per_result_scaled", func(t *testing.T) {
+		// Pipeline integration: filter without max_lines falls back to
+		// Config.MaxLinesPerResult × intensity factor.
+		// Use git-status output (detects "git status", matches built-in filter
+		// with head=5, tail=2, no max_lines). After dev: effective max_lines
+		// from Config.MaxLinesPerResult × intensity determines the line cap.
+		//
+		// With MaxLinesPerResult=4, intensity=minimal:
+		//   effectiveMaxLines(4, minimal) = max(1, round(6)) = 6
+		// Input 8 lines + head=5,tail=2 → windows kept = 5+2=7 + marker = 8 entries.
+		// maxLines=6 → capped to 6 lines. Today: maxLines=0 → no cap → 8 lines.
+		cfg := &Config{
+			Enabled:           true,
+			Intensity:         "minimal",
+			MaxLinesPerResult: 4,
+			MaxCharsPerResult: 50000,
+			DedupThreshold:    3,
+		}
+		// 8 lines of git-status text (detectable as git status)
+		input := "" +
+			"On branch feature/foo\n" +
+			"  modified:   src/main.go\n" +
+			"  modified:   src/utils.go\n" +
+			"  modified:   go.mod\n" +
+			"  modified:   Makefile\n" +
+			"  modified:   README.md\n" +
+			"  modified:   .gitignore\n" +
+			"  modified:   config.json\n"
+
+		result, _ := processRtkText(input, cfg)
+		lines := contentLines(result)
+		lineCount := len(lines)
+
+		// Today: none of the builtin filters have max_lines, so no cap;
+		// head+tail=7 < 8 → windows cut to 5+2+marker = 8 entries.
+		// After dev: maxLines=6 from fallback → cap to 6 lines.
+		if lineCount >= 8 {
+			t.Errorf("With MaxLinesPerResult=4, minimal, expected fallback cap to produce < 8 lines, got %d lines",
+				lineCount)
+		}
+	})
+}
+
+// TestIntensityScalingMaxCharsNotScaled verifies that maxChars is not affected
+// by intensity scaling (V-plugins-3 contract): the char cap applies identically
+// regardless of intensity.
+func TestIntensityScalingMaxCharsNotScaled(t *testing.T) {
+	// Build a text that fits within MaxCharsPerResult at both minimal and
+	// aggressive intensities. The char cap should be the same for both.
+	text := "On branch main\n"
+	text += "  modified:   src/main.go\n"
+	text += "  modified:   src/utils.go\n"
+	text += "  modified:   go.mod\n"
+	text += "  modified:   Makefile\n"
+	text += "  modified:   README.md\n"
+	text += "  modified:   .gitignore\n"
+	text += "  modified:   config.json\n"
+
+	smallCharLimit := 50 // will trigger truncation
+
+	for _, intensity := range []string{"minimal", "standard", "aggressive"} {
+		t.Run("intensity_"+intensity, func(t *testing.T) {
+			cfg := &Config{
+				Enabled:           true,
+				Intensity:         intensity,
+				MaxLinesPerResult: 120,
+				MaxCharsPerResult: smallCharLimit,
+				DedupThreshold:    3,
+			}
+			result, stats := processRtkText(text, cfg)
+			_ = stats
+
+			// The char limit marker should be the same across intensities
+			if !contains(result, "[rtk:truncated by chars]") {
+				t.Errorf("intensity=%s: expected char truncation marker, result len=%d limit=%d",
+					intensity, len(result), smallCharLimit)
+			}
+			// Result length should be ≤ smallCharLimit + marker overhead
+			if len(result) > smallCharLimit+50 {
+				t.Errorf("intensity=%s: result too long (%d chars) after char cap (%d)",
+					intensity, len(result), smallCharLimit)
+			}
+		})
+	}
+}
+	func strContent(s string) *schemas.ChatMessageContent {
 	return &schemas.ChatMessageContent{
 		ContentStr: &s,
 	}
