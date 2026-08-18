@@ -3103,6 +3103,7 @@ type activeLogEntry struct {
 	App             *string                  `json:"app,omitempty"`
 	UserAgent       *string                  `json:"user_agent,omitempty"`
 	Cost            *float64                 `json:"cost,omitempty"`
+	VirtualKeyID    *string                  `json:"virtual_key_id,omitempty"`
 	VirtualKeyName  *string                  `json:"virtual_key_name,omitempty"`
 	RoutingRuleID   *string                  `json:"routing_rule_id,omitempty"`
 	RoutingRuleName *string                  `json:"routing_rule_name,omitempty"`
@@ -3206,6 +3207,7 @@ func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
 		App:             l.App,
 		UserAgent:       l.UserAgent,
 		Cost:            l.Cost,
+		VirtualKeyID:    l.VirtualKeyID,
 		VirtualKeyName:  l.VirtualKeyName,
 		RoutingRuleID:   l.RoutingRuleID,
 		RoutingRuleName: l.RoutingRuleName,

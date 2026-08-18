@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1056,6 +1057,107 @@ func TestBuildLogEntriesOmitEmptyUserAgent(t *testing.T) {
 		t.Fatalf("expected nil complete user agent, got %#v", entry.UserAgent)
 	} else if entry.App != nil {
 		t.Fatalf("expected nil complete app, got %#v", entry.App)
+	}
+}
+
+// TestBuildInitialLogEntrySurfacesRoutingRuleAndVirtualKey pins the regression
+// where the in-flight SSE row (buildInitialLogEntry) used to leave routing rule
+// and virtual key columns empty: governance resolves them in PreRequestHook,
+// so by PreLLMHook they're already on ctx and must ride along on the
+// "processing" payload the UI sees.
+func TestBuildInitialLogEntrySurfacesRoutingRuleAndVirtualKey(t *testing.T) {
+	pending := &PendingLogData{
+		RequestID:       "req-initial-routing-vk",
+		Timestamp:       time.Now().UTC(),
+		RoutingRuleID:   "rule-tier-cheap",
+		RoutingRuleName: "Tier → cheap",
+		VirtualKeyID:    "vk-9",
+		VirtualKeyName:  "team-billing",
+		InitialData: &InitialLogData{
+			Provider: string(schemas.OpenAI),
+			Model:    "gpt-4o-mini",
+			Object:   string(schemas.ChatCompletionRequest),
+		},
+	}
+
+	entry := buildInitialLogEntry(pending)
+
+	if entry.RoutingRuleID == nil || *entry.RoutingRuleID != "rule-tier-cheap" {
+		t.Fatalf("expected routing rule id on initial entry, got %#v", entry.RoutingRuleID)
+	}
+	if entry.RoutingRuleName == nil || *entry.RoutingRuleName != "Tier → cheap" {
+		t.Fatalf("expected routing rule name on initial entry, got %#v", entry.RoutingRuleName)
+	}
+	if entry.VirtualKeyID == nil || *entry.VirtualKeyID != "vk-9" {
+		t.Fatalf("expected virtual key id on initial entry, got %#v", entry.VirtualKeyID)
+	}
+	if entry.VirtualKeyName == nil || *entry.VirtualKeyName != "team-billing" {
+		t.Fatalf("expected virtual key name on initial entry, got %#v", entry.VirtualKeyName)
+	}
+	if entry.Status != "processing" {
+		t.Fatalf("expected status processing, got %q", entry.Status)
+	}
+}
+
+// TestBuildCompleteLogEntrySurfacesRoutingRuleAndVirtualKey pins the parallel
+// guarantee for the terminal payload: when PostLLMHook hands the entry to the
+// batch writer, the routing rule + virtual key are preserved before the SSE
+// post-write notify, so a transition frame never loses them.
+func TestBuildCompleteLogEntrySurfacesRoutingRuleAndVirtualKey(t *testing.T) {
+	pending := &PendingLogData{
+		RequestID:       "req-complete-routing-vk",
+		Timestamp:       time.Now().UTC(),
+		RoutingRuleID:   "rule-tier-cheap",
+		RoutingRuleName: "Tier → cheap",
+		VirtualKeyID:    "vk-9",
+		VirtualKeyName:  "team-billing",
+		InitialData: &InitialLogData{
+			Provider: string(schemas.OpenAI),
+			Model:    "gpt-4o-mini",
+			Object:   string(schemas.ChatCompletionRequest),
+		},
+	}
+
+	entry := buildCompleteLogEntryFromPending(pending)
+
+	if entry.RoutingRuleID == nil || *entry.RoutingRuleID != "rule-tier-cheap" {
+		t.Fatalf("expected routing rule id on complete entry, got %#v", entry.RoutingRuleID)
+	}
+	if entry.RoutingRuleName == nil || *entry.RoutingRuleName != "Tier → cheap" {
+		t.Fatalf("expected routing rule name on complete entry, got %#v", entry.RoutingRuleName)
+	}
+	if entry.VirtualKeyID == nil || *entry.VirtualKeyID != "vk-9" {
+		t.Fatalf("expected virtual key id on complete entry, got %#v", entry.VirtualKeyID)
+	}
+	if entry.VirtualKeyName == nil || *entry.VirtualKeyName != "team-billing" {
+		t.Fatalf("expected virtual key name on complete entry, got %#v", entry.VirtualKeyName)
+	}
+}
+
+// TestBuildLogEntriesOmitEmptyRoutingAndVirtualKey ensures the "non-empty only"
+// convention is preserved — when governance did not resolve a routing rule or
+// the request had no virtual key, the entry must not carry nil-but-distinct
+// pointers that downstream code would have to nil-check.
+func TestBuildLogEntriesOmitEmptyRoutingAndVirtualKey(t *testing.T) {
+	pending := &PendingLogData{
+		RequestID: "req-empty-routing-vk",
+		Timestamp: time.Now().UTC(),
+		InitialData: &InitialLogData{
+			Provider: string(schemas.OpenAI),
+			Model:    "gpt-4o-mini",
+			Object:   string(schemas.ChatCompletionRequest),
+		},
+	}
+
+	if entry := buildInitialLogEntry(pending); entry.RoutingRuleID != nil || entry.RoutingRuleName != nil ||
+		entry.VirtualKeyID != nil || entry.VirtualKeyName != nil {
+		t.Fatalf("expected all four pointers nil on initial entry, got rr=%#v rn=%#v vk=%#v vn=%#v",
+			entry.RoutingRuleID, entry.RoutingRuleName, entry.VirtualKeyID, entry.VirtualKeyName)
+	}
+	if entry := buildCompleteLogEntryFromPending(pending); entry.RoutingRuleID != nil || entry.RoutingRuleName != nil ||
+		entry.VirtualKeyID != nil || entry.VirtualKeyName != nil {
+		t.Fatalf("expected all four pointers nil on complete entry, got rr=%#v rn=%#v vk=%#v vn=%#v",
+			entry.RoutingRuleID, entry.RoutingRuleName, entry.VirtualKeyID, entry.VirtualKeyName)
 	}
 }
 
@@ -2324,5 +2426,119 @@ func TestGuardrailDebugForLogReadsContextWithoutResponse(t *testing.T) {
 	debug := guardrailDebugForLog(ctx, nil)
 	if debug != nil {
 		t.Fatalf("guardrail debug = %#v; want nil in OSS", debug)
+	}
+}
+
+// TestUpdateLogEntryNotifyCarriesRoutingRuleAndVirtualKey pins the regression
+// where updateLogEntry's notifyActiveLogSubscribers payload used to be a
+// skinny {ID, Status, Latency}. The terminal SSE frame must carry routing
+// rule + virtual key so the UI does not drop those columns during the
+// processing→success transition.
+func TestUpdateLogEntryNotifyCarriesRoutingRuleAndVirtualKey(t *testing.T) {
+	store := newTestStore(t)
+	plugin := &LoggerPlugin{
+		store:                store,
+		logger:               testLogger{},
+		activeLogSubscribers: make(map[string]chan *logstore.Log),
+		pendingLogsEntries:   sync.Map{},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := plugin.SubscribeActiveLogStream(ctx)
+	if err != nil {
+		t.Fatalf("SubscribeActiveLogStream() error = %v", err)
+	}
+
+	requestID := "req-update-notify-routing-vk"
+	now := time.Now().UTC()
+	initial := &InitialLogData{
+		Object:   string(schemas.ChatCompletionRequest),
+		Provider: string(schemas.OpenAI),
+		Model:    "gpt-4o-mini",
+	}
+	if err := plugin.insertInitialLogEntry(context.Background(), requestID, "", now, 0, nil, initial); err != nil {
+		t.Fatalf("insertInitialLogEntry() error = %v", err)
+	}
+
+	update := &UpdateLogData{Status: "success"}
+	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10,
+		"vk-9", "team-billing",
+		"rule-tier-cheap", "Tier → cheap",
+		0, nil, "", update, false); err != nil {
+		t.Fatalf("updateLogEntry() error = %v", err)
+	}
+
+	select {
+	case got := <-sub:
+		if got.ID != requestID {
+			t.Fatalf("notify id = %q, want %q", got.ID, requestID)
+		}
+		if got.Status != "success" {
+			t.Fatalf("notify status = %q, want success", got.Status)
+		}
+		if got.RoutingRuleID == nil || *got.RoutingRuleID != "rule-tier-cheap" {
+			t.Fatalf("notify routing rule id = %#v, want pointer to rule-tier-cheap", got.RoutingRuleID)
+		}
+		if got.RoutingRuleName == nil || *got.RoutingRuleName != "Tier → cheap" {
+			t.Fatalf("notify routing rule name = %#v, want pointer to Tier → cheap", got.RoutingRuleName)
+		}
+		if got.VirtualKeyID == nil || *got.VirtualKeyID != "vk-9" {
+			t.Fatalf("notify virtual key id = %#v, want pointer to vk-9", got.VirtualKeyID)
+		}
+		if got.VirtualKeyName == nil || *got.VirtualKeyName != "team-billing" {
+			t.Fatalf("notify virtual key name = %#v, want pointer to team-billing", got.VirtualKeyName)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SSE update payload")
+	}
+}
+
+// TestUpdateLogEntryNotifyOmitsEmptyRoutingAndVirtualKey pins the empty
+// convention: when governance did not resolve a routing rule or virtual key,
+// the notify payload must not carry nil-but-distinct pointers that the UI
+// would then have to nil-check.
+func TestUpdateLogEntryNotifyOmitsEmptyRoutingAndVirtualKey(t *testing.T) {
+	store := newTestStore(t)
+	plugin := &LoggerPlugin{
+		store:                store,
+		logger:               testLogger{},
+		activeLogSubscribers: make(map[string]chan *logstore.Log),
+		pendingLogsEntries:   sync.Map{},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := plugin.SubscribeActiveLogStream(ctx)
+	if err != nil {
+		t.Fatalf("SubscribeActiveLogStream() error = %v", err)
+	}
+
+	requestID := "req-update-notify-empty"
+	now := time.Now().UTC()
+	initial := &InitialLogData{
+		Object:   string(schemas.ChatCompletionRequest),
+		Provider: string(schemas.OpenAI),
+		Model:    "gpt-4o-mini",
+	}
+	if err := plugin.insertInitialLogEntry(context.Background(), requestID, "", now, 0, nil, initial); err != nil {
+		t.Fatalf("insertInitialLogEntry() error = %v", err)
+	}
+
+	update := &UpdateLogData{Status: "success"}
+	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10,
+		"", "", "", "", 0, nil, "", update, false); err != nil {
+		t.Fatalf("updateLogEntry() error = %v", err)
+	}
+
+	select {
+	case got := <-sub:
+		if got.RoutingRuleID != nil || got.RoutingRuleName != nil ||
+			got.VirtualKeyID != nil || got.VirtualKeyName != nil {
+			t.Fatalf("expected empty routing/virtual_key on notify, got rr=%#v rn=%#v vk=%#v vn=%#v",
+				got.RoutingRuleID, got.RoutingRuleName, got.VirtualKeyID, got.VirtualKeyName)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SSE update payload")
 	}
 }

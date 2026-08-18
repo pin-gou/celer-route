@@ -35,7 +35,16 @@ type PendingLogData struct {
 	Status             string
 	RoutingEnginesUsed []string
 	InitialData        *InitialLogData
-	CreatedAt          time.Time // For cleanup of stale entries
+	// RoutingRuleID/Name and VirtualKeyID/Name are stamped in PreLLMHook from
+	// ctx (governance PreRequestHook writes the routing rule; virtual key is
+	// resolved from the x-bf-vk header). They are surfaced on the in-flight
+	// SSE row so the live Logs table shows routing rule / virtual key without
+	// waiting for PostLLMHook to land the row in the DB.
+	RoutingRuleID   string
+	RoutingRuleName string
+	VirtualKeyID    string
+	VirtualKeyName  string
+	CreatedAt       time.Time // For cleanup of stale entries
 	// TimelineEvents holds the pre_llm stage event built by PreLLMHook (with
 	// the request-start timestamp and 0 offset). PostLLMHook appends the
 	// post_llm event at its final write; both are persisted on the same write
@@ -53,8 +62,8 @@ type PendingLogData struct {
 // pendingInjectEntries wraps a slice of log entries so it can be used with sync.Map.
 // The mutex protects concurrent appends to the entries slice within the same traceID.
 type pendingInjectEntries struct {
-	mu        sync.Mutex
-	entries   []*logstore.Log
+	mu      sync.Mutex
+	entries []*logstore.Log
 	// timelineEvents is parallel to entries: entry i's stage events (pre_llm /
 	// post_llm) live at index i. Kept alongside the log so Inject() can hand
 	// them to the write queue with the correct parent log.
@@ -511,6 +520,18 @@ func buildInitialLogEntry(pending *PendingLogData) *logstore.Log {
 	if len(pending.RoutingEnginesUsed) > 0 {
 		entry.RoutingEnginesUsed = pending.RoutingEnginesUsed
 	}
+	if pending.RoutingRuleID != "" {
+		entry.RoutingRuleID = &pending.RoutingRuleID
+	}
+	if pending.RoutingRuleName != "" {
+		entry.RoutingRuleName = &pending.RoutingRuleName
+	}
+	if pending.VirtualKeyID != "" {
+		entry.VirtualKeyID = &pending.VirtualKeyID
+	}
+	if pending.VirtualKeyName != "" {
+		entry.VirtualKeyName = &pending.VirtualKeyName
+	}
 	applyUserAgent(entry, pending.InitialData.UserAgent)
 	applyApp(entry, pending.InitialData.App)
 	return entry
@@ -547,6 +568,18 @@ func buildCompleteLogEntryFromPending(pending *PendingLogData) *logstore.Log {
 	}
 	if len(pending.RoutingEnginesUsed) > 0 {
 		entry.RoutingEnginesUsed = pending.RoutingEnginesUsed
+	}
+	if pending.RoutingRuleID != "" {
+		entry.RoutingRuleID = &pending.RoutingRuleID
+	}
+	if pending.RoutingRuleName != "" {
+		entry.RoutingRuleName = &pending.RoutingRuleName
+	}
+	if pending.VirtualKeyID != "" {
+		entry.VirtualKeyID = &pending.VirtualKeyID
+	}
+	if pending.VirtualKeyName != "" {
+		entry.VirtualKeyName = &pending.VirtualKeyName
 	}
 	applyUserAgent(entry, pending.InitialData.UserAgent)
 	applyApp(entry, pending.InitialData.App)

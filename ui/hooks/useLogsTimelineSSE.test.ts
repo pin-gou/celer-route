@@ -339,6 +339,69 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		expect(result.current.error).toBeTruthy();
 		expect(result.current.isConnected).toBe(false);
 	});
+
+	// -----------------------------------------------------------------------
+	// Routing rule + virtual key pass-through (regression: in-flight rows
+	// used to lose these because the snapshot mapping omitted them).
+	// -----------------------------------------------------------------------
+
+	it("should surface routing_rule_id/name and virtual_key_id/name from the active_logs handshake", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		act(() => {
+			eventSource._dispatch("active_logs", [
+				{
+					...mockActiveLog,
+					virtual_key_id: "vk-9",
+					virtual_key_name: "team-billing",
+					routing_rule_id: "rule-tier-cheap",
+					routing_rule_name: "Tier → cheap",
+				},
+			]);
+		});
+
+		const entry = result.current.activeLogs[0];
+		expect(entry.virtual_key_id).toBe("vk-9");
+		expect(entry.virtual_key_name).toBe("team-billing");
+		expect(entry.routing_rule_id).toBe("rule-tier-cheap");
+		expect(entry.routing_rule_name).toBe("Tier → cheap");
+	});
+
+	it("should preserve routing_rule and virtual_key when log_updated merges into an existing entry", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+
+		act(() => {
+			eventSource._dispatch("active_logs", [
+				{
+					...mockActiveLog,
+					virtual_key_id: "vk-9",
+					virtual_key_name: "team-billing",
+					routing_rule_id: "rule-tier-cheap",
+					routing_rule_name: "Tier → cheap",
+				},
+			]);
+		});
+
+		// Stream a chunk without routing_rule / virtual_key fields. The hook
+		// must keep the earlier values rather than wiping them.
+		act(() => {
+			eventSource._dispatch("log_updated", {
+				id: "active-1",
+				status: "processing",
+				latency_ms: 250,
+			});
+		});
+
+		const entry = result.current.activeLogs[0];
+		expect(entry.virtual_key_id).toBe("vk-9");
+		expect(entry.virtual_key_name).toBe("team-billing");
+		expect(entry.routing_rule_id).toBe("rule-tier-cheap");
+		expect(entry.routing_rule_name).toBe("Tier → cheap");
+		expect(entry.latency).toBe(250);
+	});
 });
 
 // ---------------------------------------------------------------------------

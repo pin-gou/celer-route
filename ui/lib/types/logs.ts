@@ -1441,6 +1441,7 @@ export interface ActiveLogStreamEvent {
 	user_agent?: string;
 	cost?: number | null;
 	virtual_key_name?: string;
+	virtual_key_id?: string;
 	routing_rule_id?: string;
 	routing_rule_name?: string;
 	number_of_retries?: number;

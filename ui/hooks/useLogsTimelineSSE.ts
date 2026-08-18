@@ -28,6 +28,7 @@ export interface ActiveLogEntry {
 	user_agent?: string;
 	cost?: number | null;
 	virtual_key_name?: string;
+	virtual_key_id?: string;
 	routing_rule_id?: string;
 	routing_rule_name?: string;
 	number_of_retries?: number;
@@ -64,6 +65,7 @@ function toActiveEntry(log: LogEntry): ActiveLogEntry {
 		user_agent: log.user_agent,
 		cost: log.cost ?? null,
 		virtual_key_name: log.virtual_key_name,
+		virtual_key_id: log.virtual_key_id,
 		routing_rule_id: log.routing_rule_id,
 		routing_rule_name: log.routing_rule_name,
 		number_of_retries: log.number_of_retries,
@@ -88,6 +90,7 @@ function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
 		user_agent: update.user_agent,
 		cost: update.cost ?? null,
 		virtual_key_name: update.virtual_key_name,
+		virtual_key_id: update.virtual_key_id,
 		routing_rule_id: update.routing_rule_id,
 		routing_rule_name: update.routing_rule_name,
 		number_of_retries: update.number_of_retries ?? 0,
@@ -194,6 +197,7 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 						user_agent: fresh.user_agent ?? next[idx].user_agent,
 						cost: fresh.cost ?? next[idx].cost,
 						virtual_key_name: fresh.virtual_key_name ?? next[idx].virtual_key_name,
+						virtual_key_id: fresh.virtual_key_id ?? next[idx].virtual_key_id,
 						routing_rule_id: fresh.routing_rule_id ?? next[idx].routing_rule_id,
 						routing_rule_name: fresh.routing_rule_name ?? next[idx].routing_rule_name,
 						number_of_retries: fresh.number_of_retries ?? next[idx].number_of_retries,

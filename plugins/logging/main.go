@@ -391,6 +391,15 @@ type InitialLogData struct {
 	PassthroughRequestBody string // Raw body for passthrough requests (UTF-8)
 	UserAgent              string // Raw HTTP User-Agent of the calling client; mapped to a client app in the UI
 	App                    string // Backend-detected client app derived from UserAgent
+	// RoutingRuleID/Name are read from ctx in PreLLMHook (set by governance
+	// PreRequestHook) so the in-flight SSE row already carries the matched
+	// routing rule without waiting for PostLLMHook.
+	RoutingRuleID   string
+	RoutingRuleName string
+	// VirtualKeyID/Name mirror the same idea for the active virtual key, so an
+	// in-flight row resolves the virtual key column instead of leaving it blank.
+	VirtualKeyID   string
+	VirtualKeyName string
 }
 
 // LogCallback is a function that gets called when a new log entry is created
@@ -460,25 +469,25 @@ type LoggerPlugin struct {
 	logCallback                  LogCallback
 	mcpToolLogCallback           MCPToolLogCallback // Callback for MCP tool log entries
 	droppedRequests              atomic.Int64
-	cleanupTicker                *time.Ticker          // Ticker for cleaning up old processing logs
-	logMsgPool                   sync.Pool             // Pool for reusing LogMessage structs
-	updateDataPool               sync.Pool             // Pool for reusing UpdateLogData structs
-	pendingLogsEntries           sync.Map              // Maps requestID -> *PendingLogData (PreLLMHook input data awaiting PostLLMHook)
-	pendingLogsToInject          sync.Map              // Maps traceID -> *pendingInjectEntries (log entries to inject, supports multiple per trace)
-	pendingMCPLogsToInject       sync.Map              // Maps mcpLogID -> *logstore.MCPToolLog (PreMCPHook input data awaiting PostMCPHook)
-	writerConfig                 logstore.WriterConfig // Resolved async writer queue and batch settings
-	writeQueue                   chan *writeQueueEntry // Buffered channel for batch write queue
-	closed                       atomic.Bool           // Set during cleanup to prevent sends on closed writeQueue
-	deferredUsageSem             chan struct{}         // Limits concurrent deferred usage DB updates
-	deferredUsageWatchSem        chan struct{}         // Caps goroutines parked on a deferred-usage channel (see scheduleDeferredUsageUpdate)
-	droppedDeferredUsage         atomic.Int64          // Deferred usage updates dropped because a semaphore was full
-	clusterNodeID                atomic.Value          // Cluster node ID (string) for log attribution in clustered deployments
-	batchCtx                     context.Context       // Cancelled by Cleanup to stop the batchWriter goroutine before any further DB work
-	batchCancel                  context.CancelFunc    // Cancels batchCtx
-	batchWriterDone              chan struct{}         // Closed by batchWriter on exit; receiving from it transfers writeQueue ownership to Cleanup
-	recoveredBatch               []*writeQueueEntry    // batchWriter parks its in-memory batch here before exiting; safe to read after batchWriterDone closes (happens-before)
-	userAgentMappings            atomic.Value          // []compiledUserAgentMapping, read from request hot paths
-	userAgentMappingMu           sync.Mutex            // serializes user-agent mapping write+reload sequences to keep the cache consistent
+	cleanupTicker                *time.Ticker                  // Ticker for cleaning up old processing logs
+	logMsgPool                   sync.Pool                     // Pool for reusing LogMessage structs
+	updateDataPool               sync.Pool                     // Pool for reusing UpdateLogData structs
+	pendingLogsEntries           sync.Map                      // Maps requestID -> *PendingLogData (PreLLMHook input data awaiting PostLLMHook)
+	pendingLogsToInject          sync.Map                      // Maps traceID -> *pendingInjectEntries (log entries to inject, supports multiple per trace)
+	pendingMCPLogsToInject       sync.Map                      // Maps mcpLogID -> *logstore.MCPToolLog (PreMCPHook input data awaiting PostMCPHook)
+	writerConfig                 logstore.WriterConfig         // Resolved async writer queue and batch settings
+	writeQueue                   chan *writeQueueEntry         // Buffered channel for batch write queue
+	closed                       atomic.Bool                   // Set during cleanup to prevent sends on closed writeQueue
+	deferredUsageSem             chan struct{}                 // Limits concurrent deferred usage DB updates
+	deferredUsageWatchSem        chan struct{}                 // Caps goroutines parked on a deferred-usage channel (see scheduleDeferredUsageUpdate)
+	droppedDeferredUsage         atomic.Int64                  // Deferred usage updates dropped because a semaphore was full
+	clusterNodeID                atomic.Value                  // Cluster node ID (string) for log attribution in clustered deployments
+	batchCtx                     context.Context               // Cancelled by Cleanup to stop the batchWriter goroutine before any further DB work
+	batchCancel                  context.CancelFunc            // Cancels batchCtx
+	batchWriterDone              chan struct{}                 // Closed by batchWriter on exit; receiving from it transfers writeQueue ownership to Cleanup
+	recoveredBatch               []*writeQueueEntry            // batchWriter parks its in-memory batch here before exiting; safe to read after batchWriterDone closes (happens-before)
+	userAgentMappings            atomic.Value                  // []compiledUserAgentMapping, read from request hot paths
+	userAgentMappingMu           sync.Mutex                    // serializes user-agent mapping write+reload sequences to keep the cache consistent
 	activeLogSubscribers         map[string]chan *logstore.Log // Subscription channels for /api/logs/active/stream SSE (keyed by subscriber UUID)
 	activeLogSubMu               sync.RWMutex                  // guards activeLogSubscribers
 }
@@ -951,8 +960,22 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 		routingEngines = engines
 	}
 
+	// Routing rule and virtual key are resolved by the governance plugin's
+	// PreRequestHook (which runs before PreLLMHook), so the values are already
+	// on ctx by the time we build the in-flight log entry. Surfacing them here
+	// lets the live Logs table show the routing_rule and virtual_key columns
+	// without waiting for PostLLMHook to land the row in the DB.
+	routingRuleID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceRoutingRuleID)
+	routingRuleName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceRoutingRuleName)
+	virtualKeyID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID)
+	virtualKeyName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName)
+
 	initialData.RoutingEngineUsed = routingEngines
 	initialData.Status = logStatusProcessing
+	initialData.RoutingRuleID = routingRuleID
+	initialData.RoutingRuleName = routingRuleName
+	initialData.VirtualKeyID = virtualKeyID
+	initialData.VirtualKeyName = virtualKeyName
 
 	// Store input data in pendingLogs for later combination with PostLLMHook output.
 	// No DB write here - the write is deferred to PostLLMHook to halve total writes.
@@ -965,6 +988,10 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 		InitialData:        initialData,
 		CreatedAt:          time.Now(),
 		Status:             logStatusProcessing,
+		RoutingRuleID:      routingRuleID,
+		RoutingRuleName:    routingRuleName,
+		VirtualKeyID:       virtualKeyID,
+		VirtualKeyName:     virtualKeyName,
 	}
 	// Build the pre_llm stage marker for the request timeline. It is kept in
 	// memory with the pending data and persisted together with the Log row when
@@ -1201,7 +1228,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 	if rateLimitIDs, ok := ctx.Value(schemas.BifrostContextKeyGovernanceRateLimitIDs).([]string); ok && len(rateLimitIDs) > 0 {
 		entry.RateLimitIDsParsed = rateLimitIDs
 	}
-	
+
 	entry.MetadataParsed = pending.InitialData.Metadata
 	entry.MetadataParsed = mergeRealtimeMetadata(entry.MetadataParsed, ctx)
 	entry.RoutingEngineLogs = routingEngineLogs
@@ -1511,9 +1538,9 @@ func (p *LoggerPlugin) storeOrEnqueueEntry(ctx *schemas.BifrostContext, entry *l
 	if traceID != "" {
 		// Append to slice for Inject() to pick up — supports multiple attempts per trace
 		existing, loaded := p.pendingLogsToInject.LoadOrStore(traceID, &pendingInjectEntries{
-			entries: []*logstore.Log{entry},
+			entries:        []*logstore.Log{entry},
 			timelineEvents: [][]*logstore.TimelineEvent{timelineEvents},
-			createdAt: time.Now(),
+			createdAt:      time.Now(),
 		})
 		if !loaded {
 			return

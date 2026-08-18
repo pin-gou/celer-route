@@ -394,16 +394,32 @@ func (p *LoggerPlugin) updateLogEntry(
 	}
 	// Notify SSE subscribers of the status update so the timeline reflects
 	// the transition without waiting for the batch writer's next flush.
+	// Routing rule and virtual key ride along so the terminal log_updated
+	// payload matches what buildInitialLogEntry put on the in-flight row —
+	// the UI never sees a frame that drops fields it had earlier.
 	latencyPtr := (*float64)(nil)
 	if latency > 0 {
 		l := float64(latency)
 		latencyPtr = &l
 	}
-	p.notifyActiveLogSubscribers(&logstore.Log{
-		ID:       requestID,
-		Status:   data.Status,
-		Latency:  latencyPtr,
-	})
+	updatePayload := &logstore.Log{
+		ID:      requestID,
+		Status:  data.Status,
+		Latency: latencyPtr,
+	}
+	if routingRuleID != "" {
+		updatePayload.RoutingRuleID = &routingRuleID
+	}
+	if routingRuleName != "" {
+		updatePayload.RoutingRuleName = &routingRuleName
+	}
+	if virtualKeyID != "" {
+		updatePayload.VirtualKeyID = &virtualKeyID
+	}
+	if virtualKeyName != "" {
+		updatePayload.VirtualKeyName = &virtualKeyName
+	}
+	p.notifyActiveLogSubscribers(updatePayload)
 	return nil
 }
 

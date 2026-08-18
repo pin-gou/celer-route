@@ -70,6 +70,7 @@ function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 		app: a.app,
 		user_agent: a.user_agent,
 		virtual_key_name: a.virtual_key_name,
+		virtual_key_id: a.virtual_key_id,
 		routing_rule_id: a.routing_rule_id,
 		routing_rule_name: a.routing_rule_name,
 		content_summary: a.content_summary || a.message || "",
