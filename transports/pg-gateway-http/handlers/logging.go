@@ -3104,6 +3104,8 @@ type activeLogEntry struct {
 	UserAgent       *string                  `json:"user_agent,omitempty"`
 	Cost            *float64                 `json:"cost,omitempty"`
 	VirtualKeyName  *string                  `json:"virtual_key_name,omitempty"`
+	RoutingRuleID   *string                  `json:"routing_rule_id,omitempty"`
+	RoutingRuleName *string                  `json:"routing_rule_name,omitempty"`
 	NumberOfRetries int                      `json:"number_of_retries"`
 	FallbackIndex   int                      `json:"fallback_index"`
 	ContentSummary  string                   `json:"content_summary,omitempty"`
@@ -3205,6 +3207,8 @@ func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
 		UserAgent:       l.UserAgent,
 		Cost:            l.Cost,
 		VirtualKeyName:  l.VirtualKeyName,
+		RoutingRuleID:   l.RoutingRuleID,
+		RoutingRuleName: l.RoutingRuleName,
 		NumberOfRetries: l.NumberOfRetries,
 		FallbackIndex:   l.FallbackIndex,
 		ContentSummary:  l.ContentSummary,

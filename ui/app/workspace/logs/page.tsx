@@ -70,6 +70,8 @@ function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 		app: a.app,
 		user_agent: a.user_agent,
 		virtual_key_name: a.virtual_key_name,
+		routing_rule_id: a.routing_rule_id,
+		routing_rule_name: a.routing_rule_name,
 		content_summary: a.content_summary || a.message || "",
 		__processing: true,
 	} as DisplayLogEntry;
@@ -754,7 +756,7 @@ export default function LogsPage() {
 		[t],
 	);
 
-	const DEFAULT_HIDDEN_COLUMNS = useMemo(() => ["virtual_key", "routing_rule", "team", "customer", "user", "business_unit"], []);
+	const DEFAULT_HIDDEN_COLUMNS = useMemo(() => ["virtual_key", "team", "customer", "user", "business_unit"], []);
 
 	const {
 		entries: columnEntries,
