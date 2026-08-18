@@ -1,0 +1,7 @@
+{
+  "name": "git-stash",
+  "command": "git stash",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^Saved working directory", "^stash@\\{", "^Dropped ", "^CONFLICT"]
+}

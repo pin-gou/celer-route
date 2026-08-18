@@ -1,0 +1,7 @@
+{
+  "name": "npm-publish",
+  "command": "npm publish",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["npm ERR", "error:", "Error:", "E403", "E404", "E409"]
+}

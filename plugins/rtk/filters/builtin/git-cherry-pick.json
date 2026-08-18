@@ -1,0 +1,7 @@
+{
+  "name": "git-cherry-pick",
+  "command": "git cherry-pick",
+  "head": 3,
+  "tail": 3,
+  "priority_patterns": ["^CONFLICT", "^fatal:", "^error:", "Cherry-pick (success|failed)"]
+}

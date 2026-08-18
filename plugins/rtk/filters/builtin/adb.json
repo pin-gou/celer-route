@@ -1,0 +1,7 @@
+{
+  "name": "adb",
+  "command": "adb",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error:", "Error:", "failed", "device \\'[^\\']+\\' not found", "unauthorized", "offline", "device not found"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "git-diff",
+  "command": "git diff",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^diff --git", "^index [0-9a-f]", "^--- a/", "^\\+\\+\\+ b/", "Binary files", "renamed from", "renamed to", "similarity index", "deleted file mode", "new file mode"]
+}

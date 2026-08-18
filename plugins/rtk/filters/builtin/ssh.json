@@ -1,0 +1,7 @@
+{
+  "name": "ssh",
+  "command": "ssh",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^ssh:", "Permission denied", "Connection refused", "Connection timed out", "Host key verification failed", "No route to host", "Connection reset"]
+}

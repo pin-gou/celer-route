@@ -1071,6 +1071,14 @@ type ResponsesResponseUsage struct {
 	OutputTokens        int                            `json:"output_tokens"`         // Number of output tokens (completion tokens + reasoning tokens)
 	OutputTokensDetails *ResponsesResponseOutputTokens `json:"output_tokens_details"` // Detailed breakdown of output tokens	TotalTokens int `json:"total_tokens"` // Total number of tokens used
 	TotalTokens         int                            `json:"total_tokens"`          // Total number of tokens used
+	// OriginalPromptTokens reports the pre-compression prompt token count when the
+	// request went through the RTK (or a similarly compression) plugin. Populated on
+	// the responses path by the plugin's PostLLMHook; the corresponding
+	// CompressedPromptTokens is what InputTokens was rewritten to. Absent on
+	// ordinary responses.
+	OriginalPromptTokens *int `json:"original_prompt_tokens,omitempty"`
+	// CompressedPromptTokens mirrors the rewritten InputTokens (see OriginalPromptTokens).
+	CompressedPromptTokens *int `json:"compressed_prompt_tokens,omitempty"`
 	Cost                *BifrostCost                   `json:"cost,omitempty"`        // Only for the providers which support cost calculation
 	Iterations          []ResponsesResponseUsage       `json:"iterations,omitempty"`  // iterations field is sent by anthropic
 

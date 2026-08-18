@@ -1,0 +1,13 @@
+{
+  "name": "kubectl-get",
+  "command": "kubectl get",
+  "rules": [
+    {"type": "strip", "pattern": "^NAME\\s+READY\\s+STATUS"},
+    {"type": "strip", "pattern": "^NAME\\s+STATUS\\s+ROLES"},
+    {"type": "strip", "pattern": "\\s+Running\\s+\\d+"},
+    {"type": "strip", "pattern": "\\s+Completed\\s+\\d+"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "Pending", "Terminating", "Evicted", "OOMKilled", "Init:Error", "CreateContainerConfigError", "Error", "Failed"]
+}

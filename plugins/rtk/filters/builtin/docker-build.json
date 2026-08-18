@@ -1,0 +1,7 @@
+{
+  "name": "docker-build",
+  "command": "docker build",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^ERROR", "error:", "Error:", "failed", "ERROR:"]
+}

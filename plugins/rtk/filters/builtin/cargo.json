@@ -1,0 +1,11 @@
+{
+  "name": "cargo",
+  "command": "cargo",
+  "rules": [
+    {"type": "strip", "pattern": "^   Compiling"},
+    {"type": "strip", "pattern": "^   Finished"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error", "^Error:", "error\\[E", "warning:", "aborting", "could not compile"]
+}

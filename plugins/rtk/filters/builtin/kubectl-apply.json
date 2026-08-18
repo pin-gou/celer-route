@@ -1,0 +1,7 @@
+{
+  "name": "kubectl-apply",
+  "command": "kubectl apply",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error", "Error:", "conflict", "unchanged", "invalid", "failed"]
+}

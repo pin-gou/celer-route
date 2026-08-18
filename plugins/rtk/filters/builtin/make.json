@@ -1,0 +1,14 @@
+{
+  "name": "make",
+  "command": "make",
+  "rules": [
+    {"type": "strip", "pattern": "^gcc -c "},
+    {"type": "strip", "pattern": "^cc -c "},
+    {"type": "strip", "pattern": "^g\\+\\+ -c "},
+    {"type": "strip", "pattern": "^clang -c "},
+    {"type": "strip", "pattern": "^\\s{0,2}(ar|ld|ranlib)\\s"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^make:", "\\*\\*\\*", "error:", "Error:", "ERROR:", "warning:", "failed"]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "npm-install",
+  "command": "npm install",
+  "rules": [
+    {"type": "replace", "pattern": "^npm WARN deprecated ([^:]+): .*$", "replacement": "npm WARN deprecated $1"},
+    {"type": "strip", "pattern": "^npm notice"},
+    {"type": "replace", "pattern": "^(added \\d+ packages?), .*$", "replacement": "$1"},
+    {"type": "replace", "pattern": "^(removed \\d+ packages?), .*$", "replacement": "$1"},
+    {"type": "replace", "pattern": "^(changed \\d+ packages?), .*$", "replacement": "$1"},
+    {"type": "strip", "pattern": "^audited \\d+ packages? in"},
+    {"type": "strip", "pattern": "^up to date$"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["npm ERR", "npm error", "ERR! code", "EACCES", "ENOENT", "MODULE_NOT_FOUND"]
+}

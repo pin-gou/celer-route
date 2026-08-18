@@ -1,0 +1,7 @@
+{
+  "name": "git-reset",
+  "command": "git reset",
+  "head": 4,
+  "tail": 2,
+  "priority_patterns": ["^fatal:", "^error:"]
+}

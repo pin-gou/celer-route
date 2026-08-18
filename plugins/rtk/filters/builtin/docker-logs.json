@@ -1,0 +1,11 @@
+{
+  "name": "docker-logs",
+  "command": "docker logs",
+  "rules": [
+    {"type": "strip", "pattern": "\\bDEBUG\\b"},
+    {"type": "strip", "pattern": "\\bTRACE\\b"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["\\bERROR\\b", "\\bFATAL\\b", "\\bCRITICAL\\b", "\\bWARN\\b", "\\bException\\b", "Traceback"]
+}

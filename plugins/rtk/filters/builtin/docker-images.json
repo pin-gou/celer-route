@@ -1,0 +1,9 @@
+{
+  "name": "docker-images",
+  "command": "docker images",
+  "rules": [
+    {"type": "strip", "pattern": "^REPOSITORY\\s+TAG\\s+IMAGE ID"}
+  ],
+  "head": 10,
+  "tail": 5
+}

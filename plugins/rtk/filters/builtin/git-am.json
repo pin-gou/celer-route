@@ -1,0 +1,7 @@
+{
+  "name": "git-am",
+  "command": "git am",
+  "head": 3,
+  "tail": 3,
+  "priority_patterns": ["^Applying:", "^Patch failed", "^error:", "^fatal:"]
+}

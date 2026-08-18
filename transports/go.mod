@@ -24,6 +24,7 @@ require (
 	github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver v1.0.15
 	github.com/pin-gou/pg-gateway/plugins/otel v1.4.6
 	github.com/pin-gou/pg-gateway/plugins/prompts v1.0.34
+	github.com/pin-gou/pg-gateway/plugins/rtk v1.0.0
 	github.com/pin-gou/pg-gateway/plugins/semanticcache v1.5.34
 	github.com/pin-gou/pg-gateway/plugins/telemetry v1.5.34
 	github.com/pion/rtcp v1.2.16
@@ -259,6 +260,8 @@ replace github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver => ../plugins
 replace github.com/pin-gou/pg-gateway/plugins/otel => ../plugins/otel
 
 replace github.com/pin-gou/pg-gateway/plugins/prompts => ../plugins/prompts
+
+replace github.com/pin-gou/pg-gateway/plugins/rtk => ../plugins/rtk
 
 replace github.com/pin-gou/pg-gateway/plugins/semanticcache => ../plugins/semanticcache
 

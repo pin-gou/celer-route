@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1207,5 +1208,314 @@ func TestGetActiveLogStream_DisconnectCleanup(t *testing.T) {
 		// Handler exited cleanly
 	case <-time.After(5 * time.Second):
 		t.Fatal("handler did not clean up after client disconnect")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Task 6.2: RTK compression metadata propagation into logs-db
+// ---------------------------------------------------------------------------
+
+// newLoggingPluginStore creates an in-memory SQLite log store for testing the
+// logging plugin's metadata pipeline from the transport (handlers) package.
+func newLoggingPluginStore(t *testing.T) logstore.LogStore {
+	t.Helper()
+
+	dir := t.TempDir()
+	store, err := logstore.NewLogStore(context.Background(), &logstore.Config{
+		Enabled: true,
+		Type:    logstore.LogStoreTypeSQLite,
+		Config: &logstore.SQLiteConfig{
+			Path: filepath.Join(dir, "logging.db"),
+		},
+	}, &mockLogger{})
+	if err != nil {
+		t.Fatalf("NewLogStore() error = %v", err)
+	}
+	return store
+}
+
+// TestLoggingHandler_OriginalPromptTokensInMetadata verifies that the logging
+// handler's underlying log path reads BifrostContextKeyOriginalPromptTokens and
+// BifrostContextKeyCompressedPromptTokens (set by the RTK compression plugin's
+// PostLLMHook) and persists them into the logs-db metadata JSON as
+// `original_prompt_tokens` / `compressed_prompt_tokens`.
+//
+// RED PHASE: the logging plugin's metadata merge does not yet read these keys,
+// so the metadata map will lack them and the assertions below fail. The dev
+// phase (tasks 7.3 in tasks.md) wires the keys into the log entry metadata.
+func TestLoggingHandler_OriginalPromptTokensInMetadata(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	store := newLoggingPluginStore(t)
+	t.Cleanup(func() { _ = store.Close(context.Background()) })
+
+	loggingHeaders := []string{}
+	plugin, err := loggingplugin.Init(context.Background(), &loggingplugin.Config{LoggingHeaders: &loggingHeaders}, &mockLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("loggingplugin.Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("plugin.Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	requestID := "req-rtk-compression"
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
+	// Request headers and a dimension guarantee the logging plugin materializes
+	// a metadata map (captureLoggingHeaders + mergeRealtimeMetadata), so the
+	// assertions below fail exactly on the missing compression keys, not on a
+	// nil metadata map.
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-bf-lh-tenant": "rtk-test",
+	})
+	ctx.SetValue(schemas.BifrostContextKeyDimensions, map[string]string{
+		"region": "us-east",
+	})
+	// The RTK plugin's PostLLMHook sets these on the request context:
+	// original token count before compression, compressed count after.
+	ctx.SetValue(schemas.BifrostContextKeyOriginalPromptTokens, 2000)
+	ctx.SetValue(schemas.BifrostContextKeyCompressedPromptTokens, 800)
+
+	// Execute PreLLMHook so the plugin has pending input data for the request.
+	_, _, err = plugin.PreLLMHook(ctx, &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o",
+			Params:   &schemas.ChatParameters{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreLLMHook() error = %v", err)
+	}
+
+	// Execute PostLLMHook with a success response. The handler's log path must
+	// read the two ctx keys and merge them into the entry metadata.
+	result := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType:            schemas.ChatCompletionRequest,
+				Provider:               schemas.OpenAI,
+				OriginalModelRequested: "gpt-4o",
+				ResolvedModelUsed:      "gpt-4o",
+				Latency:                42,
+			},
+		},
+	}
+	_, _, err = plugin.PostLLMHook(ctx, result, nil)
+	if err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+
+	// Cleanup drains the write queue so the log row is persisted.
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("plugin.Cleanup() error = %v", err)
+	}
+
+	logEntry, err := store.FindByID(context.Background(), requestID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if logEntry.MetadataParsed == nil {
+		t.Fatal("expected metadata to be persisted for the RTK-compressed request")
+	}
+
+	// original_prompt_tokens must hold the pre-compression token count.
+	if got := logEntry.MetadataParsed["original_prompt_tokens"]; got == nil {
+		t.Fatal("expected metadata[\"original_prompt_tokens\"] — the logging handler must read BifrostContextKeyOriginalPromptTokens into logs-db metadata")
+	} else if fmt.Sprintf("%v", got) != "2000" {
+		t.Fatalf("metadata original_prompt_tokens = %#v, want 2000", got)
+	}
+
+	// compressed_prompt_tokens must hold the post-compression token count.
+	if got := logEntry.MetadataParsed["compressed_prompt_tokens"]; got == nil {
+		t.Fatal("expected metadata[\"compressed_prompt_tokens\"] — the logging handler must read BifrostContextKeyCompressedPromptTokens into logs-db metadata")
+	} else if fmt.Sprintf("%v", got) != "800" {
+		t.Fatalf("metadata compressed_prompt_tokens = %#v, want 800", got)
+	}
+}
+
+// TestLoggingHandler_NoCompressionKeysLeavesMetadataUnchanged verifies the
+// negative contract: requests that were never compressed (no ctx keys set) must
+// not gain original/compressed_prompt_tokens entries in the metadata. This
+// guards against the handler inventing compression stats for plain requests.
+// In the red phase metadata may be nil (no headers set → no metadata map), so
+// the test tolerates nil metadata — the key assertion is only that compression
+// keys are absent if metadata exists.
+func TestLoggingHandler_NoCompressionKeysLeavesMetadataUnchanged(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	store := newLoggingPluginStore(t)
+	t.Cleanup(func() { _ = store.Close(context.Background()) })
+
+	loggingHeaders := []string{}
+	plugin, err := loggingplugin.Init(context.Background(), &loggingplugin.Config{LoggingHeaders: &loggingHeaders}, &mockLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("loggingplugin.Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("plugin.Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	requestID := "req-no-compression"
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
+	// Request headers and a dimension guarantee the metadata map gets
+	// materialized, so the negative assertions below test the right thing:
+	// the compression keys are absent.
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-bf-lh-tenant": "rtk-test",
+	})
+	ctx.SetValue(schemas.BifrostContextKeyDimensions, map[string]string{
+		"region": "us-east",
+	})
+	// Deliberately do NOT set BifrostContextKeyOriginalPromptTokens /
+	// BifrostContextKeyCompressedPromptTokens — this is a plain, uncompressed request.
+
+	_, _, err = plugin.PreLLMHook(ctx, &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o",
+			Params:   &schemas.ChatParameters{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreLLMHook() error = %v", err)
+	}
+
+	result := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType:            schemas.ChatCompletionRequest,
+				Provider:               schemas.OpenAI,
+				OriginalModelRequested: "gpt-4o",
+				ResolvedModelUsed:      "gpt-4o",
+				Latency:                19,
+			},
+		},
+	}
+	_, _, err = plugin.PostLLMHook(ctx, result, nil)
+	if err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("plugin.Cleanup() error = %v", err)
+	}
+
+	logEntry, err := store.FindByID(context.Background(), requestID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	// The dimensions set above guarantee a metadata map materializes — assert it
+	// exists and, crucially, that it carries no compression keys for an
+	// uncompressed request.
+	if logEntry.MetadataParsed == nil {
+		t.Fatal("expected metadata to be persisted for the plain request (dimensions set)")
+	}
+	if _, ok := logEntry.MetadataParsed["original_prompt_tokens"]; ok {
+		t.Fatal("metadata must not contain original_prompt_tokens for an uncompressed request")
+	}
+	if _, ok := logEntry.MetadataParsed["compressed_prompt_tokens"]; ok {
+		t.Fatal("metadata must not contain compressed_prompt_tokens for an uncompressed request")
+	}
+}
+
+// TestLoggingHandler_OriginalPromptTokensInStreamingFinalChunk verifies that the
+// streaming final-chunk path also persists the RTK compression metadata. A
+// streaming request's PostLLMHook is invoked per chunk; non-final chunks are
+// processed by the accumulator and skipped, while the final chunk (marked by
+// BifrostContextKeyStreamEndIndicator) reaches the metadata merge that reads
+// BifrostContextKeyOriginalPromptTokens / BifrostContextKeyCompressedPromptTokens.
+func TestLoggingHandler_OriginalPromptTokensInStreamingFinalChunk(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	store := newLoggingPluginStore(t)
+	t.Cleanup(func() { _ = store.Close(context.Background()) })
+
+	loggingHeaders := []string{}
+	plugin, err := loggingplugin.Init(context.Background(), &loggingplugin.Config{LoggingHeaders: &loggingHeaders}, &mockLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("loggingplugin.Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("plugin.Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	requestID := "req-rtk-streaming-final"
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
+	// Materialize the metadata map so the assertions below fail exactly on the
+	// missing compression keys, not on a nil metadata map.
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-bf-lh-tenant": "rtk-streaming-test",
+	})
+	ctx.SetValue(schemas.BifrostContextKeyDimensions, map[string]string{
+		"region": "us-west",
+	})
+	// The RTK plugin's PostLLMHook sets these on the request context.
+	ctx.SetValue(schemas.BifrostContextKeyOriginalPromptTokens, 5000)
+	ctx.SetValue(schemas.BifrostContextKeyCompressedPromptTokens, 1500)
+	// Mark this as the streaming final chunk so the PostLLMHook writes the
+	// full log entry instead of skipping on the accumulator path.
+	ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
+
+	_, _, err = plugin.PreLLMHook(ctx, &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionStreamRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o",
+			Params:   &schemas.ChatParameters{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreLLMHook() error = %v", err)
+	}
+
+	result := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType:            schemas.ChatCompletionStreamRequest,
+				Provider:               schemas.OpenAI,
+				OriginalModelRequested: "gpt-4o",
+				ResolvedModelUsed:      "gpt-4o",
+				Latency:                88,
+			},
+		},
+	}
+	_, _, err = plugin.PostLLMHook(ctx, result, nil)
+	if err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("plugin.Cleanup() error = %v", err)
+	}
+
+	logEntry, err := store.FindByID(context.Background(), requestID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if logEntry.MetadataParsed == nil {
+		t.Fatal("expected metadata to be persisted for the streaming final chunk")
+	}
+
+	if got := logEntry.MetadataParsed["original_prompt_tokens"]; got == nil {
+		t.Fatal("expected metadata[\"original_prompt_tokens\"] in streaming final chunk — the logging handler must read BifrostContextKeyOriginalPromptTokens into logs-db metadata")
+	} else if fmt.Sprintf("%v", got) != "5000" {
+		t.Fatalf("metadata original_prompt_tokens = %#v, want 5000", got)
+	}
+
+	if got := logEntry.MetadataParsed["compressed_prompt_tokens"]; got == nil {
+		t.Fatal("expected metadata[\"compressed_prompt_tokens\"] in streaming final chunk — the logging handler must read BifrostContextKeyCompressedPromptTokens into logs-db metadata")
+	} else if fmt.Sprintf("%v", got) != "1500" {
+		t.Fatalf("metadata compressed_prompt_tokens = %#v, want 1500", got)
 	}
 }

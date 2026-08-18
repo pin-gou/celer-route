@@ -1,0 +1,7 @@
+{
+  "name": "go-mod",
+  "command": "go mod",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^go: ", "updates to go.mod", "missing go.sum entry", "download"]
+}

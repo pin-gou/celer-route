@@ -1,0 +1,14 @@
+{
+  "name": "go-test",
+  "command": "go test",
+  "rules": [
+    {"type": "strip", "pattern": "^=== RUN"},
+    {"type": "strip", "pattern": "^--- PASS"},
+    {"type": "strip", "pattern": "^--- SKIP"},
+    {"type": "strip", "pattern": "^ok\\s+\\S"},
+    {"type": "strip", "pattern": "^PASS\\s*$"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^--- FAIL", "^FAIL\\s*$", "FAIL:", "\\s+\\S+\\.go:\\d+:"]
+}

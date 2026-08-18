@@ -1,0 +1,11 @@
+{
+  "name": "mvn",
+  "command": "mvn",
+  "rules": [
+    {"type": "replace", "pattern": "^\\[INFO\\] ", "replacement": ""},
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["\\[WARN\\]", "\\[ERROR\\]", "BUILD FAILURE", "BUILD SUCCESS", "FAILURE", "ERROR:", "Failed to execute"]
+}

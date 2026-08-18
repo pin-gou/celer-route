@@ -1,0 +1,12 @@
+{
+  "name": "git-pull",
+  "command": "git pull",
+  "rules": [
+    {"type": "strip", "pattern": "^remote: "},
+    {"type": "strip", "pattern": "^From https://"},
+    {"type": "strip", "pattern": "^Already up to date"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error:", "^fatal:", "CONFLICT", "Auto-merging"]
+}

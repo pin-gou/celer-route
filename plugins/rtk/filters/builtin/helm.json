@@ -1,0 +1,7 @@
+{
+  "name": "helm",
+  "command": "helm",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^Error:", "^error:", "failed", "already exists", "not found", "deployed", "installed", "upgraded"]
+}

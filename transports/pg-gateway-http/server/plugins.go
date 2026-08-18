@@ -14,6 +14,7 @@ import (
 	"github.com/pin-gou/pg-gateway/plugins/otel"
 	"github.com/pin-gou/pg-gateway/plugins/prompts"
 	"github.com/pin-gou/pg-gateway/plugins/providercooldown"
+	"github.com/pin-gou/pg-gateway/plugins/rtk"
 	"github.com/pin-gou/pg-gateway/plugins/semanticcache"
 	"github.com/pin-gou/pg-gateway/plugins/telemetry"
 	"github.com/pin-gou/pg-gateway/transports/pg-gateway-http/handlers"
@@ -111,6 +112,13 @@ func loadBuiltinPlugin(ctx context.Context, name string, pluginConfig any, bifro
 			return nil, fmt.Errorf("failed to marshal semantic cache plugin config: %w", err)
 		}
 		return semanticcache.Init(ctx, semanticConfig, logger, bifrostConfig.VectorStore)
+
+	case rtk.PluginName:
+		rtkConfig, err := MarshalPluginConfig[rtk.Config](pluginConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal rtk plugin config: %w", err)
+		}
+		return rtk.Init(ctx, rtkConfig, logger)
 
 	case otel.PluginName:
 		otelConfig, err := MarshalPluginConfig[otel.Config](pluginConfig)
@@ -252,7 +260,18 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	}
 	s.Config.SetPluginOrderInfo(semanticcache.PluginName, builtinPlacement, schemas.Ptr(6))
 
-	// 7. Compat (if any compat feature is enabled in ClientConfig)
+	// 7. RTK (if configured in PluginConfigs)
+	rtkConfig := s.getPluginConfig(rtk.PluginName)
+	if rtkConfig != nil && rtkConfig.Enabled {
+		if err := s.registerPluginWithStatus(ctx, rtk.PluginName, nil, rtkConfig.Config, true); err != nil {
+			return fmt.Errorf("failed to initialize rtk plugin: %w", err)
+		}
+	} else {
+		s.markPluginDisabled(rtk.PluginName)
+	}
+	s.Config.SetPluginOrderInfo(rtk.PluginName, builtinPlacement, schemas.Ptr(7))
+
+	// 8. Compat (if any compat feature is enabled in ClientConfig)
 	cc := s.Config.ClientConfig.Compat
 	compatCfg := &compat.Config{
 		ConvertTextToChat:      cc.ConvertTextToChat,
@@ -261,7 +280,7 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 		ShouldConvertParams:    cc.ShouldConvertParams,
 	}
 	s.registerPluginWithStatus(ctx, compat.PluginName, nil, compatCfg, false)
-	s.Config.SetPluginOrderInfo(compat.PluginName, builtinPlacement, schemas.Ptr(7))
+	s.Config.SetPluginOrderInfo(compat.PluginName, builtinPlacement, schemas.Ptr(8))
 
 	// 8. Maxim (if configured in PluginConfigs)
 	maximConfig := s.getPluginConfig(maxim.PluginName)

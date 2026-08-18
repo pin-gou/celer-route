@@ -1,0 +1,7 @@
+{
+  "name": "kubectl-rollout",
+  "command": "kubectl rollout",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error", "Error:", "failed", "Waiting for rollout", "rollout \\\"[^\\\"]+\\\" successfully rolled out"]
+}

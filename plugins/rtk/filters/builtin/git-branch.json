@@ -1,0 +1,9 @@
+{
+  "name": "git-branch",
+  "command": "git branch",
+  "rules": [
+    {"type": "keep", "pattern": "^\\* |^  \\S|^\\S+$"}
+  ],
+  "head": 10,
+  "tail": 5
+}

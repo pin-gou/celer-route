@@ -1,0 +1,7 @@
+{
+  "name": "npm-run",
+  "command": "npm run",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["npm ERR", "npm error", "ERR! code", "error:", "Error:", "failed"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "docker-compose",
+  "command": "docker compose",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error", "Error:", "ERROR", "failed", "container.*exited", "port.*in use"]
+}

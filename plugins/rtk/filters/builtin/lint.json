@@ -1,0 +1,7 @@
+{
+  "name": "lint",
+  "command": "lint",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error:", "Error:", "ERROR", "warning:", "Warning:", "WARN", "\\s+\\.go:\\d+:"]
+}

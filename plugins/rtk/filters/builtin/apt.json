@@ -1,0 +1,10 @@
+{
+  "name": "apt",
+  "command": "apt",
+  "rules": [
+    {"type": "strip", "pattern": "^(Reading|Building|Need to get|After this operation|Get:|Fetched|Selecting|Preparing|Unpacking|Setting up|Processing triggers)"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^E:", "^W:", "^error:", "^Error:", "failed", "unable to", "not found"]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "brew",
+  "command": "brew",
+  "rules": [
+    {"type": "strip", "pattern": "^==> Downloading"},
+    {"type": "strip", "pattern": "^==> Installing"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^Error:", "^error:", "Warning:", "failed"]
+}
