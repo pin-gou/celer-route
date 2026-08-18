@@ -18,10 +18,17 @@ function formatRequest(requests: number): string {
 	return requestFormatter.format(requests);
 }
 
+// Recharts 3's ResponsiveContainer seeds its measured size at -1×-1 and logs a
+// console.warn on the very first render, before the ResizeObserver effect reads
+// the real box. Seeding a positive height silences that warning; the zero width
+// keeps the chart unmounted for that single pre-measure frame so nothing
+// mis-sized ever paints. Height matches the fixed h-32 (128px) chart wrapper.
+const CHART_INITIAL_DIMENSION = { width: 0, height: 128 };
+
 // Empty chart placeholder when data fails to render
 function EmptyChart() {
 	return (
-		<ResponsiveContainer width="100%" height="100%">
+		<ResponsiveContainer width="100%" height="100%" initialDimension={CHART_INITIAL_DIMENSION}>
 			<BarChart
 				data={[
 					{ name: "", value: 0 },
@@ -397,7 +404,7 @@ export function LogsVolumeChart({
 							<Skeleton className="h-full w-full" />
 						) : hasValidData ? (
 							<ChartErrorBoundary resetKey={`${effectingTimeRange.startTime}-${effectingTimeRange.endTime}-${chartData.length}`}>
-								<ResponsiveContainer width="100%" height="100%">
+								<ResponsiveContainer width="100%" height="100%" initialDimension={CHART_INITIAL_DIMENSION}>
 									<BarChart
 										data={chartData}
 										margin={{ top: 6, right: 4, left: 12, bottom: 0 }}
