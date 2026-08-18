@@ -1018,3 +1018,54 @@ func TestPluginInitHoldsLoader(t *testing.T) {
 		t.Error("second plugin loader should honor DisabledFilters=[git-status]")
 	}
 }
+
+// TestBuiltinFiltersParseBothFormatsAndHaveTests (task 1.3) verifies that the
+// 52 builtin JSON filters parse correctly under the legacy+canonical dual
+// format arbitration AND that every builtin carries a non-empty `tests` field.
+//
+// In the red phase every builtin currently lacks `tests`, so len(noTests) == 52
+// and the test fails — this is the expected red state. The dev phase must
+// supplement all 52 builtins with inline test cases (design D4/D5).
+func TestBuiltinFiltersParseBothFormatsAndHaveTests(t *testing.T) {
+	entries, err := builtinFiltersFS.ReadDir("filters/builtin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	var noTests []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		count++
+		data, err := builtinFiltersFS.ReadFile("filters/builtin/" + entry.Name())
+		if err != nil {
+			t.Errorf("failed to read %s: %v", entry.Name(), err)
+			continue
+		}
+		var filter Filter
+		if err := json.Unmarshal(data, &filter); err != nil {
+			t.Errorf("dual-format parse failed for %s: %v", entry.Name(), err)
+			continue
+		}
+		// UnmarshalJSON arbitration: name must land (from legacy name or
+		// canonical id) for every builtin.
+		if filter.Name == "" {
+			t.Errorf("builtin %s parsed with empty name (dual-format arbitration broken)", entry.Name())
+		}
+		if filter.ID == "" {
+			t.Errorf("builtin %s parsed with empty id (ID should mirror Name)", entry.Name())
+		}
+		if len(filter.Tests) == 0 {
+			noTests = append(noTests, entry.Name())
+		}
+	}
+
+	if count != 52 {
+		t.Errorf("expected 52 builtin filter JSONs, found %d", count)
+	}
+	if len(noTests) > 0 {
+		t.Errorf("%d builtin filters have no tests field: %v", len(noTests), noTests)
+	}
+}
