@@ -7,7 +7,7 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 1.1 编写 transports 配置 schema 校验测试（红）：仿照 `transports/pg-gateway-http/lib/validator_test.go` 的 loadLocalSchema 模式，断言 rtk 插件配置含 `enable_grouping`(bool)/`grouping_threshold`(int, minimum 2)/`apply_to_assistant_messages`(bool) 时校验通过；`grouping_threshold: 1` 被 schema 拒绝；未声明字段仍被 `additionalProperties: false` 拒绝（V-transports-1）
+- [x] 1.1 编写 transports 配置 schema 校验测试（红）：仿照 `transports/pg-gateway-http/lib/validator_test.go` 的 loadLocalSchema 模式，断言 rtk 插件配置含 `enable_grouping`(bool)/`grouping_threshold`(int, minimum 2)/`apply_to_assistant_messages`(bool) 时校验通过；`grouping_threshold: 1` 被 schema 拒绝；未声明字段仍被 `additionalProperties: false` 拒绝（V-transports-1）
 
 ## 2. dev.transports:dev - 实现开发
 
