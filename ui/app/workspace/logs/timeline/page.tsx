@@ -39,11 +39,42 @@ const LIVE_LINE_FRACTION = 0.9;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 8;
 
+// Stats throttling: the Gantt chart's NOW line and bars animate at up to
+// ~20fps (nowMs). Recomputing visibleLogsForStats + timelineStats every frame
+// is unnecessary — the stat cards only need freshness to the second. This
+// decoupling keeps stats O(n) work off the hot rAF path.
+const STATS_INTERVAL_MS = 300;
+
 // Local HH:MM:SS time-of-day, matching the timeline axis labels (local time).
 function formatTimeOfDay(ms: number): string {
 	const d = new Date(ms);
 	const pad = (n: number) => n.toString().padStart(2, "0");
 	return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function computeVisibleWindow(
+	mode: TimelineMode,
+	nowMs: number,
+	windowMs: number,
+	liveBaseMs: number,
+	panFrozenMs: number,
+	panOffsetMs: number,
+): { start: number; end: number } {
+	if (mode === "follow") {
+		const end = nowMs + windowMs * (1 - FOLLOW_LINE_X);
+		return { start: end - windowMs, end };
+	}
+	if (mode === "live") {
+		const base = liveBaseMs || nowMs;
+		const elapsed = nowMs - base;
+		const snapWindow = windowMs * LIVE_LINE_FRACTION;
+		const slot = elapsed % snapWindow;
+		const start = nowMs - slot - windowMs * (1 - LIVE_LINE_FRACTION);
+		return { start, end: start + windowMs };
+	}
+	const base = panFrozenMs || nowMs;
+	const start = base - windowMs * 0.5 + panOffsetMs;
+	return { start, end: start + windowMs };
 }
 
 // Fields that SSE can update on an existing log entry. These are the only
@@ -97,6 +128,13 @@ export default function TimelinePage() {
 	const [panFrozenMs, setPanFrozenMs] = useState(0);
 	const [liveBaseMs, setLiveBaseMs] = useState(() => Date.now());
 	const [nowMs, setNowMs] = useState(() => Date.now());
+
+	// Throttled clock for stat cards — keeps O(n) aggregation off the hot rAF path.
+	const [statsNowMs, setStatsNowMs] = useState(() => Date.now());
+	useEffect(() => {
+		const id = setInterval(() => setStatsNowMs(Date.now()), STATS_INTERVAL_MS);
+		return () => clearInterval(id);
+	}, []);
 
 	// SSE delivers new completed logs — merge them into the main list.
 	// We use a ref + callback pattern to avoid re-creating the SSE hook on
@@ -161,23 +199,10 @@ export default function TimelinePage() {
 
 	const windowMs = BASE_VISIBLE_WINDOW_MS / zoom;
 
-	const visibleWindow = useMemo((): { start: number; end: number } => {
-		if (mode === "follow") {
-			const end = nowMs + windowMs * (1 - FOLLOW_LINE_X);
-			return { start: end - windowMs, end };
-		}
-		if (mode === "live") {
-			const base = liveBaseMs || nowMs;
-			const elapsed = nowMs - base;
-			const snapWindow = windowMs * LIVE_LINE_FRACTION;
-			const slot = elapsed % snapWindow;
-			const start = nowMs - slot - windowMs * (1 - LIVE_LINE_FRACTION);
-			return { start, end: start + windowMs };
-		}
-		const base = panFrozenMs || nowMs;
-		const start = base - windowMs * 0.5 + panOffsetMs;
-		return { start, end: start + windowMs };
-	}, [mode, nowMs, windowMs, liveBaseMs, panFrozenMs, panOffsetMs]);
+	const visibleWindow = useMemo(
+		() => computeVisibleWindow(mode, nowMs, windowMs, liveBaseMs, panFrozenMs, panOffsetMs),
+		[mode, nowMs, windowMs, liveBaseMs, panFrozenMs, panOffsetMs],
+	);
 
 	// --- Data fetching ------------------------------------------------------
 	const now = Date.now();
@@ -252,17 +277,25 @@ export default function TimelinePage() {
 		return Array.from(merged.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	}, [logsData, extraLogs]);
 
+	// Window as seen by the throttled stats clock — recomputed at snapshot
+	// freshness (up to ~500ms stale), sufficient for the stat cards.
+	const statsWindow = useMemo(
+		() => computeVisibleWindow(mode, statsNowMs, windowMs, liveBaseMs, panFrozenMs, panOffsetMs),
+		[mode, statsNowMs, windowMs, liveBaseMs, panFrozenMs, panOffsetMs],
+	);
+
 	// Visible-window logs for stat cards: filter the merged log list to the
 	// current canvas window so all stat cards reflect the same visible range.
-	// Mirrors LogsTimeline's visibleLogs filter (logsTimeline.tsx).
+	// Mirrors LogsTimeline's visibleLogs filter (logsTimeline.tsx). Uses the
+	// throttled statsNowMs so this O(n) pass doesn't run on every rAF frame.
 	const visibleLogsForStats = useMemo(
 		() =>
 			logs.filter((log) => {
 				const start = new Date(log.timestamp).getTime();
-				const end = log.status === "processing" ? nowMs : start + (log.latency ?? 0);
-				return end >= visibleWindow.start && start <= visibleWindow.end;
+				const end = log.status === "processing" ? statsNowMs : start + (log.latency ?? 0);
+				return end >= statsWindow.start && start <= statsWindow.end;
 			}),
-		[logs, visibleWindow, nowMs],
+		[logs, statsWindow, statsNowMs],
 	);
 
 	const [firstVisibleTimeMs] = useMemo(() => {
@@ -280,9 +313,8 @@ export default function TimelinePage() {
 	// passed so maxConcurrency measures concurrency within the visible window
 	// only.
 	const timelineStats = useMemo(
-		() =>
-			summarizeTimelineStats(visibleLogsForStats, visibleLogsForStats.length, activeLogs.length, visibleWindow.start, visibleWindow.end),
-		[visibleLogsForStats, activeLogs.length, visibleWindow],
+		() => summarizeTimelineStats(visibleLogsForStats, visibleLogsForStats.length, activeLogs.length, statsWindow.start, statsWindow.end),
+		[visibleLogsForStats, activeLogs.length, statsWindow],
 	);
 
 	const statCards = useMemo(
