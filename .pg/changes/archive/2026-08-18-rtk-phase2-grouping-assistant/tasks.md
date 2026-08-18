@@ -7,7 +7,7 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 1.1 编写 transports 配置 schema 校验测试（红）：仿照 `transports/pg-gateway-http/lib/validator_test.go` 的 loadLocalSchema 模式，断言 rtk 插件配置含 `enable_grouping`(bool)/`grouping_threshold`(int, minimum 2)/`apply_to_assistant_messages`(bool) 时校验通过；`grouping_threshold: 1` 被 schema 拒绝；未声明字段仍被 `additionalProperties: false` 拒绝（V-transports-1）
+- [x] 1.1 编写 transports 配置 schema 校验测试（红）：仿照 `transports/pg-gateway-http/lib/validator_test.go` 的 loadLocalSchema 模式，断言 rtk 插件配置含 `enable_grouping`(bool)/`grouping_threshold`(int, minimum 2)/`apply_to_assistant_messages`(bool) 时校验通过；`grouping_threshold: 1` 被 schema 拒绝；未声明字段仍被 `additionalProperties: false` 拒绝（V-transports-1）
 
 ## 2. dev.transports:dev - 实现开发
 
@@ -16,7 +16,7 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 2.1 更新 transports/config.schema.json rtk 配置块（if/then name=rtk 段，约 3134-3189 行）：properties 新增 `enable_grouping`（boolean, default false）、`grouping_threshold`（integer, minimum 2, default 3）、`apply_to_assistant_messages`（boolean, default false），保持 `additionalProperties: false` 与既有 8 个字段定义不变，使 1.1 测试转绿
+- [x] 2.1 更新 transports/config.schema.json rtk 配置块（if/then name=rtk 段，约 3134-3189 行）：properties 新增 `enable_grouping`（boolean, default false）、`grouping_threshold`（integer, minimum 2, default 3）、`apply_to_assistant_messages`（boolean, default false），保持 `additionalProperties: false` 与既有 8 个字段定义不变，使 1.1 测试转绿
 
 ## 3. dev.transports:review - 静态代码审查
 
@@ -25,10 +25,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 3.2 review agent 对 git diff feat/pg/rtk-phase2-grouping-assistant 做静态审查
-- [ ] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 3.2 review agent 对 git diff feat/pg/rtk-phase2-grouping-assistant 做静态审查
+- [x] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 ## 4. dev.transports:verify - dev 集成验证
 
@@ -37,10 +37,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 4.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 4.3 启动服务（如需）
-- [ ] 4.4 验证 V-transports-1：来自 design.md 的 Verification Criteria
+- [x] 4.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 4.2 执行测试（runner 通过 modules 注入命令）
+- [x] 4.3 启动服务（如需）
+- [x] 4.4 验证 V-transports-1：来自 design.md 的 Verification Criteria
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
@@ -94,10 +94,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 8.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 8.2 review agent 对 git diff feat/pg/rtk-phase2-grouping-assistant 做静态审查
-- [ ] 8.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 8.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 8.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 8.2 review agent 对 git diff feat/pg/rtk-phase2-grouping-assistant 做静态审查
+- [x] 8.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 8.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 ## 9. dev.plugins:verify - dev 集成验证
 
@@ -106,10 +106,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 9.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 9.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 9.3 启动服务（如需）
-- [ ] 9.4 验证 V-plugins-1, V-plugins-2, V-plugins-3, V-plugins-4：来自 design.md 的 Verification Criteria（V-plugins-1~4 均为 degraded，验证方式=plugins 模块单元测试；V-plugins-5 为 verifiable，由 int.scr scenario 验证，不在本章节执行）
+- [x] 9.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 9.2 执行测试（runner 通过 modules 注入命令）
+- [x] 9.3 启动服务（如需）
+- [x] 9.4 验证 V-plugins-1, V-plugins-2, V-plugins-3, V-plugins-4：来自 design.md 的 Verification Criteria（V-plugins-1~4 均为 degraded，验证方式=plugins 模块单元测试；V-plugins-5 为 verifiable，由 int.scr scenario 验证，不在本章节执行）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）

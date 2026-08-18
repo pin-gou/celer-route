@@ -3183,6 +3183,22 @@
                       "type": "boolean",
                       "description": "Preserve cache_control blocks during compression (Anthropic prompt caching)",
                       "default": true
+                    },
+                    "enable_grouping": {
+                      "type": "boolean",
+                      "description": "Enable fuzzy grouping of similar consecutive lines (runLength >= threshold)",
+                      "default": false
+                    },
+                    "grouping_threshold": {
+                      "type": "integer",
+                      "description": "Number of consecutive similar lines required to trigger grouping",
+                      "minimum": 2,
+                      "default": 3
+                    },
+                    "apply_to_assistant_messages": {
+                      "type": "boolean",
+                      "description": "Apply compression to assistant messages (full text mode)",
+                      "default": false
                     }
                   },
                   "additionalProperties": false

@@ -28,6 +28,20 @@ type Config struct {
 
 	// PreserveCacheControl preserves cache_control blocks during compression (Anthropic prompt caching).
 	PreserveCacheControl bool `json:"preserve_cache_control"`
+
+	// EnableGrouping enables fuzzy grouping of near-equivalent consecutive lines
+	// (lines that differ only by timestamps/hex IDs/numbers/versions).
+	EnableGrouping bool `json:"enable_grouping"`
+
+	// GroupingThreshold is the minimum run length of near-equivalent lines before
+	// grouping kicks in. Values below 2 are clamped to 2 at runtime.
+	GroupingThreshold int `json:"grouping_threshold"`
+
+	// ApplyToAssistantMessages controls whether assistant messages are compressed.
+	// When true (and ApplyToCodeBlocks is false), assistant message text is fully
+	// compressed. When ApplyToCodeBlocks is true and ApplyToAssistantMessages is
+	// false, only the inside of code fences in assistant messages is compressed.
+	ApplyToAssistantMessages bool `json:"apply_to_assistant_messages"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -66,5 +80,13 @@ func applyConfigDefaults(c *Config) {
 	}
 	if !c.ApplyToToolResults && !c.ApplyToCodeBlocks {
 		c.ApplyToToolResults = true
+	}
+	// Grouping defaults: zero value → 3 (default off for EnableGrouping).
+	if c.GroupingThreshold == 0 {
+		c.GroupingThreshold = 3
+	} else if c.GroupingThreshold < 2 {
+		// Clamp values below 2 to 2, logging a WARN with the original value.
+		fmt.Printf("WARN: rtk: grouping_threshold %d is below minimum 2, clamping to 2\n", c.GroupingThreshold)
+		c.GroupingThreshold = 2
 	}
 }
