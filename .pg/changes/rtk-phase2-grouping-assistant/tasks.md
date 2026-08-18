@@ -106,10 +106,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 9.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 9.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 9.3 启动服务（如需）
-- [ ] 9.4 验证 V-plugins-1, V-plugins-2, V-plugins-3, V-plugins-4：来自 design.md 的 Verification Criteria（V-plugins-1~4 均为 degraded，验证方式=plugins 模块单元测试；V-plugins-5 为 verifiable，由 int.scr scenario 验证，不在本章节执行）
+- [x] 9.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 9.2 执行测试（runner 通过 modules 注入命令）
+- [x] 9.3 启动服务（如需）
+- [x] 9.4 验证 V-plugins-1, V-plugins-2, V-plugins-3, V-plugins-4：来自 design.md 的 Verification Criteria（V-plugins-1~4 均为 degraded，验证方式=plugins 模块单元测试；V-plugins-5 为 verifiable，由 int.scr scenario 验证，不在本章节执行）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
