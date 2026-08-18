@@ -48,6 +48,7 @@ import (
 	"github.com/pin-gou/pg-gateway/plugins/otel"
 	"github.com/pin-gou/pg-gateway/plugins/prompts"
 	"github.com/pin-gou/pg-gateway/plugins/providercooldown"
+	"github.com/pin-gou/pg-gateway/plugins/rtk"
 	"github.com/pin-gou/pg-gateway/plugins/semanticcache"
 	"github.com/pin-gou/pg-gateway/plugins/telemetry"
 	"gorm.io/gorm"
@@ -129,6 +130,7 @@ var builtinPluginNames = []string{
 	governance.PluginName,
 	otel.PluginName,
 	semanticcache.PluginName,
+	rtk.PluginName,
 	compat.PluginName,
 	maxim.PluginName,
 	providercooldown.PluginName,

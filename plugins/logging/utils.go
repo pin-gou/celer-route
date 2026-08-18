@@ -921,6 +921,22 @@ func mergeRealtimeMetadata(metadata map[string]interface{}, ctx *schemas.Bifrost
 		}
 		metadata["realtime"] = true
 	}
+
+	// Inject compression plugin token counts (RTK) into metadata when present.
+	// These are set by the rtk plugin's PostLLMHook as int values on the context.
+	if origTokens, ok := ctx.Value(schemas.BifrostContextKeyOriginalPromptTokens).(int); ok {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["original_prompt_tokens"] = origTokens
+	}
+	if compTokens, ok := ctx.Value(schemas.BifrostContextKeyCompressedPromptTokens).(int); ok {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["compressed_prompt_tokens"] = compTokens
+	}
+
 	return metadata
 }
 

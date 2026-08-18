@@ -2738,7 +2738,7 @@
           },
           "name": {
             "type": "string",
-            "description": "Name of the plugin (built-in: telemetry, prompts, logging, governance, maxim, semantic_cache, otel, provider-cooldown, or custom plugin name)"
+            "description": "Name of the plugin (built-in: telemetry, prompts, logging, governance, maxim, semantic_cache, otel, rtk, provider-cooldown, or custom plugin name)"
           },
           "config": {
             "type": "object",
@@ -3118,6 +3118,73 @@
                       }
                     }
                   ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "rtk"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "config"
+              ],
+              "properties": {
+                "config": {
+                  "type": "object",
+                  "description": "Configuration for the RTK (Rule-based Tool-output Kompression) plugin",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Enable or disable the RTK compression plugin",
+                      "default": true
+                    },
+                    "intensity": {
+                      "type": "string",
+                      "description": "Compression aggressiveness: minimal | standard | aggressive",
+                      "enum": ["minimal", "standard", "aggressive"],
+                      "default": "standard"
+                    },
+                    "apply_to_tool_results": {
+                      "type": "boolean",
+                      "description": "Apply compression to tool result messages",
+                      "default": true
+                    },
+                    "apply_to_code_blocks": {
+                      "type": "boolean",
+                      "description": "Apply compression to code blocks within messages",
+                      "default": false
+                    },
+                    "max_lines_per_result": {
+                      "type": "integer",
+                      "description": "Maximum number of lines to keep per tool result after compression",
+                      "minimum": 1,
+                      "default": 120
+                    },
+                    "max_chars_per_result": {
+                      "type": "integer",
+                      "description": "Maximum number of characters to keep per tool result after compression",
+                      "minimum": 1,
+                      "default": 12000
+                    },
+                    "deduplicate_threshold": {
+                      "type": "integer",
+                      "description": "Number of consecutive identical lines before deduplication kicks in",
+                      "minimum": 1,
+                      "default": 3
+                    },
+                    "preserve_cache_control": {
+                      "type": "boolean",
+                      "description": "Preserve cache_control blocks during compression (Anthropic prompt caching)",
+                      "default": true
+                    }
+                  },
                   "additionalProperties": false
                 }
               }

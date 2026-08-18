@@ -83,10 +83,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 7.1 修改 `transports/config.schema.json` 在 `plugins.items` 数组的 `if/then` 块下新增 `name: "rtk"` 的 `then` 分支，包含 `enabled` / `intensity` / `apply_to_tool_results` / `apply_to_code_blocks` / `max_lines_per_result` / `max_chars_per_result` / `deduplicate_threshold` / `preserve_cache_control` 等属性
-- [ ] 7.2 修改 `transports/pg-gateway-http/server/plugins.go` 增加 RTK plugin init case（参考 semanticcache 模式），调用 `rtk.Init(ctx, config, logger)`
-- [ ] 7.3 修改 `transports/pg-gateway-http/handlers/logging.go` 在 log entry 写入前读取 `BifrostContextKeyOriginalPromptTokens` / `BifrostContextKeyCompressedPromptTokens`，若存在则注入到 log metadata JSON
-- [ ] 7.4 跑 `cd transports/pg-gateway-http && go build ./...` 确认编译通过
+- [x] 7.1 修改 `transports/config.schema.json` 在 `plugins.items` 数组的 `if/then` 块下新增 `name: "rtk"` 的 `then` 分支，包含 `enabled` / `intensity` / `apply_to_tool_results` / `apply_to_code_blocks` / `max_lines_per_result` / `max_chars_per_result` / `deduplicate_threshold` / `preserve_cache_control` 等属性
+- [x] 7.2 修改 `transports/pg-gateway-http/server/plugins.go` 增加 RTK plugin init case（参考 semanticcache 模式），调用 `rtk.Init(ctx, config, logger)`
+- [x] 7.3 修改 `transports/pg-gateway-http/handlers/logging.go` 在 log entry 写入前读取 `BifrostContextKeyOriginalPromptTokens` / `BifrostContextKeyCompressedPromptTokens`，若存在则注入到 log metadata JSON
+- [x] 7.4 跑 `cd transports/pg-gateway-http && go build ./...` 确认编译通过
 
 ## 8. dev.transports:review - 静态代码审查
 
