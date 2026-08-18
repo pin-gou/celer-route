@@ -105,6 +105,15 @@ function isTerminalStatus(status: string): boolean {
 	return status === "success" || status === "error" || status === "cancelled";
 }
 
+// TTL for activeLogs entries: a processing log that hasn't received any
+// log_updated event for this long is considered abandoned by the server and
+// dropped locally. Without this, a backend that fails to emit the terminal
+// event for an in-flight request would leak an entry forever — each subsequent
+// SSE update would append a new row, the Logs table would render it, and the
+// Timeline stats would keep counting it.
+const ACTIVE_LOG_TTL_MS = 10 * 60 * 1000;
+const ACTIVE_LOG_SWEEP_INTERVAL_MS = 30 * 1000;
+
 export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogsTimelineSSEResult {
 	const [activeLogs, setActiveLogs] = useState<ActiveLogEntry[]>([]);
 	const [error, setError] = useState<string | null>(null);
@@ -112,12 +121,24 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 	const eventSourceRef = useRef<EventSource | null>(null);
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
+	const lastSeenRef = useRef<Map<string, number>>(new Map());
+	// Mirror of activeLogs readable from the sweep timer without relying on
+	// setState-updater timing (updaters run during render, not at call time).
+	const activeLogsRef = useRef<ActiveLogEntry[]>([]);
+	activeLogsRef.current = activeLogs;
 
 	const handleActiveLogs = useCallback((data: unknown) => {
 		setError(null);
 		try {
 			const logs = data as LogEntry[];
-			setActiveLogs(logs.map(toActiveEntry));
+			const now = Date.now();
+			const seen = lastSeenRef.current;
+			seen.clear();
+			const entries = logs.map((log) => {
+				seen.set(log.id, now);
+				return toActiveEntry(log);
+			});
+			setActiveLogs(entries);
 		} catch {
 			// Silently ignore malformed data
 		}
@@ -140,6 +161,8 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 		try {
 			const update = data as ActiveLogStreamEvent;
 			const { onNewLog, onLogRemoved } = optionsRef.current ?? {};
+			const seen = lastSeenRef.current;
+			const now = Date.now();
 
 			setActiveLogs((prev) => {
 				const idx = prev.findIndex((l) => l.id === update.id);
@@ -148,6 +171,7 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 					if (isTerminalStatus(update.status)) {
 						onLogRemoved?.(update.id);
 						onNewLog?.(toActiveEntryFromEvent(update));
+						seen.delete(update.id);
 						const next = [...prev];
 						next.splice(idx, 1);
 						return next;
@@ -177,6 +201,7 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 						content_summary: fresh.content_summary ?? next[idx].content_summary,
 						message: fresh.message ?? next[idx].message,
 					};
+					seen.set(update.id, now);
 					return next;
 				}
 
@@ -185,6 +210,7 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 					return prev;
 				}
 
+				seen.set(update.id, now);
 				return [...prev, toActiveEntryFromEvent(update)];
 			});
 		} catch {
@@ -235,10 +261,41 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 			setError(null);
 		};
 
+		// TTL sweep: drop activeLogs entries the server stopped updating. Without
+		// this, a backend that fails to emit the terminal log_updated for an
+		// in-flight request leaks an entry forever, growing activeLogs unbounded
+		// and bloating every consumer re-render (Logs table rows, Timeline stats).
+		const sweepTimer = setInterval(() => {
+			const seen = lastSeenRef.current;
+			const active = activeLogsRef.current;
+			if (active.length === 0) return;
+			const cutoff = Date.now() - ACTIVE_LOG_TTL_MS;
+			const expiredIds: string[] = [];
+			const next: ActiveLogEntry[] = [];
+			for (const entry of active) {
+				const lastSeen = seen.get(entry.id) ?? 0;
+				if (lastSeen < cutoff) {
+					expiredIds.push(entry.id);
+				} else {
+					next.push(entry);
+				}
+			}
+			if (expiredIds.length === 0) return;
+			setActiveLogs(next);
+			const onLogRemoved = optionsRef.current?.onLogRemoved;
+			for (const id of expiredIds) {
+				seen.delete(id);
+				onLogRemoved?.(id);
+			}
+		}, ACTIVE_LOG_SWEEP_INTERVAL_MS);
+
 		return () => {
+			clearInterval(sweepTimer);
 			es.close();
 			eventSourceRef.current = null;
 			setIsConnected(false);
+			lastSeenRef.current.clear();
+			activeLogsRef.current = [];
 		};
 	}, [handleActiveLogs, handleRecentLogs, handleLogUpdated]);
 

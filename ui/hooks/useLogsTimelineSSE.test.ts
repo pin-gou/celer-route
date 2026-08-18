@@ -340,3 +340,133 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		expect(result.current.isConnected).toBe(false);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// TTL sweep — runs with fake timers so we can drive the 10-minute TTL and
+// the 30-second sweep interval without waiting in wall-clock time. The hook
+// reads Date.now() for lastSeen comparisons, so we tick the fake clock in
+// lockstep with each act() that depends on time.
+// ---------------------------------------------------------------------------
+
+describe("useLogsTimelineSSE — TTL sweep", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.stubGlobal(
+			"EventSource",
+			vi.fn(function () {
+				const listeners: Record<string, Set<(...args: unknown[]) => void>> = {};
+				return {
+					close: vi.fn(),
+					addEventListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+						if (!listeners[event]) listeners[event] = new Set();
+						listeners[event].add(handler);
+					}),
+					removeEventListener: vi.fn(),
+					_dispatch: (event: string, data: unknown) => {
+						const eventListeners = listeners[event];
+						if (eventListeners) {
+							eventListeners.forEach((handler) => handler({ data: JSON.stringify(data) }));
+						}
+					},
+				};
+			}),
+		);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+	});
+
+	it("should drop an activeLogs entry that hasn't been updated for longer than the TTL", () => {
+		const onLogRemoved = vi.fn();
+		const { result } = renderHook(() => useLogsTimelineSSE({ onLogRemoved }));
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		const t0 = Date.now();
+
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
+		expect(result.current.activeLogs).toHaveLength(1);
+
+		// Advance past TTL (10 min) but trigger the 30s sweep before checking.
+		act(() => {
+			vi.setSystemTime(t0 + 11 * 60 * 1000);
+			vi.advanceTimersByTime(30 * 1000);
+		});
+
+		expect(result.current.activeLogs).toHaveLength(0);
+		expect(onLogRemoved).toHaveBeenCalledWith("active-1");
+	});
+
+	it("should keep an activeLogs entry that received a recent log_updated within the TTL window", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		const t0 = Date.now();
+
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog]);
+		});
+
+		// Halfway through the TTL window, refresh the entry with a new
+		// log_updated — this resets its lastSeen.
+		act(() => {
+			vi.setSystemTime(t0 + 5 * 60 * 1000);
+			eventSource._dispatch("log_updated", { id: "active-1", status: "processing", latency_ms: 500 });
+		});
+
+		// Sweep fires at t0 + 5min + 30s — only 30s since the refresh, well
+		// inside the 10-minute TTL.
+		act(() => {
+			vi.advanceTimersByTime(30 * 1000);
+		});
+
+		expect(result.current.activeLogs).toHaveLength(1);
+		expect(result.current.activeLogs[0].id).toBe("active-1");
+	});
+
+	it("should only evict entries older than the TTL, leaving fresh ones intact", () => {
+		const onLogRemoved = vi.fn();
+		const { result } = renderHook(() => useLogsTimelineSSE({ onLogRemoved }));
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		const t0 = Date.now();
+
+		act(() => {
+			eventSource._dispatch("active_logs", [mockActiveLog, { ...mockActiveLog, id: "active-2", provider: "anthropic", model: "claude-3" }]);
+		});
+		expect(result.current.activeLogs).toHaveLength(2);
+
+		// Refresh only active-2 at t0 + 11min. active-1 stays at t0.
+		act(() => {
+			vi.setSystemTime(t0 + 11 * 60 * 1000);
+			eventSource._dispatch("log_updated", { id: "active-2", status: "processing", latency_ms: 100 });
+		});
+
+		// Sweep at t0 + 11min: cutoff = t0 + 1min, so active-1 (lastSeen=t0)
+		// expires, active-2 (lastSeen=t0+11min) is fresh.
+		act(() => {
+			vi.advanceTimersByTime(30 * 1000);
+		});
+
+		expect(result.current.activeLogs).toHaveLength(1);
+		expect(result.current.activeLogs[0].id).toBe("active-2");
+		expect(onLogRemoved).toHaveBeenCalledTimes(1);
+		expect(onLogRemoved).toHaveBeenCalledWith("active-1");
+	});
+
+	it("should clear the sweep timer when the consumer unmounts", () => {
+		const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+		const { unmount } = renderHook(() => useLogsTimelineSSE());
+
+		unmount();
+
+		// The hook installs two timers in its main useEffect: nothing else, so
+		// clearInterval should fire at least once for the sweep timer. (Exact
+		// count varies if other code paths schedule intervals; assert >= 1.)
+		expect(clearIntervalSpy).toHaveBeenCalled();
+		clearIntervalSpy.mockRestore();
+	});
+});
