@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Pause, Play, Download } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface AudioPlayerProps {
@@ -11,8 +11,38 @@ interface AudioPlayerProps {
 const AudioPlayer = ({ src, format }: AudioPlayerProps) => {
 	const { t } = useTranslation("logs");
 	const [isPlaying, setIsPlaying] = useState(false);
-	const [audio] = useState<HTMLAudioElement | null>(typeof window !== "undefined" ? new Audio() : null);
+	const audioRef = useRef<HTMLAudioElement | null>(null);
+	if (audioRef.current === null && typeof window !== "undefined") {
+		audioRef.current = new Audio();
+	}
 	const [error, setError] = useState<string | null>(null);
+	// Tracks the object URL currently assigned to <audio>.src so we can revoke
+	// it on the next play, on play() rejection, and on unmount. Without this
+	// guard every new play leaks one Blob URL — and so does any path that
+	// interrupts playback before onended fires (pause, source switch, error,
+	// unmount).
+	const currentUrlRef = useRef<string | null>(null);
+
+	const revokeCurrentUrl = () => {
+		const url = currentUrlRef.current;
+		if (url) {
+			URL.revokeObjectURL(url);
+			currentUrlRef.current = null;
+		}
+	};
+
+	useEffect(() => {
+		return () => {
+			const audio = audioRef.current;
+			if (audio) {
+				audio.onended = null;
+				audio.pause();
+				audio.removeAttribute("src");
+				audio.load();
+			}
+			revokeCurrentUrl();
+		};
+	}, []);
 
 	// Convert PCM16 to WAV format
 	const convertPCM16ToWAV = (pcmData: Uint8Array, sampleRate: number = 24000, numChannels: number = 1): Uint8Array => {
@@ -94,29 +124,40 @@ const AudioPlayer = ({ src, format }: AudioPlayerProps) => {
 	};
 
 	const handlePlayPause = () => {
+		const audio = audioRef.current;
 		if (!audio || !src) return;
 
 		if (isPlaying) {
 			audio.pause();
 			setIsPlaying(false);
-		} else {
-			const audioBlob = createAudioBlob(src, format);
-			if (!audioBlob) return;
-
-			const audioUrl = URL.createObjectURL(audioBlob);
-			audio.src = audioUrl;
-			audio.play().catch((err) => {
-				console.error("Failed to play audio:", err);
-				setError("Failed to play audio. Please try again.");
-				setIsPlaying(false);
-			});
-			setIsPlaying(true);
-
-			audio.onended = () => {
-				setIsPlaying(false);
-				URL.revokeObjectURL(audioUrl);
-			};
+			return;
 		}
+
+		const audioBlob = createAudioBlob(src, format);
+		if (!audioBlob) return;
+
+		// Replace any previously-issued blob URL — otherwise the old one leaks
+		// when we overwrite audio.src below.
+		revokeCurrentUrl();
+		const audioUrl = URL.createObjectURL(audioBlob);
+		currentUrlRef.current = audioUrl;
+		audio.src = audioUrl;
+		audio.play().catch((err) => {
+			console.error("Failed to play audio:", err);
+			setError("Failed to play audio. Please try again.");
+			setIsPlaying(false);
+			// play() rejection skips onended entirely, so the url would leak
+			// without this guard.
+			if (audio.src === audioUrl) audio.removeAttribute("src");
+			revokeCurrentUrl();
+		});
+		setIsPlaying(true);
+
+		audio.onended = () => {
+			setIsPlaying(false);
+			revokeCurrentUrl();
+			if (audio.src === audioUrl) audio.removeAttribute("src");
+		};
 	};
 
 	const handleDownload = () => {
