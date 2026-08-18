@@ -1,0 +1,366 @@
+schema_version: 1
+change_id: rtk-stage-4-raw-output-and-verify
+defined_at: "2026-08-19T00:30:00Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  oc2-gateway 的 RTK 插件 (plugins/rtk/) 在阶段一/二/三已落地核心压缩管线
+  (文档保护 + 截断/去重标记 + 模糊分组 + assistant 消息 + 双格式 + 三级 +
+  信任模型), 但缺失运维/调试面: (a) 当压缩把原始 tool output 截短/丢弃后,
+  调试失败场景时无法回查原始字节; (b) 52 个 builtin filter 和用户自定义
+  filter 没有任何内联测试机制, 改 lineFilter/deduplicator/smartTruncate
+  后无法在 CI 阶段发现 regression; (c) 当 secret (OpenAI key / Slack token
+  / AWS key / Authorization header / key=value 凭据) 落在 tool output 中
+  并被截短后留在日志/缓存里时, 无脱敏机制会导致凭据泄漏.
+
+solution: >-
+  在 plugins/rtk/ 下新增两个独立模块:
+
+  1. plugins/rtk/rawoutput.go (~250 行) - 落盘原始 tool output + 密钥脱敏 +
+     失败检测:
+     - RtkRawOutputRetention 枚举: "never" | "failures" | "always"
+       (Config 字段 raw_output_retention, 默认 "never" 不写入, 保持现有零
+       副作用行为).
+     - RtkRawOutputPointer 结构: {ID, Path, Bytes, SHA256, Redacted}, 与
+       OmniRoute rawOutput.ts 的 RtkRawOutputPointer 对齐 (id/path/bytes/
+       sha256/redacted).
+     - redactRtkRawOutput(text) -> {Text, Redacted}: 5 条正则依次替换:
+       sk-... → [REDACTED_OPENAI_KEY], xox[baprs]-... → [REDACTED_SLACK_TOKEN],
+       AKIA... → [REDACTED_AWS_KEY], key=value/key: value (credential
+       field 名 13 个) → [REDACTED], (Proxy-)Authorization: Bearer|Basic
+       → [REDACTED]. ReDoS-safe (flat alternation).
+     - isLikelyFailureOutput(text) -> bool: 9 关键词正则
+       (error|failed|failure|exception|traceback|panic|fatal|critical|
+       TS\d{4}|FAIL).
+     - MaybePersistRtkRawOutput(raw, opts) -> *RtkRawOutputPointer:
+       retention=never 直接返回 nil; retention=failures 仅当
+       isLikelyFailureOutput(raw) || opts.Failure 为真时写; retention=always
+       始终写. 文件名 `<unix_ms>-<command_slug>-<sha256_id24>.log`, slug
+       由 command 经 `[^A-Za-z0-9_-]+ → _` + 首尾下划线裁剪 + 48 字符上限.
+       sidecar `<same>.meta.json` 写 {command, timestamp, failure,
+       redacted, bytes}, 写失败 best-effort 不抛错. 主 .log 写失败同样
+       best-effort 返回 nil, 不阻塞压缩管线. max_bytes 默认 1_048_576,
+       UTF-8 字节级截断 (safeUtf8Slice 等价). 落盘根目录 <appDir>/rtk/
+       raw-output/ (与现有 filterloader 的全局路径 <appDir>/rtk/filters.json
+       同根, 对称; appDir 来自 transports/server/plugins.go:122 的
+       os.Getwd()).
+     - ReadRtkRawOutput(id) -> string: 按 id 在 raw-output/ 下查找含 id 的
+       .log 文件并读回 (阶段五 learn/discover 用).
+
+  2. plugins/rtk/verify.go (~150 行) - 内联 filter 测试运行器:
+     - FilterTest 类型: {Name, Command?, Input, Expected}, 加到 Filter
+       struct 顶层字段 `Tests []FilterTest json:"tests,omitempty"`
+       (兼容 legacy 与 canonical 两类 builtin JSON).
+     - FilterTestOutcome: {FilterID, TestName, Passed, Actual, Expected}
+     - FilterBenchmarkRow: {Category, Filters, Tests, AverageSavingsPercent}
+     - VerifyResult: {Passed, Outcomes, FiltersWithoutTests, Benchmark,
+       Diagnostics}.
+     - RunRtkFilterTests(opts?) VerifyResult: 遍历 loader.cachedFilters,
+       对每个 filter.tests 跑 applyLineFilter(input, filter) 与
+       trimComparable(expected) 比对; benchmark 按 category 聚合
+       (用 estimateTokens 算 savings% 平均, 保留 2 位小数).
+     - trimComparable(text): 移除尾部换行 (与 OmniRoute 一致).
+     - 入口仅 Go test (rtk_test.go + filterloader_test.go + 新增
+       verify_test.go), 不挂 PostLLMHook; 不暴露 HTTP 端点 (留阶段六).
+
+  3. 52 个 builtin filter 手工设计 tests: 每个 builtin JSON 增加
+     "tests": [{name, command?, input, expected}] 字段 (1 个最小用例即可).
+     多数 builtin 无 rules 字段, 压缩逻辑全靠 head/tail, 用例构造:
+     input = N 行 (N > head + tail), expected = 前 head 行 + 截断标记
+     "[rtk:truncated K lines]" + 后 tail 行. 有 rules 的 (apt/cargo/
+     docker-images/docker-logs/docker-ps/git-branch/git-pull/git-push/
+     generic-output/go-test/gradle/journalctl/kubectl-get/make/mvn/
+     npm-install/pip-install) 单独设计覆盖 strip/keep/collapse 的用例.
+
+  4. compression.go 主流程接入 raw output: processRtkTextWithCommand
+     内部, 在 stats.CompressedTokens < stats.OriginalTokens 时 (实际
+     发生了压缩, 严格对齐 OmniRoute index.ts:343-355, 不用 oc2-gateway
+     现有 5% 阈值) 调用 MaybePersistRtkRawOutput(text, {retention,
+     command: cmd, maxBytes}). 拿到的 pointer 累加进 CompressionState.
+     CompressionState 新增 RawOutputPointers []*RtkRawOutputPointer 字段.
+     PostLLMHook 不动 (raw output 是诊断资产, 不影响 usage 计数).
+
+  5. Config 新增 2 字段:
+     - RawOutputRetention string `json:"raw_output_retention"` (default
+       "never", 枚举校验: never|failures|always)
+     - RawOutputMaxBytes int `json:"raw_output_max_bytes"` (default 1048576,
+       最小 1024)
+     校验失败 → Validate() 返回 error (fail-fast).
+
+  6. transports/config.schema.json rtk 配置块同步新增 raw_output_retention
+     (enum: never|failures|always, default "never") + raw_output_max_bytes
+     (integer, minimum 1024, default 1048576).
+
+  7. 单元测试覆盖 V-RTK-S4-1 到 V-RTK-S4-10 (见 verification_needs).
+
+boundary:
+  in_scope:
+    - plugins/rtk/rawoutput.go: RtkRawOutputRetention/RtkRawOutputPointer 类型 + 5 条脱敏正则 + isLikelyFailureOutput + MaybePersistRtkRawOutput + ReadRtkRawOutput + best-effort 磁盘错误降级
+    - plugins/rtk/verify.go: FilterTest/FilterTestOutcome/FilterBenchmarkRow/VerifyResult 类型 + RunRtkFilterTests + trimComparable
+    - Filter struct 新增 Tests []FilterTest 顶层字段 (兼容 legacy/canonical 双格式解析, 阶段三 UnmarshalJSON 仲裁自动接管)
+    - Config 新增 raw_output_retention (enum) + raw_output_max_bytes (int, 默认 1MB, 最小 1KB) + Validate 校验 + applyConfigDefaults 默认值
+    - compression.go processRtkTextWithCommand 在实际压缩发生时调 MaybePersistRtkRawOutput, 把 pointer 累加进 ProcessStats.RawOutputPointers
+    - CompressionState 新增 RawOutputPointers []*RtkRawOutputPointer 字段
+    - 52 个 builtin filter 手工补充 tests 字段 (每个至少 1 个最小用例, 覆盖 head/tail 截断或 rules 行为)
+    - plugins/rtk/rawoutput_test.go (脱敏 + 落盘 + sidecar + 失败检测 + 磁盘错误降级)
+    - plugins/rtk/verify_test.go (runRtkFilterTests passed/outcomes/benchmark/filtersWithoutTests)
+    - plugins/rtk/rtk_test.go 补充 raw output 集成场景
+    - transports/config.schema.json rtk 配置块同步新增 2 字段
+  out_of_scope:
+    - listRtkCommandSamples (阶段五 learn/discover 用, 本阶段只暴露 ReadRtkRawOutput 让接口预留)
+    - env var 覆盖 raw_output_dir (与现有 transport 注入 appDir 模型对齐, 不引入新 env var)
+    - HTTP admin 端点 /admin/rtk/verify (阶段六 UI/API 时做)
+    - PostLLMHook 异步跑 verify (会引入性能抖动, 与 OmniRoute 偏离)
+    - CLI 入口 (与 verify 设计原则 "纯函数 + 测试入口" 不符)
+    - 压缩主流程的 5% 阈值改造 (D1 决策严格对齐 OmniRoute, 不沿用 oc2-gateway 现有阈值; 这是行为变更, 不属于本阶段范围)
+    - 阶段五 learn/discover (discover.ts/learn.ts) 自学习
+    - 阶段六 跨引擎堆叠 / 主动触发 / UI
+
+verification_needs:
+  - id: V-plugins-1
+    track_id: plugins
+    name: Raw Output 保留策略 never/failures/always 按配置生效
+    what: >-
+      Config.RawOutputRetention = "never" 时不写盘; "failures" 时仅
+      isLikelyFailureOutput(raw) == true 或显式 opts.Failure == true 时写;
+      "always" 时任何非空 raw 都写; raw 为空 (trim 后 length=0) 一律不写.
+      文件名严格遵循 `<unix_ms>-<command_slug>-<sha256_id24>.log` 模板.
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: 至少 1 个 fixture (command + raw 文本) 用于覆盖 3 种 retention 策略
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+        description: plugins/rtk 的 Go 二进制需能构建, embed.FS + rawoutput.go 编译通过
+    downgrade_when_missing: >-
+      无 Go 工具链 → 在 design.md「环境限制与验证策略」段标注"V-* 测试须在
+      CI runner 跑 go test ./plugins/rtk/... -count=1".
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-2
+    track_id: plugins
+    name: 5 条密钥脱敏正则正确替换为占位符
+    what: >-
+      redactRtkRawOutput 对以下 5 类输入返回正确替换:
+      (a) sk-abc123... (>=16 字符) → [REDACTED_OPENAI_KEY];
+      (b) xoxb-abc123... / xoxa- / xoxp- / xoxr- / xoxs- (>=16 字符) →
+      [REDACTED_SLACK_TOKEN];
+      (c) AKIA + 16 位大写字母数字 → [REDACTED_AWS_KEY];
+      (d) api_key=xxx / token: "xxx" / password: 'xxx' 等 13 个 credential
+      字段名 (key=value 或 key: value 形式, 含引号/无引号) → 保留 key 名,
+      value 替换为 [REDACTED];
+      (e) Authorization: Bearer xxx / Basic xxx / Proxy-Authorization: ... →
+      保留 Bearer/Basic 前缀, 后替换为 [REDACTED].
+      Redacted 标志位任一规则匹配即 true.
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: 至少 1 个含各类型密钥的 fixture 字符串
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      同 V-plugins-1.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-3
+    track_id: plugins
+    name: isLikelyFailureOutput 9 关键词正确识别
+    what: >-
+      isLikelyFailureOutput 对以下关键词返回 true:
+      error, failed, failure, exception, traceback, panic, fatal, critical,
+      TS<4位数字> (TypeScript 错误码), FAIL (大小写不敏感).
+      普通输出 ("OK", "success", "12 files changed") 返回 false.
+      是单词边界匹配 (\b), 避免误匹配 "errored" 中的 "error" 仍正确
+      (边界允许), 但 "errorsome" 这种不匹配.
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      同 V-plugins-1.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-4
+    track_id: plugins
+    name: sidecar .meta.json 写入正确
+    what: >-
+      MaybePersistRtkRawOutput 写 .log 后同步写 <same>.meta.json:
+      {command: opts.Command 原始值 (非 slug), timestamp: unix_ms,
+      failure: bool, redacted: bool, bytes: utf8 字节数}.
+      sidecar 写失败 best-effort 不影响 .log 已写入的 pointer 返回.
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      同 V-plugins-1.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-5
+    track_id: plugins
+    name: 磁盘错误 (EACCES) best-effort 降级不阻塞压缩管线
+    what: >-
+      当 raw-output 目录不可写 (chmod 0 或父目录只读) 时, MaybePersistRtkRawOutput
+      返回 nil 且不抛 error/panic; 调用方 (compression.go) 视为落盘失败,
+      不影响 result/stats 返回. 磁盘错误的 pointer 永不暴露给上层.
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: 至少 1 个 chmod 0 的临时目录用于触发 EACCES
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      EACCES 模拟在 macOS root 用户下失效 → 仅在 Linux CI 验证, macOS
+      标 degraded, scenario 加 @skip.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-6
+    track_id: plugins
+    name: runRtkFilterTests passed / outcomes / benchmark 正确
+    what: >-
+      RunRtkFilterTests 对带 tests 的 filter 跑 applyLineFilter(input,
+      filter) 与 trimComparable(expected) 比对, outcomes 数组每条记录
+      filterId/testName/passed/actual/expected; 任一失败 → passed=false.
+      benchmark 按 category 聚合: 同一 category 下所有 test 的
+      ((orig_tokens - compressed_tokens) / orig_tokens * 100) 平均,
+      保留 2 位小数; tests=0 时 averageSavingsPercent=0.
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: 至少 1 套含 tests 字段的 fixture filter (legacy + canonical 各 1)
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      同 V-plugins-1.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-7
+    track_id: plugins
+    name: 52 个 builtin 都含 tests 后 filtersWithoutTests=[]
+    what: >-
+      阶段四手工补齐后, RunRtkFilterTests 返回的 FiltersWithoutTests
+      必须为空 (52 个 builtin 都含 tests 字段). 这是 D4+D5 决策的物证:
+      verify 跑通即证明补齐完成.
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+        description: plugins/rtk 二进制构建产物 (含 embed.FS 的 52 个 builtin JSON), 验证 tests 补齐完整性
+    downgrade_when_missing: >-
+      builtin tests 未补齐 → scenario 标 @skip, proposal.md「风险和注意
+      事项」段记录"阶段四 builtin tests 补齐延迟到后续迭代".
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-8
+    track_id: plugins
+    name: benchmark 按 category 聚合正确
+    what: >-
+      benchmark rows 按 category 升序排序; 同 category 下多个 filter 的
+      tests 聚合, filters=唯一 id 数 (Set), tests=总 test 数,
+      averageSavingsPercent = Σ(savings%) / tests 数 (round 2 位小数).
+      空 category (无 filter) 不出现在 benchmark.
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: 至少 2 个不同 category 的 fixture filter, 每个 ≥ 2 tests
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      同 V-plugins-1.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-9
+    track_id: plugins
+    name: compression 主流程接入 raw output 保留 (实际压缩时触发)
+    what: >-
+      processRtkTextWithCommand 在 stats.CompressedTokens < stats.OriginalTokens
+      时 (实际压缩, D1 决策严格对齐 OmniRoute) 调用 MaybePersistRtkRawOutput,
+      拿到的 pointer 累加进 ProcessStats.RawOutputPointers; 调用方
+      applyRtkCompression 进一步累加到 CompressionState.RawOutputPointers.
+      retention=never 时 ProcessStats.RawOutputPointers 始终 nil/空.
+      触发条件不受 oc2-gateway 现有 5% 阈值影响 (D1 已决策).
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+        description: 至少 1 套真实 tool output fixture (含 command + 输出文本)
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      同 V-plugins-1.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+  - id: V-plugins-10
+    track_id: plugins
+    name: RawOutputPointers 透传到 CompressionState 可被 PostLLMHook/日志读取
+    what: >-
+      applyRtkCompression 返回的 CompressionState.RawOutputPointers
+      非 nil 时, hooks.go PostLLMHook 路径可读 (本阶段不消费, 仅验证
+      字段透传). rtk_test.go 验证: 模拟 applyRtkCompression 输入
+      (含可压缩 tool output), 断言 state.RawOutputPointers 包含至少
+      1 个 pointer 且 ID 非空. hooks_test.go 验证 PostLLMHook 在
+      state.RawOutputPointers 非空时不丢失数据 (清状态前可读).
+    requires_capabilities:
+      - capability: sample_dataset
+        min_quantity: 1
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    downgrade_when_missing: >-
+      同 V-plugins-1.
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.runtime_environment[name=localhost]}"
+
+risks:
+  - "D4/D5 决策: 手工设计 52 个 builtin tests 用例需要逐个验证 expected 与
+    oc2-gateway 的 filter 处理逻辑一致. 若 oc2-gateway 与 OmniRoute 的
+    lineFilter/deduplicator/smartTruncate 行为有细微差异 (如 head/tail
+    边界、collapsePattern 顺序、truncate 标记行位置), 一些 expected 可能
+    不匹配, 需要回归性调整; 这会让 V-plugins-7 短期不通过, 留到 build
+    阶段循环修复."
+  - "MaybePersistRtkRawOutput 的 commandSlug 在 command 含非 ASCII 时被
+    替换为下划线, sidecar .meta.json 才会保留原始 command. 如果未来
+    UI 想按 command 搜索, 必须读 sidecar 而非从文件名解析."
+  - "raw output 落盘到 <appDir>/rtk/raw-output/, 进程崩溃或磁盘满时旧
+    文件不会自动清理. 阶段六前不会引入 LRU/TTL, 用户需自行清理或挂载
+    tmpfs/logrotate."
+  - "5 条脱敏正则无法覆盖所有 secret 形态 (如 base64 JWT、custom
+    vendor key), 仅保证 OpenAI/Slack/AWS 三家 + 标准凭据字段名 + 标准
+    Authorization header. 用户自定义 filter 不走 redact 路径, 自行
+    负责."
+  - "RunRtkFilterTests 在测试入口跑 (rtk_test.go), 不挂 PostLLMHook.
+    如果未来想在线上自动跑 verify, 需新增 trigger (cron / admin 端点 /
+    CLI), 阶段六再做."
+
+open_questions:
+  - "D1 决策: 把 compression 主流程的 5% 阈值替换成 'compressedTokens < 
+    originalTokens' 后, 那些原本 0-5% 压缩率的 filter 是否还能拿到
+    'applyRtkCompression' 的入口? 阶段四 build 跑回归时若发现大量
+    request 的 stats.Techniques 变长, 可能需要回滚阈值或在 config 加
+    raw_output_min_savings_percent 开关 (D1 选项 C)."
+  - "raw output 目录 <appDir>/rtk/raw-output/ 与未来 learn/discover
+    (阶段五) 的样本目录是否合并? listRtkCommandSamples 读 raw-output/,
+    discover 的样本可能需要单独的 noise-samples/ 目录; 阶段四先复用
+    raw-output/, 阶段五再决定是否拆分."
+  - "verify 的 diagnostics 字段 (来自 FilterLoader.diagnostics) 是否包
+    含 raw output 路径? 当前仅含 filter 加载诊断; raw output 失败
+    是否要写 diagnostics 让 UI 可见? 阶段四仅 logging, 留阶段六 UI 接."
