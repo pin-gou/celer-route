@@ -118,6 +118,98 @@ interface CustomTooltipProps {
 
 type ChartMouseEvent = { activeTooltipIndex?: number | string | null };
 
+// Fills the [startTime, endTime] window with empty buckets and overlays the API
+// buckets at their correct indices. Exported so unit tests can pin the
+// regression where a stale endTime froze the right edge of a sliding-window
+// histogram even as fresh data arrived. We accept the histogram response
+// union as-is (LogsHistogramResponse and MCPHistogramResponse both carry
+// bucket_size_seconds + buckets with the same shape — TS can't see it, so
+// the caller side stays narrow).
+export function fillHistogramBuckets(
+	data: LogsHistogramResponse | MCPHistogramResponse | null | undefined,
+	startTime: number,
+	endTime: number,
+): Array<LogVolumeDataPoint> {
+	if (!data?.bucket_size_seconds || !startTime || !endTime || startTime >= endTime) {
+		return [];
+	}
+
+	const bucketSizeSeconds = data.bucket_size_seconds;
+	const bucketSizeMs = bucketSizeSeconds * 1000;
+	const minTime = Math.floor((startTime * 1000) / bucketSizeMs) * bucketSizeMs;
+	const maxTime = endTime * 1000;
+
+	// Safety: limit maximum number of buckets to prevent performance issues
+	const maxBuckets = 500;
+	const estimatedBuckets = Math.ceil((maxTime - minTime) / bucketSizeMs);
+
+	if (estimatedBuckets > maxBuckets) {
+		// If too many buckets, just return the original data without filling
+		const result = (data.buckets || []).map((bucket, index) => ({
+			...bucket,
+			cancelled: bucket.cancelled ?? 0,
+			index,
+			formattedTime: formatTimestamp(bucket.timestamp, bucketSizeSeconds),
+		}));
+		if (result.length === 1) {
+			const nextTimestamp = new Date(new Date(result[0].timestamp).getTime() + bucketSizeMs).toISOString();
+			result.push({
+				timestamp: nextTimestamp,
+				count: 0,
+				success: 0,
+				error: 0,
+				cancelled: 0,
+				index: 1,
+				formattedTime: formatTimestamp(nextTimestamp, bucketSizeSeconds),
+			});
+		}
+		return result;
+	}
+
+	const filledBuckets: Array<LogVolumeDataPoint> = [];
+	for (let time = minTime, idx = 0; time < maxTime; time += bucketSizeMs, idx++) {
+		const timestamp = new Date(time).toISOString();
+		filledBuckets.push({
+			timestamp,
+			count: 0,
+			success: 0,
+			error: 0,
+			cancelled: 0,
+			index: idx,
+			formattedTime: formatTimestamp(timestamp, bucketSizeSeconds),
+		});
+	}
+
+	for (const bucket of data.buckets || []) {
+		const bucketTime = new Date(bucket.timestamp).getTime();
+		const bucketIndex = Math.round((bucketTime - minTime) / bucketSizeMs);
+
+		if (bucketIndex >= 0 && bucketIndex < filledBuckets.length) {
+			filledBuckets[bucketIndex] = {
+				...bucket,
+				cancelled: bucket.cancelled ?? 0,
+				index: bucketIndex,
+				formattedTime: formatTimestamp(bucket.timestamp, bucketSizeSeconds),
+			};
+		}
+	}
+
+	if (filledBuckets.length === 1) {
+		const nextTimestamp = new Date(new Date(filledBuckets[0].timestamp).getTime() + bucketSizeMs).toISOString();
+		filledBuckets.push({
+			timestamp: nextTimestamp,
+			count: 0,
+			success: 0,
+			error: 0,
+			cancelled: 0,
+			index: 1,
+			formattedTime: formatTimestamp(nextTimestamp, bucketSizeSeconds),
+		});
+	}
+
+	return filledBuckets;
+}
+
 // Custom tooltip component
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
 	const { t, i18n } = useTranslation("logs");
@@ -187,106 +279,28 @@ export function LogsVolumeChart({
 	const effectingTimeRange = useMemo(() => {
 		if (period) {
 			const { start, end } = getUnixRangeForPeriod(period);
-			return { startTime: start, endTime: end };
+			// In "Last X" period mode the right edge must follow wall-clock now,
+			// otherwise a refreshed histogram paints new bars into stale x-axis
+			// ticks that never slide forward. We pin start to the period anchor
+			// (now - period) and let "end" track the latest of: the period's now,
+			// or the last bucket's right edge from the freshest API response. The
+			// bucket-derived edge is what gives us free forward motion whenever
+			// the 10s polling round-trip completes with newer data.
+			const bucketSizeSeconds = data?.bucket_size_seconds ?? 0;
+			const lastBucket = data?.buckets && data.buckets.length > 0 ? data.buckets[data.buckets.length - 1] : undefined;
+			const lastBucketEnd = lastBucket ? Math.floor(new Date(lastBucket.timestamp).getTime() / 1000) + bucketSizeSeconds : 0;
+			const slidingEnd = Math.max(end, lastBucketEnd);
+			return { startTime: start, endTime: slidingEnd };
 		}
 
 		return { startTime, endTime };
-	}, [period, startTime, endTime]);
+	}, [period, startTime, endTime, data]);
 
 	// Transform data for chart, filling in empty buckets for the full time range
-	const chartData = useMemo(() => {
-		// Need bucket_size_seconds and valid time range
-		if (
-			!data?.bucket_size_seconds ||
-			!effectingTimeRange.startTime ||
-			!effectingTimeRange.endTime ||
-			effectingTimeRange.startTime >= effectingTimeRange.endTime
-		) {
-			return [];
-		}
-
-		const bucketSizeMs = data.bucket_size_seconds * 1000;
-
-		// Align start time to bucket boundary
-		const minTime = Math.floor((effectingTimeRange.startTime * 1000) / bucketSizeMs) * bucketSizeMs;
-		const maxTime = effectingTimeRange.endTime * 1000;
-
-		// Safety: limit maximum number of buckets to prevent performance issues
-		const maxBuckets = 500;
-		const estimatedBuckets = Math.ceil((maxTime - minTime) / bucketSizeMs);
-
-		if (estimatedBuckets > maxBuckets) {
-			// If too many buckets, just return the original data without filling
-			const result = (data.buckets || []).map((bucket, index) => ({
-				...bucket,
-				cancelled: bucket.cancelled ?? 0,
-				index,
-				formattedTime: formatTimestamp(bucket.timestamp, data.bucket_size_seconds),
-			}));
-			// Ensure at least 2 data points for Recharts
-			if (result.length === 1) {
-				const nextTimestamp = new Date(new Date(result[0].timestamp).getTime() + bucketSizeMs).toISOString();
-				result.push({
-					timestamp: nextTimestamp,
-					count: 0,
-					success: 0,
-					error: 0,
-					cancelled: 0,
-					index: 1,
-					formattedTime: formatTimestamp(nextTimestamp, data.bucket_size_seconds),
-				});
-			}
-			return result;
-		}
-
-		// First, create all empty buckets for the time range
-		const filledBuckets: Array<HistogramBucket & { formattedTime: string; index: number }> = [];
-		for (let time = minTime, idx = 0; time < maxTime; time += bucketSizeMs, idx++) {
-			const timestamp = new Date(time).toISOString();
-			filledBuckets.push({
-				timestamp,
-				count: 0,
-				success: 0,
-				error: 0,
-				cancelled: 0,
-				index: idx,
-				formattedTime: formatTimestamp(timestamp, data.bucket_size_seconds),
-			});
-		}
-
-		// Then, place API buckets at their correct positions using index calculation
-		// This is more robust than exact timestamp matching
-		for (const bucket of data.buckets || []) {
-			const bucketTime = new Date(bucket.timestamp).getTime();
-			// Calculate the index for this bucket based on its offset from minTime
-			const bucketIndex = Math.round((bucketTime - minTime) / bucketSizeMs);
-
-			if (bucketIndex >= 0 && bucketIndex < filledBuckets.length) {
-				filledBuckets[bucketIndex] = {
-					...bucket,
-					cancelled: bucket.cancelled ?? 0,
-					index: bucketIndex,
-					formattedTime: formatTimestamp(bucket.timestamp, data.bucket_size_seconds),
-				};
-			}
-		}
-
-		// Ensure at least 2 data points for Recharts
-		if (filledBuckets.length === 1) {
-			const nextTimestamp = new Date(new Date(filledBuckets[0].timestamp).getTime() + bucketSizeMs).toISOString();
-			filledBuckets.push({
-				timestamp: nextTimestamp,
-				count: 0,
-				success: 0,
-				error: 0,
-				cancelled: 0,
-				index: 1,
-				formattedTime: formatTimestamp(nextTimestamp, data.bucket_size_seconds),
-			});
-		}
-
-		return filledBuckets;
-	}, [data, effectingTimeRange.startTime, effectingTimeRange.endTime, i18n.language]);
+	const chartData = useMemo(
+		() => fillHistogramBuckets(data, effectingTimeRange.startTime, effectingTimeRange.endTime),
+		[data, effectingTimeRange.startTime, effectingTimeRange.endTime],
+	);
 
 	// Handle mouse down on chart (start selection)
 	const handleMouseDown = useCallback((e: ChartMouseEvent) => {
