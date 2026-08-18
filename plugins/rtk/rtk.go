@@ -1,5 +1,6 @@
 // Package rtk provides a Rule-based Tool-output Kompression plugin for Bifrost.
-// This is a minimal stub that will be fully implemented in the dev.plugins track.
+// It implements custom filter loading (project > global > builtin), dual-format
+// JSON parsing, and trust-based SHA256 verification.
 package rtk
 
 import (
@@ -19,12 +20,16 @@ type Plugin struct {
 	config     *Config
 	logger     schemas.Logger
 	stateStore sync.Map // map[string]*CompressionState, keyed by requestID
+	loader     *FilterLoader
 }
 
 // Init creates a new RTK plugin instance with the given configuration.
 // Init validates the config before constructing the plugin to fail fast on
-// misconfiguration (malicious input, out-of-range values, etc.).
-func Init(ctx context.Context, config *Config, logger schemas.Logger) (*Plugin, error) {
+// misconfiguration (malicious input, out-of-range values, etc.). The appDir
+// parameter is used to locate project/global custom filter files.
+// If loading custom filters fails, Init logs a warning but does not fail
+// (fail-open strategy — builtin filters still work).
+func Init(ctx context.Context, config *Config, logger schemas.Logger, appDir string) (*Plugin, error) {
 	if config == nil {
 		return nil, fmt.Errorf("rtk: config is nil")
 	}
@@ -34,12 +39,43 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger) (*Plugin, 
 	// Apply defaults for zero-value fields so the compression pipeline has
 	// sane limits even when the config omits them.
 	applyConfigDefaults(config)
-	return &Plugin{
+	p := &Plugin{
 		name:       PluginName,
 		config:     config,
 		logger:     logger,
 		stateStore: sync.Map{},
-	}, nil
+		loader:     NewFilterLoader(config),
+	}
+	// Load custom filters — fail-open: warn on error, continue with builtins.
+	if err := p.loader.Load(appDir); err != nil {
+		if logger != nil {
+			logger.Warn("rtk", "filter loader warning: %v", err)
+		}
+	}
+
+	// Observability: log Init summary and diagnostics as required by design.md.
+	if logger != nil {
+		loader := p.loader
+		builtinCount := len(loader.builtins)
+		projectCount := len(loader.projects)
+		globalCount := len(loader.globals)
+		totalCount := len(loader.cachedFilters)
+		diagCount := len(loader.diagnostics)
+		logger.Info("rtk: filter loader initialized, total=%d (project=%d global=%d builtin=%d), diagnostics=%d",
+			totalCount, projectCount, globalCount, builtinCount, diagCount)
+
+		for _, d := range loader.diagnostics {
+			switch d.Level {
+			case "error":
+				logger.Error("rtk", "filter diagnostic: [%s/%s] %s — %s", d.Source, d.Format, d.Path, d.Message)
+			case "warning":
+				logger.Warn("rtk", "filter diagnostic: [%s/%s] %s — %s", d.Source, d.Format, d.Path, d.Message)
+			default:
+				logger.Info("rtk", "filter diagnostic: [%s/%s] %s — %s", d.Source, d.Format, d.Path, d.Message)
+			}
+		}
+	}
+	return p, nil
 }
 
 // GetName returns the plugin name.

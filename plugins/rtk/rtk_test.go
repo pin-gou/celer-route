@@ -380,7 +380,7 @@ ERROR: Module B failed
 				},
 			}
 
-			state := applyRtkCompression(req, tt.config)
+			state := applyRtkCompression(req, newTestPluginWithConfig(t, tt.config))
 			if state == nil {
 				t.Fatal("applyRtkCompression returned nil state")
 			}
@@ -586,17 +586,17 @@ func TestTokenEstimation(t *testing.T) {
 
 // TestApplyRtkCompressionNilRequest verifies nil safety.
 func TestApplyRtkCompressionNilRequest(t *testing.T) {
-	state := applyRtkCompression(nil, DefaultConfig())
+	state := applyRtkCompression(nil, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
-		t.Fatal("applyRtkCompression(nil, config) should return non-nil state")
+		t.Fatal("applyRtkCompression(nil, plugin) should return non-nil state")
 	}
 	if state.Compressed {
 		t.Error("compression of nil request should not be marked as compressed")
 	}
 }
 
-// TestApplyRtkCompressionNilConfig verifies nil config safety.
-func TestApplyRtkCompressionNilConfig(t *testing.T) {
+// TestApplyRtkCompressionNilPlugin verifies nil plugin safety.
+func TestApplyRtkCompressionNilPlugin(t *testing.T) {
 	req := &schemas.BifrostRequest{
 		ChatRequest: &schemas.BifrostChatRequest{
 			Input: []schemas.ChatMessage{
@@ -638,7 +638,7 @@ func TestApplyRtkCompressionAnthropicStyle(t *testing.T) {
 		},
 	}
 
-	state := applyRtkCompression(req, DefaultConfig())
+	state := applyRtkCompression(req, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
 		t.Fatal("applyRtkCompression returned nil state")
 	}
@@ -686,7 +686,7 @@ Changes not staged for commit:
 		},
 	}
 
-	state := applyRtkCompressionResponses(req, DefaultConfig())
+	state := applyRtkCompressionResponses(req, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
 		t.Fatal("applyRtkCompressionResponses returned nil state")
 	}
@@ -727,7 +727,7 @@ func TestApplyRtkCompressionResponsesCacheControl(t *testing.T) {
 		},
 	}
 
-	state := applyRtkCompressionResponses(req, DefaultConfig())
+	state := applyRtkCompressionResponses(req, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
 		t.Fatal("applyRtkCompressionResponses returned nil state")
 	}
@@ -738,17 +738,17 @@ func TestApplyRtkCompressionResponsesCacheControl(t *testing.T) {
 
 // TestApplyRtkCompressionResponsesNilRequest verifies nil safety for the responses path.
 func TestApplyRtkCompressionResponsesNilRequest(t *testing.T) {
-	state := applyRtkCompressionResponses(nil, DefaultConfig())
+	state := applyRtkCompressionResponses(nil, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
-		t.Fatal("applyRtkCompressionResponses(nil, config) should return non-nil state")
+		t.Fatal("applyRtkCompressionResponses(nil, plugin) should return non-nil state")
 	}
 	if state.Compressed {
 		t.Error("compression of nil request should not be marked as compressed")
 	}
 }
 
-// TestApplyRtkCompressionResponsesNilConfig verifies nil config safety for the responses path.
-func TestApplyRtkCompressionResponsesNilConfig(t *testing.T) {
+// TestApplyRtkCompressionResponsesNilPlugin verifies nil plugin safety for the responses path.
+func TestApplyRtkCompressionResponsesNilPlugin(t *testing.T) {
 	req := &schemas.BifrostRequest{
 		ResponsesRequest: &schemas.BifrostResponsesRequest{
 			Input: []schemas.ResponsesMessage{
@@ -769,7 +769,7 @@ func TestApplyRtkCompressionResponsesNilConfig(t *testing.T) {
 		t.Fatal("applyRtkCompressionResponses(req, nil) should return non-nil state")
 	}
 	if state.Compressed {
-		t.Error("compression with nil config should not be marked as compressed")
+		t.Error("compression with nil plugin should not be marked as compressed")
 	}
 }
 
@@ -816,7 +816,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, cfg)
+		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -865,7 +865,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, cfg)
+		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -927,7 +927,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, cfg)
+		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -991,7 +991,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		_ = applyRtkCompression(req, cfg)
+		_ = applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
 
 		// Cache control block must remain byte-identical
 		blocks := req.ChatRequest.Input[0].Content.ContentBlocks
@@ -1031,7 +1031,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, cfg)
+		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -1076,7 +1076,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		_ = applyRtkCompression(req, cfg)
+		_ = applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
 
 		// Content must be byte-identical to original
 		got := *req.ChatRequest.Input[0].Content.ContentStr
@@ -1119,7 +1119,7 @@ func TestAssistantCompressionConfigPreserved(t *testing.T) {
 		},
 	}
 
-	state := applyRtkCompression(req, cfg)
+	state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
 	if state == nil {
 		t.Fatal("applyRtkCompression returned nil state")
 	}

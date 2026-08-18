@@ -41,10 +41,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 3.2 review agent 对 git diff feat/pg/rtk-stage-3-custom-filters 做静态审查
-- [ ] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 3.2 review agent 对 git diff feat/pg/rtk-stage-3-custom-filters 做静态审查
+- [x] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 ## 4. dev.plugins:verify - dev 集成验证
 
@@ -53,10 +53,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 4.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 4.3 启动服务（如需）
-- [ ] 4.4 验证 V-plugins-N：来自 design.md（N 由 design.md 决定，非章节号）
+- [x] 4.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 4.2 执行测试（runner 通过 modules 注入命令）
+- [x] 4.3 启动服务（如需）
+- [x] 4.4 验证 V-plugins-N：来自 design.md（N 由 design.md 决定，非章节号）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
@@ -88,6 +88,6 @@
      stage=final (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 收集所有 stage 的 Gate Assessment
-- [ ] 6.2 检查跨 stage 依赖项
-- [ ] 6.3 输出 Final Gate Assessment
+- [x] 6.1 收集所有 stage 的 Gate Assessment
+- [x] 6.2 检查跨 stage 依赖项
+- [x] 6.3 输出 Final Gate Assessment
