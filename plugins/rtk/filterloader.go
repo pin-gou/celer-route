@@ -235,7 +235,8 @@ func sourceRankForFilter(l *FilterLoader, f *Filter) int {
 // should be loaded. See design.md: CustomFiltersEnabled defaults to true.
 // A plain-bool zero value cannot distinguish "explicit false" from "unset",
 // so any configuration signal (TrustProjectFilters, whitelist/blacklist) or
-// an all-zero config is treated as enabled. Custom filters are always loaded.
+// an all-zero config is treated as enabled. Custom filters are always loaded
+// (an explicit custom_filters_enabled=false is noted as a stage-6 refinement).
 func (l *FilterLoader) customFiltersEnabled() bool {
 	return true
 }

@@ -104,12 +104,9 @@ func TestLoadBuiltinPlugins_ProviderCooldown_ExplicitDisabled(t *testing.T) {
 	}
 }
 
-// TestInstantiatePlugin_RTK_Loads pins the desired contract for the RTK
-// compression plugin registration in loadBuiltinPlugin. The transport dev phase
-// (tasks.md 7.2) is expected to add an `rtk` case (mirroring semanticcache)
-// that calls rtk.Init(ctx, config, logger). Until then the switch hits the
-// default branch, so InstantiatePlugin returns "unknown built-in plugin: rtk"
-// and this test FAILS — the red-phase signal that the registration is missing.
+// TestInstantiatePlugin_RTK_Loads pins the contract for the RTK compression
+// plugin registration in loadBuiltinPlugin. The dev phase added the `rtk` case
+// (mirroring semanticcache) that calls rtk.Init(ctx, config, logger, appDir).
 func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
 	prevLogger := logger
 	logger = noopTestLogger{}
@@ -136,8 +133,8 @@ func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
 
 	plugin, err := InstantiatePlugin(context.Background(), "rtk", nil, rtkConfig, config)
 	if err != nil {
-		// Red phase: the rtk case is not yet registered in loadBuiltinPlugin.
-		// After the dev phase this must succeed.
+		// The rtk case is registered in loadBuiltinPlugin — failure here means
+		// the plugin config or init is broken.
 		t.Fatalf("InstantiatePlugin(rtk) returned error: %v", err)
 	}
 	if plugin == nil {

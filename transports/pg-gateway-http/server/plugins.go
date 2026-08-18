@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/pin-gou/pg-gateway/plugins/compat"
@@ -118,7 +119,8 @@ func loadBuiltinPlugin(ctx context.Context, name string, pluginConfig any, bifro
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal rtk plugin config: %w", err)
 		}
-		return rtk.Init(ctx, rtkConfig, logger)
+		appDir, _ := os.Getwd()
+		return rtk.Init(ctx, rtkConfig, logger, appDir)
 
 	case otel.PluginName:
 		otelConfig, err := MarshalPluginConfig[otel.Config](pluginConfig)
