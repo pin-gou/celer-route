@@ -97,9 +97,7 @@ export function LogsHeaderView({
 				size="sm"
 				className="h-7.5 disabled:opacity-100"
 				onClick={() => {
-					fetchLogs();
-					fetchStats();
-					fetchHistogram();
+					window.location.reload();
 				}}
 				disabled={loading}
 			>

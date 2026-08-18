@@ -6,6 +6,7 @@
  */
 
 import { formatCost } from "@/app/workspace/dashboard/utils/chartUtils";
+import { getMessage } from "@/app/workspace/logs/views/columns";
 import type { LogEntry } from "@/lib/types/logs";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -607,60 +608,73 @@ export function LogsTimeline({
 			</div>
 
 			{/* Tooltip */}
-			{tooltipLog && (
-				<div
-					data-testid="timeline-tooltip"
-					className="bg-popover pointer-events-none absolute z-20 rounded-md border px-3 py-2 text-xs shadow-md"
-					style={{
-						left: tooltipPos.x,
-						top: tooltipPos.y,
-						transform: tooltipAbove ? "translate(-50%, -100%)" : "translate(-50%, 0)",
-					}}
-				>
-					<div className="flex items-center gap-2 font-medium">
-						<span className="uppercase">{tooltipLog.provider}</span>
-						<span className="text-muted-foreground">{tooltipLog.model}</span>
-						{tooltipLog.status === "processing" && (
-							<span className="rounded-sm bg-blue-100 px-1.5 py-0.5 font-mono text-[9px] text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-								RUNNING
-							</span>
-						)}
-					</div>
-					<div className="text-muted-foreground mt-1 flex gap-3">
-						<span>
-							{tooltipLog.status === "processing"
-								? `~${Math.round((nowMs - new Date(tooltipLog.timestamp).getTime()) / 100) / 10}s elapsed`
-								: `${(tooltipLog.latency ?? 0).toLocaleString()}ms`}
-						</span>
-						<span>{tooltipLog.cost != null ? formatCost(tooltipLog.cost) : "—"}</span>
-					</div>
-					{tooltipLog.token_usage && (
-						<div className="text-muted-foreground mt-1 flex gap-3">
-							<span>Input: {tooltipLog.token_usage.prompt_tokens.toLocaleString()}</span>
-							<span>Output: {tooltipLog.token_usage.completion_tokens.toLocaleString()}</span>
-							{tooltipLog.status !== "processing" &&
-								tooltipLog.latency != null &&
-								tooltipLog.latency > 0 &&
-								(() => {
-									const tps = tooltipLog.token_usage.completion_tokens / (tooltipLog.latency / 1000);
-									const cls =
-										tps < 20
-											? "text-red-500 dark:text-red-400"
-											: tps < 50
-												? "text-amber-500 dark:text-amber-400"
-												: tps < 80
-													? "text-blue-500 dark:text-blue-400"
-													: "text-green-600 dark:text-green-400";
-									return (
-										<span>
-											TPS: <strong className={cls}>{tps.toFixed(1)}</strong>/s
-										</span>
-									);
-								})()}
+			{tooltipLog &&
+				(() => {
+					const lastUserMessage = getMessage(tooltipLog);
+					return (
+						<div
+							data-testid="timeline-tooltip"
+							className="bg-popover pointer-events-none absolute z-20 max-w-[360px] rounded-md border px-3 py-2 text-xs shadow-md"
+							style={{
+								left: tooltipPos.x,
+								top: tooltipPos.y,
+								transform: tooltipAbove ? "translate(-50%, -100%)" : "translate(-50%, 0)",
+							}}
+						>
+							<div className="flex items-center gap-2 font-medium">
+								<span className="uppercase">{tooltipLog.provider}</span>
+								<span className="text-muted-foreground">{tooltipLog.model}</span>
+								{tooltipLog.status === "processing" && (
+									<span className="rounded-sm bg-blue-100 px-1.5 py-0.5 font-mono text-[9px] text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+										RUNNING
+									</span>
+								)}
+							</div>
+							<div className="text-muted-foreground mt-1 flex gap-3">
+								<span>
+									{tooltipLog.status === "processing"
+										? `~${Math.round((nowMs - new Date(tooltipLog.timestamp).getTime()) / 100) / 10}s elapsed`
+										: `${(tooltipLog.latency ?? 0).toLocaleString()}ms`}
+								</span>
+								<span>{tooltipLog.cost != null ? formatCost(tooltipLog.cost) : "—"}</span>
+							</div>
+							{tooltipLog.token_usage && (
+								<div className="text-muted-foreground mt-1 flex gap-3">
+									<span>Input: {tooltipLog.token_usage.prompt_tokens.toLocaleString()}</span>
+									<span>Output: {tooltipLog.token_usage.completion_tokens.toLocaleString()}</span>
+									{tooltipLog.status !== "processing" &&
+										tooltipLog.latency != null &&
+										tooltipLog.latency > 0 &&
+										(() => {
+											const tps = tooltipLog.token_usage.completion_tokens / (tooltipLog.latency / 1000);
+											const cls =
+												tps < 20
+													? "text-red-500 dark:text-red-400"
+													: tps < 50
+														? "text-amber-500 dark:text-amber-400"
+														: tps < 80
+															? "text-blue-500 dark:text-blue-400"
+															: "text-green-600 dark:text-green-400";
+											return (
+												<span>
+													TPS: <strong className={cls}>{tps.toFixed(1)}</strong>/s
+												</span>
+											);
+										})()}
+								</div>
+							)}
+							{lastUserMessage ? (
+								<div
+									data-testid="timeline-tooltip-last-user-message"
+									className="text-foreground/90 mt-1 overflow-hidden text-ellipsis whitespace-nowrap"
+									title={lastUserMessage}
+								>
+									{lastUserMessage}
+								</div>
+							) : null}
 						</div>
-					)}
-				</div>
-			)}
+					);
+				})()}
 		</div>
 	);
 }

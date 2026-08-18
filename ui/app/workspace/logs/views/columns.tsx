@@ -13,7 +13,7 @@ import {
 	Status,
 	StatusBarColors,
 } from "@/lib/constants/logs";
-import { ChatMessageContent, DisplayLogEntry, LogEntry, ResponsesMessageContentBlock } from "@/lib/types/logs";
+import { ChatMessageContent, DisplayLogEntry, LogEntry, ResponsesMessage, ResponsesMessageContentBlock } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import { formatCompactNumber, formatTokensAdaptive } from "@/lib/utils/numbers";
 import { ColumnDef } from "@tanstack/react-table";
@@ -134,14 +134,28 @@ export function getMessage(log?: LogEntry) {
 		return "";
 	}
 	if (log?.input_history && log.input_history.length > 0) {
+		for (let i = log.input_history.length - 1; i >= 0; i--) {
+			if (log.input_history[i]?.role === "user") {
+				return getMessageFromContent(log.input_history[i].content);
+			}
+		}
 		const lastInput = log.input_history[log.input_history.length - 1];
 		return getMessageFromContent(lastInput?.content);
 	} else if (log?.responses_input_history && log.responses_input_history.length > 0) {
-		let lastMessage = log.responses_input_history[log.responses_input_history.length - 1];
-		let lastMessageContent = lastMessage?.content;
+		let lastMessage: ResponsesMessage | undefined;
+		for (let i = log.responses_input_history.length - 1; i >= 0; i--) {
+			if (log.responses_input_history[i]?.role === "user") {
+				lastMessage = log.responses_input_history[i];
+				break;
+			}
+		}
+		if (!lastMessage) {
+			lastMessage = log.responses_input_history[log.responses_input_history.length - 1];
+		}
 		if (!lastMessage) {
 			return "";
 		}
+		let lastMessageContent = lastMessage.content;
 		if (typeof lastMessageContent === "string") {
 			return lastMessageContent;
 		}
