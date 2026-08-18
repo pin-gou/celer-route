@@ -3,6 +3,7 @@ package rtk
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
 )
@@ -20,7 +21,7 @@ func newTestPlugin(t *testing.T) *Plugin {
 // newTestCtx creates a BifrostContext for tests.
 func newTestCtx(t *testing.T) *schemas.BifrostContext {
 	t.Helper()
-	return schemas.NewBifrostContext(context.Background(), nil)
+	return schemas.NewBifrostContext(context.Background(), time.Time{})
 }
 
 // TestPreLLMHookModifiesToolMessages verifies that PreLLMHook compresses
@@ -217,14 +218,14 @@ func TestPostLLMHookContextPropagation(t *testing.T) {
 	}
 
 	// Verify ctx values are set
-	origVal := ctx.GetValue(schemas.BifrostContextKeyOriginalPromptTokens)
+	origVal := ctx.Value(schemas.BifrostContextKeyOriginalPromptTokens)
 	if origVal == nil {
 		t.Error("BifrostContextKeyOriginalPromptTokens not set in ctx")
 	} else if origVal.(int) != 500 {
 		t.Errorf("OriginalPromptTokens = %d, want 500", origVal.(int))
 	}
 
-	compVal := ctx.GetValue(schemas.BifrostContextKeyCompressedPromptTokens)
+	compVal := ctx.Value(schemas.BifrostContextKeyCompressedPromptTokens)
 	if compVal == nil {
 		t.Error("BifrostContextKeyCompressedPromptTokens not set in ctx")
 	} else if compVal.(int) != 200 {
@@ -294,7 +295,7 @@ func TestPreLLMHookNonChatRequest(t *testing.T) {
 	req := &schemas.BifrostRequest{
 		RequestType: schemas.EmbeddingRequest,
 		EmbeddingRequest: &schemas.BifrostEmbeddingRequest{
-			Input: []string{"test"},
+			Input: &schemas.EmbeddingInput{Texts: []string{"test"}},
 		},
 	}
 
@@ -381,7 +382,9 @@ func TestPostLLMHookErrorPassthrough(t *testing.T) {
 	p.setState(ctx, state)
 
 	bifrostErr := &schemas.BifrostError{
-		Message: "test error",
+		Error: &schemas.ErrorField{
+			Message: "test error",
+		},
 	}
 
 	outResp, outErr, err := p.PostLLMHook(ctx, nil, bifrostErr)

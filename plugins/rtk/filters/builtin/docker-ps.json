@@ -1,0 +1,10 @@
+{
+  "name": "docker-ps",
+  "command": "docker ps",
+  "rules": [
+    {"type": "strip", "pattern": "^CONTAINER ID\\s+IMAGE\\s+COMMAND"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["\\bExited \\(\\d+\\)", "\\bRestarting\\b", "\\bUp \\d+ .* \\([^)]+\\)", "\\bUnhealthy\\b", "\\bDead\\b", "\\bCreated\\b", "\\bPaused\\b"]
+}

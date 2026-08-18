@@ -1,0 +1,7 @@
+{
+  "name": "git-log",
+  "command": "git log",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^commit [0-9a-f]", "^Author: ", "^Date: ", "^Merge: "]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "journalctl",
+  "command": "journalctl",
+  "rules": [
+    {"type": "strip", "pattern": "\\bDEBUG\\b"},
+    {"type": "strip", "pattern": "\\bTRACE\\b"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["\\bERROR\\b", "\\berror\\b", "\\bFATAL\\b", "\\bCRITICAL\\b", "\\bWARN\\b", "\\bException\\b", "\\bpanic\\b"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "ansible",
+  "command": "ansible",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^fatal:", "FAILED", "UNREACHABLE", "CHANGED", "error:", "Error:", "failed"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "kubectl-logs",
+  "command": "kubectl logs",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["\\bERROR\\b", "\\berror\\b", "\\bFATAL\\b", "\\bfatal\\b", "\\bWARN\\b", "Exception", "Traceback", "panic:"]
+}

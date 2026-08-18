@@ -1,0 +1,7 @@
+{
+  "name": "kubectl-describe",
+  "command": "kubectl describe",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["Status:.*(Failed|Error|CrashLoop)", "Message:", "Reason:", "Events:", "Back-off", "Error:", "Failed"]
+}

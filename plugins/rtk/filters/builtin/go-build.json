@@ -1,0 +1,7 @@
+{
+  "name": "go-build",
+  "command": "go build",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error", "Error:", "cannot", "undefined", "expected", "declared and not used", "no required module provides"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "npm-ls",
+  "command": "npm ls",
+  "head": 10,
+  "tail": 5,
+  "priority_patterns": ["UNMET DEPENDENCY", "invalid", "deduped", "npm ERR"]
+}

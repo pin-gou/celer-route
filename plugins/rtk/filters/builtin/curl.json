@@ -1,0 +1,7 @@
+{
+  "name": "curl",
+  "command": "curl",
+  "head": 10,
+  "tail": 5,
+  "priority_patterns": ["^error:", "^Error:", "failed", "Connection refused", "Could not resolve", "timeout", "HTTP/\\d+\\.\\d+ \\d+"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "python",
+  "command": "python",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["Traceback", "Error:", "error:", "File \".*\", line", "\\w+Error:", "ModuleNotFoundError", "ImportError", "SyntaxError", "IndentationError", "TypeError", "ValueError", "KeyError", "AttributeError"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "generic-output",
+  "command": "",
+  "rules": [
+    {"type": "collapse", "pattern": "^\\s*$"}
+  ],
+  "head": 10,
+  "tail": 5
+}

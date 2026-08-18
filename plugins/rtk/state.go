@@ -20,7 +20,7 @@ func NewCompressionState() *CompressionState {
 
 // setState stores the compression state for the given context's request ID.
 func (p *Plugin) setState(ctx *schemas.BifrostContext, state *CompressionState) {
-	reqID := ctx.GetValue(schemas.BifrostContextKeyRequestID)
+	reqID := ctx.Value(schemas.BifrostContextKeyRequestID)
 	if reqID == nil {
 		// Fallback: use a placeholder if no request ID is available
 		p.stateStore.Store("default", state)
@@ -36,7 +36,7 @@ func (p *Plugin) setState(ctx *schemas.BifrostContext, state *CompressionState) 
 
 // getState retrieves the compression state for the given context's request ID.
 func (p *Plugin) getState(ctx *schemas.BifrostContext) *CompressionState {
-	reqID := ctx.GetValue(schemas.BifrostContextKeyRequestID)
+	reqID := ctx.Value(schemas.BifrostContextKeyRequestID)
 	if reqID == nil {
 		v, ok := p.stateStore.Load("default")
 		if !ok {
@@ -70,7 +70,7 @@ func (p *Plugin) getCompressionState(ctx *schemas.BifrostContext) *CompressionSt
 
 // clearCompressionState removes the compression state for the given context's request ID.
 func (p *Plugin) clearCompressionState(ctx *schemas.BifrostContext) {
-	reqID := ctx.GetValue(schemas.BifrostContextKeyRequestID)
+	reqID := ctx.Value(schemas.BifrostContextKeyRequestID)
 	if reqID == nil {
 		p.stateStore.Delete("default")
 		return

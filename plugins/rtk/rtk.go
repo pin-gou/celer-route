@@ -61,18 +61,6 @@ func (p *Plugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostReq
 	return nil
 }
 
-// PreLLMHook implements schemas.LLMPlugin.
-// This is a minimal stub; the full implementation is in the dev.plugins track.
-func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
-	return req, nil, nil
-}
-
-// PostLLMHook implements schemas.LLMPlugin.
-// This is a minimal stub; the full implementation is in the dev.plugins track.
-func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
-	return resp, err, nil
-}
-
 // HTTPTransportPreHook implements schemas.HTTPTransportPlugin (no-op).
 func (p *Plugin) HTTPTransportPreHook(ctx *schemas.BifrostContext, req *schemas.HTTPRequest) (*schemas.HTTPResponse, error) {
 	return nil, nil

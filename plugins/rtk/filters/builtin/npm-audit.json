@@ -1,0 +1,7 @@
+{
+  "name": "npm-audit",
+  "command": "npm audit",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["critical", "high", "severe", "npm ERR", "vulnerabilities"]
+}

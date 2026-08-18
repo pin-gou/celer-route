@@ -1,0 +1,14 @@
+{
+  "name": "pip-install",
+  "command": "pip install",
+  "rules": [
+    {"type": "strip", "pattern": "^Collecting"},
+    {"type": "strip", "pattern": "^  Downloading"},
+    {"type": "strip", "pattern": "^  Using cached"},
+    {"type": "strip", "pattern": "^  Preparing metadata"},
+    {"type": "strip", "pattern": "^  Installing build dependencies"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^ERROR:", "^error:", "failed", "Requirement already satisfied"]
+}

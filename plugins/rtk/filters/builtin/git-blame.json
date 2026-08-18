@@ -1,0 +1,7 @@
+{
+  "name": "git-blame",
+  "command": "git blame",
+  "head": 10,
+  "tail": 5,
+  "priority_patterns": ["^error:", "^fatal:"]
+}

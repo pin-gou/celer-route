@@ -1,0 +1,11 @@
+{
+  "name": "gradle",
+  "command": "gradle",
+  "rules": [
+    {"type": "strip", "pattern": "^> Task :"},
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["BUILD FAILED", "error:", "Error:", "FAILURE", "BUILD SUCCESSFUL", "FAILED", "Could not", "unresolved dependency"]
+}

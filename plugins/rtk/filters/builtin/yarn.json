@@ -1,0 +1,7 @@
+{
+  "name": "yarn",
+  "command": "yarn",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error", "Error:", "ERR", "failed", "YN\\d{4}:"]
+}

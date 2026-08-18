@@ -1,0 +1,12 @@
+{
+  "name": "git-push",
+  "command": "git push",
+  "rules": [
+    {"type": "strip", "pattern": "^remote: "},
+    {"type": "strip", "pattern": "^To https://"},
+    {"type": "strip", "pattern": "^Everything up-to-date"}
+  ],
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["rejected", "^error:", "^fatal:", "non-fast-forward", "protected branch"]
+}

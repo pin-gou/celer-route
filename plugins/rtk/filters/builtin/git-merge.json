@@ -1,0 +1,7 @@
+{
+  "name": "git-merge",
+  "command": "git merge",
+  "head": 3,
+  "tail": 3,
+  "priority_patterns": ["^CONFLICT", "^fatal:", "^error:", "^Auto-merging", "^Merge made by", "Fast-forward", "Already up to date"]
+}

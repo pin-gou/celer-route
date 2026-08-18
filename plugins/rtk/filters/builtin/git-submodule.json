@@ -1,0 +1,7 @@
+{
+  "name": "git-submodule",
+  "command": "git submodule",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["^error:", "^fatal:", "^Submodule path .* checked out"]
+}

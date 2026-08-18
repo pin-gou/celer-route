@@ -1,0 +1,7 @@
+{
+  "name": "terraform",
+  "command": "terraform",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["Error:", "error:", "failed", "Plan: \\d+ to add", "Apply complete", "No changes", "Terraform has been successfully initialized"]
+}

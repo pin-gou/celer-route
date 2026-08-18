@@ -1,0 +1,7 @@
+{
+  "name": "npm-test",
+  "command": "npm test",
+  "head": 5,
+  "tail": 3,
+  "priority_patterns": ["npm ERR", "FAIL", "failed", "error:", "Error:"]
+}
