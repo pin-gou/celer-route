@@ -199,14 +199,14 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 14.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 14.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 14.3 启动服务（如需）
-- [ ] 14.4 验证 V-plugins-1：来自 design.md Verification Criteria
-- [ ] 14.5 验证 V-plugins-2：来自 design.md Verification Criteria
-- [ ] 14.6 验证 V-plugins-3：来自 design.md Verification Criteria
-- [ ] 14.7 验证 V-plugins-4：来自 design.md Verification Criteria
-- [ ] 14.8 验证 V-plugins-5：来自 design.md Verification Criteria
+- [x] 14.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 14.2 执行测试（runner 通过 modules 注入命令）
+- [x] 14.3 启动服务（如需）
+- [x] 14.4 验证 V-plugins-1：来自 design.md Verification Criteria
+- [x] 14.5 验证 V-plugins-2：来自 design.md Verification Criteria
+- [x] 14.6 验证 V-plugins-3：来自 design.md Verification Criteria
+- [x] 14.7 验证 V-plugins-4：来自 design.md Verification Criteria
+- [x] 14.8 验证 V-plugins-5：来自 design.md Verification Criteria
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
