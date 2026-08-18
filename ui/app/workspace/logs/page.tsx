@@ -422,7 +422,11 @@ export default function LogsPage() {
 				number_of_retries: entry.number_of_retries ?? 0,
 				fallback_index: entry.fallback_index ?? 0,
 			};
-			return [log, ...prev];
+			const next = [log, ...prev];
+			// Cap at 500 — the poll (30s) reconciles these into the API data and
+			// displayLogs filters out already-API rows, so we never need more than
+			// one poll cycle's worth of headroom.
+			return next.length > 500 ? next.slice(0, 500) : next;
 		});
 		// Debounce refetch of stats and histogram so the stat cards and volume
 		// chart update within ~1.5 s of the latest completion, not just at the

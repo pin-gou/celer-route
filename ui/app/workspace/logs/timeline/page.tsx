@@ -131,7 +131,11 @@ export default function TimelinePage() {
 				next[idx] = { ...next[idx], ...log };
 				return next;
 			}
-			return [...prev, log];
+			const next = [...prev, log];
+			// Cap at 500 — older rows age out of the visible window as the clock
+			// advances, and they are re-fetched if the user pans back. Keeping the
+			// extra rows bounded prevents unbounded memory growth on the timeline.
+			return next.length > 500 ? next.slice(next.length - 500) : next;
 		});
 	}, []);
 
