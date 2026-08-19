@@ -52,9 +52,8 @@ export default function ProviderDetailPage() {
 	const linkProvider = (isCustom ? provider.custom_provider_config?.base_provider_type : provider.name) as ProviderName | undefined;
 	const websiteUrl = linkProvider ? ProviderWebsites[linkProvider] : undefined;
 	const apiKeyUrl = linkProvider ? ProviderApiKeyUrls[linkProvider] : undefined;
-	const keyRequired = linkProvider ? isKeyRequiredByProvider[linkProvider] : undefined;
 	const showWebsiteLink = !!websiteUrl;
-	const showApiKeyLink = !!apiKeyUrl && keyRequired !== false;
+	const showApiKeyLink = !!apiKeyUrl && provider.is_key_less !== true && isKeyRequiredByProvider[linkProvider as ProviderName] !== false;
 
 	const tabs = [
 		{ id: "overview", label: t("providers2.tabs.overview") },

@@ -12,6 +12,21 @@ var _ schemas.Provider = (*opencodeProvider)(nil)
 func TestOpencodeProviderConstructors(t *testing.T) {
 	t.Parallel()
 
+	t.Run("Bare constructor defaults", func(t *testing.T) {
+		cfg := &schemas.ProviderConfig{}
+		cfg.CheckAndSetDefaults()
+		provider, err := NewOpencodeProvider(cfg, nil)
+		if err != nil {
+			t.Fatalf("NewOpencodeProvider failed: %v", err)
+		}
+		if provider.GetProviderKey() != schemas.Opencode {
+			t.Errorf("expected provider key %s, got %s", schemas.Opencode, provider.GetProviderKey())
+		}
+		if provider.networkConfig.BaseURL != "https://opencode.ai/zen" {
+			t.Errorf("expected base URL https://opencode.ai/zen, got %s", provider.networkConfig.BaseURL)
+		}
+	})
+
 	t.Run("Zen constructor defaults", func(t *testing.T) {
 		zenConfig := &schemas.ProviderConfig{}
 		zenConfig.CheckAndSetDefaults()
@@ -58,6 +73,7 @@ func TestOpencodeUnsupportedOperations(t *testing.T) {
 		name string
 		key  schemas.ModelProvider
 	}{
+		{name: "Bare", key: schemas.Opencode},
 		{name: "Zen", key: schemas.OpencodeZen},
 		{name: "Go", key: schemas.OpencodeGo},
 	}
@@ -286,4 +302,35 @@ func TestOpencodeUnsupportedOperations(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestOpencodeAnthropicHeaders(t *testing.T) {
+	t.Parallel()
+
+	t.Run("includes x-api-key and anthropic-version when key is set", func(t *testing.T) {
+		p := &opencodeProvider{providerKey: schemas.OpencodeGo}
+		key := schemas.Key{Value: *schemas.NewSecretVar("sk-test")}
+		hdrs := p.opencodeAnthropicHeaders(key)
+		if hdrs["x-api-key"] != "sk-test" {
+			t.Errorf("x-api-key = %q, want sk-test", hdrs["x-api-key"])
+		}
+		if hdrs["anthropic-version"] != anthropicAPIVersion {
+			t.Errorf("anthropic-version = %q, want %q", hdrs["anthropic-version"], anthropicAPIVersion)
+		}
+		if _, hasAuth := hdrs["Authorization"]; hasAuth {
+			t.Errorf("Authorization should not be set for claude format")
+		}
+	})
+
+	t.Run("omits x-api-key when key is empty", func(t *testing.T) {
+		p := &opencodeProvider{providerKey: schemas.Opencode}
+		key := schemas.Key{}
+		hdrs := p.opencodeAnthropicHeaders(key)
+		if _, hasKey := hdrs["x-api-key"]; hasKey {
+			t.Errorf("x-api-key should not be set for empty key")
+		}
+		if hdrs["anthropic-version"] != anthropicAPIVersion {
+			t.Errorf("anthropic-version missing")
+		}
+	})
 }

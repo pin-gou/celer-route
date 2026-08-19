@@ -242,6 +242,20 @@ export function KeysTab({ provider }: KeysTabProps) {
 		{ value: "error" as const, label: t("providers2.keysTab.healthFilter.error") },
 	];
 
+	// Keyless providers (e.g. bare opencode) never carry API keys — show a
+	// static notice instead of the key-management surface. The tab stays so
+	// operators see the provider's Keys entry point, but there is nothing to
+	// manage underneath.
+	if (provider.is_key_less) {
+		return (
+			<div data-testid="providers2-keys-tab" className="rounded-lg border">
+				<div data-testid="providers2-keys-keyless-notice" className="text-muted-foreground px-4 py-12 text-center text-xs">
+					{t("providers2.keysTab.keylessNotice")}
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div data-testid="providers2-keys-tab" className="rounded-lg border">
 			{/* Toolbar */}

@@ -451,6 +451,9 @@
         "gemini": {
           "$ref": "#/$defs/provider"
         },
+        "opencode": {
+          "$ref": "#/$defs/provider"
+        },
         "opencode-go": {
           "$ref": "#/$defs/provider"
         },
@@ -7637,6 +7640,7 @@
             "mistral",
             "ollama",
             "groq",
+            "opencode",
             "opencode-go",
             "opencode-zen",
             "sgl",

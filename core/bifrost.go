@@ -4449,6 +4449,8 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return opencode.NewOpencodeGoProvider(config, bifrost.logger)
 	case schemas.OpencodeZen:
 		return opencode.NewOpencodeZenProvider(config, bifrost.logger)
+	case schemas.Opencode:
+		return opencode.NewOpencodeProvider(config, bifrost.logger)
 	case schemas.SGL:
 		return sgl.NewSGLProvider(config, bifrost.logger)
 	case schemas.Parasail:
@@ -8423,6 +8425,14 @@ func (bifrost *Bifrost) getAllSupportedKeys(ctx *schemas.BifrostContext, provide
 	}
 
 	if len(keys) == 0 {
+		// Keyless providers (see schemas.IsKeylessProvider, e.g. bare `opencode`,
+		// the free/no-auth OpenCode tier) have no configured keys by design —
+		// return a single empty key so the request proceeds unauthenticated
+		// instead of failing with "no keys found". The empty-key carrier matches
+		// how unprefixed list models requests behave for other providers.
+		if schemas.IsKeylessProvider(providerKey) {
+			return []schemas.Key{{}}, nil
+		}
 		return nil, fmt.Errorf("no keys found for provider: %v", providerKey)
 	}
 

@@ -52,6 +52,7 @@ const (
 	Vertex        ModelProvider = "vertex"
 	Mistral       ModelProvider = "mistral"
 	Ollama        ModelProvider = "ollama"
+	Opencode      ModelProvider = "opencode"
 	OpencodeGo    ModelProvider = "opencode-go"
 	OpencodeZen   ModelProvider = "opencode-zen"
 	Groq          ModelProvider = "groq"
@@ -99,6 +100,7 @@ var StandardProviders = []ModelProvider{
 	Groq,
 	Mistral,
 	Ollama,
+	Opencode,
 	OpencodeGo,
 	OpencodeZen,
 	OpenAI,
@@ -118,6 +120,26 @@ var StandardProviders = []ModelProvider{
 	Fireworks,
 	Sarvam,
 	Wafer,
+}
+
+// KeylessProviders is the set of built-in (non-custom) providers that never
+// require an API key — request routing, model discovery, and key management
+// all treat these as keyless regardless of config. Bare `opencode` (the
+// no-auth/free OpenCode tier) is the canonical example.
+//
+// NOTE: this is distinct from "key-optional" providers such as Ollama, SGL,
+// and vLLM, whose key value may be empty but which still support per-key
+// server URLs — those keep full key management.
+var KeylessProviders = map[ModelProvider]struct{}{
+	Opencode: {},
+}
+
+// IsKeylessProvider reports whether a built-in provider never requires an API
+// key (see KeylessProviders). Custom providers express keyless-ness through
+// their own CustomProviderConfig.IsKeyLess flag.
+func IsKeylessProvider(provider ModelProvider) bool {
+	_, ok := KeylessProviders[provider]
+	return ok
 }
 
 // RequestType represents the type of request being made to a provider.

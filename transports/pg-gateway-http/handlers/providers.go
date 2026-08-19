@@ -109,6 +109,10 @@ type ProviderResponse struct {
 	Status                   string                           `json:"status,omitempty"`                 // Operational status (e.g., list_models_failed)
 	Description              string                           `json:"description,omitempty"`            // Error/status description
 	ConfigHash               string                           `json:"config_hash,omitempty"`            // Hash of config.json version, used for change detection
+	// IsKeyLess is true when the provider is inherently keyless (no API key
+	// needed). Set by the server for built-in keyless providers (opencode)
+	// and custom providers with CustomProviderConfig.IsKeyLess=true.
+	IsKeyLess bool `json:"is_key_less,omitempty"`
 	// Read-only aggregation fields (populated on list/get)
 	KeysCount        int     `json:"keys_count,omitempty"`         // Number of keys for this provider
 	ModelsCount      int     `json:"models_count,omitempty"`       // Number of models for this provider
@@ -1309,6 +1313,9 @@ func (h *ProviderHandler) getProviderResponseFromConfig(provider schemas.ModelPr
 		config.ConcurrencyAndBufferSize = &schemas.DefaultConcurrencyAndBufferSize
 	}
 
+	keyless := schemas.IsKeylessProvider(provider) ||
+		(config.CustomProviderConfig != nil && config.CustomProviderConfig.IsKeyLess)
+
 	return ProviderResponse{
 		Name:                     provider,
 		NetworkConfig:            *config.NetworkConfig,
@@ -1319,6 +1326,7 @@ func (h *ProviderHandler) getProviderResponseFromConfig(provider schemas.ModelPr
 		StoreRawRequestResponse:  config.StoreRawRequestResponse,
 		CustomProviderConfig:     config.CustomProviderConfig,
 		OpenAIConfig:             config.OpenAIConfig,
+		IsKeyLess:                keyless,
 		ProviderStatus:           status,
 		Status:                   config.Status,
 		Description:              config.Description,

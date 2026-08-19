@@ -361,6 +361,12 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 					</div>
 				</Section>
 
+				{provider.is_key_less && (
+					<Section testId="providers2-overview-keyless" title={t("providers2.overview.keyless")}>
+						<p className="text-muted-foreground text-xs">{t("providers2.overview.keylessDescription")}</p>
+					</Section>
+				)}
+
 				{provider.custom_provider_config && (
 					<Section
 						testId="providers2-overview-api-structure"

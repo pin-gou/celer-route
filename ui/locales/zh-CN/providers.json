@@ -126,7 +126,9 @@
 			"debuggingStoreRawRequestResponseDescription": "在日志记录中持久化原始请求和响应负载。",
 			"apiStructure": "API 结构",
 			"apiStructureDescription": "配置此自定义提供者的底层提供者类型、密钥要求和允许的请求类型。",
-			"apiStructureOnlyCustom": "API 结构仅适用于自定义提供者。"
+			"apiStructureOnlyCustom": "API 结构仅适用于自定义提供者。",
+			"keyless": "无需 API 密钥",
+			"keylessDescription": "此提供商无需 API 密钥，密钥管理功能已禁用。"
 		},
 		"detail": {
 			"delete": "删除",
@@ -157,6 +159,7 @@
 			"searchPlaceholder": "搜索密钥...",
 			"loading": "加载密钥中...",
 			"noKeys": "未找到密钥。",
+			"keylessNotice": "此提供商无需 API 密钥，密钥管理不适用。",
 			"table": {
 				"name": "名称",
 				"weight": "权重",

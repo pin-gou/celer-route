@@ -425,6 +425,11 @@ export interface ModelProvider extends ModelProviderConfig {
 	provider_status: ProviderStatus;
 	config_hash?: string; // Present when config is synced from config.json
 
+	// True when the provider is inherently keyless (no API key needed).
+	// Set by the server for built-in keyless providers (opencode) and custom
+	// providers with custom_provider_config.is_key_less=true.
+	is_key_less?: boolean;
+
 	// Aggregate fields from ProviderResponse (read-only, computed server-side)
 	keys_count?: number;
 	models_count?: number;

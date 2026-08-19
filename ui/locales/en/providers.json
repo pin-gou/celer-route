@@ -126,7 +126,9 @@
 			"debuggingStoreRawRequestResponseDescription": "Persist raw request and response payloads in log records.",
 			"apiStructure": "API Structure",
 			"apiStructureDescription": "Configure the underlying provider type, key requirements, and allowed request types for this custom provider.",
-			"apiStructureOnlyCustom": "API Structure is only available for custom providers."
+			"apiStructureOnlyCustom": "API Structure is only available for custom providers.",
+			"keyless": "No API Key Required",
+			"keylessDescription": "This provider does not require an API key. Key management is disabled for this provider."
 		},
 		"detail": {
 			"delete": "Delete",
@@ -157,6 +159,7 @@
 			"searchPlaceholder": "Search keys...",
 			"loading": "Loading keys...",
 			"noKeys": "No keys found.",
+			"keylessNotice": "This provider does not require an API key. Key management is not applicable.",
 			"table": {
 				"name": "Name",
 				"weight": "Weight",

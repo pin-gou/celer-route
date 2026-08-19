@@ -199,10 +199,10 @@ type BifrostHTTPServer struct {
 	Host   string
 	AppDir string
 
-	LogLevel        string
-	LogOutputStyle  string
-	LogsCleaner     *logstore.LogsCleaner
-	AsyncJobCleaner *logstore.AsyncJobCleaner
+	LogLevel                  string
+	LogOutputStyle            string
+	LogsCleaner               *logstore.LogsCleaner
+	AsyncJobCleaner           *logstore.AsyncJobCleaner
 	DashboardBucketAggregator *logstore.DashboardAggregator
 
 	Client *bifrost.Bifrost
@@ -860,8 +860,8 @@ func (s *BifrostHTTPServer) ReloadProvider(ctx context.Context, provider schemas
 	if err != nil {
 		return nil, fmt.Errorf("failed to read provider keys for %s: %w", provider, err)
 	}
-	isKeylessProvider := providerInfo.CustomProviderConfig != nil && providerInfo.CustomProviderConfig.IsKeyLess
-	hasNoKeys := len(inMemoryKeys) == 0 && !isKeylessProvider
+	keyless := isKeylessProvider(provider, s.Config)
+	hasNoKeys := len(inMemoryKeys) == 0 && !keyless
 
 	// Refresh keyconfig from the current key list, then reconcile the live
 	// entries against it before refetching per-key.
@@ -886,7 +886,7 @@ func (s *BifrostHTTPServer) ReloadProvider(ctx context.Context, provider schemas
 		// smaller blast radius, since an emptied catalog makes every model
 		// unroutable rather than just the ones that moved.
 		keep := make(map[string]struct{}, len(inMemoryKeys)+1)
-		if isKeylessProvider {
+		if keyless {
 			// Keyless providers cache under the empty-string sentinel, which
 			// is also what the OnKey* helpers write under for this provider.
 			keep[""] = struct{}{}
@@ -1013,7 +1013,15 @@ func keyEnabled(key schemas.Key) bool {
 // isKeylessProvider returns true when the provider's config marks it
 // keyless. Used to pick the live-cache key for OnKey* helpers: keyless
 // providers cache under the empty-string sentinel.
+//
+// Built-in keyless providers (e.g. bare `opencode`, the free/no-auth
+// OpenCode tier) are inherently keyless despite not carrying a
+// CustomProviderConfig — their provider config is created without one, so
+// gate on schemas.IsKeylessProvider directly.
 func isKeylessProvider(provider schemas.ModelProvider, cfg *lib.Config) bool {
+	if schemas.IsKeylessProvider(provider) {
+		return true
+	}
 	if cfg == nil {
 		return false
 	}
