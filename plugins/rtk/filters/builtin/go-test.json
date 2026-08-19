@@ -10,5 +10,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^--- FAIL", "^FAIL\\s*$", "FAIL:", "\\s+\\S+\\.go:\\d+:"]
+  "priority_patterns": ["^--- FAIL", "^FAIL\\s*$", "FAIL:", "\\s+\\S+\\.go:\\d+:"],
+  "tests": [{"name":"keeps-failures-only","input":"=== RUN   TestFoo\n--- PASS: TestFoo (0.00s)\n=== RUN   TestBar\n--- FAIL: TestBar (0.01s)\n    bar_test.go:42: expected 42, got 0\nok  \tgithub.com/foo/bar\t0.002s\nFAIL","expected":"--- FAIL: TestBar (0.01s)\n    bar_test.go:42: expected 42, got 0\nFAIL"}]
 }

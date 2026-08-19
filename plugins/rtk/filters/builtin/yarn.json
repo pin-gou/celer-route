@@ -3,5 +3,6 @@
   "command": "yarn",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^error", "Error:", "ERR", "failed", "YN\\d{4}:"]
+  "priority_patterns": ["^error", "Error:", "ERR", "failed", "YN\\d{4}:"],
+  "tests": [{"name":"preserves-yarn-install","input":"yarn install v1.22.19\n[1/4] Resolving packages...\nsuccess Saved lockfile.","expected":"yarn install v1.22.19\n[1/4] Resolving packages...\nsuccess Saved lockfile."}]
 }

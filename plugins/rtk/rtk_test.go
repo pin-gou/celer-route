@@ -1,6 +1,9 @@
 package rtk
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
@@ -1326,5 +1329,133 @@ func DefaultConfig() *Config {
 		MaxCharsPerResult:    12000,
 		DedupThreshold:       3,
 		PreserveCacheControl: true,
+	}
+}
+
+// gitStatusFixture is a realistic shell tool output used by the raw-output
+// integration tests: it is compressible (git-status filter head=5/tail=2)
+// and carries no secrets, so redaction stays off.
+const gitStatusFixture = `On branch feature/foo
+Changes not staged for commit:
+	modified:   src/main.go
+	modified:   src/utils.go
+	modified:   go.mod
+	modified:   go.sum
+	modified:   Makefile
+	modified:   README.md
+	modified:   .gitignore
+	modified:   docker-compose.yml
+	modified:   config.json
+	modified:   tests/test_main.go
+	modified:   docs/README.md
+`
+
+// TestCompressionTriggersRawOutput (V-plugins-9) verifies that
+// processRtkTextWithCommand persists the raw output via
+// MaybePersistRtkRawOutput exactly when stats.CompressedTokens <
+// stats.OriginalTokens (design D1: strict alignment with OmniRoute, no 5%
+// threshold), accumulating the pointer into ProcessStats.RawOutputPointers.
+func TestCompressionTriggersRawOutput(t *testing.T) {
+	t.Run("retention_always_persists_raw_output", func(t *testing.T) {
+		appDir := t.TempDir()
+		cfg := DefaultConfig()
+		cfg.RawOutputRetention = "always"
+
+		loader := NewFilterLoader(cfg)
+		if err := loader.Load(appDir); err != nil {
+			t.Fatal(err)
+		}
+
+		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status")
+		if stats.CompressedTokens >= stats.OriginalTokens {
+			t.Fatalf("fixture must actually compress for this test: original=%d compressed=%d",
+				stats.OriginalTokens, stats.CompressedTokens)
+		}
+		if len(stats.RawOutputPointers) < 1 {
+			t.Fatalf("expected at least 1 raw output pointer with retention=always, got %d",
+				len(stats.RawOutputPointers))
+		}
+		ptr := stats.RawOutputPointers[0]
+		if ptr.ID == "" {
+			t.Error("expected non-empty pointer ID")
+		}
+		if ptr.Path == "" {
+			t.Error("expected non-empty pointer Path")
+		}
+		if _, err := os.Stat(ptr.Path); err != nil {
+			t.Errorf("persisted raw output file missing: %v", err)
+		}
+	})
+
+	t.Run("retention_never_captures_no_pointers", func(t *testing.T) {
+		appDir := t.TempDir()
+		cfg := DefaultConfig()
+		cfg.RawOutputRetention = "never"
+
+		loader := NewFilterLoader(cfg)
+		if err := loader.Load(appDir); err != nil {
+			t.Fatal(err)
+		}
+
+		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status")
+		if len(stats.RawOutputPointers) != 0 {
+			t.Errorf("expected 0 raw output pointers with retention=never, got %d",
+				len(stats.RawOutputPointers))
+		}
+	})
+}
+
+// TestStateRawOutputPointersPropagation (V-plugins-10) verifies that the
+// pointers accumulated by processRtkTextWithCommand are propagated onto the
+// CompressionState after the full applyRtkCompression path, keeping the ID
+// consistent with the persisted file name.
+func TestStateRawOutputPointersPropagation(t *testing.T) {
+	appDir := t.TempDir()
+	cfg := DefaultConfig()
+	cfg.RawOutputRetention = "always"
+
+	plugin := newTestPluginWithConfig(t, cfg)
+	if err := plugin.loader.Load(appDir); err != nil {
+		t.Fatal(err)
+	}
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role:    schemas.ChatMessageRoleTool,
+					Content: strContent(gitStatusFixture),
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_raw_v10"),
+					},
+				},
+			},
+		},
+	}
+
+	state := applyRtkCompression(req, plugin)
+	if state == nil {
+		t.Fatal("applyRtkCompression returned nil state")
+	}
+	if !state.Compressed {
+		t.Fatal("expected the fixture to be compressed")
+	}
+	if len(state.RawOutputPointers) < 1 {
+		t.Fatalf("expected state.RawOutputPointers to be non-empty, got %d", len(state.RawOutputPointers))
+	}
+
+	ptr := state.RawOutputPointers[0]
+	if ptr.ID == "" {
+		t.Error("expected non-empty pointer ID")
+	}
+	if _, err := os.Stat(ptr.Path); err != nil {
+		t.Errorf("persisted raw output file missing: %v", err)
+	}
+
+	// The file name must embed the same ID as the pointer:
+	// <ts_ms>-<slug>-<id24>.log → base ends with "-<ID>.log".
+	base := filepath.Base(ptr.Path)
+	if !strings.HasSuffix(base, "-"+ptr.ID+".log") {
+		t.Errorf("pointer ID %q not embedded in file name %q", ptr.ID, base)
 	}
 }

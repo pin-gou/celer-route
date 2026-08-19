@@ -3,5 +3,6 @@
   "command": "ssh",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^ssh:", "Permission denied", "Connection refused", "Connection timed out", "Host key verification failed", "No route to host", "Connection reset"]
+  "priority_patterns": ["^ssh:", "Permission denied", "Connection refused", "Connection timed out", "Host key verification failed", "No route to host", "Connection reset"],
+  "tests": [{"name":"preserves-login-banner","input":"Welcome to Ubuntu 22.04 LTS\nLast login: Sun Jan 1 00:00:00 2024 from 10.0.0.1","expected":"Welcome to Ubuntu 22.04 LTS\nLast login: Sun Jan 1 00:00:00 2024 from 10.0.0.1"}]
 }

@@ -12,5 +12,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["npm ERR", "npm error", "ERR! code", "EACCES", "ENOENT", "MODULE_NOT_FOUND"]
+  "priority_patterns": ["npm ERR", "npm error", "ERR! code", "EACCES", "ENOENT", "MODULE_NOT_FOUND"],
+  "tests": [{"name":"strips-noisy-install-lines","input":"npm WARN deprecated old-pkg@1.0.0: use new-pkg instead\nnpm notice\n\nadded 1 package, and audited 1500 packages in 3s\nnpm ERR! code E404","expected":"npm WARN deprecated old-pkg@1.0.0\n\nadded 1 package\nnpm ERR! code E404"}]
 }

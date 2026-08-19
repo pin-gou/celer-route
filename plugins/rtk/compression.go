@@ -8,9 +8,10 @@ import (
 
 // ProcessStats holds token statistics for a single text compression pass.
 type ProcessStats struct {
-	OriginalTokens   int
-	CompressedTokens int
-	Techniques       []string
+	OriginalTokens     int
+	CompressedTokens   int
+	Techniques         []string
+	RawOutputPointers []*RtkRawOutputPointer
 }
 
 // applyRtkCompression is the top-level entry point for the RTK compression
@@ -65,6 +66,9 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 			} else {
 				result, stats = processRtkTextWithCommand(text, config, loader, "")
 			}
+			if stats != nil && len(stats.RawOutputPointers) > 0 {
+				state.RawOutputPointers = append(state.RawOutputPointers, stats.RawOutputPointers...)
+			}
 
 			// Apply the result if savings are meaningful and we didn't
 			// empty the content entirely.
@@ -111,6 +115,9 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 					result, stats = processRtkTextWithCommand(text, config, loader, command)
 				} else {
 					result, stats = processRtkTextWithCommand(text, config, loader, "")
+				}
+				if stats != nil && len(stats.RawOutputPointers) > 0 {
+					state.RawOutputPointers = append(state.RawOutputPointers, stats.RawOutputPointers...)
 				}
 
 				if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
@@ -293,6 +300,9 @@ func applyRtkCompressionResponses(req *schemas.BifrostRequest, p *Plugin) *Compr
 		} else {
 			result, stats = processRtkTextWithCommand(text, config, loader, "")
 		}
+		if stats != nil && len(stats.RawOutputPointers) > 0 {
+			state.RawOutputPointers = append(state.RawOutputPointers, stats.RawOutputPointers...)
+		}
 
 		if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
 			ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
@@ -457,6 +467,7 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 			stats.Techniques = append(stats.Techniques, "charlimit")
 		}
 		stats.CompressedTokens = estimateTokens(result)
+		maybePersistRawOutput(stats, text, config, loader, cmd)
 		return result, stats
 	}
 
@@ -522,7 +533,40 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 	}
 
 	stats.CompressedTokens = estimateTokens(result)
+	maybePersistRawOutput(stats, text, config, loader, cmd)
 	return result, stats
+}
+
+// maybePersistRawOutput persists the raw tool output when the pipeline has
+// actually compressed it (stats.CompressedTokens < stats.OriginalTokens — the
+// D1 decision: strict alignment with OmniRoute, no 5% threshold) and the
+// config's RawOutputRetention policy allows it. The returned pointer (if any)
+// is accumulated onto stats.RawOutputPointers so the caller can attach it to
+// the request-level CompressionState. Disk failures are best-effort — a nil
+// pointer is discarded and the caller continues unaffected.
+func maybePersistRawOutput(stats *ProcessStats, text string, config *Config, loader *FilterLoader, cmd string) {
+	if stats == nil || config == nil {
+		return
+	}
+	if stats.CompressedTokens >= stats.OriginalTokens {
+		return
+	}
+	if config.RawOutputRetention == "" || config.RawOutputRetention == string(RawOutputRetentionNever) {
+		return
+	}
+	appDir := ""
+	if loader != nil {
+		appDir = loader.appDir
+	}
+	ptr := MaybePersistRtkRawOutput(text, PersistOptions{
+		Retention: RtkRawOutputRetention(config.RawOutputRetention),
+		Command:   cmd,
+		MaxBytes:  config.RawOutputMaxBytes,
+		AppDir:    appDir,
+	})
+	if ptr != nil {
+		stats.RawOutputPointers = append(stats.RawOutputPointers, ptr)
+	}
 }
 
 // effectiveMaxLines scales a line budget by the compression intensity.

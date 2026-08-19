@@ -3,5 +3,6 @@
   "command": "kubectl apply",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^error", "Error:", "conflict", "unchanged", "invalid", "failed"]
+  "priority_patterns": ["^error", "Error:", "conflict", "unchanged", "invalid", "failed"],
+  "tests": [{"name":"preserves-apply-result","input":"deployment.apps/web configured\nservice/web unchanged","expected":"deployment.apps/web configured\nservice/web unchanged"}]
 }

@@ -3,5 +3,6 @@
   "command": "git cherry-pick",
   "head": 3,
   "tail": 3,
-  "priority_patterns": ["^CONFLICT", "^fatal:", "^error:", "Cherry-pick (success|failed)"]
+  "priority_patterns": ["^CONFLICT", "^fatal:", "^error:", "Cherry-pick (success|failed)"],
+  "tests": [{"name":"preserves-cherry-pick-result","input":"Auto-merging src/main.go\n[feature 12ab34c5] cherry-picked commit","expected":"Auto-merging src/main.go\n[feature 12ab34c5] cherry-picked commit"}]
 }

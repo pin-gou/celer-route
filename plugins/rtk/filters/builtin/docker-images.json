@@ -5,5 +5,6 @@
     {"type": "strip", "pattern": "^REPOSITORY\\s+TAG\\s+IMAGE ID"}
   ],
   "head": 10,
-  "tail": 5
+  "tail": 5,
+  "tests": [{"name":"strips-header-row","input":"REPOSITORY   TAG       IMAGE ID       CREATED       SIZE\nnginx        latest    abc123def456   2 days ago    91.2MB\nredis        alpine    456defabc123   1 week ago    34.1MB","expected":"nginx        latest    abc123def456   2 days ago    91.2MB\nredis        alpine    456defabc123   1 week ago    34.1MB"}]
 }

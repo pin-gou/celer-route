@@ -3,5 +3,6 @@
   "command": "npm publish",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["npm ERR", "error:", "Error:", "E403", "E404", "E409"]
+  "priority_patterns": ["npm ERR", "error:", "Error:", "E403", "E404", "E409"],
+  "tests": [{"name":"preserves-publish-result","input":"npm notice\nnpm ok  // registry.npmjs.org","expected":"npm notice\nnpm ok  // registry.npmjs.org"}]
 }

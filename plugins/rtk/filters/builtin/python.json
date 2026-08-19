@@ -3,5 +3,6 @@
   "command": "python",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["Traceback", "Error:", "error:", "File \".*\", line", "\\w+Error:", "ModuleNotFoundError", "ImportError", "SyntaxError", "IndentationError", "TypeError", "ValueError", "KeyError", "AttributeError"]
+  "priority_patterns": ["Traceback", "Error:", "error:", "File \".*\", line", "\\w+Error:", "ModuleNotFoundError", "ImportError", "SyntaxError", "IndentationError", "TypeError", "ValueError", "KeyError", "AttributeError"],
+  "tests": [{"name":"preserves-interpreter-output","input":"Python 3.12.1\n\u003e\u003e\u003e print('hello')\nhello","expected":"Python 3.12.1\n\u003e\u003e\u003e print('hello')\nhello"}]
 }

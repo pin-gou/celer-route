@@ -3,5 +3,6 @@
   "command": "npm run",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["npm ERR", "npm error", "ERR! code", "error:", "Error:", "failed"]
+  "priority_patterns": ["npm ERR", "npm error", "ERR! code", "error:", "Error:", "failed"],
+  "tests": [{"name":"preserves-run-header","input":"\u003e app@1.0.0 dev\n\u003e vite","expected":"\u003e app@1.0.0 dev\n\u003e vite"}]
 }

@@ -3,5 +3,6 @@
   "command": "git diff",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^diff --git", "^index [0-9a-f]", "^--- a/", "^\\+\\+\\+ b/", "Binary files", "renamed from", "renamed to", "similarity index", "deleted file mode", "new file mode"]
+  "priority_patterns": ["^diff --git", "^index [0-9a-f]", "^--- a/", "^\\+\\+\\+ b/", "Binary files", "renamed from", "renamed to", "similarity index", "deleted file mode", "new file mode"],
+  "tests": [{"name":"preserves-diff-hunks","input":"diff --git a/main.go b/main.go\nindex 1234567..89abcde 100644\n--- a/main.go\n+++ b/main.go\nfunc main() {","expected":"diff --git a/main.go b/main.go\nindex 1234567..89abcde 100644\n--- a/main.go\n+++ b/main.go\nfunc main() {"}]
 }

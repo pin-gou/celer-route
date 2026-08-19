@@ -3,5 +3,6 @@
   "command": "go build",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^error", "Error:", "cannot", "undefined", "expected", "declared and not used", "no required module provides"]
+  "priority_patterns": ["^error", "Error:", "cannot", "undefined", "expected", "declared and not used", "no required module provides"],
+  "tests": [{"name":"preserves-build-slash-line","input":"go build github.com/local/app","expected":"go build github.com/local/app"}]
 }

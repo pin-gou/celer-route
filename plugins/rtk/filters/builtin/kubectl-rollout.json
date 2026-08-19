@@ -3,5 +3,6 @@
   "command": "kubectl rollout",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^error", "Error:", "failed", "Waiting for rollout", "rollout \\\"[^\\\"]+\\\" successfully rolled out"]
+  "priority_patterns": ["^error", "Error:", "failed", "Waiting for rollout", "rollout \\\"[^\\\"]+\\\" successfully rolled out"],
+  "tests": [{"name":"preserves-rollout-result","input":"deployment.apps/web rolled out","expected":"deployment.apps/web rolled out"}]
 }

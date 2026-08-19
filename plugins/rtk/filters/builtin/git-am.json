@@ -3,5 +3,6 @@
   "command": "git am",
   "head": 3,
   "tail": 3,
-  "priority_patterns": ["^Applying:", "^Patch failed", "^error:", "^fatal:"]
+  "priority_patterns": ["^Applying:", "^Patch failed", "^error:", "^fatal:"],
+  "tests": [{"name":"preserves-apply-summary","input":"Applying: fix typo in docs\nApplying: update tests","expected":"Applying: fix typo in docs\nApplying: update tests"}]
 }

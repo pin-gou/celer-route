@@ -3225,6 +3225,18 @@
                         "type": "string"
                       },
                       "default": []
+                    },
+                    "raw_output_retention": {
+                      "type": "string",
+                      "description": "When to persist raw tool output to disk for debugging: never (default) | failures (only when output looks like a failure) | always",
+                      "enum": ["never", "failures", "always"],
+                      "default": "never"
+                    },
+                    "raw_output_max_bytes": {
+                      "type": "integer",
+                      "description": "Maximum byte size of the persisted raw output file (UTF-8 safe truncation, minimum 1024)",
+                      "minimum": 1024,
+                      "default": 1048576
                     }
                   },
                   "additionalProperties": false

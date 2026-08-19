@@ -3,5 +3,6 @@
   "command": "kubectl describe",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["Status:.*(Failed|Error|CrashLoop)", "Message:", "Reason:", "Events:", "Back-off", "Error:", "Failed"]
+  "priority_patterns": ["Status:.*(Failed|Error|CrashLoop)", "Message:", "Reason:", "Events:", "Back-off", "Error:", "Failed"],
+  "tests": [{"name":"preserves-describe-summary","input":"Name: web-7c8f9d6b4f-abc123\nNamespace: default\nStatus: Running","expected":"Name: web-7c8f9d6b4f-abc123\nNamespace: default\nStatus: Running"}]
 }

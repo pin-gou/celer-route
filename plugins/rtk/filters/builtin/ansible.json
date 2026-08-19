@@ -3,5 +3,6 @@
   "command": "ansible",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^fatal:", "FAILED", "UNREACHABLE", "CHANGED", "error:", "Error:", "failed"]
+  "priority_patterns": ["^fatal:", "FAILED", "UNREACHABLE", "CHANGED", "error:", "Error:", "failed"],
+  "tests": [{"name":"preserves-play-summary","input":"PLAY [localhost] **********************************\nTASK [ping] ************************************\nok: [localhost]","expected":"PLAY [localhost] **********************************\nTASK [ping] ************************************\nok: [localhost]"}]
 }

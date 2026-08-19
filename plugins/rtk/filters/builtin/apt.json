@@ -6,5 +6,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^E:", "^W:", "^error:", "^Error:", "failed", "unable to", "not found"]
+  "priority_patterns": ["^E:", "^W:", "^error:", "^Error:", "failed", "unable to", "not found"],
+  "tests": [{"name":"strips-package-progress","input":"Reading package lists... Done\nBuilding dependency tree\nNeed to get 1.2 MB of archives\nGet:1 http://archive.ubuntu.com jammy/main amd64 pkg 1.0 [1.2 MB]\nSetting up pkg (1.0) ...\npkg installed successfully","expected":"pkg installed successfully"}]
 }

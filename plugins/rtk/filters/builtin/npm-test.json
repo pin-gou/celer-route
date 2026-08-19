@@ -3,5 +3,6 @@
   "command": "npm test",
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["npm ERR", "FAIL", "failed", "error:", "Error:"]
+  "priority_patterns": ["npm ERR", "FAIL", "failed", "error:", "Error:"],
+  "tests": [{"name":"preserves-test-result","input":"\u003e app@1.0.0 test\n\u003e vitest run\n PASS  src/foo.test.ts","expected":"\u003e app@1.0.0 test\n\u003e vitest run\n PASS  src/foo.test.ts"}]
 }

@@ -3,5 +3,6 @@
   "command": "git status",
   "head": 5,
   "tail": 2,
-  "priority_patterns": ["^fatal:", "^error:", "CONFLICT", "both modified:", "deleted by us", "deleted by them", "added by us", "added by them"]
+  "priority_patterns": ["^fatal:", "^error:", "CONFLICT", "both modified:", "deleted by us", "deleted by them", "added by us", "added by them"],
+  "tests": [{"name":"preserves-status-summary","input":"On branch feature/foo\nChanges not staged for commit:\n  modified:   src/main.go","expected":"On branch feature/foo\nChanges not staged for commit:\n  modified:   src/main.go"}]
 }

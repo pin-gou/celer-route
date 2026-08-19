@@ -6,5 +6,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["\\bExited \\(\\d+\\)", "\\bRestarting\\b", "\\bUp \\d+ .* \\([^)]+\\)", "\\bUnhealthy\\b", "\\bDead\\b", "\\bCreated\\b", "\\bPaused\\b"]
+  "priority_patterns": ["\\bExited \\(\\d+\\)", "\\bRestarting\\b", "\\bUp \\d+ .* \\([^)]+\\)", "\\bUnhealthy\\b", "\\bDead\\b", "\\bCreated\\b", "\\bPaused\\b"],
+  "tests": [{"name":"strips-header-row","input":"CONTAINER ID   IMAGE     COMMAND                  CREATED\nabc123         nginx     \"nginx -g 'daemon off;'\"   2 days ago\nUp 2 days","expected":"abc123         nginx     \"nginx -g 'daemon off;'\"   2 days ago\nUp 2 days"}]
 }

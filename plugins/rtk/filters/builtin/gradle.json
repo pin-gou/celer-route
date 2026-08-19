@@ -7,5 +7,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["BUILD FAILED", "error:", "Error:", "FAILURE", "BUILD SUCCESSFUL", "FAILED", "Could not", "unresolved dependency"]
+  "priority_patterns": ["BUILD FAILED", "error:", "Error:", "FAILURE", "BUILD SUCCESSFUL", "FAILED", "Could not", "unresolved dependency"],
+  "tests": [{"name":"strips-task-and-blank-lines","input":"\u003e Task :compileJava\n\u003e Task :test\n\nBUILD SUCCESSFUL in 3s","expected":"BUILD SUCCESSFUL in 3s"}]
 }

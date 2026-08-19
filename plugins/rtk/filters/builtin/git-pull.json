@@ -8,5 +8,6 @@
   ],
   "head": 5,
   "tail": 3,
-  "priority_patterns": ["^error:", "^fatal:", "CONFLICT", "Auto-merging"]
+  "priority_patterns": ["^error:", "^fatal:", "CONFLICT", "Auto-merging"],
+  "tests": [{"name":"strips-remote-transport-lines","input":"remote: Enumerating objects: 3, done.\nremote: Counting objects: 100% (3/3), done.\nFrom https://github.com/user/repo\n * branch            main       -\u003e FETCH_HEAD\nFast-forward","expected":" * branch            main       -\u003e FETCH_HEAD\nFast-forward"}]
 }

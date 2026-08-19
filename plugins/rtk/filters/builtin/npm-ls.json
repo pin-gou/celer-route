@@ -3,5 +3,6 @@
   "command": "npm ls",
   "head": 10,
   "tail": 5,
-  "priority_patterns": ["UNMET DEPENDENCY", "invalid", "deduped", "npm ERR"]
+  "priority_patterns": ["UNMET DEPENDENCY", "invalid", "deduped", "npm ERR"],
+  "tests": [{"name":"preserves-package-tree","input":"app@1.0.0 /workspace\n├── express@4.18.2\n└── lodash@4.17.21","expected":"app@1.0.0 /workspace\n├── express@4.18.2\n└── lodash@4.17.21"}]
 }
