@@ -160,7 +160,7 @@ Changes not staged for commit:
 				},
 			}
 
-			state := applyRtkCompression(req, newTestPluginWithConfig(t, &Config{
+			state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, &Config{
 				Enabled:              true,
 				Intensity:            "standard",
 				ApplyToToolResults:   true,

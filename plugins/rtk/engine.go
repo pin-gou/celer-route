@@ -1,19 +1,28 @@
 package rtk
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/pin-gou/pg-gateway/core/schemas"
+)
 
 // CompressionEngine defines the interface for compression engines in the pipeline.
 // Each engine is registered in the EngineCatalog and executed in order by the
-// PipelineRunner. The Compress method takes input text and optional configuration
+// PipelineRunner. The Apply method takes input text and optional configuration
 // and returns the compressed result with processing statistics.
 type CompressionEngine interface {
-	Compress(text string, opts map[string]any) (string, *ProcessStats, error)
+	Id() string
+	Apply(ctx *schemas.BifrostContext, text string, cfg EngineConfig) (EngineResult, error)
+	HealthCheck() error
+	IsEnabled() bool
+	Schema() json.RawMessage
 }
 
 // EngineConfig holds configuration for a single engine in the pipeline.
 type EngineConfig struct {
-	Enabled  bool              `json:"enabled"`
-	Settings map[string]any    `json:"settings,omitempty"`
+	Enabled  bool            `json:"enabled"`
+	Settings json.RawMessage `json:"settings,omitempty"`
 }
 
 // EngineResult holds the result of a single engine's compression pass.
@@ -24,11 +33,18 @@ type EngineResult struct {
 	CompressedBy float64 `json:"compressed_by"`
 	Skipped      bool    `json:"skipped,omitempty"`
 	Reason       string  `json:"reason,omitempty"`
+
+	// rawOutputPointers carries raw output persistence pointers from the
+	// engine's Apply method to the caller. It is not serialised — it is
+	// an internal plumbing field so the pipeline runner can propagate
+	// these pointers from processRtkTextWithCommand through to the
+	// CompressionState without discarding them.
+	rawOutputPointers []*RtkRawOutputPointer
 }
 
 // EngineBreakdown holds per-engine stats for the pipeline result.
 type EngineBreakdown struct {
-	EngineID     string  `json:"engine_id"`
+	Id           string  `json:"id"`
 	InputBytes   int     `json:"input_bytes"`
 	OutputBytes  int     `json:"output_bytes"`
 	CompressedBy float64 `json:"compressed_by"`
@@ -94,11 +110,11 @@ func (c *EngineCatalog) ListEngines() []string {
 var globalCatalog = NewEngineCatalog()
 
 // RegisterEngine registers a compression engine in the global catalog
-// under the given ID. This is the top-level registration function called
-// by engines during Init. Engines registered here are available to all
-// pipeline runners via the global catalog.
-func RegisterEngine(id string, engine CompressionEngine) {
-	globalCatalog.RegisterEngine(id, engine)
+// using the engine's own Id() as the key. This is the top-level registration
+// function called by engines during Init. Engines registered here are
+// available to all pipeline runners via the global catalog.
+func RegisterEngine(engine CompressionEngine) {
+	globalCatalog.RegisterEngine(engine.Id(), engine)
 }
 
 // PipelineRunner executes a sequence of compression engines in order.
@@ -117,14 +133,16 @@ func NewPipelineRunner(catalog *EngineCatalog) *PipelineRunner {
 // Run executes the pipeline on the input text. Each engine in the pipeline
 // is looked up in the catalog and executed in order. The output of each
 // engine becomes the input for the next. Unknown engines are skipped with
-// a warning. Returns the final text and a breakdown of per-engine stats.
-func (r *PipelineRunner) Run(pipeline *Pipeline, input string) (string, []EngineBreakdown) {
+// a warning. Returns the final text, a breakdown of per-engine stats, and
+// any raw output pointers accumulated during execution.
+func (r *PipelineRunner) Run(ctx *schemas.BifrostContext, pipeline *Pipeline, input string, defaultCfg EngineConfig) (string, []EngineBreakdown, error, []*RtkRawOutputPointer) {
 	if pipeline == nil || len(pipeline.Engines) == 0 {
-		return input, nil
+		return input, nil, nil, nil
 	}
 
 	text := input
 	var breakdown []EngineBreakdown
+	var rawPointers []*RtkRawOutputPointer
 
 	for _, engineID := range pipeline.Engines {
 		engine, ok := r.catalog.GetEngine(engineID)
@@ -133,26 +151,27 @@ func (r *PipelineRunner) Run(pipeline *Pipeline, input string) (string, []Engine
 			continue
 		}
 
-		result, stats, err := engine.Compress(text, nil)
+		cfg := defaultCfg
+		result, err := engine.Apply(ctx, text, cfg)
 		if err != nil {
 			fmt.Printf("WARN: rtk: engine %q error: %v\n", engineID, err)
-			// Still record a breakdown entry so the error engine is visible
-			// in the breakdown, allowing the pipeline to continue.
-			breakdown = append(breakdown, EngineBreakdown{EngineID: engineID})
+			breakdown = append(breakdown, EngineBreakdown{Id: engineID})
 			continue
 		}
 
-		if result != "" {
-			text = result
+		if result.Text != "" {
+			text = result.Text
 		}
 
-		entry := EngineBreakdown{EngineID: engineID}
-		if stats != nil {
-			entry.InputBytes = stats.OriginalTokens
-			entry.OutputBytes = stats.CompressedTokens
-		}
+		entry := EngineBreakdown{Id: engineID}
+		entry.InputBytes = result.InputBytes
+		entry.OutputBytes = result.OutputBytes
 		breakdown = append(breakdown, entry)
+
+		if len(result.rawOutputPointers) > 0 {
+			rawPointers = append(rawPointers, result.rawOutputPointers...)
+		}
 	}
 
-	return text, breakdown
+	return text, breakdown, nil, rawPointers
 }

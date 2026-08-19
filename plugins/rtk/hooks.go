@@ -92,18 +92,34 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		}
 	}
 
+	// Build the pipeline runner from the global catalog and the config's pipeline.
+	// This is the production path that routes through EngineCatalog + PipelineRunner,
+	// ensuring the CompressionEngine interface is actually used at runtime.
+	// Ensure the rtk engine is registered in the catalog (safe to call multiple times).
+	globalCatalog.RegisterEngine("rtk", &rtkEngine{plugin: p})
+	applyConfigDefaults(p.config)
+	runner := NewPipelineRunner(globalCatalog)
+	pipeline := &Pipeline{Engines: make([]string, len(p.config.Pipeline))}
+	for i, step := range p.config.Pipeline {
+		pipeline.Engines[i] = step.ID
+	}
+	defaultCfg := EngineConfig{
+		Enabled:  true,
+		Settings: nil,
+	}
+
 	switch req.RequestType {
 	case schemas.ChatCompletionRequest, schemas.ChatCompletionStreamRequest:
 		if req.ChatRequest == nil {
 			return req, nil, nil
 		}
-		state := applyRtkCompression(req, p)
+		state := applyRtkCompression(ctx, req, p, runner, pipeline, defaultCfg)
 		p.setState(ctx, state)
 	case schemas.ResponsesRequest, schemas.ResponsesStreamRequest:
 		if req.ResponsesRequest == nil {
 			return req, nil, nil
 		}
-		state := applyRtkCompressionResponses(req, p)
+		state := applyRtkCompressionResponses(ctx, req, p, runner, pipeline, defaultCfg)
 		p.setState(ctx, state)
 	}
 

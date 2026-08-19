@@ -17,32 +17,26 @@ type ProcessStats struct {
 // applyRtkCompression is the top-level entry point for the RTK compression
 // pipeline. It scans the request's messages for tool output (both OpenAI
 // role=tool and Anthropic tool_result blocks), applies the compression
-// pipeline, and returns the per-request compression state.
+// pipeline through the EngineCatalog + PipelineRunner, and returns the
+// per-request compression state.
 //
 // The request is mutated in place: compressed message content is written
 // directly to the input slice. The returned CompressionState carries the
 // aggregate token counts for the request.
-func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionState {
+func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostRequest, p *Plugin, runner *PipelineRunner, pipeline *Pipeline, defaultCfg EngineConfig) *CompressionState {
 	state := NewCompressionState()
 	if req == nil || p == nil || p.config == nil || !p.config.Enabled {
 		return state
 	}
 	config := p.config
-	loader := p.loader
 
 	if req.ChatRequest == nil || len(req.ChatRequest.Input) == 0 {
 		return state
 	}
 
-	// Build the tool call lookup from assistant messages.
-	lookup := buildToolCallLookup(req.ChatRequest.Input)
-
 	originalTotal := 0
 	compressedTotal := 0
 	anyCompressed := false
-
-	// Track pending tool calls for Anthropic-style positional correlation.
-	var pendingToolCalls []schemas.ChatAssistantMessageToolCall
 
 	for i := range req.ChatRequest.Input {
 		msg := &req.ChatRequest.Input[i]
@@ -56,38 +50,30 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 			origTokens := estimateTokens(text)
 			originalTotal += origTokens
 
-			// Try to get the command from the tool call lookup.
-			command, hasCommand := getOpenAICommand(msg, lookup)
-
-			var result string
-			var stats *ProcessStats
-			if hasCommand {
-				result, stats = processRtkTextWithCommand(text, config, loader, command)
-			} else {
-				result, stats = processRtkTextWithCommand(text, config, loader, "")
+			// Compress through the PipelineRunner (EngineCatalog + pipeline).
+			result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+			if err != nil || result == "" || result == text {
+				compressedTotal += origTokens
+				continue
 			}
-			if stats != nil && len(stats.RawOutputPointers) > 0 {
-				state.RawOutputPointers = append(state.RawOutputPointers, stats.RawOutputPointers...)
+			if len(ptrs) > 0 {
+				state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
 			}
 
-			// Apply the result if savings are meaningful and we didn't
-			// empty the content entirely.
-			if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
-				ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
-				if ratio >= 0.05 {
-					applyToolContent(msg, result)
-					anyCompressed = true
-					compressedTotal += estimateTokens(result)
-					state.Techniques = append(state.Techniques, stats.Techniques...)
-					continue
-				}
+			compressedEst := estimateTokens(result)
+			ratio := 1.0 - float64(compressedEst)/float64(origTokens)
+			if ratio >= 0.05 {
+				applyToolContent(msg, result)
+				anyCompressed = true
+				compressedTotal += compressedEst
+				state.Techniques = append(state.Techniques, "pipeline-runner")
+				continue
 			}
 			compressedTotal += origTokens
 		}
 
 		// --- Anthropic-style: user message with tool_result blocks ---
 		if msg.Content != nil && len(msg.Content.ContentBlocks) > 0 {
-			blockIdx := 0
 			for j := range msg.Content.ContentBlocks {
 				block := &msg.Content.ContentBlocks[j]
 				if !isToolResultBlock(block) {
@@ -95,44 +81,35 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 				}
 				// Preserve cache_control blocks verbatim.
 				if config.PreserveCacheControl && shouldPreserveCacheControl(block) {
-					blockIdx++
 					continue
 				}
 				if block.Text == nil || *block.Text == "" {
-					blockIdx++
 					continue
 				}
 				text := *block.Text
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
 
-				// Try positional correlation.
-				command, hasCommand := getAnthropicCommand(blockIdx, pendingToolCalls)
-
-				var result string
-				var stats *ProcessStats
-				if hasCommand {
-					result, stats = processRtkTextWithCommand(text, config, loader, command)
-				} else {
-					result, stats = processRtkTextWithCommand(text, config, loader, "")
+				// Compress through the PipelineRunner.
+				result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+				if err != nil || result == "" || result == text {
+					compressedTotal += origTokens
+					continue
 				}
-				if stats != nil && len(stats.RawOutputPointers) > 0 {
-					state.RawOutputPointers = append(state.RawOutputPointers, stats.RawOutputPointers...)
+				if len(ptrs) > 0 {
+					state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
 				}
 
-				if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
-					ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
-					if ratio >= 0.05 {
-						block.Text = &result
-						anyCompressed = true
-						compressedTotal += estimateTokens(result)
-						state.Techniques = append(state.Techniques, stats.Techniques...)
-						blockIdx++
-						continue
-					}
+				compressedEst := estimateTokens(result)
+				ratio := 1.0 - float64(compressedEst)/float64(origTokens)
+				if ratio >= 0.05 {
+					block.Text = &result
+					anyCompressed = true
+					compressedTotal += compressedEst
+					state.Techniques = append(state.Techniques, "pipeline-runner")
+					continue
 				}
 				compressedTotal += origTokens
-				blockIdx++
 			}
 		}
 
@@ -142,21 +119,24 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 		if msg.Role == schemas.ChatMessageRoleAssistant && msg.Content != nil {
 			mode := assistantCompressionMode(msg, config)
 			if mode != "" {
-				codeOnly := mode == "codeOnly"
 				// OpenAI-style: ContentStr
 				if msg.Content.ContentStr != nil {
 					text := *msg.Content.ContentStr
 					if text != "" {
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
-						result, stats := compressAssistantText(text, config, codeOnly)
-						if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
-							ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
+						// Assistant messages go through the pipeline runner too.
+						result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						if err == nil && result != "" && result != text {
+							if len(ptrs) > 0 {
+								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+							}
+							ratio := 1.0 - float64(estimateTokens(result))/float64(origTokens)
 							if ratio >= 0.05 {
 								msg.Content.ContentStr = &result
 								anyCompressed = true
 								compressedTotal += estimateTokens(result)
-								state.Techniques = append(state.Techniques, stats.Techniques...)
+								state.Techniques = append(state.Techniques, "pipeline-runner")
 							} else {
 								compressedTotal += origTokens
 							}
@@ -182,14 +162,17 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 						}
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
-						result, stats := compressAssistantText(text, config, codeOnly)
-						if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
-							ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
+						result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						if err == nil && result != "" && result != text {
+							if len(ptrs) > 0 {
+								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+							}
+							ratio := 1.0 - float64(estimateTokens(result))/float64(origTokens)
 							if ratio >= 0.05 {
 								block.Text = &result
 								anyCompressed = true
 								compressedTotal += estimateTokens(result)
-								state.Techniques = append(state.Techniques, stats.Techniques...)
+								state.Techniques = append(state.Techniques, "pipeline-runner")
 							} else {
 								compressedTotal += origTokens
 							}
@@ -200,12 +183,6 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 				}
 			}
 		}
-
-		// Track the last assistant message's tool calls for Anthropic correlation.
-		if msg.Role == schemas.ChatMessageRoleAssistant && msg.ChatAssistantMessage != nil &&
-			len(msg.ChatAssistantMessage.ToolCalls) > 0 {
-			pendingToolCalls = msg.ChatAssistantMessage.ToolCalls
-		}
 	}
 
 	if anyCompressed {
@@ -214,6 +191,45 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 		state.CompressedTokens = compressedTotal
 	}
 	return state
+}
+
+// applyRtkCompressionWithDefaults wraps applyRtkCompression with a default
+// PipelineRunner and pipeline built from the plugin's config. This is a
+// convenience wrapper for backward compatibility with existing tests.
+func applyRtkCompressionWithDefaults(req *schemas.BifrostRequest, p *Plugin) *CompressionState {
+	if p == nil || p.config == nil {
+		return applyRtkCompression(nil, req, p, nil, nil, EngineConfig{})
+	}
+	// Ensure config defaults are applied so Pipeline is non-nil.
+	applyConfigDefaults(p.config)
+	// Create a local catalog with the rtk engine registered, so the pipeline
+	// runner can find and execute it.
+	catalog := NewEngineCatalog()
+	catalog.RegisterEngine("rtk", &rtkEngine{plugin: p})
+	runner := NewPipelineRunner(catalog)
+	pipeline := &Pipeline{Engines: make([]string, len(p.config.Pipeline))}
+	for i, step := range p.config.Pipeline {
+		pipeline.Engines[i] = step.ID
+	}
+	return applyRtkCompression(nil, req, p, runner, pipeline, EngineConfig{Enabled: true})
+}
+
+// applyRtkCompressionResponsesWithDefaults wraps applyRtkCompressionResponses
+// with a default PipelineRunner and pipeline. Convenience for backward compat.
+func applyRtkCompressionResponsesWithDefaults(req *schemas.BifrostRequest, p *Plugin) *CompressionState {
+	if p == nil || p.config == nil {
+		return applyRtkCompressionResponses(nil, req, p, nil, nil, EngineConfig{})
+	}
+	// Ensure config defaults are applied so Pipeline is non-nil.
+	applyConfigDefaults(p.config)
+	catalog := NewEngineCatalog()
+	catalog.RegisterEngine("rtk", &rtkEngine{plugin: p})
+	runner := NewPipelineRunner(catalog)
+	pipeline := &Pipeline{Engines: make([]string, len(p.config.Pipeline))}
+	for i, step := range p.config.Pipeline {
+		pipeline.Engines[i] = step.ID
+	}
+	return applyRtkCompressionResponses(nil, req, p, runner, pipeline, EngineConfig{Enabled: true})
 }
 
 // applyRtkCompressionResponses is the Responses-API / Anthropic-route entry
@@ -226,13 +242,12 @@ func applyRtkCompression(req *schemas.BifrostRequest, p *Plugin) *CompressionSta
 // cache_control protection is honoured: function_call_output items carrying a
 // CacheControl (Anthropic tool_result with cache_control) are preserved
 // verbatim when config.PreserveCacheControl is enabled.
-func applyRtkCompressionResponses(req *schemas.BifrostRequest, p *Plugin) *CompressionState {
+func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.BifrostRequest, p *Plugin, runner *PipelineRunner, pipeline *Pipeline, defaultCfg EngineConfig) *CompressionState {
 	state := NewCompressionState()
 	if req == nil || p == nil || p.config == nil || !p.config.Enabled {
 		return state
 	}
 	config := p.config
-	loader := p.loader
 
 	if req.ResponsesRequest == nil || len(req.ResponsesRequest.Input) == 0 {
 		return state
@@ -240,26 +255,13 @@ func applyRtkCompressionResponses(req *schemas.BifrostRequest, p *Plugin) *Compr
 
 	input := req.ResponsesRequest.Input
 
-	// Build tool-name lookup from function_call items so we can recover the
-	// shell command for each tool output (positional correlation for
-	// function_call_output items whose preceding function_call carries name +
-	// arguments).
-	pendingCommands := buildResponsesCommandLookup(input)
-
 	originalTotal := 0
 	compressedTotal := 0
 	anyCompressed := false
-	// Positional index across tool messages, used together with
-	// pendingCommands to correlate a tool output back to its command.
-	callIdx := 0
 
 	for i := range input {
 		msg := &input[i]
 		if msg.Type == nil || *msg.Type != schemas.ResponsesMessageTypeFunctionCallOutput {
-			// function_call items advance the positional correlation index.
-			if msg.Type != nil && *msg.Type == schemas.ResponsesMessageTypeFunctionCall {
-				callIdx++
-			}
 			continue
 		}
 		if msg.ResponsesToolMessage == nil || msg.ResponsesToolMessage.Output == nil {
@@ -269,7 +271,6 @@ func applyRtkCompressionResponses(req *schemas.BifrostRequest, p *Plugin) *Compr
 
 		// Preserve cache_control-marked tool outputs verbatim.
 		if config.PreserveCacheControl && msg.CacheControl != nil {
-			callIdx++
 			continue
 		}
 
@@ -285,38 +286,32 @@ func applyRtkCompressionResponses(req *schemas.BifrostRequest, p *Plugin) *Compr
 			}
 		}
 		if text == "" {
-			callIdx++
 			continue
 		}
 
 		origTokens := estimateTokens(text)
 		originalTotal += origTokens
 
-		command, hasCommand := responsesCommandAt(pendingCommands, callIdx)
-		var result string
-		var stats *ProcessStats
-		if hasCommand {
-			result, stats = processRtkTextWithCommand(text, config, loader, command)
-		} else {
-			result, stats = processRtkTextWithCommand(text, config, loader, "")
+		// Compress through the PipelineRunner.
+		result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+		if err != nil || result == "" || result == text {
+			compressedTotal += origTokens
+			continue
 		}
-		if stats != nil && len(stats.RawOutputPointers) > 0 {
-			state.RawOutputPointers = append(state.RawOutputPointers, stats.RawOutputPointers...)
+		if len(ptrs) > 0 {
+			state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
 		}
 
-		if result != "" && result != text && stats.CompressedTokens < stats.OriginalTokens {
-			ratio := 1.0 - float64(stats.CompressedTokens)/float64(stats.OriginalTokens)
-			if ratio >= 0.05 {
-				applyResponsesToolOutput(out, config, result)
-				anyCompressed = true
-				compressedTotal += estimateTokens(result)
-				state.Techniques = append(state.Techniques, stats.Techniques...)
-				callIdx++
-				continue
-			}
+		compressedEst := estimateTokens(result)
+		ratio := 1.0 - float64(compressedEst)/float64(origTokens)
+		if ratio >= 0.05 {
+			applyResponsesToolOutput(out, config, result)
+			anyCompressed = true
+			compressedTotal += compressedEst
+			state.Techniques = append(state.Techniques, "pipeline-runner")
+			continue
 		}
 		compressedTotal += origTokens
-		callIdx++
 	}
 
 	if anyCompressed {

@@ -383,7 +383,7 @@ ERROR: Module B failed
 				},
 			}
 
-			state := applyRtkCompression(req, newTestPluginWithConfig(t, tt.config))
+			state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, tt.config))
 			if state == nil {
 				t.Fatal("applyRtkCompression returned nil state")
 			}
@@ -589,9 +589,9 @@ func TestTokenEstimation(t *testing.T) {
 
 // TestApplyRtkCompressionNilRequest verifies nil safety.
 func TestApplyRtkCompressionNilRequest(t *testing.T) {
-	state := applyRtkCompression(nil, newTestPluginWithConfig(t, DefaultConfig()))
+	state := applyRtkCompressionWithDefaults(nil, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
-		t.Fatal("applyRtkCompression(nil, plugin) should return non-nil state")
+		t.Fatal("applyRtkCompressionWithDefaults(nil, plugin) should return non-nil state")
 	}
 	if state.Compressed {
 		t.Error("compression of nil request should not be marked as compressed")
@@ -613,9 +613,9 @@ func TestApplyRtkCompressionNilPlugin(t *testing.T) {
 			},
 		},
 	}
-	state := applyRtkCompression(req, nil)
+	state := applyRtkCompressionWithDefaults(req, nil)
 	if state == nil {
-		t.Fatal("applyRtkCompression(req, nil) should return non-nil state")
+		t.Fatal("applyRtkCompressionWithDefaults(req, nil) should return non-nil state")
 	}
 }
 
@@ -641,7 +641,7 @@ func TestApplyRtkCompressionAnthropicStyle(t *testing.T) {
 		},
 	}
 
-	state := applyRtkCompression(req, newTestPluginWithConfig(t, DefaultConfig()))
+	state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
 		t.Fatal("applyRtkCompression returned nil state")
 	}
@@ -689,7 +689,7 @@ Changes not staged for commit:
 		},
 	}
 
-	state := applyRtkCompressionResponses(req, newTestPluginWithConfig(t, DefaultConfig()))
+	state := applyRtkCompressionResponsesWithDefaults(req, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
 		t.Fatal("applyRtkCompressionResponses returned nil state")
 	}
@@ -730,7 +730,7 @@ func TestApplyRtkCompressionResponsesCacheControl(t *testing.T) {
 		},
 	}
 
-	state := applyRtkCompressionResponses(req, newTestPluginWithConfig(t, DefaultConfig()))
+	state := applyRtkCompressionResponsesWithDefaults(req, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
 		t.Fatal("applyRtkCompressionResponses returned nil state")
 	}
@@ -741,9 +741,9 @@ func TestApplyRtkCompressionResponsesCacheControl(t *testing.T) {
 
 // TestApplyRtkCompressionResponsesNilRequest verifies nil safety for the responses path.
 func TestApplyRtkCompressionResponsesNilRequest(t *testing.T) {
-	state := applyRtkCompressionResponses(nil, newTestPluginWithConfig(t, DefaultConfig()))
+	state := applyRtkCompressionResponsesWithDefaults(nil, newTestPluginWithConfig(t, DefaultConfig()))
 	if state == nil {
-		t.Fatal("applyRtkCompressionResponses(nil, plugin) should return non-nil state")
+		t.Fatal("applyRtkCompressionResponsesWithDefaults(nil, plugin) should return non-nil state")
 	}
 	if state.Compressed {
 		t.Error("compression of nil request should not be marked as compressed")
@@ -767,9 +767,9 @@ func TestApplyRtkCompressionResponsesNilPlugin(t *testing.T) {
 			},
 		},
 	}
-	state := applyRtkCompressionResponses(req, nil)
+	state := applyRtkCompressionResponsesWithDefaults(req, nil)
 	if state == nil {
-		t.Fatal("applyRtkCompressionResponses(req, nil) should return non-nil state")
+		t.Fatal("applyRtkCompressionResponsesWithDefaults(req, nil) should return non-nil state")
 	}
 	if state.Compressed {
 		t.Error("compression with nil plugin should not be marked as compressed")
@@ -819,7 +819,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
+		state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -868,7 +868,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
+		state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -930,7 +930,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
+		state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -994,7 +994,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		_ = applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
+		_ = applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 
 		// Cache control block must remain byte-identical
 		blocks := req.ChatRequest.Input[0].Content.ContentBlocks
@@ -1034,7 +1034,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
+		state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 		if state == nil {
 			t.Fatal("applyRtkCompression returned nil state")
 		}
@@ -1079,7 +1079,7 @@ func TestApplyToAssistantMessages(t *testing.T) {
 			},
 		}
 
-		_ = applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
+		_ = applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 
 		// Content must be byte-identical to original
 		got := *req.ChatRequest.Input[0].Content.ContentStr
@@ -1122,7 +1122,7 @@ func TestAssistantCompressionConfigPreserved(t *testing.T) {
 		},
 	}
 
-	state := applyRtkCompression(req, newTestPluginWithConfig(t, cfg))
+	state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 	if state == nil {
 		t.Fatal("applyRtkCompression returned nil state")
 	}
@@ -1433,7 +1433,7 @@ func TestStateRawOutputPointersPropagation(t *testing.T) {
 		},
 	}
 
-	state := applyRtkCompression(req, plugin)
+	state := applyRtkCompressionWithDefaults(req, plugin)
 	if state == nil {
 		t.Fatal("applyRtkCompression returned nil state")
 	}

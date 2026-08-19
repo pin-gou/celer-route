@@ -1,7 +1,11 @@
 package rtk
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
+
+	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
 // ============================================================================
@@ -111,7 +115,7 @@ func TestPipelineRunnerOrderedExecution(t *testing.T) {
 
 	runner := NewPipelineRunner(catalog)
 	input := "some tool output text to compress"
-	result, breakdown := runner.Run(pipeline, input)
+	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	// Verify engines were called in order
 	if len(executionOrder) != 3 {
@@ -149,7 +153,7 @@ func TestPipelineRunnerEmptyPipeline(t *testing.T) {
 	}
 
 	input := "some tool output"
-	result, breakdown := runner.Run(pipeline, input)
+	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	if result != input {
 		t.Errorf("empty pipeline should pass input through unchanged, got %q, want %q", result, input)
@@ -165,7 +169,7 @@ func TestPipelineRunnerNilPipeline(t *testing.T) {
 	runner := NewPipelineRunner(catalog)
 
 	input := "some tool output"
-	result, breakdown := runner.Run(nil, input)
+	result, breakdown, _, _ := runner.Run(nil, nil, input, EngineConfig{})
 
 	if result != input {
 		t.Errorf("nil pipeline should pass input through unchanged, got %q, want %q", result, input)
@@ -196,7 +200,7 @@ func TestPipelineRunnerUnknownEngineIdFailSoft(t *testing.T) {
 	input := "some tool output text to compress"
 
 	// Must not panic
-	result, breakdown := runner.Run(pipeline, input)
+	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	// engine-a and engine-c should have executed, engine-b skipped
 	if len(executionOrder) != 2 {
@@ -231,7 +235,7 @@ func TestPipelineRunnerAllUnknownIds(t *testing.T) {
 	}
 
 	input := "some tool output"
-	result, breakdown := runner.Run(pipeline, input)
+	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	if result != input {
 		t.Errorf("when all engines are unknown, input should pass through, got %q, want %q", result, input)
@@ -261,7 +265,7 @@ func TestPipelineRunnerEngineErrorDoesNotAbort(t *testing.T) {
 	input := "some tool output text to compress"
 
 	// Must not panic from the error engine
-	result, breakdown := runner.Run(pipeline, input)
+	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 	_ = result // result is not directly asserted in this test, only execution order
 
 	// All three engines should have been attempted
@@ -297,7 +301,7 @@ func TestPipelineRunnerInputPassThrough(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			input := "exact text to preserve"
-			result, _ := runner.Run(tt.pipeline, input)
+			result, _, _, _ := runner.Run(nil, tt.pipeline, input, EngineConfig{})
 			if result != input {
 				t.Errorf("result = %q, want %q (input passed through)", result, input)
 			}
@@ -320,19 +324,19 @@ func TestEngineBreakdownAccumulation(t *testing.T) {
 
 	runner := NewPipelineRunner(catalog)
 	input := "some tool output text to compress"
-	_, breakdown := runner.Run(pipeline, input)
+	_, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	if len(breakdown) != 2 {
 		t.Fatalf("expected 2 breakdown entries, got %d", len(breakdown))
 	}
 
 	// First entry should be engine-a
-	if breakdown[0].EngineID != "engine-a" {
-		t.Errorf("breakdown[0].EngineID = %q, want %q", breakdown[0].EngineID, "engine-a")
+	if breakdown[0].Id != "engine-a" {
+		t.Errorf("breakdown[0].Id = %q, want %q", breakdown[0].Id, "engine-a")
 	}
 	// Second entry should be engine-b
-	if breakdown[1].EngineID != "engine-b" {
-		t.Errorf("breakdown[1].EngineID = %q, want %q", breakdown[1].EngineID, "engine-b")
+	if breakdown[1].Id != "engine-b" {
+		t.Errorf("breakdown[1].Id = %q, want %q", breakdown[1].Id, "engine-b")
 	}
 }
 
@@ -347,14 +351,30 @@ type mockCompressionEngine struct {
 	id string
 }
 
-func (m *mockCompressionEngine) Compress(text string, opts map[string]any) (string, *ProcessStats, error) {
-	// Return the text unchanged with a ProcessStats
-	stats := &ProcessStats{
-		OriginalTokens:   estimateTokens(text),
-		CompressedTokens: estimateTokens(text),
-		Techniques:       []string{},
-	}
-	return text, stats, nil
+func (m *mockCompressionEngine) Id() string {
+	return m.id
+}
+
+func (m *mockCompressionEngine) Apply(ctx *schemas.BifrostContext, text string, cfg EngineConfig) (EngineResult, error) {
+	// Return the text unchanged with a pass-through result
+	return EngineResult{
+		Text:         text,
+		InputBytes:   len(text),
+		OutputBytes:  len(text),
+		CompressedBy: 0,
+	}, nil
+}
+
+func (m *mockCompressionEngine) HealthCheck() error {
+	return nil
+}
+
+func (m *mockCompressionEngine) IsEnabled() bool {
+	return true
+}
+
+func (m *mockCompressionEngine) Schema() json.RawMessage {
+	return json.RawMessage(`{"type":"object"}`)
 }
 
 // recordingEngine is a test helper that records its execution order
@@ -364,23 +384,55 @@ type recordingEngine struct {
 	order *[]string
 }
 
-func (r *recordingEngine) Compress(text string, opts map[string]any) (string, *ProcessStats, error) {
-	*r.order = append(*r.order, r.id)
-	stats := &ProcessStats{
-		OriginalTokens:   estimateTokens(text),
-		CompressedTokens: estimateTokens(text),
-		Techniques:       []string{},
-	}
-	return text, stats, nil
+func (r *recordingEngine) Id() string {
+	return r.id
 }
 
-// errorEngine is a test helper that returns an error on Compress.
+func (r *recordingEngine) Apply(ctx *schemas.BifrostContext, text string, cfg EngineConfig) (EngineResult, error) {
+	*r.order = append(*r.order, r.id)
+	return EngineResult{
+		Text:         text,
+		InputBytes:   len(text),
+		OutputBytes:  len(text),
+		CompressedBy: 0,
+	}, nil
+}
+
+func (r *recordingEngine) HealthCheck() error {
+	return nil
+}
+
+func (r *recordingEngine) IsEnabled() bool {
+	return true
+}
+
+func (r *recordingEngine) Schema() json.RawMessage {
+	return json.RawMessage(`{"type":"object"}`)
+}
+
+// errorEngine is a test helper that returns an error on Apply.
 type errorEngine struct {
 	id    string
 	order *[]string
 }
 
-func (e *errorEngine) Compress(text string, opts map[string]any) (string, *ProcessStats, error) {
+func (e *errorEngine) Id() string {
+	return e.id
+}
+
+func (e *errorEngine) Apply(ctx *schemas.BifrostContext, text string, cfg EngineConfig) (EngineResult, error) {
 	*e.order = append(*e.order, e.id)
-	return text, nil, nil // returns nil ProcessStats to simulate error
+	return EngineResult{}, fmt.Errorf("rtk: engine %q error", e.id)
+}
+
+func (e *errorEngine) HealthCheck() error {
+	return nil
+}
+
+func (e *errorEngine) IsEnabled() bool {
+	return true
+}
+
+func (e *errorEngine) Schema() json.RawMessage {
+	return json.RawMessage(`{"type":"object"}`)
 }
