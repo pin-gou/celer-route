@@ -1,6 +1,11 @@
 package opencode
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
@@ -333,4 +338,74 @@ func TestOpencodeAnthropicHeaders(t *testing.T) {
 			t.Errorf("anthropic-version missing")
 		}
 	})
+}
+
+// TestOpencodeListModels verifies that the bare (keyless) `opencode` provider
+// surfaces its free-tier catalog instead of collapsing to an empty list.
+//
+// The request worker hands a keyless provider a single empty Key{} whose nil
+// allowlist trips ListModelsPipeline.ShouldEarlyExit in
+// ToBifrostListModelsResponse (empty allowlist == deny-all), returning an empty
+// model list before the isFreeOpencodeModel filter even runs. This regression
+// made the "OpenCode Free" model dropdown empty on the routing-rules page.
+func TestOpencodeListModels(t *testing.T) {
+	t.Parallel()
+
+	catalog := []map[string]any{
+		{"id": "deepseek-v4-flash-free", "object": "model", "owned_by": "opencode"},
+		{"id": "hy3-free", "object": "model", "owned_by": "opencode"},
+		{"id": "big-pickle", "object": "model", "owned_by": "opencode"},
+		{"id": "gpt-5", "object": "model", "owned_by": "opencode"},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		body, _ := json.Marshal(map[string]any{"object": "list", "data": catalog})
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	cfg := &schemas.ProviderConfig{
+		NetworkConfig: schemas.NetworkConfig{
+			BaseURL:                        srv.URL,
+			DefaultRequestTimeoutInSeconds: 30,
+			KeepAliveTimeoutInSeconds:      10,
+		},
+	}
+	cfg.CheckAndSetDefaults()
+	provider, err := NewOpencodeProvider(cfg, nil)
+	if err != nil {
+		t.Fatalf("NewOpencodeProvider failed: %v", err)
+	}
+
+	// Mirrors the real request flow: keyless providers get a single empty key.
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	resp, bifrostErr := provider.ListModels(ctx, []schemas.Key{{}}, &schemas.BifrostListModelsRequest{})
+	if bifrostErr != nil {
+		t.Fatalf("ListModels failed: %s", bifrostErr.Error.Message)
+	}
+	if resp == nil {
+		t.Fatal("ListModels response is nil")
+	}
+	if len(resp.Data) == 0 {
+		t.Fatalf("BUG reproduced: empty model list (ShouldEarlyExit on nil allowlist)")
+	}
+
+	// Only free-tier models must surface; IDs arrive prefixed "opencode/".
+	wantFree := map[string]bool{"deepseek-v4-flash-free": true, "hy3-free": true, "big-pickle": true}
+	for _, m := range resp.Data {
+		id := strings.TrimPrefix(m.ID, "opencode/")
+		if !isFreeOpencodeModel(id) {
+			t.Errorf("non-free model leaked into opencode catalog: %s", m.ID)
+		}
+		if !wantFree[id] {
+			t.Errorf("unexpected model in opencode catalog: %s", m.ID)
+		}
+		delete(wantFree, id)
+	}
+	if len(wantFree) != 0 {
+		t.Errorf("expected free models missing: %v", wantFree)
+	}
 }

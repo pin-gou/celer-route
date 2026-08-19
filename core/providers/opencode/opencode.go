@@ -100,7 +100,36 @@ func (p *opencodeProvider) GetProviderKey() schemas.ModelProvider {
 // For the bare `opencode` (free/no-auth) provider, the response is filtered
 // to only include models accessible without an API key (free models).
 func (p *opencodeProvider) ListModels(ctx *schemas.BifrostContext, keys []schemas.Key, request *schemas.BifrostListModelsRequest) (*schemas.BifrostListModelsResponse, *schemas.BifrostError) {
-	resp, bifrostErr := openai.HandleOpenAIListModelsRequest(
+	// The bare `opencode` provider is keyless (schemas.KeylessProviders): the
+	// request worker hands it a single empty Key{} whose nil allowlist trips
+	// ListModelsPipeline.ShouldEarlyExit, collapsing the catalog to an empty
+	// list before the free-tier filter can run. Route it through the keyless
+	// handler with a wildcard allowlist, mirroring how OpenAI/HuggingFace list
+	// models for their own keyless providers.
+	if p.providerKey == schemas.Opencode {
+		return providerUtils.HandleKeylessListModelsRequest(p.providerKey, func() (*schemas.BifrostListModelsResponse, *schemas.BifrostError) {
+			resp, bifrostErr := openai.ListModelsByKey(
+				ctx,
+				p.client,
+				p.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/models"),
+				schemas.Key{Models: schemas.WhiteList{"*"}},
+				request.Unfiltered,
+				p.networkConfig.ExtraHeaders,
+				p.providerKey,
+				providerUtils.ShouldSendBackRawRequest(ctx, p.sendBackRawRequest),
+				providerUtils.ShouldSendBackRawResponse(ctx, p.sendBackRawResponse),
+			)
+			if bifrostErr != nil {
+				return resp, bifrostErr
+			}
+			if resp != nil {
+				resp.Data = freeOpencodeModels(resp.Data, p.providerKey)
+			}
+			return resp, nil
+		})
+	}
+
+	return openai.HandleOpenAIListModelsRequest(
 		ctx,
 		p.client,
 		request,
@@ -111,19 +140,22 @@ func (p *opencodeProvider) ListModels(ctx *schemas.BifrostContext, keys []schema
 		providerUtils.ShouldSendBackRawRequest(ctx, p.sendBackRawRequest),
 		providerUtils.ShouldSendBackRawResponse(ctx, p.sendBackRawResponse),
 	)
-	if bifrostErr != nil {
-		return resp, bifrostErr
-	}
-	if resp != nil && p.providerKey == schemas.Opencode {
-		filtered := make([]schemas.Model, 0, len(resp.Data))
-		for _, m := range resp.Data {
-			if isFreeOpencodeModel(m.ID) {
-				filtered = append(filtered, m)
-			}
+}
+
+// freeOpencodeModels filters models to those accessible without an API key on
+// the bare `opencode` tier. IDs returned by the OpenAI-compatible pipeline
+// arrive prefixed with the provider key (e.g. "opencode/deepseek-v4-flash-free"),
+// while isFreeOpencodeModel matches against the bare model id — strip the prefix
+// so map membership (big-pickle) and the "-free" suffix check both work.
+func freeOpencodeModels(models []schemas.Model, providerKey schemas.ModelProvider) []schemas.Model {
+	prefix := string(providerKey) + "/"
+	filtered := make([]schemas.Model, 0, len(models))
+	for _, m := range models {
+		if isFreeOpencodeModel(strings.TrimPrefix(m.ID, prefix)) {
+			filtered = append(filtered, m)
 		}
-		resp.Data = filtered
 	}
-	return resp, nil
+	return filtered
 }
 
 // TextCompletion is not supported by Opencode.

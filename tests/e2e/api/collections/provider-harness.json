@@ -50270,6 +50270,56 @@
       "description": "Pins the wire-visible behaviour of the bare `opencode` (free/no-auth OpenCode) provider: a chat completion must reach the upstream without any configured API key. Before the fix, selectKeyFromProviderForModelWithPool (core/bifrost.go) failed fast with `no keys found for provider: opencode and model: <m>` whenever the keyless provider had zero configured keys, so any request to /v1/chat/completions — and the provider page's \"Test\" button (POST /api/providers/{provider}/test-model[s]) which runs the same ChatCompletionRequest path — returned the key-selection error before ever reaching the upstream. After the fix the keyless provider builds an empty key pool (the same path SkipKeySelection takes: keyProvider stays nil, zero Key is used) and the request proceeds unauthenticated. Cases here pin (1) the keyless chat completion happy path and (2) its streaming variant. Go-level tests in core/bifrost_test.go (TestSelectKeyFromProviderForModel_KeylessProviderNoKeys) cover the selection logic in isolation.",
       "item": [
         {
+          "name": "keyless opencode list models (free models only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('keyless opencode list models - no key-selection failure', function () {",
+                  "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('no keys found for provider: opencode');",
+                  "});",
+                  "pm.test('keyless opencode list models - non-empty free model list', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.data, 'expected a data array').to.be.an('array');",
+                  "  pm.expect(j.data.length, 'expected at least one model').to.be.above(0);",
+                  "  // All models must be free-tier: -free suffix or in the known free set (big-pickle).",
+                  "  var knownFree = ['big-pickle'];",
+                  "  j.data.forEach(function(m) {",
+                  "    var id = m.id.replace(/^opencode\\//, '');",
+                  "    var ok = id.endsWith('-free') || knownFree.indexOf(id) !== -1;",
+                  "    pm.expect(ok, 'non-free model: ' + m.id).to.be.true;",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/models?provider=opencode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "models"
+              ],
+              "query": [
+                {
+                  "key": "provider",
+                  "value": "opencode"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "keyless opencode chat without API key (opencode/hy3-free)",
           "event": [
             {
