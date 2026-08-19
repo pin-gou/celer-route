@@ -1,0 +1,495 @@
+package handlers
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/fasthttp/router"
+	"github.com/pin-gou/pg-gateway/framework/configstore"
+	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	rtk "github.com/pin-gou/pg-gateway/plugins/rtk"
+	"github.com/valyala/fasthttp"
+	"gorm.io/gorm"
+)
+
+// ctxTest is a tiny helper that returns a fresh context.Context for the
+// in-memory store methods that require a non-nil context.
+func ctxTest() context.Context { return context.Background() }
+
+// stubRtkResolver satisfies RtkPluginResolver for tests. It optionally
+// embeds an RtkPluginAccessor implementation so handlers can be exercised
+// with and without a loaded plugin.
+type stubRtkResolver struct {
+	accessor RtkPluginAccessor
+	found    bool
+	reloads  []string // names passed to ReloadRtkPlugin
+	failNext error
+}
+
+func (s *stubRtkResolver) ResolveRtkPlugin() (RtkPluginAccessor, bool) {
+	if !s.found {
+		return nil, false
+	}
+	return s.accessor, true
+}
+
+func (s *stubRtkResolver) ReloadRtkPlugin(_ *fasthttp.RequestCtx, name string, _ map[string]any) error {
+	if s.failNext != nil {
+		err := s.failNext
+		s.failNext = nil
+		return err
+	}
+	s.reloads = append(s.reloads, name)
+	return nil
+}
+
+// stubRtkAccessor is a deterministic in-memory implementation of
+// RtkPluginAccessor used by the handler tests. The RawOutput field is
+// returned verbatim by ReadRawOutput so the test can assert on the bytes
+// served on the wire.
+type stubRtkAccessor struct {
+	catalog   rtk.FilterCatalog
+	rawOutput string
+	rawFound  bool
+	lastTest  rtk.TestPayload
+	lastPrev  rtk.PreviewRequest
+}
+
+func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog    { return s.catalog }
+func (s *stubRtkAccessor) RunTest(p rtk.TestPayload) rtk.TestResult { s.lastTest = p; return rtk.TestResult{
+	OriginalText: p.Output, CompressedText: "COMPRESSED:" + p.Output,
+	OriginalTokens: len(p.Output) / 4, CompressedTokens: len("COMPRESSED:"+p.Output) / 4,
+	FilterMatched: "stub", Techniques: []string{"linefilter"},
+} }
+func (s *stubRtkAccessor) PreviewCompression(r rtk.PreviewRequest) rtk.PreviewResponse {
+	s.lastPrev = r
+	return rtk.PreviewResponse{Mode: r.Mode, Result: rtk.TestResult{
+		OriginalText: r.Payload.Output, CompressedText: r.Payload.Output,
+		OriginalTokens: len(r.Payload.Output) / 4, CompressedTokens: len(r.Payload.Output) / 4,
+	}}
+}
+func (s *stubRtkAccessor) ReadRawOutput(_ string) (string, bool) { return s.rawOutput, s.rawFound }
+
+// memoryConfigStore is an in-memory replacement for configstore.ConfigStore
+// used by the RTK handler tests. Only the methods RtkHandler calls are
+// implemented; everything else returns an error so accidental use is loud.
+type memoryConfigStore struct {
+	rows map[string]*configstoreTables.TablePlugin
+}
+
+func newMemoryConfigStore() *memoryConfigStore {
+	return &memoryConfigStore{rows: map[string]*configstoreTables.TablePlugin{}}
+}
+
+func (m *memoryConfigStore) GetPlugin(_ context.Context, name string) (*configstoreTables.TablePlugin, error) {
+	if row, ok := m.rows[name]; ok {
+		return row, nil
+	}
+	return nil, configstore.ErrNotFound
+}
+
+func (m *memoryConfigStore) CreatePlugin(_ context.Context, p *configstoreTables.TablePlugin, _ ...*gorm.DB) error {
+	if _, exists := m.rows[p.Name]; exists {
+		return errors.New("plugin already exists")
+	}
+	clone := *p
+	m.rows[p.Name] = &clone
+	return nil
+}
+
+func (m *memoryConfigStore) UpdatePlugin(_ context.Context, p *configstoreTables.TablePlugin, _ ...*gorm.DB) error {
+	if _, ok := m.rows[p.Name]; !ok {
+		return configstore.ErrNotFound
+	}
+	clone := *p
+	m.rows[p.Name] = &clone
+	return nil
+}
+
+// newRtkTestServer builds a minimal fasthttp server hosting just the five
+// RTK routes. The caller can issue requests via fasthttp.RequestCtx and
+// inspect the response directly.
+func newRtkTestServer(t *testing.T, cs *memoryConfigStore, resolver *stubRtkResolver) (*router.Router, func()) {
+	t.Helper()
+	r := router.New()
+	h := NewRtkHandler(cs, resolver)
+	h.RegisterRoutes(r)
+	return r, func() {}
+}
+
+// callGET issues a GET request against r at path and returns the body and
+// status code.
+func callGET(t *testing.T, r *router.Router, path string) (int, []byte) {
+	t.Helper()
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod(http.MethodGet)
+	ctx.Request.SetRequestURI(path)
+	r.Handler(ctx)
+	return ctx.Response.StatusCode(), ctx.Response.Body()
+}
+
+// callPOST issues a POST with the given JSON body.
+func callPOST(t *testing.T, r *router.Router, path string, body any) (int, []byte) {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			t.Fatalf("encode body: %v", err)
+		}
+	}
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod(http.MethodPost)
+	ctx.Request.SetRequestURI(path)
+	ctx.Request.SetBody(buf.Bytes())
+	ctx.Request.Header.SetContentType("application/json")
+	r.Handler(ctx)
+	return ctx.Response.StatusCode(), ctx.Response.Body()
+}
+
+// callPUT issues a PUT with the given JSON body.
+func callPUT(t *testing.T, r *router.Router, path string, body any) (int, []byte) {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			t.Fatalf("encode body: %v", err)
+		}
+	}
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod(http.MethodPut)
+	ctx.Request.SetRequestURI(path)
+	ctx.Request.SetBody(buf.Bytes())
+	ctx.Request.Header.SetContentType("application/json")
+	r.Handler(ctx)
+	return ctx.Response.StatusCode(), ctx.Response.Body()
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/context/rtk/config
+// ---------------------------------------------------------------------------
+
+func TestRtkGetConfigMissingRow(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{accessor: &stubRtkAccessor{}, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/config")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var resp RtkConfigResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if !resp.Enabled {
+		t.Error("Enabled should be true when the plugin resolver reports it loaded")
+	}
+}
+
+func TestRtkGetConfigPresent(t *testing.T) {
+	cs := newMemoryConfigStore()
+	_ = cs.CreatePlugin(ctxTest(), &configstoreTables.TablePlugin{
+		Name:    rtk.PluginName,
+		Enabled: true,
+		Config:  map[string]any{"intensity": "aggressive", "max_lines_per_result": 80},
+	})
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/config")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var resp RtkConfigResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if !resp.Enabled {
+		t.Error("Enabled should mirror the persisted row")
+	}
+	if resp.Config.Intensity != "aggressive" {
+		t.Errorf("Intensity = %q, want aggressive", resp.Config.Intensity)
+	}
+	if resp.Config.MaxLinesPerResult != 80 {
+		t.Errorf("MaxLinesPerResult = %d, want 80", resp.Config.MaxLinesPerResult)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PUT /api/context/rtk/config
+// ---------------------------------------------------------------------------
+
+func TestRtkPutConfigCreate(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callPUT(t, r, "/api/context/rtk/config", PutRtkConfigRequest{
+		Enabled: ptrBool(true),
+		Config:  rtk.Config{Intensity: "aggressive", MaxLinesPerResult: 60},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	row, err := cs.GetPlugin(ctxTest(), rtk.PluginName)
+	if err != nil {
+		t.Fatalf("GetPlugin: %v", err)
+	}
+	if !row.Enabled {
+		t.Error("row.Enabled = false, want true")
+	}
+	if got := resolver.reloads; len(got) != 1 || got[0] != rtk.PluginName {
+		t.Errorf("expected one reload call for %q, got %v", rtk.PluginName, got)
+	}
+}
+
+func TestRtkPutConfigUpdateExisting(t *testing.T) {
+	cs := newMemoryConfigStore()
+	_ = cs.CreatePlugin(ctxTest(), &configstoreTables.TablePlugin{
+		Name:    rtk.PluginName,
+		Enabled: true,
+		Config:  map[string]any{"intensity": "standard"},
+	})
+	resolver := &stubRtkResolver{found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callPUT(t, r, "/api/context/rtk/config", PutRtkConfigRequest{
+		Config: rtk.Config{Intensity: "minimal", MaxCharsPerResult: 8000},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	row, err := cs.GetPlugin(ctxTest(), rtk.PluginName)
+	if err != nil {
+		t.Fatalf("GetPlugin: %v", err)
+	}
+	if row.Config.(map[string]any)["intensity"] != "minimal" {
+		t.Errorf("intensity not updated: %v", row.Config)
+	}
+}
+
+func TestRtkPutConfigInvalidIntensity(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callPUT(t, r, "/api/context/rtk/config", PutRtkConfigRequest{
+		Config: rtk.Config{Intensity: "bogus"},
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", status, body)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/context/rtk/filters
+// ---------------------------------------------------------------------------
+
+func TestRtkGetFiltersRequiresLoadedPlugin(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callGET(t, r, "/api/context/rtk/filters")
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", status)
+	}
+}
+
+func TestRtkGetFiltersReturnsCatalog(t *testing.T) {
+	cs := newMemoryConfigStore()
+	accessor := &stubRtkAccessor{
+		catalog: rtk.FilterCatalog{
+			Filters: []rtk.FilterCatalogEntry{
+				{ID: "git-status", Label: "git-status", Source: "builtin", Priority: 50, TestsCount: 1},
+			},
+			Counters: map[string]int{"builtin": 1, "total": 1},
+		},
+	}
+	resolver := &stubRtkResolver{accessor: accessor, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/filters")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var cat rtk.FilterCatalog
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if len(cat.Filters) != 1 {
+		t.Fatalf("len(Filters) = %d, want 1", len(cat.Filters))
+	}
+	if cat.Filters[0].ID != "git-status" {
+		t.Errorf("Filters[0].ID = %q, want git-status", cat.Filters[0].ID)
+	}
+	if cat.Counters["builtin"] != 1 {
+		t.Errorf("Counters.builtin = %d, want 1", cat.Counters["builtin"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/context/rtk/test
+// ---------------------------------------------------------------------------
+
+func TestRtkTestPayload(t *testing.T) {
+	cs := newMemoryConfigStore()
+	accessor := &stubRtkAccessor{}
+	resolver := &stubRtkResolver{accessor: accessor, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callPOST(t, r, "/api/context/rtk/test", rtk.TestPayload{
+		Command: "git status",
+		Output:  "On branch main",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var res rtk.TestResult
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if res.FilterMatched != "stub" {
+		t.Errorf("FilterMatched = %q, want stub", res.FilterMatched)
+	}
+	if accessor.lastTest.Command != "git status" {
+		t.Errorf("resolver lastTest.Command = %q", accessor.lastTest.Command)
+	}
+}
+
+func TestRtkTestEmptyPayloadRejected(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{accessor: &stubRtkAccessor{}, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callPOST(t, r, "/api/context/rtk/test", rtk.TestPayload{Output: ""})
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+func TestRtkTestRequiresLoadedPlugin(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callPOST(t, r, "/api/context/rtk/test", rtk.TestPayload{Output: "x"})
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/context/rtk/raw-output/{id}
+// ---------------------------------------------------------------------------
+
+func TestRtkRawOutput(t *testing.T) {
+	cs := newMemoryConfigStore()
+	accessor := &stubRtkAccessor{rawOutput: "hello raw", rawFound: true}
+	resolver := &stubRtkResolver{accessor: accessor, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/raw-output/0123456789abcdef01234567")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	if !strings.Contains(string(body), "hello raw") {
+		t.Errorf("body = %q, want it to contain 'hello raw'", body)
+	}
+}
+
+func TestRtkRawOutputBadID(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{accessor: &stubRtkAccessor{}, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callGET(t, r, "/api/context/rtk/raw-output/not-hex")
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+func TestRtkRawOutputNotFound(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{accessor: &stubRtkAccessor{rawFound: false}, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callGET(t, r, "/api/context/rtk/raw-output/0123456789abcdef01234567")
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/compression/preview
+// ---------------------------------------------------------------------------
+
+func TestRtkPreviewOff(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{accessor: &stubRtkAccessor{}, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callPOST(t, r, "/api/compression/preview", rtk.PreviewRequest{
+		Mode:    rtk.CompressionModeOff,
+		Payload: rtk.TestPayload{Output: "abc"},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var resp rtk.PreviewResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if resp.Mode != rtk.CompressionModeOff {
+		t.Errorf("Mode = %q, want off", resp.Mode)
+	}
+}
+
+func TestRtkPreviewInvalidMode(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{accessor: &stubRtkAccessor{}, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callPOST(t, r, "/api/compression/preview", rtk.PreviewRequest{
+		Mode:    "bogus",
+		Payload: rtk.TestPayload{Output: "x"},
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+func TestRtkPreviewWithoutLoadedPluginServesOff(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callPOST(t, r, "/api/compression/preview", rtk.PreviewRequest{
+		Mode:    rtk.CompressionModeRTK,
+		Payload: rtk.TestPayload{Output: "abc"},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	var resp rtk.PreviewResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if resp.Mode != rtk.CompressionModeOff {
+		t.Errorf("Mode = %q, want off (when plugin not loaded)", resp.Mode)
+	}
+}
+
+// ptr returns a pointer for the given bool — used for optional PUT fields.
+// Renamed ptrBool to avoid colliding with the helpers declared in
+// providers_test.go that have the same generic name.
+func ptrBool[T any](v T) *T { return &v }
+
+// ensure http import is used (decoded via net/http constants)
+var _ = io.EOF

@@ -174,7 +174,80 @@
 		"pipelineLabel": "Pipeline (JSON)",
 		"pipelineDescription": "Ordered list of compression engines. Edit as JSON array of {id, config?} objects",
 		"minTokensToCompressLabel": "Min Tokens To Compress",
-		"minTokensToCompressDescription": "Skip compression when estimated request tokens are below this threshold (0 = never skip)"
+		"minTokensToCompressDescription": "Skip compression when estimated request tokens are below this threshold (0 = never skip)",
+		"admin": {
+			"title": "RTK Admin",
+			"subtitle": "Inspect the loaded filter catalog, dry-run compression, and preview different intensity settings.",
+			"openCta": "Open",
+			"tabs": {
+				"filters": "Filters",
+				"test": "Test Runner",
+				"preview": "Preview",
+				"rawOutput": "Raw Output"
+			},
+			"filtersDescription": "Browse the builtin + project + global filters currently loaded by the RTK plugin and inspect load diagnostics.",
+			"testDescription": "Run the compression pipeline against an arbitrary payload and see the original vs compressed text.",
+			"previewDescription": "Preview how a chosen intensity setting changes the output without modifying runtime state."
+		},
+		"filters": {
+			"title": "Loaded Filters",
+			"subtitle": "Filters that the compression pipeline can dispatch to. Source determines precedence: project > global > builtin.",
+			"searchPlaceholder": "Search by id, label, or description",
+			"source": "Source",
+			"sourceAll": "All sources",
+			"sourceBuiltin": "Built-in",
+			"sourceProject": "Project",
+			"sourceGlobal": "Global",
+			"refresh": "Refresh",
+			"counters": "Showing {{shown}} of {{total}} filters",
+			"loading": "Loading filters…",
+			"error": "Failed to load filters. Verify the RTK plugin is enabled.",
+			"empty": "No filters match your search.",
+			"tableId": "ID",
+			"tableCategory": "Category",
+			"tableSource": "Source",
+			"tablePriority": "Priority",
+			"tableTests": "Tests",
+			"diagnosticsTitle": "Load Diagnostics",
+			"diagnosticsSubtitle": "Warnings emitted while loading the filter corpus."
+		},
+		"test": {
+			"title": "Compression Test Runner",
+			"subtitle": "Submit a payload and command hint; the server returns the compressed text and per-stage stats.",
+			"commandLabel": "Command hint",
+			"outputLabel": "Output to compress",
+			"applyRulesLabel": "Apply filter line rules (turn off to run only the universal pipeline)",
+			"submit": "Run test",
+			"resultTitle": "Result",
+			"resultStats": "{{original}} → {{compressed}} tokens ({{ ratio }}% reduction)",
+			"filterMatched": "Filter: {{name}}",
+			"filterMatchedNone": "No filter matched",
+			"rawOutputHint": "Raw output persisted with id {{id}} — open it from the Raw Output tab.",
+			"original": "Original",
+			"compressed": "Compressed"
+		},
+		"preview": {
+			"title": "Compression Preview",
+			"subtitle": "Run a one-off preview of the rtk / stacked / off modes without mutating runtime state.",
+			"modeLabel": "Mode",
+			"modeRtk": "rtk",
+			"modeStacked": "stacked",
+			"modeOff": "off",
+			"intensityLabel": "Intensity override",
+			"intensityCurrent": "Use runtime value",
+			"submit": "Preview",
+			"resultTitle": "Result ({{ mode }})",
+			"engineStats": "Per-engine stats"
+		},
+		"rawOutput": {
+			"title": "Raw Output Viewer",
+			"subtitle": "Open a persisted raw output file by id. Output is already redacted on disk; this endpoint only returns what is there.",
+			"fetch": "Fetch",
+			"invalidId": "Invalid id format. Expected 24 hexadecimal characters.",
+			"notFound": "Raw output not found. It may have been cleaned up, or the plugin was running with retention 'never'.",
+			"content": "Content",
+			"empty": "(empty)"
+		}
 	},
 	"providerCooldown": {
 		"title": "Provider Cooldown Configuration",

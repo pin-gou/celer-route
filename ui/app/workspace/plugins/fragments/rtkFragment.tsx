@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { RTK_PLUGIN, rtkConfigSchema, type Plugin } from "@/lib/types/plugins";
+import { Link } from "@tanstack/react-router";
+import { ExternalLink, FlaskConical, Beaker, Image as ImageIcon } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -523,8 +525,34 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 					</div>
 				</fieldset>
 
-				{/* Save button */}
-				<div className="flex justify-end">
+				{/* Save button + admin links */}
+				<div className="flex flex-wrap items-center justify-end gap-2">
+					<div className="flex flex-wrap items-center gap-2">
+						<Button variant="outline" size="sm" asChild data-testid="rtk-admin-link-filters">
+							<Link to="/workspace/plugins/rtk/filters">
+								<FlaskConical className="h-4 w-4" />
+								{t("rtk.admin.tabs.filters")}
+							</Link>
+						</Button>
+						<Button variant="outline" size="sm" asChild data-testid="rtk-admin-link-test">
+							<Link to="/workspace/plugins/rtk/test">
+								<Beaker className="h-4 w-4" />
+								{t("rtk.admin.tabs.test")}
+							</Link>
+						</Button>
+						<Button variant="outline" size="sm" asChild data-testid="rtk-admin-link-preview">
+							<Link to="/workspace/plugins/rtk/preview">
+								<ImageIcon className="h-4 w-4" />
+								{t("rtk.admin.tabs.preview")}
+							</Link>
+						</Button>
+						<Button variant="ghost" size="sm" asChild data-testid="rtk-admin-link-overview">
+							<Link to="/workspace/plugins/rtk">
+								<ExternalLink className="h-4 w-4" />
+								{t("rtk.admin.title")}
+							</Link>
+						</Button>
+					</div>
 					<Button type="submit" disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess}>
 						{isLoading ? t("rtk.saving") : t("rtk.saveConfiguration")}
 					</Button>

@@ -243,6 +243,74 @@ func ReadRtkRawOutput(pointerID string) string {
 	return ""
 }
 
+// reRawOutputID matches the 24-hex pointer ID produced by MaybePersistRtkRawOutput.
+// Compile at package init for hot-path reuse. Case-insensitive so an
+// operator pasting a SHA-256 prefix from a shell that uppercased it still
+// resolves to the right file.
+var reRawOutputID = regexp.MustCompile(`(?i)^[0-9a-f]{24}$`)
+
+// IsValidRawOutputID reports whether the string matches the raw-output ID
+// format (24 lowercase hex characters). Handlers should use this to validate
+// path parameters before doing any disk lookup.
+func IsValidRawOutputID(id string) bool {
+	if id == "" {
+		return false
+	}
+	return reRawOutputID.MatchString(id)
+}
+
+// ReadRtkRawOutputByID reads the persisted raw output by pointer ID, preferring
+// the explicit appDir for path resolution when set. Falls back to the in-memory
+// registry and finally a glob search under the current working directory, the
+// same as ReadRtkRawOutput. Returns (data, found): when found is false the
+// data is empty and callers should surface a 404 to the client.
+func ReadRtkRawOutputByID(pointerID, appDir string) (string, bool) {
+	if !IsValidRawOutputID(pointerID) {
+		return "", false
+	}
+
+	// 1. Try the in-memory registry (most recent persist call sites it directly).
+	if v, ok := rawOutputPaths.Load(pointerID); ok {
+		path, _ := v.(string)
+		if data, err := os.ReadFile(path); err == nil {
+			return string(data), true
+		}
+	}
+
+	// 2. Try under the provided appDir (production path — handler passes p.AppDir()).
+	if appDir != "" {
+		dir := filepath.Join(appDir, "rtk", "raw-output")
+		if data, ok := readFirstMatch(filepath.Join(dir, "*-"+pointerID+".log")); ok {
+			return data, true
+		}
+	}
+
+	// 3. Fallback: glob under the current working directory.
+	if cwd, err := os.Getwd(); err == nil {
+		pattern := filepath.Join(cwd, "rtk", "raw-output", "*-"+pointerID+".log")
+		if data, ok := readFirstMatch(pattern); ok {
+			return data, true
+		}
+	}
+
+	return "", false
+}
+
+// readFirstMatch performs a glob search and returns the content of the first
+// matching file. Used by ReadRtkRawOutputByID to fan out over the available
+// raw-output directories without exposing glob internals to callers.
+func readFirstMatch(pattern string) (string, bool) {
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		return "", false
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
+}
+
 // safeUtf8Slice truncates the string to the given byte limit, ensuring the
 // result is valid UTF-8 (backing off the last incomplete rune).
 func safeUtf8Slice(value string, maxBytes int) string {

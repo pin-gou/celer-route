@@ -37,6 +37,7 @@ import (
 	"github.com/pin-gou/pg-gateway/plugins/otel"
 	"github.com/pin-gou/pg-gateway/plugins/prompts"
 	"github.com/pin-gou/pg-gateway/plugins/providercooldown"
+	"github.com/pin-gou/pg-gateway/plugins/rtk"
 	"github.com/pin-gou/pg-gateway/plugins/semanticcache"
 	"github.com/pin-gou/pg-gateway/plugins/telemetry"
 	"github.com/pin-gou/pg-gateway/transports/pg-gateway-http/handlers"
@@ -264,6 +265,11 @@ type BifrostHTTPServer struct {
 	refreshInFlight   map[schemas.ModelProvider]*providerRefreshState
 
 	WebhookDispatcher *webhooks.Dispatcher
+
+	// rtkPluginMu guards rtkPlugin so the admin API can resolve the live
+	// RTK instance after a reload without racing the loader goroutine.
+	rtkPluginMu sync.RWMutex
+	rtkPlugin   *rtk.Plugin
 
 	wsPool *bfws.Pool
 }
@@ -1962,6 +1968,15 @@ func (s *BifrostHTTPServer) SyncLoadedPlugin(ctx context.Context, name string, p
 		s.Client.SetKeyPoolFilter(f)
 		logger.Info("provider-cooldown: filter rewired after plugin reload")
 	}
+	// 3d. Special-case: rtk caches a typed pointer so the admin API can
+	// resolve the live plugin instance after a reload. The pointer is
+	// updated atomically under rtkPluginMu so /api/context/rtk/* handlers
+	// never observe a half-initialised plugin.
+	if rp, ok := plugin.(*rtk.Plugin); ok && rp != nil {
+		s.rtkPluginMu.Lock()
+		s.rtkPlugin = rp
+		s.rtkPluginMu.Unlock()
+	}
 	// 4. Special handling for observability plugins
 	if _, ok := plugin.(schemas.ObservabilityPlugin); ok {
 		s.reloadObservabilityPlugins()
@@ -1987,6 +2002,58 @@ func (s *BifrostHTTPServer) ReloadPlugin(ctx context.Context, name string, path 
 		semanticCachePlugin.SetEmbeddingRequestExecutor(s.Client.EmbeddingRequest)
 	}
 	return s.SyncLoadedPlugin(ctx, name, plugin, placement, order)
+}
+
+// rtkAccessor is the bridge between BifrostHTTPServer and the handlers
+// package's RtkPluginResolver / RtkReloader interfaces. It is returned by
+// ResolveRtkPlugin so the RTK admin handler can call GetFilterCatalog /
+// RunTest / PreviewCompression / ReadRawOutput on the live plugin.
+//
+// The wrapper is intentionally tiny: it does not copy any plugin state,
+// it just forwards the calls. The handlers never mutate the plugin
+// directly — they go through ReloadRtkPlugin which in turn goes through
+// the regular ReloadPlugin pipeline.
+type rtkAccessor struct {
+	p *rtk.Plugin
+}
+
+func (a *rtkAccessor) GetFilterCatalog() rtk.FilterCatalog { return a.p.GetFilterCatalog() }
+func (a *rtkAccessor) RunTest(payload rtk.TestPayload) rtk.TestResult {
+	return a.p.RunTest(payload)
+}
+func (a *rtkAccessor) PreviewCompression(req rtk.PreviewRequest) rtk.PreviewResponse {
+	return a.p.PreviewCompression(req)
+}
+func (a *rtkAccessor) ReadRawOutput(id string) (string, bool) {
+	return rtk.ReadRtkRawOutputByID(id, a.p.GetAppDir())
+}
+
+// ResolveRtkPlugin returns an RtkPluginAccessor over the live RTK plugin
+// when it is loaded, or (nil, false) when it is not. It is safe to call
+// from any goroutine — the underlying pointer is replaced atomically when
+// the plugin is reloaded.
+func (s *BifrostHTTPServer) ResolveRtkPlugin() (handlers.RtkPluginAccessor, bool) {
+	s.rtkPluginMu.RLock()
+	p := s.rtkPlugin
+	s.rtkPluginMu.RUnlock()
+	if p == nil {
+		return nil, false
+	}
+	return &rtkAccessor{p: p}, true
+}
+
+// ReloadRtkPlugin is the RtkReloader implementation that the RTK handler
+// invokes when PUT /api/context/rtk/config persists a new config. The
+// path mirrors the generic /api/plugins/rtk PUT path: re-instantiate the
+// plugin with the new config and re-sync into the Bifrost client.
+func (s *BifrostHTTPServer) ReloadRtkPlugin(_ *fasthttp.RequestCtx, name string, config map[string]any) error {
+	if name != rtk.PluginName {
+		return fmt.Errorf("server: unexpected reload target %q for rtk admin endpoint", name)
+	}
+	if err := s.ReloadPlugin(context.Background(), name, nil, config, nil, nil); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RemovePlugin removes a plugin from the server.
@@ -2181,6 +2248,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	configHandler := handlers.NewConfigHandler(callbacks, s.Config)
 	pluginsHandler := handlers.NewPluginsHandler(callbacks, s.Config.ConfigStore)
 	sessionHandler := handlers.NewSessionHandler(s.Config.ConfigStore, s.WSTicketStore)
+	rtkHandler := handlers.NewRtkHandler(s.Config.ConfigStore, s)
 	promptsHandler := handlers.NewPromptsHandler(s.Config.ConfigStore, promptsReloader)
 	featureFlagsHandler := handlers.NewFeatureFlagsHandler(s.Config.FeatureFlags, s.Config.ConfigStore)
 	// Going ahead with API handlers
@@ -2203,6 +2271,9 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	oauthHandler.RegisterRoutes(s.Router, middlewares...)
 	if pluginsHandler != nil {
 		pluginsHandler.RegisterRoutes(s.Router, middlewares...)
+	}
+	if rtkHandler != nil {
+		rtkHandler.RegisterRoutes(s.Router, middlewares...)
 	}
 	if sessionHandler != nil {
 		sessionHandler.RegisterRoutes(s.Router, middlewares...)

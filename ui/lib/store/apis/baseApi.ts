@@ -200,6 +200,8 @@ export const baseApi = createApi({
 		"EdgeApps",
 		"EdgeMCPServers",
 		"EdgeConfig",
+		"RtkConfig",
+		"RtkFilters",
 	],
 	endpoints: () => ({}),
 });

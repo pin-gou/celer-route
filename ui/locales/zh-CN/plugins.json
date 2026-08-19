@@ -173,8 +173,81 @@
 		"advancedSection": "高级",
 		"pipelineLabel": "管线（JSON）",
 		"pipelineDescription": "压缩引擎的有序列表。以 JSON 数组格式编辑 {id, config?} 对象",
-		"minTokensToCompressLabel": "最小压缩 Token 数",
-		"minTokensToCompressDescription": "当请求预估 Token 数低于此阈值时跳过压缩（0 = 从不跳过）"
+		"minTokensToCompressLabel": "最小压缩词元数",
+		"minTokensToCompressDescription": "当请求预估词元数低于此阈值时跳过压缩（0 = 从不跳过）",
+		"admin": {
+			"title": "RTK 管理",
+			"subtitle": "浏览已加载的过滤器目录、干跑压缩、并预览不同强度配置的效果。",
+			"openCta": "打开",
+			"tabs": {
+				"filters": "过滤器",
+				"test": "测试运行器",
+				"preview": "预览",
+				"rawOutput": "原始输出"
+			},
+			"filtersDescription": "浏览 RTK 插件当前加载的内置 + 项目 + 全局过滤器，并查看加载诊断信息。",
+			"testDescription": "对任意输出运行压缩管道，对比原始文本与压缩后的文本。",
+			"previewDescription": "在不改运行时配置的前提下，预览不同压缩强度会如何影响输出。"
+		},
+		"filters": {
+			"title": "已加载的过滤器",
+			"subtitle": "压缩管道可分发的过滤器。优先级：项目 > 全局 > 内置。",
+			"searchPlaceholder": "按 id、标签或描述搜索",
+			"source": "来源",
+			"sourceAll": "全部来源",
+			"sourceBuiltin": "内置",
+			"sourceProject": "项目",
+			"sourceGlobal": "全局",
+			"refresh": "刷新",
+			"counters": "显示 {{shown}} / {{total}} 个过滤器",
+			"loading": "正在加载过滤器…",
+			"error": "加载过滤器失败。请确认 RTK 插件已启用。",
+			"empty": "没有匹配的过滤器。",
+			"tableId": "ID",
+			"tableCategory": "类别",
+			"tableSource": "来源",
+			"tablePriority": "优先级",
+			"tableTests": "测试数",
+			"diagnosticsTitle": "加载诊断",
+			"diagnosticsSubtitle": "加载过滤器时产生的告警。"
+		},
+		"test": {
+			"title": "压缩测试运行器",
+			"subtitle": "提交输出与命令提示，服务端返回压缩文本及各阶段统计。",
+			"commandLabel": "命令提示",
+			"outputLabel": "待压缩的输出",
+			"applyRulesLabel": "应用过滤器行规则（关闭后只跑通用管道）",
+			"submit": "执行测试",
+			"resultTitle": "结果",
+			"resultStats": "{{original}} → {{compressed}} 词元（降幅 {{ ratio }}%）",
+			"filterMatched": "过滤器：{{name}}",
+			"filterMatchedNone": "未匹配到过滤器",
+			"rawOutputHint": "已持久化的原始输出 id {{id}} —— 可在「原始输出」标签页打开。",
+			"original": "原始",
+			"compressed": "压缩后"
+		},
+		"preview": {
+			"title": "压缩预览",
+			"subtitle": "在不改动运行时配置的前提下，对 rtk / stacked / off 三种模式各跑一次预览。",
+			"modeLabel": "模式",
+			"modeRtk": "rtk",
+			"modeStacked": "stacked",
+			"modeOff": "off",
+			"intensityLabel": "强度覆盖",
+			"intensityCurrent": "使用运行时值",
+			"submit": "预览",
+			"resultTitle": "结果（{{ mode }}）",
+			"engineStats": "各引擎统计"
+		},
+		"rawOutput": {
+			"title": "原始输出查看器",
+			"subtitle": "按 id 打开已持久化的原始输出文件。文件已是脱敏后的内容，此端点仅返回磁盘上存在的文本。",
+			"fetch": "获取",
+			"invalidId": "id 格式不合法。需要 24 位十六进制字符。",
+			"notFound": "未找到原始输出。可能已被清理，或插件当时以「永不保留」模式运行。",
+			"content": "内容",
+			"empty": "（空）"
+		}
 	},
 	"providerCooldown": {
 		"title": "提供商冷却配置",

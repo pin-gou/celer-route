@@ -21,6 +21,7 @@ type Plugin struct {
 	logger     schemas.Logger
 	stateStore sync.Map // map[string]*CompressionState, keyed by requestID
 	loader     *FilterLoader
+	appDir     string
 }
 
 // Init creates a new RTK plugin instance with the given configuration.
@@ -45,6 +46,7 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, appDir str
 		logger:     logger,
 		stateStore: sync.Map{},
 		loader:     NewFilterLoader(config),
+		appDir:     appDir,
 	}
 	// Load custom filters — fail-open: warn on error, continue with builtins.
 	if err := p.loader.Load(appDir); err != nil {
@@ -88,6 +90,25 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, appDir str
 // GetName returns the plugin name.
 func (p *Plugin) GetName() string {
 	return PluginName
+}
+
+// GetAppDir returns the application directory passed to Init. It is used by
+// handlers to resolve relative paths (e.g. raw-output files) consistently
+// with the loader's project/global filter discovery.
+func (p *Plugin) GetAppDir() string {
+	if p == nil {
+		return ""
+	}
+	return p.appDir
+}
+
+// Loader returns the plugin's FilterLoader so handlers can inspect the
+// loaded filter catalog and diagnostics.
+func (p *Plugin) Loader() *FilterLoader {
+	if p == nil {
+		return nil
+	}
+	return p.loader
 }
 
 // Cleanup performs plugin cleanup — drains the state store.
