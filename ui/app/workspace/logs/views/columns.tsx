@@ -233,7 +233,7 @@ export function LogMessageCell({ log, contentClassName = "max-w-full" }: { log: 
 			)}
 			{realtimeMessages &&
 			(realtimeMessages.tool || realtimeMessages.user || realtimeMessages.assistantToolCall || realtimeMessages.assistant) ? (
-				<div className={cn(contentClassName, "font-mono text-sm font-normal leading-5")} title={input}>
+				<div className={cn(contentClassName, "font-mono text-sm font-normal leading-5")}>
 					{realtimeMessages.tool ? <div className="truncate">{t("columns.toolResult", { text: truncatedTool })}</div> : null}
 					{realtimeMessages.user ? <div className="truncate">{t("columns.user", { text: truncatedUser })}</div> : null}
 					{realtimeMessages.assistantToolCall ? (
@@ -242,7 +242,7 @@ export function LogMessageCell({ log, contentClassName = "max-w-full" }: { log: 
 					{realtimeMessages.assistant ? <div className="truncate">{t("columns.assistant", { text: truncatedAssistant })}</div> : null}
 				</div>
 			) : (
-				<div className={cn(contentClassName, "truncate font-mono text-[12px] font-normal")} title={input}>
+				<div className={cn(contentClassName, "truncate font-mono text-[12px] font-normal")}>
 					{truncatedInput || (isLargePayload ? t("columns.largePayloadBoth") : "-")}
 				</div>
 			)}
