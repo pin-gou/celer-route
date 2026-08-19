@@ -1,0 +1,280 @@
+scenarios:
+- scenario_id: S-rtk-pipeline-default-runs
+  critical: true
+  description: 验证 Pipeline 默认配置 [{id:rtk}] 下 RTK 压缩管线正常执行并累加 engineBreakdown
+  given:
+  - '# pg-gateway-api 已启动：{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}'
+  - '# rtk plugin 已 seed：{env.data_resources[name=fixture-plugins]}'
+  - '# Config.Pipeline 默认 [{id:rtk}]；Config.Enabled=true'
+  covers:
+  - V-plugins-1
+  when:
+  - name: 发送带大体积可压缩 tool result 的 chat request
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer test-fixture-key
+    body:
+      model: sensova-chat
+      messages:
+      - role: user
+        content: echo this
+      - role: tool
+        tool_call_id: call-1
+        content: |
+          INFO line 1
+          INFO line 2
+          INFO line 3
+          INFO line 4
+          INFO line 5
+          INFO line 6
+          INFO line 7
+          INFO line 8
+          INFO line 9
+          INFO line 10
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.choices[0].message.content 存在且非空
+  - response.choices[0].message.content.length < input.tool result 长度（已压缩）
+  and:
+  - name: no cleanup needed (read-only)
+    action: none
+  evidence:
+  - 2-build/<report_seq>-S-rtk-pipeline-default-runs-evidence.json
+
+- scenario_id: S-rtk-pipeline-unknown-id-fail-soft
+  critical: true
+  description: 验证 Pipeline 配置未知 engine id 时不 panic，warn+skip
+  given:
+  - '# pg-gateway-api 已启动'
+  - '# Config.Pipeline 改为 [{id:nonexistent-engine}]'
+  - 准备：通过 PATCH 接口覆盖 rtk config
+  covers:
+  - V-plugins-1
+  when:
+  - name: PATCH rtk config 设置未知 pipeline id
+    type: api
+    method: PATCH
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/rtk'
+    headers:
+      Content-Type: application/json
+    body:
+      config:
+        pipeline:
+        - id: nonexistent-engine
+        min_tokens_to_compress: 0
+    expect_status: 200
+  - name: 发送 chat request（不应 panic）
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: sensova-chat
+      messages:
+      - role: user
+        content: echo this
+    expect_status: 200
+  then:
+  - 第二次 when status_code == 200（无 panic）
+  - pg-gateway 日志中含 "unknown engine id" warning 记录
+  and:
+  - name: 恢复 rtk config 为默认 [{id:rtk}]
+    action: HTTP PATCH /api/plugins/rtk with body {"config":{"pipeline":[{"id":"rtk"}]}}
+  evidence:
+  - 2-build/<report_seq>-S-rtk-pipeline-unknown-id-fail-soft-evidence.json
+
+- scenario_id: S-rtk-min-tokens-skip-compression
+  critical: true
+  description: 验证 MinTokensToCompress 高阈值时小请求被跳过压缩（响应中 tool result 字节与输入一致）
+  given:
+  - '# pg-gateway-api 已启动'
+  - '# logs-db 已就绪：{env.data_resources[name=logs-db]}'
+  - '# Config.MinTokensToCompress = 1000000（远大于小请求 token 数）'
+  covers:
+  - V-plugins-2
+  when:
+  - name: PATCH rtk config 设置大阈值
+    type: api
+    method: PATCH
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/rtk'
+    headers:
+      Content-Type: application/json
+    body:
+      config:
+        min_tokens_to_compress: 1000000
+        pipeline:
+        - id: rtk
+    expect_status: 200
+  - name: 发送 token < 1M 的小 chat request
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: sensova-chat
+      messages:
+      - role: tool
+        tool_call_id: call-1
+        content: |
+          line A
+          line B
+          line C
+    expect_status: 200
+  then:
+  - status_code == 200
+  - 响应中 tool content 与请求 tool content 完全一致（未被压缩）
+  - logs-db 中对应日志条目标记 "skipped by min_tokens_to_compress"
+  and:
+  - name: 恢复 MinTokensToCompress=0
+    action: HTTP PATCH /api/plugins/rtk with body {"config":{"min_tokens_to_compress":0}}
+  evidence:
+  - 2-build/<report_seq>-S-rtk-min-tokens-skip-compression-evidence.json
+
+- scenario_id: S-rtk-config-patch-passthrough
+  critical: false
+  description: 验证 plugin PATCH 接口透传 pipeline/min_tokens_to_compress 新字段并持久化
+  given:
+  - '# pg-gateway-api 已启动'
+  - '# rtk plugin 已 seed'
+  - 准备：获取当前 rtk config（用于回滚）
+  covers:
+  - V-transports-1
+  when:
+  - name: PATCH rtk config 新增 pipeline + min_tokens_to_compress
+    type: api
+    method: PATCH
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/rtk'
+    headers:
+      Content-Type: application/json
+    body:
+      config:
+        pipeline:
+        - id: rtk
+        min_tokens_to_compress: 500
+        intensity: aggressive
+    expect_status: 200
+  - name: GET 验证字段持久化
+    type: api
+    method: GET
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/rtk'
+    expect_status: 200
+  then:
+  - PATCH status_code == 200
+  - GET status_code == 200
+  - GET response.config.pipeline == [{id:rtk}]
+  - GET response.config.min_tokens_to_compress == 500
+  - GET response.config.intensity == aggressive
+  and:
+  - name: 恢复 rtk config 为原值
+    action: HTTP PATCH /api/plugins/rtk with body {"config":{"pipeline":[],"min_tokens_to_compress":0,"intensity":"standard"}}
+  evidence:
+  - 2-build/<report_seq>-S-rtk-config-patch-passthrough-evidence.json
+
+- scenario_id: S-rtk-ui-fragment-renders
+  critical: false
+  description: 验证 RTK fragment 在 /workspace/plugins 正确加载并显示所有字段
+  given:
+  - '# ui-dev 已启动：{env.business_systems[name=ui-dev].endpoints[name=dev].url}'
+  - '# pg-gateway-api 已启动且 rtk plugin 已 seed'
+  - 已登录（cookie/session 存在）
+  covers:
+  - V-ui-1
+  - V-ui-2
+  when:
+  - name: 浏览器访问 /workspace/plugins 并选中 rtk
+    type: browser
+    action: navigate
+    url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/workspace/plugins'
+    steps:
+    - click plugin row with name "rtk"
+    - wait for fragment to render
+  then:
+  - DOM contains data-testid="rtk-fragment-enabled-switch"
+  - DOM contains data-testid="rtk-fragment-intensity-select" with value "standard"
+  - DOM contains data-testid="rtk-fragment-max-lines-input" with value 120
+  - DOM contains data-testid="rtk-fragment-max-chars-input" with value 12000
+  - DOM contains data-testid="rtk-fragment-raw-output-retention-select"
+  - DOM contains data-testid="rtk-fragment-min-tokens-input"
+  and:
+  - name: screenshot for evidence
+    action: browser_screenshot
+    file: 2-build/<report_seq>-S-rtk-ui-fragment-renders-screenshot.png
+  evidence:
+  - 2-build/<report_seq>-S-rtk-ui-fragment-renders-evidence.json
+  - 2-build/<report_seq>-S-rtk-ui-fragment-renders-screenshot.png
+
+- scenario_id: S-rtk-ui-submit-update
+  critical: false
+  description: 验证在 RTK fragment 修改字段并 submit 后 PATCH /api/plugins/rtk 返回 200
+  given:
+  - '# ui-dev + pg-gateway-api 已启动'
+  - '# rtk plugin 已 seed'
+  - 已在 /workspace/plugins 选中 rtk
+  covers:
+  - V-ui-1
+  when:
+  - name: 修改 intensity 为 aggressive 并 submit
+    type: browser
+    action: interact
+    url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/workspace/plugins'
+    steps:
+    - select intensity = aggressive
+    - click data-testid="rtk-fragment-submit-button"
+    - wait for success toast
+  then:
+  - toast contains "RTK configuration updated"
+  - GET /api/plugins/rtk 返回 config.intensity == aggressive
+  and:
+  - name: 恢复 intensity=standard
+    action: HTTP PATCH /api/plugins/rtk with body {"config":{"intensity":"standard"}}
+  evidence:
+  - 2-build/<report_seq>-S-rtk-ui-submit-update-evidence.json
+
+- scenario_id: S-rtk-e2e-config-to-effect
+  critical: false
+  description: 跨模块端到端：UI 改 min_tokens_to_compress=1000000 → 后端持久化 → 重启后行为生效
+  given:
+  - '# pg-gateway-api + ui-dev 均已启动'
+  - '# rtk plugin 已 seed'
+  covers:
+  - V-scr-1
+  when:
+  - name: 浏览器通过 UI fragment 修改 min_tokens_to_compress
+    type: browser
+    action: interact
+    url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/workspace/plugins'
+    steps:
+    - select rtk plugin
+    - set min_tokens_to_compress input to 1000000
+    - submit
+  - name: 重启 pg-gateway 触发 Config 重载
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/admin/restart'
+    expect_status: 202
+  - name: 重启后发送小 chat request
+    type: api
+    method: POST
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: sensova-chat
+      messages:
+      - role: tool
+        tool_call_id: call-1
+        content: small output
+    expect_status: 200
+  then:
+  - PATCH UI 调用后 GET /api/plugins/rtk 可见 min_tokens_to_compress=1000000
+  - 重启后小请求的 tool content 未被压缩
+  and:
+  - name: 恢复 min_tokens_to_compress=0
+    action: HTTP PATCH /api/plugins/rtk with body {"config":{"min_tokens_to_compress":0}}
+  evidence:
+  - 2-build/<report_seq>-S-rtk-e2e-config-to-effect-evidence.json
+_meta:
+  _comment: 'scenario-<track>.yaml 由 pg-gen-scenario.py 生成的 skeleton, LLM 必填。scenario_id / given / when / then / and / evidence 是必填段, critical / description 必填, covers 是 v3.10 推荐必填段。_meta 段最终会被 pg-build scenario-execute agent 忽略。v3.9: when[].type 可选, 默认 api; type=browser 时需填写 browser action 字段。v3.10: 数量按 design V-* 数动态派生, 上限 7。若不需要 browser 场景可删除最后一个 scenario；若 V-* 不足, 建议补充 scenario 而非合并现有 scenario。v1.0 (v6 hook 协议): scenario given 直接引用 .pg/changes/<id>/env-description.yaml 中的资源路径, 不再使用 _meta.env_constraint 字段.v1.1.0 (硬约束): given/when/then 中禁止硬编码 IPv4 / ssh://user@host / port 字面, 必须用 {env.<段>.<name>.<字段路径>} 占位引用 env-description.yaml 中的真实资源。pg-validate-proposal.py 校验规则 scenario_given_hardcoded_endpoint 拦截违规。'
+  change: rtk-stage6-pipeline-trigger-ui
+  track_id: scr
+  schema_version: v3.10
