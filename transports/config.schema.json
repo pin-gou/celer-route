@@ -3237,6 +3237,33 @@
                       "description": "Maximum byte size of the persisted raw output file (UTF-8 safe truncation, minimum 1024)",
                       "minimum": 1024,
                       "default": 1048576
+                    },
+                    "pipeline": {
+                      "type": "array",
+                      "description": "Compression engine pipeline (ordered list). Each engine is applied in sequence, passing the output of one as the input of the next. Default: [{id:\"rtk\"}]",
+                      "items": {
+                        "type": "object",
+                        "required": ["id"],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": ["rtk"],
+                            "description": "Engine id. Currently only \"rtk\" is supported; unknown ids fail-soft (skip + warn)."
+                          },
+                          "config": {
+                            "type": "object",
+                            "description": "Engine-specific config override (currently unused for id=rtk; reserved for future engines)"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "default": [{"id": "rtk"}]
+                    },
+                    "min_tokens_to_compress": {
+                      "type": "integer",
+                      "description": "Skip entire compression when estimated request tokens are below this threshold. 0 = never skip (always compress)",
+                      "minimum": 0,
+                      "default": 0
                     }
                   },
                   "additionalProperties": false
