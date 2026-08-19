@@ -823,7 +823,7 @@ export function LogDetailView({
 							{log.routing_rule && (
 								<Link
 									to="/workspace/logs"
-									search={(prev) => ({ ...prev, offset: 0, selected_log: "", routing_rule_ids: [log.routing_rule!.id] })}
+									search={(prev) => ({ ...prev, offset: 0, routing_rule_ids: [log.routing_rule!.id] })}
 									data-testid="logdetails-header-routing-rule-link"
 								>
 									<Badge variant="outline" className="bg-card text-muted-foreground rounded-sm px-2 py-0.5 font-normal hover:underline">
@@ -897,7 +897,7 @@ export function LogDetailView({
 								</div>
 								<Link
 									to="/workspace/logs"
-									search={(prev) => ({ ...prev, offset: 0, selected_log: "", routing_rule_ids: [log.routing_rule!.id] })}
+									search={(prev) => ({ ...prev, offset: 0, routing_rule_ids: [log.routing_rule!.id] })}
 									className="truncate text-[13px] font-medium text-blue-600 hover:underline dark:text-blue-400"
 									data-testid="logdetails-header-rule-link"
 								>
@@ -912,7 +912,7 @@ export function LogDetailView({
 								</div>
 								<Link
 									to="/workspace/logs"
-									search={(prev) => ({ ...prev, offset: 0, selected_log: "", selected_key_ids: [log.selected_key_id] })}
+									search={(prev) => ({ ...prev, offset: 0, selected_key_ids: [log.selected_key_id] })}
 									className="truncate font-mono text-[13px] text-blue-600 hover:underline dark:text-blue-400"
 									data-testid="logdetails-header-selected-key-link"
 								>
@@ -1158,7 +1158,7 @@ export function LogDetailView({
 									value={
 										<Link
 											to="/workspace/logs"
-											search={(prev) => ({ ...prev, offset: 0, selected_log: "", selected_key_ids: [log.selected_key_id] })}
+											search={(prev) => ({ ...prev, offset: 0, selected_key_ids: [log.selected_key_id] })}
 											className="text-blue-600 hover:underline dark:text-blue-400"
 											data-testid="logdetails-selected-key-link"
 										>
@@ -1202,7 +1202,7 @@ export function LogDetailView({
 												<Link
 													key={t.id}
 													to="/workspace/logs"
-													search={(prev) => ({ ...prev, offset: 0, selected_log: "", team_ids: [t.id] })}
+													search={(prev) => ({ ...prev, offset: 0, team_ids: [t.id] })}
 													className="text-blue-600 hover:underline dark:text-blue-400"
 													data-testid={`logdetails-team-link-${t.id}`}
 												>
@@ -1227,7 +1227,7 @@ export function LogDetailView({
 												<Link
 													key={c.id}
 													to="/workspace/logs"
-													search={(prev) => ({ ...prev, offset: 0, selected_log: "", customer_ids: [c.id] })}
+													search={(prev) => ({ ...prev, offset: 0, customer_ids: [c.id] })}
 													className="text-blue-600 hover:underline dark:text-blue-400"
 													data-testid={`logdetails-customer-link-${c.id}`}
 												>
@@ -1252,7 +1252,7 @@ export function LogDetailView({
 												<Link
 													key={b.id}
 													to="/workspace/logs"
-													search={(prev) => ({ ...prev, offset: 0, selected_log: "", business_unit_ids: [b.id] })}
+													search={(prev) => ({ ...prev, offset: 0, business_unit_ids: [b.id] })}
 													className="text-blue-600 hover:underline dark:text-blue-400"
 													data-testid={`logdetails-business-unit-link-${b.id}`}
 												>
@@ -1273,7 +1273,7 @@ export function LogDetailView({
 											<TooltipTrigger asChild>
 												<Link
 													to="/workspace/logs"
-													search={(prev) => ({ ...prev, offset: 0, selected_log: "", user_ids: [log.user_id] })}
+													search={(prev) => ({ ...prev, offset: 0, user_ids: [log.user_id] })}
 													className={`block min-w-0 cursor-pointer text-sm font-normal break-all text-blue-600 underline-offset-2 hover:underline dark:text-blue-400${log.user_name ? "" : " font-mono"}`}
 													data-testid="logdetails-user-link"
 												>
@@ -1335,7 +1335,7 @@ export function LogDetailView({
 									value={
 										<Link
 											to="/workspace/logs"
-											search={(prev) => ({ ...prev, offset: 0, selected_log: "", routing_rule_ids: [log.routing_rule!.id] })}
+											search={(prev) => ({ ...prev, offset: 0, routing_rule_ids: [log.routing_rule!.id] })}
 											className="text-blue-600 hover:underline dark:text-blue-400"
 											data-testid="logdetails-routing-rule-link"
 										>

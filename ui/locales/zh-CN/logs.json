@@ -581,10 +581,14 @@
 		"more": "+{{count}} 更多"
 	},
 	"detailSheet": {
-		"viewSession": "查看会话",
-		"loadingLogDetails": "加载日志详情",
 		"loggingSettings": "日志记录设置",
 		"observabilitySettings": "可观测性设置"
+	},
+	"detailPage": {
+		"title": "日志详情",
+		"closeWindow": "关闭窗口",
+		"notFound": "未找到日志",
+		"loadError": "加载此日志失败"
 	},
 	"detailView": {
 		"tokenSubTotal": "总计",

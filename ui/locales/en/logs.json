@@ -581,10 +581,14 @@
 		"more": "+{{count}} more"
 	},
 	"detailSheet": {
-		"viewSession": "View Session",
-		"loadingLogDetails": "Loading log details",
 		"loggingSettings": "Logging settings",
 		"observabilitySettings": "Observability settings"
+	},
+	"detailPage": {
+		"title": "Log details",
+		"closeWindow": "Close window",
+		"notFound": "Log not found",
+		"loadError": "Could not load this log"
 	},
 	"detailView": {
 		"tokenSubTotal": "total",

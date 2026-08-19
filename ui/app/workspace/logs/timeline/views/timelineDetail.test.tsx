@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * @file TDD Red Phase — Timeline detail panel tests
+ * @file Timeline detail panel tests
  *
- * These tests verify the Timeline tab in the LogDetailSheet that renders
- * events from the GET /api/logs/{id}/timeline API response.
+ * These tests verify the TimelineDetail component (rendered inside the
+ * standalone log detail page at /workspace/logs/$id) that renders events
+ * from the GET /api/logs/{id}/timeline API response.
  *
  * The timeline detail displays a sorted list of events with:
  * - Time offset from request start

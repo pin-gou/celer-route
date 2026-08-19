@@ -4,16 +4,12 @@
 
 import { useGetLogsQuery } from "@/lib/store";
 import type { LogEntry } from "@/lib/types/logs";
-import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogsTimeline } from "./views/logsTimeline";
 import { TimelineToolbar, type TimelineMode } from "./views/timelineToolbar";
 import { TimelineLegend } from "./views/timelineLegend";
-import { LogDetailSheet } from "@/app/workspace/logs/sheets/logDetailsSheet";
 import { useLogsTimelineSSE, type ActiveLogEntry } from "@/hooks/useLogsTimelineSSE";
-import { useQueryStates, parseAsString } from "nuqs";
-import { useNavigate } from "@tanstack/react-router";
 import { summarizeTimelineStats } from "./views/timelineStats";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -112,14 +108,8 @@ function mergeLogEntry(existing: LogEntry, live: Partial<LogEntry>): LogEntry {
 
 export default function TimelinePage() {
 	const { t } = useTranslation("logs");
-	const navigate = useNavigate();
-	const hasDeleteAccess = useRbac(RbacResource.Logs, RbacOperation.Delete);
-	const hasRevealAccess = useRbac(RbacResource.Logs, RbacOperation.Reveal);
 
-	// URL state — selected log for the detail sheet
-	const [urlState, setUrlState] = useQueryStates({
-		selected_log: parseAsString.withDefault(""),
-	});
+	// URL state (currently none — the detail view opens in a separate window)
 
 	// --- Time-window engine -------------------------------------------------
 	const [mode, setMode] = useState<TimelineMode>("follow");
@@ -487,17 +477,9 @@ export default function TimelinePage() {
 		[t, timelineStats, visibleLogsForStats, firstVisibleTimeMs],
 	);
 
-	const selectedLog = useMemo(
-		() => (urlState.selected_log ? (logs.find((l) => l.id === urlState.selected_log) ?? null) : null),
-		[urlState.selected_log, logs],
-	);
-
-	const handleBarClick = useCallback(
-		(log: LogEntry) => {
-			setUrlState({ selected_log: log.id }, { history: "replace" });
-		},
-		[setUrlState],
-	);
+	const handleBarClick = useCallback((log: LogEntry) => {
+		window.open(`/workspace/logs/${encodeURIComponent(log.id)}`, "_blank", "noopener,noreferrer");
+	}, []);
 
 	const handleRefresh = useCallback(() => {
 		refetch();
@@ -525,13 +507,6 @@ export default function TimelinePage() {
 	const handleDragPan = useCallback((offsetMs: number) => {
 		setPanOffsetMs(offsetMs);
 	}, []);
-
-	const handleFilterByParentRequestId = useCallback(
-		(parentRequestId: string) => {
-			navigate({ to: "/workspace/logs", search: { parent_request_id: parentRequestId } as any });
-		},
-		[navigate],
-	);
 
 	return (
 		<div className="dark:bg-card no-padding-parent no-border-parent flex h-[calc(100vh_-_16px)] flex-col gap-3 p-4">
@@ -603,26 +578,6 @@ export default function TimelinePage() {
 					onModeChange={handleModeChange}
 				/>
 			</div>
-
-			{/* Log detail sheet */}
-			<LogDetailSheet
-				log={selectedLog}
-				open={selectedLog !== null}
-				onOpenChange={(open) => !open && setUrlState({ selected_log: "" })}
-				handleDelete={hasDeleteAccess ? undefined : undefined}
-				canReveal={hasRevealAccess}
-				onNavigate={(direction) => {
-					const idx = logs.findIndex((l) => l.id === urlState.selected_log);
-					if (direction === "prev" && idx > 0) {
-						setUrlState({ selected_log: logs[idx - 1].id }, { history: "replace" });
-					} else if (direction === "next" && idx < logs.length - 1) {
-						setUrlState({ selected_log: logs[idx + 1].id }, { history: "replace" });
-					}
-				}}
-				hasPrev={logs.findIndex((l) => l.id === urlState.selected_log) > 0}
-				hasNext={logs.findIndex((l) => l.id === urlState.selected_log) < logs.length - 1}
-				onFilterByParentRequestId={handleFilterByParentRequestId}
-			/>
 		</div>
 	);
 }

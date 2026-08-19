@@ -50,6 +50,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
 	// neither a fragment nor a cookie to drive the tempTokenScoped per-visitor
 	// logic.
 	const publicShell = matches.some((m) => (m.staticData as { publicShell?: boolean } | undefined)?.publicShell === true);
+	// hideSidebar: route renders full-screen content (e.g. the standalone log
+	// detail page opened in a new window). Same chrome as the workspace, but
+	// without the sidebar or content-container border.
+	const hideSidebar = matches.some((m) => (m.staticData as { hideSidebar?: boolean } | undefined)?.hideSidebar === true);
 
 	// Probe dashboard auth state on opted-in routes. is-auth-enabled is whitelisted
 	// (no 401 risk) and returns whether the current cookie is a valid session.
@@ -104,6 +108,19 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
 	if (rbacLoading) {
 		return <FullPageLoader />;
+	}
+
+	if (hideSidebar) {
+		return (
+			<WebSocketProvider>
+				<CookiesProvider>
+					<StoreSyncInitializer />
+					<div className="dark:bg-card custom-scrollbar h-screen w-full overflow-auto bg-white">
+						{isLoading ? <FullPageLoader /> : <FullPage config={bifrostConfig}>{children}</FullPage>}
+					</div>
+				</CookiesProvider>
+			</WebSocketProvider>
+		);
 	}
 
 	return (

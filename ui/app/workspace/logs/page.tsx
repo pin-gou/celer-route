@@ -1,4 +1,3 @@
-import { LogDetailSheet } from "@/app/workspace/logs/sheets/logDetailsSheet";
 import { SessionDetailsSheet } from "@/app/workspace/logs/sheets/sessionDetailsSheet";
 import { createColumns } from "@/app/workspace/logs/views/columns";
 import { formatLatency } from "@/app/workspace/dashboard/utils/chartUtils";
@@ -20,7 +19,7 @@ import {
 	useGetLogsStatsQuery,
 	useGetUserAgentMappingsQuery,
 } from "@/lib/store";
-import { useLazyGetLogByIdQuery, useLazyGetLogsQuery } from "@/lib/store/apis/logsApi";
+import { useLazyGetLogsQuery } from "@/lib/store/apis/logsApi";
 import type { DisplayLogEntry, LogEntry, LogFilters, Pagination } from "@/lib/types/logs";
 import { useLogsTimelineSSE, type ActiveLogEntry } from "@/hooks/useLogsTimelineSSE";
 import { dateUtils } from "@/lib/types/logs";
@@ -93,8 +92,6 @@ export default function LogsPage() {
 	const hasRevealAccess = useRbac(RbacResource.Logs, RbacOperation.Reveal);
 
 	const [deleteLogs] = useDeleteLogsMutation();
-	// Lazy query kept only for handleLogNavigate (fetches adjacent pages on demand)
-	const [triggerGetLogs] = useLazyGetLogsQuery();
 
 	const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 	const [sessionHighlightedLogId, setSessionHighlightedLogId] = useState<string | null>(null);
@@ -111,8 +108,6 @@ export default function LogsPage() {
 		}
 	}, []);
 	const [isChartOpen, setIsChartOpen] = useState(true);
-	const [triggerGetLogById] = useLazyGetLogByIdQuery();
-	const [fetchedLog, setFetchedLog] = useState<LogEntry | null>(null);
 
 	// Track if user has manually modified the time range
 	const userModifiedTimeRange = useRef<boolean>(false);
@@ -156,7 +151,6 @@ export default function LogsPage() {
 			missing_cost_only: parseAsBoolean.withDefault(false),
 			cache_hit_types: parseAsSafeArrayOf.withDefault([]),
 			metadata_filters: parseAsString.withDefault(""),
-			selected_log: parseAsString.withDefault(""),
 			grouped: parseAsBoolean.withDefault(true),
 		},
 		{
@@ -165,9 +159,6 @@ export default function LogsPage() {
 		},
 	);
 
-	// Derive selectedLog: find in current logs array, or fetch by ID from API
-	const selectedLogId = urlState.selected_log || null;
-	const activeLogFetchId = useRef<string | null>(null);
 	const polling = urlState.polling;
 	// Grouped view collapses fallback chains under their root. Disabled while a
 	// session filter is active — that view is already scoped to one chain/session.
@@ -509,7 +500,6 @@ export default function LogsPage() {
 		(parentRequestId: string) => {
 			setSelectedSessionId(null);
 			setSessionHighlightedLogId(null);
-			setUrlState({ selected_log: "" }, { history: "replace" });
 			setFilters({
 				...filters,
 				parent_request_id: parentRequestId,
@@ -583,9 +573,6 @@ export default function LogsPage() {
 			if ((log as DisplayLogEntry).__processing) return;
 			try {
 				await deleteLogs({ ids: [log.id] }).unwrap();
-				if (urlState.selected_log === log.id) {
-					setUrlState({ selected_log: "" });
-				}
 				refetchLogs();
 				refetchStats();
 				refetchHistogram();
@@ -593,7 +580,7 @@ export default function LogsPage() {
 				setError(getErrorMessage(err));
 			}
 		},
-		[deleteLogs, urlState.selected_log, setUrlState, refetchLogs, refetchStats, refetchHistogram],
+		[deleteLogs, refetchLogs, refetchStats, refetchHistogram],
 	);
 
 	const handlePollToggle = useCallback(
@@ -903,93 +890,6 @@ export default function LogsPage() {
 		() => ({ expandedChainIds, loadingChainIds, onToggleChain: handleToggleChain }),
 		[expandedChainIds, loadingChainIds, handleToggleChain],
 	);
-	const selectedLogFromData = useMemo(
-		() => (selectedLogId ? (logs.find((l) => l.id === selectedLogId) ?? null) : null),
-		[selectedLogId, logs],
-	);
-
-	useEffect(() => {
-		if (!selectedLogId || selectedLogFromData) {
-			setFetchedLog(null);
-			activeLogFetchId.current = null;
-			return;
-		}
-		const fetchId = selectedLogId;
-		activeLogFetchId.current = fetchId;
-		triggerGetLogById(selectedLogId).then((result) => {
-			if (activeLogFetchId.current === fetchId) {
-				if (result.data) {
-					setFetchedLog(result.data);
-				} else if (result.error) {
-					setError(getErrorMessage(result.error));
-				}
-			}
-		});
-	}, [selectedLogId, selectedLogFromData, triggerGetLogById]);
-
-	const selectedLog = selectedLogFromData ?? fetchedLog;
-
-	const selectedLogIndex = useMemo(() => (selectedLogId ? logs.findIndex((l) => l.id === selectedLogId) : -1), [selectedLogId, logs]);
-
-	const handleLogNavigate = useCallback(
-		(direction: "prev" | "next") => {
-			const currentLogId = selectedLogId || "";
-			if (direction === "prev") {
-				if (selectedLogIndex > 0) {
-					// Navigate to previous log on current page
-					setUrlState({ selected_log: logs[selectedLogIndex - 1].id });
-				} else if (pagination.offset > 0) {
-					// Go to previous page and select the last item
-					const newOffset = Math.max(0, pagination.offset - pagination.limit);
-					setUrlState({ offset: newOffset, selected_log: "" });
-					// Fetch previous page, then select last log
-					triggerGetLogs({
-						filters,
-						pagination: { ...pagination, offset: newOffset },
-						rootsOnly: grouped,
-					}).then((result) => {
-						if (result.data?.logs?.length) {
-							const lastLog = result.data.logs[result.data.logs.length - 1];
-							setUrlState({ selected_log: lastLog.id });
-						} else if (result.error) {
-							setUrlState({
-								offset: pagination.offset,
-								selected_log: currentLogId,
-							});
-							setError(getErrorMessage(result.error));
-						}
-					});
-				}
-			} else {
-				if (selectedLogIndex >= 0 && selectedLogIndex < logs.length - 1) {
-					// Navigate to next log on current page
-					setUrlState({ selected_log: logs[selectedLogIndex + 1].id });
-				} else if (pagination.offset + pagination.limit < totalItems) {
-					// Go to next page and select the first item
-					const newOffset = pagination.offset + pagination.limit;
-					setUrlState({ offset: newOffset, selected_log: "" });
-					// Fetch next page, then select first log
-					triggerGetLogs({
-						filters,
-						pagination: { ...pagination, offset: newOffset },
-						rootsOnly: grouped,
-					}).then((result) => {
-						if (result.data?.logs?.length) {
-							const firstLog = result.data.logs[0];
-							setUrlState({ selected_log: firstLog.id });
-						} else if (result.error) {
-							setUrlState({
-								offset: pagination.offset,
-								selected_log: currentLogId,
-							});
-							setError(getErrorMessage(result.error));
-						}
-					});
-				}
-			}
-		},
-		[selectedLogId, selectedLogIndex, logs, pagination, totalItems, filters, grouped, setUrlState, triggerGetLogs],
-	);
 
 	return (
 		<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100vh_-_16px)]">
@@ -1099,9 +999,7 @@ export default function LogsPage() {
 								onPaginationChange={setPagination}
 								onRowClick={(row, columnId) => {
 									if (columnId === "actions") return;
-									setUrlState({ selected_log: row.id }, { history: "replace" });
-									setSelectedSessionId(null);
-									setSessionHighlightedLogId(null);
+									window.open(`/workspace/logs/${encodeURIComponent(row.id)}`, "_blank", "noopener,noreferrer");
 								}}
 								polling={polling}
 								onRefresh={refetchLogs}
@@ -1116,23 +1014,8 @@ export default function LogsPage() {
 						</div>
 					</div>
 
-					{/* Log Detail Sheet */}
-					<LogDetailSheet
-						log={selectedLog}
-						open={selectedLog !== null}
-						onOpenChange={(open) => !open && setUrlState({ selected_log: "" })}
-						handleDelete={hasDeleteAccess ? handleDelete : undefined}
-						canReveal={hasRevealAccess}
-						onNavigate={handleLogNavigate}
-						hasPrev={selectedLogIndex > 0 || (selectedLogIndex !== -1 && pagination.offset > 0)}
-						hasNext={selectedLogIndex !== -1 && (selectedLogIndex < logs.length - 1 || pagination.offset + pagination.limit < totalItems)}
-						onFilterByParentRequestId={handleFilterByParentRequestId}
-						onViewSession={(sessionId, logId) => {
-							setUrlState({ selected_log: "" }, { history: "replace" });
-							setSessionHighlightedLogId(logId);
-							setSelectedSessionId(sessionId);
-						}}
-					/>
+					{/* Session Details Sheet — opened from the logs table when grouping
+					    surfaces a multi-attempt chain under one parent_request_id. */}
 					<SessionDetailsSheet
 						sessionId={selectedSessionId}
 						highlightedLogId={sessionHighlightedLogId}
@@ -1140,7 +1023,7 @@ export default function LogsPage() {
 						onOpenChange={handleSessionSheetOpenChange}
 						onLogClick={(log) => {
 							setSelectedSessionId(null);
-							setUrlState({ selected_log: log.id }, { history: "replace" });
+							window.open(`/workspace/logs/${encodeURIComponent(log.id)}`, "_blank", "noopener,noreferrer");
 						}}
 						onFilterByParentRequestId={handleFilterByParentRequestId}
 					/>
