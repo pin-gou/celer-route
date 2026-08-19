@@ -33,6 +33,12 @@ func (s *capturePluginsStore) UpdatePlugin(_ context.Context, plugin *configstor
 		s.capturedConfig = cfg
 	}
 	s.capturedEnabled = plugin.Enabled
+	// Update the existing plugin's config so subsequent GetPlugin calls return
+	// the updated state, mirroring production behavior.
+	if s.existingPlugin != nil && s.existingPlugin.Name == plugin.Name {
+		s.existingPlugin.Config = plugin.Config
+		s.existingPlugin.Enabled = plugin.Enabled
+	}
 	return nil
 }
 
@@ -444,6 +450,119 @@ type namedPluginsLoader struct {
 }
 
 func (l namedPluginsLoader) GetLoadedPluginNames() []string { return l.names }
+
+// TestUpdatePlugin_RTKConfigPassThrough verifies that the PATCH (PUT) endpoint
+// passes through the new pipeline and min_tokens_to_compress fields in the RTK
+// plugin config. The transport layer uses map[string]any for config, so these
+// fields must survive the update cycle without being stripped.
+func TestUpdatePlugin_RTKConfigPassThrough(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	existingConfig := map[string]any{
+		"enabled":                    true,
+		"intensity":                  "standard",
+		"max_lines_per_result":       120,
+		"max_chars_per_result":       12000,
+		"dedup_threshold":            3,
+		"apply_to_tool_results":      true,
+		"apply_to_code_blocks":       false,
+		"apply_to_assistant_messages": false,
+		"raw_output_retention":       "never",
+		"raw_output_max_bytes":       1048576,
+	}
+
+	store := &capturePluginsStore{
+		existingPlugin: &configstoreTables.TablePlugin{
+			Name:    "rtk",
+			Enabled: true,
+			Config:  existingConfig,
+		},
+	}
+
+	h := &PluginsHandler{
+		pluginsLoader: noopPluginsLoader{},
+		configStore:   store,
+	}
+
+	// PATCH /api/plugins/rtk with new pipeline and min_tokens_to_compress fields.
+	reqBody := map[string]any{
+		"enabled": true,
+		"config": map[string]any{
+			"enabled":                    true,
+			"intensity":                  "standard",
+			"max_lines_per_result":       120,
+			"max_chars_per_result":       12000,
+			"dedup_threshold":            3,
+			"apply_to_tool_results":      true,
+			"apply_to_code_blocks":       false,
+			"apply_to_assistant_messages": false,
+			"raw_output_retention":       "never",
+			"raw_output_max_bytes":       1048576,
+			"pipeline": []any{
+				map[string]any{
+					"id": "rtk",
+				},
+			},
+			"min_tokens_to_compress": 500,
+		},
+	}
+
+	ctx := buildUpdateRequest(t, reqBody)
+	ctx.SetUserValue("name", "rtk")
+	h.updatePlugin(ctx)
+
+	if ctx.Response.StatusCode() != 200 {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+
+	if store.capturedConfig == nil {
+		t.Fatal("UpdatePlugin was not called on the config store")
+	}
+
+	// Verify the pipeline field was passed through.
+	pipeline, ok := store.capturedConfig["pipeline"]
+	if !ok {
+		t.Fatal("pipeline field was stripped from the config; pass-through is broken")
+	}
+	pipelineSlice, ok := pipeline.([]any)
+	if !ok {
+		t.Fatalf("pipeline is %T, want []any", pipeline)
+	}
+	if len(pipelineSlice) != 1 {
+		t.Fatalf("pipeline has %d entries, want 1", len(pipelineSlice))
+	}
+	firstEntry, ok := pipelineSlice[0].(map[string]any)
+	if !ok {
+		t.Fatalf("pipeline[0] is %T, want map[string]any", pipelineSlice[0])
+	}
+	if firstEntry["id"] != "rtk" {
+		t.Errorf("pipeline[0].id = %v, want rtk", firstEntry["id"])
+	}
+
+	// Verify the min_tokens_to_compress field was passed through.
+	if got, ok := store.capturedConfig["min_tokens_to_compress"]; !ok {
+		t.Fatal("min_tokens_to_compress field was stripped from the config; pass-through is broken")
+	} else if got != float64(500) {
+		// JSON unmarshal into map[string]any produces float64 for numbers.
+		t.Errorf("min_tokens_to_compress = %v (type %T), want 500", got, got)
+	}
+
+	// Verify the response body also contains the new fields.
+	var response struct {
+		Plugin struct {
+			Config map[string]any `json:"config"`
+		} `json:"plugin"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if _, ok := response.Plugin.Config["pipeline"]; !ok {
+		t.Error("pipeline field missing from response body")
+	}
+	if _, ok := response.Plugin.Config["min_tokens_to_compress"]; !ok {
+		t.Error("min_tokens_to_compress field missing from response body")
+	}
+}
 
 // TestGetLoadedPlugins verifies that getLoadedPlugins returns the loader's plugin
 // names under the "plugins" JSON key, locking the response shape the UI depends on.

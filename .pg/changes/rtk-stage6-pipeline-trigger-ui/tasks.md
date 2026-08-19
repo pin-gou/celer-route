@@ -7,7 +7,7 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 1.1 编写 transports Go 单测：plugin CRUD PATCH 透传新增 pipeline/min_tokens_to_compress 字段（红）
+- [x] 1.1 编写 transports Go 单测：plugin CRUD PATCH 透传新增 pipeline/min_tokens_to_compress 字段（红）
 
 ## 2. dev.transports:dev - 实现开发
 
