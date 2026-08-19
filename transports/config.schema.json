@@ -3264,6 +3264,19 @@
                       "description": "Skip entire compression when estimated request tokens are below this threshold. 0 = never skip (always compress)",
                       "minimum": 0,
                       "default": 0
+                    },
+                    "enable_renderers": {
+                      "type": "boolean",
+                      "description": "Enable semantic renderers (opt-in). When true, structured outputs (git diff, test suites, terraform plan, JSON tables) are rewritten to a more compact form after line filtering. Renderers are fail-open — a panic or no-op leaves the original text unchanged",
+                      "default": false
+                    },
+                    "renderers": {
+                      "type": "array",
+                      "description": "Whitelist of detection types whose renderers are allowed to run. Empty (default) means every registered renderer is enabled when enable_renderers is true. Detection types with no registered renderer pass through unchanged",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": []
                     }
                   },
                   "additionalProperties": false

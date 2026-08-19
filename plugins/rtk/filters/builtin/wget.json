@@ -1,0 +1,14 @@
+{
+  "name": "wget",
+  "command": "wget",
+  "rules": [
+    {"type": "strip", "pattern": "^--\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}--\\s+\\S+\\s*$"},
+    {"type": "strip", "pattern": "^Saving to: '[^']+'$"},
+    {"type": "strip", "pattern": "^\\d+[K\\s]\\s+\\d+[K\\s]"},
+    {"type": "strip", "pattern": "^\\d+[K\\s]\\s+\\d+[K\\s].*in \\S+"}
+  ],
+  "head": 5,
+  "tail": 5,
+  "priority_patterns": ["ERROR", "saved", "error", "100%"],
+  "tests": [{"name":"keeps-summary","input":"--2024-01-01 12:00:00--  https://example.com/foo\nResolving example.com (example.com)... 1.2.3.4\nConnecting to example.com... connected.\nHTTP request sent, awaiting response... 200 OK\nLength: 12345 (12K) [application/octet-stream]\nSaving to: 'foo'\n\nfoo             100%[=========>] 12,345  --.-K/s   in 0.1s\n\n2024-01-01 12:00:00 (123 KB/s) - 'foo' saved [12345/12345]","expected":"HTTP request sent, awaiting response... 200 OK\n\nfoo             100%[=========>] 12,345  --.-K/s   in 0.1s\n\n2024-01-01 12:00:00 (123 KB/s) - 'foo' saved [12345/12345]"}]
+}

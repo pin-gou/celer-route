@@ -34,6 +34,13 @@ type EngineResult struct {
 	Skipped      bool    `json:"skipped,omitempty"`
 	Reason       string  `json:"reason,omitempty"`
 
+	// Techniques lists the compression techniques applied by this engine
+	// (e.g. "rtk-render:git-diff", "linefilter", "dedup", "smarttruncate").
+	// Propagated through the pipeline runner so the caller can record
+	// granular technique attribution instead of a generic "pipeline-runner"
+	// label.
+	Techniques []string `json:"techniques,omitempty"`
+
 	// rawOutputPointers carries raw output persistence pointers from the
 	// engine's Apply method to the caller. It is not serialised — it is
 	// an internal plumbing field so the pipeline runner can propagate
@@ -133,16 +140,18 @@ func NewPipelineRunner(catalog *EngineCatalog) *PipelineRunner {
 // Run executes the pipeline on the input text. Each engine in the pipeline
 // is looked up in the catalog and executed in order. The output of each
 // engine becomes the input for the next. Unknown engines are skipped with
-// a warning. Returns the final text, a breakdown of per-engine stats, and
-// any raw output pointers accumulated during execution.
-func (r *PipelineRunner) Run(ctx *schemas.BifrostContext, pipeline *Pipeline, input string, defaultCfg EngineConfig) (string, []EngineBreakdown, error, []*RtkRawOutputPointer) {
+// a warning. Returns the final text, a breakdown of per-engine stats, an
+// aggregated technique list, and any raw output pointers accumulated
+// during execution.
+func (r *PipelineRunner) Run(ctx *schemas.BifrostContext, pipeline *Pipeline, input string, defaultCfg EngineConfig) (string, []EngineBreakdown, []string, error, []*RtkRawOutputPointer) {
 	if pipeline == nil || len(pipeline.Engines) == 0 {
-		return input, nil, nil, nil
+		return input, nil, nil, nil, nil
 	}
 
 	text := input
 	var breakdown []EngineBreakdown
 	var rawPointers []*RtkRawOutputPointer
+	var techniques []string
 
 	for _, engineID := range pipeline.Engines {
 		engine, ok := r.catalog.GetEngine(engineID)
@@ -168,10 +177,14 @@ func (r *PipelineRunner) Run(ctx *schemas.BifrostContext, pipeline *Pipeline, in
 		entry.OutputBytes = result.OutputBytes
 		breakdown = append(breakdown, entry)
 
+		if len(result.Techniques) > 0 {
+			techniques = append(techniques, result.Techniques...)
+		}
+
 		if len(result.rawOutputPointers) > 0 {
 			rawPointers = append(rawPointers, result.rawOutputPointers...)
 		}
 	}
 
-	return text, breakdown, nil, rawPointers
+	return text, breakdown, techniques, nil, rawPointers
 }

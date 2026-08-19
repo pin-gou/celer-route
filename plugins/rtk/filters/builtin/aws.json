@@ -1,0 +1,11 @@
+{
+  "name": "aws",
+  "command": "aws",
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 20,
+  "tail": 10,
+  "priority_patterns": ["error", "Error", "ERROR", "An error occurred"],
+  "tests": [{"name":"preserves-error","input":"An error occurred (AccessDenied) when calling the DescribeInstances operation: User: arn:aws:iam::123456789012:user/test is not authorized\n\nHTTP 403","expected":"An error occurred (AccessDenied) when calling the DescribeInstances operation: User: arn:aws:iam::123456789012:user/test is not authorized"}]
+}

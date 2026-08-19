@@ -1,0 +1,9 @@
+{
+  "name": "json-output",
+  "command": "jq",
+  "rules": [],
+  "head": 200,
+  "tail": 0,
+  "priority_patterns": ["error", "Error", "ERROR"],
+  "tests": [{"name":"passthrough","input":"{\"name\":\"foo\",\"value\":42}","expected":"{\"name\":\"foo\",\"value\":42}"}]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "rubocop",
+  "command": "rubocop",
+  "rules": [
+    {"type": "strip", "pattern": "^Inspecting \\d+ files"},
+    {"type": "strip", "pattern": "^\\d+ files? inspected, no offenses detected$"}
+  ],
+  "head": 20,
+  "tail": 5,
+  "priority_patterns": ["offense", "error", "warning"],
+  "tests": [{"name":"keeps-offenses","input":"Inspecting 12 files\n............\n\nOffenses:\n\nfoo.rb:10:5: C: Style/Documentation: Missing top-level documentation comment.\n\n12 files inspected, 1 offense detected","expected":"foo.rb:10:5: C: Style/Documentation: Missing top-level documentation comment."}]
+}

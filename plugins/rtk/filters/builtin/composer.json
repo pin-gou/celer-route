@@ -1,0 +1,12 @@
+{
+  "name": "composer",
+  "command": "composer",
+  "rules": [
+    {"type": "strip", "pattern": "^Loading composer repositories"},
+    {"type": "strip", "pattern": "^Updating dependencies"}
+  ],
+  "head": 10,
+  "tail": 10,
+  "priority_patterns": ["error", "Error", "failed"],
+  "tests": [{"name":"passthrough","input":"Installing dependencies from lock file\n  - Installing foo/bar (1.0.0)","expected":"  - Installing foo/bar (1.0.0)"}]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "test-jest",
+  "command": "jest",
+  "rules": [
+    {"type": "strip", "pattern": "^\\(node:\\d+\\)"},
+    {"type": "strip", "pattern": "^Test Suites:"},
+    {"type": "strip", "pattern": "^Snapshots:\\s+\\d+"},
+    {"type": "strip", "pattern": "^Time:\\s+"},
+    {"type": "strip", "pattern": "^Ran all test suites"}
+  ],
+  "head": 5,
+  "tail": 5,
+  "priority_patterns": ["FAIL", "Tests:", "Test Suites:", "Error", "✖"],
+  "tests": [{"name":"preserves-summary","input":"FAIL src/auth.test.ts\n  ✕ should login (5 ms)\n\nTests: 1 failed, 3 passed, 4 total","expected":"FAIL src/auth.test.ts\n\nTests: 1 failed, 3 passed, 4 total"}]
+}

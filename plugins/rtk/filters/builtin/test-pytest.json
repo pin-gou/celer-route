@@ -1,0 +1,14 @@
+{
+  "name": "test-pytest",
+  "command": "pytest",
+  "rules": [
+    {"type": "strip", "pattern": "^={3,}\\s+test session starts\\s+={3,}.*$"},
+    {"type": "strip", "pattern": "^={3,}\\s+warnings summary\\s+={3,}.*$"},
+    {"type": "strip", "pattern": "^\\.\\.\\.+\\s*$"},
+    {"type": "strip", "pattern": "^tests/[\\w/_.-]+\\.py:\\d+:"}
+  ],
+  "head": 3,
+  "tail": 3,
+  "priority_patterns": ["^FAILED ", "^={3,}\\s+\\d+\\s+passed", "^={3,}\\s+\\d+\\s+failed", "Error", "Traceback", "AssertionError"],
+  "tests": [{"name":"preserves-failures-summary","input":"============ test session starts ============\ncollected 142 items\n\ntests/a.py ....\ntests/b.py ....\n\n============ 142 passed in 3.21s ============","expected":"============ 142 passed in 3.21s ============"}]
+}

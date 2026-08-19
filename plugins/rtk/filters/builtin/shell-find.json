@@ -1,0 +1,9 @@
+{
+  "name": "shell-find",
+  "command": "find",
+  "rules": [],
+  "head": 100,
+  "tail": 0,
+  "priority_patterns": [],
+  "tests": [{"name":"passthrough","input":"./foo\n./foo/bar\n./baz","expected":"./foo\n./foo/bar\n./baz"}]
+}

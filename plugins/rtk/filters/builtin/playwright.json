@@ -1,0 +1,11 @@
+{
+  "name": "playwright",
+  "command": "playwright test",
+  "rules": [
+    {"type": "strip", "pattern": "^Running \\d+ tests? using \\d+ workers?"}
+  ],
+  "head": 5,
+  "tail": 5,
+  "priority_patterns": ["\\d+ failed", "\\d+ passed", "Error"],
+  "tests": [{"name":"keeps-failures","input":"Running 5 tests using 2 workers\n\n  ✓ 1 [chromium] › foo.test.ts:3:5 (250ms)\n  ✗ 2 [chromium] › foo.test.ts:10:5 (180ms)\n  ✗ 3 [chromium] › foo.test.ts:20:5 (200ms)\n  2 failed\n\n  1) foo.test.ts:10:5 › test two\n  2) foo.test.ts:20:5 › test three","expected":"  2 failed\n\n  1) foo.test.ts:10:5 › test two\n  2) foo.test.ts:20:5 › test three"}]
+}

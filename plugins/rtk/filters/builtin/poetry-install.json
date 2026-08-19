@@ -1,0 +1,12 @@
+{
+  "name": "poetry-install",
+  "command": "poetry install",
+  "rules": [
+    {"type": "strip", "pattern": "^Installing dependencies from lock file$"},
+    {"type": "strip", "pattern": "^Package operations:"}
+  ],
+  "head": 5,
+  "tail": 10,
+  "priority_patterns": ["error", "Installing"],
+  "tests": [{"name":"keeps-summary","input":"Installing dependencies from lock file\n\nPackage operations: 5 installs, 0 updates, 0 removals\n\n  • Installing foo (1.0.0)\n  • Installing bar (2.0.0)","expected":"  • Installing foo (1.0.0)\n  • Installing bar (2.0.0)"}]
+}

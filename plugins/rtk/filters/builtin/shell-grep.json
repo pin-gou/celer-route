@@ -1,0 +1,11 @@
+{
+  "name": "shell-grep",
+  "command": "grep",
+  "rules": [
+    {"type": "strip", "pattern": "^--$"}
+  ],
+  "head": 50,
+  "tail": 0,
+  "priority_patterns": ["error", "Error"],
+  "tests": [{"name":"keeps-matches","input":"src/foo.ts:10:5:const x = 1\nsrc/bar.ts:5:1:const y = 2","expected":"src/foo.ts:10:5:const x = 1\nsrc/bar.ts:5:1:const y = 2"}]
+}

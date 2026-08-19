@@ -1,0 +1,12 @@
+{
+  "name": "mypy",
+  "command": "mypy",
+  "rules": [
+    {"type": "strip", "pattern": "^Found \\d+ errors? in \\d+ files? \\(checked \\d+ source files?\\)$"},
+    {"type": "strip", "pattern": "^Success: no issues found in \\d+ source files?$"}
+  ],
+  "head": 20,
+  "tail": 5,
+  "priority_patterns": ["error", "warning", "note"],
+  "tests": [{"name":"keeps-errors","input":"src/foo.py:10: error: Argument 1 has incompatible type \"str\"; expected \"int\"  [arg-type]\nFound 1 error in 1 file (checked 5 source files)","expected":"src/foo.py:10: error: Argument 1 has incompatible type \"str\"; expected \"int\"  [arg-type]"}]
+}

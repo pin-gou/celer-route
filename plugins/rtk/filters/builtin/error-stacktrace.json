@@ -1,0 +1,11 @@
+{
+  "name": "error-stacktrace",
+  "command": "",
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 20,
+  "tail": 30,
+  "priority_patterns": ["Error", "Exception", "Traceback", "panic", "FAIL", "fatal"],
+  "tests": [{"name":"preserves-traceback","input":"Traceback (most recent call last):\n  File \"foo.py\", line 10, in <module>\n    raise ValueError(\"bad\")\nValueError: bad","expected":"Traceback (most recent call last):\n  File \"foo.py\", line 10, in <module>\n    raise ValueError(\"bad\")\nValueError: bad"}]
+}

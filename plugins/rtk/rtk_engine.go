@@ -56,6 +56,7 @@ func (e *rtkEngine) Apply(ctx *schemas.BifrostContext, text string, cfg EngineCo
 		InputBytes:        inputBytes,
 		OutputBytes:       outputBytes,
 		CompressedBy:      compressedBy,
+		Techniques:        stats.Techniques,
 		rawOutputPointers: stats.RawOutputPointers,
 	}, nil
 }

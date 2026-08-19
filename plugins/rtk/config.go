@@ -79,6 +79,22 @@ type Config struct {
 	// are below this threshold, the entire compression pipeline is skipped.
 	// 0 means "no minimum threshold, always compress" (the default).
 	MinTokensToCompress int `json:"min_tokens_to_compress"`
+
+	// EnableRenderers enables semantic renderers (opt-in, default false).
+	// When enabled, the pipeline looks up a renderer by detection.Type and,
+	// if one is registered, applies a semantic rewrite (e.g. git-diff
+	// strips context lines, test-green collapses an all-green test suite
+	// into a single summary line, terraform-plan summarises a plan,
+	// structured-table parses JSON arrays into TSV). Renderers are
+	// fail-open: a panic or error returns the original text untouched.
+	// Aligned with OmniRoute's RtkConfig.enableRenderers.
+	EnableRenderers bool `json:"enable_renderers"`
+
+	// Renderers is an optional whitelist of detection types whose renderers
+	// may run. Empty (the default) enables every registered renderer. When
+	// non-empty, renderers for detection types NOT in this list pass through
+	// unchanged. Aligned with OmniRoute's RtkConfig.renderers.
+	Renderers []string `json:"renderers,omitempty"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -174,4 +190,7 @@ func applyConfigDefaults(c *Config) {
 
 	// MinTokensToCompress stays at 0 (zero value = no threshold).
 	// Do not overwrite an explicit positive value.
+
+	// EnableRenderers stays at false (opt-in). Renderers whitelist stays
+	// empty (== all registered renderers enabled when EnableRenderers=true).
 }

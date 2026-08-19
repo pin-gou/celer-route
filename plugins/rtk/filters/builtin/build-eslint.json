@@ -1,0 +1,11 @@
+{
+  "name": "build-eslint",
+  "command": "eslint",
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 20,
+  "tail": 5,
+  "priority_patterns": ["error", "warning", "✖", "problem"],
+  "tests": [{"name":"keeps-summary","input":"/path/to/file.ts\n  10:5  error  'foo' is defined but never used  no-unused-vars\n  22:1  warning  Missing semicolon  semi\n\n✖ 2 problems (1 error, 1 warning)","expected":"/path/to/file.ts\n  10:5  error  'foo' is defined but never used  no-unused-vars\n\n✖ 2 problems (1 error, 1 warning)"}]
+}

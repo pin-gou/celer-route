@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/pg-gateway/plugins/rtk/renderers"
 )
 
 // ProcessStats holds token statistics for a single text compression pass.
@@ -51,7 +52,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			originalTotal += origTokens
 
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
-			result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+			result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 			if err != nil || result == "" || result == text {
 				compressedTotal += origTokens
 				continue
@@ -66,7 +67,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				applyToolContent(msg, result)
 				anyCompressed = true
 				compressedTotal += compressedEst
-				state.Techniques = append(state.Techniques, "pipeline-runner")
+				if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
 				continue
 			}
 			compressedTotal += origTokens
@@ -91,7 +92,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				originalTotal += origTokens
 
 				// Compress through the PipelineRunner.
-				result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+				result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 				if err != nil || result == "" || result == text {
 					compressedTotal += origTokens
 					continue
@@ -106,7 +107,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 					block.Text = &result
 					anyCompressed = true
 					compressedTotal += compressedEst
-					state.Techniques = append(state.Techniques, "pipeline-runner")
+					if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
 					continue
 				}
 				compressedTotal += origTokens
@@ -126,7 +127,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
 						// Assistant messages go through the pipeline runner too.
-						result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -136,7 +137,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 								msg.Content.ContentStr = &result
 								anyCompressed = true
 								compressedTotal += estimateTokens(result)
-								state.Techniques = append(state.Techniques, "pipeline-runner")
+								if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
 							} else {
 								compressedTotal += origTokens
 							}
@@ -162,7 +163,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						}
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
-						result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -172,7 +173,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 								block.Text = &result
 								anyCompressed = true
 								compressedTotal += estimateTokens(result)
-								state.Techniques = append(state.Techniques, "pipeline-runner")
+								if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
 							} else {
 								compressedTotal += origTokens
 							}
@@ -293,7 +294,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		originalTotal += origTokens
 
 		// Compress through the PipelineRunner.
-		result, _, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+		result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 		if err != nil || result == "" || result == text {
 			compressedTotal += origTokens
 			continue
@@ -308,7 +309,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 			applyResponsesToolOutput(out, config, result)
 			anyCompressed = true
 			compressedTotal += compressedEst
-			state.Techniques = append(state.Techniques, "pipeline-runner")
+			if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
 			continue
 		}
 		compressedTotal += origTokens
@@ -419,14 +420,16 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 	}
 
 	// 3. Command detection.
-	detection := defaultDetector.detect(text)
+	detection := defaultDetector.detect(text, commandHint)
 	cmd := commandHint
 	if cmd == "" {
 		cmd = detection.Command
 	}
 
-	// 4. Non-shell output is not compressed.
-	if detection.Type != "shell" {
+	// 4. Non-shell output is not compressed (skip when type is unknown or
+	// pure JSON). Granular types ("git-diff", "test-pytest", ...) are routed
+	// through the filter matching path so they can pick a type-specific filter.
+	if detection.Type == "" || detection.Type == "unknown" {
 		stats.CompressedTokens = stats.OriginalTokens
 		return input, stats
 	}
@@ -448,6 +451,23 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 			stats.Techniques = append(stats.Techniques, "dedup")
 		}
 		result := deduped
+		// 7b. Semantic renderers — apply even on the document-like read
+		// path so a renderer registered for the `shell` (generic) type can
+		// still act if ever added. Today no renderer keys on `shell`, so
+		// this is a no-op for the default registry.
+		if config.EnableRenderers {
+			res := renderers.ApplyRenderer(result, renderers.DetectionInfo{
+				Type:     detection.Type,
+				Command:  detection.Command,
+				Category: detection.Category,
+			}, renderers.RenderConfig{
+				AllowedRenderers: config.Renderers,
+			})
+			if res.Changed {
+				result = res.Text
+				stats.Techniques = append(stats.Techniques, "rtk-render:"+res.Renderer)
+			}
+		}
 		// R5: grouping — opt-in via enable_grouping flag (default OFF).
 		if config.EnableGrouping {
 			groupResult := groupSimilarLines(result, GroupingOptions{Threshold: config.GroupingThreshold})
@@ -480,6 +500,25 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 	stripped := applyLineFilter(text, filter)
 	if stripped != text {
 		stats.Techniques = append(stats.Techniques, "linefilter")
+	}
+
+	// 7b. Semantic renderers — opt-in via EnableRenderers, fail-open.
+	// Aligned with OmniRoute's processRtkText step 5: a renderer applies
+	// AFTER line filtering (so the input to the renderer is already
+	// trimmed) and BEFORE dedup/grouping/truncate (so the renderer's
+	// output is the canonical form that those later steps operate on).
+	if config.EnableRenderers {
+		res := renderers.ApplyRenderer(stripped, renderers.DetectionInfo{
+			Type:     detection.Type,
+			Command:  detection.Command,
+			Category: detection.Category,
+		}, renderers.RenderConfig{
+			AllowedRenderers: config.Renderers,
+		})
+		if res.Changed {
+			stripped = res.Text
+			stats.Techniques = append(stats.Techniques, "rtk-render:"+res.Renderer)
+		}
 	}
 
 	// 8. Deduplicate consecutive identical lines.

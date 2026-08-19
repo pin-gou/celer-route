@@ -1,0 +1,12 @@
+{
+  "name": "nx",
+  "command": "nx",
+  "rules": [
+    {"type": "strip", "pattern": "^NX\\s+"},
+    {"type": "strip", "pattern": "^>\\s*nx\\s+run"}
+  ],
+  "head": 10,
+  "tail": 10,
+  "priority_patterns": ["Successfully ran target", "ERROR", "failed"],
+  "tests": [{"name":"keeps-target","input":"> nx run myapp:build\n\nSuccessfully ran target build for project myapp (3s)\n\nSee logs and run details at https://nx.app/...","expected":"Successfully ran target build for project myapp (3s)"}]
+}
