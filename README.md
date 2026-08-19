@@ -16,7 +16,13 @@
 
 ```bash
 # 启动服务（即将支持）
-docker run -p 8080:8080 ghcr.io/pin-gou/pg-gateway
+docker run  -d \
+  --name pg-gateway \
+  --restart unless-stopped \
+  --user 0:0 \
+  -p 8080:8080 \
+  -v ~/pg-gateway-data:/app/data \
+  ghcr.io/pin-gou/pg-gateway:latest
 
 # 打开 Web 界面
 open http://localhost:8080
