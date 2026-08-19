@@ -1,0 +1,12 @@
+{
+  "name": "prettier",
+  "command": "prettier",
+  "rules": [
+    {"type": "strip", "pattern": "^Checking formatting\\.\\.\\."},
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 20,
+  "tail": 10,
+  "priority_patterns": ["error", "warning"],
+  "tests": [{"name":"keeps-issues","input":"Checking formatting...\n\nsrc/foo.ts\nsrc/bar.ts\nCode style issues found in 2 files. Run Prettier with --write to fix.","expected":"src/foo.ts\nsrc/bar.ts\nCode style issues found in 2 files. Run Prettier with --write to fix."}]
+}

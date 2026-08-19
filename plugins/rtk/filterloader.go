@@ -416,12 +416,22 @@ func (l *FilterLoader) projectFiltersTrusted(filtersDir string) (bool, string) {
 // non-shell command types. When Load has been called, Match searches the
 // unified cachedFilters slice. Otherwise, it falls back to the legacy
 // per-tier search (project > global > builtin > generic-output).
+//
+// Dual-key matching (v2): when commandType is a granular detection type
+// (e.g. "git-diff", "test-pytest", "terraform-plan"), Match first searches
+// by Filter.CommandPatterns (canonical form) and falls back to name match.
+// For legacy "shell" commandType, the original longest-prefix matching is
+// used. Non-shell types ("json", "", "unknown", "api") return nil so that
+// the caller knows not to apply shell-based line filtering.
+//
 // Priority: project > global > builtin, then generic-output fallback.
 func (l *FilterLoader) Match(commandType, command string) *Filter {
 	if l == nil {
 		return nil
 	}
-	if commandType != "shell" {
+	// Non-shell types are not matched.
+	switch commandType {
+	case "", "unknown", "json", "api":
 		return nil
 	}
 
@@ -430,29 +440,72 @@ func (l *FilterLoader) Match(commandType, command string) *Filter {
 
 	// Use the unified cache if populated (Load was called).
 	if len(l.cachedFilters) > 0 {
-		if command == "" {
+		if commandType == "shell" {
+			if command == "" {
+				return l.generic
+			}
+			if f := matchLongest(l.cachedFilters, command); f != nil {
+				return f
+			}
 			return l.generic
 		}
-		if f := matchLongest(l.cachedFilters, command); f != nil {
+		// Granular type: try direct ID/Name match, then command-prefix, then generic.
+		if f := matchByIDOrName(l.cachedFilters, commandType); f != nil {
 			return f
+		}
+		if command != "" {
+			if f := matchLongest(l.cachedFilters, command); f != nil {
+				return f
+			}
 		}
 		return l.generic
 	}
 
-	// Legacy fallback: per-tier search.
-	if command == "" {
+	// Legacy fallback: per-tier search (only "shell" path).
+	if commandType == "shell" {
+		if command == "" {
+			return l.generic
+		}
+		if f := matchLongest(l.projects, command); f != nil {
+			return f
+		}
+		if f := matchLongest(l.globals, command); f != nil {
+			return f
+		}
+		if f := matchLongest(l.builtins, command); f != nil {
+			return f
+		}
 		return l.generic
 	}
-	if f := matchLongest(l.projects, command); f != nil {
+	// Granular type without cache: scan builtins (by ID/Name first, then command).
+	if f := matchByIDOrName(l.builtins, commandType); f != nil {
 		return f
 	}
-	if f := matchLongest(l.globals, command); f != nil {
-		return f
-	}
-	if f := matchLongest(l.builtins, command); f != nil {
-		return f
+	if command != "" {
+		if f := matchLongest(l.builtins, command); f != nil {
+			return f
+		}
 	}
 	return l.generic
+}
+
+// matchByIDOrName returns the first filter whose ID or Name matches the
+// given key (exact match). For granular types like "git-diff", this lets
+// the renderer pipeline dispatch to a filter specifically tailored for
+// that detection type.
+func matchByIDOrName(filters []*Filter, key string) *Filter {
+	if key == "" {
+		return nil
+	}
+	for _, f := range filters {
+		if f == nil {
+			continue
+		}
+		if f.ID == key || f.Name == key {
+			return f
+		}
+	}
+	return nil
 }
 
 // matchLongest returns the filter whose Command is the longest prefix of the

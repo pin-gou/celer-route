@@ -1,0 +1,16 @@
+{
+  "name": "test-vitest",
+  "command": "vitest",
+  "rules": [
+    {"type": "strip", "pattern": "^\\(node:\\d+\\)"},
+    {"type": "strip", "pattern": "^Test Files\\s+\\d+"},
+    {"type": "strip", "pattern": "^Snapshots\\s+"},
+    {"type": "strip", "pattern": "^Time\\s+"},
+    {"type": "strip", "pattern": "^Duration\\s+"},
+    {"type": "strip", "pattern": "^Ran all"}
+  ],
+  "head": 5,
+  "tail": 5,
+  "priority_patterns": ["FAIL", "✓", "×", "Error", "✖", "passed", "failed"],
+  "tests": [{"name":"preserves-passed-summary","input":"✓ src/foo.test.ts (3 tests) 12ms\n✓ src/bar.test.ts (5 tests) 18ms\n\nTest Files  2 passed (2)\n     Tests  8 passed (8)","expected":"✓ src/foo.test.ts (3 tests) 12ms\n✓ src/bar.test.ts (5 tests) 18ms\n\nTest Files  2 passed (2)\n     Tests  8 passed (8)"}]
+}

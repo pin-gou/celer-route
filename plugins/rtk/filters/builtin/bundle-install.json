@@ -1,0 +1,12 @@
+{
+  "name": "bundle-install",
+  "command": "bundle install",
+  "rules": [
+    {"type": "strip", "pattern": "^Fetching gem metadata from .*$"},
+    {"type": "strip", "pattern": "^Resolving dependencies\\.\\.\\."}
+  ],
+  "head": 5,
+  "tail": 5,
+  "priority_patterns": ["error", "Bundle complete"],
+  "tests": [{"name":"keeps-summary","input":"Fetching gem metadata from https://rubygems.org/........\nResolving dependencies...\nFetching gem metadata from https://rubygems.org/........\nResolving dependencies...\nUsing rake 13.0.6\nBundle complete! 5 Gemfile dependencies, 42 gems now installed.","expected":"Using rake 13.0.6\nBundle complete! 5 Gemfile dependencies, 42 gems now installed."}]
+}

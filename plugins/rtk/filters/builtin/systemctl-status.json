@@ -1,0 +1,11 @@
+{
+  "name": "systemctl-status",
+  "command": "systemctl status",
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 30,
+  "tail": 20,
+  "priority_patterns": ["error", "failed", "Active:", "Main PID"],
+  "tests": [{"name":"keeps-status","input":"● nginx.service - A high performance web server and a reverse proxy server\n   Loaded: loaded (/lib/systemd/system/nginx.service; enabled; vendor preset: enabled)\n   Active: active (running) since Mon 2024-01-01 12:00:00 UTC; 1h ago\n     Docs: man:nginx(8)\n Main PID: 1234 (nginx)\n    Tasks: 5 (limit: 4915)\n   Memory: 14.2M","expected":"● nginx.service - A high performance web server and a reverse proxy server\n   Loaded: loaded (/lib/systemd/system/nginx.service; enabled; vendor preset: enabled)\n   Active: active (running) since Mon 2024-01-01 12:00:00 UTC; 1h ago\n     Docs: man:nginx(8)"}]
+}

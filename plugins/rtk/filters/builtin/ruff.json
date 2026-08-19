@@ -1,0 +1,11 @@
+{
+  "name": "ruff",
+  "command": "ruff",
+  "rules": [
+    {"type": "strip", "pattern": "^Found \\d+ errors?\\.$"}
+  ],
+  "head": 30,
+  "tail": 5,
+  "priority_patterns": ["error", "warning"],
+  "tests": [{"name":"keeps-findings","input":"src/foo.py:10:5: E501 Line too long (120 > 88)\nsrc/bar.py:5:1: F401 'os' imported but unused\n\nFound 2 errors.","expected":"src/foo.py:10:5: E501 Line too long (120 > 88)\nsrc/bar.py:5:1: F401 'os' imported but unused\n\nFound 2 errors."}]
+}

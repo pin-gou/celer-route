@@ -1,0 +1,14 @@
+{
+  "name": "test-cargo",
+  "command": "cargo test",
+  "rules": [
+    {"type": "strip", "pattern": "^Compiling\\s+\\S+"},
+    {"type": "strip", "pattern": "^Finished\\s+(?:release|debug)\\s+"},
+    {"type": "strip", "pattern": "^Running\\s+(?:unittests|target/\\S+)\\s*\\(\\S+\\)$"},
+    {"type": "strip", "pattern": "^\\s*Doc-tests\\s+\\S+"}
+  ],
+  "head": 3,
+  "tail": 5,
+  "priority_patterns": ["^test result:", "FAILED", "error\\[", "^failures:"],
+  "tests": [{"name":"preserves-result","input":"running 12 tests\ntest test_a ... ok\ntest test_b ... ok\n\ntest result: ok. 12 passed; 0 failed; 0 ignored","expected":"test test_a ... ok\ntest test_b ... ok\n\ntest result: ok. 12 passed; 0 failed; 0 ignored"}]
+}

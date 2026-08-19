@@ -1,0 +1,13 @@
+{
+  "name": "uv-sync",
+  "command": "uv sync",
+  "rules": [
+    {"type": "strip", "pattern": "^Audited \\d+ packages? in"},
+    {"type": "strip", "pattern": "^Resolved \\d+ packages? in"},
+    {"type": "strip", "pattern": "^Built \\d+ editable"}
+  ],
+  "head": 5,
+  "tail": 10,
+  "priority_patterns": ["error", "Resolved", "Installed"],
+  "tests": [{"name":"keeps-summary","input":"Resolved 42 packages in 50ms\nInstalled 38 packages in 120ms","expected":"Installed 38 packages in 120ms"}]
+}

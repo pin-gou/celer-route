@@ -1,0 +1,12 @@
+{
+  "name": "turbo",
+  "command": "turbo",
+  "rules": [
+    {"type": "strip", "pattern": "^• Packages in scope:"},
+    {"type": "strip", "pattern": "^• Running"}
+  ],
+  "head": 10,
+  "tail": 10,
+  "priority_patterns": ["error", "failed", "ERROR"],
+  "tests": [{"name":"keeps-tasks","input":"• Packages in scope: app, ui, api\n• Running build in 3 packages\nweb:build: cache hit, replaying logs\nui:build: cache hit, replaying logs\napi:build: cache hit, replaying logs\nTasks: 3 successful, 3 total","expected":"web:build: cache hit, replaying logs\nui:build: cache hit, replaying logs\napi:build: cache hit, replaying logs\nTasks: 3 successful, 3 total"}]
+}

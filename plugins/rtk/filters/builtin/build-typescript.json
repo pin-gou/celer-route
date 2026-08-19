@@ -1,0 +1,12 @@
+{
+  "name": "build-typescript",
+  "command": "tsc",
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^Found \\d+ error"}
+  ],
+  "head": 20,
+  "tail": 10,
+  "priority_patterns": ["error TS\\d+", "TS\\d+:", "warning TS\\d+"],
+  "tests": [{"name":"keeps-errors","input":"src/index.ts:10:5 - error TS2322: Type 'string' is not assignable to type 'number'.\n\nFound 1 error.","expected":"src/index.ts:10:5 - error TS2322: Type 'string' is not assignable to type 'number'."}]
+}

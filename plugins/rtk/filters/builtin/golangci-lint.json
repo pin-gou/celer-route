@@ -1,0 +1,11 @@
+{
+  "name": "golangci-lint",
+  "command": "golangci-lint",
+  "rules": [
+    {"type": "strip", "pattern": "^level=info"}
+  ],
+  "head": 20,
+  "tail": 5,
+  "priority_patterns": ["error", "warning"],
+  "tests": [{"name":"keeps-issues","input":"level=info msg=\"Running linters\"\nfoo.go:10:5: errcheck Error return value is not checked (errcheck)\nbar.go:5:1: staticcheck SA4006 this value is never used (staticcheck)\n\n12 issues:\n * errcheck: 1\n * staticcheck: 1\n * gosimple: 1","expected":"foo.go:10:5: errcheck Error return value is not checked (errcheck)\nbar.go:5:1: staticcheck SA4006 this value is never used (staticcheck)"}]
+}

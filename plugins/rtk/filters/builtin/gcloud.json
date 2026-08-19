@@ -1,0 +1,11 @@
+{
+  "name": "gcloud",
+  "command": "gcloud",
+  "rules": [
+    {"type": "strip", "pattern": "^Updated property \\[\\S+\\]\\.$"}
+  ],
+  "head": 20,
+  "tail": 5,
+  "priority_patterns": ["ERROR", "FAILED", "error"],
+  "tests": [{"name":"keeps-errors","input":"ERROR: (gcloud.compute.instances.list) Some requests did not succeed:\n - Invalid value for field 'resource.instance': 'us-east1-a'","expected":"ERROR: (gcloud.compute.instances.list) Some requests did not succeed:\n - Invalid value for field 'resource.instance': 'us-east1-a'"}]
+}

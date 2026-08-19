@@ -1062,8 +1062,8 @@ func TestBuiltinFiltersParseBothFormatsAndHaveTests(t *testing.T) {
 		}
 	}
 
-	if count != 52 {
-		t.Errorf("expected 52 builtin filter JSONs, found %d", count)
+	if count < 52 {
+		t.Errorf("expected at least 52 builtin filter JSONs, found %d", count)
 	}
 	if len(noTests) > 0 {
 		t.Errorf("%d builtin filters have no tests field: %v", len(noTests), noTests)

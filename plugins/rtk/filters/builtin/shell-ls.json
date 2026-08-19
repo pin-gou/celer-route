@@ -1,0 +1,11 @@
+{
+  "name": "shell-ls",
+  "command": "ls",
+  "rules": [
+    {"type": "strip", "pattern": "^total \\d+$"}
+  ],
+  "head": 100,
+  "tail": 0,
+  "priority_patterns": [],
+  "tests": [{"name":"passthrough","input":"file1.txt\nfile2.txt\nfile3.txt","expected":"file1.txt\nfile2.txt\nfile3.txt"}]
+}

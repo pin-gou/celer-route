@@ -1,0 +1,12 @@
+{
+  "name": "shell-df",
+  "command": "df",
+  "rules": [
+    {"type": "strip", "pattern": "^Filesystem\\s+1K-blocks"},
+    {"type": "strip", "pattern": "^tmpfs\\s+\\d+"}
+  ],
+  "head": 20,
+  "tail": 0,
+  "priority_patterns": ["100%", "error"],
+  "tests": [{"name":"keeps-disks","input":"/dev/sda1       50000000 32000000  18000000  64% /\ntmpfs             2000000        0   2000000   0% /run","expected":"/dev/sda1       50000000 32000000  18000000  64% /"}]
+}

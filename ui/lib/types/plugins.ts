@@ -120,6 +120,17 @@ export const rtkConfigSchema = z.object({
 
 	// MinTokensToCompress is the minimum estimated request token count required to trigger compression.
 	min_tokens_to_compress: z.number().int().min(0).default(0),
+
+	// EnableRenderers enables semantic renderers (opt-in, default false).
+	// When true, structured outputs (git diff, test suites, terraform plan,
+	// JSON tables) are rewritten to a more compact form after line filtering.
+	// Renderers are fail-open — a panic or no-op leaves the original text unchanged.
+	enable_renderers: z.boolean().default(false),
+
+	// Renderers is an optional whitelist of detection types whose renderers
+	// may run. Empty (default) enables every registered renderer. Aligned
+	// with OmniRoute's RtkConfig.renderers.
+	renderers: z.array(z.string()).optional(),
 });
 
 export type RTKConfig = z.infer<typeof rtkConfigSchema>;

@@ -1,0 +1,12 @@
+{
+  "name": "kubectl",
+  "command": "kubectl",
+  "rules": [
+    {"type": "strip", "pattern": "^$"},
+    {"type": "strip", "pattern": "^NAME\\s+"}
+  ],
+  "head": 30,
+  "tail": 5,
+  "priority_patterns": ["error", "Error", "CrashLoopBackOff", "ImagePullBackOff", "Pending"],
+  "tests": [{"name":"keeps-resources","input":"NAME                          READY   STATUS    RESTARTS   AGE\nmyapp-pod-abc123              1/1     Running   0          10m","expected":"myapp-pod-abc123              1/1     Running   0          10m"}]
+}

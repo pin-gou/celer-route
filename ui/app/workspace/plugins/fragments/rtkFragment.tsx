@@ -14,7 +14,6 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -226,13 +225,9 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 							control={form.control}
 							name="apply_to_tool_results"
 							render={({ field }) => (
-								<FormItem className="flex flex-row items-start space-x-3 space-y-0">
+								<FormItem className="flex flex-row items-start space-y-0 space-x-3">
 									<FormControl>
-										<Checkbox
-											data-testid="rtk-field-apply-to-tool-results"
-											checked={field.value}
-											onCheckedChange={field.onChange}
-										/>
+										<Checkbox data-testid="rtk-field-apply-to-tool-results" checked={field.value} onCheckedChange={field.onChange} />
 									</FormControl>
 									<div className="space-y-1 leading-none">
 										<FormLabel>{t("rtk.applyToToolResultsLabel")}</FormLabel>
@@ -245,13 +240,9 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 							control={form.control}
 							name="apply_to_code_blocks"
 							render={({ field }) => (
-								<FormItem className="flex flex-row items-start space-x-3 space-y-0">
+								<FormItem className="flex flex-row items-start space-y-0 space-x-3">
 									<FormControl>
-										<Checkbox
-											data-testid="rtk-field-apply-to-code-blocks"
-											checked={field.value}
-											onCheckedChange={field.onChange}
-										/>
+										<Checkbox data-testid="rtk-field-apply-to-code-blocks" checked={field.value} onCheckedChange={field.onChange} />
 									</FormControl>
 									<div className="space-y-1 leading-none">
 										<FormLabel>{t("rtk.applyToCodeBlocksLabel")}</FormLabel>
@@ -264,13 +255,9 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 							control={form.control}
 							name="apply_to_assistant_messages"
 							render={({ field }) => (
-								<FormItem className="flex flex-row items-start space-x-3 space-y-0">
+								<FormItem className="flex flex-row items-start space-y-0 space-x-3">
 									<FormControl>
-										<Checkbox
-											data-testid="rtk-field-apply-to-assistant-messages"
-											checked={field.value}
-											onCheckedChange={field.onChange}
-										/>
+										<Checkbox data-testid="rtk-field-apply-to-assistant-messages" checked={field.value} onCheckedChange={field.onChange} />
 									</FormControl>
 									<div className="space-y-1 leading-none">
 										<FormLabel>{t("rtk.applyToAssistantMessagesLabel")}</FormLabel>
@@ -296,11 +283,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 										<FormDescription>{t("rtk.enableGroupingDescription")}</FormDescription>
 									</div>
 									<FormControl>
-										<Switch
-											data-testid="rtk-field-enable-grouping"
-											checked={field.value}
-											onCheckedChange={field.onChange}
-										/>
+										<Switch data-testid="rtk-field-enable-grouping" checked={field.value} onCheckedChange={field.onChange} />
 									</FormControl>
 								</FormItem>
 							)}
@@ -342,11 +325,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 										<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
 									</div>
 									<FormControl>
-										<Switch
-											data-testid="rtk-field-custom-filters-enabled"
-											checked={field.value}
-											onCheckedChange={field.onChange}
-										/>
+										<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
 									</FormControl>
 								</FormItem>
 							)}
@@ -361,11 +340,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 										<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
 									</div>
 									<FormControl>
-										<Switch
-											data-testid="rtk-field-trust-project-filters"
-											checked={field.value}
-											onCheckedChange={field.onChange}
-										/>
+										<Switch data-testid="rtk-field-trust-project-filters" checked={field.value} onCheckedChange={field.onChange} />
 									</FormControl>
 								</FormItem>
 							)}
@@ -373,7 +348,75 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 					</div>
 				</fieldset>
 
-				{/* Section 6: 原始输出 */}
+				{/* Section 6b: 语义渲染器 (Semantic Renderers) */}
+				<fieldset className="rounded-lg border p-4">
+					<legend className="text-sm font-semibold">{t("rtk.renderersSection")}</legend>
+					<div className="mt-2 space-y-4">
+						<FormField
+							control={form.control}
+							name="enable_renderers"
+							render={({ field }) => (
+								<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+									<FormControl>
+										<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
+									</FormControl>
+									<div className="space-y-1 leading-none">
+										<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
+										<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
+									</div>
+								</FormItem>
+							)}
+						/>
+						<FormField
+							control={form.control}
+							name="renderers"
+							render={({ field }) => {
+								const selected = Array.isArray(field.value) ? field.value : [];
+								const options = [
+									"git-diff",
+									"test-pytest",
+									"test-jest",
+									"test-vitest",
+									"test-go",
+									"build-eslint",
+									"terraform-plan",
+									"tofu-plan",
+									"aws",
+									"json-output",
+								];
+								return (
+									<FormItem>
+										<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
+										<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
+										<div className="mt-2 grid grid-cols-2 gap-2">
+											{options.map((opt) => {
+												const checked = selected.includes(opt);
+												return (
+													<label key={opt} className="flex items-center gap-2 text-sm" data-testid={`rtk-field-renderer-${opt}`}>
+														<Checkbox
+															checked={checked}
+															onCheckedChange={(v) => {
+																if (v) {
+																	field.onChange([...selected, opt]);
+																} else {
+																	field.onChange(selected.filter((s: string) => s !== opt));
+																}
+															}}
+														/>
+														<span>{opt}</span>
+													</label>
+												);
+											})}
+										</div>
+										<FormMessage />
+									</FormItem>
+								);
+							}}
+						/>
+					</div>
+				</fieldset>
+
+				{/* Section 7: 原始输出 */}
 				<fieldset className="rounded-lg border p-4">
 					<legend className="text-sm font-semibold">{t("rtk.rawOutputSection")}</legend>
 					<div className="mt-2 space-y-4">
@@ -423,7 +466,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 					</div>
 				</fieldset>
 
-				{/* Section 7: 高级 */}
+				{/* Section 8: 高级 */}
 				<fieldset className="rounded-lg border p-4">
 					<legend className="text-sm font-semibold">{t("rtk.advancedSection")}</legend>
 					<div className="mt-2 space-y-4">

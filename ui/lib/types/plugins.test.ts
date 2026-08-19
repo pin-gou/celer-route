@@ -87,7 +87,7 @@ describe("rtkConfigSchema (task 11.2)", () => {
 		expect(result.pipeline[1].id).toBe("llmlingua");
 	});
 
-	it("defaults pipeline to [{id:\"rtk\"}] when omitted", () => {
+	it('defaults pipeline to [{id:"rtk"}] when omitted', () => {
 		const result = parseConfig({});
 		expect(result.pipeline).toBeDefined();
 		expect(result.pipeline).toHaveLength(1);
@@ -130,21 +130,15 @@ describe("rtkConfigSchema (task 11.2)", () => {
 	});
 
 	it("rejects negative min_tokens_to_compress", () => {
-		expect(() =>
-			parseConfig({ min_tokens_to_compress: -1 }),
-		).toThrow();
+		expect(() => parseConfig({ min_tokens_to_compress: -1 })).toThrow();
 	});
 
 	it("rejects non-integer min_tokens_to_compress", () => {
-		expect(() =>
-			parseConfig({ min_tokens_to_compress: 3.14 }),
-		).toThrow();
+		expect(() => parseConfig({ min_tokens_to_compress: 3.14 })).toThrow();
 	});
 
 	it("rejects string min_tokens_to_compress", () => {
-		expect(() =>
-			parseConfig({ min_tokens_to_compress: "500" }),
-		).toThrow();
+		expect(() => parseConfig({ min_tokens_to_compress: "500" })).toThrow();
 	});
 
 	// -----------------------------------------------------------------------

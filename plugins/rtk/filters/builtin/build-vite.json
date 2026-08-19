@@ -1,0 +1,14 @@
+{
+  "name": "build-vite",
+  "command": "vite build",
+  "rules": [
+    {"type": "strip", "pattern": "^vite v[\\d.]+ building"},
+    {"type": "strip", "pattern": "^transforming \\(\\d+\\)"},
+    {"type": "strip", "pattern": "^✓ \\d+ modules transformed"},
+    {"type": "strip", "pattern": "^rendering chunks"}
+  ],
+  "head": 10,
+  "tail": 10,
+  "priority_patterns": ["error", "ERROR", "✗", "failed"],
+  "tests": [{"name":"keeps-built","input":"vite v5.0.0 building for production...\ntransforming (50)...\n✓ 50 modules transformed.\nrendering chunks...\ndist/index.html                  0.50 kB\ndist/assets/index.js           120.45 kB\n✓ built in 1.23s","expected":"dist/index.html                  0.50 kB\ndist/assets/index.js           120.45 kB\n✓ built in 1.23s"}]
+}

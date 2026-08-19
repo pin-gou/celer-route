@@ -1,0 +1,11 @@
+{
+  "name": "gh",
+  "command": "gh",
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 30,
+  "tail": 5,
+  "priority_patterns": ["error", "Error"],
+  "tests": [{"name":"passthrough","input":"Some CLI output","expected":"Some CLI output"}]
+}

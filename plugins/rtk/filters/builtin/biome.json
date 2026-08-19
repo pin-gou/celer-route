@@ -1,0 +1,11 @@
+{
+  "name": "biome",
+  "command": "biome",
+  "rules": [
+    {"type": "strip", "pattern": "^Checked \\d+ files? in"}
+  ],
+  "head": 10,
+  "tail": 5,
+  "priority_patterns": ["error", "warning", "lint/"],
+  "tests": [{"name":"keeps-findings","input":"Checked 42 files in 23ms.\n\nlint/format/noUnusedVariables  src/foo.ts:3:5\n  Suppressed lint reason: stub\n\nFound 1 error.","expected":"lint/format/noUnusedVariables  src/foo.ts:3:5\n\nFound 1 error."}]
+}

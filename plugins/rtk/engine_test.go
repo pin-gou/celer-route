@@ -115,7 +115,7 @@ func TestPipelineRunnerOrderedExecution(t *testing.T) {
 
 	runner := NewPipelineRunner(catalog)
 	input := "some tool output text to compress"
-	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
+	result, breakdown, _, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	// Verify engines were called in order
 	if len(executionOrder) != 3 {
@@ -153,7 +153,7 @@ func TestPipelineRunnerEmptyPipeline(t *testing.T) {
 	}
 
 	input := "some tool output"
-	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
+	result, breakdown, _, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	if result != input {
 		t.Errorf("empty pipeline should pass input through unchanged, got %q, want %q", result, input)
@@ -169,7 +169,7 @@ func TestPipelineRunnerNilPipeline(t *testing.T) {
 	runner := NewPipelineRunner(catalog)
 
 	input := "some tool output"
-	result, breakdown, _, _ := runner.Run(nil, nil, input, EngineConfig{})
+	result, breakdown, _, _, _ := runner.Run(nil, nil, input, EngineConfig{})
 
 	if result != input {
 		t.Errorf("nil pipeline should pass input through unchanged, got %q, want %q", result, input)
@@ -200,7 +200,7 @@ func TestPipelineRunnerUnknownEngineIdFailSoft(t *testing.T) {
 	input := "some tool output text to compress"
 
 	// Must not panic
-	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
+	result, breakdown, _, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	// engine-a and engine-c should have executed, engine-b skipped
 	if len(executionOrder) != 2 {
@@ -235,7 +235,7 @@ func TestPipelineRunnerAllUnknownIds(t *testing.T) {
 	}
 
 	input := "some tool output"
-	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
+	result, breakdown, _, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	if result != input {
 		t.Errorf("when all engines are unknown, input should pass through, got %q, want %q", result, input)
@@ -265,7 +265,7 @@ func TestPipelineRunnerEngineErrorDoesNotAbort(t *testing.T) {
 	input := "some tool output text to compress"
 
 	// Must not panic from the error engine
-	result, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
+	result, breakdown, _, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 	_ = result // result is not directly asserted in this test, only execution order
 
 	// All three engines should have been attempted
@@ -301,7 +301,7 @@ func TestPipelineRunnerInputPassThrough(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			input := "exact text to preserve"
-			result, _, _, _ := runner.Run(nil, tt.pipeline, input, EngineConfig{})
+			result, _, _, _, _ := runner.Run(nil, tt.pipeline, input, EngineConfig{})
 			if result != input {
 				t.Errorf("result = %q, want %q (input passed through)", result, input)
 			}
@@ -324,7 +324,7 @@ func TestEngineBreakdownAccumulation(t *testing.T) {
 
 	runner := NewPipelineRunner(catalog)
 	input := "some tool output text to compress"
-	_, breakdown, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
+	_, breakdown, _, _, _ := runner.Run(nil, pipeline, input, EngineConfig{})
 
 	if len(breakdown) != 2 {
 		t.Fatalf("expected 2 breakdown entries, got %d", len(breakdown))

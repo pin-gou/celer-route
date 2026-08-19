@@ -1,0 +1,11 @@
+{
+  "name": "shell-du",
+  "command": "du",
+  "rules": [
+    {"type": "strip", "pattern": "^\\d+\\s+/(\\s*\\.)?$"}
+  ],
+  "head": 30,
+  "tail": 0,
+  "priority_patterns": [],
+  "tests": [{"name":"keeps-size-list","input":"1.2M\t./node_modules\n500K\t./dist\n4.0K\t./src","expected":"1.2M\t./node_modules\n500K\t./dist\n4.0K\t./src"}]
+}

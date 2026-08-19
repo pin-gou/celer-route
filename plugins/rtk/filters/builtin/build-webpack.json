@@ -1,0 +1,14 @@
+{
+  "name": "build-webpack",
+  "command": "webpack",
+  "rules": [
+    {"type": "strip", "pattern": "^Hash:\\s+\\S+"},
+    {"type": "strip", "pattern": "^Time:\\s+\\S+"},
+    {"type": "strip", "pattern": "^Built at:"},
+    {"type": "strip", "pattern": "^WARNING in"}
+  ],
+  "head": 10,
+  "tail": 10,
+  "priority_patterns": ["ERROR in", "error", "failed"],
+  "tests": [{"name":"keeps-asset-list","input":"Hash: abc123\nTime: 1234ms\nBuilt at: 2024-01-01\nasset main.js 120 KiB [emitted]\nasset main.css 5 KiB [emitted]\nEntrypoint main = main.js\nwebpack compiled successfully","expected":"asset main.js 120 KiB [emitted]\nasset main.css 5 KiB [emitted]\nEntrypoint main = main.js\nwebpack compiled successfully"}]
+}
