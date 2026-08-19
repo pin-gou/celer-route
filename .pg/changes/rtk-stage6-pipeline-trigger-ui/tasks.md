@@ -112,12 +112,12 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 9.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 9.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 9.3 启动服务（如需）
-- [ ] 9.4 验证 V-plugins-1：CompressionEngine 接口注册与堆叠行为（`go test ./plugins/rtk/... -run TestEngine` 通过：EngineCatalog 含 id="rtk"；Pipeline runner 顺序执行累加 engineBreakdown；未知 id warn+skip）
-- [ ] 9.5 验证 V-plugins-2：PreLLMHook 主动触发 token 阈值跳过（`go test ./plugins/rtk/... -run TestHooksMinTokens` 通过：MinTokens=0 全压；MinTokens=1000000 + req tokens=10 跳过压缩输出字节与输入一致）
-- [ ] 9.6 验证 V-plugins-3：Config 默认值零值安全（`go test ./plugins/rtk/... -run TestConfigDefaults` 通过：applyConfigDefaults 不 panic；空 Pipeline 自动补 `[{id:"rtk"}]`）
+- [x] 9.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 9.2 执行测试（runner 通过 modules 注入命令）
+- [x] 9.3 启动服务（如需）
+- [x] 9.4 验证 V-plugins-1：CompressionEngine 接口注册与堆叠行为（`go test ./plugins/rtk/... -run TestEngine` 通过：EngineCatalog 含 id="rtk"；Pipeline runner 顺序执行累加 engineBreakdown；未知 id warn+skip）
+- [x] 9.5 验证 V-plugins-2：PreLLMHook 主动触发 token 阈值跳过（`go test ./plugins/rtk/... -run TestHooksMinTokens` 通过：MinTokens=0 全压；MinTokens=1000000 + req tokens=10 跳过压缩输出字节与输入一致）
+- [x] 9.6 验证 V-plugins-3：Config 默认值零值安全（`go test ./plugins/rtk/... -run TestConfigDefaults` 通过：applyConfigDefaults 不 panic；空 Pipeline 自动补 `[{id:"rtk"}]`）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
