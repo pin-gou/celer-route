@@ -20,6 +20,10 @@ interface ChartCardProps {
 	secondaryTotal?: ReactNode;
 	secondaryTotalLabel?: string;
 	secondaryTotalTooltip?: ReactNode;
+	// Optional third labeled total (e.g. grand total alongside input/output).
+	tertiaryTotal?: ReactNode;
+	tertiaryTotalLabel?: string;
+	tertiaryTotalTooltip?: ReactNode;
 }
 
 function TotalChip({
@@ -69,6 +73,9 @@ function Header({
 	secondaryTotal,
 	secondaryTotalLabel,
 	secondaryTotalTooltip,
+	tertiaryTotal,
+	tertiaryTotalLabel,
+	tertiaryTotalTooltip,
 	testId,
 }: {
 	title: string;
@@ -80,10 +87,14 @@ function Header({
 	secondaryTotal?: ReactNode;
 	secondaryTotalLabel?: string;
 	secondaryTotalTooltip?: ReactNode;
+	tertiaryTotal?: ReactNode;
+	tertiaryTotalLabel?: string;
+	tertiaryTotalTooltip?: ReactNode;
 	testId?: string;
 }) {
 	const hasTotal = total !== undefined && total !== null;
 	const hasSecondaryTotal = secondaryTotal !== undefined && secondaryTotal !== null;
+	const hasTertiaryTotal = tertiaryTotal !== undefined && tertiaryTotal !== null;
 	const hasActionRow = hasTotal || controls;
 	return (
 		<div className="shrink-0 space-y-2">
@@ -101,6 +112,14 @@ function Header({
 									totalLabel={secondaryTotalLabel}
 									totalTooltip={secondaryTotalTooltip}
 									testId={testId ? `${testId}-secondary` : undefined}
+								/>
+							)}
+							{hasTertiaryTotal && (
+								<TotalChip
+									total={tertiaryTotal}
+									totalLabel={tertiaryTotalLabel}
+									totalTooltip={tertiaryTotalTooltip}
+									testId={testId ? `${testId}-tertiary` : undefined}
 								/>
 							)}
 						</div>
@@ -129,6 +148,9 @@ export function ChartCard({
 	secondaryTotal,
 	secondaryTotalLabel,
 	secondaryTotalTooltip,
+	tertiaryTotal,
+	tertiaryTotalLabel,
+	tertiaryTotalTooltip,
 }: ChartCardProps) {
 	if (loading) {
 		return (
@@ -143,6 +165,9 @@ export function ChartCard({
 					secondaryTotal={secondaryTotal}
 					secondaryTotalLabel={secondaryTotalLabel}
 					secondaryTotalTooltip={secondaryTotalTooltip}
+					tertiaryTotal={tertiaryTotal}
+					tertiaryTotalLabel={tertiaryTotalLabel}
+					tertiaryTotalTooltip={tertiaryTotalTooltip}
 					testId={testId}
 				/>
 				<div className="grow" data-testid={testId ? `${testId}-chart-skeleton` : undefined}>
@@ -164,6 +189,9 @@ export function ChartCard({
 				secondaryTotal={secondaryTotal}
 				secondaryTotalLabel={secondaryTotalLabel}
 				secondaryTotalTooltip={secondaryTotalTooltip}
+				tertiaryTotal={tertiaryTotal}
+				tertiaryTotalLabel={tertiaryTotalLabel}
+				tertiaryTotalTooltip={tertiaryTotalTooltip}
 				testId={testId}
 			/>
 			<div className="grow">{children}</div>

@@ -118,6 +118,11 @@ function OverviewTabImpl({
 		return tokenData.buckets.reduce((sum, b) => sum + (b.completion_tokens ?? 0), 0);
 	}, [tokenData]);
 
+	const tokenTotal = useMemo(() => {
+		if (!tokenData?.buckets) return null;
+		return tokenData.buckets.reduce((sum, b) => sum + (b.total_tokens ?? 0), 0);
+	}, [tokenData]);
+
 	const modelUsageTotal = useMemo(() => {
 		if (!modelData?.buckets) return null;
 		if (usageModel === "all") {
@@ -213,6 +218,11 @@ function OverviewTabImpl({
 						) : undefined
 					}
 					secondaryTotalTooltip={tokenOutputTotal !== null ? formatTokensAdaptive(tokenOutputTotal) : undefined}
+					tertiaryTotalLabel={t("charts.total")}
+					tertiaryTotal={
+						tokenTotal !== null ? <span className="truncate whitespace-nowrap">{formatTokensAdaptive(tokenTotal)}</span> : undefined
+					}
+					tertiaryTotalTooltip={tokenTotal !== null ? formatTokensAdaptive(tokenTotal) : undefined}
 					legend={
 						<div className={CHART_HEADER_LEGEND_CLASS}>
 							<span className="flex items-center gap-1">
