@@ -50264,6 +50264,105 @@
           ]
         }
       ]
+    },
+    {
+      "name": "48. Keyless Opencode Chat Completion (no API key)",
+      "description": "Pins the wire-visible behaviour of the bare `opencode` (free/no-auth OpenCode) provider: a chat completion must reach the upstream without any configured API key. Before the fix, selectKeyFromProviderForModelWithPool (core/bifrost.go) failed fast with `no keys found for provider: opencode and model: <m>` whenever the keyless provider had zero configured keys, so any request to /v1/chat/completions — and the provider page's \"Test\" button (POST /api/providers/{provider}/test-model[s]) which runs the same ChatCompletionRequest path — returned the key-selection error before ever reaching the upstream. After the fix the keyless provider builds an empty key pool (the same path SkipKeySelection takes: keyProvider stays nil, zero Key is used) and the request proceeds unauthenticated. Cases here pin (1) the keyless chat completion happy path and (2) its streaming variant. Go-level tests in core/bifrost_test.go (TestSelectKeyFromProviderForModel_KeylessProviderNoKeys) cover the selection logic in isolation.",
+      "item": [
+        {
+          "name": "keyless opencode chat without API key (opencode/hy3-free)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 412, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('keyless opencode chat - no key-selection failure', function () {",
+                  "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('no keys found for provider: opencode');",
+                  "});",
+                  "pm.test('keyless opencode chat - wire intact', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.choices && j.choices[0] && j.choices[0].message, 'expected a chat completion response').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"opencode/hy3-free\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Hello\" }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "keyless opencode chat stream without API key (opencode/hy3-free)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 412, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('keyless opencode stream - no key-selection failure', function () {",
+                  "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('no keys found for provider: opencode');",
+                  "});",
+                  "pm.test('keyless opencode stream - SSE', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var ct = pm.response.headers.get('content-type') || '';",
+                  "  pm.expect(ct.toLowerCase(), 'expected SSE, got ' + ct).to.include('event-stream');",
+                  "  pm.expect(pm.response.text(), 'empty stream').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"opencode/hy3-free\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Hello\" }\n  ],\n  \"max_tokens\": 16,\n  \"stream\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

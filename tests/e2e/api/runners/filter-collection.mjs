@@ -75,6 +75,7 @@ const PROVIDER_KEYWORDS = {
   azure: ["azure", "deployments"],
   passthrough: ["_passthrough"],
   openrouter: ["openrouter"],
+  opencode: ["opencode"],
   replicate: ["replicate", "/replicate", "flux", "black-forest-labs"],
 };
 

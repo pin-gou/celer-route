@@ -42,6 +42,8 @@ export function useProviders2Data() {
 				keys_health_status: p.keys_health_status ?? "unknown",
 				keys_enabled: p.keys_enabled ?? true,
 				custom_provider_config: p.custom_provider_config,
+				is_key_less: p.is_key_less === true,
+				status: p.status,
 			};
 			groups.get(family)!.push(cardProvider);
 		}

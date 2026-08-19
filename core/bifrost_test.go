@@ -1132,6 +1132,55 @@ func TestSelectKeyFromProviderForModel_SessionStickinessNoRotation(t *testing.T)
 	}
 }
 
+// TestSelectKeyFromProviderForModel_KeylessProviderNoKeys verifies that keyless
+// providers (e.g. bare `opencode`, the free/no-auth OpenCode tier) with zero
+// configured keys — which is by design — build an empty key pool instead of
+// failing with "no keys found". This is the path hit by the provider page's
+// "Test" button and by any chat completion routed to a keyless provider; the
+// empty pool flows through requestWorker as the keyless path (keyProvider stays
+// nil, zero Key is used).
+func TestSelectKeyFromProviderForModel_KeylessProviderNoKeys(t *testing.T) {
+	account := NewMockAccount()
+	account.AddProvider(schemas.Opencode, 5, 1000)
+	account.SetKeysForProvider(schemas.Opencode, []schemas.Key{})
+
+	ctx := context.Background()
+	bifrost, err := Init(ctx, schemas.BifrostConfig{
+		Account: account,
+		Logger:  NewDefaultLogger(schemas.LogLevelError),
+	})
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	bfCtx := schemas.NewBifrostContext(ctx, schemas.NoDeadline)
+
+	t.Run("keyless provider with no keys returns empty pool", func(t *testing.T) {
+		pool, canRotate, err := bifrost.selectKeyFromProviderForModelWithPool(bfCtx, schemas.ChatCompletionRequest, schemas.Opencode, "hy3-free", schemas.Opencode)
+		if err != nil {
+			t.Fatalf("keyless provider must not error on key selection: %v", err)
+		}
+		if canRotate {
+			t.Error("expected canRotate=false for keyless empty pool")
+		}
+		if len(pool) != 0 {
+			t.Errorf("expected empty pool, got %v", pool)
+		}
+	})
+
+	t.Run("non-keyless provider with no keys still errors", func(t *testing.T) {
+		account.SetKeysForProvider(schemas.OpenAI, []schemas.Key{})
+		_, _, err := bifrost.selectKeyFromProviderForModelWithPool(bfCtx, schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", schemas.OpenAI)
+		if err == nil {
+			t.Fatal("expected error for non-keyless provider with no keys")
+		}
+		if !strings.Contains(err.Error(), "no keys found for provider") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+// TestSelectKeyFromProviderForModel_BlacklistedModels tests blacklist filtering
+// of keys during pool building.
 func TestSelectKeyFromProviderForModel_BlacklistedModels(t *testing.T) {
 	account := NewMockAccount()
 	account.AddProvider(schemas.OpenAI, 5, 1000)

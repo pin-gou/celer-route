@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
+import { getProviderLabel } from "@/lib/constants/logs";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -16,6 +17,12 @@ export interface ProviderCardProvider {
 	keys_health_status: string;
 	keys_enabled: boolean;
 	custom_provider_config?: { base_provider_type?: string } | null;
+	// True when the provider is inherently keyless (no API key needed) — the
+	// enable/disable toggle and key-derived health status do not apply.
+	is_key_less?: boolean;
+	// Operational status ("unknown" | "success" | "list_models_failed").
+	// Drives the degraded/health signal for keyless providers.
+	status?: string;
 }
 
 export interface ProviderCardProps {
@@ -29,7 +36,13 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 	const navigate = useNavigate();
 	const { t } = useTranslation("providers");
 	const isCustom = !!provider.custom_provider_config;
-	const healthStatus = provider.keys_health_status;
+	const healthStatus = provider.is_key_less
+		? provider.provider_status === "error"
+			? "unknown"
+			: provider.status === "list_models_failed"
+				? "degraded"
+				: "healthy"
+		: (provider.keys_health_status ?? "unknown");
 
 	const handleCardClick = () => {
 		navigate({ to: "/workspace/providers/$id", params: { id: provider.name } });
@@ -68,7 +81,7 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 				</div>
 				<div className="flex-1">
 					<div className="flex items-center gap-2">
-						<span className="text-sm font-medium">{provider.name}</span>
+						<span className="text-sm font-medium">{getProviderLabel(provider.name)}</span>
 						{isCustom && (
 							<Badge variant="secondary" className="text-muted-foreground px-1.5 py-0.5 text-[10px] font-bold">
 								{t("providers2.card.custom")}
@@ -128,13 +141,15 @@ export function ProviderCard({ provider, onToggle, onQuickTest, onDelete }: Prov
 						</TooltipTrigger>
 						<TooltipContent>{t("providers2.card.deleteTooltip")}</TooltipContent>
 					</Tooltip>
-					<Switch
-						data-testid="providers2-card-toggle"
-						checked={provider.keys_enabled}
-						onCheckedChange={() => onToggle()}
-						onClick={(e) => e.stopPropagation()}
-						className="h-5 w-9"
-					/>
+					{!provider.is_key_less && (
+						<Switch
+							data-testid="providers2-card-toggle"
+							checked={provider.keys_enabled}
+							onCheckedChange={() => onToggle()}
+							onClick={(e) => e.stopPropagation()}
+							className="h-5 w-9"
+						/>
+					)}
 				</div>
 			</div>
 		</div>

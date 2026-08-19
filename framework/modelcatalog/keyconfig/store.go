@@ -288,8 +288,10 @@ func (s *Store) buildState(provider schemas.ModelProvider, keys []schemas.Key) *
 	)
 
 	// Keyless non-standard providers (custom providers configured without keys)
-	// are unrestricted — there's no allow-list to derive from.
-	if len(keys) == 0 && !bifrost.IsStandardProvider(provider) {
+	// are unrestricted — there's no allow-list to derive from. Built-in keyless
+	// standard providers (e.g. bare `opencode`, the free tier) are the same:
+	// zero keys is by design, so every discovered model is callable.
+	if len(keys) == 0 && (!bifrost.IsStandardProvider(provider) || schemas.IsKeylessProvider(provider)) {
 		allModelsAllowed = true
 	}
 

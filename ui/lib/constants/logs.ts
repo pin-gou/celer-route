@@ -123,7 +123,7 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	vertex: "Vertex AI",
 	mistral: "Mistral AI",
 	ollama: "Ollama",
-	opencode: "OpenCode",
+	opencode: "OpenCode Free",
 	"opencode-go": "OpenCode Go",
 	"opencode-zen": "OpenCode Zen",
 	groq: "Groq",

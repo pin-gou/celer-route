@@ -58,7 +58,7 @@ describe("ProviderCard", () => {
 	it("should render provider name", () => {
 		render(<ProviderCard provider={mockProvider} onToggle={mockOnToggle} onQuickTest={mockOnQuickTest} onDelete={mockOnDelete} />);
 
-		expect(screen.getByText("openai")).not.toBeNull();
+		expect(screen.getByText("OpenAI")).not.toBeNull();
 	});
 
 	it("should render health badge with correct status", () => {

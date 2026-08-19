@@ -8568,6 +8568,15 @@ func (bifrost *Bifrost) selectKeyFromProviderForModelWithPool(ctx *schemas.Bifro
 		return nil, false, err
 	}
 	if len(keys) == 0 {
+		// Keyless providers (see schemas.IsKeylessProvider, e.g. bare `opencode`,
+		// the free/no-auth OpenCode tier) have no configured keys by design —
+		// return an empty pool so the request proceeds unauthenticated instead of
+		// failing with "no keys found". The empty pool flows through
+		// requestWorker as the keyless path (keyProvider stays nil, zero Key is
+		// used), mirroring the SkipKeySelection handling above.
+		if schemas.IsKeylessProvider(providerKey) {
+			return []schemas.Key{}, false, nil
+		}
 		return nil, false, fmt.Errorf("no keys found for provider: %v and model: %s", providerKey, model)
 	}
 
