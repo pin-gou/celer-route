@@ -67,9 +67,9 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 编写 `plugins/rtk/engine_test.go`：CompressionEngine 接口契约 + EngineCatalog 注册 + Pipeline runner 顺序执行 + 未知 id fail-soft（红）
-- [ ] 6.2 编写 `plugins/rtk/hooks_test.go` 增量：MinTokensToCompress 阈值边界（0=全压、低阈值跳过、高阈值压缩）（红）
-- [ ] 6.3 编写 `plugins/rtk/config_test.go` 增量：Config 新字段默认值零值安全（Pipeline 空自动补 `[{id:"rtk"}]`，MinTokensToCompress=0 不跳过）
+- [x] 6.1 编写 `plugins/rtk/engine_test.go`：CompressionEngine 接口契约 + EngineCatalog 注册 + Pipeline runner 顺序执行 + 未知 id fail-soft（红）
+- [x] 6.2 编写 `plugins/rtk/hooks_test.go` 增量：MinTokensToCompress 阈值边界（0=全压、低阈值跳过、高阈值压缩）（红）
+- [x] 6.3 编写 `plugins/rtk/config_test.go` 增量：Config 新字段默认值零值安全（Pipeline 空自动补 `[{id:"rtk"}]`，MinTokensToCompress=0 不跳过）
 
 ## 7. dev.plugins:dev - 实现开发
 
