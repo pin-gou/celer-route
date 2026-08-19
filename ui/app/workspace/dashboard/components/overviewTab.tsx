@@ -108,9 +108,14 @@ function OverviewTabImpl({
 		return histogramData.buckets.reduce((sum, b) => sum + (b.count ?? 0), 0);
 	}, [histogramData]);
 
-	const tokenTotal = useMemo(() => {
+	const tokenInputTotal = useMemo(() => {
 		if (!tokenData?.buckets) return null;
-		return tokenData.buckets.reduce((sum, b) => sum + (b.total_tokens ?? 0), 0);
+		return tokenData.buckets.reduce((sum, b) => sum + (b.prompt_tokens ?? 0), 0);
+	}, [tokenData]);
+
+	const tokenOutputTotal = useMemo(() => {
+		if (!tokenData?.buckets) return null;
+		return tokenData.buckets.reduce((sum, b) => sum + (b.completion_tokens ?? 0), 0);
 	}, [tokenData]);
 
 	const modelUsageTotal = useMemo(() => {
@@ -194,9 +199,20 @@ function OverviewTabImpl({
 					title={t("charts.tokenUsage")}
 					loading={loadingTokens}
 					testId="chart-token-usage"
-					totalLabel={t("charts.total")}
-					total={tokenTotal !== null ? <span className="truncate whitespace-nowrap">{formatTokensAdaptive(tokenTotal)}</span> : undefined}
-					totalTooltip={tokenTotal !== null ? formatTokensAdaptive(tokenTotal) : undefined}
+					totalLabel={t("charts.input")}
+					total={
+						tokenInputTotal !== null ? (
+							<span className="truncate whitespace-nowrap">{formatTokensAdaptive(tokenInputTotal)}</span>
+						) : undefined
+					}
+					totalTooltip={tokenInputTotal !== null ? formatTokensAdaptive(tokenInputTotal) : undefined}
+					secondaryTotalLabel={t("charts.output")}
+					secondaryTotal={
+						tokenOutputTotal !== null ? (
+							<span className="truncate whitespace-nowrap">{formatTokensAdaptive(tokenOutputTotal)}</span>
+						) : undefined
+					}
+					secondaryTotalTooltip={tokenOutputTotal !== null ? formatTokensAdaptive(tokenOutputTotal) : undefined}
 					legend={
 						<div className={CHART_HEADER_LEGEND_CLASS}>
 							<span className="flex items-center gap-1">
