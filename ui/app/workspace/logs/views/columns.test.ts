@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LogEntry } from "@/lib/types/logs";
 
-import { getMessage } from "./columns";
+import { getMessage, truncateByWidth } from "./columns";
 
 describe("getMessage", () => {
 	it("returns EI realtime text from input history", () => {
@@ -149,5 +149,46 @@ describe("getMessage", () => {
 		} as unknown as LogEntry;
 
 		expect(getMessage(log)).toBe("latest responses prompt");
+	});
+});
+
+describe("truncateByWidth", () => {
+	it("does not truncate text within limit", () => {
+		expect(truncateByWidth("你好世界", 25)).toBe("你好世界");
+	});
+
+	it("truncates pure Chinese text exceeding 25 chars", () => {
+		expect(truncateByWidth("一二三四五六七八九十甲乙丙丁戊己庚辛壬癸天地玄黄宇宙", 25)).toBe(
+			"一二三四五六七八九十甲乙丙丁戊己庚辛壬癸天地玄黄宇...",
+		);
+	});
+
+	it("does not truncate exactly 25 Chinese chars", () => {
+		expect(truncateByWidth("一二三四五六七八九十甲乙丙丁戊己庚辛壬癸天地玄黄宇", 25)).toBe(
+			"一二三四五六七八九十甲乙丙丁戊己庚辛壬癸天地玄黄宇",
+		);
+	});
+
+	it("does not truncate 50 English chars (50 × 0.5 = 25)", () => {
+		const text = "a".repeat(50);
+		expect(truncateByWidth(text, 25)).toBe(text);
+	});
+
+	it("truncates 51 English chars (51 × 0.5 = 25.5 > 25)", () => {
+		expect(truncateByWidth("a".repeat(51), 25)).toBe("a".repeat(50) + "...");
+	});
+
+	it("does not truncate 10 Chinese + 30 English (10 × 1 + 30 × 0.5 = 25)", () => {
+		const text = "一二三四五六七八九十" + "e".repeat(30);
+		expect(truncateByWidth(text, 25)).toBe(text);
+	});
+
+	it("truncates 10 Chinese + 32 English (10 × 1 + 32 × 0.5 = 26 > 25)", () => {
+		const text = "一二三四五六七八九十" + "e".repeat(32);
+		expect(truncateByWidth(text, 25)).toBe("一二三四五六七八九十" + "e".repeat(30) + "...");
+	});
+
+	it("returns empty string for empty input", () => {
+		expect(truncateByWidth("", 25)).toBe("");
 	});
 });

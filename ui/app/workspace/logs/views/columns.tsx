@@ -196,11 +196,30 @@ export function getMessage(log?: LogEntry) {
 	return "";
 }
 
+export function truncateByWidth(text: string | undefined, maxChineseChars: number): string {
+	if (!text) return "";
+	let width = 0;
+	for (let i = 0; i < text.length; i++) {
+		const charWidth = text.charCodeAt(i) < 128 ? 0.5 : 1;
+		if (width + charWidth > maxChineseChars) {
+			return text.slice(0, i) + "...";
+		}
+		width += charWidth;
+	}
+	return text;
+}
+
 export function LogMessageCell({ log, contentClassName = "max-w-full" }: { log: LogEntry; contentClassName?: string }) {
 	const { t } = useTranslation("logs");
 	const input = getMessage(log);
 	const isLargePayload = log.is_large_payload_request || log.is_large_payload_response;
 	const realtimeMessages = log.object === "realtime.turn" ? getRealtimeTurnMessages(log) : null;
+
+	const truncatedInput = truncateByWidth(input, 25);
+	const truncatedTool = truncateByWidth(realtimeMessages?.tool, 25);
+	const truncatedUser = truncateByWidth(realtimeMessages?.user, 25);
+	const truncatedAssistantToolCall = truncateByWidth(realtimeMessages?.assistantToolCall, 25);
+	const truncatedAssistant = truncateByWidth(realtimeMessages?.assistant, 25);
 
 	return (
 		<div className="flex items-center gap-1.5">
@@ -214,19 +233,17 @@ export function LogMessageCell({ log, contentClassName = "max-w-full" }: { log: 
 			)}
 			{realtimeMessages &&
 			(realtimeMessages.tool || realtimeMessages.user || realtimeMessages.assistantToolCall || realtimeMessages.assistant) ? (
-				<div className={cn(contentClassName, "font-mono text-sm font-normal leading-5")}>
-					{realtimeMessages.tool ? <div className="truncate">{t("columns.toolResult", { text: realtimeMessages.tool })}</div> : null}
-					{realtimeMessages.user ? <div className="truncate">{t("columns.user", { text: realtimeMessages.user })}</div> : null}
+				<div className={cn(contentClassName, "font-mono text-sm font-normal leading-5")} title={input}>
+					{realtimeMessages.tool ? <div className="truncate">{t("columns.toolResult", { text: truncatedTool })}</div> : null}
+					{realtimeMessages.user ? <div className="truncate">{t("columns.user", { text: truncatedUser })}</div> : null}
 					{realtimeMessages.assistantToolCall ? (
-						<div className="truncate">{t("columns.assistantToolCall", { text: realtimeMessages.assistantToolCall })}</div>
+						<div className="truncate">{t("columns.assistantToolCall", { text: truncatedAssistantToolCall })}</div>
 					) : null}
-					{realtimeMessages.assistant ? (
-						<div className="truncate">{t("columns.assistant", { text: realtimeMessages.assistant })}</div>
-					) : null}
+					{realtimeMessages.assistant ? <div className="truncate">{t("columns.assistant", { text: truncatedAssistant })}</div> : null}
 				</div>
 			) : (
-				<div className={cn(contentClassName, "truncate font-mono text-[12px] font-normal")}>
-					{input || (isLargePayload ? t("columns.largePayloadBoth") : "-")}
+				<div className={cn(contentClassName, "truncate font-mono text-[12px] font-normal")} title={input}>
+					{truncatedInput || (isLargePayload ? t("columns.largePayloadBoth") : "-")}
 				</div>
 			)}
 		</div>
