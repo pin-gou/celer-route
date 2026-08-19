@@ -173,10 +173,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 13.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 13.2 review agent 对 git diff feat/pg/rtk-stage6-pipeline-trigger-ui 做静态审查
-- [ ] 13.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 13.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 13.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 13.2 review agent 对 git diff feat/pg/rtk-stage6-pipeline-trigger-ui 做静态审查
+- [x] 13.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 13.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 ## 14. dev.ui:verify - dev 集成验证
 
