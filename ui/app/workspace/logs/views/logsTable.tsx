@@ -8,7 +8,7 @@ import {
 	usePinOffsets,
 } from "@/components/table";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Table, TableBody } from "@/components/ui/table";
 import { Pagination } from "@/components/ui/pagination";
 import { useTablePageSizePreference } from "@/lib/hooks/useTablePageSizePreference";
 import type { DisplayLogEntry, LogEntry, Pagination as PaginationType } from "@/lib/types/logs";
@@ -18,6 +18,27 @@ import { ColumnDef, flexRender, getCoreRowModel, SortingState, useReactTable } f
 import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+// Local <td>/<tr> for the logs table. Skip the global <TableCell>'s default
+// `data-slot="table-cell"` and the `[role=checkbox]` hooks (this table has no
+// checkbox column), and skip `min-width`/`max-width` in style since
+// tanstack-table already derives the column width from `size`.
+function LogTableCell({ className, style, ...props }: React.ComponentProps<"td">) {
+	return (
+		<td
+			className={cn(
+				"px-4 py-1.5 align-middle whitespace-nowrap group-hover/table-row:bg-[#f7f7f7] dark:group-hover/table-row:bg-[#232327]",
+				className,
+			)}
+			style={style}
+			{...props}
+		/>
+	);
+}
+
+function LogTableRow({ className, ...props }: React.ComponentProps<"tr">) {
+	return <tr className={cn("hover:bg-muted/50 dark:hover:bg-muted/75 border-b transition-colors", className)} {...props} />;
+}
 
 interface DataTableProps {
 	columns: ColumnDef<LogEntry>[];
@@ -171,8 +192,8 @@ export function LogsDataTable({
 						))}
 					</thead>
 					<TableBody>
-						<TableRow className="hover:bg-transparent">
-							<TableCell colSpan={columns.length} className="h-12 text-center">
+						<LogTableRow className="hover:bg-transparent">
+							<LogTableCell colSpan={columns.length} className="h-12 text-center">
 								<div className="text-muted-foreground flex items-center justify-center gap-2 text-sm">
 									{loading ? (
 										<>
@@ -197,14 +218,14 @@ export function LogsDataTable({
 										</Button>
 									)}
 								</div>
-							</TableCell>
-						</TableRow>
+							</LogTableCell>
+						</LogTableRow>
 						{table.getRowModel().rows.length ? (
 							table.getRowModel().rows.map((row) => (
-								<TableRow
+								<LogTableRow
 									key={row.id}
 									className={cn(
-										"hover:bg-muted/50 group/table-row min-h-[40px] cursor-pointer",
+										"group/table-row min-h-[40px] cursor-pointer",
 										(row.original as DisplayLogEntry).__chainChild && "bg-muted/30 border-l-2 border-l-zinc-300 dark:border-l-zinc-600",
 										(row.original as DisplayLogEntry).__processing && "bg-blue-50/30 dark:bg-blue-950/20 animate-pulse",
 									)}
@@ -213,35 +234,31 @@ export function LogsDataTable({
 										const pinned = cell.column.getIsPinned();
 										const size = cell.column.getSize();
 										return (
-											<TableCell
+											<LogTableCell
 												onClick={() => onRowClick?.(row.original, cell.column.id)}
 												key={cell.id}
 												style={{
 													width: size,
-													minWidth: size,
-													maxWidth: size,
 													...buildPinStyle(cell.column, pinOffsets),
 												}}
 												className={cn(
-													"py-1.5 align-middle",
 													pinned && "bg-card",
 													cell.column.id === lastLeftPinId && PIN_SHADOW_LEFT,
 													cell.column.id === firstRightPinId && PIN_SHADOW_RIGHT,
-													"group-hover/table-row:bg-[#f7f7f7] dark:group-hover/table-row:bg-[#232327]",
 												)}
 											>
 												{flexRender(cell.column.columnDef.cell, cell.getContext())}
-											</TableCell>
+											</LogTableCell>
 										);
 									})}
-								</TableRow>
+								</LogTableRow>
 							))
 						) : loading ? null : (
-							<TableRow>
-								<TableCell colSpan={columns.length} className="h-24 text-center">
+							<LogTableRow>
+								<LogTableCell colSpan={columns.length} className="h-24 text-center">
 									{t("table.noResults")}
-								</TableCell>
-							</TableRow>
+								</LogTableCell>
+							</LogTableRow>
 						)}
 					</TableBody>
 				</Table>
