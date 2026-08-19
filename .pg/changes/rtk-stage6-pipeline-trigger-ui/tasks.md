@@ -16,8 +16,8 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 2.1 修改 `transports/config.schema.json` rtk 块（第 3130-3225 行附近），新增 `pipeline`（array of {id, config}，默认 `[{id:"rtk"}]`）与 `min_tokens_to_compress`（integer，默认 0）两个字段定义，附 description
-- [ ] 2.2 验证现有 plugin handlers 无需修改即可透传（plugins.go 处理 config 为 json.RawMessage）
+- [x] 2.1 修改 `transports/config.schema.json` rtk 块（第 3130-3225 行附近），新增 `pipeline`（array of {id, config}，默认 `[{id:"rtk"}]`）与 `min_tokens_to_compress`（integer，默认 0）两个字段定义，附 description
+- [x] 2.2 验证现有 plugin handlers 无需修改即可透传（plugins.go 处理 config 为 json.RawMessage）
 
 ## 3. dev.transports:review - 静态代码审查
 
