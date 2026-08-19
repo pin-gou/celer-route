@@ -76,6 +76,6 @@
      stage=final (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 收集所有 stage 的 Gate Assessment
-- [ ] 6.2 检查跨 stage 依赖项
-- [ ] 6.3 输出 Final Gate Assessment
+- [x] 6.1 收集所有 stage 的 Gate Assessment
+- [x] 6.2 检查跨 stage 依赖项
+- [x] 6.3 输出 Final Gate Assessment
