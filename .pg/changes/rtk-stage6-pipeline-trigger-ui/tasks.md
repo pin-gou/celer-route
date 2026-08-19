@@ -185,11 +185,11 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 14.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 14.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 14.3 启动服务（如需）
-- [ ] 14.4 验证 V-ui-1：RTK fragment 渲染与字段出现（Playwright e2e `tests/e2e/features/plugins/rtk-config.spec.ts` 通过：进入 `/workspace/plugins` → 选中 rtk → fragment 渲染字段；enabled 切换 submit → API 返回 200）
-- [ ] 14.5 验证 V-ui-2：i18n 中英文渲染（Playwright e2e 切换 zh-CN 后断言字段标签中文正确显示）
+- [x] 14.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 14.2 执行测试（runner 通过 modules 注入命令）
+- [x] 14.3 启动服务（如需）
+- [x] 14.4 验证 V-ui-1：RTK fragment 渲染与字段出现（Playwright e2e `tests/e2e/features/plugins/rtk-config.spec.ts` 通过：进入 `/workspace/plugins` → 选中 rtk → fragment 渲染字段；enabled 切换 submit → API 返回 200）
+- [x] 14.5 验证 V-ui-2：i18n 中英文渲染（Playwright e2e 切换 zh-CN 后断言字段标签中文正确显示）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
