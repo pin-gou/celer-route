@@ -198,10 +198,11 @@ export function getMessage(log?: LogEntry) {
 
 export function truncateByWidth(text: string | undefined, maxChineseChars: number): string {
 	if (!text) return "";
+	const maxThirds = maxChineseChars * 3;
 	let width = 0;
 	for (let i = 0; i < text.length; i++) {
-		const charWidth = text.charCodeAt(i) < 128 ? 0.5 : 1;
-		if (width + charWidth > maxChineseChars) {
+		const charWidth = text.charCodeAt(i) < 128 ? 2 : 3;
+		if (width + charWidth > maxThirds) {
 			return text.slice(0, i) + "...";
 		}
 		width += charWidth;

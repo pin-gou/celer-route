@@ -169,23 +169,28 @@ describe("truncateByWidth", () => {
 		);
 	});
 
-	it("does not truncate 50 English chars (50 × 0.5 = 25)", () => {
-		const text = "a".repeat(50);
+	it("does not truncate 37 English chars (37 × 2/3 = 24.67 < 25)", () => {
+		const text = "a".repeat(37);
 		expect(truncateByWidth(text, 25)).toBe(text);
 	});
 
-	it("truncates 51 English chars (51 × 0.5 = 25.5 > 25)", () => {
-		expect(truncateByWidth("a".repeat(51), 25)).toBe("a".repeat(50) + "...");
+	it("truncates 38 English chars (38 × 2/3 = 25.33 > 25)", () => {
+		expect(truncateByWidth("a".repeat(38), 25)).toBe("a".repeat(37) + "...");
 	});
 
-	it("does not truncate 10 Chinese + 30 English (10 × 1 + 30 × 0.5 = 25)", () => {
-		const text = "一二三四五六七八九十" + "e".repeat(30);
+	it("does not truncate 10 Chinese + 22 English (10×3 + 22×2 = 74 < 75)", () => {
+		const text = "一二三四五六七八九十" + "e".repeat(22);
 		expect(truncateByWidth(text, 25)).toBe(text);
 	});
 
-	it("truncates 10 Chinese + 32 English (10 × 1 + 32 × 0.5 = 26 > 25)", () => {
-		const text = "一二三四五六七八九十" + "e".repeat(32);
-		expect(truncateByWidth(text, 25)).toBe("一二三四五六七八九十" + "e".repeat(30) + "...");
+	it("truncates 10 Chinese + 23 English (10×3 + 23×2 = 76 > 75)", () => {
+		const text = "一二三四五六七八九十" + "e".repeat(23);
+		expect(truncateByWidth(text, 25)).toBe("一二三四五六七八九十" + "e".repeat(22) + "...");
+	});
+
+	it("does not truncate at exact boundary 23 Chinese + 3 English (23×3 + 3×2 = 75)", () => {
+		const text = "一".repeat(23) + "eee";
+		expect(truncateByWidth(text, 25)).toBe(text);
 	});
 
 	it("returns empty string for empty input", () => {
