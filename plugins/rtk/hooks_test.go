@@ -414,3 +414,260 @@ func TestPostLLMHookErrorPassthrough(t *testing.T) {
 		t.Error("PostLLMHook should pass through the original error")
 	}
 }
+
+// ============================================================================
+// Task 6.2: MinTokensToCompress threshold boundary tests (red phase)
+//
+// TDD red phase: Config.MinTokensToCompress does not exist yet. All tests
+// referencing it will fail at compile time with "undefined" errors.
+//
+// After dev, the hook must:
+//   - MinTokensToCompress=0 (default) → compress all messages (no skip)
+//   - MinTokensToCompress=1000000 & req tokens=10 → skip compression entirely
+//     (output bytes identical to input)
+// ============================================================================
+
+// TestPreLLMHookMinTokensZeroCompressesAll verifies that when
+// MinTokensToCompress=0 (the default), the hook compresses all tool messages
+// regardless of size. This preserves the current behaviour — zero means
+// "no minimum threshold, always compress." After dev, the new field must not
+// block compression when set to its zero value.
+func TestPreLLMHookMinTokensZeroCompressesAll(t *testing.T) {
+	// Config with MinTokensToCompress=0 (zero value, default)
+	cfg := &Config{
+		Enabled:             true,
+		Intensity:           "standard",
+		MaxLinesPerResult:   120,
+		MaxCharsPerResult:   12000,
+		DedupThreshold:      3,
+		MinTokensToCompress: 0,
+	}
+	p := newTestPluginWithConfig(t, cfg)
+	ctx := newTestCtx(t)
+
+	// Tool output (should still be compressed when MinTokensToCompress=0)
+	toolContent := `On branch feature/foo
+Changes not staged for commit:
+	modified:   src/main.go
+	modified:   src/utils.go
+	modified:   go.mod
+	modified:   go.sum
+	modified:   Makefile
+	modified:   README.md
+	modified:   .gitignore
+	modified:   docker-compose.yml
+	modified:   config.json
+	modified:   tests/test_main.go
+	modified:   docs/README.md
+`
+
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Model: "gpt-4o",
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					Content: &schemas.ChatMessageContent{
+						ContentStr: strPtr("Let me check git status"),
+					},
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{ID: strPtr("call_1"), Function: schemas.ChatAssistantMessageToolCallFunction{
+								Name:      strPtr("bash"),
+								Arguments: "git status",
+							}},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: &schemas.ChatMessageContent{
+						ContentStr: &toolContent,
+					},
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_1"),
+					},
+				},
+			},
+		},
+	}
+
+	outReq, _, err := p.PreLLMHook(ctx, req)
+	if err != nil {
+		t.Fatalf("PreLLMHook returned error: %v", err)
+	}
+
+	// With MinTokensToCompress=0, compression should occur
+	compressed := *outReq.ChatRequest.Input[1].Content.ContentStr
+	if len(compressed) >= len(toolContent) {
+		t.Errorf("expected compression with MinTokensToCompress=0, original len=%d compressed len=%d",
+			len(toolContent), len(compressed))
+	}
+
+	// Key info should still be preserved
+	if !contains(compressed, "On branch feature/foo") {
+		t.Error("On branch info should be preserved after compression")
+	}
+}
+
+// TestPreLLMHookMinTokensHighSkipsCompression verifies that when
+// MinTokensToCompress is set to a very high value (e.g. 1000000) and the
+// request's estimated tokens are well below that threshold, the hook skips
+// compression entirely. The output bytes must be identical to the input.
+// After dev, this is the threshold guard: small outputs are not worth
+// compressing when the minimum is set high.
+func TestPreLLMHookMinTokensHighSkipsCompression(t *testing.T) {
+	// Config with MinTokensToCompress set very high
+	cfg := &Config{
+		Enabled:             true,
+		Intensity:           "standard",
+		MaxLinesPerResult:   120,
+		MaxCharsPerResult:   12000,
+		DedupThreshold:      3,
+		MinTokensToCompress: 1000000,
+	}
+	p := newTestPluginWithConfig(t, cfg)
+	ctx := newTestCtx(t)
+
+	// Small tool output (~10 tokens estimated) — well below the threshold
+	originalContent := `On branch main
+  modified:   src/main.go
+`
+
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Model: "gpt-4o",
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					Content: &schemas.ChatMessageContent{
+						ContentStr: strPtr("Check git status"),
+					},
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{ID: strPtr("call_skip"), Function: schemas.ChatAssistantMessageToolCallFunction{
+								Name:      strPtr("bash"),
+								Arguments: "git status",
+							}},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: &schemas.ChatMessageContent{
+						ContentStr: &originalContent,
+					},
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_skip"),
+					},
+				},
+			},
+		},
+	}
+
+	// Save the original content bytes to compare after the hook
+	originalBytes := *req.ChatRequest.Input[1].Content.ContentStr
+
+	outReq, _, err := p.PreLLMHook(ctx, req)
+	if err != nil {
+		t.Fatalf("PreLLMHook returned error: %v", err)
+	}
+
+	// With MinTokensToCompress=1000000 and small input, compression should be skipped
+	// Output bytes must be identical to input
+	afterHook := *outReq.ChatRequest.Input[1].Content.ContentStr
+	if afterHook != originalBytes {
+		t.Errorf("output should be byte-identical to input when MinTokensToCompress threshold is not met, "+
+			"got %q, want %q", afterHook, originalBytes)
+	}
+}
+
+// TestPreLLMHookMinTokensPartialCompression verifies that when the request
+// token count exceeds MinTokensToCompress, compression proceeds normally
+// (the threshold is not a hard cap, just a minimum gate). This test uses
+// a large enough output to exceed the threshold, ensuring the compression
+// pipeline still runs.
+func TestPreLLMHookMinTokensPartialCompression(t *testing.T) {
+	cfg := &Config{
+		Enabled:             true,
+		Intensity:           "standard",
+		MaxLinesPerResult:   120,
+		MaxCharsPerResult:   12000,
+		DedupThreshold:      3,
+		MinTokensToCompress: 5, // Very low threshold — most outputs exceed this
+	}
+	p := newTestPluginWithConfig(t, cfg)
+	ctx := newTestCtx(t)
+
+	// Moderate git output (>5 estimated tokens)
+	toolContent := `On branch feature/foo
+Changes not staged for commit:
+	modified:   src/main.go
+	modified:   src/utils.go
+	modified:   go.mod
+	modified:   go.sum
+	modified:   Makefile
+	modified:   README.md
+	modified:   .gitignore
+	modified:   docker-compose.yml
+	modified:   config.json
+	modified:   tests/test_main.go
+	modified:   docs/README.md
+	modified:   scripts/build.sh
+`
+
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Model: "gpt-4o",
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					Content: &schemas.ChatMessageContent{
+						ContentStr: strPtr("Check git status"),
+					},
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{ID: strPtr("call_partial"), Function: schemas.ChatAssistantMessageToolCallFunction{
+								Name:      strPtr("bash"),
+								Arguments: "git status",
+							}},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: &schemas.ChatMessageContent{
+						ContentStr: &toolContent,
+					},
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_partial"),
+					},
+				},
+			},
+		},
+	}
+
+	outReq, _, err := p.PreLLMHook(ctx, req)
+	if err != nil {
+		t.Fatalf("PreLLMHook returned error: %v", err)
+	}
+
+	// With MinTokensToCompress=5 and output much larger, compression should occur
+	compressed := *outReq.ChatRequest.Input[1].Content.ContentStr
+	if len(compressed) >= len(toolContent) {
+		t.Errorf("expected compression when input exceeds MinTokensToCompress threshold, "+
+			"original len=%d compressed len=%d", len(toolContent), len(compressed))
+	}
+
+	// Key info should be preserved
+	if !contains(compressed, "On branch feature/foo") {
+		t.Error("branch info should be preserved after compression")
+	}
+	// Error patterns must survive
+	if !contains(compressed, "modified:   src/main.go") {
+		t.Error("key file changes should be preserved")
+	}
+}

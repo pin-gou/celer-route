@@ -4,6 +4,64 @@ import (
 	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
+// estimateRequestTokens estimates the total token count across all messages
+// in the request. It handles both ChatCompletion and Responses request types.
+// Returns 0 when the request is nil or has no messages.
+func estimateRequestTokens(req *schemas.BifrostRequest) int {
+	if req == nil {
+		return 0
+	}
+
+	var total int
+
+	// Estimate tokens from chat request messages.
+	if req.ChatRequest != nil {
+		for _, msg := range req.ChatRequest.Input {
+			if msg.Content != nil {
+				if msg.Content.ContentStr != nil {
+					total += estimateTokens(*msg.Content.ContentStr)
+				}
+				for _, block := range msg.Content.ContentBlocks {
+					if block.Text != nil {
+						total += estimateTokens(*block.Text)
+					}
+				}
+			}
+			// Include tool call arguments in the estimation.
+			if msg.ChatAssistantMessage != nil {
+				for _, tc := range msg.ChatAssistantMessage.ToolCalls {
+					if tc.Function.Arguments != "" {
+						total += estimateTokens(tc.Function.Arguments)
+					}
+				}
+			}
+		}
+	}
+
+	// Estimate tokens from responses-API request messages.
+	if req.ResponsesRequest != nil {
+		for _, msg := range req.ResponsesRequest.Input {
+			if msg.ResponsesToolMessage != nil {
+				if msg.ResponsesToolMessage.Output != nil {
+					if msg.ResponsesToolMessage.Output.ResponsesToolCallOutputStr != nil {
+						total += estimateTokens(*msg.ResponsesToolMessage.Output.ResponsesToolCallOutputStr)
+					}
+					for _, block := range msg.ResponsesToolMessage.Output.ResponsesFunctionToolCallOutputBlocks {
+						if block.Text != nil {
+							total += estimateTokens(*block.Text)
+						}
+					}
+				}
+				if msg.ResponsesToolMessage.Arguments != nil {
+					total += estimateTokens(*msg.ResponsesToolMessage.Arguments)
+				}
+			}
+		}
+	}
+
+	return total
+}
+
 // PreLLMHook implements schemas.LLMPlugin. It scans the request's input
 // messages for tool output (role=tool and tool_result blocks), applies the
 // RTK compression pipeline, and stores the per-request compression state
@@ -20,18 +78,48 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		return req, nil, nil
 	}
 
+	// MinTokensToCompress threshold check: when the estimated request tokens
+	// are below the configured minimum, skip the entire compression pipeline.
+	// This is a performance optimisation: small requests that don't benefit
+	// from compression are passed through unchanged.
+	if p.config.MinTokensToCompress > 0 {
+		estimated := estimateRequestTokens(req)
+		if estimated < p.config.MinTokensToCompress {
+			if p.logger != nil {
+				p.logger.Debug("rtk", "skipping compression: estimated=%d < min_tokens_to_compress=%d", estimated, p.config.MinTokensToCompress)
+			}
+			return req, nil, nil
+		}
+	}
+
+	// Build the pipeline runner from the global catalog and the config's pipeline.
+	// This is the production path that routes through EngineCatalog + PipelineRunner,
+	// ensuring the CompressionEngine interface is actually used at runtime.
+	// Ensure the rtk engine is registered in the catalog (safe to call multiple times).
+	globalCatalog.RegisterEngine("rtk", &rtkEngine{plugin: p})
+	applyConfigDefaults(p.config)
+	runner := NewPipelineRunner(globalCatalog)
+	pipeline := &Pipeline{Engines: make([]string, len(p.config.Pipeline))}
+	for i, step := range p.config.Pipeline {
+		pipeline.Engines[i] = step.ID
+	}
+	defaultCfg := EngineConfig{
+		Enabled:  true,
+		Settings: nil,
+	}
+
 	switch req.RequestType {
 	case schemas.ChatCompletionRequest, schemas.ChatCompletionStreamRequest:
 		if req.ChatRequest == nil {
 			return req, nil, nil
 		}
-		state := applyRtkCompression(req, p)
+		state := applyRtkCompression(ctx, req, p, runner, pipeline, defaultCfg)
 		p.setState(ctx, state)
 	case schemas.ResponsesRequest, schemas.ResponsesStreamRequest:
 		if req.ResponsesRequest == nil {
 			return req, nil, nil
 		}
-		state := applyRtkCompressionResponses(req, p)
+		state := applyRtkCompressionResponses(ctx, req, p, runner, pipeline, defaultCfg)
 		p.setState(ctx, state)
 	}
 

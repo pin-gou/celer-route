@@ -336,3 +336,161 @@ func TestConfigCustomFiltersDefaults(t *testing.T) {
 		t.Errorf("applyConfigDefaults() should leave DisabledFilters empty, got %v", cfg.DisabledFilters)
 	}
 }
+
+// ============================================================================
+// Task 6.3: Config new field defaults zero-value safety (red phase)
+//
+// TDD red phase: Config.Pipeline and Config.MinTokensToCompress do not exist
+// yet. All tests referencing them will fail at compile time with "undefined"
+// errors.
+//
+// After dev, applyConfigDefaults must:
+//   - Pipeline empty/nil → auto-fill to []PipelineStep{{ID: "rtk"}}
+//   - Pipeline non-empty → preserve as-is (no override)
+//   - MinTokensToCompress=0 → not skipped (no default override, stays 0)
+// ============================================================================
+
+// TestConfigPipelineDefaults verifies that when Pipeline is nil or empty,
+// applyConfigDefaults fills it with the default PipelineStep containing
+// id="rtk". After dev, this ensures the compression pipeline runs even
+// when the config omits the Pipeline field entirely.
+func TestConfigPipelineDefaults(t *testing.T) {
+	t.Run("nil_pipeline_gets_default", func(t *testing.T) {
+		cfg := &Config{Enabled: true}
+		applyConfigDefaults(cfg)
+
+		if cfg.Pipeline == nil {
+			t.Fatal("applyConfigDefaults() should set Pipeline to non-nil default when nil")
+		}
+		if len(cfg.Pipeline) != 1 {
+			t.Fatalf("applyConfigDefaults() Pipeline len = %d, want 1", len(cfg.Pipeline))
+		}
+		if cfg.Pipeline[0].ID != "rtk" {
+			t.Errorf("applyConfigDefaults() Pipeline[0].ID = %q, want %q", cfg.Pipeline[0].ID, "rtk")
+		}
+	})
+
+	t.Run("empty_pipeline_gets_default", func(t *testing.T) {
+		cfg := &Config{Enabled: true, Pipeline: []PipelineStep{}}
+		applyConfigDefaults(cfg)
+
+		if cfg.Pipeline == nil {
+			t.Fatal("applyConfigDefaults() should set Pipeline to non-nil default when empty")
+		}
+		if len(cfg.Pipeline) != 1 {
+			t.Fatalf("applyConfigDefaults() Pipeline len = %d, want 1", len(cfg.Pipeline))
+		}
+		if cfg.Pipeline[0].ID != "rtk" {
+			t.Errorf("applyConfigDefaults() Pipeline[0].ID = %q, want %q", cfg.Pipeline[0].ID, "rtk")
+		}
+	})
+
+	t.Run("existing_pipeline_preserved", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:  true,
+			Pipeline: []PipelineStep{{ID: "custom-engine"}},
+		}
+		applyConfigDefaults(cfg)
+
+		if len(cfg.Pipeline) != 1 {
+			t.Fatalf("applyConfigDefaults() Pipeline len = %d, want 1 (preserved)", len(cfg.Pipeline))
+		}
+		if cfg.Pipeline[0].ID != "custom-engine" {
+			t.Errorf("applyConfigDefaults() Pipeline[0].ID = %q, want %q (preserved)", cfg.Pipeline[0].ID, "custom-engine")
+		}
+	})
+
+	t.Run("multi_step_pipeline_preserved", func(t *testing.T) {
+		cfg := &Config{
+			Enabled: true,
+			Pipeline: []PipelineStep{
+				{ID: "engine-a"},
+				{ID: "engine-b"},
+				{ID: "engine-c"},
+			},
+		}
+		applyConfigDefaults(cfg)
+
+		if len(cfg.Pipeline) != 3 {
+			t.Fatalf("applyConfigDefaults() Pipeline len = %d, want 3 (preserved)", len(cfg.Pipeline))
+		}
+		if cfg.Pipeline[0].ID != "engine-a" {
+			t.Errorf("Pipeline[0].ID = %q, want %q", cfg.Pipeline[0].ID, "engine-a")
+		}
+		if cfg.Pipeline[1].ID != "engine-b" {
+			t.Errorf("Pipeline[1].ID = %q, want %q", cfg.Pipeline[1].ID, "engine-b")
+		}
+		if cfg.Pipeline[2].ID != "engine-c" {
+			t.Errorf("Pipeline[2].ID = %q, want %q", cfg.Pipeline[2].ID, "engine-c")
+		}
+	})
+}
+
+// TestConfigMinTokensToCompressDefault verifies that MinTokensToCompress=0
+// (zero value) is kept as-is by applyConfigDefaults — it must NOT be
+// overwritten to any positive value. After dev, zero means "no minimum
+// threshold, always compress", which is the backward-compatible default.
+func TestConfigMinTokensToCompressDefault(t *testing.T) {
+	cfg := &Config{Enabled: true}
+	applyConfigDefaults(cfg)
+
+	if cfg.MinTokensToCompress != 0 {
+		t.Errorf("applyConfigDefaults() MinTokensToCompress = %d, want 0 (zero value preserved)", cfg.MinTokensToCompress)
+	}
+}
+
+// TestConfigMinTokensToCompressExplicitPreserved verifies that an explicitly
+// set MinTokensToCompress value is preserved by applyConfigDefaults (not
+// overwritten to 0).
+func TestConfigMinTokensToCompressExplicitPreserved(t *testing.T) {
+	cfg := &Config{
+		Enabled:             true,
+		MinTokensToCompress: 500,
+	}
+	applyConfigDefaults(cfg)
+
+	if cfg.MinTokensToCompress != 500 {
+		t.Errorf("applyConfigDefaults() MinTokensToCompress = %d, want 500 (explicit value preserved)", cfg.MinTokensToCompress)
+	}
+}
+
+// TestConfigPipelineAndMinTokensValidate verifies that the new Pipeline and
+// MinTokensToCompress fields do not break Config.Validate(): a valid config
+// with the new fields must pass, and an invalid config (bogus intensity) with
+// the new fields must still be rejected (fail-fast not weakened).
+func TestConfigPipelineAndMinTokensValidate(t *testing.T) {
+	t.Run("valid_config_with_new_fields_passes", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:             true,
+			Intensity:           "standard",
+			Pipeline:            []PipelineStep{{ID: "rtk"}},
+			MinTokensToCompress: 100,
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Config.Validate() should accept valid config with Pipeline and MinTokensToCompress, got: %v", err)
+		}
+	})
+
+	t.Run("invalid_intensity_still_rejected", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:             true,
+			Intensity:           "bogus-intensity",
+			Pipeline:            []PipelineStep{{ID: "rtk"}},
+			MinTokensToCompress: 100,
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("Config.Validate() should still reject invalid intensity with new fields set")
+		}
+	})
+
+	t.Run("negative_min_tokens_rejected", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:             true,
+			Intensity:           "standard",
+			MinTokensToCompress: -1,
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("Config.Validate() should reject negative MinTokensToCompress")
+		}
+	})
+}

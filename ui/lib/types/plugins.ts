@@ -49,6 +49,82 @@ export interface UpdatePluginRequest {
 }
 
 // ---------------------------------------------------------------------------
+// RTK (built-in plugin) — form schema
+// ---------------------------------------------------------------------------
+
+export const RTK_PLUGIN = "rtk";
+
+// zod schema for the RTK plugin's dedicated config form.
+// Mirrors plugins/rtk/config.go's Config struct fields.
+export const rtkConfigSchema = z.object({
+	// Enabled enables or disables the RTK compression plugin.
+	enabled: z.boolean().optional(),
+
+	// Intensity controls the compression aggressiveness.
+	intensity: z.enum(["minimal", "standard", "aggressive"]).optional(),
+
+	// ApplyToToolResults controls whether tool result messages are compressed.
+	apply_to_tool_results: z.boolean().optional(),
+
+	// ApplyToCodeBlocks controls whether code blocks within messages are compressed.
+	apply_to_code_blocks: z.boolean().optional(),
+
+	// MaxLinesPerResult is the maximum number of lines to keep per tool result.
+	max_lines_per_result: z.number().int().min(0).optional(),
+
+	// MaxCharsPerResult is the maximum number of characters to keep per tool result.
+	max_chars_per_result: z.number().int().min(0).optional(),
+
+	// DedupThreshold is the number of consecutive identical lines before deduplication.
+	dedup_threshold: z.number().int().min(0).optional(),
+
+	// PreserveCacheControl preserves cache_control blocks during compression.
+	preserve_cache_control: z.boolean().optional(),
+
+	// EnableGrouping enables fuzzy grouping of near-equivalent consecutive lines.
+	enable_grouping: z.boolean().optional(),
+
+	// GroupingThreshold is the minimum run length of near-equivalent lines before grouping.
+	grouping_threshold: z.number().int().min(0).optional(),
+
+	// ApplyToAssistantMessages controls whether assistant messages are compressed.
+	apply_to_assistant_messages: z.boolean().optional(),
+
+	// CustomFiltersEnabled enables loading of project/global custom filters.
+	custom_filters_enabled: z.boolean().optional(),
+
+	// TrustProjectFilters bypasses the trust.json SHA256 check for project-level filters.
+	trust_project_filters: z.boolean().optional(),
+
+	// EnabledFilters whitelists filter IDs to load.
+	enabled_filters: z.array(z.string()).optional(),
+
+	// DisabledFilters blacklists filter IDs from loading.
+	disabled_filters: z.array(z.string()).optional(),
+
+	// RawOutputRetention controls when raw tool outputs are persisted to disk.
+	raw_output_retention: z.enum(["never", "failures", "always", "all"]).optional(),
+
+	// RawOutputMaxBytes caps the persisted raw output size.
+	raw_output_max_bytes: z.number().int().min(0).optional(),
+
+	// Pipeline defines the ordered list of compression engines to run.
+	pipeline: z
+		.array(
+			z.object({
+				id: z.string(),
+				config: z.unknown().optional(),
+			}),
+		)
+		.default([{ id: "rtk" }]),
+
+	// MinTokensToCompress is the minimum estimated request token count required to trigger compression.
+	min_tokens_to_compress: z.number().int().min(0).default(0),
+});
+
+export type RTKConfig = z.infer<typeof rtkConfigSchema>;
+
+// ---------------------------------------------------------------------------
 // Provider cooldown (built-in plugin) — form schema + monitoring types
 // ---------------------------------------------------------------------------
 
