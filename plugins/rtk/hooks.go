@@ -4,6 +4,64 @@ import (
 	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
+// estimateRequestTokens estimates the total token count across all messages
+// in the request. It handles both ChatCompletion and Responses request types.
+// Returns 0 when the request is nil or has no messages.
+func estimateRequestTokens(req *schemas.BifrostRequest) int {
+	if req == nil {
+		return 0
+	}
+
+	var total int
+
+	// Estimate tokens from chat request messages.
+	if req.ChatRequest != nil {
+		for _, msg := range req.ChatRequest.Input {
+			if msg.Content != nil {
+				if msg.Content.ContentStr != nil {
+					total += estimateTokens(*msg.Content.ContentStr)
+				}
+				for _, block := range msg.Content.ContentBlocks {
+					if block.Text != nil {
+						total += estimateTokens(*block.Text)
+					}
+				}
+			}
+			// Include tool call arguments in the estimation.
+			if msg.ChatAssistantMessage != nil {
+				for _, tc := range msg.ChatAssistantMessage.ToolCalls {
+					if tc.Function.Arguments != "" {
+						total += estimateTokens(tc.Function.Arguments)
+					}
+				}
+			}
+		}
+	}
+
+	// Estimate tokens from responses-API request messages.
+	if req.ResponsesRequest != nil {
+		for _, msg := range req.ResponsesRequest.Input {
+			if msg.ResponsesToolMessage != nil {
+				if msg.ResponsesToolMessage.Output != nil {
+					if msg.ResponsesToolMessage.Output.ResponsesToolCallOutputStr != nil {
+						total += estimateTokens(*msg.ResponsesToolMessage.Output.ResponsesToolCallOutputStr)
+					}
+					for _, block := range msg.ResponsesToolMessage.Output.ResponsesFunctionToolCallOutputBlocks {
+						if block.Text != nil {
+							total += estimateTokens(*block.Text)
+						}
+					}
+				}
+				if msg.ResponsesToolMessage.Arguments != nil {
+					total += estimateTokens(*msg.ResponsesToolMessage.Arguments)
+				}
+			}
+		}
+	}
+
+	return total
+}
+
 // PreLLMHook implements schemas.LLMPlugin. It scans the request's input
 // messages for tool output (role=tool and tool_result blocks), applies the
 // RTK compression pipeline, and stores the per-request compression state
@@ -18,6 +76,20 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 	}
 	if !p.config.Enabled {
 		return req, nil, nil
+	}
+
+	// MinTokensToCompress threshold check: when the estimated request tokens
+	// are below the configured minimum, skip the entire compression pipeline.
+	// This is a performance optimisation: small requests that don't benefit
+	// from compression are passed through unchanged.
+	if p.config.MinTokensToCompress > 0 {
+		estimated := estimateRequestTokens(req)
+		if estimated < p.config.MinTokensToCompress {
+			if p.logger != nil {
+				p.logger.Debug("rtk", "skipping compression: estimated=%d < min_tokens_to_compress=%d", estimated, p.config.MinTokensToCompress)
+			}
+			return req, nil, nil
+		}
 	}
 
 	switch req.RequestType {

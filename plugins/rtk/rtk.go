@@ -75,6 +75,13 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, appDir str
 			}
 		}
 	}
+	// Register the RTK engine in the global EngineCatalog so it can be
+	// used as a compression step in the pipeline. The engine wraps the
+	// plugin's config and filter loader, allowing the existing compression
+	// pipeline (applyRtkCompression) to be called through the CompressionEngine
+	// interface.
+	RegisterEngine("rtk", &rtkEngine{plugin: p})
+
 	return p, nil
 }
 

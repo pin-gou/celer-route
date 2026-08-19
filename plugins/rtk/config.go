@@ -68,6 +68,17 @@ type Config struct {
 	// RawOutputMaxBytes caps the persisted raw output size in UTF-8 bytes
 	// (default 1048576, minimum 1024).
 	RawOutputMaxBytes int `json:"raw_output_max_bytes"`
+
+	// Pipeline defines the ordered list of compression engines to run.
+	// When nil or empty, applyConfigDefaults fills it with [{id:"rtk"}].
+	// Each step specifies an engine ID and optional engine-specific config.
+	Pipeline []PipelineStep `json:"pipeline,omitempty"`
+
+	// MinTokensToCompress is the minimum estimated request token count
+	// required to trigger compression. When > 0 and the estimated tokens
+	// are below this threshold, the entire compression pipeline is skipped.
+	// 0 means "no minimum threshold, always compress" (the default).
+	MinTokensToCompress int `json:"min_tokens_to_compress"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -106,6 +117,10 @@ func (c *Config) Validate() error {
 	}
 	if c.RawOutputMaxBytes > 0 && c.RawOutputMaxBytes < 1024 {
 		return fmt.Errorf("rtk: raw_output_max_bytes must be >= 1024 when set, got %d", c.RawOutputMaxBytes)
+	}
+	// MinTokensToCompress validation: negative is invalid.
+	if c.MinTokensToCompress < 0 {
+		return fmt.Errorf("rtk: min_tokens_to_compress must be >= 0, got %d", c.MinTokensToCompress)
 	}
 	return nil
 }
@@ -151,4 +166,12 @@ func applyConfigDefaults(c *Config) {
 	if c.RawOutputMaxBytes == 0 {
 		c.RawOutputMaxBytes = 1048576
 	}
+
+	// Pipeline defaults: nil or empty → [{id:"rtk"}]
+	if len(c.Pipeline) == 0 {
+		c.Pipeline = []PipelineStep{{ID: "rtk"}}
+	}
+
+	// MinTokensToCompress stays at 0 (zero value = no threshold).
+	// Do not overwrite an explicit positive value.
 }

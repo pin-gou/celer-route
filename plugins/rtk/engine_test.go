@@ -262,6 +262,7 @@ func TestPipelineRunnerEngineErrorDoesNotAbort(t *testing.T) {
 
 	// Must not panic from the error engine
 	result, breakdown := runner.Run(pipeline, input)
+	_ = result // result is not directly asserted in this test, only execution order
 
 	// All three engines should have been attempted
 	if len(executionOrder) != 3 {

@@ -445,11 +445,20 @@ func TestPreLLMHookMinTokensZeroCompressesAll(t *testing.T) {
 	p := newTestPluginWithConfig(t, cfg)
 	ctx := newTestCtx(t)
 
-	// Small tool output (should still be compressed when MinTokensToCompress=0)
-	toolContent := `On branch main
-  modified:   src/main.go
-  modified:   src/utils.go
-  modified:   go.mod
+	// Tool output (should still be compressed when MinTokensToCompress=0)
+	toolContent := `On branch feature/foo
+Changes not staged for commit:
+	modified:   src/main.go
+	modified:   src/utils.go
+	modified:   go.mod
+	modified:   go.sum
+	modified:   Makefile
+	modified:   README.md
+	modified:   .gitignore
+	modified:   docker-compose.yml
+	modified:   config.json
+	modified:   tests/test_main.go
+	modified:   docs/README.md
 `
 
 	req := &schemas.BifrostRequest{
@@ -497,7 +506,7 @@ func TestPreLLMHookMinTokensZeroCompressesAll(t *testing.T) {
 	}
 
 	// Key info should still be preserved
-	if !contains(compressed, "On branch main") {
+	if !contains(compressed, "On branch feature/foo") {
 		t.Error("On branch info should be preserved after compression")
 	}
 }
