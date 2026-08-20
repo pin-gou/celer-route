@@ -70,10 +70,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 6.1 编写 `plugins/logging/main_test.go` 单元测试：覆盖 `Config.UnmarshalJSON` 默认值（4 个字段）、`validateWriterConfig` 边界值（MaxBatchSize > 0、BatchInterval > 0、MaxBatchBytes > 0）
-- [ ] 6.2 编写 `plugins/semanticcache/main_test.go` 单元测试：覆盖 `Init` 中 `Dimension >= 0` 校验、`Config.Dimension > 0` 当 `Provider != ""`、TTL UnmarshalJSON 接受非负字符串与整数
-- [ ] 6.3 编写 `plugins/mocker/main_test.go` 单元测试：覆盖 `MockerConfig` 默认值（DefaultBehavior = "passthrough"）、`validateRule` 边界值（Priority [-1000, 1000]、Probability [0, 1]、Response.StatusCode [100, 599]）
-- [ ] 6.4 编写 `plugins/compat/main_test.go` 单元测试：覆盖 `Config.UnmarshalJSON` 默认值（全部 4 个字段 absent 时为 true）、`IsEnabled()` 至少 1 个字段为 true 时返回 true
+- [x] 6.1 编写 `plugins/logging/main_test.go` 单元测试：覆盖 `Config.UnmarshalJSON` 默认值（4 个字段）、`validateWriterConfig` 边界值（MaxBatchSize > 0、BatchInterval > 0、MaxBatchBytes > 0）
+- [x] 6.2 编写 `plugins/semanticcache/main_test.go` 单元测试：覆盖 `Init` 中 `Dimension >= 0` 校验、`Config.Dimension > 0` 当 `Provider != ""`、TTL UnmarshalJSON 接受非负字符串与整数
+- [x] 6.3 编写 `plugins/mocker/main_test.go` 单元测试：覆盖 `MockerConfig` 默认值（DefaultBehavior = "passthrough"）、`validateRule` 边界值（Priority [-1000, 1000]、Probability [0, 1]、Response.StatusCode [100, 599]）
+- [x] 6.4 编写 `plugins/compat/main_test.go` 单元测试：覆盖 `Config.UnmarshalJSON` 默认值（全部 4 个字段 absent 时为 true）、`IsEnabled()` 至少 1 个字段为 true 时返回 true
 
 ## 7. dev.plugins:dev - 实现开发
 
