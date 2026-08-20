@@ -4,6 +4,8 @@ export const TIME_PERIODS = [
 	{ label: "Last 24 hours", value: "24h" },
 	{ label: "Last 7 days", value: "7d" },
 	{ label: "Last 30 days", value: "30d" },
+	{ label: "Today", value: "today" },
+	{ label: "Yesterday", value: "yesterday" },
 ];
 
 export type TimePeriod = (typeof TIME_PERIODS)[number]["value"];
@@ -15,6 +17,8 @@ export function getTimePeriods(t: (key: string, opts?: Record<string, unknown>) 
 		{ label: t("timePeriods.last24Hours", { ns: "common" }), value: "24h" },
 		{ label: t("timePeriods.last7Days", { ns: "common" }), value: "7d" },
 		{ label: t("timePeriods.last30Days", { ns: "common" }), value: "30d" },
+		{ label: t("timePeriods.today", { ns: "common" }), value: "today" },
+		{ label: t("timePeriods.yesterday", { ns: "common" }), value: "yesterday" },
 	];
 }
 
@@ -38,6 +42,19 @@ export function getRangeForPeriod(period: string): { from: Date; to: Date } {
 		case "30d":
 			from.setDate(from.getDate() - 30);
 			break;
+		case "today":
+			from.setHours(0, 0, 0, 0);
+			to.setHours(23, 59, 59, 999);
+			break;
+		case "yesterday": {
+			const y = new Date(to.getTime());
+			y.setDate(y.getDate() - 1);
+			y.setHours(0, 0, 0, 0);
+			from.setTime(y.getTime());
+			to.setDate(to.getDate() - 1);
+			to.setHours(23, 59, 59, 999);
+			break;
+		}
 		default:
 			from.setHours(from.getHours() - 1);
 	}

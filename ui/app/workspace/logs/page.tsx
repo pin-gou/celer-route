@@ -602,12 +602,17 @@ export default function LogsPage() {
 	const handlePeriodChange = useCallback(
 		(p?: string, from?: Date, to?: Date) => {
 			if (p) {
-				const { from: computedFrom } = getRangeForPeriod(p);
+				const { from: computedFrom, to: computedTo } = getRangeForPeriod(p);
 				const startTs = from ? Math.floor(from.getTime() / 1000) : Math.floor(computedFrom.getTime() / 1000);
+				// Absolute calendar periods ("today", "yesterday") pin both edges so the
+				// range covers the whole day; rolling periods ("1h", "24h", ...) leave end
+				// open so the server falls back to wall-clock now.
+				const isAbsolutePeriod = p === "today" || p === "yesterday";
+				const endTs = isAbsolutePeriod ? Math.floor((to ?? computedTo).getTime() / 1000) : null;
 				setUrlState({
 					period: p,
 					start_time: startTs,
-					end_time: null,
+					end_time: endTs,
 					offset: 0,
 					polling: true,
 				});

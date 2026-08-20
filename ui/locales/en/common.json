@@ -183,7 +183,9 @@
 		"last6Hours": "Last 6 hours",
 		"last24Hours": "Last 24 hours",
 		"last7Days": "Last 7 days",
-		"last30Days": "Last 30 days"
+		"last30Days": "Last 30 days",
+		"today": "Today",
+		"yesterday": "Yesterday"
 	},
 	"toast": {
 		"success": "Operation completed successfully",
