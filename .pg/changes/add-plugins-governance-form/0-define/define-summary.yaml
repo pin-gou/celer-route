@@ -1,0 +1,127 @@
+schema_version: 1
+change_id: add-plugins-governance-form
+defined_at: "2026-08-20T05:30:00Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  governance 插件在 /workspace/plugins?plugin=governance 路由下当前无任何专用 UI 表单，
+  用户只能手动编辑 JSON 才能配置；otel 已有完整 fragment 但未接入 /workspace/plugins 路由。
+  需要为两者提供专用表单以匹配 rtkFragment 的产品形态。
+
+solution: >-
+  1. governance：新增 ui/app/workspace/plugins/fragments/governanceFragment.tsx，导出
+     EnabledSwitch 与 ConfigForm，覆写 Config 的 4 字段（is_vk_mandatory / required_headers /
+     disable_auto_tool_inject / routing_chain_max_depth），required_headers 用 TagInput 多标签输入。
+     沿用 rtkFragment 的 react-hook-form + zod 模式、RBAC 门控、data-testid 命名、i18n 双语。
+  2. otel：在 pluginsView.tsx 的 if-chain 中复用 ui/app/workspace/observability/views/plugins/otelView.tsx
+     已有实现，不复制代码。
+  3. pluginsView.tsx 添加 GOVERNANCE_PLUGIN 与 OTEL_PLUGIN 的 if 路由分支。
+  4. 在 ui/lib/types/plugins.ts 添加 governanceConfigSchema（zod）与 GOVERNANCE_PLUGIN 常量。
+
+boundary:
+  in_scope:
+    - governanceFragment.tsx 新建（EnabledSwitch + ConfigForm + 4 字段 + RBAC + data-testid）
+    - governanceConfigSchema 在 ui/lib/types/plugins.ts 中定义
+    - GOVERNANCE_PLUGIN 常量导出
+    - pluginsView.tsx 路由分支添加 governance / otel
+    - otel 复用 observability 已有视图，不重写
+    - i18n 双语：ui/locales/en/plugins.json + ui/locales/zh-CN/plugins.json 添加 governance 键
+    - data-testid 命名遵循 plugin-entity-element 约定
+  out_of_scope:
+    - VirtualKeys / Teams / Customers / Budgets / RoutingRules 等已有 CRUD 页面
+    - ui/app/workspace/governance/ 子页面扩展（当前 redirect 到 virtual-keys 即可）
+    - 其它无表单内置插件（telemetry/logging/semanticcache/maxim/prompts/compat）
+    - governance 后端 Config 结构变更（Go 端 4 字段已稳定）
+    - PluginSpanFilter（保留现有 merge 行为）
+
+verification_needs:
+  - id: V-ui-1
+    track_id: ui
+    name: governance 表单渲染
+    what: >-
+      在 ui-dev 打开 /workspace/plugins?plugin=governance，左侧列表选中 governance 插件，
+      右侧渲染出 EnabledSwitch + ConfigForm（4 字段），不再展示 JSON Editor。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+        description: Vite 开发服务器可启动并响应 3008 端口
+      - capability: react_spa
+        min_quantity: 1
+      - capability: sample_dataset
+        min_quantity: 1
+        description: fixture-plugins 中至少 1 条 governance 行，使 useGetPluginsQuery 返回数据
+    downgrade_when_missing: >-
+      ui-dev 不可启动 → 用 npx vitest 渲染 governanceFragment 单元测试 + jsdom 验证 form 节点存在
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev].endpoints[name=dev].url}"
+      - "{env.data_resources[name=fixture-plugins]}"
+
+  - id: V-ui-2
+    track_id: ui
+    name: 表单提交与持久化
+    what: >-
+      修改任一字段后点 Save，UI 触发 PUT /api/plugins/governance，pg-gateway-api 持久化到
+      config.db 并返回 200，UI 收到 success toast；再次打开页面字段值保持。
+    requires_capabilities:
+      - capability: rest_api_endpoint
+        min_quantity: 1
+        description: pg-gateway-api 提供 PUT /api/plugins/{name}
+      - capability: sample_dataset
+        min_quantity: 1
+    downgrade_when_missing: >-
+      pg-gateway-api 不可用 → 仅用 vitest mock useUpdatePluginMutation 断言调用 payload 正确
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}"
+      - "{env.data_resources[name=fixture-plugins]}"
+
+  - id: V-ui-3
+    track_id: ui
+    name: otel 复用渲染
+    what: >-
+      在 /workspace/plugins?plugin=otel 下渲染出 observability/fragments/otelFormFragment.tsx 已有内容，
+      包含 Profiles 列表、trace/metrics 字段、SecretVarInput 等。无新代码，仅路由接入。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+      - capability: react_spa
+        min_quantity: 1
+      - capability: sample_dataset
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev].endpoints[name=dev].url}"
+      - "{env.data_resources[name=fixture-plugins]}"
+
+  - id: V-ui-4
+    track_id: ui
+    name: i18n 双语切换
+    what: >-
+      governance fragment 的所有 label / description / placeholder 在英文与简体中文下均正确显示，
+      无 en→zh-CN 错译（如「令牌」误用）。
+    requires_capabilities:
+      - capability: i18n_runtime_switch
+        min_quantity: 1
+        description: ui-dev 支持运行时切语言并持久化到 localStorage
+      - capability: jsdom_runtime
+        min_quantity: 1
+        description: vitest jsdom 环境可断言翻译键
+    downgrade_when_missing: >-
+      i18n 不可用 → vitest snapshot 翻译键存在性 + 手工 grep 检查 zh-CN 无 令牌 错用
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+
+risks:
+  - governance 插件的 4 字段是 *bool/*[]string/*int 指针类型，UI 提交时需正确处理
+    「未设置」(nil) 与「显式 false」(0/false) 的区分，避免 pointer-omitempty 误删
+  - PluginSpanFilter 在 otel form 中由独立 Sheet 管理，表单保存时必须通过 merge 逻辑保留，
+    不要因 otel 复用破坏现有行为
+  - ui/app/workspace/governance/page.tsx 当前是 redirect 占位，本次保持不动，
+    避免影响 VirtualKeys 入口
+open_questions:
+  - governance ConfigForm 提交时是否应同时包含 enabled（沿用 rtk Fragment 中 ConfigForm 与
+    EnabledSwitch 分离的模式），还是将 enabled 合并到 ConfigForm 首个字段？
+    （默认沿用 rtk 分离模式，已确认）

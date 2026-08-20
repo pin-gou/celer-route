@@ -1,0 +1,154 @@
+scenarios:
+- scenario_id: S-list-governance-enabled
+  critical: true
+  description: GET /api/plugins/builtins 包含 governance；GET /api/plugins/governance 返回 enabled=true + status=active
+  given:
+  - '# env: pg-gateway-api 启动后由 prepare_env 注入 fixture-plugins（含 governance）'
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 可达'
+  - '{env.data_resources[name=fixture-plugins].state.status} == seeded'
+  - '{env.business_systems[name=ui-dev].endpoints[name=dev].url} 可达'
+  covers:
+  - V-ui-1
+  when:
+  - name: list builtin plugins
+    type: api
+    method: GET
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/builtins'
+    expect_status: 200
+  - name: get governance plugin
+    type: api
+    method: GET
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/governance'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.plugins contains governance
+  - response.body.name == governance
+  - response.body.isCustom == false
+  - response.body.status.status == active
+  evidence:
+  - 2-build/<report_seq>-S-list-governance-enabled-evidence.json
+- scenario_id: S-put-config-persists
+  critical: true
+  description: PUT /api/plugins/governance 写入 4 字段后 GET 返回相同值（is_vk_mandatory / required_headers / disable_auto_tool_inject / routing_chain_max_depth）
+  given:
+  - '# env: pg-gateway-api 启动后由 prepare_env 注入 fixture-plugins'
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 可达'
+  - '{env.data_resources[name=config-db].state.status} == seeded'
+  covers:
+  - V-ui-2
+  when:
+  - name: put config
+    type: api
+    method: PUT
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/governance'
+    body:
+      enabled: true
+      config:
+        is_vk_mandatory: true
+        required_headers:
+          - x-org-id
+          - x-team-id
+        disable_auto_tool_inject: true
+        routing_chain_max_depth: 7
+    expect_status: 200
+  - name: get config
+    type: api
+    method: GET
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/governance'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.config.is_vk_mandatory == true
+  - response.body.config.required_headers contains x-org-id
+  - response.body.config.required_headers contains x-team-id
+  - response.body.config.disable_auto_tool_inject == true
+  - response.body.config.routing_chain_max_depth == 7
+  and:
+  - name: cleanup config
+    action: HTTP PUT /api/plugins/governance with restored default config (reset to false / [] / 0)
+  evidence:
+  - 2-build/<report_seq>-S-put-config-persists-evidence.json
+- scenario_id: S-otel-fragment-rendered
+  critical: true
+  description: GET /api/plugins/builtins 包含 otel；通过 ui-dev 访问 /workspace/plugins?plugin=otel 渲染出 otelFormFragment
+  given:
+  - '# env: pg-gateway-api 启动后由 prepare_env 注入 fixture-plugins'
+  - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 可达'
+  - '{env.business_systems[name=ui-dev].endpoints[name=dev].url} 可达'
+  - '{env.data_resources[name=fixture-plugins].state.status} == seeded'
+  covers:
+  - V-ui-3
+  when:
+  - name: list builtin plugins
+    type: api
+    method: GET
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/builtins'
+    expect_status: 200
+  - name: get otel plugin
+    type: api
+    method: GET
+    url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/otel'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.body.plugins contains otel
+  - response.body.name == otel
+  - response.body.status.status == active
+  evidence:
+  - 2-build/<report_seq>-S-otel-fragment-rendered-evidence.json
+- scenario_id: S-i18n-zh-cn-toggle
+  critical: false
+  description: pg-gateway-ui 在 zh-CN locale 下访问 /workspace/plugins?plugin=governance，渲染 governance 翻译键
+  given:
+    - '# env: pg-gateway-api + ui-dev 启动后；localStorage.pg-gateway.locale = zh-CN'
+    - '{env.business_systems[name=ui-dev].endpoints[name=dev].url} 可达'
+    - '{env.business_systems[name=ui-dev].capabilities} 包含 i18n_runtime_switch'
+  covers:
+    - V-ui-4
+  when:
+    - name: get governance plugin i18n keys
+      type: api
+      method: GET
+      url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/locales/zh-CN/plugins.json'
+      expect_status: 200
+  then:
+    - status_code == 200
+    - response.body.governance.enableTitle exists
+    - response.body.governance.isVkMandatoryLabel exists
+    - response.body.governance.requiredHeadersLabel exists
+    - response.body.governance.routingChainMaxDepthLabel exists
+  evidence:
+    - 2-build/<report_seq>-S-i18n-zh-cn-toggle-evidence.json
+- scenario_id: S-put-config-rejects-invalid
+  critical: false
+  description: PUT /api/plugins/governance 携带非法 routing_chain_max_depth（超 100）被后端拒绝
+  given:
+    - '# env: pg-gateway-api 启动后由 prepare_env 注入 fixture-plugins'
+    - '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url} 可达'
+    - '{env.data_resources[name=config-db].state.status} == seeded'
+  covers:
+    - V-ui-2
+  when:
+    - name: put config invalid
+      type: api
+      method: PUT
+      url: '{env.business_systems[name=pg-gateway-api].endpoints[name=api].url}/api/plugins/governance'
+      body:
+        enabled: true
+        config:
+          routing_chain_max_depth: 999
+      expect_status: 422
+  then:
+    - status_code == 422
+    - response.body.error.code == config_invalid
+  and:
+    - name: cleanup
+      action: HTTP PUT /api/plugins/governance with restored default config
+  evidence:
+    - 2-build/<report_seq>-S-put-config-rejects-invalid-evidence.json
+_meta:
+  _comment: 'scenario-scr.yaml 由 LLM 填充，基于 design.md V-ui-1/V-ui-2/V-ui-3/V-ui-4 共 4 个 verifiable V-*，共 4 个 scenario（在 7 个上限内）。critical=true: 3 个（list+enabled / put-config-persists / otel-fragment-rendered），critical=false: 1 个（i18n-toggle）。given 全部用 {env.<段>.<name>.<字段路径>} 占位引用 env-description.yaml 资源。type=api 覆盖后端跨模块 + 翻译键存在性，浏览器渲染断言留待 verify 阶段 Playwright + Chrome DevTools MCP。'
+  change: add-plugins-governance-form
+  track_id: scr
+  schema_version: v3.10
