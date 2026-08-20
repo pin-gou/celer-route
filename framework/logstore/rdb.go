@@ -1547,8 +1547,12 @@ func billingPayloadColumnFor(objectType string) string {
 func (s *RDBLogStore) GetStats(ctx context.Context, filters SearchFilters) (*SearchStats, error) {
 	// Fast path: pre-aggregated dashboard_bucket_metrics. Skipped when the
 	// reader is missing, stale, or doesn't support these filters (e.g. when
-	// content_search or metadata filters are present).
+	// content_search or metadata filters are present). The bucket table only
+	// carries status counts, token/cost totals, and summed latency — it can't
+	// express user-facing (chain-level) success, min/max latency, or cache-hit
+	// counts — so backfill those from the raw logs table before returning.
 	if stats, ok := s.tryBucketStats(ctx, filters); ok {
+		s.backfillMissingStats(ctx, stats, filters)
 		return stats, nil
 	}
 	// Stats has a stricter matview gate than other paths: short windows go to
@@ -1697,6 +1701,94 @@ func (s *RDBLogStore) GetStats(ctx context.Context, filters SearchFilters) (*Sea
 	}
 
 	return stats, nil
+}
+
+// backfillMissingStats fills the SearchStats fields the dashboard-bucket fast
+// path cannot serve. DashboardBucketMetric aggregates only per-status counts,
+// token/cost totals, and summed latency, so the pre-aggregate carries no
+// chain-level (fallback/parent) info, no per-request latency distribution, and
+// no cache_debug payloads. Whenever GetStats short-circuits on the bucket
+// reader, we recompute exactly those fields from the raw logs table so the
+// /api/logs/stats response stays fully populated on both paths.
+func (s *RDBLogStore) backfillMissingStats(ctx context.Context, stats *SearchStats, filters SearchFilters) {
+	// Min/max latency across successful requests.
+	var latencyResult struct {
+		MinLatency sql.NullFloat64 `gorm:"column:min_latency"`
+		MaxLatency sql.NullFloat64 `gorm:"column:max_latency"`
+	}
+	latencyQuery := s.ScopedDB(ctx).Model(&Log{})
+	latencyQuery = s.applyFilters(latencyQuery, filters)
+	latencyQuery = latencyQuery.Where("status IN ?", terminalLogStatuses)
+	if err := latencyQuery.Select(`
+		MIN(CASE WHEN status = 'success' THEN latency ELSE NULL END) as min_latency,
+		MAX(CASE WHEN status = 'success' THEN latency ELSE NULL END) as max_latency
+	`).Scan(&latencyResult).Error; err != nil {
+		s.logger.Warn(fmt.Sprintf("logstore: failed to backfill min/max latency, skipping: %s", err))
+	} else {
+		if latencyResult.MinLatency.Valid {
+			stats.MinLatency = latencyResult.MinLatency.Float64
+		}
+		if latencyResult.MaxLatency.Valid {
+			stats.MaxLatency = latencyResult.MaxLatency.Float64
+		}
+	}
+
+	// User-facing success rate: count each fallback chain as one user request.
+	// A chain is identified by the original request (fallback_index=0); any
+	// successful attempt (original or fallback) makes the whole chain a success.
+	// When scoped to a specific parent request, root rows are excluded by
+	// definition (they have parent_request_id = NULL), so fall back to the
+	// per-attempt success rate.
+	if filters.ParentRequestID != "" {
+		stats.UserFacingSuccessRate = stats.SuccessRate
+	} else {
+		var userFacingResult struct {
+			TotalUserRequests      sql.NullInt64 `gorm:"column:total_user_requests"`
+			SuccessfulUserRequests sql.NullInt64 `gorm:"column:successful_user_requests"`
+		}
+		userFacingQuery := s.ScopedDB(ctx).Model(&Log{})
+		userFacingQuery = s.applyFilters(userFacingQuery, filters)
+		userFacingQuery = userFacingQuery.Where("fallback_index = ?", 0).Where("status IN ?", terminalLogStatuses)
+		innerJoin := `LEFT JOIN (
+			SELECT DISTINCT parent_request_id
+			FROM logs
+			WHERE status = 'success' AND parent_request_id IS NOT NULL`
+		var innerArgs []interface{}
+		if filters.StartTime != nil {
+			innerJoin += " AND timestamp >= ?"
+			innerArgs = append(innerArgs, *filters.StartTime)
+		}
+		if filters.EndTime != nil {
+			innerJoin += " AND timestamp <= ?"
+			innerArgs = append(innerArgs, *filters.EndTime)
+		}
+		innerJoin += `) fallback_success ON fallback_success.parent_request_id = logs.id`
+		userFacingQuery = userFacingQuery.Joins(innerJoin, innerArgs...)
+		if err := userFacingQuery.Select(`
+			COUNT(DISTINCT logs.id) as total_user_requests,
+			COUNT(DISTINCT CASE
+				WHEN logs.status = 'success' OR fallback_success.parent_request_id IS NOT NULL THEN logs.id
+				ELSE NULL
+			END) as successful_user_requests
+		`).Scan(&userFacingResult).Error; err != nil {
+			s.logger.Warn(fmt.Sprintf("logstore: failed to backfill user-facing success rate, skipping: %s", err))
+		} else {
+			stats.UserFacingTotalRequests = userFacingResult.TotalUserRequests.Int64
+			if userFacingResult.TotalUserRequests.Int64 > 0 {
+				stats.UserFacingSuccessRate = float64(userFacingResult.SuccessfulUserRequests.Int64) / float64(userFacingResult.TotalUserRequests.Int64) * 100
+			}
+		}
+	}
+
+	// Count cache hits by hit_type from cache_debug JSON.
+	cacheBase := s.ScopedDB(ctx).Model(&Log{}).Where("status IN ?", terminalLogStatuses)
+	direct, semantic, err := s.aggregateCacheHits(ctx, cacheBase, filters)
+	if err != nil {
+		s.logger.Warn(fmt.Sprintf("logstore: failed to backfill cache-hit stats, skipping: %s", err))
+	} else if direct != nil || semantic != nil {
+		stats.DirectCacheHits = direct
+		stats.SemanticCacheHits = semantic
+	}
 }
 
 // aggregateCacheHits counts direct and semantic cache hits from the cache_debug JSON column.
