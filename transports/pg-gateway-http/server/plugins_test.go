@@ -10,7 +10,13 @@ import (
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/pin-gou/pg-gateway/framework/configstore"
+	"github.com/pin-gou/pg-gateway/plugins/logging"
+	"github.com/pin-gou/pg-gateway/plugins/maxim"
+	"github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver"
+	"github.com/pin-gou/pg-gateway/plugins/otel"
 	"github.com/pin-gou/pg-gateway/plugins/providercooldown"
+	"github.com/pin-gou/pg-gateway/plugins/rtk"
+	"github.com/pin-gou/pg-gateway/plugins/semanticcache"
 	"github.com/pin-gou/pg-gateway/transports/pg-gateway-http/lib"
 )
 
@@ -94,13 +100,57 @@ func TestLoadBuiltinPlugins_ProviderCooldown_ExplicitDisabled(t *testing.T) {
 	statuses := server.Config.GetPluginStatus()
 	ps, ok := statuses[providercooldown.PluginName]
 	if !ok {
-		// When the plugin has never been registered (UpdatePluginOverallStatus
-		// was never called), the status map has no entry. This is acceptable
-		// for the disabled path — we already verified KeyPoolFilter is nil.
-		return
+		t.Fatal("provider-cooldown status missing — expected a disabled status entry")
 	}
 	if ps.Status != schemas.PluginStatusDisabled {
 		t.Fatalf("provider-cooldown status = %q, want %q", ps.Status, schemas.PluginStatusDisabled)
+	}
+}
+
+// TestLoadBuiltinPlugins_UnconfiguredBuiltins_VisibleAsDisabled verifies that
+// config-gated built-ins (rtk, otel, semantic-cache, maxim, model-catalog-resolver,
+// logging, prompts) still get a disabled status entry at startup even when they are
+// not configured. This makes the plugins list behave like an "installed plugins"
+// surface: every built-in is visible and the enable/disable action happens in its
+// detail view — a plugin must never silently vanish from the list.
+//
+// Red phase: these plugins are absent from GetPluginStatus() because markPluginDisabled
+// only flipped an existing entry and silently no-op'd when there was none.
+func TestLoadBuiltinPlugins_UnconfiguredBuiltins_VisibleAsDisabled(t *testing.T) {
+	prevLogger := logger
+	logger = noopTestLogger{}
+	defer func() { logger = prevLogger }()
+
+	server := &BifrostHTTPServer{
+		Ctx: schemas.NewBifrostContext(context.Background(), schemas.NoDeadline),
+		Config: &lib.Config{
+			ClientConfig: &configstore.ClientConfig{},
+			// PluginConfigs is nil — no rtk / otel / semantic_cache / maxim entry.
+		},
+	}
+
+	if err := server.loadBuiltinPlugins(context.Background()); err != nil {
+		t.Fatalf("loadBuiltinPlugins returned unexpected error: %v", err)
+	}
+
+	statuses := server.Config.GetPluginStatus()
+	wantDisabled := []string{
+		rtk.PluginName,
+		otel.PluginName,
+		semanticcache.PluginName,
+		maxim.PluginName,
+		modelcatalogresolver.PluginName,
+		logging.PluginName,
+	}
+	for _, name := range wantDisabled {
+		ps, ok := statuses[name]
+		if !ok {
+			t.Errorf("plugin %s has no status entry — expected disabled", name)
+			continue
+		}
+		if ps.Status != schemas.PluginStatusDisabled {
+			t.Errorf("plugin %s status = %q, want %q", name, ps.Status, schemas.PluginStatusDisabled)
+		}
 	}
 }
 
@@ -318,8 +368,8 @@ func TestRTKInit_InvalidConfigRejected(t *testing.T) {
 		{
 			name: "negative max_chars_per_result",
 			config: map[string]any{
-				"enabled":             true,
-				"intensity":           "standard",
+				"enabled":              true,
+				"intensity":            "standard",
 				"max_chars_per_result": -100,
 			},
 		},

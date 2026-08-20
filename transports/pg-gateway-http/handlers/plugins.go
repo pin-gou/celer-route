@@ -185,9 +185,9 @@ func (h *PluginsHandler) getPlugins(ctx *fasthttp.RequestCtx) {
 			finalPlugins = append(finalPlugins, PluginResponse{
 				Name:       pluginStatus.Name,
 				ActualName: name,
-				Enabled:    true,
+				Enabled:    pluginStatus.Status == schemas.PluginStatusActive,
 				Config:     map[string]any{},
-				IsCustom:   true,
+				IsCustom:   !lib.IsBuiltinPlugin(name),
 				Path:       nil,
 				Status:     pluginStatus,
 			})
@@ -227,7 +227,7 @@ func (h *PluginsHandler) getPlugins(ctx *fasthttp.RequestCtx) {
 		finalPlugins = append(finalPlugins, PluginResponse{
 			Name:       status.Name,
 			ActualName: actualName,
-			Enabled:    true,
+			Enabled:    status.Status == schemas.PluginStatusActive,
 			Config:     map[string]any{},
 			IsCustom:   false,
 			Path:       nil,

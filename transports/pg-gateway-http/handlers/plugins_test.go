@@ -457,8 +457,8 @@ func TestUpdatePlugin_RTKConfigPassThrough(t *testing.T) {
 	SetLogger(&mockLogger{})
 
 	existingConfig := map[string]any{
-		"enabled":                      true,
-		"intensity":                    "standard",
+		"enabled":                     true,
+		"intensity":                   "standard",
 		"max_lines_per_result":        120,
 		"max_chars_per_result":        12000,
 		"dedup_threshold":             3,
@@ -486,8 +486,8 @@ func TestUpdatePlugin_RTKConfigPassThrough(t *testing.T) {
 	reqBody := map[string]any{
 		"enabled": true,
 		"config": map[string]any{
-			"enabled":                      true,
-			"intensity":                    "standard",
+			"enabled":                     true,
+			"intensity":                   "standard",
 			"max_lines_per_result":        120,
 			"max_chars_per_result":        12000,
 			"dedup_threshold":             3,
@@ -591,5 +591,177 @@ func TestGetLoadedPlugins(t *testing.T) {
 		if response.Plugins[i] != name {
 			t.Errorf("plugins[%d] = %q, want %q", i, response.Plugins[i], name)
 		}
+	}
+}
+
+// statusPluginsLoader returns a fixed status map for getPlugins tests.
+type statusPluginsLoader struct {
+	noopPluginsLoader
+	statuses map[string]schemas.PluginStatus
+}
+
+func (l statusPluginsLoader) GetPluginStatus(_ context.Context) map[string]schemas.PluginStatus {
+	return l.statuses
+}
+
+// emptyPluginsStore is a config store whose GetPlugins returns an empty list.
+type emptyPluginsStore struct {
+	configstore.ConfigStore
+}
+
+func (s emptyPluginsStore) GetPlugins(_ context.Context) ([]*configstoreTables.TablePlugin, error) {
+	return nil, nil
+}
+
+// TestGetPlugins_NoConfigStore_EnabledReflectsStatus verifies the no-configstore
+// branch of getPlugins: every plugin in the status map is returned as a PluginResponse
+// with Enabled derived from the status (not hardcoded true) and IsCustom computed
+// from IsBuiltinPlugin.
+func TestGetPlugins_NoConfigStore_EnabledReflectsStatus(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	statuses := map[string]schemas.PluginStatus{
+		"rtk": {
+			Name:   "rtk",
+			Status: schemas.PluginStatusDisabled,
+			Logs:   []string{},
+		},
+		"telemetry": {
+			Name:   "telemetry",
+			Status: schemas.PluginStatusActive,
+			Logs:   []string{},
+		},
+		"my-custom-plugin": {
+			Name:   "my-custom-plugin",
+			Status: schemas.PluginStatusActive,
+			Logs:   []string{},
+		},
+	}
+
+	h := &PluginsHandler{
+		pluginsLoader: statusPluginsLoader{statuses: statuses},
+		configStore:   nil,
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	h.getPlugins(ctx)
+
+	if ctx.Response.StatusCode() != 200 {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+
+	var resp struct {
+		Plugins []PluginResponse `json:"plugins"`
+		Count   int              `json:"count"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	lookup := make(map[string]PluginResponse, len(resp.Plugins))
+	for _, p := range resp.Plugins {
+		lookup[p.Name] = p
+	}
+
+	// rtk: disabled built-in → Enabled=false, IsCustom=false
+	rtk, ok := lookup["rtk"]
+	if !ok {
+		t.Fatal("rtk not found in plugin list")
+	}
+	if rtk.Enabled {
+		t.Errorf("rtk.Enabled = true, want false (status is disabled)")
+	}
+	if rtk.IsCustom {
+		t.Errorf("rtk.IsCustom = true, want false (rtk is a built-in)")
+	}
+
+	// telemetry: active built-in → Enabled=true, IsCustom=false
+	tel, ok := lookup["telemetry"]
+	if !ok {
+		t.Fatal("telemetry not found in plugin list")
+	}
+	if !tel.Enabled {
+		t.Errorf("telemetry.Enabled = false, want true (status is active)")
+	}
+	if tel.IsCustom {
+		t.Errorf("telemetry.IsCustom = true, want false (telemetry is a built-in)")
+	}
+
+	// my-custom-plugin: active custom → Enabled=true, IsCustom=true
+	custom, ok := lookup["my-custom-plugin"]
+	if !ok {
+		t.Fatal("my-custom-plugin not found in plugin list")
+	}
+	if !custom.Enabled {
+		t.Errorf("my-custom-plugin.Enabled = false, want true (status is active)")
+	}
+	if !custom.IsCustom {
+		t.Errorf("my-custom-plugin.IsCustom = false, want true (custom plugin)")
+	}
+}
+
+// TestGetPlugins_WithStore_DisabledBuiltinsMerged verifies the store-backed branch
+// of getPlugins: a disabled built-in that has no config_plugins row is merged into
+// the response with Enabled=false (derived from status, not hardcoded true).
+func TestGetPlugins_WithStore_DisabledBuiltinsMerged(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	statuses := map[string]schemas.PluginStatus{
+		"rtk": {
+			Name:   "rtk",
+			Status: schemas.PluginStatusDisabled,
+			Logs:   []string{},
+		},
+		"telemetry": {
+			Name:   "telemetry",
+			Status: schemas.PluginStatusActive,
+			Logs:   []string{},
+		},
+	}
+
+	h := &PluginsHandler{
+		pluginsLoader: statusPluginsLoader{statuses: statuses},
+		configStore:   emptyPluginsStore{},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	h.getPlugins(ctx)
+
+	if ctx.Response.StatusCode() != 200 {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+
+	var resp struct {
+		Plugins []PluginResponse `json:"plugins"`
+		Count   int              `json:"count"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	lookup := make(map[string]PluginResponse, len(resp.Plugins))
+	for _, p := range resp.Plugins {
+		lookup[p.Name] = p
+	}
+
+	// rtk: disabled built-in no DB row → must be merged with Enabled=false
+	rtk, ok := lookup["rtk"]
+	if !ok {
+		t.Fatal("rtk not found in plugin list — disabled built-in must be merged")
+	}
+	if rtk.Enabled {
+		t.Errorf("rtk.Enabled = true, want false (status is disabled)")
+	}
+	if rtk.IsCustom {
+		t.Errorf("rtk.IsCustom = true, want false (rtk is a built-in)")
+	}
+
+	// telemetry: active built-in → Enabled=true
+	tel, ok := lookup["telemetry"]
+	if !ok {
+		t.Fatal("telemetry not found in plugin list")
+	}
+	if !tel.Enabled {
+		t.Errorf("telemetry.Enabled = false, want true (status is active)")
 	}
 }

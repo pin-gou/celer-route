@@ -489,9 +489,18 @@ func (s *BifrostHTTPServer) GetAvailableMCPTools(ctx context.Context) []schemas.
 	return s.Client.GetAvailableMCPTools(bifrostCtx)
 }
 
-// markPluginDisabled marks a plugin as disabled in the plugin status
+// markPluginDisabled marks a plugin as disabled in the plugin status.
+// When the plugin was never registered during this boot (e.g. a built-in that is
+// only loaded once configured — rtk, otel, semantic-cache, maxim), it registers a
+// disabled status entry so the plugin still appears in the plugins list as
+// "installed but disabled" instead of silently vanishing.
 func (s *BifrostHTTPServer) markPluginDisabled(name string) error {
-	return s.Config.UpdatePluginStatus(name, schemas.PluginStatusDisabled)
+	if err := s.Config.UpdatePluginStatus(name, schemas.PluginStatusDisabled); err == nil {
+		return nil
+	}
+	s.Config.UpdatePluginOverallStatus(name, name, schemas.PluginStatusDisabled,
+		[]string{fmt.Sprintf("%s plugin is disabled", name)}, []schemas.PluginType{})
+	return nil
 }
 
 // getGovernancePluginName returns the governance plugin name from context or default
