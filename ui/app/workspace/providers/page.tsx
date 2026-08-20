@@ -8,6 +8,7 @@ import {
 } from "@/lib/store/apis/providersApi";
 import { type ModelProvider, ModelProviderName } from "@/lib/types/config";
 import { useRbac, RbacOperation, RbacResource } from "@/lib/rbac";
+import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -20,6 +21,7 @@ import { useProviders2Data } from "./views/useProviders2Data";
 
 export default function ProvidersPage() {
 	const { t } = useTranslation("providers");
+	const navigate = useNavigate();
 	const { groupedProviders, isLoading, error, refetch } = useProviders2Data();
 	const [batchUpdateKeys] = useBatchUpdateProviderKeysMutation();
 	const [getProviderKeys] = useLazyGetProviderKeysQuery();
@@ -126,8 +128,17 @@ export default function ProvidersPage() {
 	const handleSelectKnownProvider = async (name: string) => {
 		try {
 			await createProvider({ provider: name as ModelProviderName }).unwrap();
+			// Drop the user straight into the Keys tab so they can paste the
+			// API key they just came here to set up. The tab query param is
+			// owned by the detail page (`useQueryState("tab")`).
+			navigate({ to: "/workspace/providers/$id", params: { id: name }, search: { tab: "keys" } });
 		} catch (err: any) {
-			if (err?.status === 409) return;
+			if (err?.status === 409) {
+				// Already configured — still jump to the detail page so the user
+				// can manage keys without an extra click.
+				navigate({ to: "/workspace/providers/$id", params: { id: name }, search: { tab: "keys" } });
+				return;
+			}
 			toast.error(t("toast.failedToAddProvider"), {
 				description: getErrorMessage(err),
 			});
@@ -136,6 +147,11 @@ export default function ProvidersPage() {
 
 	const handleAddCustomProvider = () => {
 		setShowCustomProviderSheet(true);
+	};
+
+	const handleCustomProviderSaved = (id: string) => {
+		setShowCustomProviderSheet(false);
+		navigate({ to: "/workspace/providers/$id", params: { id }, search: { tab: "keys" } });
 	};
 
 	if (isLoading) {
@@ -188,10 +204,7 @@ export default function ProvidersPage() {
 			<AddCustomProviderSheet
 				show={showCustomProviderSheet}
 				onClose={() => setShowCustomProviderSheet(false)}
-				onSave={() => {
-					refetch();
-					setShowCustomProviderSheet(false);
-				}}
+				onSave={handleCustomProviderSaved}
 			/>
 
 			{deleteProviderName && (

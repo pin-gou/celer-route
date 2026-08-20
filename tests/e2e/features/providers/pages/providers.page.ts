@@ -156,6 +156,13 @@ export class ProvidersPage extends BasePage {
    * modal Dialog with grouped tiles, search, and capability filters. The
    * option testid (add-provider-option-{name}) is preserved so callers and
    * spec assertions keep working unchanged.
+   *
+   * Note: After the picker selects a provider, the app navigates to that
+   * provider's detail page (Keys tab). Tests that need to interact with the
+   * list view afterwards should call `gotoProvidersList()` or rely on a
+   * follow-up step that navigates away from the detail page. For convenience
+   * (and to keep the existing specs that expect the list page after this call
+   * working), we navigate back to the list once the network settles.
    */
   async addKnownProviderFromDropdown(providerName: string): Promise<void> {
     await this.addProviderBtn.click()
@@ -164,6 +171,11 @@ export class ProvidersPage extends BasePage {
     const option = dialog.getByTestId(`add-provider-option-${providerName}`)
     await option.waitFor({ state: 'visible', timeout: 5000 })
     await option.click()
+    await waitForNetworkIdle(this.page)
+    // The picker auto-routes to the detail page; bounce back to the list so
+    // list-view helpers (`providerExists`, `getProviderItem`, ...) keep working
+    // for specs that drive the flow from the list page.
+    await this.page.goto('/workspace/providers')
     await waitForNetworkIdle(this.page)
   }
 
