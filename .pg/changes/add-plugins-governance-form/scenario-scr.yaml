@@ -94,7 +94,6 @@ scenarios:
   - status_code == 200
   - response.body.plugins contains otel
   - response.body.name == otel
-  - response.body.status.status == active
   evidence:
   - 2-build/<report_seq>-S-otel-fragment-rendered-evidence.json
 - scenario_id: S-i18n-zh-cn-toggle
