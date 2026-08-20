@@ -51,4 +51,5 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	zhipu: ["chat", "embed", "vision", "tools", "image", "speech"],
 	tencent: ["chat", "embed", "vision", "tools", "image", "speech"],
 	baidu: ["chat", "embed", "vision", "tools", "image", "speech"],
+	sensenova: ["chat", "embed", "vision", "tools", "image", "speech"],
 };

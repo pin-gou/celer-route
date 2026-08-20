@@ -49,8 +49,9 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/runware"
 	"github.com/pin-gou/pg-gateway/core/providers/runway"
 	"github.com/pin-gou/pg-gateway/core/providers/sarvam"
+"github.com/pin-gou/pg-gateway/core/providers/sensenova"
 	"github.com/pin-gou/pg-gateway/core/providers/sgl"
-"github.com/pin-gou/pg-gateway/core/providers/siliconflow"
+	"github.com/pin-gou/pg-gateway/core/providers/siliconflow"
 	"github.com/pin-gou/pg-gateway/core/providers/tencent"
 	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
 	"github.com/pin-gou/pg-gateway/core/providers/vertex"
@@ -4511,6 +4512,8 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return tencent.NewTencentProvider(config, bifrost.logger)
 	case schemas.Baidu:
 		return baidu.NewBaiduProvider(config, bifrost.logger)
+	case schemas.Sensenova:
+		return sensenova.NewSensenovaProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

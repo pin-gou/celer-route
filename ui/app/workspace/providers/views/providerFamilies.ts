@@ -10,7 +10,7 @@ import type { ProviderName } from "@/lib/constants/logs";
 export type FamilyKey = "domestic" | "overseas" | "gateway" | "other";
 
 export const FAMILY_MAP: Record<FamilyKey, string[]> = {
-	domestic: ["deepseek", "moonshot", "alibaba", "zhipu", "volcengine", "tencent", "baidu", "siliconflow", "minimax", "sarvam"],
+	domestic: ["deepseek", "moonshot", "alibaba", "zhipu", "volcengine", "tencent", "baidu", "siliconflow", "sensenova", "minimax", "sarvam"],
 	overseas: ["openai", "anthropic", "gemini", "vertex", "bedrock", "mistral", "cohere", "groq", "huggingface", "xai", "replicate"],
 	gateway: [
 		"openrouter",
@@ -62,4 +62,4 @@ export const DISPLAY_FAMILY_ORDER = ["Custom", ...FAMILY_ORDER] as const;
 
 /** Providers commonly surfaced in the "Recommended" row of the picker.
  * The order here is the display order. */
-export const RECOMMENDED_PROVIDERS: ProviderName[] = ["deepseek", "alibaba", "minimax"];
+export const RECOMMENDED_PROVIDERS: ProviderName[] = ["deepseek", "minimax", "sensenova", "opencode"];

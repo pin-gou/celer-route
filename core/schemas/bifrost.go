@@ -82,6 +82,7 @@ const (
 	Zhipu         ModelProvider = "zhipu"
 	Tencent       ModelProvider = "tencent"
 	Baidu         ModelProvider = "baidu"
+	Sensenova     ModelProvider = "sensenova"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
@@ -135,8 +136,9 @@ var StandardProviders = []ModelProvider{
 	Volcengine,
 	Zhipu,
 	Tencent,
-	Baidu,
-}
+Baidu,
+		Sensenova,
+	}
 
 // KeylessProviders is the set of built-in (non-custom) providers that never
 // require an API key — request routing, model discovery, and key management

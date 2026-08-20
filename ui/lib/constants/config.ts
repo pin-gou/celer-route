@@ -75,6 +75,7 @@ export const ModelPlaceholders = {
 	zhipu: "e.g. glm-4-plus, glm-4-flash",
 	tencent: "e.g. hunyuan-turbos-latest, hunyuan-t1-latest, hunyuan-pro",
 	baidu: "e.g. ernie-5.1, ernie-5.0, ernie-4.5-turbo-128k",
+	sensenova: "e.g. SenseNova-v5, SenseChat-32K",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
@@ -118,6 +119,7 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	zhipu: true,
 	tencent: true,
 	baidu: true,
+	sensenova: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
@@ -163,6 +165,7 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	zhipu: "https://open.bigmodel.cn",
 	tencent: "https://cloud.tencent.com/product/hunyuan",
 	baidu: "https://cloud.baidu.com/product/wenxinworkshop",
+	sensenova: "https://platform.sensenova.cn",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
@@ -208,6 +211,7 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	zhipu: "https://open.bigmodel.cn/usercenter/apikeys",
 	tencent: "https://console.cloud.tencent.com/hunyuan/api-key",
 	baidu: "https://console.bce.baidu.com/qianfan/ais/console/application/list",
+	sensenova: "https://platform.sensenova.cn/console/keys",
 };
 
 export const DefaultNetworkConfig = {

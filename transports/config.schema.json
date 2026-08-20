@@ -534,6 +534,9 @@
         },
         "baidu": {
           "$ref": "#/$defs/provider"
+        },
+        "sensenova": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -7692,7 +7695,8 @@
             "volcengine",
             "zhipu",
             "tencent",
-            "baidu"
+            "baidu",
+            "sensenova"
           ],
           "description": "Base provider type to extend"
         },
