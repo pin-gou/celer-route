@@ -41,12 +41,7 @@ import { describe, expect, it } from "vitest";
 // Red phase: these schemas are not yet exported from plugins.ts.
 // In the TDD red phase this import will fail at load time.
 // ---------------------------------------------------------------------------
-import {
-	loggingConfigSchema,
-	semanticCacheConfigSchema,
-	mockerConfigSchema,
-	compatConfigSchema,
-} from "@/lib/types/plugins";
+import { loggingConfigSchema, semanticCacheConfigSchema, mockerConfigSchema, compatConfigSchema } from "@/lib/types/plugins";
 
 // ---------------------------------------------------------------------------
 // loggingConfigSchema tests

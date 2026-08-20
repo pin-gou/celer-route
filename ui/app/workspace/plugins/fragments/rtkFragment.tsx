@@ -569,7 +569,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 export function RtkFragment({ plugin }: { plugin: Plugin }) {
 	const { t } = useTranslation("plugins");
 	return (
-		<div className="space-y-8">
+		<div data-testid="rtk-fragment" className="space-y-8">
 			<h3 className="text-lg font-semibold">{t("rtk.title")}</h3>
 
 			{/* Section 1: enabled switch */}

@@ -146,16 +146,16 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 12.1 在 `ui/lib/types/plugins.ts` 中新增 4 个 Zod schema：`loggingConfigSchema`、`semanticCacheConfigSchema`、`compatConfigSchema`、`mockerConfigSchema`，使用 `.optional()` 容错现有 config 缺失字段
-- [ ] 12.2 在 `ui/lib/types/plugins.ts` 中新增 1 个 i18n 标签映射：`pluginFragmentLabels`（logging / semantic_cache / mocker / compat / prompts / modelcatalogresolver / jsonparser → display name）
-- [ ] 12.3 新增 `ui/app/workspace/plugins/fragments/loggingFragment.tsx`：4 字段表单（Switch + TagInput），按钮触发 `useUpdatePluginMutation`
-- [ ] 12.4 新增 `ui/app/workspace/plugins/fragments/semanticCacheFragment.tsx`：11 字段表单 with `allOf` 条件联动（provider 切换时 validator 实时重算）
-- [ ] 12.5 新增 `ui/app/workspace/plugins/fragments/mockerFragment.tsx`：Monaco JSON 编辑器 + Zod 实时校验 + 错误提示
-- [ ] 12.6 新增 `ui/app/workspace/plugins/fragments/compatFragment.tsx`：4 个 Switch + 提交按钮
-- [ ] 12.7 新增 3 个占位卡 fragment：`promptsFragment.tsx`、`modelcatalogresolverFragment.tsx`、`jsonparserFragment.tsx`（Card + 跳转 link）
-- [ ] 12.8 修改 `ui/app/workspace/plugins/views/pluginsView.tsx`：在散转逻辑中新增 7 个插件名 → fragment 映射 + 7 个 import
-- [ ] 12.9 在 `ui/locales/en/plugins.json` 中新增 49 个 i18n 键（pluginNames.* + loggingConfig.* + semanticCacheConfig.* + mockerConfig.* + compatConfig.* + placeholderConfig.*）
-- [ ] 12.10 在 `ui/locales/zh-CN/plugins.json` 中新增对应 49 个键值，LLM token 译"词元"、auth token 译"令牌"
+- [x] 12.1 在 `ui/lib/types/plugins.ts` 中新增 4 个 Zod schema：`loggingConfigSchema`、`semanticCacheConfigSchema`、`compatConfigSchema`、`mockerConfigSchema`，使用 `.optional()` 容错现有 config 缺失字段
+- [x] 12.2 在 `ui/lib/types/plugins.ts` 中新增 1 个 i18n 标签映射：`pluginFragmentLabels`（logging / semantic_cache / mocker / compat / prompts / modelcatalogresolver / jsonparser → display name）
+- [x] 12.3 新增 `ui/app/workspace/plugins/fragments/loggingFragment.tsx`：4 字段表单（Switch + TagInput），按钮触发 `useUpdatePluginMutation`
+- [x] 12.4 新增 `ui/app/workspace/plugins/fragments/semanticCacheFragment.tsx`：11 字段表单 with `allOf` 条件联动（provider 切换时 validator 实时重算）
+- [x] 12.5 新增 `ui/app/workspace/plugins/fragments/mockerFragment.tsx`：Monaco JSON 编辑器 + Zod 实时校验 + 错误提示
+- [x] 12.6 新增 `ui/app/workspace/plugins/fragments/compatFragment.tsx`：4 个 Switch + 提交按钮
+- [x] 12.7 新增 3 个占位卡 fragment：`promptsFragment.tsx`、`modelcatalogresolverFragment.tsx`、`jsonparserFragment.tsx`（Card + 跳转 link）
+- [x] 12.8 修改 `ui/app/workspace/plugins/views/pluginsView.tsx`：在散转逻辑中新增 7 个插件名 → fragment 映射 + 7 个 import
+- [x] 12.9 在 `ui/locales/en/plugins.json` 中新增 49 个 i18n 键（pluginNames.* + loggingConfig.* + semanticCacheConfig.* + mockerConfig.* + compatConfig.* + placeholderConfig.*）
+- [x] 12.10 在 `ui/locales/zh-CN/plugins.json` 中新增对应 49 个键值，LLM token 译"词元"、auth token 译"令牌"
 
 ## 13. dev.ui:review - 静态代码审查
 

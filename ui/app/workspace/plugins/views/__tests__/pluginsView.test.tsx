@@ -52,6 +52,21 @@ vi.mock("@/lib/store/apis/pluginsApi", async (importOriginal) => {
 	return {
 		...actual,
 		useUpdatePluginMutation: () => [mocks.updatePlugin, { isLoading: false }],
+		useDeletePluginMutation: () => [vi.fn(), { isLoading: false }],
+		useGetCooldownStateQuery: () => ({ data: { state: [] }, isLoading: false }),
+		useGetCooldownStatsQuery: () => ({ data: { stats: { markCount: 0, suppressedCount: 0, activeCount: 0 } }, isLoading: false }),
+		useUnfreezeCooldownMutation: () => [vi.fn(), { isLoading: false }],
+		useGetPluginsQuery: () => ({ data: [], isLoading: false }),
+		useGetLoadedPluginsQuery: () => ({ data: [], isLoading: false }),
+		useGetPluginQuery: () => ({ data: undefined, isLoading: false }),
+	};
+});
+
+vi.mock("@/lib/store/apis/providersApi", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/store/apis/providersApi")>();
+	return {
+		...actual,
+		useGetProvidersQuery: () => ({ data: [], isLoading: false }),
 	};
 });
 
@@ -94,6 +109,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 	return {
 		...actual,
 		useNavigate: () => vi.fn(),
+		Link: ({ children, ...props }: any) => (
+			<a data-mock-link="true" href={props.to || "#"}>
+				{children}
+			</a>
+		),
 	};
 });
 
