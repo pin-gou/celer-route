@@ -32,10 +32,13 @@ const KNOWN = [
 	{ name: "anthropic" as const },
 	{ name: "gemini" as const },
 	{ name: "deepseek" as const },
+	{ name: "alibaba" as const },
+	{ name: "minimax" as const },
 	{ name: "elevenlabs" as const },
 	{ name: "replicate" as const },
 	{ name: "huggingface" as const },
 	{ name: "runway" as const },
+	{ name: "fireworks" as const },
 ];
 
 async function openDialog(existingProviderNames: Set<string> = new Set()) {
@@ -91,6 +94,24 @@ describe("AddProviderDialog", () => {
 		// Anthropic / OpenAI / Gemini / ElevenLabs / Replicate should be filtered out
 		expect(screen.queryByTestId("add-provider-option-anthropic")).toBeNull();
 		expect(screen.queryByTestId("add-provider-option-openai")).toBeNull();
+	});
+
+	it("places the Custom provider tile as the first card in the Recommended row", async () => {
+		await openDialog();
+		const recommended = screen.getByTestId("add-provider-recommended");
+		const tiles = recommended.querySelectorAll("[data-testid^='add-provider-option-']");
+		expect(tiles.length).toBeGreaterThan(0);
+		expect(tiles[0].getAttribute("data-testid")).toBe("add-provider-option-custom");
+	});
+
+	it("places DeepSeek first among recommended known providers", async () => {
+		await openDialog();
+		const recommended = screen.getByTestId("add-provider-recommended");
+		const tiles = Array.from(recommended.querySelectorAll("[data-testid^='add-provider-option-']")).map((n) =>
+			n.getAttribute("data-testid"),
+		);
+		// Skip the first (Custom) and verify the next three are DeepSeek / Alibaba / MiniMax
+		expect(tiles.slice(1, 4)).toEqual(["add-provider-option-deepseek", "add-provider-option-alibaba", "add-provider-option-minimax"]);
 	});
 
 	it("filters provider tiles by capability chip selection (AND across chips)", async () => {
@@ -157,9 +178,9 @@ describe("AddProviderDialog", () => {
 
 	it("groups known providers into family sections", async () => {
 		await openDialog();
-		// Anthropic Family should be present (anthropic is a fixture)
-		expect(screen.getByTestId("add-provider-family-anthropic-family")).toBeTruthy();
-		// Google Family should be present (gemini)
-		expect(screen.getByTestId("add-provider-family-google-family")).toBeTruthy();
+		// Overseas bucket contains anthropic, gemini, openai
+		expect(screen.getByTestId("add-provider-family-overseas")).toBeTruthy();
+		// Gateway bucket contains huggingface
+		expect(screen.getByTestId("add-provider-family-gateway")).toBeTruthy();
 	});
 });

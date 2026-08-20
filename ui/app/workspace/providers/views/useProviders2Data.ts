@@ -2,7 +2,7 @@ import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { ProviderLabels } from "@/lib/constants/logs";
 import { useMemo } from "react";
 import type { ProviderCardProvider } from "./ProviderCard";
-import { FAMILY_ORDER, getFamilyName } from "./providerFamilies";
+import { DISPLAY_FAMILY_ORDER, getFamilyName } from "./providerFamilies";
 
 export function useProviders2Data() {
 	const { data: providers, isLoading, error, refetch } = useGetProvidersQuery();
@@ -31,12 +31,10 @@ export function useProviders2Data() {
 			groups.get(family)!.push(cardProvider);
 		}
 
-		// Sort families: Custom first, then known families, then Other
-		const familyOrder = ["Custom", ...FAMILY_ORDER];
 		return Array.from(groups.entries())
 			.sort(([a], [b]) => {
-				const ai = familyOrder.indexOf(a);
-				const bi = familyOrder.indexOf(b);
+				const ai = DISPLAY_FAMILY_ORDER.indexOf(a as (typeof DISPLAY_FAMILY_ORDER)[number]);
+				const bi = DISPLAY_FAMILY_ORDER.indexOf(b as (typeof DISPLAY_FAMILY_ORDER)[number]);
 				return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
 			})
 			.map(([family, members]) => ({

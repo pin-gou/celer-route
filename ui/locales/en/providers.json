@@ -67,12 +67,10 @@
 		"customProviderOption": "Custom provider...",
 		"family": {
 			"custom": "Custom",
-			"other": "Other",
-			"openai": "OpenAI Family",
-			"anthropic": "Anthropic Family",
-			"google": "Google Family",
-			"metaLlama": "Meta-Llama Family",
-			"aws": "AWS Family"
+			"domestic": "Domestic",
+			"overseas": "Overseas",
+			"gateway": "Gateways",
+			"other": "Other"
 		},
 		"filter": {
 			"all": "All",

@@ -52,10 +52,3 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	tencent: ["chat", "embed", "vision", "tools", "image", "speech"],
 	baidu: ["chat", "embed", "vision", "tools", "image", "speech"],
 };
-
-/**
- * Providers commonly used in the China region. Surfaced as the "Recommended"
- * row in the picker to give new users a fast on-ramp without making them
- * scroll a 39-item catalog.
- */
-export const RECOMMENDED_PROVIDERS: ProviderName[] = ["deepseek", "moonshot", "alibaba", "zhipu", "volcengine", "openai"];

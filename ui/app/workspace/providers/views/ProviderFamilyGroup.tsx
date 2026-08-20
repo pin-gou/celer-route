@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ProviderCard, type ProviderCardProvider } from "./ProviderCard";
+import { getFamilyLabelKey } from "./providerFamilies";
 
 export interface ProviderFamilyGroupProps {
 	familyName: string;
@@ -15,17 +16,7 @@ export function ProviderFamilyGroup({ familyName, providers, onToggle, onQuickTe
 	const { t } = useTranslation("providers");
 	const [isExpanded, setIsExpanded] = useState(true);
 
-	const familyLabel = t(
-		{
-			Custom: "providers2.family.custom",
-			Other: "providers2.family.other",
-			"OpenAI Family": "providers2.family.openai",
-			"Anthropic Family": "providers2.family.anthropic",
-			"Google Family": "providers2.family.google",
-			"Meta-Llama Family": "providers2.family.metaLlama",
-			"AWS Family": "providers2.family.aws",
-		}[familyName] ?? familyName,
-	);
+	const familyLabel = t(getFamilyLabelKey(familyName));
 
 	return (
 		<div data-testid={`providers2-family-group-${familyName.toLowerCase().replace(/\s+/g, "-")}`} className="mb-6">

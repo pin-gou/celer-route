@@ -67,12 +67,10 @@
 		"customProviderOption": "自定义提供商...",
 		"family": {
 			"custom": "自定义",
-			"other": "其他",
-			"openai": "OpenAI 系列",
-			"anthropic": "Anthropic 系列",
-			"google": "Google 系列",
-			"metaLlama": "Meta-Llama 系列",
-			"aws": "AWS 系列"
+			"domestic": "国内",
+			"overseas": "国外",
+			"gateway": "网关",
+			"other": "其他"
 		},
 		"filter": {
 			"all": "全部",

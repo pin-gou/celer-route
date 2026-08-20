@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
 import { CheckIcon, PlusIcon, SearchIcon, Settings2Icon, SparklesIcon, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FAMILY_ORDER, getFamilyName } from "./providerFamilies";
-import { CAPABILITY_ORDER, type Capability, ProviderCapabilities, RECOMMENDED_PROVIDERS } from "./providerCapabilities";
+import { CAPABILITY_ORDER, type Capability, ProviderCapabilities } from "./providerCapabilities";
+import { FAMILY_ORDER, getFamilyLabelKey, getFamilyName, RECOMMENDED_PROVIDERS } from "./providerFamilies";
 
 export interface AddProviderDialogProps {
 	/** Provider names already configured in the workspace (existing sidebar entries). */
@@ -129,7 +129,7 @@ export function AddProviderDialog({
 				</Button>
 			</DialogTrigger>
 			<DialogContent
-				className="custom-scrollbar flex max-h-[75vh] w-[75vw] max-w-[800px] flex-col gap-0 overflow-hidden p-0"
+				className="custom-scrollbar flex max-h-[85vh] w-full !max-w-[1024px] flex-col gap-0 overflow-hidden p-0"
 				data-testid="add-provider-dialog"
 				showCloseButton={false}
 			>
@@ -204,14 +204,16 @@ export function AddProviderDialog({
 						</div>
 					) : (
 						<div className="flex flex-col gap-6">
-							{/* Recommended row — only when no filter is active */}
+							{/* Recommended row — only when no filter is active. Custom goes first. */}
 							{!hasActiveFilter && recommended.length > 0 && (
 								<section data-testid="add-provider-recommended">
 									<header className="mb-3 flex items-center gap-2">
 										<SparklesIcon className="text-primary h-4 w-4" />
 										<h3 className="text-sm font-semibold">{t("providers2.addProviderDialog.recommended")}</h3>
 									</header>
-									<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+									<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+										{/* Custom sits at the head of the row per design request */}
+										<CustomProviderTile onClick={handleCustomClick} />
 										{recommended.map((name) => (
 											<ProviderTile
 												key={name}
@@ -228,22 +230,10 @@ export function AddProviderDialog({
 							{grouped.map(({ family, providers }) => (
 								<section key={family} data-testid={`add-provider-family-${family.toLowerCase().replace(/\s+/g, "-")}`}>
 									<header className="mb-3 flex items-center justify-between">
-										<h3 className="text-sm font-semibold">
-											{t(
-												{
-													Custom: "providers2.family.custom",
-													Other: "providers2.family.other",
-													"OpenAI Family": "providers2.family.openai",
-													"Anthropic Family": "providers2.family.anthropic",
-													"Google Family": "providers2.family.google",
-													"Meta-Llama Family": "providers2.family.metaLlama",
-													"AWS Family": "providers2.family.aws",
-												}[family] ?? family,
-											)}
-										</h3>
+										<h3 className="text-sm font-semibold">{t(getFamilyLabelKey(family))}</h3>
 										<span className="text-muted-foreground text-xs">({providers.length})</span>
 									</header>
-									<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+									<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
 										{providers.map((name) => (
 											<ProviderTile
 												key={name}
@@ -257,24 +247,6 @@ export function AddProviderDialog({
 							))}
 						</div>
 					)}
-				</div>
-
-				{/* Custom provider footer */}
-				<div className="border-t px-6 py-3">
-					<button
-						type="button"
-						data-testid="add-provider-option-custom"
-						onClick={handleCustomClick}
-						className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors"
-					>
-						<div className="bg-muted text-muted-foreground flex h-9 w-9 items-center justify-center rounded-md">
-							<Settings2Icon className="h-4 w-4" />
-						</div>
-						<div className="flex flex-col">
-							<span className="text-sm font-medium">{t("providers2.customProviderOption")}</span>
-							<span className="text-muted-foreground text-xs">{t("providers2.addProviderDialog.customDescription")}</span>
-						</div>
-					</button>
 				</div>
 			</DialogContent>
 		</Dialog>
@@ -322,6 +294,26 @@ function ProviderTile({ name, alreadyAdded, onClick }: ProviderTileProps) {
 				))}
 				{caps.length > 4 && <span className="text-muted-foreground text-[10px] leading-none">+{caps.length - 4}</span>}
 			</div>
+		</button>
+	);
+}
+
+function CustomProviderTile({ onClick }: { onClick: () => void }) {
+	const { t } = useTranslation("providers");
+	return (
+		<button
+			type="button"
+			data-testid="add-provider-option-custom"
+			onClick={onClick}
+			className="hover:border-primary hover:bg-accent/40 group relative flex flex-col gap-2 rounded-md border p-3 text-left transition-colors"
+		>
+			<div className="flex items-center gap-2">
+				<div className="bg-muted text-muted-foreground flex h-5 w-5 items-center justify-center rounded">
+					<Settings2Icon className="h-4 w-4" />
+				</div>
+				<span className="truncate text-sm font-medium">{t("providers2.customProviderOption")}</span>
+			</div>
+			<p className="text-muted-foreground text-[11px] leading-snug">{t("providers2.addProviderDialog.customDescription")}</p>
 		</button>
 	);
 }
