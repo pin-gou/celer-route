@@ -11,6 +11,7 @@ import (
 	"github.com/pin-gou/pg-gateway/plugins/governance"
 	"github.com/pin-gou/pg-gateway/plugins/logging"
 	"github.com/pin-gou/pg-gateway/plugins/maxim"
+	"github.com/pin-gou/pg-gateway/plugins/mocker"
 	"github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver"
 	"github.com/pin-gou/pg-gateway/plugins/otel"
 	"github.com/pin-gou/pg-gateway/plugins/prompts"
@@ -135,6 +136,20 @@ func loadBuiltinPlugin(ctx context.Context, name string, pluginConfig any, bifro
 			return nil, fmt.Errorf("failed to marshal compat plugin config: %w", err)
 		}
 		return compat.Init(*compatConfig, logger, bifrostConfig.ModelCatalog)
+
+	case mocker.PluginName:
+		var mockerCfg *mocker.MockerConfig
+		if pluginConfig != nil {
+			var err error
+			mockerCfg, err = MarshalPluginConfig[mocker.MockerConfig](pluginConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal mocker plugin config: %w", err)
+			}
+		}
+		if mockerCfg == nil {
+			mockerCfg = &mocker.MockerConfig{}
+		}
+		return mocker.Init(*mockerCfg)
 
 	case modelcatalogresolver.PluginName:
 		return modelcatalogresolver.Init(bifrostConfig.ModelCatalog, logger)
@@ -346,6 +361,20 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 		s.KeyPoolFilter = nil
 	}
 	s.Config.SetPluginOrderInfo(providercooldown.PluginName, builtinPlacement, schemas.Ptr(9))
+
+	// 11. Mocker (always registered so it is visible in the plugins list for
+	// configuration — same default-on semantics as compat above). The plugin is
+	// inert until explicitly enabled: Init applies defaults (default_behavior
+	// "passthrough") and PreLLMHook short-circuits when config.enabled is false.
+	// Persisted config from the config store / config.json is passed through when
+	// present, otherwise an empty config is used.
+	mockerCfgEntry := s.getPluginConfig(mocker.PluginName)
+	var mockerConfig any
+	if mockerCfgEntry != nil {
+		mockerConfig = mockerCfgEntry.Config
+	}
+	s.registerPluginWithStatus(ctx, mocker.PluginName, nil, mockerConfig, false)
+	s.Config.SetPluginOrderInfo(mocker.PluginName, builtinPlacement, schemas.Ptr(10))
 
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/pin-gou/pg-gateway/framework/configstore"
 	"github.com/pin-gou/pg-gateway/plugins/logging"
 	"github.com/pin-gou/pg-gateway/plugins/maxim"
+	"github.com/pin-gou/pg-gateway/plugins/mocker"
 	"github.com/pin-gou/pg-gateway/plugins/modelcatalogresolver"
 	"github.com/pin-gou/pg-gateway/plugins/otel"
 	"github.com/pin-gou/pg-gateway/plugins/providercooldown"
@@ -192,6 +193,79 @@ func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
 	}
 	if got := plugin.GetName(); got != "rtk" {
 		t.Fatalf("InstantiatePlugin(rtk) plugin name = %q, want %q", got, "rtk")
+	}
+}
+
+// TestInstantiatePlugin_Mocker_Loads pins the contract for the mocker plugin
+// registration in loadBuiltinPlugin. The scenario fix added the `mocker` case
+// (mirroring compat) so the plugin can be created/updated via the plugins API
+// and appears in the built-in plugin list. It also pins the canonical name:
+// "mocker" (matching config.schema.json and the frontend MOCKER_PLUGIN), not
+// the historical "bifrost-mocker".
+func TestInstantiatePlugin_Mocker_Loads(t *testing.T) {
+	prevLogger := logger
+	logger = noopTestLogger{}
+	defer func() { logger = prevLogger }()
+
+	config := &lib.Config{
+		ClientConfig: &configstore.ClientConfig{},
+	}
+
+	// Empty config is valid — Init applies defaults (default_behavior = "passthrough",
+	// no rules until enabled).
+	plugin, err := InstantiatePlugin(context.Background(), mocker.PluginName, nil, nil, config)
+	if err != nil {
+		t.Fatalf("InstantiatePlugin(mocker) with nil config returned error: %v", err)
+	}
+	if plugin == nil {
+		t.Fatal("InstantiatePlugin(mocker) returned nil plugin, want non-nil")
+	}
+	if got := plugin.GetName(); got != "mocker" {
+		t.Fatalf("InstantiatePlugin(mocker) plugin name = %q, want %q", got, "mocker")
+	}
+
+	// Persisted config from the config store / config.json merges through.
+	mockerConfig := map[string]any{
+		"enabled":          true,
+		"default_behavior": "passthrough",
+	}
+	plugin, err = InstantiatePlugin(context.Background(), mocker.PluginName, nil, mockerConfig, config)
+	if err != nil {
+		t.Fatalf("InstantiatePlugin(mocker) with config returned error: %v", err)
+	}
+	if plugin == nil {
+		t.Fatal("InstantiatePlugin(mocker) with config returned nil plugin, want non-nil")
+	}
+}
+
+// TestLoadBuiltinPlugins_Mocker_AlwaysRegistered verifies that mocker is always
+// registered at startup (same default-on semantics as compat), so it is visible
+// in the plugins list and configurable even when it has no PluginConfigs entry
+// and no config_plugins row yet.
+func TestLoadBuiltinPlugins_Mocker_AlwaysRegistered(t *testing.T) {
+	prevLogger := logger
+	logger = noopTestLogger{}
+	defer func() { logger = prevLogger }()
+
+	server := &BifrostHTTPServer{
+		Ctx: schemas.NewBifrostContext(context.Background(), schemas.NoDeadline),
+		Config: &lib.Config{
+			ClientConfig: &configstore.ClientConfig{},
+			// PluginConfigs is nil — no mocker entry at all.
+		},
+	}
+
+	if err := server.loadBuiltinPlugins(context.Background()); err != nil {
+		t.Fatalf("loadBuiltinPlugins returned unexpected error: %v", err)
+	}
+
+	statuses := server.Config.GetPluginStatus()
+	ps, ok := statuses[mocker.PluginName]
+	if !ok {
+		t.Fatal("mocker status missing — expected an active status entry (always registered)")
+	}
+	if ps.Status != schemas.PluginStatusActive {
+		t.Fatalf("mocker status = %q, want %q", ps.Status, schemas.PluginStatusActive)
 	}
 }
 

@@ -18,7 +18,10 @@ import (
 )
 
 const (
-	PluginName = "bifrost-mocker"
+	// PluginName is the canonical name registered for the mocker plugin.
+	// It must match the config store / config.schema.json plugin name ("mocker")
+	// and the frontend MOCKER_PLUGIN constant so /api/plugins/mocker works.
+	PluginName = "mocker"
 )
 
 // Constants for type checking and validation

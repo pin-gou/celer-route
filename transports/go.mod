@@ -160,7 +160,7 @@ require (
 	github.com/onsi/gomega v1.38.2 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
-	github.com/pin-gou/pg-gateway/plugins/mocker v1.5.34 // indirect
+	github.com/pin-gou/pg-gateway/plugins/mocker v1.5.34
 	github.com/pin-gou/pg-gateway/plugins/providercooldown v0.0.0
 	github.com/pinecone-io/go-pinecone/v5 v5.3.0 // indirect
 	github.com/pion/datachannel v1.6.0 // indirect
