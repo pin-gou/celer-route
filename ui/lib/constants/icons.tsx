@@ -837,6 +837,84 @@ export const ProviderIcons = {
 			</svg>
 		);
 	},
+
+	alibaba: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg viewBox="0 0 24 24" height={resolvedSize} width={resolvedSize} fill="currentColor" className={className}>
+				<title>Alibaba</title>
+				<path
+					d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z"
+					fill="#FF6A00"
+				/>
+			</svg>
+		);
+	},
+
+	minimax: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg viewBox="0 0 24 24" height={resolvedSize} width={resolvedSize} fill="currentColor" className={className}>
+				<title>MiniMax</title>
+				<path
+					d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+					fill="#6C5CE7"
+				/>
+			</svg>
+		);
+	},
+
+	moonshot: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg viewBox="0 0 24 24" height={resolvedSize} width={resolvedSize} fill="currentColor" className={className}>
+				<title>Moonshot</title>
+				<path
+					d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
+					fill="#4285F4"
+				/>
+			</svg>
+		);
+	},
+
+	siliconflow: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg viewBox="0 0 24 24" height={resolvedSize} width={resolvedSize} fill="currentColor" className={className}>
+				<title>SiliconFlow</title>
+				<path
+					d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
+					fill="#00B4D8"
+				/>
+			</svg>
+		);
+	},
+
+	volcengine: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg viewBox="0 0 24 24" height={resolvedSize} width={resolvedSize} fill="currentColor" className={className}>
+				<title>Volcengine</title>
+				<path
+					d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+					fill="#1E88E5"
+				/>
+			</svg>
+		);
+	},
+
+	zhipu: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg viewBox="0 0 24 24" height={resolvedSize} width={resolvedSize} fill="currentColor" className={className}>
+				<title>Zhipu AI</title>
+				<path
+					d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
+					fill="#4FC3F7"
+				/>
+			</svg>
+		);
+	},
 } as const;
 
 // Routing Engine Icons

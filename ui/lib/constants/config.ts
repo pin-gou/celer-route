@@ -36,6 +36,7 @@ function parseTrialExpiry(dateStr: string | undefined): Date | null {
 // Model placeholders based on provider type
 export const ModelPlaceholders = {
 	default: "e.g. gpt-4, gpt-3.5-turbo. Leave blank for all models.",
+	alibaba: "e.g. qwen-plus, qwen-turbo, qwen-max",
 	anthropic: "e.g. claude-3-haiku, claude-2.1",
 	azure: "e.g. gpt-4, gpt-35-turbo (must match alias keys)",
 	bedrock: "e.g. claude-v2, titan-text-express-v1, ai21-j2-mid",
@@ -46,7 +47,9 @@ export const ModelPlaceholders = {
 	gemini: "e.g. gemini-1.5-pro, gemini-1.5-flash",
 	groq: "e.g. llama3-70b-8192, mixtral-8x7b-32768",
 	huggingface: "e.g. sambanova/meta-llama/Llama-3.1-8B-Instruct, nebius/Qwen/Qwen3-Embedding-8B",
+	minimax: "e.g. minimax-text-01, minimax-abab5.5s",
 	mistral: "e.g. mistral-7b-instruct, mixtral-8x7b",
+	moonshot: "e.g. moonshot-v1-8k, moonshot-v1-32k",
 	openrouter: "e.g. openai/gpt-4, anthropic/claude-3-haiku",
 	sgl: "e.g. sgl-2, sgl-vision",
 	parasail: "e.g. parasail-2, parasail-vision",
@@ -66,11 +69,15 @@ export const ModelPlaceholders = {
 	runware: "e.g. runware:100@1, runware:101@1",
 	fireworks: "e.g. accounts/fireworks/models/deepseek-v3p2",
 	sarvam: "e.g. sarvam-30b, sarvam-105b",
+	siliconflow: "e.g. deepseek-ai/DeepSeek-V3, Qwen/Qwen2.5-72B-Instruct",
+	volcengine: "e.g. doubao-pro-32k, doubao-lite-32k",
 	wafer: "e.g. glm-5.2, kimi-k2.6",
+	zhipu: "e.g. glm-4-plus, glm-4-flash",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
 export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
+	alibaba: true,
 	anthropic: true,
 	azure: true,
 	bedrock: true,
@@ -81,7 +88,9 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	gemini: true,
 	groq: true,
 	huggingface: true,
+	minimax: true,
 	mistral: true,
+	moonshot: true,
 	openrouter: true,
 	sgl: false,
 	parasail: true,
@@ -101,13 +110,17 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	vllm: false,
 	fireworks: true,
 	sarvam: true,
+	siliconflow: true,
+	volcengine: true,
 	wafer: true,
+	zhipu: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
 // Custom providers (defined via custom_provider_config at runtime) are not in
 // this map and never get a header link.
 export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
+	alibaba: "https://www.aliyun.com/product/dashscope",
 	anthropic: "https://www.anthropic.com",
 	azure: "https://azure.microsoft.com/products/ai-services/openai-service",
 	bedrock: "https://aws.amazon.com/bedrock/",
@@ -118,7 +131,9 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	gemini: "https://ai.google.dev",
 	groq: "https://groq.com",
 	huggingface: "https://huggingface.co",
+	minimax: "https://www.minimaxi.com",
 	mistral: "https://mistral.ai",
+	moonshot: "https://platform.moonshot.cn",
 	openrouter: "https://openrouter.ai",
 	sgl: "https://sgl-project.github.io",
 	parasail: "https://parasail.io",
@@ -138,13 +153,17 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	vllm: "https://docs.vllm.ai",
 	fireworks: "https://fireworks.ai",
 	sarvam: "https://www.sarvam.ai",
+	siliconflow: "https://siliconflow.cn",
+	volcengine: "https://www.volcengine.com/product/ark",
 	wafer: "https://waferhoufy.com",
+	zhipu: "https://open.bigmodel.cn",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
 // "Get API key" link on the provider detail header; hidden for custom
 // providers and for keyless providers.
 export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
+	alibaba: "https://www.aliyun.com/product/dashscope",
 	anthropic: "https://console.anthropic.com/settings/keys",
 	azure: "https://portal.azure.com/#settings/keys",
 	bedrock: "https://us-east-1.console.aws.amazon.com/bedrock/home",
@@ -155,7 +174,9 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	gemini: "https://aistudio.google.com/apikey",
 	groq: "https://console.groq.com/keys",
 	huggingface: "https://huggingface.co/settings/tokens",
+	minimax: "https://www.minimaxi.com/user-center/basic-information/interface-key",
 	mistral: "https://console.mistral.ai/api-keys",
+	moonshot: "https://platform.moonshot.cn/console/api-keys",
 	openrouter: "https://openrouter.ai/settings/keys",
 	sgl: "",
 	parasail: "https://console.parasail.io/api-keys",
@@ -175,7 +196,10 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	vllm: "",
 	fireworks: "https://app.fireworks.ai/api-keys",
 	sarvam: "https://console.sarvam.ai/api-keys",
+	siliconflow: "https://cloud.siliconflow.cn/account/api-key",
+	volcengine: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
 	wafer: "",
+	zhipu: "https://open.bigmodel.cn/usercenter/apikeys",
 };
 
 export const DefaultNetworkConfig = {

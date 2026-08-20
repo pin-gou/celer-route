@@ -21,6 +21,7 @@ import (
 	"github.com/pin-gou/pg-gateway/core/mcp"
 	"github.com/pin-gou/pg-gateway/core/mcp/codemode/starlark"
 	"github.com/pin-gou/pg-gateway/core/mcp/credstore"
+	"github.com/pin-gou/pg-gateway/core/providers/alibaba"
 	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
 	"github.com/pin-gou/pg-gateway/core/providers/azure"
 	"github.com/pin-gou/pg-gateway/core/providers/bedrock"
@@ -33,7 +34,9 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/gemini"
 	"github.com/pin-gou/pg-gateway/core/providers/groq"
 	"github.com/pin-gou/pg-gateway/core/providers/huggingface"
+	"github.com/pin-gou/pg-gateway/core/providers/minimax"
 	"github.com/pin-gou/pg-gateway/core/providers/mistral"
+	"github.com/pin-gou/pg-gateway/core/providers/moonshot"
 	"github.com/pin-gou/pg-gateway/core/providers/nebius"
 	"github.com/pin-gou/pg-gateway/core/providers/ollama"
 	"github.com/pin-gou/pg-gateway/core/providers/openai"
@@ -46,11 +49,14 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/runway"
 	"github.com/pin-gou/pg-gateway/core/providers/sarvam"
 	"github.com/pin-gou/pg-gateway/core/providers/sgl"
+	"github.com/pin-gou/pg-gateway/core/providers/siliconflow"
 	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
 	"github.com/pin-gou/pg-gateway/core/providers/vertex"
 	"github.com/pin-gou/pg-gateway/core/providers/vllm"
+	"github.com/pin-gou/pg-gateway/core/providers/volcengine"
 	"github.com/pin-gou/pg-gateway/core/providers/wafer"
 	"github.com/pin-gou/pg-gateway/core/providers/xai"
+	"github.com/pin-gou/pg-gateway/core/providers/zhipu"
 	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -70,32 +76,32 @@ type ChannelMessage struct {
 type Bifrost struct {
 	ctx                 *schemas.BifrostContext
 	cancel              context.CancelFunc
-	account             schemas.Account                     // account interface
-	llmPlugins          atomic.Pointer[[]schemas.LLMPlugin] // list of llm plugins
-	mcpPlugins          atomic.Pointer[[]schemas.MCPPlugin] // list of mcp plugins
-	providers           atomic.Pointer[[]schemas.Provider]  // list of providers
-	requestQueues       sync.Map                            // provider request queues (thread-safe), stores *ProviderQueue
-	waitGroups          sync.Map                            // wait groups for each provider (thread-safe)
-	oldWorkerCleanups   sync.WaitGroup                      // tracks async cleanup of old workers after provider updates
-	retiredWorkerWaits  sync.Map                            // provider old-worker cleanup wait groups (thread-safe), stores *sync.WaitGroup
-	providerLifecycleMu sync.RWMutex                        // prevents provider updates from racing with shutdown cleanup waits
-	providerMutexes     sync.Map                            // mutexes for each provider to prevent concurrent updates (thread-safe)
-	channelMessagePool  sync.Pool                           // Pool for ChannelMessage objects, initial pool size is set in Init
-	responseChannelPool sync.Pool                           // Pool for response channels, initial pool size is set in Init
-	errorChannelPool    sync.Pool                           // Pool for error channels, initial pool size is set in Init
-	responseStreamPool  sync.Pool                           // Pool for response stream channels, initial pool size is set in Init
-	pluginPipelinePool  sync.Pool                           // Pool for PluginPipeline objects
-	bifrostRequestPool  sync.Pool                           // Pool for BifrostRequest objects
-	logger              schemas.Logger                      // logger instance, default logger is used if not provided
-	tracer              atomic.Value                        // tracer for distributed tracing (stores schemas.Tracer, NoOpTracer if not configured)
-	modelCatalog        schemas.ModelInfoProvider           // model pricing/capability catalog exposed to plugins via ctx.GetModelInfo (nil if not configured); set once from BifrostConfig at Init
-	MCPManager          mcp.MCPManagerInterface             // MCP integration manager (nil if MCP not configured)
-	mcpCredStore        schemas.MCPCredentialStore          // Per-call credential resolver for MCP tool execution (wraps oauth2Provider for OAuth-flavored auth types)
-	mcpInitOnce         sync.Once                           // Ensures MCP manager is initialized only once
-	dropExcessRequests  atomic.Bool                         // If true, in cases where the queue is full, requests will not wait for the queue to be empty and will be dropped instead.
-	keySelector         schemas.KeySelector                 // Custom key selector function
+	account             schemas.Account                       // account interface
+	llmPlugins          atomic.Pointer[[]schemas.LLMPlugin]   // list of llm plugins
+	mcpPlugins          atomic.Pointer[[]schemas.MCPPlugin]   // list of mcp plugins
+	providers           atomic.Pointer[[]schemas.Provider]    // list of providers
+	requestQueues       sync.Map                              // provider request queues (thread-safe), stores *ProviderQueue
+	waitGroups          sync.Map                              // wait groups for each provider (thread-safe)
+	oldWorkerCleanups   sync.WaitGroup                        // tracks async cleanup of old workers after provider updates
+	retiredWorkerWaits  sync.Map                              // provider old-worker cleanup wait groups (thread-safe), stores *sync.WaitGroup
+	providerLifecycleMu sync.RWMutex                          // prevents provider updates from racing with shutdown cleanup waits
+	providerMutexes     sync.Map                              // mutexes for each provider to prevent concurrent updates (thread-safe)
+	channelMessagePool  sync.Pool                             // Pool for ChannelMessage objects, initial pool size is set in Init
+	responseChannelPool sync.Pool                             // Pool for response channels, initial pool size is set in Init
+	errorChannelPool    sync.Pool                             // Pool for error channels, initial pool size is set in Init
+	responseStreamPool  sync.Pool                             // Pool for response stream channels, initial pool size is set in Init
+	pluginPipelinePool  sync.Pool                             // Pool for PluginPipeline objects
+	bifrostRequestPool  sync.Pool                             // Pool for BifrostRequest objects
+	logger              schemas.Logger                        // logger instance, default logger is used if not provided
+	tracer              atomic.Value                          // tracer for distributed tracing (stores schemas.Tracer, NoOpTracer if not configured)
+	modelCatalog        schemas.ModelInfoProvider             // model pricing/capability catalog exposed to plugins via ctx.GetModelInfo (nil if not configured); set once from BifrostConfig at Init
+	MCPManager          mcp.MCPManagerInterface               // MCP integration manager (nil if MCP not configured)
+	mcpCredStore        schemas.MCPCredentialStore            // Per-call credential resolver for MCP tool execution (wraps oauth2Provider for OAuth-flavored auth types)
+	mcpInitOnce         sync.Once                             // Ensures MCP manager is initialized only once
+	dropExcessRequests  atomic.Bool                           // If true, in cases where the queue is full, requests will not wait for the queue to be empty and will be dropped instead.
+	keySelector         schemas.KeySelector                   // Custom key selector function
 	keyPoolFilter       atomic.Pointer[schemas.KeyPoolFilter] // optional hook to veto keys before selection (nil pointer = all eligible); hot-swappable via SetKeyPoolFilter
-	kvStore             schemas.KVStore                     // optional KV store for session stickiness (nil = disabled)
+	kvStore             schemas.KVStore                       // optional KV store for session stickiness (nil = disabled)
 }
 
 // ProviderQueue wraps a provider's request channel with lifecycle management
@@ -4487,6 +4493,18 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return fireworks.NewFireworksProvider(config, bifrost.logger)
 	case schemas.Sarvam:
 		return sarvam.NewSarvamProvider(config, bifrost.logger)
+	case schemas.Alibaba:
+		return alibaba.NewAlibabaProvider(config, bifrost.logger)
+	case schemas.Minimax:
+		return minimax.NewMinimaxProvider(config, bifrost.logger)
+	case schemas.Moonshot:
+		return moonshot.NewMoonshotProvider(config, bifrost.logger)
+	case schemas.Siliconflow:
+		return siliconflow.NewSiliconflowProvider(config, bifrost.logger)
+	case schemas.Volcengine:
+		return volcengine.NewVolcengineProvider(config, bifrost.logger)
+	case schemas.Zhipu:
+		return zhipu.NewZhipuProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

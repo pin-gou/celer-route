@@ -510,6 +510,24 @@
         },
         "sarvam": {
           "$ref": "#/$defs/provider"
+        },
+        "alibaba": {
+          "$ref": "#/$defs/provider"
+        },
+        "minimax": {
+          "$ref": "#/$defs/provider"
+        },
+        "moonshot": {
+          "$ref": "#/$defs/provider"
+        },
+        "siliconflow": {
+          "$ref": "#/$defs/provider"
+        },
+        "volcengine": {
+          "$ref": "#/$defs/provider"
+        },
+        "zhipu": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -7660,7 +7678,13 @@
             "runware",
             "fireworks",
             "sarvam",
-            "wafer"
+            "wafer",
+            "alibaba",
+            "minimax",
+            "moonshot",
+            "siliconflow",
+            "volcengine",
+            "zhipu"
           ],
           "description": "Base provider type to extend"
         },

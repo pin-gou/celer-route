@@ -1,5 +1,6 @@
 // Known provider names array - centralized definition
 export const KnownProvidersNames = [
+	"alibaba",
 	"anthropic",
 	"azure",
 	"bedrock",
@@ -10,7 +11,9 @@ export const KnownProvidersNames = [
 	"gemini",
 	"groq",
 	"huggingface",
+	"minimax",
 	"mistral",
+	"moonshot",
 	"ollama",
 	"opencode",
 	"opencode-go",
@@ -21,8 +24,10 @@ export const KnownProvidersNames = [
 	"elevenlabs",
 	"perplexity",
 	"sgl",
+	"siliconflow",
 	"vertex",
 	"nebius",
+	"volcengine",
 	"xai",
 	"replicate",
 	"vllm",
@@ -31,6 +36,7 @@ export const KnownProvidersNames = [
 	"fireworks",
 	"sarvam",
 	"wafer",
+	"zhipu",
 ] as const;
 
 // Local Provider type derived from KNOWN_PROVIDERS constant
@@ -113,6 +119,7 @@ export const RequestTypes = [
 ] as const;
 
 export const ProviderLabels: Record<ProviderName, string> = {
+	alibaba: "Alibaba",
 	openai: "OpenAI",
 	anthropic: "Anthropic",
 	azure: "Azure",
@@ -121,7 +128,9 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	cohere: "Cohere",
 	deepseek: "DeepSeek",
 	vertex: "Vertex AI",
+	minimax: "MiniMax",
 	mistral: "Mistral AI",
+	moonshot: "Moonshot",
 	ollama: "Ollama",
 	opencode: "OpenCode Free",
 	"opencode-go": "OpenCode Go",
@@ -136,14 +145,17 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	openrouter: "OpenRouter",
 	huggingface: "HuggingFace",
 	nebius: "Nebius Token Factory",
+	volcengine: "Volcengine",
 	xai: "xAI",
 	replicate: "Replicate",
+	siliconflow: "SiliconFlow",
 	vllm: "vLLM",
 	runway: "Runway",
 	runware: "Runware",
 	fireworks: "Fireworks AI",
 	sarvam: "Sarvam AI",
 	wafer: "Wafer",
+	zhipu: "Zhipu AI",
 } as const;
 
 // Helper function to get provider label, supporting custom providers

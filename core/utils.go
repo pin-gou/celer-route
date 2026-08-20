@@ -101,6 +101,12 @@ var dynamicallyConfigurableProviders = []schemas.ModelProvider{
 	schemas.Vertex,
 	schemas.Wafer,
 	schemas.XAI,
+	schemas.Alibaba,
+	schemas.Minimax,
+	schemas.Moonshot,
+	schemas.Siliconflow,
+	schemas.Volcengine,
+	schemas.Zhipu,
 }
 
 // isModelRequired returns true if the request type requires a model
