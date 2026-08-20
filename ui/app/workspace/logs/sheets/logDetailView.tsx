@@ -1,6 +1,7 @@
 import { formatCost, formatLatency } from "@/app/workspace/dashboard/utils/chartUtils";
 import { TimelineDetail } from "@/app/workspace/logs/timeline/views/timelineDetail";
 import { useGetLogTimelineQuery } from "@/lib/store/apis/logsApi";
+import { useGetProviderQuery } from "@/lib/store/apis/providersApi";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -713,6 +714,12 @@ export function LogDetailView({
 		} catch {}
 		return 0;
 	})();
+
+	// Check current provider's raw storage config
+	const { data: providerConfig } = useGetProviderQuery(log.provider ?? "", {
+		skip: !log?.provider,
+	});
+	const storeRawConfigEnabled = providerConfig?.store_raw_request_response ?? false;
 
 	// Timeline data
 	const {
@@ -2709,7 +2716,27 @@ export function LogDetailView({
 						</>
 					)}
 					{!rawRequest && !rawResponse && !passthroughRequestBody && !passthroughResponseBody && (
-						<div className="text-muted-foreground rounded-sm border border-dashed p-5 text-center text-sm">{t("detailView.noRawJson")}</div>
+						<div
+							className="text-muted-foreground mx-auto max-w-md rounded-sm border border-dashed p-5 text-center text-sm"
+							data-testid="logdetails-no-raw-json"
+						>
+							{t("detailView.noRawJson")}
+							<div className="text-muted-foreground/80 mt-2 text-xs leading-relaxed">
+								{storeRawConfigEnabled ? t("detailView.noRawJsonReasonEnabled") : t("detailView.noRawJsonReason")}
+							</div>
+							{!storeRawConfigEnabled && (
+								<div className="mt-3 border-t pt-3 text-xs">
+									<Link
+										to="/workspace/providers/$id"
+										params={{ id: log.provider ?? "" }}
+										className="text-primary font-medium hover:underline"
+										data-testid="logdetails-no-raw-enable-link"
+									>
+										{t("detailView.noRawJsonHowTo", { provider: log.provider ?? "" })}
+									</Link>
+								</div>
+							)}
+						</div>
 					)}
 				</TabsContent>
 
