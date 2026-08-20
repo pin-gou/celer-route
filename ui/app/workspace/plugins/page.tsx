@@ -7,10 +7,37 @@ import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { ListOrdered, PlusIcon, Puzzle } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { useEffect, useMemo, useState } from "react";
+import type { Plugin } from "@/lib/types/plugins";
+import { getPluginDisplayName } from "@/lib/utils/pluginDisplayName";
 import AddNewPluginSheet from "./sheets/addNewPluginSheet";
 import PluginSequenceSheet from "./sheets/pluginSequenceSheet";
 import { PluginsEmptyState } from "./views/pluginsEmptyState";
 import PluginsView from "./views/pluginsView";
+
+const placementRank = (plugin: Plugin): number => {
+	switch (plugin.placement) {
+		case "pre_builtin":
+			return 0;
+		case "builtin":
+			return 1;
+		case "post_builtin":
+			return 2;
+		default:
+			return plugin.isCustom ? 2 : 1;
+	}
+};
+
+// Sort plugins by their runtime execution order: pre_builtin custom plugins first,
+// then built-in plugins, then post_builtin custom plugins. Within each group, order
+// by the plugin's order field (lower = earlier), with name as a deterministic tiebreak.
+const sortPluginsByRunOrder = (plugins: Plugin[]): Plugin[] =>
+	[...plugins].sort((a, b) => {
+		const rankDiff = placementRank(a) - placementRank(b);
+		if (rankDiff !== 0) return rankDiff;
+		const orderDiff = (a.order ?? 0) - (b.order ?? 0);
+		if (orderDiff !== 0) return orderDiff;
+		return a.name.localeCompare(b.name);
+	});
 
 export default function PluginsPage() {
 	const { t } = useTranslation("plugins");
@@ -20,7 +47,7 @@ export default function PluginsPage() {
 	const { data: plugins, isLoading } = useGetPluginsQuery();
 	const selectedPlugin = useAppSelector((state) => state.plugin.selectedPlugin);
 	const [selectedPluginId, setSelectedPluginId] = useQueryState("plugin");
-	const allPlugins = useMemo(() => plugins ?? [], [plugins]);
+	const allPlugins = useMemo(() => sortPluginsByRunOrder(plugins ?? []), [plugins]);
 	const hasCustomPlugins = useMemo(() => allPlugins.some((plugin) => plugin.isCustom), [allPlugins]);
 	const [isSheetOpen, setIsSheetOpen] = useState(false);
 	const [isSequenceSheetOpen, setIsSequenceSheetOpen] = useState(false);
@@ -91,7 +118,7 @@ export default function PluginsPage() {
 								>
 									<div className="flex min-w-0 flex-row items-center gap-2">
 										<Puzzle className="text-muted-foreground size-3.5 shrink-0" />
-										<span className="truncate">{plugin.name}</span>
+										<span className="truncate">{getPluginDisplayName(plugin, t)}</span>
 										{!plugin.isCustom && (
 											<Badge variant="secondary" className="text-muted-foreground h-4 px-1 text-[10px] leading-none font-normal">
 												{t("sidebar.builtIn")}

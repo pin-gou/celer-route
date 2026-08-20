@@ -3152,7 +3152,7 @@ func (s *RDBConfigStore) UpsertModelParametersBatch(ctx context.Context, params 
 
 func (s *RDBConfigStore) GetPlugins(ctx context.Context) ([]*tables.TablePlugin, error) {
 	var plugins []*tables.TablePlugin
-	if err := s.DB().WithContext(ctx).Find(&plugins).Error; err != nil {
+	if err := s.DB().WithContext(ctx).Order("id").Find(&plugins).Error; err != nil {
 		return nil, err
 	}
 	return plugins, nil

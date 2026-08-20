@@ -326,5 +326,17 @@
 		"disableAutoToolInjectDescription": "Prevent automatic injection of tools into LLM requests",
 		"routingChainMaxDepthLabel": "Routing Chain Max Depth",
 		"routingChainMaxDepthDescription": "Maximum number of chained routing hops (1–100)"
+	},
+	"pluginNames": {
+		"telemetry": "Telemetry",
+		"prompts": "Prompts",
+		"logging": "Logging",
+		"governance": "Governance",
+		"otel": "OpenTelemetry",
+		"semanticCache": "Semantic Cache",
+		"rtk": "RTK",
+		"compat": "Compat",
+		"maxim": "Maxim",
+		"providerCooldown": "Provider Cooldown"
 	}
 }

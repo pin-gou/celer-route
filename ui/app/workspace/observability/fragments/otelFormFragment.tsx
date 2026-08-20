@@ -179,6 +179,25 @@ export function OtelFormFragment({
 	return (
 		<Form {...form}>
 			<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+				{/* Global enable/disable switch, surfaced at the top of the page */}
+				<FormField
+					control={form.control}
+					name="enabled"
+					render={({ field }) => (
+						<FormItem className="flex items-center justify-between gap-2 border-b pb-4">
+							<FormLabel className="text-sm font-medium">{t("otel.enabled")}</FormLabel>
+							<FormControl>
+								<Switch
+									checked={field.value}
+									onCheckedChange={field.onChange}
+									disabled={!hasOtelAccess}
+									data-testid="otel-connector-enable-toggle"
+								/>
+							</FormControl>
+						</FormItem>
+					)}
+				/>
+
 				<div className="flex flex-col gap-3">
 					{fields.map((field, index) => (
 						<OtelProfileSection
@@ -207,25 +226,8 @@ export function OtelFormFragment({
 				</Button>
 
 				{/* Form Actions */}
-				<div className="flex w-full flex-row items-center border-t pt-4">
-					<FormField
-						control={form.control}
-						name="enabled"
-						render={({ field }) => (
-							<FormItem className="flex items-center gap-2 py-2">
-								<FormLabel className="text-muted-foreground text-sm font-medium">{t("otel.enabled")}</FormLabel>
-								<FormControl>
-									<Switch
-										checked={field.value}
-										onCheckedChange={field.onChange}
-										disabled={!hasOtelAccess}
-										data-testid="otel-connector-enable-toggle"
-									/>
-								</FormControl>
-							</FormItem>
-						)}
-					/>
-					<div className="ml-auto flex justify-end space-x-2 py-2">
+				<div className="flex w-full flex-row items-center justify-end border-t pt-4">
+					<div className="flex justify-end space-x-2 py-2">
 						{onDelete && (
 							<Button
 								type="button"

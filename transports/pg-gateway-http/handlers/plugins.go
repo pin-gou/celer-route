@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"sort"
 
 	"github.com/fasthttp/router"
 	"github.com/pin-gou/pg-gateway/core/schemas"
@@ -180,6 +181,46 @@ func (h *PluginsHandler) buildPluginResponseWithStatuses(plugin *configstoreTabl
 	}
 }
 
+// sortPluginsByRunOrder sorts plugins by their runtime execution order:
+// pre_builtin custom plugins first, then built-in plugins, then post_builtin
+// custom plugins. Within each group, plugins are ordered by their order field
+// (lower = earlier), with name as a deterministic tiebreak.
+func sortPluginsByRunOrder(plugins []PluginResponse) {
+	placementRank := func(p PluginResponse) int {
+		if p.Placement != nil {
+			switch *p.Placement {
+			case schemas.PluginPlacementPreBuiltin:
+				return 0
+			case schemas.PluginPlacementBuiltin:
+				return 1
+			case schemas.PluginPlacementPostBuiltin:
+				return 2
+			}
+		}
+		if !p.IsCustom {
+			return 1
+		}
+		return 2
+	}
+	sort.SliceStable(plugins, func(i, j int) bool {
+		ri, rj := placementRank(plugins[i]), placementRank(plugins[j])
+		if ri != rj {
+			return ri < rj
+		}
+		oi, oj := 0, 0
+		if plugins[i].Order != nil {
+			oi = *plugins[i].Order
+		}
+		if plugins[j].Order != nil {
+			oj = *plugins[j].Order
+		}
+		if oi != oj {
+			return oi < oj
+		}
+		return plugins[i].Name < plugins[j].Name
+	})
+}
+
 // getBuiltinPlugins returns the canonical list of built-in plugin names.
 func (h *PluginsHandler) getBuiltinPlugins(ctx *fasthttp.RequestCtx) {
 	SendJSON(ctx, map[string]any{
@@ -211,6 +252,7 @@ func (h *PluginsHandler) getPlugins(ctx *fasthttp.RequestCtx) {
 				Status:     pluginStatus,
 			})
 		}
+		sortPluginsByRunOrder(finalPlugins)
 		SendJSON(ctx, map[string]any{
 			"plugins": finalPlugins,
 			"count":   len(finalPlugins),
@@ -253,7 +295,7 @@ func (h *PluginsHandler) getPlugins(ctx *fasthttp.RequestCtx) {
 			Status:     status,
 		})
 	}
-	// Creating ephemeral struct
+	sortPluginsByRunOrder(finalPlugins)
 	SendJSON(ctx, map[string]any{
 		"plugins": finalPlugins,
 		"count":   len(finalPlugins),

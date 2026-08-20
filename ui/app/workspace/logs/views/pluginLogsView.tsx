@@ -1,4 +1,5 @@
 import { PluginLogEntry } from "@/lib/types/logs";
+import { getPluginDisplayName } from "@/lib/utils/pluginDisplayName";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
@@ -13,14 +14,6 @@ const levelColors: Record<string, string> = {
 
 interface PluginLogsViewProps {
 	pluginLogs: string;
-}
-
-function formatPluginName(name: string): string {
-	return name
-		.split(/[-_\s]+/)
-		.filter(Boolean)
-		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-		.join(" ");
 }
 
 export default function PluginLogsView({ pluginLogs }: PluginLogsViewProps) {
@@ -54,6 +47,7 @@ export default function PluginLogsView({ pluginLogs }: PluginLogsViewProps) {
 
 function PluginSection({ name, entries }: { name: string; entries: PluginLogEntry[] }) {
 	const [isOpen, setIsOpen] = useState(false);
+	const { t: tPlugins } = useTranslation("plugins");
 	const sorted = [...entries].sort((a, b) => a.timestamp - b.timestamp);
 
 	return (
@@ -68,7 +62,7 @@ function PluginSection({ name, entries }: { name: string; entries: PluginLogEntr
 				className="hover:bg-muted/50 flex w-full items-center gap-2 px-4 py-2 text-left text-sm"
 			>
 				{isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-				<span className="font-medium">{formatPluginName(name)}</span>
+				<span className="font-medium">{getPluginDisplayName({ name, isCustom: false }, tPlugins)}</span>
 				<span className="text-muted-foreground text-xs">({entries.length})</span>
 			</button>
 			{isOpen && (

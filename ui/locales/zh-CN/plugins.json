@@ -326,5 +326,17 @@
 		"disableAutoToolInjectDescription": "禁止自动向 LLM 请求注入工具",
 		"routingChainMaxDepthLabel": "路由链最大深度",
 		"routingChainMaxDepthDescription": "路由链跳转的最大次数（1–100）"
+	},
+	"pluginNames": {
+		"telemetry": "遥测",
+		"prompts": "提示词管理",
+		"logging": "日志记录",
+		"governance": "治理",
+		"otel": "OpenTelemetry",
+		"semanticCache": "语义缓存",
+		"rtk": "RTK",
+		"compat": "兼容层",
+		"maxim": "Maxim",
+		"providerCooldown": "提供方冷却"
 	}
 }
