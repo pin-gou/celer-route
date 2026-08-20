@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { CodeEditor } from "@/components/ui/codeEditor";
 import { ChatMessage, ContentBlock } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
-import { cleanJson, isJson } from "@/lib/utils/validation";
+import { isJson } from "@/lib/utils/validation";
 import { Download } from "lucide-react";
 import { format } from "date-fns";
+import { memo } from "react";
 import AudioPlayer from "./audioPlayer";
 import CollapsibleBox from "./collapsibleBox";
+import { LazyJsonBlock } from "./lazyJsonBlock";
 
 interface LogChatMessageViewProps {
 	message: ChatMessage;
@@ -101,21 +102,7 @@ function ContentBlockView({ block }: { block: ContentBlock; index: number }) {
 	// Handle text content
 	if (block.text) {
 		if (isJson(block.text)) {
-			const jsonContent = JSON.stringify(cleanJson(block.text), null, 2);
-			return (
-				<CollapsibleBox title={blockType} onCopy={() => jsonContent} collapsedHeight={100}>
-					<CodeEditor
-						className="z-0 w-full"
-						shouldAdjustInitialHeight={true}
-						maxHeight={200}
-						wrap={true}
-						code={jsonContent}
-						lang="json"
-						readonly={true}
-						options={{ scrollBeyondLastLine: false, collapsibleBlocks: true, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
-					/>
-				</CollapsibleBox>
-			);
+			return <LazyJsonBlock title={blockType} text={block.text} />;
 		}
 		return (
 			<CollapsibleBox title={blockType} onCopy={() => block.text || ""} collapsedHeight={100}>
@@ -145,27 +132,13 @@ function ContentBlockView({ block }: { block: ContentBlock; index: number }) {
 
 	// Handle audio content
 	if (block.input_audio) {
-		const jsonContent = JSON.stringify(block.input_audio, null, 2);
-		return (
-			<CollapsibleBox title={blockType} onCopy={() => jsonContent} collapsedHeight={100}>
-				<CodeEditor
-					className="z-0 w-full"
-					shouldAdjustInitialHeight={true}
-					maxHeight={150}
-					wrap={true}
-					code={jsonContent}
-					lang="json"
-					readonly={true}
-					options={{ scrollBeyondLastLine: false, collapsibleBlocks: true, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
-				/>
-			</CollapsibleBox>
-		);
+		return <LazyJsonBlock title={blockType} text={JSON.stringify(block.input_audio, null, 2)} />;
 	}
 
 	return null;
 }
 
-export default function LogChatMessageView({ message, audioFormat }: LogChatMessageViewProps) {
+const LogChatMessageView = memo(function LogChatMessageView({ message, audioFormat }: LogChatMessageViewProps) {
 	return (
 		<div className="flex w-full flex-col gap-2">
 			{/* Role header */}
@@ -178,18 +151,7 @@ export default function LogChatMessageView({ message, audioFormat }: LogChatMess
 			{message.reasoning && (
 				<>
 					{isJson(message.reasoning) ? (
-						<CollapsibleBox title="Reasoning" onCopy={() => JSON.stringify(cleanJson(message.reasoning), null, 2)} collapsedHeight={100}>
-							<CodeEditor
-								className="z-0 w-full"
-								shouldAdjustInitialHeight={true}
-								maxHeight={200}
-								wrap={true}
-								code={JSON.stringify(cleanJson(message.reasoning), null, 2)}
-								lang="json"
-								readonly={true}
-								options={{ scrollBeyondLastLine: false, collapsibleBlocks: true, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
-							/>
-						</CollapsibleBox>
+						<LazyJsonBlock title="Reasoning" text={message.reasoning} mono={false} />
 					) : (
 						<CollapsibleBox title="Reasoning" onCopy={() => message.reasoning || ""} collapsedHeight={100}>
 							<div className="custom-scrollbar text-muted-foreground max-h-[400px] overflow-y-auto px-6 py-2 font-mono text-xs break-words whitespace-pre-wrap italic">
@@ -204,18 +166,7 @@ export default function LogChatMessageView({ message, audioFormat }: LogChatMess
 			{message.refusal && (
 				<>
 					{isJson(message.refusal) ? (
-						<CollapsibleBox title="Refusal" onCopy={() => JSON.stringify(cleanJson(message.refusal), null, 2)} collapsedHeight={100}>
-							<CodeEditor
-								className="z-0 w-full"
-								shouldAdjustInitialHeight={true}
-								maxHeight={150}
-								wrap={true}
-								code={JSON.stringify(cleanJson(message.refusal), null, 2)}
-								lang="json"
-								readonly={true}
-								options={{ scrollBeyondLastLine: false, collapsibleBlocks: true, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
-							/>
-						</CollapsibleBox>
+						<LazyJsonBlock title="Refusal" text={message.refusal} mono={false} />
 					) : (
 						<CollapsibleBox title="Refusal" onCopy={() => message.refusal || ""} collapsedHeight={100}>
 							<div className="custom-scrollbar max-h-[400px] overflow-y-auto px-6 py-2 font-mono text-xs break-words whitespace-pre-wrap text-red-800">
@@ -232,22 +183,7 @@ export default function LogChatMessageView({ message, audioFormat }: LogChatMess
 					{typeof message.content === "string" ? (
 						<>
 							{isJson(message.content) ? (
-								<CollapsibleBox
-									title="Content"
-									onCopy={() => JSON.stringify(cleanJson(message.content as string), null, 2)}
-									collapsedHeight={100}
-								>
-									<CodeEditor
-										className="z-0 w-full"
-										shouldAdjustInitialHeight={true}
-										maxHeight={250}
-										wrap={true}
-										code={JSON.stringify(cleanJson(message.content), null, 2)}
-										lang="json"
-										readonly={true}
-										options={{ scrollBeyondLastLine: false, collapsibleBlocks: true, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
-									/>
-								</CollapsibleBox>
+								<LazyJsonBlock title="Content" text={message.content as string} mono={false} />
 							) : (
 								<CollapsibleBox title="Content" onCopy={() => (message.content as string) || ""} collapsedHeight={100}>
 									<div className="custom-scrollbar max-h-[400px] overflow-y-auto px-6 py-2 font-mono text-xs break-words whitespace-pre-wrap">
@@ -266,45 +202,19 @@ export default function LogChatMessageView({ message, audioFormat }: LogChatMess
 			{/* Handle tool calls */}
 			{message.tool_calls && message.tool_calls.length > 0 && (
 				<>
-					{message.tool_calls.map((toolCall, index) => {
-						const jsonContent = JSON.stringify(toolCall, null, 2);
-						return (
-							<CollapsibleBox
-								key={index}
-								title={`Tool Call: ${toolCall.function?.name || `#${index + 1}`}`}
-								onCopy={() => jsonContent}
-								collapsedHeight={100}
-							>
-								<CodeEditor
-									className="z-0 w-full"
-									shouldAdjustInitialHeight={true}
-									maxHeight={400}
-									wrap={true}
-									code={jsonContent}
-									lang="json"
-									readonly={true}
-									options={{ scrollBeyondLastLine: false, collapsibleBlocks: true, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
-								/>
-							</CollapsibleBox>
-						);
-					})}
+					{message.tool_calls.map((toolCall, index) => (
+						<LazyJsonBlock
+							key={index}
+							title={`Tool Call: ${toolCall.function?.name || `#${index + 1}`}`}
+							text={JSON.stringify(toolCall, null, 2)}
+						/>
+					))}
 				</>
 			)}
 
 			{/* Handle annotations */}
 			{message.annotations && message.annotations.length > 0 && (
-				<CollapsibleBox title="Annotations" onCopy={() => JSON.stringify(message.annotations, null, 2)} collapsedHeight={100}>
-					<CodeEditor
-						className="z-0 w-full"
-						shouldAdjustInitialHeight={true}
-						maxHeight={400}
-						wrap={true}
-						code={JSON.stringify(message.annotations, null, 2)}
-						lang="json"
-						readonly={true}
-						options={{ scrollBeyondLastLine: false, collapsibleBlocks: true, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
-					/>
-				</CollapsibleBox>
+				<LazyJsonBlock title="Annotations" text={JSON.stringify(message.annotations, null, 2)} />
 			)}
 
 			{/* Handle audio output */}
@@ -336,4 +246,6 @@ export default function LogChatMessageView({ message, audioFormat }: LogChatMess
 			)}
 		</div>
 	);
-}
+});
+
+export default LogChatMessageView;

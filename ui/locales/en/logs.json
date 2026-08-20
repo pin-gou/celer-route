@@ -766,7 +766,9 @@
 		"websocket": "WebSocket",
 		"webrtc": "WebRTC",
 		"eventInitiated": "Event Initiated",
-		"languageModel": "Language Model"
+		"languageModel": "Language Model",
+		"viewFormattedJson": "View formatted JSON",
+		"loadMoreMessages": "Load {{count}} more messages"
 	},
 	"sessionSheet": {
 		"logs": "Logs",

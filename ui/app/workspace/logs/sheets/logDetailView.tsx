@@ -50,13 +50,14 @@ import { isJson } from "@/lib/utils/validation";
 import { Link } from "@tanstack/react-router";
 import { addMilliseconds, format } from "date-fns";
 import { AlertCircle, ChevronDown, Clipboard, Copy, Download, Loader2, MoreVertical, Trash2, Wrench } from "lucide-react";
-import { useMemo, useEffect, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n/config";
 import BlockHeader from "../views/blockHeader";
 import CollapsibleBox from "../views/collapsibleBox";
 import ImageView from "../views/imageView";
+import { LazyJsonBlock } from "../views/lazyJsonBlock";
 import LogChatMessageView, { LogChatFileBlockView } from "../views/logChatMessageView";
 import LogEntryDetailsView from "../views/logEntryDetailsView";
 import OCRView from "../views/ocrView";
@@ -376,6 +377,322 @@ const formatToolChoice = (value: unknown): string => {
 	}
 };
 
+// Role set for the messages-tab filter. Module-level constant so the derived
+// sections below (memoized on `visibleRoles`) stay referentially stable.
+const ALL_ROLES: MessageRole[] = ["system", "user", "assistant", "tool", "reasoning"];
+
+// Incremental messages-tab rendering: only this many rows mount on first paint;
+// the rest are revealed in chunks as the user scrolls / clicks "show more".
+const INITIAL_MESSAGE_LIMIT = 20;
+const MESSAGE_LOAD_CHUNK = 50;
+
+type MessagesSectionOptions = {
+	isPassthrough: boolean;
+	visibleRoles: Set<MessageRole>;
+	activeInputRevealMapping?: Record<string, string>;
+	activeOutputRevealMapping?: Record<string, string>;
+	audioFormat?: string;
+	t: (key: string, options?: Record<string, unknown>) => string;
+};
+
+// Builds the chat-completion message rows once per relevant state change, so
+// unrelated re-renders (reveal toggle, role filter, background refetches) don't
+// re-run text extraction over 400-800KB payloads.
+const buildChatRows = (log: LogEntry, opts: MessagesSectionOptions): ReactNode[] | null => {
+	const { isPassthrough, visibleRoles, activeInputRevealMapping, activeOutputRevealMapping, audioFormat, t } = opts;
+	if (isPassthrough) return null;
+	const showSection =
+		(log.input_history && log.input_history.length > 0) ||
+		(log.output_message && !log.error_details?.error.message) ||
+		log.stop_reason === "refusal" ||
+		log.stop_reason === "content_filter" ||
+		log.stop_reason === "safety";
+	if (!showSection) return null;
+
+	const rows: ReactNode[] = [];
+	const showAll = visibleRoles.size === ALL_ROLES.length;
+	const inputHistory = log.input_history ?? [];
+	const filteredMessages = showAll
+		? inputHistory.filter(Boolean)
+		: inputHistory.filter((m) => {
+				if (!m) return false;
+				const mainRole = ((m.role as string) || "user") as MessageRole;
+				const hasReasoning = !!extractChatReasoning(m);
+				return visibleRoles.has(mainRole) || (hasReasoning && visibleRoles.has("reasoning"));
+			});
+
+	filteredMessages.forEach((message, index) => {
+		const role = ((message.role as string) || "user") as MessageRole;
+		const text = extractMessageText(message, activeInputRevealMapping);
+		const reasoningText = extractChatReasoning(message, activeInputRevealMapping);
+		const showMain = showAll || visibleRoles.has(role);
+		const showReasoning = !!reasoningText && (showAll || visibleRoles.has("reasoning"));
+		const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+		const isOverallLast = index === inputHistory.length - 1 && !log.output_message && !log.error_details?.error.message;
+		const lineCount = text ? text.split("\n").length : 0;
+		const approxTokens = text ? Math.max(1, Math.round(text.length / 4)) : 0;
+		const reasoningTokens = reasoningText ? Math.max(1, Math.round(reasoningText.length / 4)) : 0;
+		const meta = text
+			? role === "system" || role === "tool"
+				? `${lineCount} line${lineCount === 1 ? "" : "s"} · ~${approxTokens} tokens`
+				: `${lineCount} line${lineCount === 1 ? "" : "s"}`
+			: hasToolCalls
+				? `${message.tool_calls!.length} tool call${message.tool_calls!.length === 1 ? "" : "s"}`
+				: undefined;
+		const usePlainText = role === "user" || role === "assistant";
+		if (showReasoning) {
+			rows.push(
+				<MessageRow key={`${index}-reasoning`} role="reasoning" meta={`~${reasoningTokens} tokens`} last={isOverallLast && !showMain}>
+					<CollapsibleCode text={reasoningText} preview={3} mono={false} />
+				</MessageRow>,
+			);
+		}
+		if (showMain) {
+			rows.push(
+				<MessageRow key={index} role={role} meta={meta} last={isOverallLast}>
+					{text ? (
+						usePlainText && isJson(text) ? (
+							<LazyJsonBlock text={text} mono={false} bordered={false} />
+						) : usePlainText ? (
+							<CollapsibleCode text={text} preview={3} mono={false} />
+						) : (
+							<CollapsibleCode text={text} preview={3} lang={role === "system" ? "xml" : undefined} />
+						)
+					) : (
+						<LogChatMessageView message={message} audioFormat={audioFormat} />
+					)}
+					{text &&
+						Array.isArray(message.content) &&
+						(message.content as ContentBlock[])
+							.filter((b) => b.type === "image_url")
+							.map((b, i) => {
+								const src = b.image_url?.url;
+								if (!src) return null;
+								return <img key={`${i}-${src}`} src={src} alt={t("views.attachedImage")} className="mt-2 max-w-full rounded border" />;
+							})}
+					{text &&
+						Array.isArray(message.content) &&
+						(message.content as ContentBlock[])
+							.filter((b) => b.type === "file" && b.file)
+							.map((b, i) => (
+								<LogChatFileBlockView key={`${i}-${b.file?.filename || b.file?.file_id || "file"}`} block={b} className="mt-2" />
+							))}
+					{hasToolCalls && text ? (
+						<div className="text-muted-foreground mt-2 text-[11px]">
+							{message
+								.tool_calls!.map((tc) => tc.function?.name)
+								.filter(Boolean)
+								.join(", ") || `${message.tool_calls!.length} tool call${message.tool_calls!.length === 1 ? "" : "s"}`}
+						</div>
+					) : null}
+				</MessageRow>,
+			);
+		}
+	});
+
+	if (log.output_message && !log.error_details?.error.message) {
+		const reasoningText = extractChatReasoning(log.output_message, activeOutputRevealMapping);
+		const showReasoning = !!reasoningText && (showAll || visibleRoles.has("reasoning"));
+		const showAssistant = visibleRoles.has("assistant");
+		if (showReasoning || showAssistant) {
+			const text = extractMessageText(log.output_message, activeOutputRevealMapping);
+			const refusalText = applyRedactionMapping(log.output_message.refusal, activeOutputRevealMapping);
+			const isStopReasonRefusal = log.stop_reason === "refusal" || log.stop_reason === "content_filter" || log.stop_reason === "safety";
+			const showRefusal = refusalText || (!text && isStopReasonRefusal);
+			const lineCount = text ? text.split("\n").length : 0;
+			const tokenMeta = log.token_usage?.completion_tokens ? `${log.token_usage.completion_tokens} tokens` : undefined;
+			const meta = text
+				? tokenMeta
+					? `${lineCount} line${lineCount === 1 ? "" : "s"} · ${tokenMeta}`
+					: `${lineCount} line${lineCount === 1 ? "" : "s"}`
+				: showRefusal
+					? "refusal"
+					: tokenMeta;
+			const reasoningTokens = reasoningText
+				? log.token_usage?.completion_tokens_details?.reasoning_tokens || Math.max(1, Math.round(reasoningText.length / 4))
+				: 0;
+			if (showReasoning) {
+				rows.push(
+					<MessageRow key="output-reasoning" role="reasoning" meta={`~${reasoningTokens} tokens`} last={!showAssistant}>
+						<CollapsibleCode text={reasoningText} preview={3} mono={false} />
+					</MessageRow>,
+				);
+			}
+			if (showAssistant) {
+				rows.push(
+					<MessageRow key="output" role="assistant" meta={meta} last>
+						{showRefusal ? (
+							<div className="rounded-sm border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30">
+								<div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+									<AlertCircle className="h-4 w-4 shrink-0" />
+									<span className="text-[12.5px] font-semibold">{t("detailView.refusal")}</span>
+								</div>
+								{refusalText && (
+									<div className="mt-2 text-[13px] leading-relaxed break-words whitespace-pre-wrap text-red-700 dark:text-red-400">
+										{refusalText}
+									</div>
+								)}
+							</div>
+						) : text ? (
+							isJson(text) ? (
+								<LazyJsonBlock text={text} mono={false} bordered={false} />
+							) : (
+								<CollapsibleCode text={text} preview={3} mono={false} />
+							)
+						) : (
+							<LogChatMessageView message={log.output_message} audioFormat={audioFormat} />
+						)}
+					</MessageRow>,
+				);
+			}
+		}
+	}
+
+	if (
+		!log.output_message &&
+		!log.error_details?.error.message &&
+		(log.stop_reason === "refusal" || log.stop_reason === "content_filter" || log.stop_reason === "safety")
+	) {
+		rows.push(
+			<MessageRow key="output-refusal" role="assistant" meta="refusal" last>
+				<div className="rounded-sm border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30">
+					<div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+						<AlertCircle className="h-4 w-4 shrink-0" />
+						<span className="text-[12.5px] font-semibold">{t("detailView.refusal")}</span>
+					</div>
+				</div>
+			</MessageRow>,
+		);
+	}
+
+	return rows;
+};
+
+// Builds the Responses-API message rows once per relevant state change. Same
+// rationale as buildChatRows above.
+const buildResponsesRows = (log: LogEntry, opts: MessagesSectionOptions): ReactNode[] | null => {
+	const { visibleRoles, activeInputRevealMapping, activeOutputRevealMapping, t } = opts;
+	const showFiltered = visibleRoles.size !== ALL_ROLES.length;
+	const rawInput = log.responses_input_history ?? [];
+	const inputMsgs = showFiltered ? rawInput.filter((m) => visibleRoles.has(getResponsesRole(m))) : rawInput;
+	const rawOutput = log.status !== "processing" && !log.error_details?.error.message ? (log.responses_output ?? []) : [];
+	const outputMsgs = showFiltered ? rawOutput.filter((m) => visibleRoles.has(getResponsesRole(m))) : rawOutput;
+	const all: Array<{ msg: ResponsesMessage; mapping?: Record<string, string> }> = [
+		...coalesceResponsesMessages(inputMsgs).map((msg) => ({ msg, mapping: activeInputRevealMapping })),
+		...coalesceResponsesMessages(outputMsgs).map((msg) => ({ msg, mapping: activeOutputRevealMapping })),
+	];
+	if (all.length === 0) return null;
+	return all.map(({ msg, mapping }, index) => {
+		const role = getResponsesRole(msg);
+		const isLast = index === all.length - 1;
+		const reasoningParts = role === "reasoning" ? extractReasoningParts(msg, mapping) : null;
+		const reasoningHasAny =
+			!!reasoningParts &&
+			(reasoningParts.summaries.length > 0 ||
+				!!reasoningParts.encrypted ||
+				!!reasoningParts.contentText ||
+				reasoningParts.signatures.length > 0);
+		const text = role === "reasoning" ? "" : extractResponsesText(msg, mapping);
+		const lineCount = text ? text.split("\n").length : 0;
+		const approxTokens = text ? Math.max(1, Math.round(text.length / 4)) : 0;
+		let meta: string | undefined;
+		if (role === "reasoning" && reasoningParts) {
+			const totalLen =
+				reasoningParts.summaries.reduce((acc, s) => acc + s.length, 0) +
+				(reasoningParts.contentText?.length ?? 0) +
+				(reasoningParts.encrypted?.length ?? 0);
+			const totalApprox = totalLen ? Math.max(1, Math.round(totalLen / 4)) : 0;
+			const hasOpaqueOnly =
+				(!!reasoningParts.encrypted || reasoningParts.signatures.length > 0) &&
+				reasoningParts.summaries.length === 0 &&
+				!reasoningParts.contentText;
+			meta = totalApprox ? `~${totalApprox} tokens${hasOpaqueOnly ? " · encrypted" : ""}` : hasOpaqueOnly ? "encrypted" : undefined;
+		} else {
+			meta = text
+				? role === "system" || role === "tool"
+					? msg.name
+						? `${msg.name} · ${lineCount} line${lineCount === 1 ? "" : "s"} · ~${approxTokens} tokens`
+						: `${lineCount} line${lineCount === 1 ? "" : "s"} · ~${approxTokens} tokens`
+					: `${lineCount} line${lineCount === 1 ? "" : "s"}`
+				: msg.name
+					? msg.name
+					: msg.type === "function_call_output" && msg.call_id
+						? msg.call_id
+						: Array.isArray(msg.tools)
+							? (() => {
+									const callable = flattenDeclaredTools(msg.tools).length;
+									return callable !== msg.tools.length
+										? `${msg.type} · ${msg.tools.length} declarations · ${callable} callable tools`
+										: `${msg.type} · ${msg.tools.length} tool${msg.tools.length === 1 ? "" : "s"}`;
+								})()
+							: msg.type || undefined;
+		}
+		const usePlainText = role === "user" || role === "assistant";
+		return (
+			<MessageRow key={index} role={role} meta={meta} last={isLast}>
+				{role === "reasoning" ? (
+					reasoningHasAny && reasoningParts ? (
+						<div className="space-y-3">
+							{reasoningParts.contentText ? <CollapsibleCode text={reasoningParts.contentText} preview={3} mono={false} /> : null}
+							{reasoningParts.summaries.map((s, i) => (
+								<div key={`s-${i}`} className="space-y-1">
+									{reasoningParts.summaries.length > 1 ? (
+										<div className="text-muted-foreground text-[10.5px] font-semibold tracking-wider uppercase">
+											{t("detailView.summaryIndex", { count: i + 1 })}
+										</div>
+									) : null}
+									<CollapsibleCode text={s} preview={3} mono={false} />
+								</div>
+							))}
+							{reasoningParts.encrypted ? (
+								<div className="space-y-1">
+									<div className="text-muted-foreground text-[10.5px] font-semibold tracking-wider uppercase">
+										{t("detailView.encrypted")}
+									</div>
+									<CollapsibleCode text={reasoningParts.encrypted} preview={2} />
+								</div>
+							) : null}
+							{reasoningParts.signatures.length > 0 ? (
+								<EncryptedReveal
+									text={reasoningParts.signatures.join("\n\n")}
+									label={reasoningParts.signatures.length > 1 ? t("detailView.encryptedSignatures") : t("detailView.encryptedSignature")}
+								/>
+							) : null}
+						</div>
+					) : (
+						<div className="text-muted-foreground text-[12px] italic">{t("detailView.noReasoningContent")}</div>
+					)
+				) : text ? (
+					usePlainText ? (
+						<CollapsibleCode text={text} preview={3} mono={false} />
+					) : (
+						<CollapsibleCode text={text} preview={3} lang={role === "system" ? "xml" : undefined} />
+					)
+				) : msg.output !== undefined ? (
+					<CollapsibleCode text={typeof msg.output === "string" ? msg.output : JSON.stringify(msg.output, null, 2)} preview={3} />
+				) : Array.isArray(msg.tools) && msg.tools.length > 0 ? (
+					<CollapsibleCode text={JSON.stringify(msg.tools, null, 2)} preview={3} />
+				) : Array.isArray(msg.tools) ? (
+					<div className="text-muted-foreground text-[12px] italic">{t("detailView.noToolsDeclared")}</div>
+				) : (
+					<div className="text-muted-foreground text-[12px] italic">{t("detailView.noContent")}</div>
+				)}
+				{Array.isArray(msg.content) &&
+					msg.content
+						.filter((b) => b?.type === "input_image" && b.image_url)
+						.map((b, i) => (
+							<img
+								key={`${i}-${b.image_url}`}
+								src={b.image_url}
+								alt={t("views.attachedImage")}
+								className="mt-2 max-w-full rounded border"
+							/>
+						))}
+			</MessageRow>
+		);
+	});
+};
+
 // Helper to detect passthrough operations
 const isPassthroughOperation = (object: string) => object === "passthrough" || object === "passthrough_stream";
 
@@ -552,7 +869,17 @@ function EncryptedReveal({ text, label }: { text: string; label: string }) {
 	);
 }
 
-function CollapsibleCode({ text, preview = 3, lang, mono = true }: { text: string; preview?: number; lang?: string; mono?: boolean }) {
+const CollapsibleCode = memo(function CollapsibleCode({
+	text,
+	preview = 3,
+	lang,
+	mono = true,
+}: {
+	text: string;
+	preview?: number;
+	lang?: string;
+	mono?: boolean;
+}) {
 	const { t } = useTranslation("logs");
 	const [open, setOpen] = useState(false);
 	const lines = text.split("\n");
@@ -584,9 +911,19 @@ function CollapsibleCode({ text, preview = 3, lang, mono = true }: { text: strin
 			)}
 		</>
 	);
-}
+});
 
-function MessageRow({ role, meta, children, last = false }: { role: MessageRole; meta?: string; children: ReactNode; last?: boolean }) {
+const MessageRow = memo(function MessageRow({
+	role,
+	meta,
+	children,
+	last = false,
+}: {
+	role: MessageRole;
+	meta?: string;
+	children: ReactNode;
+	last?: boolean;
+}) {
 	const { t } = useTranslation("logs");
 	return (
 		<div className="flex gap-3">
@@ -605,7 +942,54 @@ function MessageRow({ role, meta, children, last = false }: { role: MessageRole;
 			</div>
 		</div>
 	);
-}
+});
+
+// Reveals the next chunk of message rows when the button is clicked or the
+// sentinel scrolls near the viewport. Self-limiting: once a chunk is appended
+// the sentinel usually drops out of range, so it does not cascade through a long
+// conversation without further scrolling.
+const MessagesLoadMore = memo(function MessagesLoadMore({
+	remaining,
+	onLoadMore,
+	dataTestId,
+}: {
+	remaining: number;
+	onLoadMore: () => void;
+	dataTestId?: string;
+}) {
+	const { t } = useTranslation("logs");
+	const sentinelRef = useRef<HTMLDivElement>(null);
+	const onLoadMoreRef = useRef(onLoadMore);
+
+	useEffect(() => {
+		onLoadMoreRef.current = onLoadMore;
+	});
+
+	useEffect(() => {
+		const el = sentinelRef.current;
+		if (!el) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((e) => e.isIntersecting)) {
+					onLoadMoreRef.current();
+				}
+			},
+			{ rootMargin: "0px 0px 600px 0px", threshold: 0 },
+		);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, []);
+
+	return (
+		<div className="mt-3 flex flex-col items-center gap-2">
+			<div ref={sentinelRef} className="h-1 w-full" />
+			<Button type="button" variant="outline" size="sm" onClick={onLoadMore} className="gap-1.5" data-testid={dataTestId}>
+				<ChevronDown className="h-3.5 w-3.5" />
+				{t("detailView.loadMoreMessages", { count: remaining })}
+			</Button>
+		</div>
+	);
+});
 
 interface LogDetailViewProps {
 	log: LogEntry | null;
@@ -644,7 +1028,7 @@ export function LogDetailView({
 		setShowRevealedValues(false);
 	}, [log?.id, revealAvailable]);
 
-	const allRoles: MessageRole[] = ["system", "user", "assistant", "tool", "reasoning"];
+	const allRoles = ALL_ROLES;
 	const [visibleRoles, setVisibleRoles] = useState<Set<MessageRole>>(new Set(allRoles));
 
 	const handleToggleReveal = (checked: boolean) => {
@@ -729,6 +1113,52 @@ export function LogDetailView({
 	} = useGetLogTimelineQuery(log.id, {
 		skip: !log?.id,
 	});
+
+	// Messages tab sections — derived once so role-filter toggles, reveal toggles
+	// and background refetches don't re-run the full 400-800KB extraction pipeline.
+	const chatRows = useMemo(
+		() =>
+			buildChatRows(log, {
+				isPassthrough,
+				visibleRoles,
+				activeInputRevealMapping,
+				activeOutputRevealMapping,
+				audioFormat,
+				t,
+			}),
+		[log, isPassthrough, visibleRoles, activeInputRevealMapping, activeOutputRevealMapping, audioFormat, t],
+	);
+	const responsesRows = useMemo(
+		() =>
+			buildResponsesRows(log, {
+				isPassthrough,
+				visibleRoles,
+				activeInputRevealMapping,
+				activeOutputRevealMapping,
+				audioFormat,
+				t,
+			}),
+		[log, isPassthrough, visibleRoles, activeInputRevealMapping, activeOutputRevealMapping, audioFormat, t],
+	);
+
+	// Incremental rendering: only mount a few rows on first paint; reveal more
+	// chunks as the user scrolls or clicks "show more".
+	const [chatVisibleCount, setChatVisibleCount] = useState(INITIAL_MESSAGE_LIMIT);
+	const [responsesVisibleCount, setResponsesVisibleCount] = useState(INITIAL_MESSAGE_LIMIT);
+
+	useEffect(() => {
+		setChatVisibleCount(INITIAL_MESSAGE_LIMIT);
+	}, [chatRows]);
+	useEffect(() => {
+		setResponsesVisibleCount(INITIAL_MESSAGE_LIMIT);
+	}, [responsesRows]);
+
+	const loadMoreChat = useCallback(() => {
+		setChatVisibleCount((c) => c + MESSAGE_LOAD_CHUNK);
+	}, []);
+	const loadMoreResponses = useCallback(() => {
+		setResponsesVisibleCount((c) => c + MESSAGE_LOAD_CHUNK);
+	}, []);
 
 	return loading ? (
 		<div className="flex h-full items-center justify-center">
@@ -2062,356 +2492,31 @@ export function LogDetailView({
 						</CollapsibleBox>
 					)}
 
-					{!isPassthrough &&
-						((log.input_history && log.input_history.length > 0) ||
-							(log.output_message && !log.error_details?.error.message) ||
-							log.stop_reason === "refusal" ||
-							log.stop_reason === "content_filter" ||
-							log.stop_reason === "safety") && (
-							<div className="bg-card rounded-sm border p-5">
-								{(visibleRoles.size < allRoles.length
-									? log.input_history?.filter((m) => {
-											if (!m) return false;
-											const mainRole = ((m.role as string) || "user") as MessageRole;
-											const hasReasoning = !!extractChatReasoning(m);
-											return visibleRoles.has(mainRole) || (hasReasoning && visibleRoles.has("reasoning"));
-										})
-									: log.input_history?.filter(Boolean)
-								)?.flatMap((message, index) => {
-									const role = ((message.role as string) || "user") as MessageRole;
-									const text = extractMessageText(message, activeInputRevealMapping);
-									const reasoningText = extractChatReasoning(message, activeInputRevealMapping);
-									const showAll = visibleRoles.size === allRoles.length;
-									const showMain = showAll || visibleRoles.has(role);
-									const showReasoning = !!reasoningText && (showAll || visibleRoles.has("reasoning"));
-									const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-									const isOverallLast =
-										index === (log.input_history?.length ?? 0) - 1 && !log.output_message && !log.error_details?.error.message;
-									const lineCount = text ? text.split("\n").length : 0;
-									const approxTokens = text ? Math.max(1, Math.round(text.length / 4)) : 0;
-									const reasoningTokens = reasoningText ? Math.max(1, Math.round(reasoningText.length / 4)) : 0;
-									const meta = text
-										? role === "system" || role === "tool"
-											? `${lineCount} line${lineCount === 1 ? "" : "s"} · ~${approxTokens} tokens`
-											: `${lineCount} line${lineCount === 1 ? "" : "s"}`
-										: hasToolCalls
-											? `${message.tool_calls!.length} tool call${message.tool_calls!.length === 1 ? "" : "s"}`
-											: undefined;
-									const usePlainText = role === "user" || role === "assistant";
-									const rows: ReactNode[] = [];
-									if (showReasoning) {
-										rows.push(
-											<MessageRow
-												key={`${index}-reasoning`}
-												role="reasoning"
-												meta={`~${reasoningTokens} tokens`}
-												last={isOverallLast && !showMain}
-											>
-												<CollapsibleCode text={reasoningText} preview={3} mono={false} />
-											</MessageRow>,
-										);
-									}
-									if (showMain) {
-										rows.push(
-											<MessageRow key={index} role={role} meta={meta} last={isOverallLast}>
-												{text ? (
-													usePlainText && isJson(text) ? (
-														<CodeEditor
-															wrap
-															code={(() => {
-																try {
-																	return JSON.stringify(JSON.parse(text), null, 2);
-																} catch {
-																	return text;
-																}
-															})()}
-															lang="json"
-															readonly
-															autoResize
-															options={{
-																collapsibleBlocks: true,
-																showIndentLines: false,
-																disableHover: true,
-															}}
-														/>
-													) : usePlainText ? (
-														<CollapsibleCode text={text} preview={3} mono={false} />
-													) : (
-														<CollapsibleCode text={text} preview={3} lang={role === "system" ? "xml" : undefined} />
-													)
-												) : (
-													<LogChatMessageView message={message} audioFormat={audioFormat} />
-												)}
-												{text &&
-													Array.isArray(message.content) &&
-													(message.content as ContentBlock[])
-														.filter((b) => b.type === "image_url")
-														.map((b, i) => {
-															const src = b.image_url?.url;
-															if (!src) return null;
-															return (
-																<img
-																	key={`${i}-${src}`}
-																	src={src}
-																	alt={t("views.attachedImage")}
-																	className="mt-2 max-w-full rounded border"
-																/>
-															);
-														})}
-												{text &&
-													Array.isArray(message.content) &&
-													(message.content as ContentBlock[])
-														.filter((b) => b.type === "file" && b.file)
-														.map((b, i) => (
-															<LogChatFileBlockView
-																key={`${i}-${b.file?.filename || b.file?.file_id || "file"}`}
-																block={b}
-																className="mt-2"
-															/>
-														))}
-												{hasToolCalls && text ? (
-													<div className="text-muted-foreground mt-2 text-[11px]">
-														{message
-															.tool_calls!.map((tc) => tc.function?.name)
-															.filter(Boolean)
-															.join(", ") || `${message.tool_calls!.length} tool call${message.tool_calls!.length === 1 ? "" : "s"}`}
-													</div>
-												) : null}
-											</MessageRow>,
-										);
-									}
-									return rows;
-								})}
-								{log.output_message &&
-									!log.error_details?.error.message &&
-									(() => {
-										const reasoningText = extractChatReasoning(log.output_message, activeOutputRevealMapping);
-										const showReasoning = !!reasoningText && (visibleRoles.size === allRoles.length || visibleRoles.has("reasoning"));
-										const showAssistant = visibleRoles.has("assistant");
-										if (!showReasoning && !showAssistant) return null;
-										const text = extractMessageText(log.output_message, activeOutputRevealMapping);
-										const refusalText = applyRedactionMapping(log.output_message.refusal, activeOutputRevealMapping);
-										const isStopReasonRefusal =
-											log.stop_reason === "refusal" || log.stop_reason === "content_filter" || log.stop_reason === "safety";
-										const showRefusal = refusalText || (!text && isStopReasonRefusal);
-										const lineCount = text ? text.split("\n").length : 0;
-										const tokenMeta = log.token_usage?.completion_tokens ? `${log.token_usage.completion_tokens} tokens` : undefined;
-										const meta = text
-											? tokenMeta
-												? `${lineCount} line${lineCount === 1 ? "" : "s"} · ${tokenMeta}`
-												: `${lineCount} line${lineCount === 1 ? "" : "s"}`
-											: showRefusal
-												? "refusal"
-												: tokenMeta;
-										const reasoningTokens = reasoningText
-											? log.token_usage?.completion_tokens_details?.reasoning_tokens || Math.max(1, Math.round(reasoningText.length / 4))
-											: 0;
-										return (
-											<>
-												{showReasoning ? (
-													<MessageRow role="reasoning" meta={`~${reasoningTokens} tokens`} last={!showAssistant}>
-														<CollapsibleCode text={reasoningText} preview={3} mono={false} />
-													</MessageRow>
-												) : null}
-												{showAssistant ? (
-													<MessageRow role="assistant" meta={meta} last>
-														{showRefusal ? (
-															<div className="rounded-sm border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30">
-																<div className="flex items-center gap-2 text-red-700 dark:text-red-400">
-																	<AlertCircle className="h-4 w-4 shrink-0" />
-																	<span className="text-[12.5px] font-semibold">{t("detailView.refusal")}</span>
-																</div>
-																{refusalText && (
-																	<div className="mt-2 text-[13px] leading-relaxed break-words whitespace-pre-wrap text-red-700 dark:text-red-400">
-																		{refusalText}
-																	</div>
-																)}
-															</div>
-														) : text ? (
-															isJson(text) ? (
-																<CodeEditor
-																	wrap
-																	code={(() => {
-																		try {
-																			return JSON.stringify(JSON.parse(text), null, 2);
-																		} catch {
-																			return text;
-																		}
-																	})()}
-																	lang="json"
-																	readonly
-																	autoResize
-																	options={{
-																		collapsibleBlocks: true,
-																		showIndentLines: false,
-																		disableHover: true,
-																	}}
-																/>
-															) : (
-																<CollapsibleCode text={text} preview={3} mono={false} />
-															)
-														) : (
-															<LogChatMessageView message={log.output_message} audioFormat={audioFormat} />
-														)}
-													</MessageRow>
-												) : null}
-											</>
-										);
-									})()}
-								{!log.output_message &&
-									!log.error_details?.error.message &&
-									(log.stop_reason === "refusal" || log.stop_reason === "content_filter" || log.stop_reason === "safety") && (
-										<MessageRow role="assistant" meta="refusal" last>
-											<div className="rounded-sm border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30">
-												<div className="flex items-center gap-2 text-red-700 dark:text-red-400">
-													<AlertCircle className="h-4 w-4 shrink-0" />
-													<span className="text-[12.5px] font-semibold">{t("detailView.refusal")}</span>
-												</div>
-											</div>
-										</MessageRow>
-									)}
-							</div>
-						)}
+					{chatRows && (
+						<div className="bg-card rounded-sm border p-5">
+							{chatRows.slice(0, chatVisibleCount)}
+							{chatVisibleCount < chatRows.length && (
+								<MessagesLoadMore
+									remaining={chatRows.length - chatVisibleCount}
+									onLoadMore={loadMoreChat}
+									dataTestId="logdetails-chat-load-more"
+								/>
+							)}
+						</div>
+					)}
 
-					{(() => {
-						const rawInput = log.responses_input_history ?? [];
-						const inputMsgs =
-							visibleRoles.size < allRoles.length ? rawInput.filter((m) => visibleRoles.has(getResponsesRole(m))) : rawInput;
-						const rawOutput = log.status !== "processing" && !log.error_details?.error.message ? (log.responses_output ?? []) : [];
-						const outputMsgs =
-							visibleRoles.size < allRoles.length ? rawOutput.filter((m) => visibleRoles.has(getResponsesRole(m))) : rawOutput;
-						const all: Array<{ msg: ResponsesMessage; mapping?: Record<string, string> }> = [
-							...coalesceResponsesMessages(inputMsgs).map((msg) => ({ msg, mapping: activeInputRevealMapping })),
-							...coalesceResponsesMessages(outputMsgs).map((msg) => ({ msg, mapping: activeOutputRevealMapping })),
-						];
-						if (all.length === 0) return null;
-						return (
-							<div className="bg-card rounded-sm border p-5">
-								{all.map(({ msg, mapping }, index) => {
-									const role = getResponsesRole(msg);
-									const isLast = index === all.length - 1;
-									const reasoningParts = role === "reasoning" ? extractReasoningParts(msg, mapping) : null;
-									const reasoningHasAny =
-										!!reasoningParts &&
-										(reasoningParts.summaries.length > 0 ||
-											!!reasoningParts.encrypted ||
-											!!reasoningParts.contentText ||
-											reasoningParts.signatures.length > 0);
-									const text = role === "reasoning" ? "" : extractResponsesText(msg, mapping);
-									const lineCount = text ? text.split("\n").length : 0;
-									const approxTokens = text ? Math.max(1, Math.round(text.length / 4)) : 0;
-									let meta: string | undefined;
-									if (role === "reasoning" && reasoningParts) {
-										const totalLen =
-											reasoningParts.summaries.reduce((acc, s) => acc + s.length, 0) +
-											(reasoningParts.contentText?.length ?? 0) +
-											(reasoningParts.encrypted?.length ?? 0);
-										const totalApprox = totalLen ? Math.max(1, Math.round(totalLen / 4)) : 0;
-										const hasOpaqueOnly =
-											(!!reasoningParts.encrypted || reasoningParts.signatures.length > 0) &&
-											reasoningParts.summaries.length === 0 &&
-											!reasoningParts.contentText;
-										meta = totalApprox
-											? `~${totalApprox} tokens${hasOpaqueOnly ? " · encrypted" : ""}`
-											: hasOpaqueOnly
-												? "encrypted"
-												: undefined;
-									} else {
-										meta = text
-											? role === "system" || role === "tool"
-												? msg.name
-													? `${msg.name} · ${lineCount} line${lineCount === 1 ? "" : "s"} · ~${approxTokens} tokens`
-													: `${lineCount} line${lineCount === 1 ? "" : "s"} · ~${approxTokens} tokens`
-												: `${lineCount} line${lineCount === 1 ? "" : "s"}`
-											: msg.name
-												? msg.name
-												: msg.type === "function_call_output" && msg.call_id
-													? msg.call_id
-													: Array.isArray(msg.tools)
-														? (() => {
-																const callable = flattenDeclaredTools(msg.tools).length;
-																return callable !== msg.tools.length
-																	? `${msg.type} · ${msg.tools.length} declarations · ${callable} callable tools`
-																	: `${msg.type} · ${msg.tools.length} tool${msg.tools.length === 1 ? "" : "s"}`;
-															})()
-														: msg.type || undefined;
-									}
-									const usePlainText = role === "user" || role === "assistant";
-									return (
-										<MessageRow key={index} role={role} meta={meta} last={isLast}>
-											{role === "reasoning" ? (
-												reasoningHasAny && reasoningParts ? (
-													<div className="space-y-3">
-														{reasoningParts.contentText ? (
-															<CollapsibleCode text={reasoningParts.contentText} preview={3} mono={false} />
-														) : null}
-														{reasoningParts.summaries.map((s, i) => (
-															<div key={`s-${i}`} className="space-y-1">
-																{reasoningParts.summaries.length > 1 ? (
-																	<div className="text-muted-foreground text-[10.5px] font-semibold tracking-wider uppercase">
-																		{t("detailView.summaryIndex", { count: i + 1 })}
-																	</div>
-																) : null}
-																<CollapsibleCode text={s} preview={3} mono={false} />
-															</div>
-														))}
-														{reasoningParts.encrypted ? (
-															<div className="space-y-1">
-																<div className="text-muted-foreground text-[10.5px] font-semibold tracking-wider uppercase">
-																	{t("detailView.encrypted")}
-																</div>
-																<CollapsibleCode text={reasoningParts.encrypted} preview={2} />
-															</div>
-														) : null}
-														{reasoningParts.signatures.length > 0 ? (
-															<EncryptedReveal
-																text={reasoningParts.signatures.join("\n\n")}
-																label={
-																	reasoningParts.signatures.length > 1
-																		? t("detailView.encryptedSignatures")
-																		: t("detailView.encryptedSignature")
-																}
-															/>
-														) : null}
-													</div>
-												) : (
-													<div className="text-muted-foreground text-[12px] italic">{t("detailView.noReasoningContent")}</div>
-												)
-											) : text ? (
-												usePlainText ? (
-													<CollapsibleCode text={text} preview={3} mono={false} />
-												) : (
-													<CollapsibleCode text={text} preview={3} lang={role === "system" ? "xml" : undefined} />
-												)
-											) : msg.output !== undefined ? (
-												<CollapsibleCode
-													text={typeof msg.output === "string" ? msg.output : JSON.stringify(msg.output, null, 2)}
-													preview={3}
-												/>
-											) : Array.isArray(msg.tools) && msg.tools.length > 0 ? (
-												<CollapsibleCode text={JSON.stringify(msg.tools, null, 2)} preview={3} />
-											) : Array.isArray(msg.tools) ? (
-												<div className="text-muted-foreground text-[12px] italic">{t("detailView.noToolsDeclared")}</div>
-											) : (
-												<div className="text-muted-foreground text-[12px] italic">{t("detailView.noContent")}</div>
-											)}
-											{Array.isArray(msg.content) &&
-												msg.content
-													.filter((b) => b?.type === "input_image" && b.image_url)
-													.map((b, i) => (
-														<img
-															key={`${i}-${b.image_url}`}
-															src={b.image_url}
-															alt={t("views.attachedImage")}
-															className="mt-2 max-w-full rounded border"
-														/>
-													))}
-										</MessageRow>
-									);
-								})}
-							</div>
-						);
-					})()}
+					{responsesRows && (
+						<div className="bg-card rounded-sm border p-5">
+							{responsesRows.slice(0, responsesVisibleCount)}
+							{responsesVisibleCount < responsesRows.length && (
+								<MessagesLoadMore
+									remaining={responsesRows.length - responsesVisibleCount}
+									onLoadMore={loadMoreResponses}
+									dataTestId="logdetails-responses-load-more"
+								/>
+							)}
+						</div>
+					)}
 
 					{log.is_large_payload_request && !log.input_history?.length && !log.responses_input_history?.length && (
 						<div className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300">

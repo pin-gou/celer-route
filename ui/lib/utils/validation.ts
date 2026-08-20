@@ -555,6 +555,23 @@ function isValidIPv6(host: string): boolean {
 
 export const isJson = (text: string) => {
 	try {
+		// Fast-fail on strings that cannot be JSON before paying for a full parse.
+		// JSON top-level values can only start with `{`, `[`, `"`, `-`, a digit,
+		// or one of `t`/`f`/`n` (true/false/null). This skips the expensive JSON.parse
+		// on large plain-text payloads (e.g. multi-hundred-KB message content).
+		const head = text.trimStart();
+		if (head.length === 0) return false;
+		const first = head.charCodeAt(0);
+		const looksLikeJson =
+			first === 0x7b /* { */ ||
+			first === 0x5b /* [ */ ||
+			first === 0x22 /* " */ ||
+			first === 0x2d /* - */ ||
+			first === 0x74 /* t */ ||
+			first === 0x66 /* f */ ||
+			first === 0x6e /* n */ ||
+			(first >= 0x30 && first <= 0x39) /* 0-9 */;
+		if (!looksLikeJson) return false;
 		JSON.parse(text);
 		return true;
 	} catch {

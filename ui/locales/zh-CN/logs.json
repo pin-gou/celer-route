@@ -766,7 +766,9 @@
 		"websocket": "WebSocket",
 		"webrtc": "WebRTC",
 		"eventInitiated": "事件发起",
-		"languageModel": "语言模型"
+		"languageModel": "语言模型",
+		"viewFormattedJson": "查看格式化 JSON",
+		"loadMoreMessages": "加载更多消息（剩余 {{count}} 条）"
 	},
 	"sessionSheet": {
 		"logs": "日志数",
