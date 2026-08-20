@@ -64,6 +64,11 @@ export function RoutingRulesView() {
 		setDialogOpen(true);
 	};
 
+	const handleEditFromInfo = (rule: RoutingRule) => {
+		setInfoSheetOpen(false);
+		handleEdit(rule);
+	};
+
 	const handleRowClick = (rule: RoutingRule) => {
 		setSelectedRule(rule);
 		setInfoSheetOpen(true);
@@ -150,6 +155,8 @@ export function RoutingRulesView() {
 				onNavigate={handleRuleNavigate}
 				hasPrev={selectedRuleIndex > 0}
 				hasNext={selectedRuleIndex >= 0 && selectedRuleIndex < sortedRules.length - 1}
+				onEdit={handleEditFromInfo}
+				canUpdate={canUpdate}
 			/>
 		</div>
 	);

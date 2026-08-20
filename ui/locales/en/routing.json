@@ -112,6 +112,8 @@
 		"invalidRuleConfig": "Invalid rule configuration:\n{{errors}}"
 	},
 	"infoSheet": {
+		"edit": "Edit",
+		"editAriaLabel": "Edit routing rule {{name}}",
 		"overview": "Overview",
 		"scope": "Scope",
 		"priority": "Priority",

@@ -50,6 +50,10 @@ export class RoutingRulesPage extends BasePage {
   readonly saveBtn: Locator
   readonly cancelBtn: Locator
 
+  // Info sheet (details drawer) elements
+  readonly infoSheet: Locator
+  readonly infoEditBtn: Locator
+
   constructor(page: Page) {
     super(page)
 
@@ -97,6 +101,10 @@ export class RoutingRulesPage extends BasePage {
     this.cancelBtn = page.locator('[data-testid="cancel-rule-btn"]').or(
       page.locator('[role="dialog"]').getByRole('button', { name: 'Cancel', exact: true })
     )
+
+    // Info sheet (details drawer) elements
+    this.infoSheet = page.getByTestId('routing-rule-info')
+    this.infoEditBtn = page.getByTestId('routing-rule-info-edit-btn')
   }
 
   /**
@@ -225,6 +233,19 @@ export class RoutingRulesPage extends BasePage {
     await editBtn.click()
 
     await expect(this.sheet).toBeVisible({ timeout: 5000 })
+    await this.waitForSheetAnimation()
+  }
+
+  /**
+   * Open the details (info) drawer for a rule by clicking its table row.
+   */
+  async openInfoSheet(name: string): Promise<void> {
+    await this.dismissToasts()
+    const row = this.getRuleRow(name)
+    await row.scrollIntoViewIfNeeded()
+    await row.click()
+
+    await expect(this.infoSheet).toBeVisible({ timeout: 5000 })
     await this.waitForSheetAnimation()
   }
 

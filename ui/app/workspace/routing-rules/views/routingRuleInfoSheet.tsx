@@ -13,7 +13,7 @@ import { useGetVirtualKeyQuery } from "@/lib/store/apis/governanceApi";
 import { RoutingRule } from "@/lib/types/routingRules";
 import { getScopeLabel } from "@/lib/utils/labels";
 import { formatDistanceToNow } from "date-fns";
-import { Check, Copy, GitMerge, Key } from "lucide-react";
+import { Check, Copy, GitMerge, Key, Pencil } from "lucide-react";
 import { useMemo, useState } from "react";
 import { RuleGroupType, RuleType } from "react-querybuilder";
 import { useTranslation } from "react-i18next";
@@ -26,6 +26,8 @@ interface Props {
 	onNavigate?: (direction: "prev" | "next") => void;
 	hasPrev?: boolean;
 	hasNext?: boolean;
+	onEdit?: (rule: RoutingRule) => void;
+	canUpdate?: boolean;
 }
 
 function getFieldLabel(fieldName: string): string {
@@ -236,7 +238,16 @@ function FallbackChain({ fallbacks }: { fallbacks: string[] }) {
 	);
 }
 
-export function RoutingRuleInfoSheet({ rule, open, onOpenChange, onNavigate, hasPrev = false, hasNext = false }: Props) {
+export function RoutingRuleInfoSheet({
+	rule,
+	open,
+	onOpenChange,
+	onNavigate,
+	hasPrev = false,
+	hasNext = false,
+	onEdit,
+	canUpdate = false,
+}: Props) {
 	const { t } = useTranslation("routing");
 	const targets = rule?.targets ?? [];
 	const fallbacks = rule?.fallbacks ?? [];
@@ -277,14 +288,30 @@ export function RoutingRuleInfoSheet({ rule, open, onOpenChange, onNavigate, has
 								</div>
 								{rule.description && <SheetDescription className="mt-0.5 text-sm">{rule.description}</SheetDescription>}
 							</div>
-							<SheetNavigationButtons
-								hasPrev={hasPrev}
-								hasNext={hasNext}
-								onNavigate={(dir) => onNavigate?.(dir)}
-								prevKeys={prevKeys}
-								nextKeys={nextKeys}
-								entityLabel="rule"
-							/>
+							<div className="flex shrink-0 items-center gap-2">
+								{canUpdate && onEdit && (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={() => onEdit(rule)}
+										className="gap-1.5"
+										data-testid="routing-rule-info-edit-btn"
+										aria-label={t("infoSheet.editAriaLabel", { name: rule.name })}
+									>
+										<Pencil className="h-3.5 w-3.5" />
+										{t("infoSheet.edit")}
+									</Button>
+								)}
+								<SheetNavigationButtons
+									hasPrev={hasPrev}
+									hasNext={hasNext}
+									onNavigate={(dir) => onNavigate?.(dir)}
+									prevKeys={prevKeys}
+									nextKeys={nextKeys}
+									entityLabel="rule"
+								/>
+							</div>
 						</SheetHeader>
 
 						<div className="-mx-8 space-y-6 overflow-y-auto px-8 pb-8">

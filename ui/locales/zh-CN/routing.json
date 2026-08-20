@@ -112,6 +112,8 @@
 		"invalidRuleConfig": "无效的规则配置：\n{{errors}}"
 	},
 	"infoSheet": {
+		"edit": "编辑",
+		"editAriaLabel": "编辑路由规则 {{name}}",
 		"overview": "概览",
 		"scope": "作用域",
 		"priority": "优先级",

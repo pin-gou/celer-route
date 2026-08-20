@@ -148,6 +148,29 @@ test.describe('Routing Rules', () => {
       const exists = await routingRulesPage.ruleExists(ruleData.name)
       expect(exists).toBe(true)
     })
+
+    test('should open edit sheet from the details drawer', async ({ routingRulesPage }) => {
+      const ruleData = createRoutingRuleData({
+        name: `Info Edit Test Rule ${Date.now()}`,
+      })
+      createdRules.push(ruleData.name)
+
+      await routingRulesPage.createRoutingRule(ruleData)
+
+      // Open the details drawer, then switch to edit mode
+      await routingRulesPage.openInfoSheet(ruleData.name)
+      await expect(routingRulesPage.infoEditBtn).toBeVisible({ timeout: 5000 })
+
+      await routingRulesPage.infoEditBtn.click()
+
+      // Details drawer closes and the edit sheet opens pre-filled
+      await expect(routingRulesPage.infoSheet).not.toBeVisible({ timeout: 5000 })
+      await expect(routingRulesPage.sheet).toBeVisible({ timeout: 5000 })
+      await routingRulesPage.waitForSheetAnimation()
+      await expect(routingRulesPage.nameInput).toHaveValue(ruleData.name)
+
+      await routingRulesPage.cancelRule()
+    })
   })
 
   test.describe('Form Validation', () => {
