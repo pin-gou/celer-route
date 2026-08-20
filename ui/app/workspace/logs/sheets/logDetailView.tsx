@@ -1847,7 +1847,7 @@ export function LogDetailView({
 				</div>
 			</details>
 			<Tabs key={log.id} defaultValue={showTabs ? "messages" : "plugins"} className="gap-2">
-				<TabsList className="bg-muted/60 h-10 w-fit">
+				<TabsList className="bg-muted sticky top-0 z-10 h-10 w-fit">
 					{showTabs && (
 						<TabsTrigger value="messages" className="px-3">
 							{t("detailView.messages")}
