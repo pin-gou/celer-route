@@ -129,7 +129,7 @@ export function AddProviderDialog({
 				</Button>
 			</DialogTrigger>
 			<DialogContent
-				className="custom-scrollbar flex max-h-[85vh] max-w-3xl flex-col gap-0 overflow-hidden p-0"
+				className="custom-scrollbar flex max-h-[75vh] max-w-[800px] flex-col gap-0 overflow-hidden p-0"
 				data-testid="add-provider-dialog"
 				showCloseButton={false}
 			>
