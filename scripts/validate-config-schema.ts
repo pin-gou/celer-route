@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import Ajv2019 from "ajv/dist/2019";
+import Ajv from "ajv";
 import addFormats from "ajv-formats";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,8 +70,11 @@ const mockerFixture = {
 };
 
 function main(): void {
-  const schema = loadJSON(schemaPath);
-  const ajv = new Ajv2019({ strict: false });
+  const schema = loadJSON(schemaPath) as Record<string, unknown>;
+  // Strip $schema — ajv-draft-04 doesn't ship the draft 2019-09 meta-schema,
+  // and we only care about the data-validation pass anyway.
+  delete schema["$schema"];
+  const ajv = new Ajv({ strict: false });
   addFormats(ajv);
 
   const validate = ajv.compile(schema);
