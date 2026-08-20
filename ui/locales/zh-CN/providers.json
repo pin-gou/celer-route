@@ -159,6 +159,13 @@
 			"active": "活跃",
 			"viewLogs": "查看日志"
 		},
+		"deleteConfirm": {
+			"title": "删除提供商",
+			"description": "确定要删除该提供商吗？此操作无法撤销。",
+			"cancel": "取消",
+			"confirm": "删除",
+			"deleting": "正在删除..."
+		},
 		"toast": {
 			"failedToDeleteProvider": "删除提供商失败"
 		},
