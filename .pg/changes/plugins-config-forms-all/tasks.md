@@ -7,8 +7,8 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 1.1 编写 ajv 校验脚本 `scripts/validate-config-schema.ts`：用 ajv 装载 `transports/config.schema.json` 后，对 fixture sample 配置（governance + mocker 各 1 份）做 validate（红：governance 缺字段必失败）
-- [ ] 1.2 编写治理 unit test `transports/pg-gateway-http/handlers/plugins_test.go`：断言 schema 必填字段存在（governance.is_vk_mandatory、governance.required_headers、governance.disable_auto_tool_inject、governance.routing_chain_max_depth）
+- [x] 1.1 编写 ajv 校验脚本 `scripts/validate-config-schema.ts`：用 ajv 装载 `transports/config.schema.json` 后，对 fixture sample 配置（governance + mocker 各 1 份）做 validate（红：governance 缺字段必失败）
+- [x] 1.2 编写治理 unit test `transports/pg-gateway-http/handlers/plugins_test.go`：断言 schema 必填字段存在（governance.is_vk_mandatory、governance.required_headers、governance.disable_auto_tool_inject、governance.routing_chain_max_depth）
 
 ## 2. dev.transports:dev - 实现开发
 

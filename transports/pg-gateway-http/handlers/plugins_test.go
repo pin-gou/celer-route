@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
@@ -834,5 +836,115 @@ func TestUpdatePlugin_Governance_RejectsInvalidRoutingChainMaxDepth(t *testing.T
 				}
 			}
 		})
+	}
+}
+
+// TestGovernanceSchemaRequiredFields verifies that the governance plugin config
+// section in config.schema.json defines all four fields from the Go Config struct:
+//
+//   - is_vk_mandatory
+//   - required_headers
+//   - disable_auto_tool_inject
+//   - routing_chain_max_depth
+//
+// TDD red phase: the schema currently only defines is_vk_mandatory and
+// required_headers in the governance plugin config section, so this test will
+// fail until the schema is updated to match the Go struct.
+func TestGovernanceSchemaRequiredFields(t *testing.T) {
+	// Resolve config.schema.json relative to this test file.
+	// Test runs from transports/pg-gateway-http/handlers/, so we go up 2 levels to reach transports/.
+	schemaPath := filepath.Join("..", "..", "config.schema.json")
+	absPath, err := filepath.Abs(schemaPath)
+	if err != nil {
+		t.Fatalf("failed to resolve schema path: %v", err)
+	}
+
+	raw, err := os.ReadFile(absPath)
+	if err != nil {
+		t.Fatalf("failed to read config.schema.json: %v", err)
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("failed to parse config.schema.json: %v", err)
+	}
+
+	// Navigate: properties.plugins.items.allOf[].then.properties.config.properties
+	// Find the governance plugin section (if.then.properties.name.const == "governance")
+	plugins, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("schema missing top-level properties")
+	}
+	pluginsObj, ok := plugins["plugins"].(map[string]any)
+	if !ok {
+		t.Fatal("schema.plugins is not an object")
+	}
+	items, ok := pluginsObj["items"].(map[string]any)
+	if !ok {
+		t.Fatal("schema.plugins.items is not an object")
+	}
+	allOf, ok := items["allOf"].([]any)
+	if !ok {
+		t.Fatal("schema.plugins.items.allOf is not an array")
+	}
+
+	var governanceConfigProps map[string]any
+	for _, branch := range allOf {
+		branchMap, ok := branch.(map[string]any)
+		if !ok {
+			continue
+		}
+		ifBranch, ok := branchMap["if"].(map[string]any)
+		if !ok {
+			continue
+		}
+		ifProps, ok := ifBranch["properties"].(map[string]any)
+		if !ok {
+			continue
+		}
+		nameProp, ok := ifProps["name"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if nameProp["const"] != "governance" {
+			continue
+		}
+
+		thenBranch, ok := branchMap["then"].(map[string]any)
+		if !ok {
+			t.Fatal("governance if/then branch missing 'then'")
+		}
+		thenProps, ok := thenBranch["properties"].(map[string]any)
+		if !ok {
+			t.Fatal("governance then missing properties")
+		}
+		configObj, ok := thenProps["config"].(map[string]any)
+		if !ok {
+			t.Fatal("governance config is not an object")
+		}
+		configProps, ok := configObj["properties"].(map[string]any)
+		if !ok {
+			t.Fatal("governance config missing properties")
+		}
+		governanceConfigProps = configProps
+		break
+	}
+
+	if governanceConfigProps == nil {
+		t.Fatal("governance plugin config section not found in schema")
+	}
+
+	// Required fields from the Go Config struct that must be in the schema
+	requiredFields := []string{
+		"is_vk_mandatory",
+		"required_headers",
+		"disable_auto_tool_inject",
+		"routing_chain_max_depth",
+	}
+
+	for _, field := range requiredFields {
+		if _, ok := governanceConfigProps[field]; !ok {
+			t.Errorf("governance plugin config schema missing required field: %q", field)
+		}
 	}
 }
