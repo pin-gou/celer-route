@@ -264,6 +264,7 @@ export const mockerRuleSchema = z.object({
 export type MockerRule = z.infer<typeof mockerRuleSchema>;
 
 export const mockerConfigSchema = z.object({
+	enabled: z.boolean().optional(),
 	global_latency: globalLatencySchema.optional(),
 	rules: z.array(mockerRuleSchema).optional(),
 	default_behavior: z.enum(["passthrough", "error", "success"]).optional(),

@@ -111,7 +111,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 					type="button"
 					data-testid="mocker-save-button"
 					onClick={() => void submitRef.current()}
-					disabled={isLoading || !isDirty || !hasUpdateAccess}
+					disabled={isLoading || !isDirty || !hasUpdateAccess || parsingError !== null || validationError !== null}
 				>
 					{isLoading ? t("mockerConfig.saving") : t("mockerConfig.saveConfiguration")}
 				</Button>

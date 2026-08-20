@@ -260,6 +260,32 @@ describe("mockerConfigSchema (task 11.1)", () => {
 		expect(result.success).toBe(true);
 	});
 
+	// -----------------------------------------------------------------------
+	// enabled — config-level enable flag must survive the Zod round-trip
+	// (backend MockerConfig has `Enabled bool json:"enabled"` at config level;
+	// a stripped `enabled` breaks PUT → GET echo of config.enabled).
+	// -----------------------------------------------------------------------
+
+	it("accepts enabled as a boolean", () => {
+		const result = mockerConfigSchema.safeParse({ enabled: true });
+		expect(result.success).toBe(true);
+	});
+
+	it("preserves enabled in the parsed output (not stripped)", () => {
+		const result = mockerConfigSchema.parse({
+			enabled: true,
+			default_behavior: "passthrough",
+			rules: [],
+		});
+		expect(result.enabled).toBe(true);
+		expect(result.default_behavior).toBe("passthrough");
+	});
+
+	it("rejects enabled when type is not boolean", () => {
+		const result = mockerConfigSchema.safeParse({ enabled: "yes" });
+		expect(result.success).toBe(false);
+	});
+
 	it("accepts default_behavior = 'error'", () => {
 		const result = mockerConfigSchema.safeParse({ default_behavior: "error" });
 		expect(result.success).toBe(true);
