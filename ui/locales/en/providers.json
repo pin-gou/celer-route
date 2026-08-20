@@ -80,6 +80,29 @@
 			"error": "Error",
 			"searchPlaceholder": "Search providers..."
 		},
+		"capabilities": {
+			"chat": "Chat",
+			"embed": "Embed",
+			"vision": "Vision",
+			"speech": "Speech",
+			"tools": "Tools",
+			"image": "Image",
+			"video": "Video",
+			"transcription": "Transcription",
+			"rerank": "Rerank"
+		},
+		"addProviderDialog": {
+			"title": "Add New Provider",
+			"description": "Pick a provider to configure. Search by name or filter by capability.",
+			"close": "Close",
+			"searchPlaceholder": "Search providers by name...",
+			"capabilityLabel": "Filter by capability:",
+			"recommended": "Recommended for you",
+			"added": "Added",
+			"noResults": "No providers match your filters.",
+			"reset": "Reset",
+			"customDescription": "Connect any OpenAI/Anthropic-compatible endpoint."
+		},
 		"card": {
 			"keys": "{{count}} keys",
 			"models": "{{count}} models",

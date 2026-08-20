@@ -149,12 +149,19 @@ export class ProvidersPage extends BasePage {
   }
 
   /**
-   * Add a known provider from the "Add provider" dropdown (e.g. Nebius, OpenAI).
-   * Opens the dropdown and clicks the option with data-testid add-provider-option-{name}.
+   * Add a known provider from the "Add provider" picker (e.g. Nebius, OpenAI).
+   * Opens the picker dialog and clicks the option with data-testid add-provider-option-{name}.
+   *
+   * Legacy note: this method used to drive a DropdownMenu; the picker is now a
+   * modal Dialog with grouped tiles, search, and capability filters. The
+   * option testid (add-provider-option-{name}) is preserved so callers and
+   * spec assertions keep working unchanged.
    */
   async addKnownProviderFromDropdown(providerName: string): Promise<void> {
     await this.addProviderBtn.click()
-    const option = this.page.getByTestId(`add-provider-option-${providerName}`)
+    const dialog = this.page.getByTestId('add-provider-dialog')
+    await dialog.waitFor({ state: 'visible', timeout: 5000 })
+    const option = dialog.getByTestId(`add-provider-option-${providerName}`)
     await option.waitFor({ state: 'visible', timeout: 5000 })
     await option.click()
     await waitForNetworkIdle(this.page)
@@ -165,8 +172,11 @@ export class ProvidersPage extends BasePage {
    */
   async openCustomProviderSheet(): Promise<void> {
     await this.addProviderBtn.click()
-    await this.addProviderOptionCustom.waitFor({ state: 'visible', timeout: 5000 })
-    await this.addProviderOptionCustom.click()
+    const dialog = this.page.getByTestId('add-provider-dialog')
+    await dialog.waitFor({ state: 'visible', timeout: 5000 })
+    const customOption = dialog.getByTestId('add-provider-option-custom')
+    await customOption.waitFor({ state: 'visible', timeout: 5000 })
+    await customOption.click()
     await expect(this.customProviderSheet).toBeVisible({ timeout: 5000 })
   }
 

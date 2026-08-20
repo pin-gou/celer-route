@@ -80,6 +80,29 @@
 			"error": "错误",
 			"searchPlaceholder": "搜索提供商..."
 		},
+		"capabilities": {
+			"chat": "对话",
+			"embed": "向量",
+			"vision": "视觉",
+			"speech": "语音",
+			"tools": "工具",
+			"image": "图像",
+			"video": "视频",
+			"transcription": "转录",
+			"rerank": "重排"
+		},
+		"addProviderDialog": {
+			"title": "添加提供商",
+			"description": "选择要配置的提供商，可按名称搜索或按能力筛选。",
+			"close": "关闭",
+			"searchPlaceholder": "按名称搜索提供商...",
+			"capabilityLabel": "按能力筛选：",
+			"recommended": "为你推荐",
+			"added": "已添加",
+			"noResults": "没有匹配的提供商。",
+			"reset": "重置",
+			"customDescription": "对接任意 OpenAI/Anthropic 兼容端点。"
+		},
 		"card": {
 			"keys": "{{count}} 个密钥",
 			"models": "{{count}} 个模型",

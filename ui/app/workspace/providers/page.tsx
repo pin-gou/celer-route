@@ -12,7 +12,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AddCustomProviderSheet from "@/app/workspace/providers/dialogs/addNewCustomProviderSheet";
-import { AddProviderDropdown } from "@/app/workspace/providers/views/addProviderDropdown";
+import { AddProviderDialog } from "@/app/workspace/providers/views/AddProviderDialog";
 import ConfirmDeleteProviderDialog from "@/app/workspace/providers/dialogs/confirmDeleteProviderDialog";
 import { ProviderFamilyGroup } from "./views/ProviderFamilyGroup";
 import { ProviderFilters, type FilterState } from "./views/ProviderFilters";
@@ -154,10 +154,10 @@ export default function ProvidersPage() {
 					<ProviderFilters filters={filters} onChange={setFilters} />
 				</div>
 				<div className="flex items-center gap-2">
-					<AddProviderDropdown
+					<AddProviderDialog
 						variant="toolbar"
 						disabled={!hasCreateAccess}
-						existingInSidebar={existingInSidebar}
+						existingProviderNames={existingInSidebar}
 						knownProviders={knownProviders}
 						onSelectKnownProvider={handleSelectKnownProvider}
 						onAddCustomProvider={handleAddCustomProvider}
