@@ -80,6 +80,8 @@ const (
 	Siliconflow   ModelProvider = "siliconflow"
 	Volcengine    ModelProvider = "volcengine"
 	Zhipu         ModelProvider = "zhipu"
+	Tencent       ModelProvider = "tencent"
+	Baidu         ModelProvider = "baidu"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
@@ -132,6 +134,8 @@ var StandardProviders = []ModelProvider{
 	Siliconflow,
 	Volcengine,
 	Zhipu,
+	Tencent,
+	Baidu,
 }
 
 // KeylessProviders is the set of built-in (non-custom) providers that never

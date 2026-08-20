@@ -107,6 +107,8 @@ var dynamicallyConfigurableProviders = []schemas.ModelProvider{
 	schemas.Siliconflow,
 	schemas.Volcengine,
 	schemas.Zhipu,
+	schemas.Tencent,
+	schemas.Baidu,
 }
 
 // isModelRequired returns true if the request type requires a model

@@ -528,6 +528,12 @@
         },
         "zhipu": {
           "$ref": "#/$defs/provider"
+        },
+        "tencent": {
+          "$ref": "#/$defs/provider"
+        },
+        "baidu": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -7684,7 +7690,9 @@
             "moonshot",
             "siliconflow",
             "volcengine",
-            "zhipu"
+            "zhipu",
+            "tencent",
+            "baidu"
           ],
           "description": "Base provider type to extend"
         },

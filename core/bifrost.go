@@ -24,6 +24,7 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/alibaba"
 	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
 	"github.com/pin-gou/pg-gateway/core/providers/azure"
+	"github.com/pin-gou/pg-gateway/core/providers/baidu"
 	"github.com/pin-gou/pg-gateway/core/providers/bedrock"
 	"github.com/pin-gou/pg-gateway/core/providers/bedrockmantle"
 	"github.com/pin-gou/pg-gateway/core/providers/cerebras"
@@ -49,7 +50,8 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/runway"
 	"github.com/pin-gou/pg-gateway/core/providers/sarvam"
 	"github.com/pin-gou/pg-gateway/core/providers/sgl"
-	"github.com/pin-gou/pg-gateway/core/providers/siliconflow"
+"github.com/pin-gou/pg-gateway/core/providers/siliconflow"
+	"github.com/pin-gou/pg-gateway/core/providers/tencent"
 	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
 	"github.com/pin-gou/pg-gateway/core/providers/vertex"
 	"github.com/pin-gou/pg-gateway/core/providers/vllm"
@@ -4505,6 +4507,10 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return volcengine.NewVolcengineProvider(config, bifrost.logger)
 	case schemas.Zhipu:
 		return zhipu.NewZhipuProvider(config, bifrost.logger)
+	case schemas.Tencent:
+		return tencent.NewTencentProvider(config, bifrost.logger)
+	case schemas.Baidu:
+		return baidu.NewBaiduProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

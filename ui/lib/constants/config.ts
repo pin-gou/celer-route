@@ -73,6 +73,8 @@ export const ModelPlaceholders = {
 	volcengine: "e.g. doubao-pro-32k, doubao-lite-32k",
 	wafer: "e.g. glm-5.2, kimi-k2.6",
 	zhipu: "e.g. glm-4-plus, glm-4-flash",
+	tencent: "e.g. hunyuan-turbos-latest, hunyuan-t1-latest, hunyuan-pro",
+	baidu: "e.g. ernie-5.1, ernie-5.0, ernie-4.5-turbo-128k",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
@@ -114,6 +116,8 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	volcengine: true,
 	wafer: true,
 	zhipu: true,
+	tencent: true,
+	baidu: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
@@ -157,6 +161,8 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	volcengine: "https://www.volcengine.com/product/ark",
 	wafer: "https://waferhoufy.com",
 	zhipu: "https://open.bigmodel.cn",
+	tencent: "https://cloud.tencent.com/product/hunyuan",
+	baidu: "https://cloud.baidu.com/product/wenxinworkshop",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
@@ -200,6 +206,8 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	volcengine: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
 	wafer: "",
 	zhipu: "https://open.bigmodel.cn/usercenter/apikeys",
+	tencent: "https://console.cloud.tencent.com/hunyuan/api-key",
+	baidu: "https://console.bce.baidu.com/qianfan/ais/console/application/list",
 };
 
 export const DefaultNetworkConfig = {
