@@ -29,6 +29,8 @@ export interface ActiveLogEntry {
 	cost?: number | null;
 	virtual_key_name?: string;
 	virtual_key_id?: string;
+	selected_key_name?: string;
+	selected_key_id?: string;
 	routing_rule_id?: string;
 	routing_rule_name?: string;
 	number_of_retries?: number;
@@ -66,6 +68,8 @@ function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
 		cost: update.cost ?? null,
 		virtual_key_name: update.virtual_key_name,
 		virtual_key_id: update.virtual_key_id,
+		selected_key_name: update.selected_key_name,
+		selected_key_id: update.selected_key_id,
 		routing_rule_id: update.routing_rule_id,
 		routing_rule_name: update.routing_rule_name,
 		number_of_retries: update.number_of_retries ?? 0,
@@ -122,6 +126,8 @@ function mergeActiveEntry(existing: ActiveLogEntry, fresh: ActiveLogEntry): Acti
 		cost: fresh.cost ?? existing.cost,
 		virtual_key_name: fresh.virtual_key_name ?? existing.virtual_key_name,
 		virtual_key_id: fresh.virtual_key_id ?? existing.virtual_key_id,
+		selected_key_name: fresh.selected_key_name ?? existing.selected_key_name,
+		selected_key_id: fresh.selected_key_id ?? existing.selected_key_id,
 		routing_rule_id: fresh.routing_rule_id ?? existing.routing_rule_id,
 		routing_rule_name: fresh.routing_rule_name ?? existing.routing_rule_name,
 		number_of_retries: fresh.number_of_retries ?? existing.number_of_retries,

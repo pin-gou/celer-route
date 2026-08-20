@@ -3105,6 +3105,8 @@ type activeLogEntry struct {
 	Cost            *float64                 `json:"cost,omitempty"`
 	VirtualKeyID    *string                  `json:"virtual_key_id,omitempty"`
 	VirtualKeyName  *string                  `json:"virtual_key_name,omitempty"`
+	SelectedKeyID   *string                  `json:"selected_key_id,omitempty"`
+	SelectedKeyName *string                  `json:"selected_key_name,omitempty"`
 	RoutingRuleID   *string                  `json:"routing_rule_id,omitempty"`
 	RoutingRuleName *string                  `json:"routing_rule_name,omitempty"`
 	NumberOfRetries int                      `json:"number_of_retries"`
@@ -3195,7 +3197,7 @@ func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
 	if l == nil {
 		return activeLogEntry{}
 	}
-	return activeLogEntry{
+	entry := activeLogEntry{
 		ID:              l.ID,
 		Status:          l.Status,
 		Provider:        l.Provider,
@@ -3216,6 +3218,15 @@ func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
 		ContentSummary:  l.ContentSummary,
 		Message:         activeEntryMessage(l),
 	}
+	// SelectedKeyID/Name are plain strings on the log row; only set the wire
+	// pointers when non-empty so empty values stay omitted from the payload.
+	if l.SelectedKeyID != "" {
+		entry.SelectedKeyID = &l.SelectedKeyID
+	}
+	if l.SelectedKeyName != "" {
+		entry.SelectedKeyName = &l.SelectedKeyName
+	}
+	return entry
 }
 
 // getActiveLogStream handles GET /api/logs/active/stream (SSE) - Pushes log

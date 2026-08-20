@@ -70,6 +70,8 @@ function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 		user_agent: a.user_agent,
 		virtual_key_name: a.virtual_key_name,
 		virtual_key_id: a.virtual_key_id,
+		selected_key_name: a.selected_key_name,
+		selected_key_id: a.selected_key_id,
 		routing_rule_id: a.routing_rule_id,
 		routing_rule_name: a.routing_rule_name,
 		// Prefer the SSE `message` preview (last user prompt, computed by the
