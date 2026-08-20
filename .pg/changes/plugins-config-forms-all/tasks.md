@@ -17,10 +17,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 2.1 同步 `transports/config.schema.json` 中 `governance` 段：补齐 `disable_auto_tool_inject` (boolean) 和 `routing_chain_max_depth` (integer, 1-100)，与 Go config struct 字段对齐
-- [ ] 2.2 新增 `transports/config.schema.json` 中 `mocker` 段：覆盖 `global_latency`、`rules[]`（含 `conditions`、`responses`、`priority`、`probability`）、`default_behavior` 枚举（passthrough/error/success）
-- [ ] 2.3 校对 `transports/config.schema.json` 中 `logging` / `semantic_cache` / `compat` 字段名、enum、allOf 条件与 Go config struct 一致
-- [ ] 2.4 ajv 校验脚本通过：所有 fixture 配置 validation error = 0
+- [x] 2.1 同步 `transports/config.schema.json` 中 `governance` 段：补齐 `disable_auto_tool_inject` (boolean) 和 `routing_chain_max_depth` (integer, 1-100)，与 Go config struct 字段对齐
+- [x] 2.2 新增 `transports/config.schema.json` 中 `mocker` 段：覆盖 `global_latency`、`rules[]`（含 `conditions`、`responses`、`priority`、`probability`）、`default_behavior` 枚举（passthrough/error/success）
+- [x] 2.3 校对 `transports/config.schema.json` 中 `logging` / `semantic_cache` / `compat` 字段名、enum、allOf 条件与 Go config struct 一致
+- [x] 2.4 ajv 校验脚本通过：所有 fixture 配置 validation error = 0
 
 ## 3. dev.transports:review - 静态代码审查
 

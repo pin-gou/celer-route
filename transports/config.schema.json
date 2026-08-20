@@ -198,8 +198,7 @@
             },
             "should_convert_params": {
               "type": "boolean",
-              "description": "Converts model parameter values that are not supported by the model.",
-              "default": false
+              "description": "Converts model parameter values that are not supported by the model."
             }
           },
           "additionalProperties": false
@@ -2912,17 +2911,49 @@
                       "description": "When content logging is disabled, offload the full content to object storage as hidden instead of dropping it. Hidden content is never served back through the API/UI. Requires object storage to be configured on the logs store.",
                       "default": false
                     },
-                    "allow_per_request_content_storage_override": {
-                      "type": "boolean",
-                      "description": "Allow individual requests to override content storage via the x-bf-disable-content-logging header or context key, and to opt in to raw-byte persistence in logs via x-bf-store-raw-request-response. When false (default), per-request storage overrides are ignored. Does not control sending raw bytes back to callers \u2014 see allow_per_request_raw_override.",
-                      "default": false
-                    },
                     "logging_headers": {
                       "type": "array",
                       "items": {
                         "type": "string"
                       },
                       "description": "List of headers to capture in log metadata"
+                    },
+                    "writer": {
+                      "type": "object",
+                      "description": "Async logging writer queue and batch tuning. Omitted fields use runtime defaults.",
+                      "properties": {
+                        "max_batch_size": {
+                          "type": "integer",
+                          "description": "Maximum number of log entries to batch before flushing (default: 1000)",
+                          "minimum": 1,
+                          "default": 1000
+                        },
+                        "batch_interval": {
+                          "type": "string",
+                          "description": "Maximum time to wait before flushing a partial batch as a Go duration string (default: 1s)",
+                          "pattern": "^[1-9][0-9]*(ns|us|\u00b5s|ms|s|m|h)$",
+                          "default": "1s"
+                        },
+                        "max_batch_bytes": {
+                          "type": "integer",
+                          "description": "Approximate byte-size ceiling for a batch before flushing (default: 314572800)",
+                          "minimum": 1,
+                          "default": 314572800
+                        },
+                        "write_queue_capacity": {
+                          "type": "integer",
+                          "description": "Buffered queue capacity for pending log writes (default: 10000)",
+                          "minimum": 1,
+                          "default": 10000
+                        },
+                        "deferred_usage_concurrency": {
+                          "type": "integer",
+                          "description": "Maximum concurrent deferred usage database updates (default: 5)",
+                          "minimum": 1,
+                          "default": 5
+                        }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "additionalProperties": false
@@ -2957,6 +2988,16 @@
                         "type": "string"
                       },
                       "description": "List of headers that must be present in requests"
+                    },
+                    "disable_auto_tool_inject": {
+                      "type": "boolean",
+                      "description": "When true, MCP tools are not automatically injected into requests"
+                    },
+                    "routing_chain_max_depth": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100,
+                      "description": "Maximum depth for routing rule chain evaluation"
                     }
                   },
                   "additionalProperties": false
@@ -3307,6 +3348,25 @@
                     }
                   },
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "mocker"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "config"
+              ],
+              "properties": {
+                "config": {
+                  "$ref": "#/$defs/mocker_config"
                 }
               }
             }
@@ -3928,6 +3988,208 @@
             ],
             "additionalProperties": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "mocker_config": {
+      "type": "object",
+      "description": "Configuration for the mocker plugin",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable or disable the mocker plugin",
+          "default": true
+        },
+        "global_latency": {
+          "type": "object",
+          "description": "Global latency settings applied to all rules (can be overridden per rule)",
+          "properties": {
+            "min": {
+              "type": "string",
+              "pattern": "^[0-9]+(ns|us|\u00b5s|ms|s|m|h)$",
+              "description": "Minimum latency as a Go duration string (e.g. '100ms', '1s')"
+            },
+            "max": {
+              "type": "string",
+              "pattern": "^[0-9]+(ns|us|\u00b5s|ms|s|m|h)$",
+              "description": "Maximum latency as a Go duration string (e.g. '500ms', '2s')"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["fixed", "uniform"],
+              "description": "Latency distribution type: 'fixed' for constant delay, 'uniform' for random delay between min and max"
+            }
+          },
+          "additionalProperties": false
+        },
+        "rules": {
+          "type": "array",
+          "description": "List of mock rules evaluated in priority order (higher priority = evaluated first)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Unique rule name for identification and statistics tracking"
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable or disable this rule",
+                "default": true
+              },
+              "priority": {
+                "type": "integer",
+                "description": "Rule evaluation priority. Higher numbers are evaluated first.",
+                "default": 0
+              },
+              "probability": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Probability of rule activation (0.0 = never, 1.0 = always)",
+                "default": 1.0
+              },
+              "conditions": {
+                "type": "object",
+                "description": "Conditions that must match for this rule to apply. All specified conditions must match.",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "description": "Match requests for a specific provider name"
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "Match requests for a specific model name"
+                  },
+                  "request_type": {
+                    "type": "string",
+                    "description": "Match requests of a specific type (e.g. 'chat_completion', 'embedding')"
+                  },
+                  "endpoint": {
+                    "type": "string",
+                    "description": "Match requests to a specific API endpoint path"
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+                    "description": "Match requests with a specific HTTP method"
+                  },
+                  "virtual_key": {
+                    "type": "string",
+                    "description": "Match requests using a specific virtual key ID"
+                  },
+                  "team_id": {
+                    "type": "string",
+                    "description": "Match requests from a specific team ID"
+                  },
+                  "customer_id": {
+                    "type": "string",
+                    "description": "Match requests from a specific customer ID"
+                  },
+                  "message_regex": {
+                    "type": "string",
+                    "description": "Regex pattern to match against request message content"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Match requests with specific header values"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "responses": {
+                "type": "array",
+                "description": "Possible responses for this rule (selected using weighted random selection)",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "status_code": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599,
+                      "description": "HTTP status code for the response",
+                      "default": 200
+                    },
+                    "content_type": {
+                      "type": "string",
+                      "description": "Content-Type header for the response",
+                      "default": "application/json"
+                    },
+                    "headers": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Additional response headers"
+                    },
+                    "body": {
+                      "type": "object",
+                      "description": "JSON response body (for JSON responses)"
+                    },
+                    "body_template": {
+                      "type": "string",
+                      "description": "Go template string for dynamic response body generation"
+                    },
+                    "body_file": {
+                      "type": "string",
+                      "description": "Path to a file containing the response body"
+                    },
+                    "weight": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "Relative weight for weighted random selection (default: 1.0)"
+                    },
+                    "delay": {
+                      "type": "string",
+                      "pattern": "^[0-9]+(ns|us|\u00b5s|ms|s|m|h)$",
+                      "description": "Additional delay before sending this response as a Go duration string"
+                    },
+                    "error": {
+                      "type": "boolean",
+                      "description": "If true, the response is returned as an error rather than a successful response",
+                      "default": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "minItems": 1
+              },
+              "latency": {
+                "type": "object",
+                "description": "Rule-specific latency override (overrides global_latency if set)",
+                "properties": {
+                  "min": {
+                    "type": "string",
+                    "pattern": "^[0-9]+(ns|us|\u00b5s|ms|s|m|h)$",
+                    "description": "Minimum latency as a Go duration string"
+                  },
+                  "max": {
+                    "type": "string",
+                    "pattern": "^[0-9]+(ns|us|\u00b5s|ms|s|m|h)$",
+                    "description": "Maximum latency as a Go duration string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["fixed", "uniform"],
+                    "description": "Latency distribution type: 'fixed' or 'uniform'"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          }
+        },
+        "default_behavior": {
+          "type": "string",
+          "enum": ["passthrough", "error", "success"],
+          "description": "Action when no rules match: 'passthrough' (forward to provider), 'error' (return mock error), 'success' (return mock success)",
+          "default": "passthrough"
         }
       },
       "additionalProperties": false

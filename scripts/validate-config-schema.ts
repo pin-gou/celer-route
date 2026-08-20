@@ -1,12 +1,12 @@
 /**
  * validate-config-schema.ts
  *
- * TDD red phase: validates fixture config samples against config.schema.json
- * using ajv. The governance fixture deliberately includes fields missing from
- * the schema (disable_auto_tool_inject, routing_chain_max_depth) so validation
- * fails — proving the schema does not yet define those fields.
+ * TDD green phase: validates fixture config samples against config.schema.json
+ * using ajv. The governance fixture includes fields that were added to the
+ * schema (disable_auto_tool_inject, routing_chain_max_depth) so validation
+ * should now pass — proving the schema is in sync with the Go config struct.
  *
- * Expected: governance fixture FAILS, mocker fixture PASSES.
+ * Expected: governance fixture PASSES, mocker fixture PASSES.
  */
 
 import { readFileSync } from "node:fs";
@@ -104,20 +104,19 @@ function main(): void {
     }
   }
 
-  // ── Summary: red phase ─────────────────────────────────────────────
-  // Expected: governance fails (schema doesn't define the Go struct fields),
-  //           mocker passes (generic plugin schema allows it).
-  if (!govValid && mockerValid) {
-    console.log("\n✓ Red phase status: GOVERNANCE FAILS (expected) + MOCKER PASSES (expected)");
-    console.log("  The schema is missing disable_auto_tool_inject and routing_chain_max_depth");
-    console.log("  from the governance plugin config section. These must be added in the green phase.");
+  // ── Summary: green phase ───────────────────────────────────────────
+  // Expected: both pass (schema has been updated with the missing fields).
+  if (govValid && mockerValid) {
+    console.log("\n✓ Green phase: both fixtures PASS");
+    console.log("  The governance plugin config section now includes disable_auto_tool_inject");
+    console.log("  and routing_chain_max_depth. The schema is in sync with the Go config struct.");
     process.exit(0);
-  } else if (govValid) {
-    console.log("\n⚠ Red phase violation: governance fixture passed unexpectedly");
-    console.log("  The schema already defines the fields that should be missing.");
+  } else if (!govValid) {
+    console.log("\n⚠ Green phase violation: governance fixture failed");
+    console.log("  The schema is still missing disable_auto_tool_inject and/or routing_chain_max_depth.");
     process.exit(1);
   } else {
-    console.log("\n⚠ Unexpected: mocker fixture also failed");
+    console.log("\n⚠ Green phase violation: mocker fixture also failed");
     console.log("  The mocker fixture should pass generic plugin validation.");
     process.exit(1);
   }
