@@ -7,10 +7,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 1.1 在 `ui/app/workspace/plugins/fragments/__tests__/` 下新增 `governanceFragment.test.tsx`，验证 EnabledSwitch 点击触发 updatePlugin + RBAC 拦截
-- [ ] 1.2 验证 ConfigForm 4 字段初始值从 plugin.config 正确填充（含 `*bool` 未设置时回退到 `false`、`*[]string` 未设置时回退到 `[]`、`*int` 未设置时回退到 `5`）
-- [ ] 1.3 验证 ConfigForm 提交后调用 updatePlugin({ name: GOVERNANCE_PLUGIN, data: { enabled, config } })，断言 payload 含 4 字段且值正确
-- [ ] 1.4 验证 `governanceConfigSchema` zod 校验：缺字段不报错、类型不匹配报错、`routing_chain_max_depth` 超 100 报错
+- [x] 1.1 在 `ui/app/workspace/plugins/fragments/__tests__/` 下新增 `governanceFragment.test.tsx`，验证 EnabledSwitch 点击触发 updatePlugin + RBAC 拦截
+- [x] 1.2 验证 ConfigForm 4 字段初始值从 plugin.config 正确填充（含 `*bool` 未设置时回退到 `false`、`*[]string` 未设置时回退到 `[]`、`*int` 未设置时回退到 `5`）
+- [x] 1.3 验证 ConfigForm 提交后调用 updatePlugin({ name: GOVERNANCE_PLUGIN, data: { enabled, config } })，断言 payload 含 4 字段且值正确
+- [x] 1.4 验证 `governanceConfigSchema` zod 校验：缺字段不报错、类型不匹配报错、`routing_chain_max_depth` 超 100 报错
 
 ## 2. dev.ui:dev - 实现开发
 
