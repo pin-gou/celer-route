@@ -443,7 +443,7 @@ export const createColumns = (
 				const { t } = useTranslation("logs");
 				return t("column_labels.app");
 			},
-			size: 110,
+			size: 130,
 			cell: ({ row }) => {
 				const app = row.original.app ? mapAppToClientApp(row.original.app) : mapUserAgentToApp(row.original.user_agent);
 				const icon = row.original.app ? customAppIcons[row.original.app] || app.icon : app.icon;
