@@ -113,9 +113,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 							render={({ field }) => (
 								<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
 									<div className="space-y-0.5">
-										<FormLabel data-testid="governance-field-is-vk-mandatory-label">
-											{t("governance.isVkMandatoryLabel")}
-										</FormLabel>
+										<FormLabel data-testid="governance-field-is-vk-mandatory-label">{t("governance.isVkMandatoryLabel")}</FormLabel>
 										<FormDescription>{t("governance.isVkMandatoryDescription")}</FormDescription>
 									</div>
 									<FormControl>
@@ -203,11 +201,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 
 				{/* Save button */}
 				<div className="flex justify-end">
-					<Button
-						type="submit"
-						data-testid="governance-save-button"
-						disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess}
-					>
+					<Button type="submit" data-testid="governance-save-button" disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess}>
 						{isLoading ? t("governance.saving") : t("governance.saveConfiguration")}
 					</Button>
 				</div>
