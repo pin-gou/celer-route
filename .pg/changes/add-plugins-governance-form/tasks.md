@@ -33,10 +33,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
-- [ ] 3.2 review agent 对 git diff feat/pg/add-plugins-governance-form 做静态审查
-- [ ] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
-- [ ] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
+- [x] 3.1 review agent 读 design.md + tasks.md + .pg/code-review/code-review.yaml 细则
+- [x] 3.2 review agent 对 git diff feat/pg/add-plugins-governance-form 做静态审查
+- [x] 3.3 review agent 输出 review_score + p0_failures 到本 section 对应的 review 报告（路径由 dispatch 注入）
+- [x] 3.4 score < pass_threshold → escalate 至 fix-review；score ≥ pass_threshold → completed → 进入 verify
 
 > **本次变更 review 关注点**：
 > - governanceFragment 是否完全沿用 rtkFragment 模式（命名 / 提交语义 / RBAC 门控）
