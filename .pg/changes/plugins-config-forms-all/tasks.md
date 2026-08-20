@@ -135,9 +135,9 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 11.1 编写 vitest `ui/app/workspace/plugins/fragments/__tests__/schema.test.ts`：覆盖 4 个 Zod schema 的 happy path（合法输入通过）、边界值（semantic_cache dimension 边界 1/2、provider 必填字段）、invalid input（mocker 非法 JSON 拒绝）
-- [ ] 11.2 编写 vitest `ui/app/workspace/plugins/views/__tests__/pluginsView.test.tsx`：覆盖散转逻辑（pluginName → fragment）、占位卡渲染（prompts / modelcatalogresolver / jsonparser）
-- [ ] 11.3 编写 vitest `ui/lib/types/__tests__/plugins.test.ts`：覆盖 compatibility 字段（compat schema 4 字段默认 true/should_convert_params 默认 false）、logging_headers 数组校验
+- [x] 11.1 编写 vitest `ui/app/workspace/plugins/fragments/__tests__/schema.test.ts`：覆盖 4 个 Zod schema 的 happy path（合法输入通过）、边界值（semantic_cache dimension 边界 1/2、provider 必填字段）、invalid input（mocker 非法 JSON 拒绝）
+- [x] 11.2 编写 vitest `ui/app/workspace/plugins/views/__tests__/pluginsView.test.tsx`：覆盖散转逻辑（pluginName → fragment）、占位卡渲染（prompts / modelcatalogresolver / jsonparser）
+- [x] 11.3 编写 vitest `ui/lib/types/__tests__/plugins.test.ts`：覆盖 compatibility 字段（compat schema 4 字段默认 true/should_convert_params 默认 false）、logging_headers 数组校验
 
 ## 12. dev.ui:dev - 实现开发
 
