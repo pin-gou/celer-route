@@ -64,6 +64,25 @@ type UpdatePluginRequest struct {
 	Order     *int                     `json:"order,omitempty"`
 }
 
+// validateGovernancePluginConfig validates the governance plugin config
+// matching the frontend zod schema: routing_chain_max_depth ∈ [1, 100].
+// Returns nil on valid config, or an error describing the first violation.
+func validateGovernancePluginConfig(config map[string]any) error {
+	if v, ok := config["routing_chain_max_depth"]; ok {
+		depth, ok := v.(float64) // JSON numbers unmarshal as float64
+		if !ok {
+			return fmt.Errorf("routing_chain_max_depth must be a number")
+		}
+		if depth < 1 || depth > 100 {
+			return fmt.Errorf("routing_chain_max_depth must be between 1 and 100")
+		}
+		if depth != float64(int(depth)) {
+			return fmt.Errorf("routing_chain_max_depth must be an integer")
+		}
+	}
+	return nil
+}
+
 // normalizePluginConfig calls the loaded plugin's MarshalConfigForStorage if it
 // implements ConfigMarshallerPlugin. Returns config unchanged if the plugin is not
 // loaded or does not implement the interface. Returns an error if marshalling fails.
@@ -509,6 +528,23 @@ func (h *PluginsHandler) updatePlugin(ctx *fasthttp.RequestCtx) {
 	if err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid plugin configuration: %v", err))
 		return
+	}
+	// Validate governance plugin config against the design contract
+	// (routing_chain_max_depth ∈ [1, 100], matching the frontend zod schema).
+	if name == "governance" {
+		if err := validateGovernancePluginConfig(mergedConfig); err != nil {
+			statusCode := 422
+			bifrostErr := &schemas.BifrostError{
+				IsBifrostError: false,
+				StatusCode:     &statusCode,
+				Error: &schemas.ErrorField{
+					Code:    schemas.Ptr("config_invalid"),
+					Message: err.Error(),
+				},
+			}
+			SendBifrostError(ctx, bifrostErr)
+			return
+		}
 	}
 	// Updating the plugin
 	if err := h.configStore.UpdatePlugin(ctx, &configstoreTables.TablePlugin{

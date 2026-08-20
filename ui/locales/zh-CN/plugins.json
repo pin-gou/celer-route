@@ -301,5 +301,30 @@
 			"recoveryTitle": "恢复机制",
 			"recoveryBody": "TTL 到期后密钥会自动重新启用。冷却状态保存在进程内存中，重启 pg-gateway 会清空所有冷却记录。"
 		}
+	},
+	"governance": {
+		"title": "治理插件配置",
+		"enableTitle": "启用治理插件",
+		"enableDescription": "强制执行访问控制策略、路由规则和虚拟密钥要求",
+		"enabledToast": "治理插件已启用",
+		"disabledToast": "治理插件已禁用",
+		"updateFailedToast": "更新治理插件失败",
+		"settingsTitle": "治理设置",
+		"savedToast": "治理配置已保存",
+		"saveFailedToast": "保存治理配置失败",
+		"formErrorToast": "请先修正表单中的错误再提交",
+		"saving": "保存中...",
+		"saveConfiguration": "保存配置",
+		"accessControlSection": "访问控制",
+		"isVkMandatoryLabel": "强制要求虚拟密钥",
+		"isVkMandatoryDescription": "强制每个请求都必须携带有效的虚拟密钥",
+		"requiredHeadersLabel": "必填请求头",
+		"requiredHeadersDescription": "每个请求都必须包含的请求头",
+		"requiredHeadersPlaceholder": "输入请求头名称并按回车添加",
+		"behaviorSection": "行为",
+		"disableAutoToolInjectLabel": "禁用自动工具注入",
+		"disableAutoToolInjectDescription": "禁止自动向 LLM 请求注入工具",
+		"routingChainMaxDepthLabel": "路由链最大深度",
+		"routingChainMaxDepthDescription": "路由链跳转的最大次数（1–100）"
 	}
 }

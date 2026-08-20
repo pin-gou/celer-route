@@ -765,3 +765,74 @@ func TestGetPlugins_WithStore_DisabledBuiltinsMerged(t *testing.T) {
 		t.Errorf("telemetry.Enabled = false, want true (status is active)")
 	}
 }
+
+// TestUpdatePlugin_Governance_RejectsInvalidRoutingChainMaxDepth verifies that
+// PUT /api/plugins/governance with routing_chain_max_depth > 100 returns 422
+// config_invalid, matching the design contract and frontend zod schema.
+func TestUpdatePlugin_Governance_RejectsInvalidRoutingChainMaxDepth(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	store := &capturePluginsStore{
+		existingPlugin: &configstoreTables.TablePlugin{
+			Name:    "governance",
+			Enabled: true,
+			Config:  map[string]any{},
+		},
+	}
+	h := &PluginsHandler{
+		pluginsLoader: noopPluginsLoader{},
+		configStore:   store,
+	}
+
+	tests := []struct {
+		name  string
+		depth any
+		code  int
+	}{
+		{"depth > 100", 999, 422},
+		{"depth = 101", 101, 422},
+		{"depth = 0 (below min)", 0, 422},
+		{"depth = -1 (negative)", -1, 422},
+		{"depth = 5.5 (non-integer)", 5.5, 422},
+		{"depth = 100 (boundary, valid)", 100, 200},
+		{"depth = 1 (boundary, valid)", 1, 200},
+		{"depth = 50 (valid)", 50, 200},
+		{"depth missing (optional)", nil, 200},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := map[string]any{}
+			if tt.depth != nil {
+				config["routing_chain_max_depth"] = tt.depth
+			}
+			reqBody := map[string]any{
+				"enabled": true,
+				"config":  config,
+			}
+			ctx := buildUpdateRequest(t, reqBody)
+			ctx.SetUserValue("name", "governance")
+
+			h.updatePlugin(ctx)
+
+			if ctx.Response.StatusCode() != tt.code {
+				t.Errorf("expected status %d, got %d: %s", tt.code, ctx.Response.StatusCode(), ctx.Response.Body())
+			}
+
+			if tt.code == 422 {
+				var resp struct {
+					Error *schemas.ErrorField `json:"error"`
+				}
+				if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+					t.Fatalf("unmarshal error response: %v", err)
+				}
+				if resp.Error == nil {
+					t.Fatal("expected error field in response body")
+				}
+				if resp.Error.Code == nil || *resp.Error.Code != "config_invalid" {
+					t.Errorf("expected error.code = config_invalid, got %v", resp.Error.Code)
+				}
+			}
+		})
+	}
+}
