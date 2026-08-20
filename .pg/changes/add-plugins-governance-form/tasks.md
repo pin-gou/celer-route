@@ -51,10 +51,10 @@
      track=ui (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 4.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 4.3 启动服务（如需）
-- [ ] 4.4 验证 V-ui-N：来自 design.md（N 由 design.md 决定，非章节号）
+- [x] 4.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 4.2 执行测试（runner 通过 modules 注入命令）
+- [x] 4.3 启动服务（如需）
+- [x] 4.4 验证 V-ui-N：来自 design.md（N 由 design.md 决定，非章节号）
 
   **Evidence 要求**（verify agent 在验证报告中产出，gate agent 据此评审）：
   - 每个 V-* 必须有对应的原始输出（curl 响应 / 命令行输出 / 日志片段）
