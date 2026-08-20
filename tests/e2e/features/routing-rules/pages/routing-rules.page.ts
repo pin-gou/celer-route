@@ -53,6 +53,8 @@ export class RoutingRulesPage extends BasePage {
   // Info sheet (details drawer) elements
   readonly infoSheet: Locator
   readonly infoEditBtn: Locator
+  readonly testCommandBlock: Locator
+  readonly testCommandCopyBtn: Locator
 
   constructor(page: Page) {
     super(page)
@@ -105,6 +107,8 @@ export class RoutingRulesPage extends BasePage {
     // Info sheet (details drawer) elements
     this.infoSheet = page.getByTestId('routing-rule-info')
     this.infoEditBtn = page.getByTestId('routing-rule-info-edit-btn')
+    this.testCommandBlock = page.getByTestId('routing-rule-test-command')
+    this.testCommandCopyBtn = page.getByTestId('routing-rule-copy-test-command-btn')
   }
 
   /**

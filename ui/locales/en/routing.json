@@ -10,6 +10,7 @@
 		"createRule": "Create Rule",
 		"editRule": "Edit Rule",
 		"deleteRule": "Delete Rule",
+		"viewRule": "View Rule",
 		"ruleName": "Rule Name",
 		"ruleNameRequired": "Rule name is required",
 		"ruleNamePlaceholder": "e.g., Route GPT-4 to Azure",
@@ -141,7 +142,10 @@
 		"copyValue": "Copy {{label}}",
 		"valueCopied": "{{label}} copied",
 		"incomingProvider": "Incoming provider",
-		"incomingModel": "Incoming model"
+		"incomingModel": "Incoming model",
+		"testCommand": "Test Command",
+		"testCommandDesc": "Copy this curl command and run it to test routing for this rule",
+		"testCommandEmpty": "Add conditions to generate a test command"
 	},
 	"tree": {
 		"title": "Routing Tree",

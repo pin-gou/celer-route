@@ -171,6 +171,29 @@ test.describe('Routing Rules', () => {
 
       await routingRulesPage.cancelRule()
     })
+
+    test('should show a copyable test command in the details drawer', async ({ routingRulesPage }) => {
+      const ruleData = createRoutingRuleData({
+        name: `Test Command Rule ${Date.now()}`,
+        provider: 'openai',
+      })
+      createdRules.push(ruleData.name)
+
+      await routingRulesPage.createRoutingRule(ruleData)
+
+      await routingRulesPage.openInfoSheet(ruleData.name)
+
+      // The generated curl command should be visible and contain the expected pieces
+      await expect(routingRulesPage.testCommandBlock).toBeVisible({ timeout: 5000 })
+      const command = (await routingRulesPage.testCommandBlock.textContent()) ?? ''
+      expect(command).toContain('curl -X POST')
+      expect(command).toContain('chat/completions')
+      expect(command).toContain('"model": "openai/')
+
+      await expect(routingRulesPage.testCommandCopyBtn).toBeVisible()
+      await routingRulesPage.testCommandCopyBtn.click()
+      await routingRulesPage.waitForSuccessToast()
+    })
   })
 
   test.describe('Form Validation', () => {

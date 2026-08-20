@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/alertDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Pagination } from "@/components/ui/pagination";
@@ -23,72 +22,10 @@ import { useDeleteRoutingRuleMutation, useUpdateRoutingRuleMutation } from "@/li
 import { RoutingRule, RoutingTarget } from "@/lib/types/routingRules";
 import { getScopeLabel } from "@/lib/utils/labels";
 import { getPriorityBadgeClass, truncateCELExpression } from "@/lib/utils/routingRules";
-import { Edit, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { Edit, Eye, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-
-function RoutingRuleActionsMenu({
-	rule,
-	canUpdate,
-	canDelete,
-	onEdit,
-	onDelete,
-}: {
-	rule: RoutingRule;
-	canUpdate: boolean;
-	canDelete: boolean;
-	onEdit: (rule: RoutingRule) => void;
-	onDelete: (ruleId: string) => void;
-}) {
-	const { t } = useTranslation("routing");
-	const [isOpen, setIsOpen] = useState(false);
-
-	return (
-		<DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-			<DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-8 w-8"
-					aria-label={`Actions for routing rule ${rule.name}`}
-					data-testid={`routing-rule-actions-${rule.id}-btn`}
-				>
-					<MoreHorizontal className="h-4 w-4" />
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end">
-				<DropdownMenuItem
-					className="cursor-pointer"
-					disabled={!canUpdate}
-					data-testid={`routing-rule-edit-${rule.id}-btn`}
-					onSelect={(e) => {
-						e.preventDefault();
-						onEdit(rule);
-						setIsOpen(false);
-					}}
-				>
-					<Edit className="h-4 w-4" />
-					{t("rules.editRule")}
-				</DropdownMenuItem>
-				<DropdownMenuItem
-					variant="destructive"
-					className="cursor-pointer"
-					disabled={!canDelete}
-					data-testid={`routing-rule-delete-${rule.id}-btn`}
-					onSelect={(e) => {
-						e.preventDefault();
-						onDelete(rule.id);
-						setIsOpen(false);
-					}}
-				>
-					<Trash2 className="h-4 w-4" />
-					{t("rules.deleteRule")}
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
 
 interface RoutingRulesTableProps {
 	rules: RoutingRule[] | undefined;
@@ -194,7 +131,7 @@ export function RoutingRulesTable({
 							<TableHead className="text-right font-semibold">{t("rules.priority")}</TableHead>
 							<TableHead className="font-semibold">{t("rules.expression")}</TableHead>
 							<TableHead className="font-semibold">{t("rules.status")}</TableHead>
-							<TableHead className={`bg-muted sticky right-0 z-30 w-[50px] text-right font-semibold ${PIN_SHADOW_RIGHT}`}>
+							<TableHead className={`bg-muted sticky right-0 z-30 w-[130px] text-center font-semibold ${PIN_SHADOW_RIGHT}`}>
 								{t("rules.actions")}
 							</TableHead>
 						</TableRow>
@@ -266,14 +203,39 @@ export function RoutingRulesTable({
 										className={`group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted sticky right-0 z-20 bg-white text-right ${PIN_SHADOW_RIGHT}`}
 										onClick={(e) => e.stopPropagation()}
 									>
-										<div className="flex items-center justify-center">
-											<RoutingRuleActionsMenu
-												rule={rule}
-												canUpdate={canUpdate}
-												canDelete={canDelete}
-												onEdit={onEdit}
-												onDelete={setDeleteRuleId}
-											/>
+										<div className="flex items-center justify-end gap-1">
+											<Button
+												variant="ghost"
+												size="icon"
+												className="h-8 w-8"
+												onClick={() => onRowClick(rule)}
+												data-testid={`routing-rule-view-${rule.id}-btn`}
+												aria-label={t("rules.viewRule")}
+											>
+												<Eye className="h-4 w-4" />
+											</Button>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="h-8 w-8"
+												disabled={!canUpdate}
+												onClick={() => onEdit(rule)}
+												data-testid={`routing-rule-edit-${rule.id}-btn`}
+												aria-label={t("rules.editRule")}
+											>
+												<Edit className="h-4 w-4" />
+											</Button>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="h-8 w-8"
+												disabled={!canDelete}
+												onClick={() => setDeleteRuleId(rule.id)}
+												data-testid={`routing-rule-delete-${rule.id}-btn`}
+												aria-label={t("rules.deleteRule")}
+											>
+												<Trash2 className="h-4 w-4" />
+											</Button>
 										</div>
 									</TableCell>
 								</TableRow>

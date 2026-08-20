@@ -11,9 +11,10 @@ import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
 import { useGetVirtualKeyQuery } from "@/lib/store/apis/governanceApi";
 import { RoutingRule } from "@/lib/types/routingRules";
+import { generateRoutingTestCommand } from "@/lib/utils/routingRules";
 import { getScopeLabel } from "@/lib/utils/labels";
 import { formatDistanceToNow } from "date-fns";
-import { Check, Copy, GitMerge, Key, Pencil } from "lucide-react";
+import { Check, Copy, GitMerge, Key, Pencil, Terminal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { RuleGroupType, RuleType } from "react-querybuilder";
 import { useTranslation } from "react-i18next";
@@ -254,6 +255,7 @@ export function RoutingRuleInfoSheet({
 	const hasQuery = rule?.query && (rule.query.rules?.length ?? 0) > 0;
 	const hasCel = !!rule?.cel_expression?.trim();
 	const scopeName = useScopeName(rule?.scope ?? "global", rule?.scope_id);
+	const testCommand = useMemo(() => (rule ? generateRoutingTestCommand(rule) : ""), [rule]);
 
 	const { prev: prevKeys, next: nextKeys } = useSheetNavigation({
 		enabled: open,
@@ -382,6 +384,34 @@ export function RoutingRuleInfoSheet({
 									<FallbackChain fallbacks={fallbacks} />
 								) : (
 									<p className="text-muted-foreground text-sm">{t("infoSheet.noFallbacks")}</p>
+								)}
+							</div>
+
+							<DottedSeparator />
+
+							<div className="space-y-3">
+								<div className="flex items-center justify-between">
+									<div>
+										<h3 className="text-sm font-semibold">{t("infoSheet.testCommand")}</h3>
+										<p className="text-muted-foreground mt-0.5 text-xs">{t("infoSheet.testCommandDesc")}</p>
+									</div>
+									{testCommand && <CopyButton value={testCommand} label="test command" testId="routing-rule-copy-test-command-btn" />}
+								</div>
+								{testCommand ? (
+									<pre
+										className="bg-muted/50 block w-full overflow-x-auto rounded-md border px-3 py-2 font-mono text-xs whitespace-pre"
+										data-testid="routing-rule-test-command"
+									>
+										{testCommand}
+									</pre>
+								) : (
+									<div
+										className="bg-muted/50 text-muted-foreground flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+										data-testid="routing-rule-test-command-empty"
+									>
+										<Terminal className="h-4 w-4 shrink-0" />
+										<span>{t("infoSheet.testCommandEmpty")}</span>
+									</div>
 								)}
 							</div>
 

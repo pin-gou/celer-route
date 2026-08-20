@@ -10,6 +10,7 @@
 		"createRule": "创建规则",
 		"editRule": "编辑规则",
 		"deleteRule": "删除规则",
+		"viewRule": "查看规则",
 		"ruleName": "规则名称",
 		"ruleNameRequired": "规则名称为必填项",
 		"ruleNamePlaceholder": "例如：将 GPT-4 路由到 Azure",
@@ -141,7 +142,10 @@
 		"copyValue": "复制 {{label}}",
 		"valueCopied": "{{label}} 已复制",
 		"incomingProvider": "传入提供商",
-		"incomingModel": "传入模型"
+		"incomingModel": "传入模型",
+		"testCommand": "测试命令",
+		"testCommandDesc": "复制此 curl 命令并运行，测试此规则的路由",
+		"testCommandEmpty": "添加条件后可生成测试命令"
 	},
 	"tree": {
 		"title": "路由树",

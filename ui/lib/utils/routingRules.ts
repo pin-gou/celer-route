@@ -3,6 +3,9 @@
  * Helper functions for CEL validation, formatting, and rule management
  */
 
+import { RuleGroupType, RuleType } from "react-querybuilder";
+import { RoutingRule } from "@/lib/types/routingRules";
+
 /**
  * Validates if a CEL expression has basic correct syntax
  * @param expression - The CEL expression to validate
@@ -149,4 +152,165 @@ export function detectCELOperators(expression: string): string[] {
 	});
 
 	return operators;
+}
+
+/**
+ * Internal type for a single routing rule condition (from query builder rules)
+ */
+interface ParsedRoutingCondition {
+	type: "model" | "provider" | "header" | "param" | "request_type" | "skip";
+	field: string;
+	operator: string;
+	value: string;
+	key?: string;
+}
+
+/**
+ * Recursively flattens query-builder rules into simple conditions.
+ */
+function flattenQueryConditions(query: RuleGroupType | undefined): ParsedRoutingCondition[] {
+	if (!query || !Array.isArray(query.rules)) return [];
+
+	const conditions: ParsedRoutingCondition[] = [];
+	for (const rule of query.rules) {
+		if ("combinator" in rule) {
+			conditions.push(...flattenQueryConditions(rule as RuleGroupType));
+			continue;
+		}
+		const r = rule as RuleType;
+		const field = String(r.field ?? "");
+		const operator = String(r.operator ?? "");
+		const value = String(r.value ?? "");
+		const keyMatch = field.match(/\["([^"]+)"\]/);
+
+		if (field === "model" || field === "provider" || field === "request_type") {
+			conditions.push({ type: field, field, operator, value });
+		} else if (field === "headers" || field.startsWith("headers[")) {
+			conditions.push({ type: "header", field, operator, value, key: keyMatch?.[1] });
+		} else if (field === "params" || field.startsWith("params[")) {
+			conditions.push({ type: "param", field, operator, value, key: keyMatch?.[1] });
+		} else {
+			conditions.push({ type: "skip", field, operator, value });
+		}
+	}
+	return conditions;
+}
+
+/**
+ * Maps CEL request types to their gateway HTTP endpoints.
+ */
+const REQUEST_TYPE_ENDPOINTS: Record<string, string> = {
+	chat_completion: "/v1/chat/completions",
+	chat_completion_stream: "/v1/chat/completions",
+	text_completion: "/v1/completions",
+	text_completion_stream: "/v1/completions",
+	responses: "/v1/responses",
+	responses_stream: "/v1/responses",
+	embedding: "/v1/embeddings",
+	image_generation: "/v1/images/generations",
+	image_edit: "/v1/images/edits",
+	image_variation: "/v1/images/variations",
+	speech: "/v1/audio/speech",
+	transcription: "/v1/audio/transcriptions",
+	count_tokens: "/v1/chat/completions",
+	rerank: "/v1/rerank",
+	video_generation: "/v1/video/generations",
+};
+
+const DEFAULT_RESPONSE_MODEL = "gpt-4o-mini";
+
+/**
+ * Extracts a testable scalar value from a query-builder rule value.
+ * Arrays (used by `in`/`notIn` operators) pick the first element.
+ */
+function scalarValue(value: any): string {
+	if (Array.isArray(value)) return value.length > 0 ? String(value[0]) : "";
+	return String(value ?? "");
+}
+
+/**
+ * Generates a curl command that a user can copy and run to test whether an
+ * incoming request would match this routing rule. Conditions that cannot be
+ * expressed in a synthetic request (budget/rate-limit usage, complexity tier)
+ * — or that would require a deliberately mismatching value (`!=`) — are
+ * skipped and listed in a trailing comment.
+ */
+export function generateRoutingTestCommand(rule: RoutingRule, baseUrl?: string): string {
+	const conditions = flattenQueryConditions(rule?.query);
+	if (conditions.length === 0) return "";
+
+	const url = baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+	let endpoint = "/v1/chat/completions";
+	let providerValue = "";
+	let modelValue = "";
+	const headerLines: string[] = [];
+	const paramPairs: string[] = [];
+	const skipped: string[] = [];
+
+	for (const c of conditions) {
+		if (c.type === "skip" || c.operator === "!=" || c.operator === "notIn" || c.operator === "null") {
+			skipped.push(`${c.field} ${c.operator} ${c.value || "(empty)"}`);
+			continue;
+		}
+
+		const value = scalarValue(c.value);
+
+		switch (c.type) {
+			case "model":
+				modelValue = value;
+				break;
+			case "provider":
+				providerValue = value;
+				break;
+			case "header":
+				if (c.key) {
+					if (c.operator === "notNull") {
+						headerLines.push(`  -H "${c.key}: <value>" \\`);
+					} else {
+						headerLines.push(`  -H "${c.key}: ${value}" \\`);
+					}
+				}
+				break;
+			case "param":
+				if (c.key) {
+					paramPairs.push(`${encodeURIComponent(c.key)}=${encodeURIComponent(c.operator === "notNull" ? "<value>" : value)}`);
+				}
+				break;
+			case "request_type":
+				endpoint = REQUEST_TYPE_ENDPOINTS[value] || endpoint;
+				break;
+		}
+	}
+
+	// Provider is passed inline in the model string ("provider/model").
+	const resolvedModel = providerValue
+		? modelValue
+			? `${providerValue}/${modelValue}`
+			: `${providerValue}/${DEFAULT_RESPONSE_MODEL}`
+		: modelValue;
+
+	const queryString = paramPairs.length > 0 ? `?${paramPairs.join("&")}` : "";
+	const fullUrl = `${url}${endpoint}${queryString}`;
+
+	const body: Record<string, unknown> = {
+		messages: [{ role: "user", content: "Hello" }],
+	};
+	if (resolvedModel) body.model = resolvedModel;
+
+	const lines: string[] = [
+		`curl -X POST ${fullUrl} \\`,
+		`  -H "Content-Type: application/json" \\`,
+		`  -H "Authorization: Bearer \${PG_API_KEY}" \\`,
+	];
+	if (rule.scope === "virtual_key" && rule.scope_id) {
+		lines.push(`  -H "x-bf-vk: ${rule.scope_id}" \\`);
+	}
+	lines.push(...headerLines);
+	lines.push(`  -d '${JSON.stringify(body, null, 2)}'`);
+
+	if (skipped.length > 0) {
+		lines.push("", `# Skipped untestable conditions: ${skipped.join(", ")}`);
+	}
+
+	return lines.join("\n");
 }

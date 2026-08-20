@@ -44,6 +44,10 @@ export default defineConfig({
 				target: `http://localhost:${process.env.BIFROST_PORT ?? "8080"}`,
 				changeOrigin: true,
 			},
+			"/v1": {
+				target: `http://localhost:${process.env.BIFROST_PORT ?? "8080"}`,
+				changeOrigin: true,
+			},
 			"/ws": {
 				target: `http://localhost:${process.env.BIFROST_PORT ?? "8080"}`,
 				ws: true,
