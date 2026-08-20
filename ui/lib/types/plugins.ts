@@ -136,6 +136,26 @@ export const rtkConfigSchema = z.object({
 export type RTKConfig = z.infer<typeof rtkConfigSchema>;
 
 // ---------------------------------------------------------------------------
+// Governance (built-in plugin) — form schema
+// ---------------------------------------------------------------------------
+
+export const GOVERNANCE_PLUGIN = "governance";
+export const OTEL_PLUGIN = "otel";
+
+// Zod schema for the governance plugin's dedicated config form.
+// Mirrors plugins/governance/main.go's Config struct fields.
+// All 4 fields are optional (Go pointer fields: nil means "not set",
+// so the UI falls back to safe defaults).
+export const governanceConfigSchema = z.object({
+	is_vk_mandatory: z.boolean().optional(),
+	required_headers: z.array(z.string()).optional(),
+	disable_auto_tool_inject: z.boolean().optional(),
+	routing_chain_max_depth: z.number().int().min(1).max(100).optional(),
+});
+
+export type GovernanceConfig = z.infer<typeof governanceConfigSchema>;
+
+// ---------------------------------------------------------------------------
 // Provider cooldown (built-in plugin) — form schema + monitoring types
 // ---------------------------------------------------------------------------
 

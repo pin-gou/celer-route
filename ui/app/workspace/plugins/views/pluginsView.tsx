@@ -6,7 +6,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { setPluginFormDirtyState, useAppDispatch, useAppSelector, useUpdatePluginMutation } from "@/lib/store";
-import { PluginType, PROVIDER_COOLDOWN_PLUGIN, RTK_PLUGIN } from "@/lib/types/plugins";
+import { PluginType, PROVIDER_COOLDOWN_PLUGIN, RTK_PLUGIN, GOVERNANCE_PLUGIN, OTEL_PLUGIN } from "@/lib/types/plugins";
 import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,6 +15,8 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import ProvidercooldownFragment from "../fragments/providercooldownFragment";
 import RtkFragment from "../fragments/rtkFragment";
+import GovernanceFragment from "../fragments/governanceFragment";
+import OtelView from "../../observability/views/plugins/otelView";
 import { toast } from "sonner";
 import * as z from "zod";
 import { useTranslation } from "react-i18next";
@@ -158,6 +160,22 @@ export default function PluginsView(props: Props) {
 		return (
 			<div className="ml-4 w-full">
 				<RtkFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === GOVERNANCE_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<GovernanceFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === OTEL_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<div data-testid="otel-fragment">
+					<OtelView />
+				</div>
 			</div>
 		);
 	}
