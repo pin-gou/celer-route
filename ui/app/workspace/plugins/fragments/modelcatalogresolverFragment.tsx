@@ -1,0 +1,1 @@
+export { ModelcatalogresolverFragment as default, ModelcatalogresolverFragment } from "./promptsFragment";

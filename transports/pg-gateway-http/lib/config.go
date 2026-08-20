@@ -45,6 +45,7 @@ import (
 	"github.com/pin-gou/pg-gateway/plugins/governance/complexity"
 	"github.com/pin-gou/pg-gateway/plugins/logging"
 	"github.com/pin-gou/pg-gateway/plugins/maxim"
+	"github.com/pin-gou/pg-gateway/plugins/mocker"
 	"github.com/pin-gou/pg-gateway/plugins/otel"
 	"github.com/pin-gou/pg-gateway/plugins/prompts"
 	"github.com/pin-gou/pg-gateway/plugins/providercooldown"
@@ -134,6 +135,7 @@ var builtinPluginNames = []string{
 	compat.PluginName,
 	maxim.PluginName,
 	providercooldown.PluginName,
+	mocker.PluginName,
 }
 
 func GetBuiltinPluginNames() []string {

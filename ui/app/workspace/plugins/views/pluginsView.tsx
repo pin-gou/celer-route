@@ -6,7 +6,20 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { setPluginFormDirtyState, useAppDispatch, useAppSelector, useUpdatePluginMutation } from "@/lib/store";
-import { PluginType, PROVIDER_COOLDOWN_PLUGIN, RTK_PLUGIN, GOVERNANCE_PLUGIN, OTEL_PLUGIN } from "@/lib/types/plugins";
+import {
+	PluginType,
+	PROVIDER_COOLDOWN_PLUGIN,
+	RTK_PLUGIN,
+	GOVERNANCE_PLUGIN,
+	OTEL_PLUGIN,
+	LOGGING_PLUGIN,
+	SEMANTIC_CACHE_PLUGIN,
+	MOCKER_PLUGIN,
+	COMPAT_PLUGIN,
+	PROMPTS_PLUGIN,
+	MODELCATALOGRESOLVER_PLUGIN,
+	JSONPARSER_PLUGIN,
+} from "@/lib/types/plugins";
 import { cn } from "@/lib/utils";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +30,11 @@ import ProvidercooldownFragment from "../fragments/providercooldownFragment";
 import RtkFragment from "../fragments/rtkFragment";
 import GovernanceFragment from "../fragments/governanceFragment";
 import OtelView from "../../observability/views/plugins/otelView";
+import LoggingFragment from "../fragments/loggingFragment";
+import SemanticCacheFragment from "../fragments/semanticCacheFragment";
+import MockerFragment from "../fragments/mockerFragment";
+import CompatFragment from "../fragments/compatFragment";
+import { PromptsFragment, ModelcatalogresolverFragment, JsonparserFragment } from "../fragments/promptsFragment";
 import { toast } from "sonner";
 import * as z from "zod";
 import { useTranslation } from "react-i18next";
@@ -176,6 +194,55 @@ export default function PluginsView(props: Props) {
 				<div data-testid="otel-fragment">
 					<OtelView />
 				</div>
+			</div>
+		);
+	}
+	if (selectedPlugin.name === LOGGING_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<LoggingFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === SEMANTIC_CACHE_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<SemanticCacheFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === MOCKER_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<MockerFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === COMPAT_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<CompatFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === PROMPTS_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<PromptsFragment />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === MODELCATALOGRESOLVER_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<ModelcatalogresolverFragment />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === JSONPARSER_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<JsonparserFragment />
 			</div>
 		);
 	}

@@ -174,6 +174,141 @@ export const providerCooldownConfigSchema = z.object({
 
 export type ProviderCooldownConfig = z.infer<typeof providerCooldownConfigSchema>;
 
+// ---------------------------------------------------------------------------
+// Logging (built-in plugin) — form schema
+// ---------------------------------------------------------------------------
+
+export const LOGGING_PLUGIN = "logging";
+
+// zod schema for the logging plugin's dedicated config form.
+// Mirrors plugins/logging/main.go's Config struct fields.
+// All 4 fields are optional — the backend applies defaults for absent fields.
+export const loggingConfigSchema = z.object({
+	disable_content_logging: z.boolean().optional(),
+	retain_content_in_object_storage: z.boolean().optional(),
+	allow_per_request_content_storage_override: z.boolean().optional(),
+	logging_headers: z.array(z.string()).optional(),
+});
+
+export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
+
+// ---------------------------------------------------------------------------
+// Semantic Cache (built-in plugin) — form schema
+// ---------------------------------------------------------------------------
+
+// zod schema for the semantic_cache plugin's dedicated config form.
+// Mirrors plugins/semanticcache/main.go's Config struct fields.
+// Uses .refine() for allOf conditional validation:
+//   - when provider is set, embedding_model is required and dimension >= 2
+//   - dimension is always >= 1
+export const semanticCacheConfigSchema = z
+	.object({
+		provider: z.string().optional(),
+		embedding_model: z.string().optional(),
+		dimension: z.number().int().min(1).optional(),
+		ttl: z.union([z.string(), z.number()]).optional(),
+		threshold: z.number().min(0).max(1).optional(),
+		vector_store_namespace: z.string().optional(),
+		default_cache_key: z.string().optional(),
+		conversation_history_threshold: z.number().int().min(0).optional(),
+		cache_by_model: z.boolean().default(true),
+		cache_by_provider: z.boolean().default(true),
+		exclude_system_prompt: z.boolean().default(false),
+	})
+	.refine(
+		(data) => {
+			if (!data.provider || data.provider.length === 0) return true;
+			// When provider is set, embedding_model must be non-empty
+			if (!data.embedding_model || data.embedding_model.length === 0) return false;
+			// When provider is set, dimension must be >= 2
+			if (data.dimension !== undefined && data.dimension < 2) return false;
+			return true;
+		},
+		{ message: "When provider is set, embedding_model is required and dimension must be >= 2" },
+	);
+
+export type SemanticCacheConfig = z.infer<typeof semanticCacheConfigSchema>;
+
+// ---------------------------------------------------------------------------
+// Mocker (built-in plugin) — form schema
+// ---------------------------------------------------------------------------
+
+export const MOCKER_PLUGIN = "mocker";
+
+// Zod schema for the mocker plugin's config.
+// Uses a JSON editor in the UI, so the schema validates the parsed JSON.
+export const globalLatencySchema = z.object({
+	min: z.string(),
+	max: z.string(),
+	type: z.enum(["fixed", "uniform"]).optional(),
+});
+
+export type GlobalLatency = z.infer<typeof globalLatencySchema>;
+
+export const mockerRuleSchema = z.object({
+	name: z.string().optional(),
+	conditions: z.record(z.string(), z.unknown()).optional(),
+	responses: z
+		.array(
+			z.object({
+				status_code: z.number().int().min(100).max(599).optional(),
+				body: z.unknown().optional(),
+				headers: z.record(z.string(), z.string()).optional(),
+			}),
+		)
+		.optional(),
+	priority: z.number().int().min(-1000).max(1000).optional(),
+	probability: z.number().min(0).max(1).optional(),
+});
+
+export type MockerRule = z.infer<typeof mockerRuleSchema>;
+
+export const mockerConfigSchema = z.object({
+	enabled: z.boolean().optional(),
+	global_latency: globalLatencySchema.optional(),
+	rules: z.array(mockerRuleSchema).optional(),
+	default_behavior: z.enum(["passthrough", "error", "success"]).optional(),
+});
+
+export type MockerConfig = z.infer<typeof mockerConfigSchema>;
+
+// ---------------------------------------------------------------------------
+// Compat (built-in plugin) — form schema
+// ---------------------------------------------------------------------------
+
+export const COMPAT_PLUGIN = "compat";
+
+// Zod schema for the compat plugin's config.
+// Mirrors plugins/compat/main.go's Config struct.
+// 3 fields default to true, 1 field defaults to false.
+export const compatConfigSchema = z.object({
+	convert_text_to_chat: z.boolean().default(true),
+	convert_chat_to_responses: z.boolean().default(true),
+	should_drop_params: z.boolean().default(true),
+	should_convert_params: z.boolean().default(false),
+});
+
+export type CompatConfig = z.infer<typeof compatConfigSchema>;
+
+// ---------------------------------------------------------------------------
+// Plugin fragment i18n label mapping
+// ---------------------------------------------------------------------------
+
+export const PROMPTS_PLUGIN = "prompts";
+export const MODELCATALOGRESOLVER_PLUGIN = "modelcatalogresolver";
+export const JSONPARSER_PLUGIN = "jsonparser";
+
+// Maps plugin name → i18n key for the display name in fragment headers.
+export const pluginFragmentLabels: Record<string, string> = {
+	logging: "pluginNames.logging",
+	semantic_cache: "pluginNames.semanticCache",
+	mocker: "pluginNames.mocker",
+	compat: "pluginNames.compat",
+	prompts: "pluginNames.prompts",
+	modelcatalogresolver: "pluginNames.modelcatalogresolver",
+	jsonparser: "pluginNames.jsonparser",
+};
+
 // One entry in the cooldown state list surfaced by GET
 // /api/plugins/provider-cooldown/state.
 export interface CooldownStateEntry {
