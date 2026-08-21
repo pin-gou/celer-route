@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Link } from "@tanstack/react-router";
 
 interface SnapshotEntry {
 	index: number;
@@ -46,7 +47,7 @@ export default function RTKCompressionDiffView({ metadata, compressedItems }: Pr
 	const ratio = numberFromMetadata(metadata?.rtk_compression_ratio);
 	const techniques = stringArrayFromMetadata(metadata?.rtk_techniques);
 	const filterMatched = stringFromMetadata(metadata?.rtk_filter_matched);
-	const mode = stringFromMetadata(metadata?.rtk_snapshot_mode) ?? "split";
+	const mode = stringFromMetadata(metadata?.rtk_snapshot_mode) ?? "off";
 
 	const original = parseSnapshotPayload(metadata?.rtk_original_snapshot);
 
@@ -64,13 +65,22 @@ export default function RTKCompressionDiffView({ metadata, compressedItems }: Pr
 		);
 	}
 
-	// Snapshot disabled (config snapshot_mode=off) — show summary stats only.
+	// Snapshot disabled (config snapshot_mode=off) — show summary stats and
+	// a prompt to enable snapshots in the RTK config page.
 	if (mode === "off") {
 		return (
 			<div className="space-y-4" data-testid="rtk-diff-disabled">
 				<RTKHeader ratio={ratio} techniques={techniques} filterMatched={filterMatched} />
 				<Alert className="border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-950">
-					<AlertDescription className="text-amber-800 dark:text-amber-200">{t("detailView.rtkSnapshotDisabled")}</AlertDescription>
+					<AlertDescription className="text-amber-800 dark:text-amber-200">
+						<span>{t("detailView.rtkSnapshotDisabled")}</span>
+						<Link
+							to="/workspace/plugins/rtk"
+							className="ml-1 text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+						>
+							{t("detailView.rtkSnapshotGoToConfig")}
+						</Link>
+					</AlertDescription>
 				</Alert>
 			</div>
 		);

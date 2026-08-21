@@ -121,11 +121,11 @@ export const rtkConfigSchema = z.object({
 	// MinTokensToCompress is the minimum estimated request token count required to trigger compression.
 	min_tokens_to_compress: z.number().int().min(0).default(0),
 
-	// EnableRenderers enables semantic renderers (opt-in, default false).
+	// EnableRenderers enables semantic renderers (opt-in, default true on fresh install).
 	// When true, structured outputs (git diff, test suites, terraform plan,
 	// JSON tables) are rewritten to a more compact form after line filtering.
 	// Renderers are fail-open — a panic or no-op leaves the original text unchanged.
-	enable_renderers: z.boolean().default(false),
+	enable_renderers: z.boolean().default(true),
 
 	// Renderers is an optional whitelist of detection types whose renderers
 	// may run. Empty (default) enables every registered renderer. Aligned
@@ -133,10 +133,10 @@ export const rtkConfigSchema = z.object({
 	renderers: z.array(z.string()).optional(),
 
 	// SnapshotMode controls how compression snapshots are persisted for the
-	// log detail view. "split" shows per-message diffs (default);
-	// "merged" concatenates everything into one block; "off" disables
-	// snapshots entirely (saves log storage).
-	snapshot_mode: z.enum(["split", "merged", "off"]).default("split"),
+	// log detail view. "off" disables snapshots entirely (default, saves log
+	// storage); "split" shows per-message diffs; "merged" concatenates
+	// everything into one block.
+	snapshot_mode: z.enum(["split", "merged", "off"]).default("off"),
 
 	// SnapshotMaxBytes caps the total bytes persisted per request across all
 	// snapshots. Default 30 KiB; clamped at the server to [1 KiB, 256 KiB].

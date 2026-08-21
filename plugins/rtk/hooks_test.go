@@ -321,7 +321,7 @@ func TestPostLLMHookSnapshotGeneration(t *testing.T) {
 	})
 
 	t.Run("no_original_snapshot_skips_snapshots", func(t *testing.T) {
-		p := newTestPlugin(t) // default config: snapshot_mode=split
+		p := newTestPlugin(t) // default config: snapshot_mode=off
 		ctx := newTestCtx(t)
 		state := &CompressionState{
 			OriginalTokens:   100,

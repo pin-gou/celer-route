@@ -530,8 +530,8 @@ func TestConfigValidateSnapshot(t *testing.T) {
 		if cfg.SnapshotMaxBytes != 30*1024 {
 			t.Errorf("default SnapshotMaxBytes = %d, want %d", cfg.SnapshotMaxBytes, 30*1024)
 		}
-		if cfg.SnapshotMode != "split" {
-			t.Errorf("default SnapshotMode = %q, want split", cfg.SnapshotMode)
+		if cfg.SnapshotMode != "off" {
+			t.Errorf("default SnapshotMode = %q, want off", cfg.SnapshotMode)
 		}
 	})
 	t.Run("clamps_max_bytes_to_min_1kib", func(t *testing.T) {

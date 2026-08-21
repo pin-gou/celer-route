@@ -277,9 +277,24 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	}
 	s.Config.SetPluginOrderInfo(semanticcache.PluginName, builtinPlacement, schemas.Ptr(6))
 
-	// 7. RTK (if configured in PluginConfigs)
+	// 7. RTK (default-on: nil entry in PluginConfigs → enabled with fresh-install seed config)
 	rtkConfig := s.getPluginConfig(rtk.PluginName)
-	if rtkConfig != nil && rtkConfig.Enabled {
+	if rtkConfig == nil || rtkConfig.Enabled {
+		if rtkConfig == nil {
+			// Fresh install: seed a default config that applies the user's preferred defaults
+			// (applyConfigDefaults cannot distinguish "unset" from "false" for booleans, so we
+			// set the opinionated choices here and let applyConfigDefaults fill the rest).
+			rtkConfig = &schemas.PluginConfig{
+				Name:    rtk.PluginName,
+				Enabled: true,
+				Config: &rtk.Config{
+					Enabled:            true,
+					EnableRenderers:    true,
+					ApplyToToolResults: true,
+					SnapshotMode:       "off",
+				},
+			}
+		}
 		rtkPlugin, err := InstantiatePlugin(ctx, rtk.PluginName, nil, rtkConfig.Config, s.Config)
 		if err != nil {
 			return fmt.Errorf("failed to initialize rtk plugin: %w", err)

@@ -96,12 +96,12 @@ type Config struct {
 	// unchanged. Aligned with OmniRoute's RtkConfig.renderers.
 	Renderers []string `json:"renderers,omitempty"`
 
-	// SnapshotMode controls how compression snapshots are persisted for the
-	// log detail view:
-	//   "split"  — per-message diff (default; recommended for tool output inspection)
-	//   "merged" — single combined diff
-	//   "off"    — disable snapshot persistence entirely (saves log storage)
-	// Empty defaults to "split".
+// SnapshotMode controls how compression snapshots are persisted for the
+		// log detail view:
+		//   "off"    — disable snapshot persistence entirely (default; saves log storage)
+		//   "split"  — per-message diff (recommended for tool output inspection)
+		//   "merged" — single combined diff
+		// Empty defaults to "off".
 	SnapshotMode string `json:"snapshot_mode"`
 
 	// SnapshotMaxBytes caps the total bytes persisted per request across all
@@ -150,7 +150,7 @@ func (c *Config) Validate() error {
 	if c.MinTokensToCompress < 0 {
 		return fmt.Errorf("rtk: min_tokens_to_compress must be >= 0, got %d", c.MinTokensToCompress)
 	}
-	// SnapshotMode validation: must be one of split, merged, off, or empty (defaults to split).
+	// SnapshotMode validation: must be one of split, merged, off, or empty (defaults to off).
 	if c.SnapshotMode != "" {
 		switch c.SnapshotMode {
 		case "split", "merged", "off":
@@ -218,9 +218,10 @@ func applyConfigDefaults(c *Config) {
 	// EnableRenderers stays at false (opt-in). Renderers whitelist stays
 	// empty (== all registered renderers enabled when EnableRenderers=true).
 
-	// SnapshotMode defaults to "split" (per-message diff).
+	// SnapshotMode defaults to "off" (no snapshot persistence). Opt-in to
+	// per-message ("split") or combined ("merged") diffs in the log detail view.
 	if c.SnapshotMode == "" {
-		c.SnapshotMode = "split"
+		c.SnapshotMode = "off"
 	}
 	// SnapshotMaxBytes default 30 KiB, clamp to [1 KiB, 256 KiB].
 	if c.SnapshotMaxBytes == 0 {

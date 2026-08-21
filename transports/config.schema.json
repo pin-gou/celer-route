@@ -3311,9 +3311,9 @@
                     },
                     "snapshot_mode": {
                       "type": "string",
-                      "description": "How the RTK compression snapshot is persisted to log metadata so the log detail view can render a diff. split (per-message, default) | merged (single combined block) | off (no snapshot).",
+                      "description": "How the RTK compression snapshot is persisted to log metadata so the log detail view can render a diff. off (default; no snapshot) | split (per-message) | merged (single combined block).",
                       "enum": ["split", "merged", "off"],
-                      "default": "split"
+                      "default": "off"
                     },
                     "snapshot_max_bytes": {
                       "type": "integer",
