@@ -253,7 +253,13 @@
 			"helpStep2": "在「测试运行器」标签页执行压缩测试，或等待真实请求触发压缩",
 			"helpStep3": "复制测试结果或响应中显示的 rawOutputPtr.id",
 			"helpStep4": "粘贴到上方输入框，点击「获取」"
-		}
+		},
+		"snapshotModeLabel": "日志详情快照模式",
+		"snapshotModeSplit": "按消息拆分（默认）",
+		"snapshotModeMerged": "合并显示",
+		"snapshotModeOff": "禁用（不在日志详情中保存快照）",
+		"snapshotMaxBytesLabel": "快照字节上限",
+		"snapshotMaxBytesHelp": "默认 30 KB，上限 256 KB"
 	},
 	"providerCooldown": {
 		"title": "提供商冷却配置",

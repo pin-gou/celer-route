@@ -253,7 +253,13 @@
 			"helpStep2": "Run a compression test from the \"Test\" tab, or wait for a live request to be compressed",
 			"helpStep3": "Copy the raw output id from the test result or the response's rawOutputPtr field",
 			"helpStep4": "Paste the id above and click \"Fetch\""
-		}
+		},
+		"snapshotModeLabel": "Log detail snapshot mode",
+		"snapshotModeSplit": "Per-message (default)",
+		"snapshotModeMerged": "Merged",
+		"snapshotModeOff": "Disabled (no snapshot in log detail)",
+		"snapshotMaxBytesLabel": "Snapshot byte limit",
+		"snapshotMaxBytesHelp": "Default 30 KB, max 256 KB"
 	},
 	"providerCooldown": {
 		"title": "Provider Cooldown Configuration",

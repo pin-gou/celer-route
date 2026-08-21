@@ -41,6 +41,11 @@ type EngineResult struct {
 	// label.
 	Techniques []string `json:"techniques,omitempty"`
 
+	// FilterMatched records the filter ID or Name selected for this compression
+	// pass (only set when a filter actually matched). Propagated through the
+	// pipeline runner so PostLLMHook can surface it in the log detail view.
+	FilterMatched string `json:"filterMatched,omitempty"`
+
 	// rawOutputPointers carries raw output persistence pointers from the
 	// engine's Apply method to the caller. It is not serialised — it is
 	// an internal plumbing field so the pipeline runner can propagate
@@ -143,15 +148,16 @@ func NewPipelineRunner(catalog *EngineCatalog) *PipelineRunner {
 // a warning. Returns the final text, a breakdown of per-engine stats, an
 // aggregated technique list, and any raw output pointers accumulated
 // during execution.
-func (r *PipelineRunner) Run(ctx *schemas.BifrostContext, pipeline *Pipeline, input string, defaultCfg EngineConfig) (string, []EngineBreakdown, []string, error, []*RtkRawOutputPointer) {
+func (r *PipelineRunner) Run(ctx *schemas.BifrostContext, pipeline *Pipeline, input string, defaultCfg EngineConfig) (string, []EngineBreakdown, []string, string, error, []*RtkRawOutputPointer) {
 	if pipeline == nil || len(pipeline.Engines) == 0 {
-		return input, nil, nil, nil, nil
+		return input, nil, nil, "", nil, nil
 	}
 
 	text := input
 	var breakdown []EngineBreakdown
 	var rawPointers []*RtkRawOutputPointer
 	var techniques []string
+	var filterMatched string
 
 	for _, engineID := range pipeline.Engines {
 		engine, ok := r.catalog.GetEngine(engineID)
@@ -181,10 +187,14 @@ func (r *PipelineRunner) Run(ctx *schemas.BifrostContext, pipeline *Pipeline, in
 			techniques = append(techniques, result.Techniques...)
 		}
 
+		if result.FilterMatched != "" {
+			filterMatched = result.FilterMatched
+		}
+
 		if len(result.rawOutputPointers) > 0 {
 			rawPointers = append(rawPointers, result.rawOutputPointers...)
 		}
 	}
 
-	return text, breakdown, techniques, nil, rawPointers
+	return text, breakdown, techniques, filterMatched, nil, rawPointers
 }

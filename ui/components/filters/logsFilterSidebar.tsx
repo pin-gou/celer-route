@@ -35,6 +35,19 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 		if (stored === "true") setCollapsed(true);
 	}, []);
 
+	// Auto-collapse after 3s when the viewport is ≤1920px wide.
+	// This is a one-time adjustment on page load to give more space to the
+	// table on smaller screens. The collapsed state is NOT persisted to
+	// localStorage so the user's manual preference survives this heuristic.
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		if (window.innerWidth > 1920) return;
+		const timer = setTimeout(() => {
+			setCollapsed(true);
+		}, 3000);
+		return () => clearTimeout(timer);
+	}, []);
+
 	const toggleCollapsed = useCallback(() => {
 		setCollapsed((prev) => {
 			const next = !prev;
@@ -66,15 +79,18 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 	}, [filters.start_time, filters.end_time, onFiltersChange]);
 
 	// Collapsed: thin rail with vertical "Filters" label — whole rail is clickable to expand
-	if (collapsed) {
-		const showFiltersLabel = t("filterSidebar.showFilters");
-		return (
+	const showFiltersLabel = t("filterSidebar.showFilters");
+	const hideFiltersLabel = t("filterSidebar.hideFilters");
+
+	return (
+		<div className="flex h-full shrink-0">
+			{/* Collapsed rail — always mounted so the button is clickable even when expanded */}
 			<button
 				type="button"
-				onClick={toggleCollapsed}
-				className="bg-card group flex h-full w-10 shrink-0 cursor-pointer flex-col items-center gap-3 rounded-r-md py-4 text-sm font-medium"
-				title={showFiltersLabel}
-				aria-label={showFiltersLabel}
+				onClick={collapsed ? toggleCollapsed : undefined}
+				className={`bg-card group flex w-10 shrink-0 cursor-pointer flex-col items-center gap-3 rounded-r-md py-4 text-sm font-medium transition-opacity duration-300 ${collapsed ? "" : "pointer-events-none opacity-0"}`}
+				title={collapsed ? showFiltersLabel : undefined}
+				aria-label={collapsed ? showFiltersLabel : undefined}
 			>
 				<PanelLeftOpen className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
 				<span className="rotate-180 select-none [writing-mode:vertical-rl]">{t("filterSidebar.title")}</span>
@@ -84,55 +100,56 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 					</span>
 				)}
 			</button>
-		);
-	}
 
-	return (
-		<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
-			{/* Header */}
-			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
-				<span className="text-sm font-semibold">{t("filterSidebar.title")}</span>
-				<div className="flex items-center gap-1">
-					{activeFilterCount > 0 && (
-						<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
-							<RotateCcw className="size-3" />
-							{t("filterSidebar.reset")}
-						</Button>
-					)}
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-7"
-						onClick={toggleCollapsed}
-						title={t("filterSidebar.hideFilters")}
-						aria-label={t("filterSidebar.hideFilters")}
-					>
-						<PanelLeftClose className="size-4" />
-					</Button>
+			{/* Expanded panel — width transitions between 0 and 256px */}
+			<div className={`overflow-hidden transition-[width] duration-300 ease-in-out ${collapsed ? "w-0" : "w-64"}`}>
+				<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
+					{/* Header */}
+					<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
+						<span className="text-sm font-semibold">{t("filterSidebar.title")}</span>
+						<div className="flex items-center gap-1">
+							{activeFilterCount > 0 && (
+								<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
+									<RotateCcw className="size-3" />
+									{t("filterSidebar.reset")}
+								</Button>
+							)}
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-7"
+								onClick={toggleCollapsed}
+								title={hideFiltersLabel}
+								aria-label={hideFiltersLabel}
+							>
+								<PanelLeftClose className="size-4" />
+							</Button>
+						</div>
+					</div>
+
+					{/* Scrollable filter sections */}
+					<ScrollArea className="flex flex-1 overflow-y-auto p-2 pb-0" viewportClassName="no-table">
+						<div className="flex grow flex-col gap-1">
+							{/* First 2 open by default */}
+							<StatusFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
+							<ModelsFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
+							{/* Rest closed unless they have active filters */}
+							<SelectedKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<VirtualKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<ProvidersFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<AppFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<TypeFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<AliasesFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<RoutingEnginesFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<RoutingRulesFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<LocalCachingFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<SessionFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<StopReasonFilter filters={filters} onFiltersChange={onFiltersChange} />
+							<MetadataFilters filters={filters} onFiltersChange={onFiltersChange} />
+						</div>
+					</ScrollArea>
 				</div>
 			</div>
-
-			{/* Scrollable filter sections */}
-			<ScrollArea className="flex flex-1 overflow-y-auto p-2 pb-0" viewportClassName="no-table">
-				<div className="flex grow flex-col gap-1">
-					{/* First 2 open by default */}
-					<StatusFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
-					<ModelsFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
-					{/* Rest closed unless they have active filters */}
-					<SelectedKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<VirtualKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<ProvidersFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<AppFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<TypeFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<AliasesFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<RoutingEnginesFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<RoutingRulesFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<LocalCachingFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<SessionFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<StopReasonFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<MetadataFilters filters={filters} onFiltersChange={onFiltersChange} />
-				</div>
-			</ScrollArea>
 		</div>
 	);
 }

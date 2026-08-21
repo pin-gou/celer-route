@@ -5,11 +5,18 @@ import "github.com/pin-gou/pg-gateway/core/schemas"
 // CompressionState holds per-request compression state, stored in the Plugin's
 // sync.Map keyed by request ID. Populated by PreLLMHook and consumed by PostLLMHook.
 type CompressionState struct {
-	OriginalTokens     int
-	CompressedTokens   int
-	Compressed         bool
-	Techniques         []string
+	OriginalTokens    int
+	CompressedTokens  int
+	Compressed        bool
+	Techniques        []string
+	FilterMatched     string
 	RawOutputPointers []*RtkRawOutputPointer
+	// OriginalSnapshot and CompressedSnapshot capture pre/post text for
+	// every tool message that the pipeline either compressed or considered
+	// compressing. They are not serialised — they live only in the
+	// per-request state and are converted to JSON in PostLLMHook.
+	OriginalSnapshot   []SnapshotEntry
+	CompressedSnapshot []SnapshotEntry
 }
 
 // NewCompressionState creates a new CompressionState with default values.

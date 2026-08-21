@@ -1,7 +1,9 @@
 package rtk
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,7 +176,7 @@ func TestPostLLMHookRewritesUsage(t *testing.T) {
 
 	resp := &schemas.BifrostResponse{
 		ChatResponse: &schemas.BifrostChatResponse{
-			ID: "chatcmpl-123",
+			ID:      "chatcmpl-123",
 			Choices: []schemas.BifrostResponseChoice{},
 			Usage: &schemas.BifrostLLMUsage{
 				PromptTokens: 1000,
@@ -216,6 +218,8 @@ func TestPostLLMHookContextPropagation(t *testing.T) {
 		OriginalTokens:   500,
 		CompressedTokens: 200,
 		Compressed:       true,
+		Techniques:       []string{"dedup", "linefilter"},
+		FilterMatched:    "git-status",
 	}
 	p.setState(ctx, state)
 
@@ -247,6 +251,202 @@ func TestPostLLMHookContextPropagation(t *testing.T) {
 	} else if compVal.(int) != 200 {
 		t.Errorf("CompressedPromptTokens = %d, want 200", compVal.(int))
 	}
+
+	// New observability keys (added in support of the log detail view).
+	techs := ctx.Value(schemas.BifrostContextKeyRTKTechniques)
+	if techs == nil {
+		t.Error("BifrostContextKeyRTKTechniques not set in ctx")
+	} else if got, ok := techs.([]string); !ok || len(got) != 2 || got[0] != "dedup" {
+		t.Errorf("RTKTechniques = %v, want [dedup linefilter]", techs)
+	}
+	filterMatched := ctx.Value(schemas.BifrostContextKeyRTKFilterMatched)
+	if filterMatched == nil || filterMatched.(string) != "git-status" {
+		t.Errorf("RTKFilterMatched = %v, want git-status", filterMatched)
+	}
+	ratio := ctx.Value(schemas.BifrostContextKeyRTKCompressionRatio)
+	if ratio == nil {
+		t.Error("BifrostContextKeyRTKCompressionRatio not set in ctx")
+	} else if r, ok := ratio.(float64); !ok || r < 0.59 || r > 0.61 {
+		t.Errorf("RTKCompressionRatio = %v, want ~0.6 (1 - 200/500)", ratio)
+	}
+}
+
+// TestPostLLMHookSnapshotGeneration verifies that snapshots are written to
+// ctx when the plugin ran (state.Compressed == true). When state.OriginalSnapshot
+// is non-empty, both BifrostContextKeyRTKOriginalSnapshot and
+// BifrostContextKeyRTKCompressedSnapshot should be populated. When
+// snapshot_mode is "off", no snapshots should be emitted.
+func TestPostLLMHookSnapshotGeneration(t *testing.T) {
+	t.Run("split_mode_writes_snapshots", func(t *testing.T) {
+		p := newTestPluginWithConfig(t, &Config{Enabled: true, SnapshotMode: "split", SnapshotMaxBytes: 30 * 1024})
+		ctx := newTestCtx(t)
+		state := &CompressionState{
+			OriginalTokens:     100,
+			CompressedTokens:   60,
+			Compressed:         true,
+			OriginalSnapshot:   []SnapshotEntry{{Index: 0, Role: "tool", Content: "long original text"}},
+			CompressedSnapshot: []SnapshotEntry{{Index: 0, Role: "tool", Content: "short"}},
+		}
+		p.setState(ctx, state)
+		resp := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Usage: &schemas.BifrostLLMUsage{}}}
+		_, _, err := p.PostLLMHook(ctx, resp, nil)
+		if err != nil {
+			t.Fatalf("PostLLMHook returned error: %v", err)
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKOriginalSnapshot); v == nil {
+			t.Error("BifrostContextKeyRTKOriginalSnapshot not set")
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKCompressedSnapshot); v == nil {
+			t.Error("BifrostContextKeyRTKCompressedSnapshot not set")
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKSnapshotMode); v != "split" {
+			t.Errorf("BifrostContextKeyRTKSnapshotMode = %v, want split", v)
+		}
+	})
+
+	t.Run("off_mode_skips_snapshots", func(t *testing.T) {
+		p := newTestPluginWithConfig(t, &Config{Enabled: true, SnapshotMode: "off"})
+		ctx := newTestCtx(t)
+		state := &CompressionState{
+			OriginalTokens:     100,
+			CompressedTokens:   60,
+			Compressed:         true,
+			OriginalSnapshot:   []SnapshotEntry{{Index: 0, Role: "tool", Content: "long original text"}},
+			CompressedSnapshot: []SnapshotEntry{{Index: 0, Role: "tool", Content: "short"}},
+		}
+		p.setState(ctx, state)
+		resp := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Usage: &schemas.BifrostLLMUsage{}}}
+		_, _, err := p.PostLLMHook(ctx, resp, nil)
+		if err != nil {
+			t.Fatalf("PostLLMHook returned error: %v", err)
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKOriginalSnapshot); v != nil {
+			t.Errorf("BifrostContextKeyRTKOriginalSnapshot should be nil when snapshot_mode=off, got %T", v)
+		}
+	})
+
+	t.Run("no_original_snapshot_skips_snapshots", func(t *testing.T) {
+		p := newTestPlugin(t) // default config: snapshot_mode=split
+		ctx := newTestCtx(t)
+		state := &CompressionState{
+			OriginalTokens:   100,
+			CompressedTokens: 60,
+			Compressed:       true,
+		}
+		p.setState(ctx, state)
+		resp := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Usage: &schemas.BifrostLLMUsage{}}}
+		_, _, err := p.PostLLMHook(ctx, resp, nil)
+		if err != nil {
+			t.Fatalf("PostLLMHook returned error: %v", err)
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKOriginalSnapshot); v != nil {
+			t.Errorf("expected nil snapshot, got %T", v)
+		}
+	})
+
+	t.Run("raw_output_pointer_propagates", func(t *testing.T) {
+		p := newTestPlugin(t)
+		ctx := newTestCtx(t)
+		state := &CompressionState{
+			OriginalTokens:    100,
+			CompressedTokens:  60,
+			Compressed:        true,
+			RawOutputPointers: []*RtkRawOutputPointer{{ID: "abcdef0123456789abcdef01", Path: "/tmp/rtk/abc.log", Bytes: 1024}},
+		}
+		p.setState(ctx, state)
+		resp := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Usage: &schemas.BifrostLLMUsage{}}}
+		_, _, err := p.PostLLMHook(ctx, resp, nil)
+		if err != nil {
+			t.Fatalf("PostLLMHook returned error: %v", err)
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKRawOutputID); v != "abcdef0123456789abcdef01" {
+			t.Errorf("RTKRawOutputID = %v, want abcdef0123456789abcdef01", v)
+		}
+	})
+}
+
+// TestBuildSnapshotModes covers the snapshot wire-shape builder: split,
+// merged, and off modes. It also exercises the byte-budget guard which sets
+// truncated=true when the payload exceeds SnapshotMaxBytes.
+func TestBuildSnapshotModes(t *testing.T) {
+	t.Run("split_preserves_order", func(t *testing.T) {
+		state := &CompressionState{
+			OriginalSnapshot: []SnapshotEntry{
+				{Index: 0, Role: "tool", Content: "first"},
+				{Index: 1, Role: "tool", Content: "second"},
+			},
+			CompressedSnapshot: []SnapshotEntry{
+				{Index: 0, Role: "tool", Content: "F"},
+				{Index: 1, Role: "tool", Content: "S"},
+			},
+		}
+		orig, comp := buildSnapshot(state, "split", 1<<20)
+		if len(orig) == 0 || len(comp) == 0 {
+			t.Fatalf("expected non-empty raw/compressed snapshots")
+		}
+		if !bytesContains(orig, `"items":[`) {
+			t.Errorf("split mode should produce an items array; got %s", orig)
+		}
+		if !bytesContains(orig, `"content":"first"`) || !bytesContains(orig, `"content":"second"`) {
+			t.Errorf("expected both items in original snapshot, got %s", orig)
+		}
+	})
+	t.Run("merged_concatenates_with_separator", func(t *testing.T) {
+		state := &CompressionState{
+			OriginalSnapshot: []SnapshotEntry{
+				{Index: 0, Role: "tool", Content: "alpha"},
+				{Index: 1, Role: "tool", Content: "beta"},
+			},
+			CompressedSnapshot: []SnapshotEntry{
+				{Index: 0, Role: "tool", Content: "A"},
+				{Index: 1, Role: "tool", Content: "B"},
+			},
+		}
+		orig, comp := buildSnapshot(state, "merged", 1<<20)
+		// Merged mode collapses all entries into a single one with index=-1.
+		// The actual JSON encoding escapes \n as \\n inside the content field,
+		// so check for the escaped sequence rather than literal newlines.
+		if !bytesContains(orig, `alpha\n\nbeta`) {
+			t.Errorf("merged mode should join contents with \\n\\n, got %s", orig)
+		}
+		if !bytesContains(comp, `A\n\nB`) {
+			t.Errorf("merged compressed should join with separator, got %s", comp)
+		}
+		if !bytesContains(orig, `"index":-1`) {
+			t.Errorf("merged mode should collapse into one item with index=-1, got %s", orig)
+		}
+	})
+	t.Run("off_returns_nil", func(t *testing.T) {
+		state := &CompressionState{
+			OriginalSnapshot:   []SnapshotEntry{{Index: 0, Role: "tool", Content: "x"}},
+			CompressedSnapshot: []SnapshotEntry{{Index: 0, Role: "tool", Content: "y"}},
+		}
+		orig, comp := buildSnapshot(state, "off", 1<<20)
+		if orig != nil || comp != nil {
+			t.Errorf("off mode should produce nil snapshots, got orig=%v comp=%v", orig, comp)
+		}
+	})
+	t.Run("empty_state_returns_nil", func(t *testing.T) {
+		state := &CompressionState{}
+		orig, comp := buildSnapshot(state, "split", 1<<20)
+		if orig != nil || comp != nil {
+			t.Errorf("empty state should produce nil snapshots, got orig=%v comp=%v", orig, comp)
+		}
+	})
+	t.Run("truncation_marks_when_oversized", func(t *testing.T) {
+		// Build a payload larger than 1 KiB; cap at 256 bytes; verify truncated flag
+		// is set and items slice was shrunk to fit. With per-item content of 200 chars,
+		// each entry marshals to ~250+ bytes, so even one item exceeds the 256-byte cap.
+		var big []SnapshotEntry
+		for i := 0; i < 20; i++ {
+			big = append(big, SnapshotEntry{Index: i, Role: "tool", Content: strings.Repeat("x", 200)})
+		}
+		state := &CompressionState{OriginalSnapshot: big, CompressedSnapshot: big}
+		orig, _ := buildSnapshot(state, "split", 256)
+		if !bytesContains(orig, `"truncated":true`) {
+			t.Errorf("expected truncated=true when payload exceeds budget, got %s", orig)
+		}
+	})
 }
 
 // TestPostLLMHookNoStatePassthrough verifies that when no compression state
@@ -670,4 +870,11 @@ Changes not staged for commit:
 	if !contains(compressed, "modified:   src/main.go") {
 		t.Error("key file changes should be preserved")
 	}
+}
+
+// bytesContains reports whether the substring appears anywhere in raw. Used
+// by the snapshot wire-shape tests; avoids pulling in a strings.Contains
+// import shadow.
+func bytesContains(raw []byte, substr string) bool {
+	return bytes.Index(raw, []byte(substr)) >= 0
 }

@@ -406,7 +406,7 @@ func (p *Plugin) PreviewCompression(req PreviewRequest) PreviewResponse {
 
 	runner := NewPipelineRunner(globalCatalog)
 	pipeline := &Pipeline{Engines: []string{"rtk"}}
-	resultText, breakdown, _, _, _ := runner.Run(nil, pipeline, req.Payload.Output, EngineConfig{Enabled: true})
+	resultText, breakdown, _, _, _, _ := runner.Run(nil, pipeline, req.Payload.Output, EngineConfig{Enabled: true})
 
 	resp.EngineStats = breakdown
 	resp.Result.OriginalText = req.Payload.Output

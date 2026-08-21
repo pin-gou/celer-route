@@ -136,9 +136,9 @@ var StandardProviders = []ModelProvider{
 	Volcengine,
 	Zhipu,
 	Tencent,
-Baidu,
-		Sensenova,
-	}
+	Baidu,
+	Sensenova,
+}
 
 // KeylessProviders is the set of built-in (non-custom) providers that never
 // require an API key — request routing, model discovery, and key management
@@ -422,6 +422,13 @@ const (
 	BifrostContextKeyUpstreamLatency                     BifrostContextKey = "bifrost-upstream-latency"       // *atomic.Int64 nanoseconds (set by bifrost - DO NOT SET THIS MANUALLY) - cumulative time blocked on provider sockets across every attempt; subtract from total to get Bifrost overhead
 	BifrostContextKeyOriginalPromptTokens                BifrostContextKey = "x-bf-original-prompt-tokens"    // int (set by compression plugin - original prompt token count before compression)
 	BifrostContextKeyCompressedPromptTokens              BifrostContextKey = "x-bf-compressed-prompt-tokens"  // int (set by compression plugin - compressed prompt token count after compression)
+	BifrostContextKeyRTKTechniques                       BifrostContextKey = "x-bf-rtk-techniques"            // []string (set by compression plugin - list of techniques fired during compression, e.g. "dedup", "linefilter")
+	BifrostContextKeyRTKFilterMatched                    BifrostContextKey = "x-bf-rtk-filter-matched"        // string (set by compression plugin - filter ID or Name that matched the compressed output)
+	BifrostContextKeyRTKCompressionRatio                 BifrostContextKey = "x-bf-rtk-compression-ratio"     // float64 (set by compression plugin - ratio of bytes removed by compression, 0.0-1.0)
+	BifrostContextKeyRTKOriginalSnapshot                 BifrostContextKey = "x-bf-rtk-original-snapshot"     // json.RawMessage (set by compression plugin - JSON snapshot of pre-compression tool message contents, for log detail diff view)
+	BifrostContextKeyRTKCompressedSnapshot               BifrostContextKey = "x-bf-rtk-compressed-snapshot"   // json.RawMessage (set by compression plugin - JSON snapshot of post-compression tool message contents)
+	BifrostContextKeyRTKSnapshotMode                     BifrostContextKey = "x-bf-rtk-snapshot-mode"         // string (set by compression plugin - "split" | "merged" | "off")
+	BifrostContextKeyRTKRawOutputID                      BifrostContextKey = "x-bf-rtk-raw-output-id"         // string (set by compression plugin - 24-char SHA256 prefix of the persisted raw output file, when RawOutputRetention is not "never")
 )
 
 const (

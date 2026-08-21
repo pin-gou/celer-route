@@ -95,6 +95,8 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
+			snapshot_mode: pluginConfig.snapshot_mode ?? "split",
+			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
 		},
 	});
 
@@ -466,6 +468,56 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 											/>
 										</FormControl>
 										<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+						</div>
+					</fieldset>
+
+					{/* Section 7b: 日志详情快照 */}
+					<fieldset className="rounded-lg border p-4">
+						<legend className="text-sm font-semibold">{t("rtk.snapshotModeLabel")}</legend>
+						<div className="mt-2 space-y-4">
+							<FormField
+								control={form.control}
+								name="snapshot_mode"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>{t("rtk.snapshotModeLabel")}</FormLabel>
+										<Select value={field.value} onValueChange={field.onChange}>
+											<FormControl>
+												<SelectTrigger data-testid="rtk-field-snapshot-mode">
+													<SelectValue />
+												</SelectTrigger>
+											</FormControl>
+											<SelectContent>
+												<SelectItem value="split">{t("rtk.snapshotModeSplit")}</SelectItem>
+												<SelectItem value="merged">{t("rtk.snapshotModeMerged")}</SelectItem>
+												<SelectItem value="off">{t("rtk.snapshotModeOff")}</SelectItem>
+											</SelectContent>
+										</Select>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+							<FormField
+								control={form.control}
+								name="snapshot_max_bytes"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>{t("rtk.snapshotMaxBytesLabel")}</FormLabel>
+										<FormControl>
+											<Input
+												data-testid="rtk-field-snapshot-max-bytes"
+												type="number"
+												min={0}
+												step={1024}
+												{...field}
+												onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+											/>
+										</FormControl>
+										<FormDescription>{t("rtk.snapshotMaxBytesHelp")}</FormDescription>
 										<FormMessage />
 									</FormItem>
 								)}

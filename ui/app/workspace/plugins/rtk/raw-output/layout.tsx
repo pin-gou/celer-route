@@ -8,6 +8,7 @@ import { useLazyGetRtkRawOutputQuery } from "@/lib/store";
 import { isValidRawOutputID } from "@/lib/types/rtk";
 import { useEffect, useState } from "react";
 import { HelpCircle, Search } from "lucide-react";
+import { z } from "zod";
 
 // /workspace/plugins/rtk/raw-output — recovery viewer for persisted raw outputs.
 //
@@ -16,10 +17,14 @@ import { HelpCircle, Search } from "lucide-react";
 // compressed a payload, the response's raw_output_ptr.id can be opened
 // here to inspect the post-redaction text without leaving the admin UI.
 
+const searchSchema = z.object({
+	id: z.string().optional().catch(undefined),
+});
+
 function RouteComponent() {
 	const { t } = useTranslation();
 	const navigate = useNavigate({ from: "/workspace/plugins/rtk/raw-output" });
-	const search = (location.search as { id?: string })?.id ?? "";
+	const { id: search = "" } = Route.useSearch();
 	const [draft, setDraft] = useState(search);
 	const [trigger, { data, isFetching, isError, error }] = useLazyGetRtkRawOutputQuery();
 
@@ -100,4 +105,5 @@ function RouteComponent() {
 
 export const Route = createFileRoute("/workspace/plugins/rtk/raw-output")({
 	component: RouteComponent,
+	validateSearch: searchSchema,
 });

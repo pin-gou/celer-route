@@ -62,6 +62,8 @@ import LogChatMessageView, { LogChatFileBlockView } from "../views/logChatMessag
 import LogEntryDetailsView from "../views/logEntryDetailsView";
 import OCRView from "../views/ocrView";
 import PluginLogsView from "../views/pluginLogsView";
+import RTKCompressionDiffView from "../views/rtkCompressionDiffView";
+import RTKMetadataBadge, { isRTKMetadataKey } from "../views/rtkMetadataBadge";
 import SpeechView from "../views/speechView";
 import TranscriptionView from "../views/transcriptionView";
 import VideoView from "../views/videoView";
@@ -2296,9 +2298,13 @@ export function LogDetailView({
 													return false;
 												return true;
 											})
-											.map(([key, value]) => (
-												<LogEntryDetailsView key={key} className="w-full" label={key} value={String(value)} />
-											))}
+											.map(([key, value]) =>
+												isRTKMetadataKey(key) ? (
+													<RTKMetadataBadge key={key} keyName={key} value={value} />
+												) : (
+													<LogEntryDetailsView key={key} className="w-full" label={key} value={String(value)} />
+												),
+											)}
 									</div>
 								</div>
 							</>
@@ -2343,6 +2349,14 @@ export function LogDetailView({
 						{pluginLogCount > 0 ? (
 							<span className="bg-background text-muted-foreground ml-1.5 rounded-sm border px-2 py-0.5 text-[10px] tabular-nums">
 								{pluginLogCount}
+							</span>
+						) : null}
+					</TabsTrigger>
+					<TabsTrigger value="rtk" className="px-3" data-testid="logdetails-tab-rtk">
+						{t("detailView.rtkTabTitle")}
+						{log.metadata?.rtk_compression_ratio != null ? (
+							<span className="bg-background text-muted-foreground ml-1.5 rounded-sm border px-2 py-0.5 text-[10px] tabular-nums">
+								{(Number(log.metadata.rtk_compression_ratio) * 100).toFixed(0)}%
 							</span>
 						) : null}
 					</TabsTrigger>
@@ -2773,6 +2787,10 @@ export function LogDetailView({
 							{t("detailView.noPluginLogs")}
 						</div>
 					)}
+				</TabsContent>
+
+				<TabsContent value="rtk" className="space-y-3">
+					<RTKCompressionDiffView metadata={log.metadata as Record<string, unknown> | undefined} />
 				</TabsContent>
 
 				<TabsContent value="raw" className="space-y-3">

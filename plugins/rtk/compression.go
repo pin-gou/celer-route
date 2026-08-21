@@ -9,10 +9,11 @@ import (
 
 // ProcessStats holds token statistics for a single text compression pass.
 type ProcessStats struct {
-	OriginalTokens     int                    `json:"originalTokens"`
-	CompressedTokens   int                    `json:"compressedTokens"`
-	Techniques         []string               `json:"techniques"`
-	RawOutputPointers  []*RtkRawOutputPointer `json:"rawOutputPointers,omitempty"`
+	OriginalTokens    int                    `json:"originalTokens"`
+	CompressedTokens  int                    `json:"compressedTokens"`
+	Techniques        []string               `json:"techniques"`
+	FilterMatched     string                 `json:"filterMatched,omitempty"`
+	RawOutputPointers []*RtkRawOutputPointer `json:"rawOutputPointers,omitempty"`
 }
 
 // applyRtkCompression is the top-level entry point for the RTK compression
@@ -51,14 +52,21 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			origTokens := estimateTokens(text)
 			originalTotal += origTokens
 
+			// Capture pre-compression text for the log detail snapshot before
+			// the pipeline mutates the message.
+			appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
+
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
-			result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+			result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 			if err != nil || result == "" || result == text {
 				compressedTotal += origTokens
 				continue
 			}
 			if len(ptrs) > 0 {
 				state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+			}
+			if filterMatched != "" && state.FilterMatched == "" {
+				state.FilterMatched = filterMatched
 			}
 
 			compressedEst := estimateTokens(result)
@@ -67,7 +75,12 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				applyToolContent(msg, result)
 				anyCompressed = true
 				compressedTotal += compressedEst
-				if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
+				if len(techs) > 0 {
+					state.Techniques = append(state.Techniques, techs...)
+				} else {
+					state.Techniques = append(state.Techniques, "pipeline-runner")
+				}
+				recordCompressed(state, i, string(msg.Role), extractToolName(msg), text, result)
 				continue
 			}
 			compressedTotal += origTokens
@@ -91,14 +104,21 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
 
+				// Capture the original block text so the snapshot survives
+				// the in-place mutation that follows.
+				appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
+
 				// Compress through the PipelineRunner.
-				result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 				if err != nil || result == "" || result == text {
 					compressedTotal += origTokens
 					continue
 				}
 				if len(ptrs) > 0 {
 					state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+				}
+				if filterMatched != "" && state.FilterMatched == "" {
+					state.FilterMatched = filterMatched
 				}
 
 				compressedEst := estimateTokens(result)
@@ -107,7 +127,12 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 					block.Text = &result
 					anyCompressed = true
 					compressedTotal += compressedEst
-					if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
+					if len(techs) > 0 {
+						state.Techniques = append(state.Techniques, techs...)
+					} else {
+						state.Techniques = append(state.Techniques, "pipeline-runner")
+					}
+					recordCompressed(state, i*100+j, string(msg.Role), extractToolName(msg), text, result)
 					continue
 				}
 				compressedTotal += origTokens
@@ -126,18 +151,27 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 					if text != "" {
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
+						appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
 						// Assistant messages go through the pipeline runner too.
-						result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+							}
+							if filterMatched != "" && state.FilterMatched == "" {
+								state.FilterMatched = filterMatched
 							}
 							ratio := 1.0 - float64(estimateTokens(result))/float64(origTokens)
 							if ratio >= 0.05 {
 								msg.Content.ContentStr = &result
 								anyCompressed = true
 								compressedTotal += estimateTokens(result)
-								if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
+								if len(techs) > 0 {
+									state.Techniques = append(state.Techniques, techs...)
+								} else {
+									state.Techniques = append(state.Techniques, "pipeline-runner")
+								}
+								recordCompressed(state, i, string(msg.Role), extractToolName(msg), text, result)
 							} else {
 								compressedTotal += origTokens
 							}
@@ -163,17 +197,26 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						}
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
-						result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
+						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+							}
+							if filterMatched != "" && state.FilterMatched == "" {
+								state.FilterMatched = filterMatched
 							}
 							ratio := 1.0 - float64(estimateTokens(result))/float64(origTokens)
 							if ratio >= 0.05 {
 								block.Text = &result
 								anyCompressed = true
 								compressedTotal += estimateTokens(result)
-								if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
+								if len(techs) > 0 {
+									state.Techniques = append(state.Techniques, techs...)
+								} else {
+									state.Techniques = append(state.Techniques, "pipeline-runner")
+								}
+								recordCompressed(state, i*100+j, string(msg.Role), extractToolName(msg), text, result)
 							} else {
 								compressedTotal += origTokens
 							}
@@ -293,14 +336,24 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		origTokens := estimateTokens(text)
 		originalTotal += origTokens
 
+		// Capture pre-compression text for the log detail snapshot.
+		name := ""
+		if msg.ResponsesToolMessage.Name != nil {
+			name = *msg.ResponsesToolMessage.Name
+		}
+		appendSnapshot(state, i, "tool", name, text)
+
 		// Compress through the PipelineRunner.
-		result, _, techs, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+		result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
 		if err != nil || result == "" || result == text {
 			compressedTotal += origTokens
 			continue
 		}
 		if len(ptrs) > 0 {
 			state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+		}
+		if filterMatched != "" && state.FilterMatched == "" {
+			state.FilterMatched = filterMatched
 		}
 
 		compressedEst := estimateTokens(result)
@@ -309,7 +362,12 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 			applyResponsesToolOutput(out, config, result)
 			anyCompressed = true
 			compressedTotal += compressedEst
-			if len(techs) > 0 { state.Techniques = append(state.Techniques, techs...) } else { state.Techniques = append(state.Techniques, "pipeline-runner") }
+			if len(techs) > 0 {
+				state.Techniques = append(state.Techniques, techs...)
+			} else {
+				state.Techniques = append(state.Techniques, "pipeline-runner")
+			}
+			recordCompressed(state, i, "tool", name, text, result)
 			continue
 		}
 		compressedTotal += origTokens
@@ -495,6 +553,7 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		stats.CompressedTokens = stats.OriginalTokens
 		return input, stats
 	}
+	stats.FilterMatched = nonEmpty(filter.ID, filter.Name)
 
 	// 7. Apply line filter rules.
 	stripped := applyLineFilter(text, filter)

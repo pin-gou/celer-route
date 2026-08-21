@@ -819,6 +819,18 @@ func (h *LoggingHandler) getLogs(ctx *fasthttp.RequestCtx) {
 		if log.RoutingRuleID != nil && log.RoutingRuleName != nil && *log.RoutingRuleID != "" && *log.RoutingRuleName != "" {
 			result.Logs[i].RoutingRule = findRedactedRoutingRule(redactedRoutingRules, *log.RoutingRuleID, *log.RoutingRuleName)
 		}
+		// Strip the heavy metadata payloads from the list projection. The
+		// snapshots (and the derived technique/filter labels) are only
+		// meaningful in the log detail view — carrying them on every row of a
+		// 500-row listing bloats the response for no consumer. The detail
+		// endpoint (getLogByID) still serves the full metadata.
+		if md := result.Logs[i].MetadataParsed; md != nil {
+			delete(md, "rtk_original_snapshot")
+			delete(md, "rtk_compressed_snapshot")
+			delete(md, "rtk_snapshot_mode")
+			delete(md, "rtk_techniques")
+			delete(md, "rtk_filter_matched")
+		}
 	}
 
 	SendJSON(ctx, result)

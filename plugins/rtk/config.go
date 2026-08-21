@@ -95,6 +95,18 @@ type Config struct {
 	// non-empty, renderers for detection types NOT in this list pass through
 	// unchanged. Aligned with OmniRoute's RtkConfig.renderers.
 	Renderers []string `json:"renderers,omitempty"`
+
+	// SnapshotMode controls how compression snapshots are persisted for the
+	// log detail view:
+	//   "split"  — per-message diff (default; recommended for tool output inspection)
+	//   "merged" — single combined diff
+	//   "off"    — disable snapshot persistence entirely (saves log storage)
+	// Empty defaults to "split".
+	SnapshotMode string `json:"snapshot_mode"`
+
+	// SnapshotMaxBytes caps the total bytes persisted per request across all
+	// snapshots. Default 30 KiB, minimum 1 KiB, maximum 256 KiB.
+	SnapshotMaxBytes int `json:"snapshot_max_bytes"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -137,6 +149,18 @@ func (c *Config) Validate() error {
 	// MinTokensToCompress validation: negative is invalid.
 	if c.MinTokensToCompress < 0 {
 		return fmt.Errorf("rtk: min_tokens_to_compress must be >= 0, got %d", c.MinTokensToCompress)
+	}
+	// SnapshotMode validation: must be one of split, merged, off, or empty (defaults to split).
+	if c.SnapshotMode != "" {
+		switch c.SnapshotMode {
+		case "split", "merged", "off":
+		default:
+			return fmt.Errorf("rtk: invalid snapshot_mode %q: must be one of split, merged, off", c.SnapshotMode)
+		}
+	}
+	// SnapshotMaxBytes validation: clamp at apply time, here we only reject negative.
+	if c.SnapshotMaxBytes < 0 {
+		return fmt.Errorf("rtk: snapshot_max_bytes must be >= 0, got %d", c.SnapshotMaxBytes)
 	}
 	return nil
 }
@@ -193,4 +217,17 @@ func applyConfigDefaults(c *Config) {
 
 	// EnableRenderers stays at false (opt-in). Renderers whitelist stays
 	// empty (== all registered renderers enabled when EnableRenderers=true).
+
+	// SnapshotMode defaults to "split" (per-message diff).
+	if c.SnapshotMode == "" {
+		c.SnapshotMode = "split"
+	}
+	// SnapshotMaxBytes default 30 KiB, clamp to [1 KiB, 256 KiB].
+	if c.SnapshotMaxBytes == 0 {
+		c.SnapshotMaxBytes = 30 * 1024
+	} else if c.SnapshotMaxBytes < 1024 {
+		c.SnapshotMaxBytes = 1024
+	} else if c.SnapshotMaxBytes > 256*1024 {
+		c.SnapshotMaxBytes = 256 * 1024
+	}
 }

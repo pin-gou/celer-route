@@ -3,6 +3,7 @@ package logging
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -937,7 +938,119 @@ func mergeRealtimeMetadata(metadata map[string]interface{}, ctx *schemas.Bifrost
 		metadata["compressed_prompt_tokens"] = compTokens
 	}
 
+	// Inject RTK observability fields (techniques, filter matched, compression
+	// ratio, raw output pointer). These power the "RTK compression" tab and
+	// the metadata badges in the log detail view. All fields are optional —
+	// they are only present when RTK ran and produced non-empty stats.
+	if techniques, ok := ctx.Value(schemas.BifrostContextKeyRTKTechniques).([]string); ok && len(techniques) > 0 {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_techniques"] = techniques
+	}
+	if filterMatched, ok := ctx.Value(schemas.BifrostContextKeyRTKFilterMatched).(string); ok && filterMatched != "" {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_filter_matched"] = filterMatched
+	}
+	if ratio, ok := ctx.Value(schemas.BifrostContextKeyRTKCompressionRatio).(float64); ok {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_compression_ratio"] = ratio
+	}
+	if rawOutputID, ok := ctx.Value(schemas.BifrostContextKeyRTKRawOutputID).(string); ok && rawOutputID != "" {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_raw_output_id"] = rawOutputID
+	}
+	if mode, ok := ctx.Value(schemas.BifrostContextKeyRTKSnapshotMode).(string); ok && mode != "" {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_snapshot_mode"] = mode
+	}
+	// Snapshots may be JSON-typed (map/slice) or json.RawMessage. Use a tiny
+	// helper to coerce before storing so the log store receives a stable shape.
+	if original, ok := coerceJSONForMetadata(ctx.Value(schemas.BifrostContextKeyRTKOriginalSnapshot)); ok {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_original_snapshot"] = original
+	}
+	if compressed, ok := coerceJSONForMetadata(ctx.Value(schemas.BifrostContextKeyRTKCompressedSnapshot)); ok {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_compressed_snapshot"] = compressed
+	}
+
 	return metadata
+}
+
+// coerceJSONForMetadata accepts any of the JSON value shapes that the RTK
+// pipeline may store in the BifrostContext (map[string]any, []any,
+// json.RawMessage, string, or []byte) and returns it as an interface{}
+// suitable for the log entry metadata map.
+//
+// IMPORTANT: json.RawMessage / []byte must NOT be returned as a raw byte
+// slice — the log store marshals metadata via sonic, which base64-encodes
+// []byte. Instead the payload is parsed into a structured shape (map/slice)
+// so it lands in the logs-db metadata as a nested JSON object the log detail
+// view can consume directly. Invalid JSON falls back to the string form so
+// no data is silently dropped. The boolean reports whether a non-nil value
+// was extracted.
+func coerceJSONForMetadata(v interface{}) (interface{}, bool) {
+	if v == nil {
+		return nil, false
+	}
+	switch t := v.(type) {
+	case json.RawMessage:
+		if len(t) == 0 {
+			return nil, false
+		}
+		return decodeJSONBytes(t), true
+	case string:
+		if t == "" {
+			return nil, false
+		}
+		// A string may itself be an embedded JSON payload (the RTK snapshot
+		// builder sometimes stores the wire format as a string). Parse it so
+		// the log entry keeps a structured shape; if it is not JSON, keep the
+		// literal string.
+		return decodeJSONString(t), true
+	case []byte:
+		if len(t) == 0 {
+			return nil, false
+		}
+		return decodeJSONBytes(t), true
+	case map[string]any, []any:
+		return t, true
+	}
+	return nil, false
+}
+
+// decodeJSONBytes attempts to unmarshal raw JSON bytes into a structured
+// value (map[string]any / []any); on failure it returns the bytes converted
+// to a string so the metadata entry is non-nil and inspectable.
+func decodeJSONBytes(raw []byte) interface{} {
+	var out interface{}
+	if err := json.Unmarshal(raw, &out); err == nil && out != nil {
+		return out
+	}
+	return string(raw)
+}
+
+// decodeJSONString attempts to parse a string as JSON into a structured
+// value; on failure it returns the original string unchanged.
+func decodeJSONString(raw string) interface{} {
+	var out interface{}
+	if err := json.Unmarshal([]byte(raw), &out); err == nil && out != nil {
+		return out
+	}
+	return raw
 }
 
 // formatRoutingEngineLogs formats routing engine logs into a human-readable string.

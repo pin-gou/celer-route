@@ -131,6 +131,20 @@ export const rtkConfigSchema = z.object({
 	// may run. Empty (default) enables every registered renderer. Aligned
 	// with OmniRoute's RtkConfig.renderers.
 	renderers: z.array(z.string()).optional(),
+
+	// SnapshotMode controls how compression snapshots are persisted for the
+	// log detail view. "split" shows per-message diffs (default);
+	// "merged" concatenates everything into one block; "off" disables
+	// snapshots entirely (saves log storage).
+	snapshot_mode: z.enum(["split", "merged", "off"]).default("split"),
+
+	// SnapshotMaxBytes caps the total bytes persisted per request across all
+	// snapshots. Default 30 KiB; clamped at the server to [1 KiB, 256 KiB].
+	snapshot_max_bytes: z
+		.number()
+		.int()
+		.min(0)
+		.default(30 * 1024),
 });
 
 export type RTKConfig = z.infer<typeof rtkConfigSchema>;

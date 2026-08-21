@@ -838,12 +838,12 @@ func TestGetLogTimeline_LogFound(t *testing.T) {
 	now := time.Now()
 	mgr := &dashboardLogManager{
 		log: &logstore.Log{
-			ID:              "log-test-1",
-			Status:          "success",
-			Provider:        "openai",
-			Model:           "gpt-4",
-			Latency:         ptrFloat64(1234.56),
-			Timestamp:       now,
+			ID:                "log-test-1",
+			Status:            "success",
+			Provider:          "openai",
+			Model:             "gpt-4",
+			Latency:           ptrFloat64(1234.56),
+			Timestamp:         now,
 			RoutingEngineLogs: `[{"engine":"governance","level":"info","message":"provider=openai attempt=0","timestamp":1700000000000}]`,
 			PluginLogs:        `{"logging":[{"plugin_name":"logging","level":"info","message":"pre-llm hook executed","timestamp":1700000000000}]}`,
 			AttemptTrail:      `[{"attempt":0,"key_id":"key-1","key_name":"Key 1"}]`,
@@ -973,12 +973,12 @@ func TestGetLogTimeline_EmptyEvents(t *testing.T) {
 	now := time.Now()
 	mgr := &dashboardLogManager{
 		log: &logstore.Log{
-			ID:              "log-empty-1",
-			Status:          "error",
-			Provider:        "minimax",
-			Model:           "test-model",
-			Latency:         ptrFloat64(5000.0),
-			Timestamp:       now,
+			ID:                "log-empty-1",
+			Status:            "error",
+			Provider:          "minimax",
+			Model:             "test-model",
+			Latency:           ptrFloat64(5000.0),
+			Timestamp:         now,
 			RoutingEngineLogs: "",
 			PluginLogs:        "",
 			AttemptTrail:      "",
@@ -1517,5 +1517,114 @@ func TestLoggingHandler_OriginalPromptTokensInStreamingFinalChunk(t *testing.T) 
 		t.Fatal("expected metadata[\"compressed_prompt_tokens\"] in streaming final chunk — the logging handler must read BifrostContextKeyCompressedPromptTokens into logs-db metadata")
 	} else if fmt.Sprintf("%v", got) != "1500" {
 		t.Fatalf("metadata compressed_prompt_tokens = %#v, want 1500", got)
+	}
+}
+
+// TestLoggingHandler_RTKObservabilityInMetadata verifies that the logging
+// handler's metadata merge reads the RTK observability keys
+// (BifrostContextKeyRTKTechniques, BifrostContextKeyRTKFilterMatched,
+// BifrostContextKeyRTKCompressionRatio, BifrostContextKeyRTKSnapshotMode,
+// BifrostContextKeyRTKRawOutputID, and the original/compressed snapshot
+// payloads) and persists them into the logs-db metadata JSON. These are
+// the keys that drive the "RTK Compression" tab and the metadata badges
+// in the log detail view.
+func TestLoggingHandler_RTKObservabilityInMetadata(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	store := newLoggingPluginStore(t)
+	t.Cleanup(func() { _ = store.Close(context.Background()) })
+
+	loggingHeaders := []string{}
+	plugin, err := loggingplugin.Init(context.Background(), &loggingplugin.Config{LoggingHeaders: &loggingHeaders}, &mockLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("loggingplugin.Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("plugin.Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	requestID := "req-rtk-observability"
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{
+		"x-bf-lh-tenant": "rtk-obs-test",
+	})
+
+	// RTK PostLLMHook sets all of these on the context.
+	ctx.SetValue(schemas.BifrostContextKeyRTKTechniques, []string{"dedup", "linefilter"})
+	ctx.SetValue(schemas.BifrostContextKeyRTKFilterMatched, "git-status")
+	ctx.SetValue(schemas.BifrostContextKeyRTKCompressionRatio, 0.42)
+	ctx.SetValue(schemas.BifrostContextKeyRTKRawOutputID, "abcdef0123456789abcdef01")
+	ctx.SetValue(schemas.BifrostContextKeyRTKSnapshotMode, "split")
+	ctx.SetValue(schemas.BifrostContextKeyRTKOriginalSnapshot, json.RawMessage(`{"mode":"split","items":[{"index":0,"role":"tool","content":"original"}]}`))
+	ctx.SetValue(schemas.BifrostContextKeyRTKCompressedSnapshot, json.RawMessage(`{"mode":"split","items":[{"index":0,"role":"tool","content":"compressed"}]}`))
+
+	_, _, err = plugin.PreLLMHook(ctx, &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o",
+			Params:   &schemas.ChatParameters{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreLLMHook() error = %v", err)
+	}
+
+	result := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType:            schemas.ChatCompletionRequest,
+				Provider:               schemas.OpenAI,
+				OriginalModelRequested: "gpt-4o",
+				ResolvedModelUsed:      "gpt-4o",
+				Latency:                42,
+			},
+		},
+	}
+	_, _, err = plugin.PostLLMHook(ctx, result, nil)
+	if err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("plugin.Cleanup() error = %v", err)
+	}
+
+	logEntry, err := store.FindByID(context.Background(), requestID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if logEntry.MetadataParsed == nil {
+		t.Fatal("expected metadata to be persisted for the RTK-observed request")
+	}
+
+	if got := logEntry.MetadataParsed["rtk_techniques"]; got == nil {
+		t.Error("metadata rtk_techniques missing")
+	} else {
+		arr, ok := got.([]interface{})
+		if !ok || len(arr) != 2 || arr[0] != "dedup" || arr[1] != "linefilter" {
+			t.Errorf("metadata rtk_techniques = %#v, want [dedup linefilter]", got)
+		}
+	}
+	if got, want := logEntry.MetadataParsed["rtk_filter_matched"], "git-status"; got != want {
+		t.Errorf("metadata rtk_filter_matched = %v, want %s", got, want)
+	}
+	// Ratio is stored as float64; tolerate a small epsilon.
+	if got, ok := logEntry.MetadataParsed["rtk_compression_ratio"].(float64); !ok || got < 0.41 || got > 0.43 {
+		t.Errorf("metadata rtk_compression_ratio = %v, want ~0.42", logEntry.MetadataParsed["rtk_compression_ratio"])
+	}
+	if got, want := logEntry.MetadataParsed["rtk_raw_output_id"], "abcdef0123456789abcdef01"; got != want {
+		t.Errorf("metadata rtk_raw_output_id = %v, want %s", got, want)
+	}
+	if got, want := logEntry.MetadataParsed["rtk_snapshot_mode"], "split"; got != want {
+		t.Errorf("metadata rtk_snapshot_mode = %v, want %s", got, want)
+	}
+	if got := logEntry.MetadataParsed["rtk_original_snapshot"]; got == nil {
+		t.Error("metadata rtk_original_snapshot missing")
+	}
+	if got := logEntry.MetadataParsed["rtk_compressed_snapshot"]; got == nil {
+		t.Error("metadata rtk_compressed_snapshot missing")
 	}
 }

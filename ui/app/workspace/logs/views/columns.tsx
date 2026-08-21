@@ -527,7 +527,7 @@ export const createColumns = (
 					</Button>
 				);
 			},
-			size: 190,
+			size: 174,
 			cell: ({ row }) => {
 				const tokenUsage = row.original.token_usage;
 				if (!tokenUsage) {
@@ -540,7 +540,7 @@ export const createColumns = (
 				const splitBase = prompt + completion || 1;
 				const inPct = (prompt / splitBase) * 100;
 				return (
-					<div className="flex flex-col items-start gap-0.5 pl-4 leading-tight">
+					<div className="flex flex-col items-start gap-0.5 leading-tight">
 						<div className="flex items-center gap-2">
 							<span className="font-mono text-[12px] tabular-nums">{formatTokensAdaptive(total)}</span>
 							{hasSplit && (
@@ -559,6 +559,25 @@ export const createColumns = (
 						)}
 					</div>
 				);
+			},
+		},
+		{
+			id: "rtk",
+			header: "RTK",
+			size: 70,
+			minSize: 50,
+			maxSize: 100,
+			cell: ({ row }) => {
+				const ratio = row.original.metadata?.rtk_compression_ratio;
+				if (ratio == null) return <div className="font-mono text-xs text-gray-300">—</div>;
+				const pct = typeof ratio === "number" ? (ratio * 100).toFixed(1) : String(ratio);
+				const tone =
+					Number(ratio) >= 0.5
+						? "text-emerald-600 dark:text-emerald-400"
+						: Number(ratio) >= 0.2
+							? "text-amber-600 dark:text-amber-400"
+							: "text-muted-foreground";
+				return <div className={`font-mono text-xs tabular-nums ${tone}`}>{pct}%</div>;
 			},
 		},
 	];
@@ -641,15 +660,35 @@ export const createColumns = (
 		},
 	];
 
-	const metadataColumns: ColumnDef<LogEntry>[] = metadataKeys.map((key) => ({
-		id: `metadata_${key}`,
-		header: key.charAt(0).toUpperCase() + key.slice(1),
-		size: 126,
-		cell: ({ row }) => {
-			const value = row.original.metadata?.[key];
-			return <div className="max-w-[150px] truncate font-mono text-xs">{value ?? "-"}</div>;
-		},
-	}));
+	// RTK observability collapses into the single dedicated "RTK" column
+	// (compression ratio). All other RTK-derived metadata keys — techniques,
+	// filter matched, snapshot payloads, and the original/compressed token
+	// counts — are only meaningful in the log detail view, so they are
+	// excluded from the dynamic column list to keep the table lean.
+	const RTK_METADATA_KEYS = new Set([
+		"rtk_compression_ratio",
+		"rtk_filter_matched",
+		"rtk_snapshot_mode",
+		"rtk_techniques",
+		"rtk_original_snapshot",
+		"rtk_compressed_snapshot",
+		"original_prompt_tokens",
+		"compressed_prompt_tokens",
+	]);
+
+	const metadataColumns: ColumnDef<LogEntry>[] = metadataKeys
+		.filter((key) => !RTK_METADATA_KEYS.has(key))
+		.map((key) => ({
+			id: `metadata_${key}`,
+			header: key.charAt(0).toUpperCase() + key.slice(1),
+			size: 126,
+			cell: ({ row }) => {
+				const value = row.original.metadata?.[key];
+				if (value == null) return <div className="max-w-[150px] truncate font-mono text-xs">-</div>;
+				const display = typeof value === "object" ? JSON.stringify(value) : String(value);
+				return <div className="max-w-[150px] truncate font-mono text-xs">{display}</div>;
+			},
+		}));
 
 	const actionsColumn: ColumnDef<LogEntry>[] = hasDeleteAccess
 		? [

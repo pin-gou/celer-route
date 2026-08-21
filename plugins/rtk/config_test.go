@@ -68,8 +68,8 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name: "negative max_chars_per_result",
 			config: Config{
-				Enabled:          true,
-				Intensity:        "standard",
+				Enabled:           true,
+				Intensity:         "standard",
 				MaxCharsPerResult: -100,
 			},
 			wantErr: true,
@@ -77,8 +77,8 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name: "negative dedup_threshold",
 			config: Config{
-				Enabled:       true,
-				Intensity:     "standard",
+				Enabled:        true,
+				Intensity:      "standard",
 				DedupThreshold: -1,
 			},
 			wantErr: true,
@@ -160,8 +160,8 @@ func TestConfigGroupingDefaults(t *testing.T) {
 // grouping fields are NOT overwritten by applyConfigDefaults.
 func TestConfigGroupingExplicitValuesPreserved(t *testing.T) {
 	cfg := &Config{
-		EnableGrouping:          true,
-		GroupingThreshold:       5,
+		EnableGrouping:           true,
+		GroupingThreshold:        5,
 		ApplyToAssistantMessages: true,
 	}
 	applyConfigDefaults(cfg)
@@ -212,9 +212,9 @@ func TestConfigGroupingThresholdClamp(t *testing.T) {
 // exist yet (compile error expected).
 func TestConfigGroupingFieldsValidates(t *testing.T) {
 	cfg := &Config{
-		Enabled:         true,
-		EnableGrouping:  true,
-		Intensity:       "bogus-intensity",
+		Enabled:           true,
+		EnableGrouping:    true,
+		Intensity:         "bogus-intensity",
 		GroupingThreshold: 3,
 	}
 	if err := cfg.Validate(); err == nil {
@@ -222,16 +222,17 @@ func TestConfigGroupingFieldsValidates(t *testing.T) {
 	}
 
 	valid := &Config{
-		Enabled:                 true,
-		EnableGrouping:          true,
-		GroupingThreshold:       3,
+		Enabled:                  true,
+		EnableGrouping:           true,
+		GroupingThreshold:        3,
 		ApplyToAssistantMessages: true,
-		Intensity:               "standard",
+		Intensity:                "standard",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Errorf("Config.Validate() unexpected error for valid grouping config: %v", err)
 	}
 }
+
 // ============================================================================
 // Phase 3: Custom filter config fields (V-plugins-2/3)
 // The 4 new fields (CustomFiltersEnabled / TrustProjectFilters /
@@ -292,10 +293,10 @@ func TestConfigCustomFilterFieldsNonEmpty(t *testing.T) {
 // does not reject the combination — only type-checks the fields.
 func TestConfigCustomFilterMutualExclusion(t *testing.T) {
 	cfg := &Config{
-		Enabled:            true,
-		Intensity:          "standard",
-		EnabledFilters:     []string{"git-status", "npm-install"},
-		DisabledFilters:    []string{"npm-install"},
+		Enabled:             true,
+		Intensity:           "standard",
+		EnabledFilters:      []string{"git-status", "npm-install"},
+		DisabledFilters:     []string{"npm-install"},
 		TrustProjectFilters: true,
 	}
 	if err := cfg.Validate(); err != nil {
@@ -491,6 +492,60 @@ func TestConfigPipelineAndMinTokensValidate(t *testing.T) {
 		}
 		if err := cfg.Validate(); err == nil {
 			t.Error("Config.Validate() should reject negative MinTokensToCompress")
+		}
+	})
+}
+
+// TestConfigValidateSnapshot covers the SnapshotMode / SnapshotMaxBytes
+// validation rules. The full Validate method is also covered by
+// TestConfigValidate above; this test pins the exact error messages and
+// acceptance windows so future refactors do not silently relax them.
+func TestConfigValidateSnapshot(t *testing.T) {
+	t.Run("accepts_split_merged_off", func(t *testing.T) {
+		for _, mode := range []string{"split", "merged", "off", ""} {
+			cfg := Config{Enabled: true, SnapshotMode: mode}
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() rejected %q: %v", mode, err)
+			}
+		}
+	})
+	t.Run("rejects_unknown_mode", func(t *testing.T) {
+		cfg := Config{Enabled: true, SnapshotMode: "bogus"}
+		if err := cfg.Validate(); err == nil {
+			t.Error("Validate() should reject unknown snapshot_mode")
+		}
+	})
+	t.Run("rejects_negative_max_bytes", func(t *testing.T) {
+		cfg := Config{Enabled: true, SnapshotMaxBytes: -1}
+		if err := cfg.Validate(); err == nil {
+			t.Error("Validate() should reject negative snapshot_max_bytes")
+		}
+	})
+	t.Run("accepts_zero_max_bytes_then_clamps", func(t *testing.T) {
+		cfg := Config{Enabled: true}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() rejected zero max_bytes: %v", err)
+		}
+		applyConfigDefaults(&cfg)
+		if cfg.SnapshotMaxBytes != 30*1024 {
+			t.Errorf("default SnapshotMaxBytes = %d, want %d", cfg.SnapshotMaxBytes, 30*1024)
+		}
+		if cfg.SnapshotMode != "split" {
+			t.Errorf("default SnapshotMode = %q, want split", cfg.SnapshotMode)
+		}
+	})
+	t.Run("clamps_max_bytes_to_min_1kib", func(t *testing.T) {
+		cfg := Config{Enabled: true, SnapshotMaxBytes: 100}
+		applyConfigDefaults(&cfg)
+		if cfg.SnapshotMaxBytes != 1024 {
+			t.Errorf("SnapshotMaxBytes = %d, want 1024 (clamped)", cfg.SnapshotMaxBytes)
+		}
+	})
+	t.Run("clamps_max_bytes_to_max_256kib", func(t *testing.T) {
+		cfg := Config{Enabled: true, SnapshotMaxBytes: 1024 * 1024}
+		applyConfigDefaults(&cfg)
+		if cfg.SnapshotMaxBytes != 256*1024 {
+			t.Errorf("SnapshotMaxBytes = %d, want %d (clamped to 256 KiB)", cfg.SnapshotMaxBytes, 256*1024)
 		}
 	})
 }
