@@ -325,6 +325,15 @@
 			"selectBaseFormat": "Select base format",
 			"baseUrl": "Base URL",
 			"baseUrlPlaceholder": "https://api.your-provider.com",
+			"baseUrlDesc": {
+				"openai": "Provider API path (e.g. https://api.your-provider.com/openai). Endpoint suffixes like /v1/chat/completions are appended automatically per request type — do NOT include them here.",
+				"anthropic": "Provider API path (e.g. https://api.your-provider.com/anthropic). Endpoint suffixes like /v1/messages are appended automatically per request type — do NOT include them here.",
+				"gemini": "Provider API path (e.g. https://generativelanguage.googleapis.com/v1beta). Gemini endpoints do not include a version prefix, so include /v1beta (or your equivalent version segment) here.",
+				"cohere": "Provider API path (e.g. https://api.your-provider.com/cohere). Endpoint suffixes like /v1/models and /v2/chat are appended automatically per request type — do NOT include them here.",
+				"bedrock": "Bedrock uses AWS SigV4 signing rather than a Base URL. This field has no effect for Bedrock — configure access via IAM credentials instead.",
+				"replicate": "Provider API path (e.g. https://api.your-provider.com/replicate). Endpoint suffixes like /v1/deployments and /v1/predictions are appended automatically per request type — do NOT include them here.",
+				"default": "Provider API path (e.g. https://api.your-provider.com/openai). Endpoint suffixes are appended automatically per request type — do NOT include them here. To customize individual paths, use Request Path Overrides below."
+			},
 			"allowPrivateNetwork": "Allow Private Network",
 			"allowPrivateNetworkDesc": "Allow connecting to private network IPs (e.g. 192.168.x.x, 10.x.x.x). Link-local addresses remain blocked.",
 			"isKeyless": "Is Keyless?",
@@ -520,6 +529,15 @@
 			"baseUrlOptional": "Base URL (Optional)",
 			"baseUrlPlaceholder": "https://api.openai.com/v1",
 			"baseUrlPlaceholderCustom": "https://your-custom-provider.com/api",
+			"baseUrlDesc": {
+				"openai": "Provider API path (e.g. https://api.your-provider.com/openai). Endpoint suffixes like /v1/chat/completions are appended automatically per request type — do NOT include them here.",
+				"anthropic": "Provider API path (e.g. https://api.your-provider.com/anthropic). Endpoint suffixes like /v1/messages are appended automatically per request type — do NOT include them here.",
+				"gemini": "Provider API path (e.g. https://generativelanguage.googleapis.com/v1beta). Gemini endpoints do not include a version prefix, so include /v1beta (or your equivalent version segment) here.",
+				"cohere": "Provider API path (e.g. https://api.your-provider.com/cohere). Endpoint suffixes like /v1/models and /v2/chat are appended automatically per request type — do NOT include them here.",
+				"bedrock": "Bedrock uses AWS SigV4 signing rather than a Base URL. This field has no effect for Bedrock — configure access via IAM credentials instead.",
+				"replicate": "Provider API path (e.g. https://api.your-provider.com/replicate). Endpoint suffixes like /v1/deployments and /v1/predictions are appended automatically per request type — do NOT include them here.",
+				"default": "Provider API path (e.g. https://api.your-provider.com/openai). Endpoint suffixes are appended automatically per request type — do NOT include them here. To customize individual paths, use Request Path Overrides below."
+			},
 			"timeout": "Timeout (seconds)",
 			"streamIdleTimeout": "Stream Idle Timeout (seconds)",
 			"streamIdleTimeoutDescription": "Max time to wait for next chunk before closing a stalled stream",

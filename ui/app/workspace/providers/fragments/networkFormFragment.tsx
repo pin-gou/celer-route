@@ -182,6 +182,7 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 	}, [form, provider.name, provider.network_config]);
 
 	const baseURLRequired = isCustomProvider;
+	const baseFormat = (provider.custom_provider_config?.base_provider_type as string) || "default";
 	const hideBaseURL = provider.name === "vllm" || provider.name === "ollama" || provider.name === "sgl";
 
 	return (
@@ -199,6 +200,7 @@ export function NetworkFormFragment({ provider, onCancel }: NetworkFormFragmentP
 										<FormLabel>
 											{baseURLRequired ? t("fragments.network.baseUrlRequired") : t("fragments.network.baseUrlOptional")}
 										</FormLabel>
+										{baseURLRequired && <FormDescription>{t(`fragments.network.baseUrlDesc.${baseFormat}`)}</FormDescription>}
 										<FormControl>
 											<Input
 												placeholder={

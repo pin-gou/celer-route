@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -86,7 +86,7 @@ export function AddCustomProviderSheetContent({ show = true, onClose, onSave }: 
 				realtime: false,
 			},
 			request_path_overrides: undefined,
-			is_key_less: false,
+			is_key_less: true,
 			allow_private_network: false,
 		},
 	});
@@ -194,6 +194,7 @@ export function AddCustomProviderSheetContent({ show = true, onClose, onSave }: 
 							render={({ field }) => (
 								<FormItem className="flex flex-col gap-3">
 									<FormLabel>{t("providers2.addCustomProviderSheet.baseUrl")}</FormLabel>
+									<FormDescription>{t(`providers2.addCustomProviderSheet.baseUrlDesc.${baseFormat || "default"}`)}</FormDescription>
 									<div>
 										<FormControl>
 											<Input

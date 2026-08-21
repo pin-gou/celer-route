@@ -325,10 +325,19 @@
 			"selectBaseFormat": "选择基础格式",
 			"baseUrl": "基础 URL",
 			"baseUrlPlaceholder": "https://api.your-provider.com",
+			"baseUrlDesc": {
+				"openai": "提供商的 API 路径（如 https://api.your-provider.com/openai）。后端会按请求类型自动拼接 /v1/chat/completions 等路径，请勿在此处重复填写。",
+				"anthropic": "提供商的 API 路径（如 https://api.your-provider.com/anthropic）。后端会按请求类型自动拼接 /v1/messages 等路径，请勿在此处重复填写。",
+				"gemini": "提供商的 API 路径（如 https://generativelanguage.googleapis.com/v1beta）。Gemini 端点本身不包含版本前缀，请保留 /v1beta 之类的版本路径。",
+				"cohere": "提供商的 API 路径（如 https://api.your-provider.com/cohere）。后端会按请求类型自动拼接 /v1/models、/v2/chat 等路径，请勿在此处重复填写。",
+				"bedrock": "Bedrock 使用 AWS SigV4 签名而非 Base URL。此字段对 Bedrock 不生效，请使用 IAM 凭据配置访问。",
+				"replicate": "提供商的 API 路径（如 https://api.your-provider.com/replicate）。后端会按请求类型自动拼接 /v1/deployments、/v1/predictions 等路径，请勿在此处重复填写。",
+				"default": "提供商的 API 路径（如 https://api.your-provider.com/openai）。后端会按请求类型自动拼接相应路径，请勿在此处重复填写。如需调整具体路径，可使用“请求路径覆写”。"
+			},
 			"allowPrivateNetwork": "允许私有网络",
 			"allowPrivateNetworkDesc": "允许连接到私有网络 IP（例如 192.168.x.x、10.x.x.x）。链接本地地址仍会被阻止。",
-			"isKeyless": "是否需要密钥？",
-			"isKeylessDesc": "自定义提供商是否需要密钥",
+			"isKeyless": "是否免密钥",
+			"isKeylessDesc": "启用后，该自定义提供商无需配置 API 密钥即可调用",
 			"cancel": "取消",
 			"add": "添加"
 		}
@@ -543,6 +552,15 @@
 			"baseUrlOptional": "基础 URL（可选）",
 			"baseUrlPlaceholder": "https://api.openai.com/v1",
 			"baseUrlPlaceholderCustom": "https://your-custom-provider.com/api",
+			"baseUrlDesc": {
+				"openai": "提供商的 API 路径（如 https://api.your-provider.com/openai）。后端会按请求类型自动拼接 /v1/chat/completions 等路径，请勿在此处重复填写。",
+				"anthropic": "提供商的 API 路径（如 https://api.your-provider.com/anthropic）。后端会按请求类型自动拼接 /v1/messages 等路径，请勿在此处重复填写。",
+				"gemini": "提供商的 API 路径（如 https://generativelanguage.googleapis.com/v1beta）。Gemini 端点本身不包含版本前缀，请保留 /v1beta 之类的版本路径。",
+				"cohere": "提供商的 API 路径（如 https://api.your-provider.com/cohere）。后端会按请求类型自动拼接 /v1/models、/v2/chat 等路径，请勿在此处重复填写。",
+				"bedrock": "Bedrock 使用 AWS SigV4 签名而非 Base URL。此字段对 Bedrock 不生效，请使用 IAM 凭据配置访问。",
+				"replicate": "提供商的 API 路径（如 https://api.your-provider.com/replicate）。后端会按请求类型自动拼接 /v1/deployments、/v1/predictions 等路径，请勿在此处重复填写。",
+				"default": "提供商的 API 路径（如 https://api.your-provider.com/openai）。后端会按请求类型自动拼接相应路径，请勿在此处重复填写。如需调整具体路径，可使用“请求路径覆写”。"
+			},
 			"timeout": "超时时间（秒）",
 			"streamIdleTimeout": "流式空闲超时（秒）",
 			"streamIdleTimeoutDescription": "在关闭停滞的流之前，等待下一个数据块的最长时间",
