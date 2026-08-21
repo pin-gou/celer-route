@@ -49,7 +49,7 @@ import { applyRedactionMapping, hasRedactionMappingEntries } from "@/lib/utils/r
 import { isJson } from "@/lib/utils/validation";
 import { Link } from "@tanstack/react-router";
 import { addMilliseconds, format } from "date-fns";
-import { AlertCircle, ChevronDown, Clipboard, Copy, Download, Loader2, MoreVertical, Trash2, Wrench } from "lucide-react";
+import { AlertCircle, ChevronDown, Clipboard, Copy, Download, Loader2, Trash2, Wrench } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -1188,39 +1188,61 @@ export function LogDetailView({
 					)}
 					{onClose ? (
 						<AlertDialog>
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<Button variant="ghost" className="size-8" type="button" data-testid="logdetails-actions-button">
-										<MoreVertical className="h-3 w-3" />
-									</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end">
-									{!isPassthrough && (
-										<DropdownMenuItem onClick={() => copyRequestBody(log, copyBody)} data-testid="logdetails-copy-request-body-button">
-											<Clipboard className="h-4 w-4" />
-											{t("detailView.copyRequestBody")}
-										</DropdownMenuItem>
-									)}
-									<DropdownMenuItem
-										onClick={() => downloadAsJson(log, `log-${log.id ?? "export"}.json`)}
-										data-testid="logdetails-export-log-button"
-									>
-										<Download className="h-4 w-4" />
-										{t("detailView.exportAsJson")}
-									</DropdownMenuItem>
-									{handleDelete ? (
-										<>
-											<DropdownMenuSeparator />
+							<div className="flex items-center gap-1">
+								{!isPassthrough && (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="size-8"
+												type="button"
+												onClick={() => copyRequestBody(log, copyBody)}
+												data-testid="logdetails-copy-request-body-button"
+												aria-label={t("detailView.copyRequestBody")}
+											>
+												<Clipboard className="h-4 w-4" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent sideOffset={6}>{t("detailView.copyRequestBody")}</TooltipContent>
+									</Tooltip>
+								)}
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											variant="ghost"
+											size="icon"
+											className="size-8"
+											type="button"
+											onClick={() => downloadAsJson(log, `log-${log.id ?? "export"}.json`)}
+											data-testid="logdetails-export-log-button"
+											aria-label={t("detailView.exportAsJson")}
+										>
+											<Download className="h-4 w-4" />
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent sideOffset={6}>{t("detailView.exportAsJson")}</TooltipContent>
+								</Tooltip>
+								{handleDelete ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
 											<AlertDialogTrigger asChild>
-												<DropdownMenuItem variant="destructive" data-testid="logdetails-delete-item">
+												<Button
+													variant="ghost"
+													size="icon"
+													className="text-destructive hover:text-destructive size-8"
+													type="button"
+													data-testid="logdetails-delete-item"
+													aria-label={t("detailView.deleteLog")}
+												>
 													<Trash2 className="h-4 w-4" />
-													{t("detailView.deleteLog")}
-												</DropdownMenuItem>
-											</AlertDialogTrigger>{" "}
-										</>
-									) : null}
-								</DropdownMenuContent>
-							</DropdownMenu>
+												</Button>
+											</AlertDialogTrigger>
+										</TooltipTrigger>
+										<TooltipContent sideOffset={6}>{t("detailView.deleteLog")}</TooltipContent>
+									</Tooltip>
+								) : null}
+							</div>
 							<AlertDialogContent>
 								<AlertDialogHeader>
 									<AlertDialogTitle>{t("detailView.deleteDialogTitle")}</AlertDialogTitle>
