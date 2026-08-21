@@ -314,12 +314,13 @@ func (h *ProviderHandler) getProvider(ctx *fasthttp.RequestCtx) {
 
 	response := h.getProviderResponseFromConfig(provider, *redactedConfig, providerStatus)
 
-	stats, statsErr := h.aggregateProviderStats(ctx, provider)
-	if statsErr != nil {
-		logger.Warn("Failed to aggregate stats for provider %s: %v", provider, statsErr)
-	} else {
-		h.applyProviderStats(&response, stats)
-	}
+	// In-memory-only stats (keys count, models count, health, enabled). The
+	// log-derived fields (hourly requests/errors, avg latency, uptime, last
+	// timestamps) are no longer computed here — they required 4 aggregated
+	// queries against the logs table per page load, which was prohibitively
+	// slow on large log stores (SQLite).
+	stats := h.computeInMemoryProviderStats(provider)
+	h.applyProviderStats(&response, stats)
 
 	SendJSON(ctx, response)
 }
@@ -1372,45 +1373,6 @@ func (h *ProviderHandler) computeInMemoryProviderStats(providerName schemas.Mode
 		stats.ModelsCount = len(h.modelsManager.GetModelsForProvider(providerName))
 	}
 	return stats
-}
-
-// aggregateProviderStats computes the full aggregation fields for a single
-// provider (detail path). Keys/models/health come from in-memory; log-derived
-// fields (hourly requests/errors, last timestamps, avg latency, uptime) come
-// from the optional ProviderLogStats source (1-hour rolling window).
-func (h *ProviderHandler) aggregateProviderStats(ctx context.Context, providerName schemas.ModelProvider) (ProviderStats, error) {
-	stats, err := h.computeProviderStats(ctx, providerName)
-	if err != nil {
-		return ProviderStats{}, fmt.Errorf("aggregate stats for provider %s: %w", providerName, err)
-	}
-	return stats, nil
-}
-
-// computeProviderStats derives the aggregation fields for one provider:
-//   - keys count + health from the in-memory provider config
-//   - models count from the models manager
-//   - 1-hour rolling-window request/error/latency aggregates from the optional logs source
-func (h *ProviderHandler) computeProviderStats(ctx context.Context, providerName schemas.ModelProvider) (ProviderStats, error) {
-	var stats ProviderStats
-	stats = h.computeInMemoryProviderStats(providerName)
-
-	// Log-derived aggregates (1-hour rolling window)
-	if h.logStats != nil {
-		hourlyRequests, hourlyErrors, lastUsedAt, lastErrorAt, avgLatencyMs, err := h.logStats.AggregateProviderLogStats(ctx, providerName)
-		if err != nil {
-			return ProviderStats{}, fmt.Errorf("aggregate log stats for provider %s: %w", providerName, err)
-		}
-		stats.HourlyRequests = hourlyRequests
-		stats.HourlyErrors = hourlyErrors
-		stats.LastUsedAt = lastUsedAt
-		stats.LastErrorAt = lastErrorAt
-		stats.AvgLatencyMs = avgLatencyMs
-		stats.Uptime = computeUptime(hourlyRequests, hourlyErrors)
-	} else {
-		stats.Uptime = 1
-	}
-
-	return stats, nil
 }
 
 // computeKeysHealthStatus aggregates per-key list-models failure flags.
