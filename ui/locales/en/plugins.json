@@ -178,6 +178,7 @@
 		"admin": {
 			"title": "RTK Admin",
 			"subtitle": "Inspect the loaded filter catalog, dry-run compression, and preview different intensity settings.",
+			"backToPlugin": "Plugin Config",
 			"openCta": "Open",
 			"tabs": {
 				"filters": "Filters",

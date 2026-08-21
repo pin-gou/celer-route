@@ -178,6 +178,7 @@
 		"admin": {
 			"title": "RTK 管理",
 			"subtitle": "浏览已加载的过滤器目录、干跑压缩、并预览不同强度配置的效果。",
+			"backToPlugin": "插件配置",
 			"openCta": "打开",
 			"tabs": {
 				"filters": "过滤器",

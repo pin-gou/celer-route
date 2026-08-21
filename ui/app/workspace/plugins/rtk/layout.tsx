@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { Beaker, FileSearch, FlaskConical, Image as ImageIcon, Settings } from "lucide-react";
+import { ArrowLeft, Beaker, FileSearch, FlaskConical, Image as ImageIcon, Settings } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NoPermissionView } from "@/components/noPermissionView";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
@@ -73,9 +73,19 @@ function RtkAdminLayout() {
 
 	return (
 		<div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-			<header className="flex flex-col gap-1">
-				<h1 className="text-2xl font-semibold">{t("plugins:rtk.admin.title")}</h1>
-				<p className="text-muted-foreground text-sm">{t("plugins:rtk.admin.subtitle")}</p>
+			<header className="flex items-start justify-between gap-4">
+				<div className="flex flex-col gap-1">
+					<h1 className="text-2xl font-semibold">{t("plugins:rtk.admin.title")}</h1>
+					<p className="text-muted-foreground text-sm">{t("plugins:rtk.admin.subtitle")}</p>
+				</div>
+				<Link
+					to="/workspace/plugins"
+					search={{ plugin: "rtk" }}
+					className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm whitespace-nowrap"
+				>
+					<ArrowLeft className="h-4 w-4" />
+					{t("plugins:rtk.admin.backToPlugin", "插件配置")}
+				</Link>
 			</header>
 			<nav className="border-b" data-testid="rtk-admin-nav">
 				<ul className="-mb-px flex flex-wrap gap-x-4 gap-y-2 text-sm">
