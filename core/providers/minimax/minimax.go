@@ -2,10 +2,12 @@ package minimax
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/providers/openai"
+	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
 	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
 	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/valyala/fasthttp"
@@ -40,7 +42,7 @@ func NewMinimaxProvider(config *schemas.ProviderConfig, logger schemas.Logger) (
 	streamingClient := providerUtils.BuildStreamingClient(client)
 
 	if config.NetworkConfig.BaseURL == "" {
-		config.NetworkConfig.BaseURL = "https://api.minimax.chat/v1"
+		config.NetworkConfig.BaseURL = "https://api.minimaxi.com/anthropic"
 	}
 	config.NetworkConfig.BaseURL = strings.TrimRight(config.NetworkConfig.BaseURL, "/")
 
@@ -59,17 +61,69 @@ func (provider *MinimaxProvider) GetProviderKey() schemas.ModelProvider {
 }
 
 func (provider *MinimaxProvider) ListModels(ctx *schemas.BifrostContext, keys []schemas.Key, request *schemas.BifrostListModelsRequest) (*schemas.BifrostListModelsResponse, *schemas.BifrostError) {
-	return openai.HandleOpenAIListModelsRequest(
+	return providerUtils.HandleMultipleListModelsRequests(
 		ctx,
-		provider.client,
-		request,
-		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/models"),
 		keys,
-		provider.networkConfig.ExtraHeaders,
-		schemas.Minimax,
-		providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest),
-		providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse),
+		request,
+		provider.listModelsByKey,
 	)
+}
+
+func (provider *MinimaxProvider) listModelsByKey(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostListModelsRequest) (*schemas.BifrostListModelsResponse, *schemas.BifrostError) {
+	// Create request
+	req := fasthttp.AcquireRequest()
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseRequest(req)
+	defer fasthttp.ReleaseResponse(resp)
+
+	// Set any extra headers from network config
+	providerUtils.SetExtraHeaders(ctx, req, provider.networkConfig.ExtraHeaders, nil)
+
+	req.SetRequestURI(provider.networkConfig.BaseURL + providerUtils.GetPathFromContext(ctx, fmt.Sprintf("/v1/models?limit=%d", schemas.DefaultPageSize)))
+	req.Header.SetMethod(http.MethodGet)
+	req.Header.SetContentType("application/json")
+	if key.Value.GetValue() != "" {
+		req.Header.Set("x-api-key", key.Value.GetValue())
+	}
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	// Make request
+	latency, bifrostErr, wait := providerUtils.MakeRequestWithContext(ctx, provider.client, req, resp)
+	defer wait()
+	if bifrostErr != nil {
+		return nil, bifrostErr
+	}
+
+	// Store provider response headers in context before status check so error responses also forward them
+	ctx.SetValue(schemas.BifrostContextKeyProviderResponseHeaders, providerUtils.ExtractProviderResponseHeaders(resp))
+
+	// Handle error response
+	if resp.StatusCode() != fasthttp.StatusOK {
+		return nil, providerUtils.SetErrorLatency(anthropic.ParseAnthropicError(resp), latency)
+	}
+
+	// Parse Anthropic's response
+	var anthropicResponse anthropic.AnthropicListModelsResponse
+	rawRequest, rawResponse, bifrostErr := providerUtils.HandleProviderResponse(resp.Body(), &anthropicResponse, nil, providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest), providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse))
+	if bifrostErr != nil {
+		return nil, bifrostErr
+	}
+
+	// Create final response
+	response := anthropicResponse.ToBifrostListModelsResponse(provider.GetProviderKey(), key.Models, key.BlacklistedModels, key.Aliases, request.Unfiltered)
+	response.ExtraFields.Latency = latency.Milliseconds()
+
+	// Set raw request if enabled
+	if providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest) {
+		response.ExtraFields.RawRequest = rawRequest
+	}
+
+	// Set raw response if enabled
+	if providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse) {
+		response.ExtraFields.RawResponse = rawResponse
+	}
+
+	return response, nil
 }
 
 func (provider *MinimaxProvider) TextCompletion(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostTextCompletionRequest) (*schemas.BifrostTextCompletionResponse, *schemas.BifrostError) {
@@ -81,40 +135,49 @@ func (provider *MinimaxProvider) TextCompletionStream(ctx *schemas.BifrostContex
 }
 
 func (provider *MinimaxProvider) ChatCompletion(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostChatRequest) (*schemas.BifrostChatResponse, *schemas.BifrostError) {
-	return openai.HandleOpenAIChatCompletionRequest(
+	return anthropic.HandleAnthropicChatCompletionRequest(
 		ctx,
 		provider.client,
-		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/chat/completions"),
+		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/messages"),
 		request,
-		openai.BearerAuthHeader(key),
+		anthropic.AnthropicRequestBuildConfig{
+			Provider:                  schemas.Anthropic,
+			IsStreaming:               false,
+			BetaHeaderOverrides:       provider.networkConfig.BetaHeaderOverrides,
+			ShouldSendBackRawRequest:  provider.sendBackRawRequest,
+			ShouldSendBackRawResponse: provider.sendBackRawResponse,
+		},
+		provider.anthropicRequestHeaders(ctx, key),
 		provider.networkConfig.ExtraHeaders,
-		providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest),
-		providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse),
-		provider.GetProviderKey(),
-		nil,
-		nil,
 		nil,
 		provider.logger,
 	)
 }
 
 func (provider *MinimaxProvider) ChatCompletionStream(ctx *schemas.BifrostContext, postHookRunner schemas.PostHookRunner, postHookSpanFinalizer func(context.Context), key schemas.Key, request *schemas.BifrostChatRequest) (chan *schemas.BifrostStreamChunk, *schemas.BifrostError) {
-	return openai.HandleOpenAIChatCompletionStreaming(
+	jsonData, bifrostErr := anthropic.BuildAnthropicChatRequestBody(ctx, request, anthropic.AnthropicRequestBuildConfig{
+		Provider:                  schemas.Anthropic,
+		IsStreaming:               true,
+		ShouldSendBackRawRequest:  provider.sendBackRawRequest,
+		ShouldSendBackRawResponse: provider.sendBackRawResponse,
+	})
+	if bifrostErr != nil {
+		return nil, bifrostErr
+	}
+
+	return anthropic.HandleAnthropicChatCompletionStreaming(
 		ctx,
 		provider.streamingClient,
-		provider.networkConfig.BaseURL+"/chat/completions",
-		request,
-		openai.BearerAuthHeader(key),
+		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/messages"),
+		jsonData,
+		provider.anthropicRequestHeaders(ctx, key),
 		provider.networkConfig.ExtraHeaders,
 		provider.networkConfig.StreamIdleTimeoutInSeconds,
+		provider.networkConfig.BetaHeaderOverrides,
 		providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest),
 		providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse),
-		schemas.Minimax,
+		provider.GetProviderKey(),
 		postHookRunner,
-		nil,
-		nil,
-		nil,
-		nil,
 		nil,
 		nil,
 		provider.logger,
@@ -123,23 +186,64 @@ func (provider *MinimaxProvider) ChatCompletionStream(ctx *schemas.BifrostContex
 }
 
 func (provider *MinimaxProvider) Responses(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostResponsesRequest) (*schemas.BifrostResponsesResponse, *schemas.BifrostError) {
-	chatResponse, err := provider.ChatCompletion(ctx, key, request.ToChatRequest())
-	if err != nil {
-		return nil, err
-	}
-	response := chatResponse.ToBifrostResponsesResponse()
-	return response, nil
+	return anthropic.HandleAnthropicResponsesRequest(
+		ctx,
+		provider.client,
+		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/messages"),
+		request,
+		anthropic.AnthropicRequestBuildConfig{
+			Provider:                  schemas.Anthropic,
+			IsStreaming:               false,
+			BetaHeaderOverrides:       provider.networkConfig.BetaHeaderOverrides,
+			ShouldSendBackRawRequest:  provider.sendBackRawRequest,
+			ShouldSendBackRawResponse: provider.sendBackRawResponse,
+		},
+		provider.anthropicRequestHeaders(ctx, key),
+		provider.networkConfig.ExtraHeaders,
+		nil,
+		provider.logger,
+	)
 }
 
 func (provider *MinimaxProvider) ResponsesStream(ctx *schemas.BifrostContext, postHookRunner schemas.PostHookRunner, postHookSpanFinalizer func(context.Context), key schemas.Key, request *schemas.BifrostResponsesRequest) (chan *schemas.BifrostStreamChunk, *schemas.BifrostError) {
-	ctx.SetValue(schemas.BifrostContextKeyIsResponsesToChatCompletionFallback, true)
-	return provider.ChatCompletionStream(
+	jsonBody, bifrostErr := anthropic.BuildAnthropicResponsesRequestBody(ctx, request, anthropic.AnthropicRequestBuildConfig{
+		Provider:                  schemas.Anthropic,
+		IsStreaming:               true,
+		ShouldSendBackRawRequest:  provider.sendBackRawRequest,
+		ShouldSendBackRawResponse: provider.sendBackRawResponse,
+	})
+	if bifrostErr != nil {
+		return nil, bifrostErr
+	}
+
+	return anthropic.HandleAnthropicResponsesStream(
 		ctx,
+		provider.streamingClient,
+		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/messages"),
+		jsonBody,
+		provider.anthropicRequestHeaders(ctx, key),
+		provider.networkConfig.ExtraHeaders,
+		provider.networkConfig.StreamIdleTimeoutInSeconds,
+		provider.networkConfig.BetaHeaderOverrides,
+		providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest),
+		providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse),
+		provider.GetProviderKey(),
 		postHookRunner,
+		nil,
+		nil,
+		provider.logger,
 		postHookSpanFinalizer,
-		key,
-		request.ToChatRequest(),
 	)
+}
+
+func (provider *MinimaxProvider) anthropicRequestHeaders(ctx *schemas.BifrostContext, key schemas.Key) map[string]string {
+	headers := map[string]string{
+		"anthropic-version": "2023-06-01",
+	}
+	if key.Value.GetValue() != "" && !anthropic.IsClaudeCodeMaxMode(ctx) {
+		headers["x-api-key"] = key.Value.GetValue()
+	}
+	return headers
 }
 
 func (provider *MinimaxProvider) Embedding(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostEmbeddingRequest) (*schemas.BifrostEmbeddingResponse, *schemas.BifrostError) {

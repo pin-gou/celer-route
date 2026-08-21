@@ -50413,6 +50413,123 @@
           }
         }
       ]
+    },
+    {
+      "name": "49. Minimax Built-in — Anthropic Endpoint (no thinking tags in content)",
+      "description": "Pins the wire-visible behaviour of the built-in minimax provider after it was switched from the OpenAI-compatible endpoint (https://api.minimax.chat/v1/chat/completions) to MiniMax's Anthropic-compatible endpoint (https://api.minimaxi.com/anthropic/v1/messages). On the OpenAI endpoint MiniMax-M3 embeds its reasoning inline in the assistant content wrapped in <thinking>...</thinking> markers, which the client renders as a 'thinking' block; the Anthropic endpoint returns the thinking as a native reasoning block (or not at all), so the content delivered to the client is clean. Before the fix, a minimax/MiniMax-M3 chat completion returned content containing <thinking> and </thinking>; after the fix it does not. Go-level change in core/providers/minimax/minimax.go: ChatCompletion/ChatCompletionStream now delegate to anthropic.HandleAnthropic* handlers against /v1/messages.",
+      "item": [
+        {
+          "name": "minimax/MiniMax-M3 chat completions (non-streaming) — no thinking tags",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('minimax anthropic-endpoint chat completions: 2xx', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "});",
+                  "if (pm.response.code >= 400) { return; }",
+                  "var msg = pm.response.json().choices[0].message;",
+                  "pm.test('minimax anthropic-endpoint chat completions: content non-empty and free of thinking markers', function () {",
+                  "  pm.expect(msg.content, 'empty content: ' + pm.response.text()).to.be.a('string').and.not.empty;",
+                  "  pm.expect(msg.content, 'content should not contain <thinking> (OpenAI-endpoint inline reasoning leaks): ' + pm.response.text()).to.not.include('<thinking>');",
+                  "  pm.expect(msg.content, 'content should not contain </thinking>: ' + pm.response.text()).to.not.include('</thinking>');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"minimax/MiniMax-M3\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is 17 * 23? Show only the final number.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "minimax/MiniMax-M3 chat completions streaming (SSE) — no thinking tags",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('minimax anthropic-endpoint streaming: 2xx', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "});",
+                  "if (pm.response.code >= 400) { return; }",
+                  "var content = '';",
+                  "var finished = false;",
+                  "pm.response.text().split('\\n').forEach(function (line) {",
+                  "  if (line.indexOf('data:') !== 0) { return; }",
+                  "  var payload = line.slice(5).trim();",
+                  "  if (!payload || payload === '[DONE]') { return; }",
+                  "  var chunk;",
+                  "  try { chunk = JSON.parse(payload); } catch (e) { return; }",
+                  "  var choice = chunk.choices && chunk.choices[0];",
+                  "  if (!choice) { return; }",
+                  "  if (choice.finish_reason) { finished = true; }",
+                  "  if (choice.delta && choice.delta.content) { content += choice.delta.content; }",
+                  "});",
+                  "pm.test('minimax anthropic-endpoint streaming: finish_reason reached', function () {",
+                  "  pm.expect(finished, 'no finish_reason in stream: ' + pm.response.text()).to.be.true;",
+                  "});",
+                  "pm.test('minimax anthropic-endpoint streaming: accumulated content free of thinking markers', function () {",
+                  "  pm.expect(content.length, 'no content in any delta: ' + pm.response.text()).to.be.above(0);",
+                  "  pm.expect(content, 'streamed content should not contain <thinking>: ' + pm.response.text()).to.not.include('<thinking>');",
+                  "  pm.expect(content, 'streamed content should not contain </thinking>: ' + pm.response.text()).to.not.include('</thinking>');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"minimax/MiniMax-M3\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is 17 * 23? Show only the final number.\"\n    }\n  ],\n  \"stream\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }
