@@ -7,6 +7,7 @@
 
 import { formatCost } from "@/app/workspace/dashboard/utils/chartUtils";
 import { getMessage } from "@/app/workspace/logs/views/columns";
+import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import type { LogEntry } from "@/lib/types/logs";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -598,7 +599,10 @@ export function LogsTimeline({
 							onClick={() => handleBarClick(bar.log)}
 						>
 							{bar.widthPct > 3 && (
-								<span className="truncate font-mono text-[11px] whitespace-nowrap text-white/90">{truncateModel(bar.log.model)}</span>
+								<>
+									<RenderProviderIcon provider={bar.log.provider as ProviderIconType} size="xs" className="mr-0.5 h-3 w-3" />
+									<span className="truncate font-mono text-[11px] whitespace-nowrap text-white/90">{truncateModel(bar.log.model)}</span>
+								</>
 							)}
 							<span data-testid={`timeline-bar-${bar.log.id}`} className="sr-only">
 								bar-{bar.log.id}
