@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLazyGetRtkRawOutputQuery } from "@/lib/store";
 import { isValidRawOutputID } from "@/lib/types/rtk";
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { HelpCircle, Search } from "lucide-react";
 
 // /workspace/plugins/rtk/raw-output — recovery viewer for persisted raw outputs.
 //
@@ -37,6 +37,22 @@ function RouteComponent() {
 
 	return (
 		<div className="flex flex-col gap-6" data-testid="rtk-raw-output-page">
+			<Card>
+				<CardHeader>
+					<div className="flex items-center gap-2">
+						<HelpCircle className="text-muted-foreground h-4 w-4" />
+						<CardTitle className="text-sm font-medium">{t("plugins:rtk.rawOutput.helpTitle")}</CardTitle>
+					</div>
+				</CardHeader>
+				<CardContent>
+					<ol className="text-muted-foreground ml-4 list-decimal space-y-1 text-sm">
+						<li>{t("plugins:rtk.rawOutput.helpStep1")}</li>
+						<li>{t("plugins:rtk.rawOutput.helpStep2")}</li>
+						<li>{t("plugins:rtk.rawOutput.helpStep3")}</li>
+						<li>{t("plugins:rtk.rawOutput.helpStep4")}</li>
+					</ol>
+				</CardContent>
+			</Card>
 			<Card>
 				<CardHeader>
 					<CardTitle>{t("plugins:rtk.rawOutput.title")}</CardTitle>

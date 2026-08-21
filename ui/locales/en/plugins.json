@@ -246,7 +246,12 @@
 			"invalidId": "Invalid id format. Expected 24 hexadecimal characters.",
 			"notFound": "Raw output not found. It may have been cleaned up, or the plugin was running with retention 'never'.",
 			"content": "Content",
-			"empty": "(empty)"
+			"empty": "(empty)",
+			"helpTitle": "How to Use",
+			"helpStep1": "In the RTK plugin config, set \"Raw Output Retention\" to \"On Failures\" or \"Always\"",
+			"helpStep2": "Run a compression test from the \"Test\" tab, or wait for a live request to be compressed",
+			"helpStep3": "Copy the raw output id from the test result or the response's rawOutputPtr field",
+			"helpStep4": "Paste the id above and click \"Fetch\""
 		}
 	},
 	"providerCooldown": {

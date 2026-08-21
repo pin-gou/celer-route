@@ -246,7 +246,12 @@
 			"invalidId": "id 格式不合法。需要 24 位十六进制字符。",
 			"notFound": "未找到原始输出。可能已被清理，或插件当时以「永不保留」模式运行。",
 			"content": "内容",
-			"empty": "（空）"
+			"empty": "（空）",
+			"helpTitle": "使用说明",
+			"helpStep1": "在 RTK 插件配置页，将「原始输出保留」设为「失败时」或「始终」",
+			"helpStep2": "在「测试运行器」标签页执行压缩测试，或等待真实请求触发压缩",
+			"helpStep3": "复制测试结果或响应中显示的 rawOutputPtr.id",
+			"helpStep4": "粘贴到上方输入框，点击「获取」"
 		}
 	},
 	"providerCooldown": {
