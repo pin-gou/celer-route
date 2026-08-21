@@ -75,7 +75,7 @@ export default function RTKCompressionDiffView({ metadata, compressedItems }: Pr
 					<AlertDescription className="text-amber-800 dark:text-amber-200">
 						<span>{t("detailView.rtkSnapshotDisabled")}</span>
 						<Link
-							to="/workspace/plugins/rtk"
+							to="/workspace/plugins?plugin=rtk"
 							className="ml-1 text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
 						>
 							{t("detailView.rtkSnapshotGoToConfig")}
