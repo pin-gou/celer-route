@@ -354,3 +354,20 @@ export interface UnfreezeCooldownResponse {
 	provider: string;
 	keyId: string;
 }
+
+// Process-lifetime compression counters surfaced by GET
+// /api/context/rtk/stats. Token savings and compression ratio are derived
+// server-side so the UI never has to guard against divide-by-zero on a
+// freshly-started instance.
+export interface RtkStats {
+	invocations: number;
+	compressedCount: number;
+	originalTokens: number;
+	compressedTokens: number;
+	tokensSaved: number;
+	compressionRatio: number;
+}
+
+export interface RtkStatsResponse {
+	stats: RtkStats;
+}

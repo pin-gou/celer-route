@@ -44,6 +44,7 @@ type RtkPluginAccessor interface {
 	RunTest(payload rtk.TestPayload) rtk.TestResult
 	PreviewCompression(req rtk.PreviewRequest) rtk.PreviewResponse
 	ReadRawOutput(id string) (string, bool)
+	Stats() rtk.MetricsSnapshot
 }
 
 // RtkPluginResolver returns the active RTK plugin or false when the plugin
@@ -83,7 +84,7 @@ func NewRtkHandler(cs RtkConfigStore, resolver RtkPluginResolver) *RtkHandler {
 	}
 }
 
-// RegisterRoutes installs the five routes on r, applying the supplied
+// RegisterRoutes installs the six routes on r, applying the supplied
 // middleware chain to each handler (matches the pattern used by every other
 // admin handler in this package).
 func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
@@ -92,6 +93,7 @@ func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.Bif
 	r.GET("/api/context/rtk/filters", lib.ChainMiddlewares(h.getFilters, middlewares...))
 	r.POST("/api/context/rtk/test", lib.ChainMiddlewares(h.postTest, middlewares...))
 	r.GET("/api/context/rtk/raw-output/{id}", lib.ChainMiddlewares(h.getRawOutput, middlewares...))
+	r.GET("/api/context/rtk/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
 	r.POST("/api/compression/preview", lib.ChainMiddlewares(h.postPreview, middlewares...))
 }
 
@@ -337,6 +339,47 @@ func (h *RtkHandler) getRawOutput(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("text/plain; charset=utf-8")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	ctx.SetBodyString(data)
+}
+
+// ---------------------------------------------------------------------------
+// /api/context/rtk/stats
+// ---------------------------------------------------------------------------
+
+// rtkStatsResponse is the JSON shape returned by GET /api/context/rtk/stats.
+// It pairs the lifetime counters with a pre-computed compression ratio so
+// the UI doesn't have to handle the "nothing compressed yet → divide by
+// zero" edge case itself.
+type rtkStatsResponse struct {
+	Plugin           string  `json:"plugin"`
+	Invocations      uint64  `json:"invocations"`
+	CompressedCount  uint64  `json:"compressed_count"`
+	OriginalTokens   uint64  `json:"original_tokens"`
+	CompressedTokens uint64  `json:"compressed_tokens"`
+	TokensSaved      uint64  `json:"tokens_saved"`
+	CompressionRatio float64 `json:"compression_ratio"`
+}
+
+// getStats returns the RTK plugin's process-lifetime compression counters.
+// The endpoint is intentionally cheap: the counters are atomic, no locking
+// is involved, and a single Load per field runs in a few nanoseconds even
+// under heavy request load. Returns a 503 when the plugin is not loaded
+// (matches the behaviour of the other RTK admin endpoints).
+func (h *RtkHandler) getStats(ctx *fasthttp.RequestCtx) {
+	accessor, ok := h.resolver.ResolveRtkPlugin()
+	if !ok || accessor == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "RTK plugin is not enabled")
+		return
+	}
+	snap := accessor.Stats()
+	SendJSON(ctx, rtkStatsResponse{
+		Plugin:           rtk.PluginName,
+		Invocations:      snap.Invocations,
+		CompressedCount:  snap.CompressedCount,
+		OriginalTokens:   snap.OriginalTokens,
+		CompressedTokens: snap.CompressedTokens,
+		TokensSaved:      snap.TokensSaved,
+		CompressionRatio: snap.CompressionRatio,
+	})
 }
 
 // ---------------------------------------------------------------------------

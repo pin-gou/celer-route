@@ -56,6 +56,19 @@ vi.mock("@/lib/store/apis/pluginsApi", async (importOriginal) => {
 		useGetCooldownStateQuery: () => ({ data: { state: [] }, isLoading: false }),
 		useGetCooldownStatsQuery: () => ({ data: { stats: { markCount: 0, suppressedCount: 0, activeCount: 0 } }, isLoading: false }),
 		useUnfreezeCooldownMutation: () => [vi.fn(), { isLoading: false }],
+		useGetRtkStatsQuery: () => ({
+			data: {
+				stats: {
+					invocations: 0,
+					compressedCount: 0,
+					originalTokens: 0,
+					compressedTokens: 0,
+					tokensSaved: 0,
+					compressionRatio: 0,
+				},
+			},
+			isLoading: false,
+		}),
 		useGetPluginsQuery: () => ({ data: [], isLoading: false }),
 		useGetLoadedPluginsQuery: () => ({ data: [], isLoading: false }),
 		useGetPluginQuery: () => ({ data: undefined, isLoading: false }),

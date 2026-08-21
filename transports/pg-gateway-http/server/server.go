@@ -2044,6 +2044,7 @@ func (a *rtkAccessor) PreviewCompression(req rtk.PreviewRequest) rtk.PreviewResp
 func (a *rtkAccessor) ReadRawOutput(id string) (string, bool) {
 	return rtk.ReadRtkRawOutputByID(id, a.p.GetAppDir())
 }
+func (a *rtkAccessor) Stats() rtk.MetricsSnapshot { return a.p.Stats() }
 
 // ResolveRtkPlugin returns an RtkPluginAccessor over the live RTK plugin
 // when it is loaded, or (nil, false) when it is not. It is safe to call

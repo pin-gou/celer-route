@@ -230,6 +230,9 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 		state.OriginalTokens = originalTotal
 		state.CompressedTokens = compressedTotal
 	}
+	if p.metrics != nil {
+		p.metrics.RecordInvocation(anyCompressed, originalTotal, compressedTotal)
+	}
 	return state
 }
 
@@ -372,6 +375,9 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		state.Compressed = true
 		state.OriginalTokens = originalTotal
 		state.CompressedTokens = compressedTotal
+	}
+	if p.metrics != nil {
+		p.metrics.RecordInvocation(anyCompressed, originalTotal, compressedTotal)
 	}
 	return state
 }

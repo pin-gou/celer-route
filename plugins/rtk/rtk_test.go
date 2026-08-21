@@ -1459,3 +1459,124 @@ func TestStateRawOutputPointersPropagation(t *testing.T) {
 		t.Errorf("pointer ID %q not embedded in file name %q", ptr.ID, base)
 	}
 }
+
+// newTestPluginWithMetrics builds a Plugin with default config and a
+// fresh CompressionMetrics instance. Used by the integration tests below
+// to assert that applyRtkCompression{,Responses} updates the counters
+// when a request actually triggers a rewrite.
+func newTestPluginWithMetrics(t *testing.T) *Plugin {
+	t.Helper()
+	p := newTestPlugin(t)
+	p.metrics = &CompressionMetrics{}
+	return p
+}
+
+// TestApplyRtkCompression_AccumulatesMetrics verifies that a passing tool
+// message round-trip bumps both the Invocations counter (every entry into
+// applyRtkCompression) and the CompressedCount / token sums (only when
+// something was actually rewritten). The Plugin is the one created by
+// newTestPluginWithMetrics, so we read its Plugin.Stats() snapshot.
+func TestApplyRtkCompression_AccumulatesMetrics(t *testing.T) {
+	p := newTestPluginWithMetrics(t)
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role:    schemas.ChatMessageRoleTool,
+					Content: strContent(strings.Repeat("git log line\n", 200)),
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_metrics_1"),
+					},
+				},
+			},
+		},
+	}
+
+	state := applyRtkCompressionWithDefaults(req, p)
+	if !state.Compressed {
+		t.Fatal("setup precondition: tool output should have been compressed so the metrics test is meaningful")
+	}
+
+	snap := p.Stats()
+	if snap.Invocations != 1 {
+		t.Errorf("Invocations = %d, want 1 (one pass through the entry point)", snap.Invocations)
+	}
+	if snap.CompressedCount != 1 {
+		t.Errorf("CompressedCount = %d, want 1", snap.CompressedCount)
+	}
+	if snap.OriginalTokens == 0 || snap.CompressedTokens == 0 {
+		t.Errorf("expected non-zero token sums after a compressed pass, got orig=%d comp=%d",
+			snap.OriginalTokens, snap.CompressedTokens)
+	}
+	if snap.TokensSaved == 0 {
+		t.Errorf("expected positive tokensSaved after a compressed pass")
+	}
+}
+
+// TestApplyRtkCompression_PassthroughIncrementsInvocationsOnly ensures a
+// request that has no tool messages still bumps Invocations but does NOT
+// contribute to CompressedCount or the token sums — otherwise a busy
+// chat workload would skew the "tokens saved" figure.
+func TestApplyRtkCompression_PassthroughIncrementsInvocationsOnly(t *testing.T) {
+	p := newTestPluginWithMetrics(t)
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{Role: schemas.ChatMessageRoleUser, Content: strContent("hello world")},
+			},
+		},
+	}
+	state := applyRtkCompressionWithDefaults(req, p)
+	if state.Compressed {
+		t.Fatal("setup precondition: user-only message should not compress")
+	}
+
+	snap := p.Stats()
+	if snap.Invocations != 1 {
+		t.Errorf("Invocations = %d, want 1", snap.Invocations)
+	}
+	if snap.CompressedCount != 0 {
+		t.Errorf("CompressedCount = %d, want 0 (no rewrite happened)", snap.CompressedCount)
+	}
+	if snap.OriginalTokens != 0 || snap.CompressedTokens != 0 {
+		t.Errorf("token sums must stay zero on passthrough, got orig=%d comp=%d",
+			snap.OriginalTokens, snap.CompressedTokens)
+	}
+}
+
+// TestApplyRtkCompressionResponses_AccumulatesMetrics mirrors the chat
+// version for the Responses-API entry point, since it has its own copy of
+// the metric update call site.
+func TestApplyRtkCompressionResponses_AccumulatesMetrics(t *testing.T) {
+	p := newTestPluginWithMetrics(t)
+	text := strings.Repeat("function_call_output line\n", 250)
+	req := &schemas.BifrostRequest{
+		ResponsesRequest: &schemas.BifrostResponsesRequest{
+			Input: []schemas.ResponsesMessage{
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCallOutput),
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID: strPtr("call_metrics_responses_1"),
+						Output: &schemas.ResponsesToolMessageOutputStruct{
+							ResponsesToolCallOutputStr: &text,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	state := applyRtkCompressionResponsesWithDefaults(req, p)
+	if !state.Compressed {
+		t.Fatal("setup precondition: function_call_output should have been compressed")
+	}
+
+	snap := p.Stats()
+	if snap.Invocations != 1 || snap.CompressedCount != 1 {
+		t.Errorf("expected 1 invocation / 1 compression, got invocations=%d compressed=%d",
+			snap.Invocations, snap.CompressedCount)
+	}
+	if snap.TokensSaved == 0 {
+		t.Errorf("expected positive tokensSaved from a compressed Responses pass")
+	}
+}

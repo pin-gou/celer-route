@@ -10,12 +10,12 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
+import { useGetRtkStatsQuery, useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { RTK_PLUGIN, rtkConfigSchema, type Plugin } from "@/lib/types/plugins";
 import { Link } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Beaker, ExternalLink, FlaskConical, HelpCircle, Image as ImageIcon, Info, RotateCcw } from "lucide-react";
+import { Activity, Beaker, ExternalLink, FlaskConical, HelpCircle, Image as ImageIcon, Info, RotateCcw } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -139,6 +139,80 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 					disabled={isLoading || !hasUpdateAccess}
 				/>
 			</div>
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// MonitoringPanel — process-lifetime compression counters. Polls the RTK
+// stats endpoint every 5s so the figures stay current without a refresh.
+// Mirrors the pattern used by ProvidercooldownFragment.MonitoringPanel:
+// a header, three stat cards, and an empty-state copy for a freshly-started
+// gateway. The stats live in process memory and reset on gateway restart
+// (matching the provider-cooldown semantics) — the empty-state copy makes
+// that explicit so operators don't expect historical totals.
+//
+// The raw-output link points at the dedicated /workspace/plugins/rtk/raw-output
+// sub-page so the operator can drill from "X requests compressed" to "show
+// me what got rewritten".
+// ---------------------------------------------------------------------------
+
+function formatCompactNumber(value: number): string {
+	if (!Number.isFinite(value) || value <= 0) return "0";
+	if (value >= 1_000_000) {
+		return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+	}
+	if (value >= 1_000) {
+		return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+	}
+	return String(value);
+}
+
+function formatRatio(ratio: number): string {
+	if (!Number.isFinite(ratio) || ratio <= 0) return "0%";
+	const pct = Math.min(100, Math.max(0, ratio * 100));
+	return `${pct.toFixed(pct >= 10 ? 0 : 1)}%`;
+}
+
+export function MonitoringPanel() {
+	const { t } = useTranslation("plugins");
+	const { data, isLoading } = useGetRtkStatsQuery(undefined, {
+		pollingInterval: 5000,
+	});
+
+	const stats = data?.stats;
+	const noActivity = !stats || (stats.invocations === 0 && stats.compressedCount === 0);
+
+	if (isLoading && !stats) {
+		return <div className="text-muted-foreground py-4 text-sm">{t("rtk.monitoringLoading")}</div>;
+	}
+
+	return (
+		<div className="space-y-4" data-testid="rtk-monitoring-panel">
+			<div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+				<div data-testid="rtk-stats-invocations" className="rounded-lg border p-4 text-center">
+					<div className="text-2xl font-bold">{formatCompactNumber(stats?.invocations ?? 0)}</div>
+					<div className="text-muted-foreground text-xs">{t("rtk.totalInvocations")}</div>
+				</div>
+				<div data-testid="rtk-stats-compressed" className="rounded-lg border p-4 text-center">
+					<div className="text-2xl font-bold">{formatCompactNumber(stats?.compressedCount ?? 0)}</div>
+					<div className="text-muted-foreground text-xs">{t("rtk.compressedRequests")}</div>
+				</div>
+				<div data-testid="rtk-stats-tokens-saved" className="rounded-lg border p-4 text-center">
+					<div className="text-2xl font-bold">{formatCompactNumber(stats?.tokensSaved ?? 0)}</div>
+					<div className="text-muted-foreground text-xs">{t("rtk.tokensSaved")}</div>
+				</div>
+				<div data-testid="rtk-stats-compression-ratio" className="rounded-lg border p-4 text-center">
+					<div className="text-2xl font-bold">{formatRatio(stats?.compressionRatio ?? 0)}</div>
+					<div className="text-muted-foreground text-xs">{t("rtk.compressionRatio")}</div>
+				</div>
+			</div>
+
+			{noActivity && (
+				<p className="text-muted-foreground text-center text-xs" data-testid="rtk-stats-empty">
+					{t("rtk.noDataYet")}
+				</p>
+			)}
 		</div>
 	);
 }
@@ -1009,6 +1083,14 @@ export function RtkFragment({ plugin }: { plugin: Plugin }) {
 			<div className="space-y-1">
 				<h3 className="text-lg font-semibold">{t("rtk.title")}</h3>
 				<p className="text-muted-foreground text-sm">{t("rtk.subtitle")}</p>
+			</div>
+
+			<div className="rounded-lg border p-4">
+				<div className="mb-4 flex items-center gap-2">
+					<Activity className="text-muted-foreground h-4 w-4" />
+					<h4 className="text-sm font-medium">{t("rtk.monitoringTitle")}</h4>
+				</div>
+				<MonitoringPanel />
 			</div>
 
 			<EnabledSwitch plugin={plugin} />

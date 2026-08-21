@@ -6,6 +6,7 @@ import {
 	CreatePluginRequest,
 	Plugin,
 	PluginsResponse,
+	RtkStatsResponse,
 	UnfreezeCooldownResponse,
 	UpdatePluginRequest,
 } from "@/lib/types/plugins";
@@ -178,6 +179,34 @@ export const pluginsApi = baseApi.injectEndpoints({
 				return response;
 			},
 		}),
+
+		// -----------------------------------------------------------------------
+		// RTK monitoring endpoint
+		// -----------------------------------------------------------------------
+
+		// GET /api/context/rtk/stats — process-lifetime compression counters.
+		// Backend returns the flat fields directly; map to a { stats: {...} }
+		// envelope so the UI has the same shape as the cooldown stats endpoint.
+		getRtkStats: builder.query<RtkStatsResponse, void>({
+			query: () => "/context/rtk/stats",
+			providesTags: ["Plugins"],
+			transformResponse: (response: any) => {
+				if (response && response.stats) return response;
+				if (response && "invocations" in response) {
+					return {
+						stats: {
+							invocations: response.invocations,
+							compressedCount: response.compressed_count,
+							originalTokens: response.original_tokens,
+							compressedTokens: response.compressed_tokens,
+							tokensSaved: response.tokens_saved,
+							compressionRatio: response.compression_ratio,
+						},
+					};
+				}
+				return response;
+			},
+		}),
 	}),
 });
 
@@ -193,4 +222,5 @@ export const {
 	useGetCooldownStateQuery,
 	useGetCooldownStatsQuery,
 	useUnfreezeCooldownMutation,
+	useGetRtkStatsQuery,
 } = pluginsApi;

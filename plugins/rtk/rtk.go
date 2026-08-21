@@ -22,6 +22,7 @@ type Plugin struct {
 	stateStore sync.Map // map[string]*CompressionState, keyed by requestID
 	loader     *FilterLoader
 	appDir     string
+	metrics    *CompressionMetrics
 }
 
 // Init creates a new RTK plugin instance with the given configuration.
@@ -47,6 +48,7 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, appDir str
 		stateStore: sync.Map{},
 		loader:     NewFilterLoader(config),
 		appDir:     appDir,
+		metrics:    &CompressionMetrics{},
 	}
 	// Load custom filters — fail-open: warn on error, continue with builtins.
 	if err := p.loader.Load(appDir); err != nil {
@@ -100,6 +102,27 @@ func (p *Plugin) GetAppDir() string {
 		return ""
 	}
 	return p.appDir
+}
+
+// Metrics returns the cross-request compression metrics so the admin HTTP
+// handler can surface a Monitoring panel. Returns nil for an uninitialised
+// plugin (e.g. during tests that bypass Init) — callers must guard.
+func (p *Plugin) Metrics() *CompressionMetrics {
+	if p == nil {
+		return nil
+	}
+	return p.metrics
+}
+
+// Stats is the public Snapshot view of the compression metrics. Implemented
+// as a method on *Plugin (rather than only on *CompressionMetrics) so the
+// handlers package can satisfy RtkPluginAccessor.Stats() without having to
+// reach through a separate accessor path.
+func (p *Plugin) Stats() MetricsSnapshot {
+	if p == nil || p.metrics == nil {
+		return MetricsSnapshot{}
+	}
+	return p.metrics.Snapshot()
 }
 
 // Loader returns the plugin's FilterLoader so handlers can inspect the

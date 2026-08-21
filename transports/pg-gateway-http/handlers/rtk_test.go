@@ -54,11 +54,13 @@ func (s *stubRtkResolver) ReloadRtkPlugin(_ *fasthttp.RequestCtx, name string, _
 // returned verbatim by ReadRawOutput so the test can assert on the bytes
 // served on the wire.
 type stubRtkAccessor struct {
-	catalog   rtk.FilterCatalog
-	rawOutput string
-	rawFound  bool
-	lastTest  rtk.TestPayload
-	lastPrev  rtk.PreviewRequest
+	catalog    rtk.FilterCatalog
+	rawOutput  string
+	rawFound   bool
+	lastTest   rtk.TestPayload
+	lastPrev   rtk.PreviewRequest
+	stats      rtk.MetricsSnapshot
+	statsCalls int
 }
 
 func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog    { return s.catalog }
@@ -75,6 +77,10 @@ func (s *stubRtkAccessor) PreviewCompression(r rtk.PreviewRequest) rtk.PreviewRe
 	}}
 }
 func (s *stubRtkAccessor) ReadRawOutput(_ string) (string, bool) { return s.rawOutput, s.rawFound }
+func (s *stubRtkAccessor) Stats() rtk.MetricsSnapshot {
+	s.statsCalls++
+	return s.stats
+}
 
 // memoryConfigStore is an in-memory replacement for configstore.ConfigStore
 // used by the RTK handler tests. Only the methods RtkHandler calls are
@@ -112,7 +118,7 @@ func (m *memoryConfigStore) UpdatePlugin(_ context.Context, p *configstoreTables
 	return nil
 }
 
-// newRtkTestServer builds a minimal fasthttp server hosting just the five
+// newRtkTestServer builds a minimal fasthttp server hosting just the six
 // RTK routes. The caller can issue requests via fasthttp.RequestCtx and
 // inspect the response directly.
 func newRtkTestServer(t *testing.T, cs *memoryConfigStore, resolver *stubRtkResolver) (*router.Router, func()) {
@@ -493,3 +499,69 @@ func ptrBool[T any](v T) *T { return &v }
 
 // ensure http import is used (decoded via net/http constants)
 var _ = io.EOF
+
+// TestRtkHandler_GetStats verifies that GET /api/context/rtk/stats returns
+// the accessor-provided MetricsSnapshot wrapped in the JSON envelope. The
+// stub returns a known snapshot so the wire shape (camelCase keys,
+// derived tokensSaved/compressionRatio already on the server side) can be
+// asserted directly.
+func TestRtkHandler_GetStats(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{
+		found: true,
+		accessor: &stubRtkAccessor{
+			stats: rtk.MetricsSnapshot{
+				Invocations:      42,
+				CompressedCount:  17,
+				OriginalTokens:   8000,
+				CompressedTokens: 2000,
+				TokensSaved:      6000,
+				CompressionRatio: 0.75,
+			},
+		},
+	}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/stats")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, string(body))
+	}
+	var got struct {
+		Plugin           string  `json:"plugin"`
+		Invocations      uint64  `json:"invocations"`
+		CompressedCount  uint64  `json:"compressed_count"`
+		OriginalTokens   uint64  `json:"original_tokens"`
+		CompressedTokens uint64  `json:"compressed_tokens"`
+		TokensSaved      uint64  `json:"tokens_saved"`
+		CompressionRatio float64 `json:"compression_ratio"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode body: %v; body=%s", err, string(body))
+	}
+	if got.Plugin != "rtk" {
+		t.Errorf("plugin = %q, want rtk", got.Plugin)
+	}
+	if got.Invocations != 42 || got.CompressedCount != 17 {
+		t.Errorf("counters mismatch: invocations=%d compressed_count=%d", got.Invocations, got.CompressedCount)
+	}
+	if got.TokensSaved != 6000 || got.CompressionRatio != 0.75 {
+		t.Errorf("derived fields mismatch: saved=%d ratio=%f", got.TokensSaved, got.CompressionRatio)
+	}
+
+	if acc := resolver.accessor.(*stubRtkAccessor); acc.statsCalls != 1 {
+		t.Errorf("Stats() should be called exactly once per request, got %d", acc.statsCalls)
+	}
+}
+
+// TestRtkHandler_GetStats_PluginNotLoaded ensures the handler mirrors the
+// other RTK admin endpoints: a 503 when ResolveRtkPlugin returns false.
+func TestRtkHandler_GetStats_PluginNotLoaded(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/stats")
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", status, string(body))
+	}
+}
