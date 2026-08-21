@@ -1,19 +1,21 @@
-# AGENTS.md — Bifrost AI Gateway
+# AGENTS.md — pg-gateway AI Gateway
 
 > Context for AI agents (Claude Code, Copilot, Cursor, etc.) working on this codebase. Read this fully before making changes.
 
-## What is Bifrost?
+> This project is a fork of the Bifrost AI Gateway, rebranded to **pg-gateway**. Go identifiers and filenames that reference the upstream brand (`BifrostContext`, `bifrost.Bifrost`, `core/bifrost.go`, etc.) are internal code symbols and are kept as-is.
 
-Bifrost is a high-performance AI gateway that unifies 20+ LLM providers behind a single OpenAI-compatible API with ~11µs overhead at 5,000 RPS. It also serves as an MCP (Model Context Protocol) gateway, turning static chat models into tool-calling agents.
+## What is pg-gateway?
 
-GitHub: `maximhq/bifrost`
+pg-gateway is a high-performance AI gateway that unifies 20+ LLM providers behind a single OpenAI-compatible API with ~11µs overhead at 5,000 RPS. It also serves as an MCP (Model Context Protocol) gateway, turning static chat models into tool-calling agents.
+
+GitHub: `pin-gou/pg-gateway`
 
 ---
 
 ## Repository Layout
 
 ```
-bifrost/
+pg-gateway/
 ├── core/                           # Go core library — the engine
 │   ├── bifrost.go                  # Main struct, request queuing, provider lifecycle
 │   ├── inference.go                # Inference routing, fallbacks, streaming dispatch
@@ -115,7 +117,7 @@ bifrost/
 │
 ├── transports/
 │   ├── config.schema.json         # JSON Schema — THE source of truth for config.json
-│   └── bifrost-http/              # HTTP gateway transport
+│   └── pg-gateway-http/            # HTTP gateway transport
 │       ├── main.go                # Entry point
 │       ├── handlers/              # 92 HTTP endpoint handlers
 │       │   ├── inference.go       # Chat/text completions, responses API
@@ -257,7 +259,7 @@ bifrost/
 
 ## Go Workspace
 
-Bifrost is a **multi-module Go workspace**. Each module has its own `go.mod`:
+pg-gateway is a **multi-module Go workspace**. Each module has its own `go.mod`:
 
 ```
 go.work
@@ -279,7 +281,7 @@ go.work
 ```bash
 # Development
 make dev                                 # Full local dev (UI + API with hot reload via air)
-make build                               # Build bifrost-http binary
+make build                               # Build pg-gateway-http binary
 
 # Core tests (provider integration tests — hit live APIs)
 make test-core                           # All providers
@@ -314,6 +316,48 @@ make lint                                # Linting
 make fmt                                 # Format code
 ```
 
+### Environment Lifecycle (local dev)
+
+本地环境的 `pg-gateway-api` 服务生命周期由 **hooks 协议**管理，通过 `pg-invoke-hook.py` 调用（详见 [.pg/context/agent-protocol.md](.pg/context/agent-protocol.md) §2）。
+
+```bash
+# 生成一次任务会话 ID（整个任务期间复用）
+PG_AGENT_SESSION="$(date -u +%Y-%m-%d)-$(echo $RANDOM | md5sum | head -c 8)"
+
+# 停止 pg-gateway-api
+python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
+  --caller pg-agent \
+  --session "$PG_AGENT_SESSION" \
+  --env local \
+  --role pg-gateway-api \
+  --action stop \
+  --instance pg-gateway-api-1
+
+# 构建（含 UI 同步）→ 启动 → 等待健康检查（120s 超时）
+python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
+  --caller pg-agent \
+  --session "$PG_AGENT_SESSION" \
+  --env local \
+  --role pg-gateway-api \
+  --action start \
+  --instance pg-gateway-api-1
+
+# 健康检查
+python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
+  --caller pg-agent \
+  --session "$PG_AGENT_SESSION" \
+  --env local \
+  --role pg-gateway-api \
+  --action health_check \
+  --instance pg-gateway-api-1
+```
+
+**注意**：
+- `pg-invoke-hook.py` 是唯一入口，禁止直接 `bash .pg/hooks/<x>.sh`（否则审计日志不可见）
+- `--env`/`--role`/`--instance` 的值通过 `pg-parse-config.py pg-agent` 查询
+- `--session` 一次任务用同一个，任务结束后换新
+- `make build` 仅编译 Go 二进制，不包含环境管理；完整重启应走 hooks 协议
+
 ---
 
 ## Architecture
@@ -323,7 +367,7 @@ make fmt                                 # Format code
 ```
 Client HTTP Request
   → FastHTTP Transport (parsing, validation ~2µs)
-    → SDK Integration Layer (OpenAI/Anthropic/Bedrock format → Bifrost format)
+    → SDK Integration Layer (OpenAI/Anthropic/Bedrock format → pg-gateway format)
       → Middleware Chain (lib.ChainMiddlewares, applied per-route)
         → HTTPTransportPreHook (HTTP-level plugins, can short-circuit)
           → PreLLMHook Pipeline (auth, rate-limit, cache check — registration order)
@@ -358,7 +402,7 @@ ctx.SetValue(key, value)     // Thread-safe, uses RWMutex
 ctx.WithValue(key, value)    // Chainable variant
 ```
 
-**Reserved context keys** (set by Bifrost internals — DO NOT set manually):
+**Reserved context keys** (set by pg-gateway internals — DO NOT set manually):
 - `BifrostContextKeySelectedKeyID/Name` — Set by governance plugin
 - `BifrostContextKeyGovernance*` — Set by governance plugin
 - `BifrostContextKeyNumberOfRetries`, `BifrostContextKeyFallbackIndex` — Set by retry/fallback logic
@@ -415,7 +459,7 @@ core/providers/<name>/
 ```
 
 **Converter function naming convention:**
-- `To<ProviderName><Feature>Request()` — Bifrost schema → Provider API format
+- `To<ProviderName><Feature>Request()` — pg-gateway schema → Provider API format
 - `ToBifrost<Feature>Response()` — Provider API format → Bifrost schema
 - These must be **pure transformation functions** — no HTTP calls, no logging, no side effects
 
@@ -524,7 +568,7 @@ type CompletionHandler struct {
 
 **Route registration:** Each handler implements `RegisterRoutes(router, middlewares...)` — routes get middleware chains applied per-route via `lib.ChainMiddlewares()`.
 
-**SDK integration layers** (`transports/pg-gateway-http/integrations/`) provide request/response converters between provider-native SDK formats and Bifrost's internal format. This enables drop-in replacement of OpenAI SDK, Anthropic SDK, AWS Bedrock SDK, Google GenAI SDK, LangChain, and LiteLLM.
+**SDK integration layers** (`transports/pg-gateway-http/integrations/`) provide request/response converters between provider-native SDK formats and pg-gateway's internal format. This enables drop-in replacement of OpenAI SDK, Anthropic SDK, AWS Bedrock SDK, Google GenAI SDK, LangChain, and LiteLLM.
 
 ---
 
@@ -604,7 +648,7 @@ When `BlockRestrictedWrites()` is active, writes to reserved keys (governance ID
 
 ### 12. `fasthttp`, Not `net/http`
 
-Bifrost uses `github.com/valyala/fasthttp` for provider HTTP calls. The API is different from `net/http`:
+pg-gateway uses `github.com/valyala/fasthttp` for provider HTTP calls. The API is different from `net/http`:
 - Use `fasthttp.AcquireRequest()`/`fasthttp.ReleaseRequest()` for lifecycle
 - `fasthttp.Client` pools connections per-host (`NetworkConfig.MaxConnsPerHost`, default 5000, 30s idle)
 - Request/response bodies accessed via `resp.Body()` (returns `[]byte`, not `io.Reader`)
@@ -618,7 +662,7 @@ For reading or writing a **single field** (or a handful) inside a larger raw JSO
 
 ### 14. Atomic Pointer for Hot Config Reload
 
-`Bifrost` uses `atomic.Pointer` for providers and plugins lists. On updates: create new slice → atomically swap pointer. **Never mutate the slice in place** — concurrent readers would see partial state.
+`pg-gateway` uses `atomic.Pointer` for providers and plugins lists. On updates: create new slice → atomically swap pointer. **Never mutate the slice in place** — concurrent readers would see partial state.
 
 ### 15. MCP Tool Filtering is 4 Levels Deep
 
@@ -783,7 +827,7 @@ Variants:
 - `/e2e-test audit` — Scan specs for incorrect/weak assertions (P0-P6 severity scale)
 
 ### `/investigate-issue <issue-id>`
-Investigate a GitHub issue from `maximhq/bifrost`. Fetches issue details, classifies by type/area, searches codebase, traces dependencies, analyzes side effects, suggests tests (LLM/MCP/E2E), and presents an implementation plan with per-change approval gates.
+Investigate a GitHub issue from `pin-gou/pg-gateway`. Fetches issue details, classifies by type/area, searches codebase, traces dependencies, analyzes side effects, suggests tests (LLM/MCP/E2E), and presents an implementation plan with per-change approval gates.
 
 ### `/resolve-pr-comments <pr-number>`
 Systematically address unresolved PR review comments. Uses GraphQL to get unresolved threads, presents each with FIX/REPLY/SKIP options, collects fixes locally, and only posts replies **after code is pushed** to remote.
@@ -809,7 +853,7 @@ Systematically address unresolved PR review comments. Uses GraphQL to get unreso
 1. Create `plugins/<name>/` with its own `go.mod`
 2. Implement `LLMPlugin`, `MCPPlugin`, or `HTTPTransportPlugin` interface
 3. Add to `go.work`
-4. Register in transport layer or Bifrost config
+4. Register in transport layer or pg-gateway config
 5. Add test targets to `Makefile`
 
 ### Modify a UI feature
@@ -1026,7 +1070,7 @@ Available today: `virtualKeySelector`, `teamSelector`, `customerSelector` (OSS);
 
 Do not edit `entitySelector.tsx` to accommodate one surface. It only carries behaviour identical across every entity; per-entity differences belong in the wrapper, per-surface differences in props (`trigger`, `triggerClassName`, `excludeIds`, `noPortal`, `className`).
 
-**OSS ↔ enterprise placement.** `entitySelector.tsx` and any selector whose API is OSS live in `ui/components/entitySelectors/`. A selector for an enterprise-only API lives in `bifrost-enterprise/enterprise-ui/app/components/entitySelectors/` and OSS must never import it directly — OSS reaches it through a runtime registry (`ui/lib/registries/userPicker.tsx`, `ui/lib/registries/modelLimitScopes.tsx`), with an empty fallback under `ui/app/_fallbacks/enterprise/` so OSS-only builds simply hide the option. Keep single mode prop-compatible with the registry contract (`{ value, onChange, disabled, fallbackOption }`) so the selector can be registered as-is.
+**OSS ↔ enterprise placement.** `entitySelector.tsx` and any selector whose API is OSS live in `ui/components/entitySelectors/`. A selector for an enterprise-only API lives in `pg-gateway-enterprise/enterprise-ui/app/components/entitySelectors/` and OSS must never import it directly — OSS reaches it through a runtime registry (`ui/lib/registries/userPicker.tsx`, `ui/lib/registries/modelLimitScopes.tsx`), with an empty fallback under `ui/app/_fallbacks/enterprise/` so OSS-only builds simply hide the option. Keep single mode prop-compatible with the registry contract (`{ value, onChange, disabled, fallbackOption }`) so the selector can be registered as-is.
 
 ---
 
