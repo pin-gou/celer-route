@@ -41,7 +41,7 @@
 		"rtkOriginal": "Original",
 		"rtkRatio": "Ratio",
 		"rtkInvocations": "Invocations",
-		"rtkTooltip": "Since startup, on this instance — not affected by dimension filters.",
+		"rtkTooltip": "Scoped to selected time range — not affected by dimension filters.",
 		"localCacheHitRate": "Local Cache Hit Rate",
 		"modelUsage": "Model Usage",
 		"providerCost": "Provider Cost",

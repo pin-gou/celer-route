@@ -134,16 +134,20 @@ function OverviewTabImpl({
 		return tokenData.buckets.reduce((sum, b) => sum + (b.total_tokens ?? 0), 0);
 	}, [tokenData]);
 
-	const rtkLifetimeSaved = useMemo(() => {
-		return rtkData?.lifetime_totals?.tokensSaved ?? null;
+	const rtkOriginalTokens = useMemo(() => {
+		return rtkData?.totals?.original_tokens ?? null;
 	}, [rtkData]);
 
-	const rtkLifetimeRatio = useMemo(() => {
-		return rtkData?.lifetime_totals?.compressionRatio ?? null;
+	const rtkCompressedTokens = useMemo(() => {
+		return rtkData?.totals?.compressed_tokens ?? null;
 	}, [rtkData]);
 
-	const rtkLifetimeInvocations = useMemo(() => {
-		return rtkData?.lifetime_totals?.invocations ?? null;
+	const rtkSavedTokens = useMemo(() => {
+		return rtkData?.totals?.tokens_saved ?? null;
+	}, [rtkData]);
+
+	const rtkRangeRatio = useMemo(() => {
+		return rtkData?.totals?.compression_ratio ?? null;
 	}, [rtkData]);
 
 	const modelUsageTotal = useMemo(() => {
@@ -272,25 +276,32 @@ function OverviewTabImpl({
 					title={t("charts.rtkCompression")}
 					loading={loadingRtk}
 					testId="chart-rtk-compression"
-					totalLabel={t("charts.rtkSaved")}
+					totalLabel={t("charts.rtkOriginal")}
 					total={
-						rtkLifetimeSaved !== null ? (
-							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkLifetimeSaved)}</span>
+						rtkOriginalTokens !== null ? (
+							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkOriginalTokens)}</span>
 						) : undefined
 					}
-					totalTooltip={rtkLifetimeSaved !== null ? formatRtkCompactNumber(rtkLifetimeSaved) : undefined}
-					secondaryTotalLabel={t("charts.rtkRatio")}
+					totalTooltip={rtkOriginalTokens !== null ? formatRtkCompactNumber(rtkOriginalTokens) : undefined}
+					secondaryTotalLabel={t("charts.rtkCompressed")}
 					secondaryTotal={
-						rtkLifetimeRatio !== null ? <span className="truncate whitespace-nowrap">{formatRtkRatio(rtkLifetimeRatio)}</span> : undefined
-					}
-					secondaryTotalTooltip={rtkLifetimeRatio !== null ? formatRtkRatio(rtkLifetimeRatio) : undefined}
-					tertiaryTotalLabel={t("charts.rtkInvocations")}
-					tertiaryTotal={
-						rtkLifetimeInvocations !== null ? (
-							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkLifetimeInvocations)}</span>
+						rtkCompressedTokens !== null ? (
+							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkCompressedTokens)}</span>
 						) : undefined
 					}
-					tertiaryTotalTooltip={rtkLifetimeInvocations !== null ? formatRtkCompactNumber(rtkLifetimeInvocations) : undefined}
+					secondaryTotalTooltip={rtkCompressedTokens !== null ? formatRtkCompactNumber(rtkCompressedTokens) : undefined}
+					tertiaryTotalLabel={t("charts.rtkRatio")}
+					tertiaryTotal={
+						rtkRangeRatio !== null ? <span className="truncate whitespace-nowrap">{formatRtkRatio(rtkRangeRatio)}</span> : undefined
+					}
+					tertiaryTotalTooltip={rtkRangeRatio !== null ? formatRtkRatio(rtkRangeRatio) : undefined}
+					quaternaryTotalLabel={t("charts.rtkSaved")}
+					quaternaryTotal={
+						rtkSavedTokens !== null ? (
+							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkSavedTokens)}</span>
+						) : undefined
+					}
+					quaternaryTotalTooltip={rtkSavedTokens !== null ? formatRtkCompactNumber(rtkSavedTokens) : undefined}
 					legend={
 						<div className={CHART_HEADER_LEGEND_CLASS}>
 							<span className="flex items-center gap-1">

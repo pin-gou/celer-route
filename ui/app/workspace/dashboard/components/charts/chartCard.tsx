@@ -24,6 +24,10 @@ interface ChartCardProps {
 	tertiaryTotal?: ReactNode;
 	tertiaryTotalLabel?: string;
 	tertiaryTotalTooltip?: ReactNode;
+	// Optional fourth labeled total (e.g. tokens saved alongside original/compressed/ratio).
+	quaternaryTotal?: ReactNode;
+	quaternaryTotalLabel?: string;
+	quaternaryTotalTooltip?: ReactNode;
 }
 
 function TotalChip({
@@ -76,6 +80,9 @@ function Header({
 	tertiaryTotal,
 	tertiaryTotalLabel,
 	tertiaryTotalTooltip,
+	quaternaryTotal,
+	quaternaryTotalLabel,
+	quaternaryTotalTooltip,
 	testId,
 }: {
 	title: string;
@@ -90,11 +97,15 @@ function Header({
 	tertiaryTotal?: ReactNode;
 	tertiaryTotalLabel?: string;
 	tertiaryTotalTooltip?: ReactNode;
+	quaternaryTotal?: ReactNode;
+	quaternaryTotalLabel?: string;
+	quaternaryTotalTooltip?: ReactNode;
 	testId?: string;
 }) {
 	const hasTotal = total !== undefined && total !== null;
 	const hasSecondaryTotal = secondaryTotal !== undefined && secondaryTotal !== null;
 	const hasTertiaryTotal = tertiaryTotal !== undefined && tertiaryTotal !== null;
+	const hasQuaternaryTotal = quaternaryTotal !== undefined && quaternaryTotal !== null;
 	const hasActionRow = hasTotal || controls;
 	return (
 		<div className="shrink-0 space-y-2">
@@ -120,6 +131,14 @@ function Header({
 									totalLabel={tertiaryTotalLabel}
 									totalTooltip={tertiaryTotalTooltip}
 									testId={testId ? `${testId}-tertiary` : undefined}
+								/>
+							)}
+							{hasQuaternaryTotal && (
+								<TotalChip
+									total={quaternaryTotal}
+									totalLabel={quaternaryTotalLabel}
+									totalTooltip={quaternaryTotalTooltip}
+									testId={testId ? `${testId}-quaternary` : undefined}
 								/>
 							)}
 						</div>
@@ -151,6 +170,9 @@ export function ChartCard({
 	tertiaryTotal,
 	tertiaryTotalLabel,
 	tertiaryTotalTooltip,
+	quaternaryTotal,
+	quaternaryTotalLabel,
+	quaternaryTotalTooltip,
 }: ChartCardProps) {
 	if (loading) {
 		return (
@@ -168,9 +190,12 @@ export function ChartCard({
 					tertiaryTotal={tertiaryTotal}
 					tertiaryTotalLabel={tertiaryTotalLabel}
 					tertiaryTotalTooltip={tertiaryTotalTooltip}
+					quaternaryTotal={quaternaryTotal}
+					quaternaryTotalLabel={quaternaryTotalLabel}
+					quaternaryTotalTooltip={quaternaryTotalTooltip}
 					testId={testId}
 				/>
-				<div className="grow" data-testid={testId ? `${testId}-chart-skeleton` : undefined}>
+				<div className="w-full min-w-0 grow" data-testid={testId ? `${testId}-chart-skeleton` : undefined}>
 					<Skeleton className="h-full w-full" />
 				</div>
 			</Card>
@@ -192,9 +217,12 @@ export function ChartCard({
 				tertiaryTotal={tertiaryTotal}
 				tertiaryTotalLabel={tertiaryTotalLabel}
 				tertiaryTotalTooltip={tertiaryTotalTooltip}
+				quaternaryTotal={quaternaryTotal}
+				quaternaryTotalLabel={quaternaryTotalLabel}
+				quaternaryTotalTooltip={quaternaryTotalTooltip}
 				testId={testId}
 			/>
-			<div className="grow">{children}</div>
+			<div className="w-full min-w-0 grow">{children}</div>
 		</Card>
 	);
 }
