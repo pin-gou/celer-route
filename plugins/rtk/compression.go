@@ -9,10 +9,10 @@ import (
 
 // ProcessStats holds token statistics for a single text compression pass.
 type ProcessStats struct {
-	OriginalTokens     int
-	CompressedTokens   int
-	Techniques         []string
-	RawOutputPointers []*RtkRawOutputPointer
+	OriginalTokens     int                    `json:"originalTokens"`
+	CompressedTokens   int                    `json:"compressedTokens"`
+	Techniques         []string               `json:"techniques"`
+	RawOutputPointers  []*RtkRawOutputPointer `json:"rawOutputPointers,omitempty"`
 }
 
 // applyRtkCompression is the top-level entry point for the RTK compression

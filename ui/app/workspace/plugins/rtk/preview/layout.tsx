@@ -45,7 +45,7 @@ function RouteComponent() {
 			const r = await run({
 				mode,
 				intensity: intensity || undefined,
-				payload: { command, output, apply_rules: true },
+				payload: { command, output, applyRules: true },
 			}).unwrap();
 			setResult(r);
 		} catch (err) {
@@ -124,28 +124,28 @@ function RouteComponent() {
 						<CardTitle>{t("plugins:rtk.preview.resultTitle", { mode: result.mode })}</CardTitle>
 						<CardDescription>
 							{t("plugins:rtk.test.resultStats", {
-								original: result.result.original_tokens,
-								compressed: result.result.compressed_tokens,
-								ratio: (result.result.compression_ratio * 100).toFixed(1),
+								original: result.result.originalTokens,
+								compressed: result.result.compressedTokens,
+								ratio: (result.result.compressionRatio * 100).toFixed(1),
 							})}
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="flex flex-col gap-4">
 						<div className="flex flex-wrap items-center gap-2">
-							{result.engines_planned?.map((id) => (
+							{result.enginesPlanned?.map((id) => (
 								<Badge key={id} variant="secondary">
 									{id}
 								</Badge>
 							))}
-							{result.result.filter_matched && (
-								<Badge variant="outline">{t("plugins:rtk.test.filterMatched", { name: result.result.filter_matched })}</Badge>
+							{result.result.filterMatched && (
+								<Badge variant="outline">{t("plugins:rtk.test.filterMatched", { name: result.result.filterMatched })}</Badge>
 							)}
 						</div>
-						{result.engine_stats && result.engine_stats.length > 0 && (
+						{result.engineStats && result.engineStats.length > 0 && (
 							<section>
 								<h3 className="mb-2 text-sm font-medium">{t("plugins:rtk.preview.engineStats")}</h3>
 								<ul className="space-y-1 text-xs">
-									{result.engine_stats.map((entry) => (
+									{result.engineStats.map((entry) => (
 										<li key={entry.id} className="font-mono">
 											{entry.id}: {(entry.compressed_by * 100).toFixed(1)}% ({entry.input_bytes} → {entry.output_bytes} bytes)
 										</li>
@@ -156,12 +156,12 @@ function RouteComponent() {
 						<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 							<section>
 								<h3 className="mb-2 text-sm font-medium">{t("plugins:rtk.test.original")}</h3>
-								<pre className="bg-muted max-h-96 overflow-auto rounded-md p-3 text-xs">{result.result.original_text}</pre>
+								<pre className="bg-muted max-h-96 overflow-auto rounded-md p-3 text-xs">{result.result.originalText}</pre>
 							</section>
 							<section>
 								<h3 className="mb-2 text-sm font-medium">{t("plugins:rtk.test.compressed")}</h3>
 								<pre data-testid="rtk-preview-compressed" className="bg-muted max-h-96 overflow-auto rounded-md p-3 text-xs">
-									{result.result.compressed_text}
+									{result.result.compressedText}
 								</pre>
 							</section>
 						</div>

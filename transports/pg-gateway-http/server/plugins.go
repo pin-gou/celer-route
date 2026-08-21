@@ -280,8 +280,20 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	// 7. RTK (if configured in PluginConfigs)
 	rtkConfig := s.getPluginConfig(rtk.PluginName)
 	if rtkConfig != nil && rtkConfig.Enabled {
-		if err := s.registerPluginWithStatus(ctx, rtk.PluginName, nil, rtkConfig.Config, true); err != nil {
+		rtkPlugin, err := InstantiatePlugin(ctx, rtk.PluginName, nil, rtkConfig.Config, s.Config)
+		if err != nil {
 			return fmt.Errorf("failed to initialize rtk plugin: %w", err)
+		}
+		s.Config.ReloadPlugin(rtkPlugin)
+		s.Config.UpdatePluginOverallStatus(rtk.PluginName, rtk.PluginName,
+			schemas.PluginStatusActive,
+			[]string{fmt.Sprintf("%s plugin initialized successfully", rtk.PluginName)},
+			InferPluginTypes(rtkPlugin))
+		// Cache the typed pointer so the admin API can resolve it.
+		if rp, ok := rtkPlugin.(*rtk.Plugin); ok && rp != nil {
+			s.rtkPluginMu.Lock()
+			s.rtkPlugin = rp
+			s.rtkPluginMu.Unlock()
 		}
 	} else {
 		s.markPluginDisabled(rtk.PluginName)

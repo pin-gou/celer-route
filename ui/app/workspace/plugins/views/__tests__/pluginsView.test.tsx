@@ -171,6 +171,13 @@ describe("PluginsView — dispatch logic (task 11.2)", () => {
 		expect(screen.getByTestId("providercooldown-field-default-ttl")).toBeTruthy();
 	});
 
+	it("renders RtkFragment when selectedPlugin.name is 'rtk'", () => {
+		mocks.selectedPlugin = { ...basePlugin, name: "rtk", actualName: "rtk" };
+		render(<PluginsView onDelete={mocks.onDelete} onCreate={mocks.onCreate} />);
+
+		expect(screen.getByTestId("rtk-fragment")).toBeTruthy();
+	});
+
 	it("renders OtelView when selectedPlugin.name is 'otel'", () => {
 		mocks.selectedPlugin = { ...basePlugin, name: "otel", actualName: "otel" };
 		render(<PluginsView onDelete={mocks.onDelete} onCreate={mocks.onCreate} />);

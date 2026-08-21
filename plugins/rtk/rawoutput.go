@@ -34,11 +34,11 @@ const (
 
 // RtkRawOutputPointer carries the result of a single raw-output persist operation.
 type RtkRawOutputPointer struct {
-	ID       string // sha256(<prefix>)[:24]
-	Path     string // absolute path to the persisted .log file
-	Bytes    int    // UTF-8 byte count of the written (redacted) text
-	SHA256   string // full hex(sha256(redactedText)) 64 chars
-	Redacted bool   // any of the 5 redaction patterns matched
+	ID       string `json:"id"`       // sha256(<prefix>)[:24]
+	Path     string `json:"path"`     // absolute path to the persisted .log file
+	Bytes    int    `json:"bytes"`    // UTF-8 byte count of the written (redacted) text
+	SHA256   string `json:"sha256"`   // full hex(sha256(redactedText)) 64 chars
+	Redacted bool   `json:"redacted"` // any of the 5 redaction patterns matched
 }
 
 // PersistOptions configures a single MaybePersistRtkRawOutput call.

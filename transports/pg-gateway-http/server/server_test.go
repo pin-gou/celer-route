@@ -1062,14 +1062,17 @@ func TestMarshalPluginConfig_WithEmptyString(t *testing.T) {
 }
 
 func TestMarshalPluginConfig_WithNil(t *testing.T) {
-	// Test case 9: source is nil (should return error as invalid type)
+	// Test case 9: source is nil (should return empty zero-value config)
 	result, err := MarshalPluginConfig[TestConfig](nil)
-	if err == nil {
-		t.Fatal("Expected error for nil source, got nil")
+	if err != nil {
+		t.Fatalf("Expected no error for nil source, got: %v", err)
 	}
-
-	if result != nil {
-		t.Errorf("Expected nil result for nil source, got %v", result)
+	if result == nil {
+		t.Fatal("Expected non-nil config for nil source, got nil")
+	}
+	// Verify it's a zero-value config
+	if result.Name != "" || result.Enabled || result.Count != 0 {
+		t.Errorf("Expected zero-value config for nil source, got %+v", result)
 	}
 }
 

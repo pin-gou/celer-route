@@ -104,6 +104,10 @@ func (s *BifrostHTTPServer) CollectObservabilityPlugins() []schemas.Observabilit
 
 // MarshalPluginConfig marshals the plugin configuration
 func MarshalPluginConfig[T any](source any) (*T, error) {
+	// If source is nil, return an empty config (zero value)
+	if source == nil {
+		return new(T), nil
+	}
 	// If its a *T, then we will confirm
 	if config, ok := source.(*T); ok {
 		return config, nil

@@ -43,7 +43,7 @@ function RouteComponent() {
 			const result = await runTest({
 				command,
 				output,
-				apply_rules: applyRules,
+				applyRules,
 			}).unwrap();
 			setLastResult(result);
 		} catch (err) {
@@ -99,17 +99,17 @@ function RouteComponent() {
 						<CardTitle>{t("plugins:rtk.test.resultTitle")}</CardTitle>
 						<CardDescription>
 							{t("plugins:rtk.test.resultStats", {
-								original: lastResult.original_tokens,
-								compressed: lastResult.compressed_tokens,
-								ratio: (lastResult.compression_ratio * 100).toFixed(1),
+								original: lastResult.originalTokens,
+								compressed: lastResult.compressedTokens,
+								ratio: (lastResult.compressionRatio * 100).toFixed(1),
 							})}
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="flex flex-col gap-4">
 						<div className="flex flex-wrap items-center gap-2">
-							{lastResult.filter_matched ? (
+							{lastResult.filterMatched ? (
 								<Badge variant="secondary" data-testid="rtk-test-filter-matched">
-									{t("plugins:rtk.test.filterMatched", { name: lastResult.filter_matched })}
+									{t("plugins:rtk.test.filterMatched", { name: lastResult.filterMatched })}
 								</Badge>
 							) : (
 								<Badge variant="outline">{t("plugins:rtk.test.filterMatchedNone")}</Badge>
@@ -120,22 +120,20 @@ function RouteComponent() {
 								</Badge>
 							))}
 						</div>
-						{lastResult.raw_output_ptr && (
-							<div className="text-muted-foreground text-xs">
-								{t("plugins:rtk.test.rawOutputHint", { id: lastResult.raw_output_ptr.id })}
-							</div>
+						{lastResult.rawOutputPtr && (
+							<div className="text-muted-foreground text-xs">{t("plugins:rtk.test.rawOutputHint", { id: lastResult.rawOutputPtr.id })}</div>
 						)}
 						<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 							<section>
 								<h3 className="mb-2 text-sm font-medium">{t("plugins:rtk.test.original")}</h3>
 								<pre data-testid="rtk-test-original" className="bg-muted max-h-96 overflow-auto rounded-md p-3 text-xs">
-									{lastResult.original_text}
+									{lastResult.originalText}
 								</pre>
 							</section>
 							<section>
 								<h3 className="mb-2 text-sm font-medium">{t("plugins:rtk.test.compressed")}</h3>
 								<pre data-testid="rtk-test-compressed" className="bg-muted max-h-96 overflow-auto rounded-md p-3 text-xs">
-									{lastResult.compressed_text}
+									{lastResult.compressedText}
 								</pre>
 							</section>
 						</div>

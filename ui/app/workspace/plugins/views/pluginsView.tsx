@@ -9,6 +9,7 @@ import { setPluginFormDirtyState, useAppDispatch, useAppSelector, useUpdatePlugi
 import {
 	PluginType,
 	PROVIDER_COOLDOWN_PLUGIN,
+	RTK_PLUGIN,
 	GOVERNANCE_PLUGIN,
 	OTEL_PLUGIN,
 	LOGGING_PLUGIN,
@@ -26,6 +27,7 @@ import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import ProvidercooldownFragment from "../fragments/providercooldownFragment";
+import RtkFragment from "../fragments/rtkFragment";
 import GovernanceFragment from "../fragments/governanceFragment";
 import OtelView from "../../observability/views/plugins/otelView";
 import LoggingFragment from "../fragments/loggingFragment";
@@ -169,6 +171,13 @@ export default function PluginsView(props: Props) {
 		return (
 			<div className="ml-4 w-full">
 				<ProvidercooldownFragment plugin={selectedPlugin} />
+			</div>
+		);
+	}
+	if (selectedPlugin.name === RTK_PLUGIN) {
+		return (
+			<div className="ml-4 w-full">
+				<RtkFragment plugin={selectedPlugin} />
 			</div>
 		);
 	}

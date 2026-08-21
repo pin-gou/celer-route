@@ -30,10 +30,10 @@ export interface RtkRawOutputPointer {
 }
 
 export interface RtkProcessStats {
-	original_tokens: number;
-	compressed_tokens: number;
+	originalTokens: number;
+	compressedTokens: number;
 	techniques: string[];
-	raw_output_pointers: RtkRawOutputPointer[];
+	rawOutputPointers: RtkRawOutputPointer[];
 }
 
 export interface FilterCatalogEntry {
@@ -89,18 +89,18 @@ export interface PutRtkConfigRequest {
 export interface TestPayload {
 	command?: string;
 	output: string;
-	apply_rules?: boolean;
+	applyRules?: boolean;
 }
 
 export interface TestResult {
-	original_text: string;
-	compressed_text: string;
-	original_tokens: number;
-	compressed_tokens: number;
-	compression_ratio: number;
-	filter_matched?: string;
+	originalText: string;
+	compressedText: string;
+	originalTokens: number;
+	compressedTokens: number;
+	compressionRatio: number;
+	filterMatched?: string;
 	techniques: string[];
-	raw_output_ptr?: RtkRawOutputPointer;
+	rawOutputPtr?: RtkRawOutputPointer;
 	stats?: RtkProcessStats;
 }
 
@@ -124,10 +124,10 @@ export interface PreviewRequest {
 export interface PreviewResponse {
 	mode: CompressionMode;
 	result: TestResult;
-	engine_stats?: EngineBreakdown[];
-	original_config?: import("./plugins").RTKConfig;
-	effective_config?: import("./plugins").RTKConfig;
-	engines_planned?: string[];
+	engineStats?: EngineBreakdown[];
+	originalConfig?: import("./plugins").RTKConfig;
+	effectiveConfig?: import("./plugins").RTKConfig;
+	enginesPlanned?: string[];
 }
 
 // ---------------------------------------------------------------------------
