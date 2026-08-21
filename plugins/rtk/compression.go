@@ -80,7 +80,6 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				} else {
 					state.Techniques = append(state.Techniques, "pipeline-runner")
 				}
-				recordCompressed(state, i, string(msg.Role), extractToolName(msg), text, result)
 				continue
 			}
 			compressedTotal += origTokens
@@ -132,7 +131,6 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 					} else {
 						state.Techniques = append(state.Techniques, "pipeline-runner")
 					}
-					recordCompressed(state, i*100+j, string(msg.Role), extractToolName(msg), text, result)
 					continue
 				}
 				compressedTotal += origTokens
@@ -171,7 +169,6 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 								} else {
 									state.Techniques = append(state.Techniques, "pipeline-runner")
 								}
-								recordCompressed(state, i, string(msg.Role), extractToolName(msg), text, result)
 							} else {
 								compressedTotal += origTokens
 							}
@@ -216,7 +213,6 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 								} else {
 									state.Techniques = append(state.Techniques, "pipeline-runner")
 								}
-								recordCompressed(state, i*100+j, string(msg.Role), extractToolName(msg), text, result)
 							} else {
 								compressedTotal += origTokens
 							}
@@ -367,7 +363,6 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 			} else {
 				state.Techniques = append(state.Techniques, "pipeline-runner")
 			}
-			recordCompressed(state, i, "tool", name, text, result)
 			continue
 		}
 		compressedTotal += origTokens

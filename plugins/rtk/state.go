@@ -11,12 +11,11 @@ type CompressionState struct {
 	Techniques        []string
 	FilterMatched     string
 	RawOutputPointers []*RtkRawOutputPointer
-	// OriginalSnapshot and CompressedSnapshot capture pre/post text for
-	// every tool message that the pipeline either compressed or considered
-	// compressing. They are not serialised — they live only in the
-	// per-request state and are converted to JSON in PostLLMHook.
-	OriginalSnapshot   []SnapshotEntry
-	CompressedSnapshot []SnapshotEntry
+	// OriginalSnapshot captures the pre-compression text for every tool
+	// message that the pipeline either compressed or considered compressing.
+	// It is not serialised — it lives only in the per-request state and is
+	// converted to JSON in PostLLMHook.
+	OriginalSnapshot []SnapshotEntry
 }
 
 // NewCompressionState creates a new CompressionState with default values.

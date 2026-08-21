@@ -426,7 +426,6 @@ const (
 	BifrostContextKeyRTKFilterMatched                    BifrostContextKey = "x-bf-rtk-filter-matched"        // string (set by compression plugin - filter ID or Name that matched the compressed output)
 	BifrostContextKeyRTKCompressionRatio                 BifrostContextKey = "x-bf-rtk-compression-ratio"     // float64 (set by compression plugin - ratio of bytes removed by compression, 0.0-1.0)
 	BifrostContextKeyRTKOriginalSnapshot                 BifrostContextKey = "x-bf-rtk-original-snapshot"     // json.RawMessage (set by compression plugin - JSON snapshot of pre-compression tool message contents, for log detail diff view)
-	BifrostContextKeyRTKCompressedSnapshot               BifrostContextKey = "x-bf-rtk-compressed-snapshot"   // json.RawMessage (set by compression plugin - JSON snapshot of post-compression tool message contents)
 	BifrostContextKeyRTKSnapshotMode                     BifrostContextKey = "x-bf-rtk-snapshot-mode"         // string (set by compression plugin - "split" | "merged" | "off")
 	BifrostContextKeyRTKRawOutputID                      BifrostContextKey = "x-bf-rtk-raw-output-id"         // string (set by compression plugin - 24-char SHA256 prefix of the persisted raw output file, when RawOutputRetention is not "never")
 )

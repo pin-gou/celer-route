@@ -9,22 +9,24 @@ import (
 
 // SnapshotEntry is one tool-message snapshot captured by the RTK pipeline
 // for the log detail view's diff comparison. It records the message index in
-// the input slice, the role/tool name, and the text content either before or
-// after compression. Per-message original/compressed token counts let the UI
-// render per-message compression ratios in split mode.
+// the input slice, the role/tool name, and the text content as it stood
+// before compression. The compressed counterpart is read directly from the
+// (now in-place-mutated) request by the log detail view, so it does not
+// need to be stored here. OriginalTokens lets the UI render per-message
+// compression ratios in split mode by pairing against the token count it
+// re-derives from the post-compression message body.
 type SnapshotEntry struct {
-	Index            int    `json:"index"`
-	Role             string `json:"role"`
-	Name             string `json:"name,omitempty"`
-	Content          string `json:"content"`
-	OriginalTokens   int    `json:"originalTokens,omitempty"`
-	CompressedTokens int    `json:"compressedTokens,omitempty"`
+	Index          int    `json:"index"`
+	Role           string `json:"role"`
+	Name           string `json:"name,omitempty"`
+	Content        string `json:"content"`
+	OriginalTokens int    `json:"originalTokens,omitempty"`
 }
 
 // SnapshotPayload is the wire shape written into log metadata as
-// rtk_original_snapshot and rtk_compressed_snapshot. The Mode field lets the
-// UI choose how to render the diff (split → side-by-side per-message;
-// merged → single combined block).
+// rtk_original_snapshot. The Mode field lets the UI choose how to render
+// the diff (split → side-by-side per-message; merged → single combined
+// block).
 type SnapshotPayload struct {
 	Mode      string          `json:"mode"`
 	Truncated bool            `json:"truncated"`
@@ -50,54 +52,33 @@ func appendSnapshot(state *CompressionState, index int, role, name, content stri
 	})
 }
 
-// recordCompressed registers the compressed version of a previously
-// snapshotted message. It is paired with appendSnapshot via the same index so
-// the UI can align original and compressed sides.
-func recordCompressed(state *CompressionState, index int, role, name, original, compressed string) {
-	if compressed == "" {
-		return
-	}
-	if state.CompressedSnapshot == nil {
-		state.CompressedSnapshot = make([]SnapshotEntry, 0, 4)
-	}
-	state.CompressedSnapshot = append(state.CompressedSnapshot, SnapshotEntry{
-		Index:            index,
-		Role:             role,
-		Name:             name,
-		Content:          compressed,
-		OriginalTokens:   estimateTokens(original),
-		CompressedTokens: estimateTokens(compressed),
-	})
-}
-
-// buildSnapshotSerializes the original/compressed slices stored on the
+// buildSnapshot serialises the pre-compression snapshot stored on the
 // CompressionState into the wire format expected by the log detail view.
-// When mode is "merged", every entry is collapsed into a single content block
-// so the UI can render one big diff rather than a list of per-message
-// diffs. When mode is "off", both returned payloads are empty. When the
-// state carries no entries at all, both payloads are nil so callers can
-// detect "no snapshot captured" without parsing JSON.
-func buildSnapshot(state *CompressionState, mode string, maxBytes int) (json.RawMessage, json.RawMessage) {
+// When mode is "merged", every entry is collapsed into a single content
+// block so the UI can render one big diff rather than a list of
+// per-message diffs. When mode is "off", no payload is returned. When the
+// state carries no entries at all, nil is returned so callers can detect
+// "no snapshot captured" without parsing JSON.
+//
+// The compressed side is intentionally omitted — the log detail view
+// derives it from the (mutated) request body, so duplicating it here
+// would only inflate the metadata payload.
+func buildSnapshot(state *CompressionState, mode string, maxBytes int) json.RawMessage {
 	if state == nil || mode == "off" {
-		return nil, nil
+		return nil
 	}
-	if len(state.OriginalSnapshot) == 0 && len(state.CompressedSnapshot) == 0 {
-		return nil, nil
+	if len(state.OriginalSnapshot) == 0 {
+		return nil
 	}
 
-	// Build the original side. In merged mode, concaten concatenate every
-	// content with a separator so the UI can render a single block; in
-	// split mode, keep each entry distinct.
 	original := buildSnapshotPayload(state.OriginalSnapshot, mode)
-	compressed := buildSnapshotPayload(state.CompressedSnapshot, mode)
 
-	// Byte-budget guard. If either payload exceeds the configured cap, mark
+	// Byte-budget guard. If the payload exceeds the configured cap, mark
 	// truncated=true and shrink the items slice until it fits. We always
 	// retain at least one item so the UI can show *something*.
 	original = clampSnapshotPayload(original, maxBytes)
-	compressed = clampSnapshotPayload(compressed, maxBytes)
 
-	return original, compressed
+	return original
 }
 
 func buildSnapshotPayload(entries []SnapshotEntry, mode string) json.RawMessage {

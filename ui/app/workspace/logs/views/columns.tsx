@@ -662,16 +662,16 @@ export const createColumns = (
 
 	// RTK observability collapses into the single dedicated "RTK" column
 	// (compression ratio). All other RTK-derived metadata keys — techniques,
-	// filter matched, snapshot payloads, and the original/compressed token
-	// counts — are only meaningful in the log detail view, so they are
-	// excluded from the dynamic column list to keep the table lean.
+	// filter matched, the pre-compression snapshot payload, and the
+	// original/compressed token counts — are only meaningful in the log
+	// detail view, so they are excluded from the dynamic column list to
+	// keep the table lean.
 	const RTK_METADATA_KEYS = new Set([
 		"rtk_compression_ratio",
 		"rtk_filter_matched",
 		"rtk_snapshot_mode",
 		"rtk_techniques",
 		"rtk_original_snapshot",
-		"rtk_compressed_snapshot",
 		"original_prompt_tokens",
 		"compressed_prompt_tokens",
 	]);

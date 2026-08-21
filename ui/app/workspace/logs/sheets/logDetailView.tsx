@@ -698,6 +698,72 @@ const buildResponsesRows = (log: LogEntry, opts: MessagesSectionOptions): ReactN
 // Helper to detect passthrough operations
 const isPassthroughOperation = (object: string) => object === "passthrough" || object === "passthrough_stream";
 
+// extractCompressedToolContents walks a log entry's request body for the
+// post-compression tool messages and indexes them by the same `index` value
+// the RTK pipeline recorded on the pre-compression snapshot side. The diff
+// view aligns the two sides on this key.
+//
+// Coverage:
+//   - Chat Completions: each tool-role message in input_history contributes
+//     one entry keyed by its position in the array.
+//   - Responses API: each function_call_output item in
+//     responses_input_history contributes one entry keyed by its position.
+//   - Anthropic-style tool_result blocks nested inside a user message use a
+//     synthetic index (i*100+j) on the Go side; those don't currently have a
+//     TS surface in ContentBlock, so they fall through and the diff view
+//     falls back to the original text on both sides — matching the prior
+//     behaviour when the compressed snapshot was missing.
+function extractCompressedToolContents(log: LogEntry): { index: number; content: string }[] {
+	const items: { index: number; content: string }[] = [];
+
+	if (Array.isArray(log.input_history)) {
+		log.input_history.forEach((msg, i) => {
+			if (msg?.role !== "tool") return;
+			const text = readMessageContentAsText(msg.content);
+			if (text === "") return;
+			items.push({ index: i, content: text });
+		});
+	}
+
+	if (Array.isArray(log.responses_input_history)) {
+		log.responses_input_history.forEach((msg, i) => {
+			if (msg?.type !== "function_call_output") return;
+			const output = (msg as { output?: unknown }).output;
+			if (typeof output === "string") {
+				if (output !== "") items.push({ index: i, content: output });
+				return;
+			}
+			if (Array.isArray(output)) {
+				const text = output
+					.map((block) =>
+						block && typeof block === "object" && "text" in block && typeof (block as { text?: unknown }).text === "string"
+							? (block as { text: string }).text
+							: "",
+					)
+					.filter((s) => s.length > 0)
+					.join("");
+				if (text !== "") items.push({ index: i, content: text });
+			}
+		});
+	}
+
+	return items;
+}
+
+function readMessageContentAsText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (Array.isArray(content)) {
+		return content
+			.map((block) => {
+				if (!block || typeof block !== "object") return "";
+				const text = (block as { text?: unknown }).text;
+				return typeof text === "string" ? text : "";
+			})
+			.join("");
+	}
+	return "";
+}
+
 // Helper to detect container operations (for hiding irrelevant fields like Model/Tokens)
 const isContainerOperation = (object: string) => {
 	const containerTypes = [
@@ -1142,6 +1208,12 @@ export function LogDetailView({
 			}),
 		[log, isPassthrough, visibleRoles, activeInputRevealMapping, activeOutputRevealMapping, audioFormat, t],
 	);
+
+	// Post-compression tool message bodies, keyed by the snapshot index the
+	// RTK pipeline recorded. Passed into the RTK compression diff view so the
+	// "compressed" side is sourced from the in-place-mutated request rather
+	// than duplicated in metadata.
+	const compressedToolContents = useMemo(() => extractCompressedToolContents(log), [log]);
 
 	// Incremental rendering: only mount a few rows on first paint; reveal more
 	// chunks as the user scrolls or clicks "show more".
@@ -2283,6 +2355,9 @@ export function LogDetailView({
 										{Object.entries(log.metadata)
 											.filter(([key]) => {
 												if (key === "isAsyncRequest") return false;
+												// rtk_original_snapshot is served in full by the RTK Compression tab —
+												// rendering the raw object here would just show "[object Object]".
+												if (key === "rtk_original_snapshot") return false;
 												if (
 													isRealtimeTurn &&
 													[
@@ -2790,7 +2865,7 @@ export function LogDetailView({
 				</TabsContent>
 
 				<TabsContent value="rtk" className="space-y-3">
-					<RTKCompressionDiffView metadata={log.metadata as Record<string, unknown> | undefined} />
+					<RTKCompressionDiffView metadata={log.metadata as Record<string, unknown> | undefined} compressedItems={compressedToolContents} />
 				</TabsContent>
 
 				<TabsContent value="raw" className="space-y-3">

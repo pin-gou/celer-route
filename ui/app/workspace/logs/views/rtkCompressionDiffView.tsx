@@ -17,17 +17,30 @@ interface SnapshotPayload {
 	items?: SnapshotEntry[];
 }
 
+// CompressedItem is the post-compression tool message body for one snapshot
+// entry, indexed by the same `index` value the RTK pipeline recorded on the
+// pre-compression side (input_history index for chat tool messages,
+// responses_input_history index for function_call_output items). The log
+// detail view builds this map once from the log entry's request body and
+// passes it in; the diff view is otherwise read-only.
+export interface CompressedItem {
+	index: number;
+	content: string;
+}
+
 interface Props {
 	metadata: Record<string, unknown> | undefined;
+	compressedItems?: CompressedItem[];
 }
 
 // RTKCompressionDiffView renders the snapshot diff from the log entry's
-// rtk_* metadata fields. The component is intentionally read-only: it never
-// invokes side effects and never re-derives data. All four states
-// (uncompressed, snapshot disabled, truncated, populated) share the same
-// outer wrapper so the layout doesn't jump when the operator toggles
-// between tabs.
-export default function RTKCompressionDiffView({ metadata }: Props) {
+// rtk_original_snapshot metadata field and the compressed tool message
+// bodies carried in the request itself. The component is intentionally
+// read-only: it never invokes side effects and never re-derives data. All
+// four states (uncompressed, snapshot disabled, truncated, populated) share
+// the same outer wrapper so the layout doesn't jump when the operator
+// toggles between tabs.
+export default function RTKCompressionDiffView({ metadata, compressedItems }: Props) {
 	const { t } = useTranslation("logs");
 
 	const ratio = numberFromMetadata(metadata?.rtk_compression_ratio);
@@ -36,10 +49,9 @@ export default function RTKCompressionDiffView({ metadata }: Props) {
 	const mode = stringFromMetadata(metadata?.rtk_snapshot_mode) ?? "split";
 
 	const original = parseSnapshotPayload(metadata?.rtk_original_snapshot);
-	const compressed = parseSnapshotPayload(metadata?.rtk_compressed_snapshot);
 
 	// Empty / not-triggered state: ratio absent AND no snapshot entries.
-	const compressedFlag = techniques.length > 0 || (original.items?.length ?? 0) > 0 || (compressed.items?.length ?? 0) > 0;
+	const compressedFlag = techniques.length > 0 || (original.items?.length ?? 0) > 0;
 	if (!compressedFlag && ratio === null) {
 		return (
 			<div
@@ -64,20 +76,23 @@ export default function RTKCompressionDiffView({ metadata }: Props) {
 		);
 	}
 
-	const truncated = (original.truncated ?? false) || (compressed.truncated ?? false);
+	const compressedByIndex = new Map<number, string>();
+	for (const item of compressedItems ?? []) {
+		compressedByIndex.set(item.index, item.content);
+	}
 
 	return (
 		<div className="space-y-4" data-testid="rtk-diff-populated">
 			<RTKHeader ratio={ratio} techniques={techniques} filterMatched={filterMatched} />
-			{truncated && (
+			{original.truncated && (
 				<Alert className="border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-950" data-testid="rtk-diff-truncated-banner">
 					<AlertDescription className="text-amber-800 dark:text-amber-200">{t("detailView.rtkSnapshotTruncated")}</AlertDescription>
 				</Alert>
 			)}
 			{mode === "merged" ? (
-				<RTKMergedDiff original={original.items ?? []} compressed={compressed.items ?? []} />
+				<RTKMergedDiff original={original.items ?? []} compressedByIndex={compressedByIndex} />
 			) : (
-				<RTKSplitDiff original={original.items ?? []} compressed={compressed.items ?? []} />
+				<RTKSplitDiff original={original.items ?? []} compressedByIndex={compressedByIndex} />
 			)}
 		</div>
 	);
@@ -116,7 +131,7 @@ function RTKHeader({ ratio, techniques, filterMatched }: { ratio: number | null;
 	);
 }
 
-function RTKSplitDiff({ original, compressed }: { original: SnapshotEntry[]; compressed: SnapshotEntry[] }) {
+function RTKSplitDiff({ original, compressedByIndex }: { original: SnapshotEntry[]; compressedByIndex: Map<number, string> }) {
 	const { t } = useTranslation("logs");
 	if (original.length === 0) {
 		return (
@@ -125,17 +140,14 @@ function RTKSplitDiff({ original, compressed }: { original: SnapshotEntry[]; com
 	}
 
 	// Align compressed entries to originals by index. Entries that have no
-	// compressed counterpart (compression was skipped for that message) keep
-	// their original text on both sides.
-	const compressedByIndex = new Map<number, SnapshotEntry>();
-	for (const entry of compressed) {
-		compressedByIndex.set(entry.index, entry);
-	}
-
+	// compressed counterpart (compression was skipped for that message, or
+	// the message lives in a TS type we don't surface — e.g. Anthropic
+	// tool_result blocks) keep their original text on both sides.
 	return (
 		<div className="flex flex-col gap-4">
 			{original.map((orig) => {
-				const comp = compressedByIndex.get(orig.index);
+				const compContent = compressedByIndex.get(orig.index);
+				const compressedTokens = compContent !== undefined ? estimateTokensLocal(compContent) : undefined;
 				return (
 					<div key={`msg-${orig.index}`} className="rounded-sm border" data-testid={`rtk-diff-message-${orig.index}`}>
 						<div className="bg-muted/20 flex items-center justify-between rounded-t-sm border-b px-4 py-2 text-xs">
@@ -152,17 +164,17 @@ function RTKSplitDiff({ original, compressed }: { original: SnapshotEntry[]; com
 									</Badge>
 								)}
 							</div>
-							{(orig.originalTokens != null || comp?.compressedTokens != null) && (
+							{(orig.originalTokens != null || compressedTokens != null) && (
 								<div className="text-muted-foreground flex items-center gap-2 font-mono text-[11px]">
 									<span>{orig.originalTokens ?? "—"}</span>
 									<span>→</span>
-									<span>{comp?.compressedTokens ?? "—"}</span>
+									<span>{compressedTokens ?? "—"}</span>
 								</div>
 							)}
 						</div>
 						<div className="grid grid-cols-1 gap-0 md:grid-cols-2">
 							<DiffPane label={t("detailView.rtkOriginalLabel")} content={orig.content} side="original" />
-							<DiffPane label={t("detailView.rtkCompressedLabel")} content={comp?.content ?? orig.content} side="compressed" />
+							<DiffPane label={t("detailView.rtkCompressedLabel")} content={compContent ?? orig.content} side="compressed" />
 						</div>
 					</div>
 				);
@@ -171,15 +183,24 @@ function RTKSplitDiff({ original, compressed }: { original: SnapshotEntry[]; com
 	);
 }
 
-function RTKMergedDiff({ original, compressed }: { original: SnapshotEntry[]; compressed: SnapshotEntry[] }) {
+function RTKMergedDiff({ original, compressedByIndex }: { original: SnapshotEntry[]; compressedByIndex: Map<number, string> }) {
 	const { t } = useTranslation("logs");
 	if (original.length === 0) {
 		return (
 			<div className="text-muted-foreground rounded-sm border border-dashed p-6 text-center text-sm">{t("detailView.rtkNoSnapshots")}</div>
 		);
 	}
+	// Merged mode collapses every original entry into one big diff. We
+	// re-derive the compressed side by walking orig.items in order and
+	// stitching each entry's compressed counterpart (or the original text
+	// when no compressed counterpart exists) with the same \n\n separator
+	// the Go snapshot builder used.
 	const origText = original.map((entry) => entry.content).join("\n\n");
-	const compText = compressed.map((entry) => entry.content).join("\n\n") || origText;
+	const compParts: string[] = [];
+	for (const entry of original) {
+		compParts.push(compressedByIndex.get(entry.index) ?? entry.content);
+	}
+	const compText = compParts.join("\n\n") || origText;
 	return (
 		<div className="rounded-sm border">
 			<div className="grid grid-cols-1 md:grid-cols-2">
@@ -255,4 +276,13 @@ function normalisePayload(v: unknown): SnapshotPayload {
 		truncated: Boolean(obj.truncated),
 		items,
 	};
+}
+
+// estimateTokensLocal is a deliberately rough (chars/4) token estimator kept
+// local to this view so the per-message "compressedTokens" badge remains
+// visually consistent without importing the bifrost-side estimator. The Go
+// pipeline uses the same chars/4 heuristic for snapshot bookkeeping, so the
+// numbers will line up within rounding.
+function estimateTokensLocal(text: string): number {
+	return Math.ceil(text.length / 4);
 }

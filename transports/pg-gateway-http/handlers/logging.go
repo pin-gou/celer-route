@@ -826,7 +826,6 @@ func (h *LoggingHandler) getLogs(ctx *fasthttp.RequestCtx) {
 		// endpoint (getLogByID) still serves the full metadata.
 		if md := result.Logs[i].MetadataParsed; md != nil {
 			delete(md, "rtk_original_snapshot")
-			delete(md, "rtk_compressed_snapshot")
 			delete(md, "rtk_snapshot_mode")
 			delete(md, "rtk_techniques")
 			delete(md, "rtk_filter_matched")

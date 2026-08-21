@@ -172,14 +172,15 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostR
 		ctx.SetValue(schemas.BifrostContextKeyRTKRawOutputID, state.RawOutputPointers[0].ID)
 	}
 
-	// Build the per-message snapshots (original + compressed) so the log
-	// detail view can render a side-by-side diff. Snapshot mode is configured
-	// per-plugin; "off" yields no snapshots at all.
+	// Build the per-message pre-compression snapshot so the log detail view
+	// can render a side-by-side diff. The compressed side is derived in the
+	// UI from the (now in-place-mutated) request body, so we don't store it
+	// here. Snapshot mode is configured per-plugin; "off" yields no
+	// snapshot at all.
 	if p.config != nil {
-		original, compressed := buildSnapshot(state, p.config.SnapshotMode, p.config.SnapshotMaxBytes)
+		original := buildSnapshot(state, p.config.SnapshotMode, p.config.SnapshotMaxBytes)
 		if original != nil {
 			ctx.SetValue(schemas.BifrostContextKeyRTKOriginalSnapshot, original)
-			ctx.SetValue(schemas.BifrostContextKeyRTKCompressedSnapshot, compressed)
 			ctx.SetValue(schemas.BifrostContextKeyRTKSnapshotMode, p.config.SnapshotMode)
 		}
 	}

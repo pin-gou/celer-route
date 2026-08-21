@@ -980,12 +980,6 @@ func mergeRealtimeMetadata(metadata map[string]interface{}, ctx *schemas.Bifrost
 		}
 		metadata["rtk_original_snapshot"] = original
 	}
-	if compressed, ok := coerceJSONForMetadata(ctx.Value(schemas.BifrostContextKeyRTKCompressedSnapshot)); ok {
-		if metadata == nil {
-			metadata = make(map[string]interface{})
-		}
-		metadata["rtk_compressed_snapshot"] = compressed
-	}
 
 	return metadata
 }

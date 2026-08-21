@@ -778,7 +778,20 @@
 		"eventInitiated": "Event Initiated",
 		"languageModel": "Language Model",
 		"viewFormattedJson": "View formatted JSON",
-		"loadMoreMessages": "Load {{count}} more messages"
+		"loadMoreMessages": "Load {{count}} more messages",
+		"rtk_compressionRatio": "Compression Ratio",
+		"rtk_techniques": "Applied Techniques",
+		"rtk_filterMatched": "Filter Matched",
+		"rtk_rawOutputLink": "View raw output →",
+		"rtkTabTitle": "RTK Compression",
+		"rtkUncompressed": "Compression not triggered",
+		"rtkSnapshotDisabled": "Snapshot persistence is disabled (snapshot_mode=off)",
+		"rtkSnapshotTruncated": "Snapshot truncated (exceeds configured byte limit)",
+		"rtkOriginalLabel": "Original",
+		"rtkCompressedLabel": "Compressed",
+		"rtkMessageLabel": "Message #{{index}}",
+		"rtkUnchangedLines": "[{{count}} unchanged lines]",
+		"rtkNoSnapshots": "No snapshots available"
 	},
 	"sessionSheet": {
 		"logs": "Logs",
@@ -912,20 +925,7 @@
 		"customToolOutput": "Custom Tool Output",
 		"imageGeneration": "Image Generation",
 		"message": "Message",
-		"unknown": "Unknown",
-		"rtk_compressionRatio": "Compression Ratio",
-		"rtk_techniques": "Applied Techniques",
-		"rtk_filterMatched": "Filter Matched",
-		"rtk_rawOutputLink": "View raw output →",
-		"rtkTabTitle": "RTK Compression",
-		"rtkUncompressed": "Compression not triggered",
-		"rtkSnapshotDisabled": "Snapshot persistence is disabled (snapshot_mode=off)",
-		"rtkSnapshotTruncated": "Snapshot truncated (exceeds configured byte limit)",
-		"rtkOriginalLabel": "Original",
-		"rtkCompressedLabel": "Compressed",
-		"rtkMessageLabel": "Message #{{index}}",
-		"rtkUnchangedLines": "[{{count}} unchanged lines]",
-		"rtkNoSnapshots": "No snapshots available"
+		"unknown": "Unknown"
 	},
 	"connectors": {
 		"observability": "Observability settings"

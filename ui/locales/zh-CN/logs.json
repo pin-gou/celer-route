@@ -778,7 +778,20 @@
 		"eventInitiated": "事件发起",
 		"languageModel": "语言模型",
 		"viewFormattedJson": "查看格式化 JSON",
-		"loadMoreMessages": "加载更多消息（剩余 {{count}} 条）"
+		"loadMoreMessages": "加载更多消息（剩余 {{count}} 条）",
+		"rtk_compressionRatio": "压缩率",
+		"rtk_techniques": "应用的技术",
+		"rtk_filterMatched": "命中的过滤器",
+		"rtk_rawOutputLink": "查看原始输出 →",
+		"rtkTabTitle": "RTK 压缩",
+		"rtkUncompressed": "未触发压缩",
+		"rtkSnapshotDisabled": "快照未启用（snapshot_mode=off）",
+		"rtkSnapshotTruncated": "快照已截断（超过配置的字节上限）",
+		"rtkOriginalLabel": "原文",
+		"rtkCompressedLabel": "压缩后",
+		"rtkMessageLabel": "消息 #{{index}}",
+		"rtkUnchangedLines": "[{{count}} 行未变]",
+		"rtkNoSnapshots": "暂无可用快照"
 	},
 	"sessionSheet": {
 		"logs": "日志数",
@@ -912,20 +925,7 @@
 		"customToolOutput": "自定义工具输出",
 		"imageGeneration": "图像生成",
 		"message": "消息",
-		"unknown": "未知",
-		"rtk_compressionRatio": "压缩率",
-		"rtk_techniques": "应用的技术",
-		"rtk_filterMatched": "命中的过滤器",
-		"rtk_rawOutputLink": "查看原始输出 →",
-		"rtkTabTitle": "RTK 压缩",
-		"rtkUncompressed": "未触发压缩",
-		"rtkSnapshotDisabled": "快照未启用（snapshot_mode=off）",
-		"rtkSnapshotTruncated": "快照已截断（超过配置的字节上限）",
-		"rtkOriginalLabel": "原文",
-		"rtkCompressedLabel": "压缩后",
-		"rtkMessageLabel": "消息 #{{index}}",
-		"rtkUnchangedLines": "[{{count}} 行未变]",
-		"rtkNoSnapshots": "暂无可用快照"
+		"unknown": "未知"
 	},
 	"connectors": {
 		"observability": "可观测性设置"
