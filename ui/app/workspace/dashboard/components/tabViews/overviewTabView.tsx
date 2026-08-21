@@ -10,6 +10,7 @@ import {
 	useLazyGetLogsThroughputHistogramQuery,
 	useLazyGetLogsTokenHistogramQuery,
 } from "@/lib/store";
+import { useGetRtkStatsHistogramQuery } from "@/lib/store/apis/pluginsApi";
 import type { LogFilters } from "@/lib/types/logs";
 import { forwardRef, useCallback, useImperativeHandle, useMemo } from "react";
 import { computeDisplaySeries } from "../../utils/chartUtils";
@@ -32,12 +33,14 @@ interface OverviewTabViewProps {
 	modelChartType: ChartType;
 	latencyChartType: ChartType;
 	throughputChartType: ChartType;
+	rtkChartType: ChartType;
 	usageModel: string;
 	onVolumeChartToggle: (type: ChartType) => void;
 	onTokenChartToggle: (type: ChartType) => void;
 	onModelChartToggle: (type: ChartType) => void;
 	onLatencyChartToggle: (type: ChartType) => void;
 	onThroughputChartToggle: (type: ChartType) => void;
+	onRtkChartToggle: (type: ChartType) => void;
 	onUsageModelChange: (model: string) => void;
 }
 
@@ -52,12 +55,14 @@ export const OverviewTabView = forwardRef<OverviewTabViewHandle, OverviewTabView
 		modelChartType,
 		latencyChartType,
 		throughputChartType,
+		rtkChartType,
 		usageModel,
 		onVolumeChartToggle,
 		onTokenChartToggle,
 		onModelChartToggle,
 		onLatencyChartToggle,
 		onThroughputChartToggle,
+		onRtkChartToggle,
 		onUsageModelChange,
 	},
 	ref,
@@ -70,6 +75,19 @@ export const OverviewTabView = forwardRef<OverviewTabViewHandle, OverviewTabView
 	const { data: modelData, isLoading: loadingModels } = useGetLogsModelHistogramQuery(fetchArg, skipOpts);
 	const { data: latencyData, isLoading: loadingLatency } = useGetLogsLatencyHistogramQuery(fetchArg, skipOpts);
 	const { data: throughputData, isLoading: loadingThroughput } = useGetLogsThroughputHistogramQuery(fetchArg, skipOpts);
+
+	// RTK histogram — uses the same time range filters as the other charts.
+	const rtkFetchArg = useMemo(() => {
+		const p: { start_time?: string; end_time?: string; period?: string } = {};
+		if (filters.period) {
+			p.period = filters.period;
+		} else {
+			if (filters.start_time) p.start_time = filters.start_time;
+			if (filters.end_time) p.end_time = filters.end_time;
+		}
+		return { filters: p };
+	}, [filters]);
+	const { data: rtkData, isLoading: loadingRtk } = useGetRtkStatsHistogramQuery(rtkFetchArg, skipOpts);
 
 	const [triggerHistogram] = useLazyGetLogsHistogramQuery();
 	const [triggerTokens] = useLazyGetLogsTokenHistogramQuery();
@@ -95,10 +113,11 @@ export const OverviewTabView = forwardRef<OverviewTabViewHandle, OverviewTabView
 				tokenData: tokenData ?? null,
 				modelData: modelData ?? null,
 				latencyData: latencyData ?? null,
+				rtkHistogramData: rtkData ?? null,
 			}),
 			loadData,
 		}),
-		[histogramData, tokenData, modelData, latencyData, loadData],
+		[histogramData, tokenData, modelData, latencyData, rtkData, loadData],
 	);
 
 	// Legend lists mirror the charts' display order (top-N by volume + "Other"),
@@ -115,11 +134,13 @@ export const OverviewTabView = forwardRef<OverviewTabViewHandle, OverviewTabView
 			modelData={modelData ?? null}
 			latencyData={latencyData ?? null}
 			throughputData={throughputData ?? null}
+			rtkData={rtkData ?? null}
 			loadingHistogram={loadingHistogram}
 			loadingTokens={loadingTokens}
 			loadingModels={loadingModels}
 			loadingLatency={loadingLatency}
 			loadingThroughput={loadingThroughput}
+			loadingRtk={loadingRtk}
 			startTime={startTime}
 			endTime={endTime}
 			volumeChartType={volumeChartType}
@@ -127,6 +148,7 @@ export const OverviewTabView = forwardRef<OverviewTabViewHandle, OverviewTabView
 			modelChartType={modelChartType}
 			latencyChartType={latencyChartType}
 			throughputChartType={throughputChartType}
+			rtkChartType={rtkChartType}
 			usageModel={usageModel}
 			usageModels={usageModels}
 			onVolumeChartToggle={onVolumeChartToggle}
@@ -134,6 +156,7 @@ export const OverviewTabView = forwardRef<OverviewTabViewHandle, OverviewTabView
 			onModelChartToggle={onModelChartToggle}
 			onLatencyChartToggle={onLatencyChartToggle}
 			onThroughputChartToggle={onThroughputChartToggle}
+			onRtkChartToggle={onRtkChartToggle}
 			onUsageModelChange={onUsageModelChange}
 		/>
 	);

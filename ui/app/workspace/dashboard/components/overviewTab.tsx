@@ -6,7 +6,9 @@ import type {
 	ThroughputHistogramResponse,
 	TokenHistogramResponse,
 } from "@/lib/types/logs";
-import { COMPACT_NUMBER_FORMAT, formatTokensAdaptive } from "@/lib/utils/numbers";
+import { COMPACT_NUMBER_FORMAT, formatRtkCompactNumber, formatRtkRatio, formatTokensAdaptive } from "@/lib/utils/numbers";
+import type { RtkStatsHistogramResponse } from "@/lib/types/plugins";
+import { Info } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +31,7 @@ import { ThroughputChart } from "./charts/throughputChart";
 import { LogVolumeChart } from "./charts/logVolumeChart";
 import { ModelFilterSelect } from "./charts/modelFilterSelect";
 import { ModelUsageChart } from "./charts/modelUsageChart";
+import { RtkCompressionChart } from "./charts/rtkCompressionChart";
 import { TokenUsageChart } from "./charts/tokenUsageChart";
 
 export interface OverviewTabProps {
@@ -38,6 +41,7 @@ export interface OverviewTabProps {
 	modelData: ModelHistogramResponse | null;
 	latencyData: LatencyHistogramResponse | null;
 	throughputData: ThroughputHistogramResponse | null;
+	rtkData: RtkStatsHistogramResponse | null;
 
 	// Loading states
 	loadingHistogram: boolean;
@@ -45,6 +49,7 @@ export interface OverviewTabProps {
 	loadingModels: boolean;
 	loadingLatency: boolean;
 	loadingThroughput: boolean;
+	loadingRtk: boolean;
 
 	// Time range
 	startTime: number;
@@ -56,6 +61,7 @@ export interface OverviewTabProps {
 	modelChartType: ChartType;
 	latencyChartType: ChartType;
 	throughputChartType: ChartType;
+	rtkChartType: ChartType;
 
 	// Model selections
 	usageModel: string;
@@ -69,6 +75,7 @@ export interface OverviewTabProps {
 	onModelChartToggle: (type: ChartType) => void;
 	onLatencyChartToggle: (type: ChartType) => void;
 	onThroughputChartToggle: (type: ChartType) => void;
+	onRtkChartToggle: (type: ChartType) => void;
 
 	// Filter callbacks
 	onUsageModelChange: (model: string) => void;
@@ -80,11 +87,13 @@ function OverviewTabImpl({
 	modelData,
 	latencyData,
 	throughputData,
+	rtkData,
 	loadingHistogram,
 	loadingTokens,
 	loadingModels,
 	loadingLatency,
 	loadingThroughput,
+	loadingRtk,
 	startTime,
 	endTime,
 	volumeChartType,
@@ -92,6 +101,7 @@ function OverviewTabImpl({
 	modelChartType,
 	latencyChartType,
 	throughputChartType,
+	rtkChartType,
 	usageModel,
 	usageModels,
 	onVolumeChartToggle,
@@ -99,6 +109,7 @@ function OverviewTabImpl({
 	onModelChartToggle,
 	onLatencyChartToggle,
 	onThroughputChartToggle,
+	onRtkChartToggle,
 	onUsageModelChange,
 }: OverviewTabProps) {
 	const { t } = useTranslation("dashboard");
@@ -122,6 +133,18 @@ function OverviewTabImpl({
 		if (!tokenData?.buckets) return null;
 		return tokenData.buckets.reduce((sum, b) => sum + (b.total_tokens ?? 0), 0);
 	}, [tokenData]);
+
+	const rtkLifetimeSaved = useMemo(() => {
+		return rtkData?.lifetime_totals?.tokensSaved ?? null;
+	}, [rtkData]);
+
+	const rtkLifetimeRatio = useMemo(() => {
+		return rtkData?.lifetime_totals?.compressionRatio ?? null;
+	}, [rtkData]);
+
+	const rtkLifetimeInvocations = useMemo(() => {
+		return rtkData?.lifetime_totals?.invocations ?? null;
+	}, [rtkData]);
 
 	const modelUsageTotal = useMemo(() => {
 		if (!modelData?.buckets) return null;
@@ -242,6 +265,62 @@ function OverviewTabImpl({
 					controls={<ChartTypeToggle chartType={tokenChartType} onToggle={onTokenChartToggle} data-testid="dashboard-token-chart-toggle" />}
 				>
 					<TokenUsageChart data={tokenData} chartType={tokenChartType} startTime={startTime} endTime={endTime} />
+				</ChartCard>
+
+				{/* RTK Compression Chart */}
+				<ChartCard
+					title={t("charts.rtkCompression")}
+					loading={loadingRtk}
+					testId="chart-rtk-compression"
+					totalLabel={t("charts.rtkSaved")}
+					total={
+						rtkLifetimeSaved !== null ? (
+							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkLifetimeSaved)}</span>
+						) : undefined
+					}
+					totalTooltip={rtkLifetimeSaved !== null ? formatRtkCompactNumber(rtkLifetimeSaved) : undefined}
+					secondaryTotalLabel={t("charts.rtkRatio")}
+					secondaryTotal={
+						rtkLifetimeRatio !== null ? <span className="truncate whitespace-nowrap">{formatRtkRatio(rtkLifetimeRatio)}</span> : undefined
+					}
+					secondaryTotalTooltip={rtkLifetimeRatio !== null ? formatRtkRatio(rtkLifetimeRatio) : undefined}
+					tertiaryTotalLabel={t("charts.rtkInvocations")}
+					tertiaryTotal={
+						rtkLifetimeInvocations !== null ? (
+							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkLifetimeInvocations)}</span>
+						) : undefined
+					}
+					tertiaryTotalTooltip={rtkLifetimeInvocations !== null ? formatRtkCompactNumber(rtkLifetimeInvocations) : undefined}
+					legend={
+						<div className={CHART_HEADER_LEGEND_CLASS}>
+							<span className="flex items-center gap-1">
+								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
+								<span className="text-muted-foreground">{t("charts.rtkCompressed")}</span>
+							</span>
+							<span className="flex items-center gap-1">
+								<span className="h-2 w-2 rounded-full" style={{ backgroundColor: "#22c55e" }} />
+								<span className="text-muted-foreground">{t("charts.rtkSaved")}</span>
+							</span>
+							<span className="flex items-center gap-1.5">
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<button
+											type="button"
+											data-testid="rtk-compression-info-btn"
+											className="text-zinc-500 transition-colors hover:text-zinc-300"
+											aria-label={t("charts.rtkTooltip")}
+										>
+											<Info className="h-3 w-3" />
+										</button>
+									</TooltipTrigger>
+									<TooltipContent side="top">{t("charts.rtkTooltip")}</TooltipContent>
+								</Tooltip>
+							</span>
+						</div>
+					}
+					controls={<ChartTypeToggle chartType={rtkChartType} onToggle={onRtkChartToggle} data-testid="dashboard-rtk-chart-toggle" />}
+				>
+					<RtkCompressionChart data={rtkData} chartType={rtkChartType} startTime={startTime} endTime={endTime} />
 				</ChartCard>
 
 				{/* External Cache Hit Rate Meter */}

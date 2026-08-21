@@ -1,0 +1,194 @@
+import { formatRtkCompactNumber, formatRtkRatio } from "@/lib/utils/numbers";
+import { format } from "date-fns";
+import { memo, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CHART_COLORS } from "../../utils/chartUtils";
+import { ChartErrorBoundary } from "./chartErrorBoundary";
+import type { ChartType } from "./chartTypeToggle";
+import type { RtkStatsHistogramResponse } from "@/lib/types/plugins";
+
+interface RtkCompressionChartProps {
+	data: RtkStatsHistogramResponse | null;
+	chartType: ChartType;
+	startTime: number;
+	endTime: number;
+}
+
+const RTK_COLORS = {
+	compressedTokens: "#3b82f6",
+	savedTokens: "#22c55e",
+} as const;
+
+// RTK bucket timestamps are Unix epoch seconds. Convert to milliseconds so
+// the existing date-format helpers (which expect a string/Date) work.
+function formatRtkBucketTime(timestamp: number, bucketSizeSeconds: number): string {
+	if (bucketSizeSeconds >= 86400) {
+		return format(new Date(timestamp * 1000), "yyyy-MM-dd");
+	}
+	return format(new Date(timestamp * 1000), "HH:mm");
+}
+
+function formatRtkFullTime(timestamp: number): string {
+	return format(new Date(timestamp * 1000), "yyyy-MM-dd HH:mm:ss");
+}
+
+function CustomTooltip({ active, payload, t }: any) {
+	if (!active || !payload || !payload.length) return null;
+
+	const data = payload[0]?.payload;
+	if (!data) return null;
+
+	const compressed = data.compressed_tokens ?? 0;
+	const saved = data.tokens_saved ?? 0;
+	const total = compressed + saved;
+	const ratio = total > 0 ? saved / total : 0;
+
+	return (
+		<div className="rounded-sm border border-zinc-200 bg-white px-3 py-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+			<div className="mb-1 text-xs text-zinc-500">{formatRtkFullTime(data.timestamp)}</div>
+			<div className="space-y-1 text-sm">
+				<div className="flex items-center justify-between gap-4">
+					<span className="flex items-center gap-1.5">
+						<span className="h-2 w-2 rounded-full bg-blue-500" />
+						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.rtkCompressed")}</span>
+					</span>
+					<span className="font-medium">{formatRtkCompactNumber(compressed)}</span>
+				</div>
+				<div className="flex items-center justify-between gap-4">
+					<span className="flex items-center gap-1.5">
+						<span className="h-2 w-2 rounded-full bg-green-500" />
+						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.rtkSaved")}</span>
+					</span>
+					<span className="font-medium">{formatRtkCompactNumber(saved)}</span>
+				</div>
+				<div className="flex items-center justify-between gap-4">
+					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.rtkOriginal")}</span>
+					<span className="font-medium">{formatRtkCompactNumber(total)}</span>
+				</div>
+				{ratio > 0 && (
+					<div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-1 dark:border-zinc-700">
+						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.rtkRatio")}</span>
+						<span className="font-medium text-green-600">{formatRtkRatio(ratio)}</span>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+function RtkCompressionChartImpl({ data, chartType, startTime, endTime }: RtkCompressionChartProps) {
+	const { t } = useTranslation("dashboard");
+	const chartData = useMemo(() => {
+		if (!data?.buckets || !data.bucket_size_seconds) {
+			return [];
+		}
+		return data.buckets.map((bucket, index) => ({
+			...bucket,
+			index,
+			formattedTime: formatRtkBucketTime(bucket.timestamp, data.bucket_size_seconds),
+		}));
+	}, [data]);
+
+	if (!data?.buckets || chartData.length === 0) {
+		return <div className="text-muted-foreground flex h-full items-center justify-center text-sm">{t("empty.noData")}</div>;
+	}
+
+	const commonProps = {
+		data: chartData,
+		margin: { top: 6, right: 4, left: 4, bottom: 0 },
+	};
+
+	return (
+		<ChartErrorBoundary resetKey={`${startTime}-${endTime}-${chartData.length}`}>
+			<ResponsiveContainer width="100%" height="100%">
+				{chartType === "bar" ? (
+					<BarChart {...commonProps} barCategoryGap={1}>
+						<CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-zinc-200 dark:stroke-zinc-700" />
+						<XAxis
+							dataKey="index"
+							type="number"
+							domain={[-0.5, chartData.length - 0.5]}
+							tick={{ fontSize: 11, className: "fill-zinc-500", dy: 5 }}
+							tickLine={false}
+							axisLine={false}
+							tickFormatter={(idx) => chartData[Math.round(idx)]?.formattedTime || ""}
+							interval="preserveStartEnd"
+						/>
+						<YAxis
+							tick={{ fontSize: 11, className: "fill-zinc-500" }}
+							tickLine={false}
+							axisLine={false}
+							width={50}
+							tickFormatter={(v) => formatRtkCompactNumber(v)}
+							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
+							allowDataOverflow={false}
+						/>
+						<Tooltip content={<CustomTooltip t={t} />} cursor={{ fill: "#8c8c8f", fillOpacity: 0.15 }} />
+						<Bar
+							isAnimationActive={false}
+							dataKey="compressed_tokens"
+							stackId="tokens"
+							fill={RTK_COLORS.compressedTokens}
+							fillOpacity={0.9}
+							radius={[0, 0, 0, 0]}
+							barSize={30}
+						/>
+						<Bar
+							isAnimationActive={false}
+							dataKey="tokens_saved"
+							stackId="tokens"
+							fill={RTK_COLORS.savedTokens}
+							fillOpacity={0.9}
+							radius={[2, 2, 0, 0]}
+							barSize={30}
+						/>
+					</BarChart>
+				) : (
+					<AreaChart {...commonProps}>
+						<CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-zinc-200 dark:stroke-zinc-700" />
+						<XAxis
+							dataKey="index"
+							type="number"
+							domain={[-0.5, chartData.length - 0.5]}
+							tick={{ fontSize: 11, className: "fill-zinc-500" }}
+							tickLine={false}
+							axisLine={false}
+							tickFormatter={(idx) => chartData[Math.round(idx)]?.formattedTime || ""}
+							interval="preserveStartEnd"
+						/>
+						<YAxis
+							tick={{ fontSize: 11, className: "fill-zinc-500" }}
+							tickLine={false}
+							axisLine={false}
+							width={50}
+							tickFormatter={(v) => formatRtkCompactNumber(v)}
+							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
+							allowDataOverflow={false}
+						/>
+						<Tooltip content={<CustomTooltip t={t} />} />
+						<Area
+							isAnimationActive={false}
+							type="monotone"
+							dataKey="compressed_tokens"
+							stackId="1"
+							stroke={RTK_COLORS.compressedTokens}
+							fill={RTK_COLORS.compressedTokens}
+							fillOpacity={0.7}
+						/>
+						<Area
+							isAnimationActive={false}
+							type="monotone"
+							dataKey="tokens_saved"
+							stackId="1"
+							stroke={RTK_COLORS.savedTokens}
+							fill={RTK_COLORS.savedTokens}
+							fillOpacity={0.7}
+						/>
+					</AreaChart>
+				)}
+			</ResponsiveContainer>
+		</ChartErrorBoundary>
+	);
+}
+export const RtkCompressionChart = memo(RtkCompressionChartImpl);

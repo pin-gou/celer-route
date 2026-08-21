@@ -2045,6 +2045,9 @@ func (a *rtkAccessor) ReadRawOutput(id string) (string, bool) {
 	return rtk.ReadRtkRawOutputByID(id, a.p.GetAppDir())
 }
 func (a *rtkAccessor) Stats() rtk.MetricsSnapshot { return a.p.Stats() }
+func (a *rtkAccessor) Histogram(start, end, bucketSize int64) []rtk.RtkHistogramBucket {
+	return a.p.Histogram(start, end, bucketSize)
+}
 
 // ResolveRtkPlugin returns an RtkPluginAccessor over the live RTK plugin
 // when it is loaded, or (nil, false) when it is not. It is safe to call

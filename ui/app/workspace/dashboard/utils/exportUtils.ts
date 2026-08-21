@@ -16,6 +16,7 @@ import type {
 	ProviderTokenHistogramResponse,
 	TokenHistogramResponse,
 } from "@/lib/types/logs";
+import type { RtkStatsHistogramResponse } from "@/lib/types/plugins";
 
 type CSVData = { headers: string[]; rows: unknown[][] };
 
@@ -54,6 +55,34 @@ export function overviewLatencyToCSV(data: LatencyHistogramResponse | null): CSV
 		b.p95_latency,
 		b.p99_latency,
 		b.total_requests,
+	]);
+	return { headers, rows };
+}
+
+export function overviewRtkToCSV(data: RtkStatsHistogramResponse | null): CSVData {
+	const headers = [
+		"Timestamp",
+		"Invocations",
+		"Compressed Count",
+		"Original Tokens",
+		"Compressed Tokens",
+		"Tokens Saved",
+		"Compression Ratio",
+		"Lifetime Invocations",
+		"Lifetime Tokens Saved",
+		"Lifetime Compression Ratio",
+	];
+	const rows = (data?.buckets ?? []).map((b) => [
+		new Date(b.timestamp * 1000).toISOString(),
+		b.invocations,
+		b.compressed_count,
+		b.original_tokens,
+		b.compressed_tokens,
+		b.tokens_saved,
+		b.compression_ratio,
+		data?.lifetime_totals?.invocations ?? 0,
+		data?.lifetime_totals?.tokensSaved ?? 0,
+		data?.lifetime_totals?.compressionRatio ?? 0,
 	]);
 	return { headers, rows };
 }
@@ -161,6 +190,7 @@ export interface DashboardData {
 	tokenData: TokenHistogramResponse | null;
 	modelData: ModelHistogramResponse | null;
 	latencyData: LatencyHistogramResponse | null;
+	rtkHistogramData: RtkStatsHistogramResponse | null;
 	// Provider Usage
 	providerCostData: ProviderCostHistogramResponse | null;
 	providerTokenData: ProviderTokenHistogramResponse | null;
@@ -200,6 +230,7 @@ export function getCSVSections(data: DashboardData, tab: ExportTab): { name: str
 			{ name: "overview-tokens", csv: overviewTokensToCSV(data.tokenData) },
 			{ name: "overview-model-usage", csv: overviewModelUsageToCSV(data.modelData) },
 			{ name: "overview-latency", csv: overviewLatencyToCSV(data.latencyData) },
+			{ name: "overview-rtk", csv: overviewRtkToCSV(data.rtkHistogramData) },
 		);
 	}
 

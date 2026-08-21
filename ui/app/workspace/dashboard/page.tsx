@@ -76,6 +76,7 @@ export default function DashboardPage() {
 			model_chart: parseAsString.withDefault("bar"),
 			latency_chart: parseAsString.withDefault("bar"),
 			throughput_chart: parseAsString.withDefault("bar"),
+			rtk_chart: parseAsString.withDefault("bar"),
 			usage_model: parseAsString.withDefault("all"),
 			provider_cost_chart: parseAsString.withDefault("bar"),
 			provider_token_chart: parseAsString.withDefault("bar"),
@@ -194,6 +195,7 @@ export default function DashboardPage() {
 			tokenData: null,
 			modelData: null,
 			latencyData: null,
+			rtkHistogramData: null,
 			providerCostData: null,
 			providerTokenData: null,
 			providerLatencyData: null,
@@ -250,6 +252,7 @@ export default function DashboardPage() {
 	const handleModelChartToggle = useCallback((type: ChartType) => setUrlState({ model_chart: type }), [setUrlState]);
 	const handleLatencyChartToggle = useCallback((type: ChartType) => setUrlState({ latency_chart: type }), [setUrlState]);
 	const handleThroughputChartToggle = useCallback((type: ChartType) => setUrlState({ throughput_chart: type }), [setUrlState]);
+	const handleRtkChartToggle = useCallback((type: ChartType) => setUrlState({ rtk_chart: type }), [setUrlState]);
 	const handleProviderCostChartToggle = useCallback((type: ChartType) => setUrlState({ provider_cost_chart: type }), [setUrlState]);
 	const handleProviderTokenChartToggle = useCallback((type: ChartType) => setUrlState({ provider_token_chart: type }), [setUrlState]);
 	const handleProviderLatencyChartToggle = useCallback((type: ChartType) => setUrlState({ provider_latency_chart: type }), [setUrlState]);
@@ -477,12 +480,14 @@ export default function DashboardPage() {
 									modelChartType={toChartType(urlState.model_chart)}
 									latencyChartType={toChartType(urlState.latency_chart)}
 									throughputChartType={toChartType(urlState.throughput_chart)}
+									rtkChartType={toChartType(urlState.rtk_chart)}
 									usageModel={urlState.usage_model}
 									onVolumeChartToggle={handleVolumeChartToggle}
 									onTokenChartToggle={handleTokenChartToggle}
 									onModelChartToggle={handleModelChartToggle}
 									onLatencyChartToggle={handleLatencyChartToggle}
 									onThroughputChartToggle={handleThroughputChartToggle}
+									onRtkChartToggle={handleRtkChartToggle}
 									onUsageModelChange={handleUsageModelChange}
 								/>
 							</div>

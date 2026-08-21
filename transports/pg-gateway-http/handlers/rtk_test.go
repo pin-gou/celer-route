@@ -54,13 +54,15 @@ func (s *stubRtkResolver) ReloadRtkPlugin(_ *fasthttp.RequestCtx, name string, _
 // returned verbatim by ReadRawOutput so the test can assert on the bytes
 // served on the wire.
 type stubRtkAccessor struct {
-	catalog    rtk.FilterCatalog
-	rawOutput  string
-	rawFound   bool
-	lastTest   rtk.TestPayload
-	lastPrev   rtk.PreviewRequest
-	stats      rtk.MetricsSnapshot
-	statsCalls int
+	catalog      rtk.FilterCatalog
+	rawOutput    string
+	rawFound     bool
+	lastTest     rtk.TestPayload
+	lastPrev     rtk.PreviewRequest
+	stats        rtk.MetricsSnapshot
+	statsCalls   int
+	histogram    []rtk.RtkHistogramBucket
+	histogramReq struct{ start, end, bucketSize int64 }
 }
 
 func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog    { return s.catalog }
@@ -80,6 +82,12 @@ func (s *stubRtkAccessor) ReadRawOutput(_ string) (string, bool) { return s.rawO
 func (s *stubRtkAccessor) Stats() rtk.MetricsSnapshot {
 	s.statsCalls++
 	return s.stats
+}
+func (s *stubRtkAccessor) Histogram(start, end, bucketSize int64) []rtk.RtkHistogramBucket {
+	s.histogramReq.start = start
+	s.histogramReq.end = end
+	s.histogramReq.bucketSize = bucketSize
+	return s.histogram
 }
 
 // memoryConfigStore is an in-memory replacement for configstore.ConfigStore
@@ -563,5 +571,137 @@ func TestRtkHandler_GetStats_PluginNotLoaded(t *testing.T) {
 	status, body := callGET(t, r, "/api/context/rtk/stats")
 	if status != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503; body=%s", status, string(body))
+	}
+}
+
+// TestRtkHandler_GetStatsHistogram checks that the histogram endpoint returns
+// the accessor's buckets, the derived window totals, and the lifetime totals
+// in a single response. It also verifies the bucket_size_seconds is honoured
+// when explicitly provided.
+func TestRtkHandler_GetStatsHistogram(t *testing.T) {
+	cs := newMemoryConfigStore()
+	buckets := []rtk.RtkHistogramBucket{
+		{Timestamp: 1600000000, Invocations: 2, CompressedCount: 2, OriginalTokens: 3000, CompressedTokens: 900, TokensSaved: 2100, CompressionRatio: 0.7},
+		{Timestamp: 1600003600, Invocations: 1, CompressedCount: 0, OriginalTokens: 0, CompressedTokens: 0, TokensSaved: 0, CompressionRatio: 0},
+	}
+	resolver := &stubRtkResolver{
+		found: true,
+		accessor: &stubRtkAccessor{
+			stats: rtk.MetricsSnapshot{
+				Invocations:      99,
+				CompressedCount:  80,
+				OriginalTokens:   90000,
+				CompressedTokens: 27000,
+				TokensSaved:      63000,
+				CompressionRatio: 0.7,
+			},
+			histogram: buckets,
+		},
+	}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/stats/histogram?start_time=2020-09-13T12:26:40Z&end_time=2020-09-13T14:26:40Z&bucket_size_seconds=3600")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, string(body))
+	}
+
+	var got struct {
+		Plugin            string `json:"plugin"`
+		Buckets           []rtk.RtkHistogramBucket `json:"buckets"`
+		BucketSizeSeconds int64  `json:"bucket_size_seconds"`
+		Totals            rtk.RtkHistogramBucket   `json:"totals"`
+		LifetimeTotals    rtk.MetricsSnapshot      `json:"lifetime_totals"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode body: %v; body=%s", err, string(body))
+	}
+	if got.Plugin != "rtk" {
+		t.Errorf("plugin = %q, want rtk", got.Plugin)
+	}
+	if got.BucketSizeSeconds != 3600 {
+		t.Errorf("bucket_size_seconds = %d, want 3600", got.BucketSizeSeconds)
+	}
+	if len(got.Buckets) != 2 {
+		t.Fatalf("buckets length = %d, want 2; body=%s", len(got.Buckets), string(body))
+	}
+	if got.Buckets[0].Timestamp != 1600000000 || got.Buckets[1].Timestamp != 1600003600 {
+		t.Errorf("bucket timestamps not preserved: %+v", got.Buckets)
+	}
+	if got.Totals.Invocations != 3 || got.Totals.CompressedCount != 2 {
+		t.Errorf("totals Invocations/Compressed = %d/%d, want 3/2", got.Totals.Invocations, got.Totals.CompressedCount)
+	}
+	if got.Totals.OriginalTokens != 3000 || got.Totals.TokensSaved != 2100 {
+		t.Errorf("totals Original/Saved = %d/%d, want 3000/2100", got.Totals.OriginalTokens, got.Totals.TokensSaved)
+	}
+	if got.LifetimeTotals.Invocations != 99 {
+		t.Errorf("lifetime Invocations = %d, want 99", got.LifetimeTotals.Invocations)
+	}
+
+	acc := resolver.accessor.(*stubRtkAccessor)
+	if acc.histogramReq.start != 1600000000 || acc.histogramReq.end != 1600007200 || acc.histogramReq.bucketSize != 3600 {
+		t.Errorf("accessor.Histogram() args = (%d, %d, %d), want (1600000000, 1600007200, 3600)",
+			acc.histogramReq.start, acc.histogramReq.end, acc.histogramReq.bucketSize)
+	}
+}
+
+// TestRtkHandler_GetStatsHistogram_MissingTimeRange ensures a 400 is returned
+// when neither explicit start/end nor a period is supplied.
+func TestRtkHandler_GetStatsHistogram_MissingTimeRange(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: true, accessor: &stubRtkAccessor{}}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callGET(t, r, "/api/context/rtk/stats/histogram")
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+// TestRtkHandler_GetStatsHistogram_Period verifies the period shorthand
+// resolves into a concrete window (the accessor receives a non-zero window).
+func TestRtkHandler_GetStatsHistogram_Period(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{
+		found: true,
+		accessor: &stubRtkAccessor{
+			stats:     rtk.MetricsSnapshot{Invocations: 5},
+			histogram: []rtk.RtkHistogramBucket{},
+		},
+	}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/stats/histogram?period=1h")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, string(body))
+	}
+	var got struct {
+		Buckets           []rtk.RtkHistogramBucket `json:"buckets"`
+		BucketSizeSeconds int64                    `json:"bucket_size_seconds"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	// An empty bucket list must still be marshalled as [] (not null).
+	if got.Buckets == nil {
+		t.Errorf("buckets = nil, want []")
+	}
+	if got.BucketSizeSeconds <= 0 {
+		t.Errorf("bucket_size_seconds = %d, want auto-calculated > 0", got.BucketSizeSeconds)
+	}
+	if acc := resolver.accessor.(*stubRtkAccessor); acc.histogramReq.start >= acc.histogramReq.end {
+		t.Errorf("period did not resolve into start < end window: (%d, %d)", acc.histogramReq.start, acc.histogramReq.end)
+	}
+}
+
+// TestRtkHandler_GetStatsHistogram_PluginNotLoaded mirrors the /stats 503
+// contract for the histogram endpoint.
+func TestRtkHandler_GetStatsHistogram_PluginNotLoaded(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, _ := callGET(t, r, "/api/context/rtk/stats/histogram?start_time=2020-09-13T12:26:40Z&end_time=2020-09-13T14:26:40Z")
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", status)
 	}
 }

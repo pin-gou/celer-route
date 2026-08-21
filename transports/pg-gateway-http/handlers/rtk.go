@@ -1,6 +1,6 @@
 // Package handlers — RTK-specific HTTP endpoints.
 //
-// This file implements the five admin endpoints that OmniRoute exposes for
+// This file implements the six admin endpoints that OmniRoute exposes for
 // its RTK engine, aligned to the same path layout operators are used to:
 //
 //   GET  /api/context/rtk/config           — read the active RTK config
@@ -8,6 +8,8 @@
 //   GET  /api/context/rtk/filters          — list the loaded filter catalog
 //   POST /api/context/rtk/test             — dry-run compression against a payload
 //   GET  /api/context/rtk/raw-output/{id}  — read a persisted raw-output file
+//   GET  /api/context/rtk/stats            — process-lifetime compression counters
+//   GET  /api/context/rtk/stats/histogram — time-bucketed histogram of compression stats
 //   POST /api/compression/preview          — preview rtk / stacked / off modes
 //
 // The handler relies on the existing plugins loader for persistence and
@@ -21,6 +23,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"time"
 
 	"github.com/fasthttp/router"
 	"github.com/pin-gou/pg-gateway/core/schemas"
@@ -45,6 +50,7 @@ type RtkPluginAccessor interface {
 	PreviewCompression(req rtk.PreviewRequest) rtk.PreviewResponse
 	ReadRawOutput(id string) (string, bool)
 	Stats() rtk.MetricsSnapshot
+	Histogram(start, end, bucketSize int64) []rtk.RtkHistogramBucket
 }
 
 // RtkPluginResolver returns the active RTK plugin or false when the plugin
@@ -94,6 +100,7 @@ func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.Bif
 	r.POST("/api/context/rtk/test", lib.ChainMiddlewares(h.postTest, middlewares...))
 	r.GET("/api/context/rtk/raw-output/{id}", lib.ChainMiddlewares(h.getRawOutput, middlewares...))
 	r.GET("/api/context/rtk/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
+	r.GET("/api/context/rtk/stats/histogram", lib.ChainMiddlewares(h.getStatsHistogram, middlewares...))
 	r.POST("/api/compression/preview", lib.ChainMiddlewares(h.postPreview, middlewares...))
 }
 
@@ -380,6 +387,114 @@ func (h *RtkHandler) getStats(ctx *fasthttp.RequestCtx) {
 		TokensSaved:      snap.TokensSaved,
 		CompressionRatio: snap.CompressionRatio,
 	})
+}
+
+// ---------------------------------------------------------------------------
+// /api/context/rtk/stats/histogram
+// ---------------------------------------------------------------------------
+
+// rtkStatsHistogramResponse is the response shape for
+// GET /api/context/rtk/stats/histogram. It wraps the time-bucketed histogram
+// alongside the lifetime totals (same shape as /stats) so the UI can render
+// both the time series and the "since startup" figures in one request.
+type rtkStatsHistogramResponse struct {
+	Plugin           string               `json:"plugin"`
+	Buckets          []rtk.RtkHistogramBucket `json:"buckets"`
+	BucketSizeSeconds int64                `json:"bucket_size_seconds"`
+	Totals           rtk.RtkHistogramBucket   `json:"totals"`
+	LifetimeTotals   rtk.MetricsSnapshot      `json:"lifetime_totals"`
+}
+
+// getStatsHistogram handles GET /api/context/rtk/stats/histogram.
+// Query parameters:
+//   - start_time (RFC3339Nano) — start of the window (required unless period is set)
+//   - end_time   (RFC3339Nano) — end of the window (required unless period is set)
+//   - period     (string)      — shorthand like "1h", "7d" (overrides start/end)
+//   - bucket_size_seconds (int) — optional; auto-calculated from window duration if omitted
+//
+// Returns 503 when the RTK plugin is not enabled.
+func (h *RtkHandler) getStatsHistogram(ctx *fasthttp.RequestCtx) {
+	accessor, ok := h.resolver.ResolveRtkPlugin()
+	if !ok || accessor == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "RTK plugin is not enabled")
+		return
+	}
+
+	var startTime, endTime *time.Time
+
+	if period := string(ctx.QueryArgs().Peek("period")); period != "" {
+		if s, e := ResolvePeriod(period); s != nil {
+			startTime = s
+			endTime = e
+		}
+	}
+
+	if startTime == nil {
+		if s := string(ctx.QueryArgs().Peek("start_time")); s != "" {
+			if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+				startTime = &t
+			}
+		}
+	}
+	if endTime == nil {
+		if e := string(ctx.QueryArgs().Peek("end_time")); e != "" {
+			if t, err := time.Parse(time.RFC3339Nano, e); err == nil {
+				endTime = &t
+			}
+		}
+	}
+
+	if startTime == nil || endTime == nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "start_time and end_time (or period) are required")
+		return
+	}
+
+	bucketSize := int64(0)
+	if bs := string(ctx.QueryArgs().Peek("bucket_size_seconds")); bs != "" {
+		if v, err := strconv.ParseInt(bs, 10, 64); err == nil && v > 0 {
+			bucketSize = v
+		}
+	}
+	if bucketSize <= 0 {
+		bucketSize = calculateBucketSize(startTime, endTime)
+	}
+
+	startUnix := startTime.Unix()
+	endUnix := endTime.Unix()
+	buckets := accessor.Histogram(startUnix, endUnix, bucketSize)
+	if buckets == nil {
+		buckets = []rtk.RtkHistogramBucket{}
+	}
+
+	// Compute totals from the window buckets.
+	totals := computeBucketTotals(buckets)
+
+	SendJSON(ctx, rtkStatsHistogramResponse{
+		Plugin:            rtk.PluginName,
+		Buckets:           buckets,
+		BucketSizeSeconds:  bucketSize,
+		Totals:            totals,
+		LifetimeTotals:    accessor.Stats(),
+	})
+}
+
+// computeBucketTotals aggregates a slice of histogram buckets into a single
+// RtkHistogramBucket representing the window totals.
+func computeBucketTotals(buckets []rtk.RtkHistogramBucket) rtk.RtkHistogramBucket {
+	var t rtk.RtkHistogramBucket
+	for _, b := range buckets {
+		t.Invocations += b.Invocations
+		t.CompressedCount += b.CompressedCount
+		t.OriginalTokens += b.OriginalTokens
+		t.CompressedTokens += b.CompressedTokens
+	}
+	if t.OriginalTokens > t.CompressedTokens {
+		t.TokensSaved = t.OriginalTokens - t.CompressedTokens
+	}
+	if t.OriginalTokens > 0 {
+		t.CompressionRatio = math.Min(1.0, math.Max(0.0, float64(t.TokensSaved)/float64(t.OriginalTokens)))
+	}
+	return t
 }
 
 // ---------------------------------------------------------------------------

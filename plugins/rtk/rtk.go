@@ -125,6 +125,16 @@ func (p *Plugin) Stats() MetricsSnapshot {
 	return p.metrics.Snapshot()
 }
 
+// Histogram returns time-bucketed compression metrics within [start, end)
+// aligned to the requested bucketSizeSeconds. Satisfies the RtkPluginAccessor
+// interface so the handler can serve GET /api/context/rtk/stats/histogram.
+func (p *Plugin) Histogram(start, end, bucketSize int64) []RtkHistogramBucket {
+	if p == nil || p.metrics == nil {
+		return nil
+	}
+	return p.metrics.Histogram(start, end, bucketSize)
+}
+
 // Loader returns the plugin's FilterLoader so handlers can inspect the
 // loaded filter catalog and diagnostics.
 func (p *Plugin) Loader() *FilterLoader {

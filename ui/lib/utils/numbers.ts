@@ -66,3 +66,22 @@ export function formatTokenPriceFull(cost?: number): string {
 	if (cost === undefined || cost === null) return "Not available";
 	return `${formatTokenPriceValue(cost)} / 1M tokens`;
 }
+
+/** Format a large number in compact form (e.g. 1500 → "1.5k", 2_000_000 → "2M"). */
+export function formatRtkCompactNumber(value: number): string {
+	if (!Number.isFinite(value) || value <= 0) return "0";
+	if (value >= 1_000_000) {
+		return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+	}
+	if (value >= 1_000) {
+		return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+	}
+	return String(value);
+}
+
+/** Format a compression ratio (0.0–1.0) as a percentage string. */
+export function formatRtkRatio(ratio: number): string {
+	if (!Number.isFinite(ratio) || ratio <= 0) return "0%";
+	const pct = Math.min(100, Math.max(0, ratio * 100));
+	return `${pct.toFixed(pct >= 10 ? 0 : 1)}%`;
+}

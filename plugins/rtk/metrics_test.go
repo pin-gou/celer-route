@@ -159,3 +159,139 @@ func TestPlugin_StatsReturnsZeroOnUninitialised(t *testing.T) {
 		t.Errorf("uninitialised Plugin.Stats() = %+v, want zero", snap)
 	}
 }
+
+// TestCompressionMetrics_HistogramBucketsByWindow verifies that events land in
+// the right bucket and that the bucket aggregates match the lifetime snapshot
+// for the window.
+func TestCompressionMetrics_HistogramBucketsByWindow(t *testing.T) {
+	m := &CompressionMetrics{}
+	// Two events in the same hour bucket (10:00:00-10:59:59), one in the next.
+	hour := int64(3600)
+	base := int64(1_600_000_000) // arbitrary aligned-ish timestamp
+	m.RecordInvocationAt(base, true, 1000, 400)
+	m.RecordInvocationAt(base+60, true, 2000, 500)
+	m.RecordInvocationAt(base+hour, false, 0, 0)
+
+	buckets := m.Histogram(base, base+2*hour, hour)
+	if len(buckets) != 2 {
+		t.Fatalf("Histogram window = %d buckets, want 2", len(buckets))
+	}
+	b0 := buckets[0]
+	if b0.Timestamp != (base/hour)*hour {
+		t.Errorf("bucket[0].Timestamp = %d, want %d", b0.Timestamp, (base/hour)*hour)
+	}
+	if b0.Invocations != 2 || b0.CompressedCount != 2 {
+		t.Errorf("bucket[0] Invocations/Compressed = %d/%d, want 2/2", b0.Invocations, b0.CompressedCount)
+	}
+	if b0.OriginalTokens != 3000 || b0.CompressedTokens != 900 {
+		t.Errorf("bucket[0] Original/Compressed tokens = %d/%d, want 3000/900", b0.OriginalTokens, b0.CompressedTokens)
+	}
+	if b0.TokensSaved != 2100 {
+		t.Errorf("bucket[0] TokensSaved = %d, want 2100", b0.TokensSaved)
+	}
+	wantRatio := 2100.0 / 3000.0
+	if b0.CompressionRatio < wantRatio-0.001 || b0.CompressionRatio > wantRatio+0.001 {
+		t.Errorf("bucket[0] CompressionRatio = %f, want ~%f", b0.CompressionRatio, wantRatio)
+	}
+
+	b1 := buckets[1]
+	if b1.Invocations != 1 || b1.CompressedCount != 0 {
+		t.Errorf("bucket[1] Invocations/Compressed = %d/%d, want 1/0", b1.Invocations, b1.CompressedCount)
+	}
+	if b1.OriginalTokens != 0 || b1.TokensSaved != 0 {
+		t.Errorf("bucket[1] tokens = %d/%d, want 0/0 (no-op pass)", b1.OriginalTokens, b1.TokensSaved)
+	}
+}
+
+// TestCompressionMetrics_HistogramWindowBoundaries verifies buckets outside
+// [start, end) are excluded and that a window covering only [start,end) with
+// no events returns nil.
+func TestCompressionMetrics_HistogramWindowBoundaries(t *testing.T) {
+	m := &CompressionMetrics{}
+	hour := int64(3600)
+	base := int64(1_600_000_000)
+	m.RecordInvocationAt(base, true, 100, 50)
+	m.RecordInvocationAt(base+hour*10, true, 100, 50) // well outside window
+
+	buckets := m.Histogram(base, base+hour, hour)
+	if len(buckets) != 1 {
+		t.Fatalf("window buckets = %d, want 1", len(buckets))
+	}
+	if buckets[0].Invocations != 1 {
+		t.Errorf("window bucket invocations = %d, want 1", buckets[0].Invocations)
+	}
+
+	// A window with no events → nil.
+	empty := m.Histogram(base+hour*2, base+hour*3, hour)
+	if empty != nil {
+		t.Errorf("empty window = %+v, want nil", empty)
+	}
+}
+
+// TestCompressionMetrics_HistogramLRUEviction verifies the cap: beyond
+// maxBuckets distinct timestamps the oldest buckets are swept (they disappear
+// from the histogram, but the lifetime snapshot keeps their numbers).
+func TestCompressionMetrics_HistogramLRUEviction(t *testing.T) {
+	m := &CompressionMetrics{}
+	second := int64(1)
+	base := int64(1_600_000_000)
+	// Write maxBuckets+5 distinct timestamps.
+	for i := 0; i < maxBuckets+5; i++ {
+		m.RecordInvocationAt(base+int64(i)*second, true, 10, 4)
+	}
+	if got := len(m.bucketMetric.buckets); got != maxBuckets {
+		t.Fatalf("bucket map size = %d, want cap %d", got, maxBuckets)
+	}
+	// The 5 oldest were evicted. Querying a window that includes them should
+	// return at most maxBuckets buckets, and the first surviving key should
+	// be base+5.
+	// Note: bucket map keys are raw unix timestamps here (1-second keys), so
+	// bucketSizeSeconds=1 keeps keys stable.
+	window := m.Histogram(base, base+second*int64(maxBuckets+5), second)
+	if len(window) != maxBuckets {
+		t.Fatalf("window buckets = %d, want %d", len(window), maxBuckets)
+	}
+	if window[0].Timestamp != base+5 {
+		t.Errorf("oldest surviving bucket = %d, want %d (5 oldest evaporated)", window[0].Timestamp, base+5)
+	}
+	// Lifetime counters keep everything.
+	snap := m.Snapshot()
+	wantInvoc := uint64(maxBuckets + 5)
+	if snap.Invocations != wantInvoc {
+		t.Errorf("lifetime Invocations = %d, want %d", snap.Invocations, wantInvoc)
+	}
+}
+
+// TestCompressionMetrics_HistogramConcurrent stresses bucket accumulation
+// under parallel RecordInvocationAt callers with differing timestamps.
+func TestCompressionMetrics_HistogramConcurrent(t *testing.T) {
+	m := &CompressionMetrics{}
+	const goroutines = 16
+	const each = 200
+	base := int64(1_600_000_000)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(n int) {
+			defer wg.Done()
+			for j := 0; j < each; j++ {
+				ts := base + int64(n)*1000 + int64(j) // spread across many seconds
+				m.RecordInvocationAt(ts, true, 10, 4)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	buckets := m.Histogram(base, base+int64(goroutines)*1000, 1000)
+	totalInv := uint64(0)
+	for _, b := range buckets {
+		totalInv += b.Invocations
+	}
+	if totalInv != goroutines*each {
+		t.Errorf("histogram summed Invocations = %d, want %d", totalInv, goroutines*each)
+	}
+	// Lifetime must match too.
+	if snap := m.Snapshot(); snap.Invocations != goroutines*each {
+		t.Errorf("lifetime Invocations = %d, want %d", snap.Invocations, goroutines*each)
+	}
+}

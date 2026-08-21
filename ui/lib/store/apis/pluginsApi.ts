@@ -6,6 +6,7 @@ import {
 	CreatePluginRequest,
 	Plugin,
 	PluginsResponse,
+	RtkStatsHistogramResponse,
 	RtkStatsResponse,
 	UnfreezeCooldownResponse,
 	UpdatePluginRequest,
@@ -207,6 +208,20 @@ export const pluginsApi = baseApi.injectEndpoints({
 				return response;
 			},
 		}),
+
+		// GET /api/context/rtk/stats/histogram — time-bucketed compression stats
+		// for the dashboard chart. Accepts the same time-range parameters as the
+		// logs histogram endpoints (start_time, end_time, period).
+		getRtkStatsHistogram: builder.query<
+			RtkStatsHistogramResponse,
+			{ filters: { start_time?: string; end_time?: string; period?: string } }
+		>({
+			query: ({ filters }) => ({
+				url: "/context/rtk/stats/histogram",
+				params: filters,
+			}),
+			providesTags: ["Plugins"],
+		}),
 	}),
 });
 
@@ -223,4 +238,5 @@ export const {
 	useGetCooldownStatsQuery,
 	useUnfreezeCooldownMutation,
 	useGetRtkStatsQuery,
+	useGetRtkStatsHistogramQuery,
 } = pluginsApi;

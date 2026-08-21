@@ -371,3 +371,23 @@ export interface RtkStats {
 export interface RtkStatsResponse {
 	stats: RtkStats;
 }
+
+// Time-bucketed histogram of compression stats, returned by
+// GET /api/context/rtk/stats/histogram. Used by the dashboard RTK chart.
+export interface RtkHistogramBucket {
+	timestamp: number;
+	invocations: number;
+	compressed_count: number;
+	original_tokens: number;
+	compressed_tokens: number;
+	tokens_saved: number;
+	compression_ratio: number;
+}
+
+export interface RtkStatsHistogramResponse {
+	plugin: string;
+	buckets: RtkHistogramBucket[];
+	bucket_size_seconds: number;
+	totals: RtkHistogramBucket;
+	lifetime_totals: RtkStats;
+}
