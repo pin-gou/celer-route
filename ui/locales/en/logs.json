@@ -71,6 +71,8 @@
 		"latency": "Latency",
 		"tokens": "Tokens",
 		"cost": "Cost",
+		"compressed_before": "Before Comp.",
+		"compressed_after": "After Comp.",
 		"virtual_key": "Virtual Key",
 		"routing_rule": "Routing Rule",
 		"team": "Team",

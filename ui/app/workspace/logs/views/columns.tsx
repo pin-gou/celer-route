@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
+
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import {
 	getProviderLabel,
@@ -19,8 +19,7 @@ import { formatCompactNumber, formatTokensAdaptive } from "@/lib/utils/numbers";
 import { ColumnDef } from "@tanstack/react-table";
 import { format, formatDistanceToNow } from "date-fns";
 import { enUS, zhCN, type Locale } from "date-fns/locale";
-import { ArrowUpDown, ChevronRight, CornerDownRight, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ArrowUpDown, ChevronRight, CornerDownRight, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 // Passed to useReactTable({ meta }) by the logs page so the expander column can
@@ -29,36 +28,6 @@ export interface LogsTableMeta {
 	expandedChainIds: Set<string>;
 	loadingChainIds: Set<string>;
 	onToggleChain: (log: LogEntry) => void;
-}
-
-function LogActionsMenu({ log, onDelete }: { log: LogEntry; onDelete: (log: LogEntry) => void }) {
-	const { t } = useTranslation("logs");
-	const [isOpen, setIsOpen] = useState(false);
-
-	return (
-		<DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-			<DropdownMenuTrigger asChild onClick={(event) => event.stopPropagation()}>
-				<Button variant="ghost" size="icon-sm" data-testid="log-actions-btn" aria-label={t("table.logActions")}>
-					<MoreHorizontal className="h-4 w-4" />
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end">
-				<DropdownMenuItem
-					variant="destructive"
-					className="cursor-pointer"
-					data-testid="log-delete-btn"
-					onSelect={(e) => {
-						e.preventDefault();
-						onDelete(log);
-						setIsOpen(false);
-					}}
-				>
-					<Trash2 className="h-4 w-4" />
-					{t("table.delete")}
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
 }
 
 function getAssistantToolCallSummary(log?: LogEntry): string {
@@ -290,8 +259,6 @@ function AttributionCell({ names, name, ids, id }: { names?: string[]; name?: st
 }
 
 export const createColumns = (
-	onDelete: (log: LogEntry) => void,
-	hasDeleteAccess = true,
 	metadataKeys: string[] = [],
 	customAppIcons: Record<string, string> = {},
 	groupedView = false,
@@ -521,7 +488,12 @@ export const createColumns = (
 			header: ({ column }) => {
 				const { t } = useTranslation("logs");
 				return (
-					<Button variant="ghost" data-testid="logs-tokens-sort-btn" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+					<Button
+						variant="ghost"
+						className="w-full justify-end"
+						data-testid="logs-tokens-sort-btn"
+						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+					>
 						{t("column_labels.tokens")}
 						<ArrowUpDown className="ml-2 h-4 w-4" />
 					</Button>
@@ -540,7 +512,7 @@ export const createColumns = (
 				const splitBase = prompt + completion || 1;
 				const inPct = (prompt / splitBase) * 100;
 				return (
-					<div className="flex flex-col items-start gap-0.5 leading-tight">
+					<div className="flex flex-col items-end gap-0.5 leading-tight">
 						<div className="flex items-center gap-2">
 							<span className="font-mono text-[12px] tabular-nums">{formatTokensAdaptive(total)}</span>
 							{hasSplit && (
@@ -578,6 +550,36 @@ export const createColumns = (
 							? "text-amber-600 dark:text-amber-400"
 							: "text-muted-foreground";
 				return <div className={`font-mono text-xs tabular-nums ${tone}`}>{pct}%</div>;
+			},
+		},
+		{
+			id: "compressed_before",
+			header: () => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.compressed_before");
+			},
+			size: 100,
+			minSize: 80,
+			maxSize: 130,
+			cell: ({ row }) => {
+				const tokens = row.original.metadata?.original_prompt_tokens;
+				if (tokens == null) return <div className="font-mono text-xs text-gray-300">—</div>;
+				return <div className="text-right font-mono text-xs tabular-nums">{formatTokensAdaptive(Number(tokens))}</div>;
+			},
+		},
+		{
+			id: "compressed_after",
+			header: () => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.compressed_after");
+			},
+			size: 100,
+			minSize: 80,
+			maxSize: 130,
+			cell: ({ row }) => {
+				const tokens = row.original.metadata?.compressed_prompt_tokens;
+				if (tokens == null) return <div className="font-mono text-xs text-gray-300">—</div>;
+				return <div className="text-right font-mono text-xs tabular-nums">{formatTokensAdaptive(Number(tokens))}</div>;
 			},
 		},
 	];
@@ -690,23 +692,5 @@ export const createColumns = (
 			},
 		}));
 
-	const actionsColumn: ColumnDef<LogEntry>[] = hasDeleteAccess
-		? [
-				{
-					id: "actions",
-					header: "",
-					size: 56,
-					cell: ({ row }) => {
-						const log = row.original;
-						return (
-							<div className="flex justify-center">
-								<LogActionsMenu log={log} onDelete={onDelete} />
-							</div>
-						);
-					},
-				},
-			]
-		: [];
-
-	return [...expandColumn, ...baseColumns, ...attributionColumns, ...metadataColumns, ...actionsColumn];
+	return [...expandColumn, ...baseColumns, ...attributionColumns, ...metadataColumns];
 };

@@ -85,7 +85,7 @@ export function LogsDataTable({
 	const [sorting, setSorting] = useState<SortingState>([{ id: pagination.sort_by, desc: pagination.order === "desc" }]);
 	const [pageSizePref, setPageSizePref, pageSizeHydrated] = useTablePageSizePreference("bifrost.logs.pageSize");
 
-	const fixedColumnIds = useMemo(() => new Set<string>(["expand", "actions"]), []);
+	const fixedColumnIds = useMemo(() => new Set<string>(["expand"]), []);
 
 	// Measure actual header cell widths for pixel-perfect pin offsets
 	const { headerCellRefs, setHeaderCellRef } = useHeaderCellRefs();
@@ -179,6 +179,8 @@ export function LogsDataTable({
 										pinStyle={buildPinStyle(header.column, pinOffsets)}
 										pinnedHeaderClassName="bg-[#f9f9f9] dark:bg-[#27272a]"
 										className={cn(
+											header.column.id === "timestamp" && "pl-0",
+											(header.column.id === "model" || header.column.id === "tokens") && "pl-0",
 											header.column.id === lastLeftPinId && PIN_SHADOW_LEFT,
 											header.column.id === firstRightPinId && PIN_SHADOW_RIGHT,
 										)}
@@ -243,6 +245,8 @@ export function LogsDataTable({
 												}}
 												className={cn(
 													pinned && "bg-card",
+													cell.column.id === "timestamp" && "pl-0",
+													(cell.column.id === "model" || cell.column.id === "tokens") && "pl-0",
 													cell.column.id === lastLeftPinId && PIN_SHADOW_LEFT,
 													cell.column.id === firstRightPinId && PIN_SHADOW_RIGHT,
 												)}

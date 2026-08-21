@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
 	getErrorMessage,
-	useDeleteLogsMutation,
 	useGetAvailableFilterDataQuery,
 	useGetLogsHistogramQuery,
 	useGetLogsQuery,
@@ -90,10 +89,7 @@ export default function LogsPage() {
 	const [showEmptyState, setShowEmptyState] = useState(false);
 	const hasCheckedEmptyState = useRef(false);
 
-	const hasDeleteAccess = useRbac(RbacResource.Logs, RbacOperation.Delete);
 	const hasRevealAccess = useRbac(RbacResource.Logs, RbacOperation.Reveal);
-
-	const [deleteLogs] = useDeleteLogsMutation();
 
 	const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 	const [sessionHighlightedLogId, setSessionHighlightedLogId] = useState<string | null>(null);
@@ -570,21 +566,6 @@ export default function LogsPage() {
 		[expandedChainIds, chainChildren, loadingChainIds, triggerGetChainChildren, filters, pagination],
 	);
 
-	const handleDelete = useCallback(
-		async (log: LogEntry) => {
-			if ((log as DisplayLogEntry).__processing) return;
-			try {
-				await deleteLogs({ ids: [log.id] }).unwrap();
-				refetchLogs();
-				refetchStats();
-				refetchHistogram();
-			} catch (err) {
-				setError(getErrorMessage(err));
-			}
-		},
-		[deleteLogs, refetchLogs, refetchStats, refetchHistogram],
-	);
-
 	const handlePollToggle = useCallback(
 		(enabled: boolean) => {
 			setUrlState({ polling: enabled });
@@ -757,10 +738,7 @@ export default function LogsPage() {
 		return icons;
 	}, [userAgentMappingsData?.mappings]);
 
-	const columns = useMemo(
-		() => createColumns(handleDelete, hasDeleteAccess, metadataKeys, customAppIcons, grouped),
-		[customAppIcons, handleDelete, hasDeleteAccess, metadataKeys, grouped],
-	);
+	const columns = useMemo(() => createColumns(metadataKeys, customAppIcons, grouped), [customAppIcons, metadataKeys, grouped]);
 
 	const columnIds = useMemo(
 		() => columns.map((col) => ("id" in col && col.id ? col.id : "accessorKey" in col ? String(col.accessorKey) : "")).filter(Boolean),
@@ -777,6 +755,8 @@ export default function LogsPage() {
 			app: t("column_labels.app"),
 			latency: t("column_labels.latency"),
 			tokens: t("column_labels.tokens"),
+			compressed_before: t("column_labels.compressed_before"),
+			compressed_after: t("column_labels.compressed_after"),
 			virtual_key: t("column_labels.virtual_key"),
 			routing_rule: t("column_labels.routing_rule"),
 			team: t("column_labels.team"),
@@ -787,7 +767,10 @@ export default function LogsPage() {
 		[t],
 	);
 
-	const DEFAULT_HIDDEN_COLUMNS = useMemo(() => ["virtual_key", "team", "customer", "user", "business_unit"], []);
+	const DEFAULT_HIDDEN_COLUMNS = useMemo(
+		() => ["compressed_before", "compressed_after", "virtual_key", "team", "customer", "user", "business_unit"],
+		[],
+	);
 
 	const {
 		entries: columnEntries,
@@ -805,7 +788,6 @@ export default function LogsPage() {
 		defaultHidden: DEFAULT_HIDDEN_COLUMNS,
 		fixedColumns: {
 			...(grouped ? { left: ["expand"] } : {}),
-			...(hasDeleteAccess ? { right: ["actions"] } : {}),
 		},
 	});
 

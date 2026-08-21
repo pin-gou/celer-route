@@ -71,6 +71,8 @@
 		"latency": "耗时",
 		"tokens": "词元",
 		"cost": "成本",
+		"compressed_before": "压缩前",
+		"compressed_after": "压缩后",
 		"virtual_key": "虚拟密钥",
 		"routing_rule": "路由规则",
 		"team": "团队",
