@@ -677,7 +677,9 @@ export function LogsTimeline({
 															: "text-green-600 dark:text-green-400";
 											return (
 												<span>
-													TPS: <strong className={cls}>{tps.toFixed(1)}</strong>/s
+													{t("timeline.tooltip.tpsPrefix")}
+													<strong className={cls}>{tps.toFixed(1)}</strong>
+													{t("timeline.tooltip.tpsSuffix")}
 												</span>
 											);
 										})()}
