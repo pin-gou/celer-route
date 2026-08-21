@@ -483,6 +483,16 @@
 			"cancelled": "已取消",
 			"activeRequests": "活跃请求",
 			"firstRequest": "首请求"
+		},
+		"now": "现在",
+		"tooltip": {
+			"running": "运行中",
+			"elapsed": "已运行 ~{{seconds}} 秒",
+			"latency": "{{value}} 毫秒",
+			"input": "输入：{{value}}",
+			"output": "输出：{{value}}",
+			"tpsPrefix": "TPS：",
+			"tpsSuffix": "/秒"
 		}
 	},
 	"toast": {

@@ -15,13 +15,33 @@ import { LogsTimeline } from "./logsTimeline";
 import type { LogsTimelineProps } from "./logsTimeline";
 import type { LogEntry } from "@/lib/types/logs";
 
-vi.mock("react-i18next", () => ({
-	useTranslation: () => ({
-		t: (key: string) => key,
-		i18n: { language: "en", options: { ns: [] }, services: {} },
-	}),
-	Trans: ({ children }: { children: React.ReactNode }) => children,
-}));
+vi.mock("react-i18next", () => {
+	const en: Record<string, string> = {
+		"timeline.now": "NOW",
+		"timeline.tooltip.running": "RUNNING",
+		"timeline.tooltip.elapsed": "~{{seconds}}s elapsed",
+		"timeline.tooltip.latency": "{{value}}ms",
+		"timeline.tooltip.input": "Input: {{value}}",
+		"timeline.tooltip.output": "Output: {{value}}",
+		"timeline.tooltip.tpsPrefix": "TPS: ",
+		"timeline.tooltip.tpsSuffix": "/s",
+	};
+	return {
+		useTranslation: () => ({
+			t: (key: string, params?: Record<string, string>) => {
+				let result = en[key] ?? key;
+				if (params) {
+					for (const [k, v] of Object.entries(params)) {
+						result = result.replace(`{{${k}}}`, v);
+					}
+				}
+				return result;
+			},
+			i18n: { language: "en", options: { ns: [] }, services: {} },
+		}),
+		Trans: ({ children }: { children: React.ReactNode }) => children,
+	};
+});
 
 // Polyfill ResizeObserver for jsdom
 globalThis.ResizeObserver = class {

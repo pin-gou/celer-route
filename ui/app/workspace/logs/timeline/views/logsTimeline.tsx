@@ -620,7 +620,7 @@ export function LogsTimeline({
 				<div className="pointer-events-none absolute top-0 bottom-0 z-10" style={{ left: `${nowLineX}%` }}>
 					<div className="h-full w-px -translate-x-1/2 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
 					<div className="absolute top-[2px] -translate-x-1/2 rounded-b-sm bg-red-500 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-wider text-white">
-						NOW
+						{t("timeline.now")}
 					</div>
 				</div>
 			</div>
@@ -644,22 +644,24 @@ export function LogsTimeline({
 								<span className="text-muted-foreground">{tooltipLog.model}</span>
 								{tooltipLog.status === "processing" && (
 									<span className="rounded-sm bg-blue-100 px-1.5 py-0.5 font-mono text-[9px] text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-										RUNNING
+										{t("timeline.tooltip.running")}
 									</span>
 								)}
 							</div>
 							<div className="text-muted-foreground mt-1 flex gap-3">
 								<span>
 									{tooltipLog.status === "processing"
-										? `~${Math.round((nowMs - new Date(tooltipLog.timestamp).getTime()) / 100) / 10}s elapsed`
-										: `${(tooltipLog.latency ?? 0).toLocaleString()}ms`}
+										? t("timeline.tooltip.elapsed", {
+												seconds: Math.round((nowMs - new Date(tooltipLog.timestamp).getTime()) / 100) / 10,
+											})
+										: t("timeline.tooltip.latency", { value: (tooltipLog.latency ?? 0).toLocaleString() })}
 								</span>
 								<span>{tooltipLog.cost != null ? formatCost(tooltipLog.cost) : "—"}</span>
 							</div>
 							{tooltipLog.token_usage && (
 								<div className="text-muted-foreground mt-1 flex gap-3">
-									<span>Input: {tooltipLog.token_usage.prompt_tokens.toLocaleString()}</span>
-									<span>Output: {tooltipLog.token_usage.completion_tokens.toLocaleString()}</span>
+									<span>{t("timeline.tooltip.input", { value: tooltipLog.token_usage.prompt_tokens.toLocaleString() })}</span>
+									<span>{t("timeline.tooltip.output", { value: tooltipLog.token_usage.completion_tokens.toLocaleString() })}</span>
 									{tooltipLog.status !== "processing" &&
 										tooltipLog.latency != null &&
 										tooltipLog.latency > 0 &&

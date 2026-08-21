@@ -483,6 +483,16 @@
 			"cancelled": "Cancelled",
 			"activeRequests": "Active Requests",
 			"firstRequest": "first request"
+		},
+		"now": "NOW",
+		"tooltip": {
+			"running": "RUNNING",
+			"elapsed": "~{{seconds}}s elapsed",
+			"latency": "{{value}}ms",
+			"input": "Input: {{value}}",
+			"output": "Output: {{value}}",
+			"tpsPrefix": "TPS: ",
+			"tpsSuffix": "/s"
 		}
 	},
 	"toast": {
