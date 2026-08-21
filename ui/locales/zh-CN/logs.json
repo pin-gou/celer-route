@@ -59,7 +59,11 @@
 		"totalTokensDesc": "使用的总词元数，分为输入（提示词）和输出（完成）词元。",
 		"totalCost": "总成本",
 		"in": "入",
-		"out": "出"
+		"out": "出",
+		"rtkCompression": "RTK 压缩",
+		"rtkCompressionDesc": "进程生命周期内的 RTK 压缩节省量，不受当前时间范围过滤。\n\n压缩率 = (原始词元数 − 压缩后词元数) / 原始词元数 × 100%\n\n只有实际触发了压缩的请求才计入比率。",
+		"rtkTokensSaved": "节省",
+		"rtkCompressedCount": "压缩请求数"
 	},
 	"column_labels": {
 		"timestamp": "时间",

@@ -59,7 +59,11 @@
 		"totalTokensDesc": "Total tokens used, split into input (prompt) and output (completion) tokens.",
 		"totalCost": "Total Cost",
 		"in": "in",
-		"out": "out"
+		"out": "out",
+		"rtkCompression": "RTK Compression",
+		"rtkCompressionDesc": "Process-lifetime RTK compression savings. Not scoped to the current time range.\n\ncompressionRatio = (originalTokens − compressedTokens) / originalTokens × 100%\n\nOnly requests where compression was actually applied contribute to the ratio.",
+		"rtkTokensSaved": "saved",
+		"rtkCompressedCount": "compressed requests"
 	},
 	"column_labels": {
 		"timestamp": "Time",

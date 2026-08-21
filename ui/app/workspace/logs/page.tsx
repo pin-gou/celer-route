@@ -16,6 +16,7 @@ import {
 	useGetLogsHistogramQuery,
 	useGetLogsQuery,
 	useGetLogsStatsQuery,
+	useGetRtkStatsQuery,
 	useGetUserAgentMappingsQuery,
 } from "@/lib/store";
 import { useLazyGetLogsQuery } from "@/lib/store/apis/logsApi";
@@ -27,7 +28,7 @@ import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import NumberFlow from "@number-flow/react";
 import { useLocation } from "@tanstack/react-router";
-import { AlertCircle, BarChart, CheckCircle, Clock, Hash, Info } from "lucide-react";
+import { AlertCircle, BarChart, CheckCircle, Clock, Hash, Info, Shrink } from "lucide-react";
 import { parseAsSafeArrayOf, parseAsSafeString } from "@/lib/queryParamsParser";
 import { parseAsBoolean, parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useTranslation } from "react-i18next";
@@ -389,6 +390,11 @@ export default function LogsPage() {
 		},
 	);
 
+	const { data: rtkStats } = useGetRtkStatsQuery(undefined, {
+		pollingInterval: polling ? 10000 : 0,
+		skipPollingIfUnfocused: true,
+	});
+
 	// "Live view" — the table whose top of page is the newest log: polling
 	// enabled, first page, sorted by timestamp desc. Only there do we surface
 	// in-flight (processing) rows and instantly inject newly completed logs.
@@ -713,8 +719,48 @@ export default function LogsPage() {
 				),
 				description: t("statCards.totalTokensDesc"),
 			},
+			{
+				title: t("statCards.rtkCompression"),
+				value: (
+					<NumberFlow
+						value={(rtkStats?.stats.compressionRatio ?? 0) * 100}
+						format={{ minimumFractionDigits: 0, maximumFractionDigits: 1, useGrouping: true }}
+						suffix="%"
+					/>
+				),
+				icon: <Shrink className="size-4" />,
+				subValue: (
+					<>
+						<span>{t("statCards.rtkTokensSaved")}：</span>
+						<strong>
+							<NumberFlow
+								value={
+									(rtkStats?.stats.tokensSaved ?? 0) >= 1_000_000
+										? (rtkStats?.stats.tokensSaved ?? 0) / 1_000_000
+										: (rtkStats?.stats.tokensSaved ?? 0) >= 1_000
+											? (rtkStats?.stats.tokensSaved ?? 0) / 1_000
+											: (rtkStats?.stats.tokensSaved ?? 0)
+								}
+								format={
+									(rtkStats?.stats.tokensSaved ?? 0) >= 1_000
+										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
+										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
+								}
+							/>
+						</strong>
+						<span>{(rtkStats?.stats.tokensSaved ?? 0) >= 1_000_000 ? "兆" : (rtkStats?.stats.tokensSaved ?? 0) >= 1_000 ? "千" : ""}</span>
+						<span className="mx-1">·</span>
+						<span>{t("statCards.rtkCompressedCount")}：</span>
+						<strong>
+							<NumberFlow value={rtkStats?.stats.compressedCount ?? 0} format={COMPACT_NUMBER_FORMAT} />
+						</strong>
+						<span>{(rtkStats?.stats.compressedCount ?? 0) >= 1_000 ? "" : ""}</span>
+					</>
+				),
+				description: t("statCards.rtkCompressionDesc"),
+			},
 		],
-		[t, stats],
+		[t, stats, rtkStats],
 	);
 
 	// Only need metadata_keys here (used to render dynamic columns even when the
@@ -918,7 +964,7 @@ export default function LogsPage() {
 								onResetColumns={resetColumns}
 							/>
 						</div>
-						<div className="grid shrink-0 grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+						<div className="grid shrink-0 grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
 							{statCards.map((card) => (
 								<Card key={card.title} className="py-4 shadow-none">
 									<CardContent
@@ -939,7 +985,9 @@ export default function LogsPage() {
 																<Info className="size-3 cursor-help" />
 															</button>
 														</TooltipTrigger>
-														<TooltipContent className="max-w-72 text-left text-xs text-wrap">{card.description}</TooltipContent>
+														<TooltipContent className="max-w-80 text-left text-xs text-wrap whitespace-pre-line">
+															{card.description}
+														</TooltipContent>
 													</Tooltip>
 												)}
 											</div>
