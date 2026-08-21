@@ -23,6 +23,15 @@ type CompressionEngine interface {
 type EngineConfig struct {
 	Enabled  bool            `json:"enabled"`
 	Settings json.RawMessage `json:"settings,omitempty"`
+
+	// CommandHint is an optional command string hint that the engine can use
+	// to improve filter matching. It is set by the pipeline caller (e.g.
+	// applyRtkCompression) from the tool call arguments and is NOT serialised
+	// — it is an internal plumbing field so the engine can pass the command
+	// hint to processRtkTextWithCommand without changing the engine interface.
+	// When non-empty, the command hint is first run through lastCommandSegment
+	// to extract the last meaningful segment from composite commands.
+	CommandHint string `json:"-"`
 }
 
 // EngineResult holds the result of a single engine's compression pass.

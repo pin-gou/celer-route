@@ -40,8 +40,22 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 	compressedTotal := 0
 	anyCompressed := false
 
+	// Build the tool call lookup for command hint resolution.
+	lookup := buildToolCallLookup(req.ChatRequest.Input)
+	// pendingToolCalls tracks the tool calls from the most recent assistant
+	// message, used for Anthropic positional correlation of tool_result blocks
+	// to the immediately preceding assistant's tool_use blocks.
+	var pendingToolCalls []schemas.ChatAssistantMessageToolCall
+
 	for i := range req.ChatRequest.Input {
 		msg := &req.ChatRequest.Input[i]
+
+		// Update pending tool calls when we see an assistant message with
+		// tool_use calls (Anthropic order: assistant tool_use -> user
+		// tool_result in the immediately following message).
+		if msg.Role == schemas.ChatMessageRoleAssistant && msg.ChatAssistantMessage != nil && len(msg.ChatAssistantMessage.ToolCalls) > 0 {
+			pendingToolCalls = msg.ChatAssistantMessage.ToolCalls
+		}
 
 		// --- OpenAI-style: role=tool with ToolCallID ---
 		if msg.Role == schemas.ChatMessageRoleTool {
@@ -52,12 +66,17 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			origTokens := estimateTokens(text)
 			originalTotal += origTokens
 
+			// Resolve the command hint from the tool call lookup.
+			cmd, _ := getOpenAICommand(msg, lookup)
+			cfg := defaultCfg
+			cfg.CommandHint = cmd
+
 			// Capture pre-compression text for the log detail snapshot before
 			// the pipeline mutates the message.
 			appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
 
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
-			result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+			result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, cfg)
 			if err != nil || result == "" || result == text {
 				compressedTotal += origTokens
 				continue
@@ -87,6 +106,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 
 		// --- Anthropic-style: user message with tool_result blocks ---
 		if msg.Content != nil && len(msg.Content.ContentBlocks) > 0 {
+			blockIndex := 0
 			for j := range msg.Content.ContentBlocks {
 				block := &msg.Content.ContentBlocks[j]
 				if !isToolResultBlock(block) {
@@ -94,21 +114,29 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				}
 				// Preserve cache_control blocks verbatim.
 				if config.PreserveCacheControl && shouldPreserveCacheControl(block) {
+					blockIndex++
 					continue
 				}
 				if block.Text == nil || *block.Text == "" {
+					blockIndex++
 					continue
 				}
 				text := *block.Text
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
 
+				// Resolve the command hint from the anthropic positional correlation.
+				cmd, _ := getAnthropicCommand(blockIndex, pendingToolCalls)
+				cfg := defaultCfg
+				cfg.CommandHint = cmd
+				blockIndex++
+
 				// Capture the original block text so the snapshot survives
 				// the in-place mutation that follows.
 				appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
 
 				// Compress through the PipelineRunner.
-				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, cfg)
 				if err != nil || result == "" || result == text {
 					compressedTotal += origTokens
 					continue
@@ -302,18 +330,25 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 	compressedTotal := 0
 	anyCompressed := false
 
+	// Build the command lookup from function_call messages for command hint
+	// resolution (positional correlation with function_call_output items).
+	commands := buildResponsesCommandLookup(input)
+	callIdx := 0
+
 	for i := range input {
 		msg := &input[i]
 		if msg.Type == nil || *msg.Type != schemas.ResponsesMessageTypeFunctionCallOutput {
 			continue
 		}
 		if msg.ResponsesToolMessage == nil || msg.ResponsesToolMessage.Output == nil {
+			callIdx++
 			continue
 		}
 		out := msg.ResponsesToolMessage.Output
 
 		// Preserve cache_control-marked tool outputs verbatim.
 		if config.PreserveCacheControl && msg.CacheControl != nil {
+			callIdx++
 			continue
 		}
 
@@ -329,11 +364,18 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 			}
 		}
 		if text == "" {
+			callIdx++
 			continue
 		}
 
 		origTokens := estimateTokens(text)
 		originalTotal += origTokens
+
+		// Resolve the command hint from the positional correlation.
+		cmd, _ := responsesCommandAt(commands, callIdx)
+		cfg := defaultCfg
+		cfg.CommandHint = cmd
+		callIdx++
 
 		// Capture pre-compression text for the log detail snapshot.
 		name := ""
@@ -343,7 +385,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		appendSnapshot(state, i, "tool", name, text)
 
 		// Compress through the PipelineRunner.
-		result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+		result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, cfg)
 		if err != nil || result == "" || result == text {
 			compressedTotal += origTokens
 			continue
@@ -477,6 +519,13 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		stats.CompressedTokens = stats.OriginalTokens
 		return input, stats
 	}
+
+	// 2b. Split composite command hints: when the command hint is a composite
+	// shell command (e.g. "cd frontend && npm run build"), extract the last
+	// meaningful segment so the detector can match against the actual command
+	// that produced the output. This is a no-op when the command has no
+	// top-level && / || / ; separators.
+	commandHint = lastCommandSegment(commandHint)
 
 	// 3. Command detection.
 	detection := defaultDetector.detect(text, commandHint)
