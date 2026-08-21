@@ -48,6 +48,10 @@ export default function PluginsPage() {
 	const selectedPlugin = useAppSelector((state) => state.plugin.selectedPlugin);
 	const [selectedPluginId, setSelectedPluginId] = useQueryState("plugin");
 	const allPlugins = useMemo(() => sortPluginsByRunOrder(plugins ?? []), [plugins]);
+
+	const HIDDEN_PLUGIN_NAMES = new Set(["telemetry", "maxim", "mocker", "otel", "prompts", "semantic_cache", "logging"]);
+	const visiblePlugins = useMemo(() => allPlugins.filter((p) => !HIDDEN_PLUGIN_NAMES.has(p.name)), [allPlugins]);
+
 	const hasCustomPlugins = useMemo(() => allPlugins.some((plugin) => plugin.isCustom), [allPlugins]);
 	const [isSheetOpen, setIsSheetOpen] = useState(false);
 	const [isSequenceSheetOpen, setIsSequenceSheetOpen] = useState(false);
@@ -71,13 +75,13 @@ export default function PluginsPage() {
 	useEffect(() => {
 		if (selectedPluginId) return;
 		if (!selectedPlugin) {
-			setSelectedPluginId(allPlugins?.[0]?.name ?? "");
+			setSelectedPluginId(visiblePlugins?.[0]?.name ?? "");
 			return;
 		}
 		setSelectedPluginId(selectedPlugin?.name ?? "");
-	}, [allPlugins]);
+	}, [visiblePlugins]);
 
-	if (allPlugins?.length === 0 && !isLoading) {
+	if (visiblePlugins?.length === 0 && !isLoading) {
 		return (
 			<div className="mx-auto w-full max-w-7xl">
 				<PluginsEmptyState onCreateClick={handleAddNew} canCreate={hasCreatePluginAccess} />
@@ -100,7 +104,7 @@ export default function PluginsPage() {
 					<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
 						<div className="mb-4">
 							<div className="text-muted-foreground mb-2 text-xs font-medium">{t("sidebar.title")}</div>
-							{allPlugins.map((plugin) => (
+							{visiblePlugins.map((plugin) => (
 								<button
 									type="button"
 									key={plugin.name}
@@ -168,7 +172,7 @@ export default function PluginsPage() {
 				</div>
 				<PluginsView
 					onDelete={() => {
-						setSelectedPluginId(allPlugins?.[0]?.name ?? "");
+						setSelectedPluginId(visiblePlugins?.[0]?.name ?? "");
 					}}
 					onCreate={(pluginName) => {
 						setSelectedPluginId(pluginName ?? "");
