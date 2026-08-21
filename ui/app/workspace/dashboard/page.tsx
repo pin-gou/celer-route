@@ -327,11 +327,13 @@ export default function DashboardPage() {
 	const handlePeriodChange = useCallback(
 		(period: string | undefined) => {
 			if (!period) return;
-			const { from } = getRangeForPeriod(period);
+			const { from, to } = getRangeForPeriod(period);
+			const isAbsolutePeriod = period === "today" || period === "yesterday";
+			const endTs = isAbsolutePeriod ? Math.floor(to.getTime() / 1000) : null;
 			setUrlState({
 				period,
 				start_time: Math.floor(from.getTime() / 1000),
-				end_time: null,
+				end_time: endTs,
 			});
 		},
 		[setUrlState],
