@@ -1,0 +1,127 @@
+---
+title: "Dashboard Password Protection"
+description: "Two ways to enable password protection on the pg-gateway admin dashboard: the bootstrap setup-token flow or the operator-side CLI."
+---
+
+# Dashboard Password Protection
+
+The pg-gateway admin dashboard at `http://<host>:8080` can be locked behind
+a username/password. Once enabled, every management API under `/api/*`
+requires HTTP Basic auth with the configured admin credentials, and the UI
+shows the login page instead of the workspace.
+
+Two paths can create or update the admin account:
+
+| Path | When to use | What it requires |
+|------|-------------|------------------|
+| **`PUT /api/config`** with `setup_token` | Network-driven, GUI workflow. | `BIFROST_SETUP_TOKEN` env var (or `setup_token` in config.json) configured **before first boot**. |
+| **`pg-gateway-admin admin reset`** CLI | Container-driven, operator workflow. | Shell access to the host or `docker exec` into the running container. |
+
+This page focuses on the **CLI**, which is the recommended approach for
+Docker deployments because it does not require a pre-configured setup token.
+
+## Why a separate CLI?
+
+When a fresh pg-gateway instance starts without an admin account, the HTTP
+endpoint that *creates* the first admin (`PUT /api/config`) is reachable
+without authentication — otherwise nobody could ever create the first
+admin. To close that window, the HTTP bootstrap requires a one-time
+`setup_token`. That token is a configuration value operators have to mint,
+distribute, and paste into the UI on first login.
+
+For Docker users this ceremony is unnecessary: anyone who can `docker exec`
+into the container already has host-level trust, so the CLI writes the admin
+row directly to the config store. The HTTP `setup_token` flow stays in place
+as the network-layer guard for non-Docker deployments.
+
+## Quick start (Docker)
+
+```bash
+# 1. Start the container (config_store block required)
+docker compose up -d
+
+# 2. From the host, exec into the container and run the CLI
+docker exec -it pg-gateway \
+  pg-gateway-admin admin reset
+```
+
+The CLI prints what it is about to do (CREATE the first admin, or RESET
+the password of an existing one), asks for confirmation, then prompts:
+
+```
+New password (12+ chars, mixed case, digit, special):
+  ********
+Confirm password:
+  ********
+Done.
+  Admin username: admin
+  Auth enabled:   true
+  Next step:      log in to the pg-gateway dashboard.
+  Note:           BIFROST_SETUP_TOKEN / setup_token is no longer required for this node.
+```
+
+Open `http://localhost:8080` and log in with the credentials you just set.
+
+### Scripted / CI usage
+
+Two flags let you drive the CLI from a pipeline:
+
+```bash
+docker exec -i pg-gateway \
+  pg-gateway-admin admin reset \
+  --username admin \
+  --password-stdin \
+  --yes \
+  <<< $'NewPassword123!\nNewPassword123!\n'
+```
+
+- `--username` skips the username prompt.
+- `--password-stdin` reads two lines (password, confirmation) from stdin
+  and skips terminal echo suppression — required when stdin is not a TTY.
+- `--yes` skips the "Proceed? [y/N]" confirmation prompt.
+
+The CLI refuses to run without `--password-stdin` when stdin is not a TTY,
+so the password cannot leak to a process listing or a CI log.
+
+## CLI reference
+
+```
+pg-gateway-admin admin reset [flags]
+
+Flags:
+  --config PATH        Path to the pg-gateway config.json file. When omitted,
+                       the CLI uses a default SQLite database at <app-dir>/config.db.
+  --app-dir PATH       Application data directory (default: $APP_DIR env var,
+                       or current directory). Used only when --config is not provided.
+  --username NAME      Skip the username prompt and use NAME.
+  --password-stdin     Read the password (and confirmation) from stdin instead
+                       of the terminal.
+  --yes                Skip the interactive confirmation prompt.
+```
+
+The command always writes `is_enabled = true` so dashboard auth is on
+after a successful run. To turn auth back off, edit the value in the
+Web UI (Security → Dashboard password protection) or in the config store
+directly.
+
+## What stays the same
+
+- The HTTP `PUT /api/config` setup_token flow is unchanged — it still
+  requires `setup_token` (or `BIFROST_SETUP_TOKEN`) for the very first
+  admin row, and `setup_token` is still fail-closed (no token → no admin).
+- Password policy is the same one the Web UI enforces (12+ characters,
+  mixed case, digit, special). It is defined once in
+  `framework/auth` and reused by both the handler and the CLI.
+- Passwords are Argon2id-hashed via `framework/encrypt.Hash` — the CLI
+  never writes plaintext to disk.
+
+## Security notes
+
+- The CLI does **not** open a network listener. It talks only to the
+  config store (SQLite file or Postgres DSN) declared in `config.json`.
+- Running the CLI requires the same shell access as `cat config.json` —
+  anyone who can do the latter can already read the existing admin
+  hash, so the CLI adds no new attack surface.
+- For multi-node deployments, run the CLI once per node against a
+  shared Postgres backend (the row is the source of truth), or once per
+  node against each node's local SQLite DB if you run independent stores.

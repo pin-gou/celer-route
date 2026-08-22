@@ -10,6 +10,16 @@ services:
       - APP_PORT=8080
       - APP_HOST=0.0.0.0
       - LOG_LEVEL=info
+      # To enable dashboard password protection without first configuring
+      # BIFROST_SETUP_TOKEN / setup_token, run the bundled CLI against
+      # the running container after the first start:
+      #
+      #   docker exec -it bifrost pg-gateway-admin admin reset
+      #
+      # The CLI prompts for an admin username and password (twice), writes
+      # them straight to the config store, and enables auth. After that
+      # you can log in at http://localhost:8080 with the new credentials
+      # — the setup_token path is no longer required for this node.
       - LOG_STYLE=json
       # Go runtime performance tuning (uncomment and adjust for your workload):
       # - GOGC=200                  # Higher = less GC, more memory (default: 100)

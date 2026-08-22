@@ -597,6 +597,12 @@ export interface BifrostConfig {
 	client_config: CoreConfig;
 	framework_config: FrameworkConfig;
 	auth_config?: AuthConfig;
+	/** Present only while no admin account exists yet. True when the operator
+	 *  configured a bootstrap setup_token (config.json / BIFROST_SETUP_TOKEN) that
+	 *  the first PUT /api/config must include; false means the HTTP path cannot
+	 *  create the first admin and the operator should use the pg-gateway-admin
+	 *  CLI instead. */
+	setup_token_configured?: boolean;
 	proxy_config?: GlobalProxyConfig;
 	restart_required?: RestartRequiredConfig;
 	is_db_connected: boolean;

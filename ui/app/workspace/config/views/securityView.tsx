@@ -1,8 +1,5 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretVarInput } from "@/components/ui/secretVarInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,12 +45,9 @@ export default function SecurityView() {
 		is_enabled: false,
 	});
 	const [passwordError, setPasswordError] = useState("");
-	const [setupToken, setSetupToken] = useState("");
-	const [setupTokenErrorMessage, setSetupTokenErrorMessage] = useState<string | null>(null);
-	// No admin account has ever been created on this instance yet. The very first
-	// PUT /api/config that creates one must include the setup token the operator
-	// configured via setup_token in config.json (or BIFROST_SETUP_TOKEN), so this
-	// field only needs to show up that once.
+	// No admin account has ever been created on this instance yet. The HTTP API
+	// cannot create the first admin without a setup_token, so we guide the
+	// operator to the pg-gateway-admin CLI instead.
 	const isFirstTimeSetup = !bifrostConfig?.auth_config;
 
 	useEffect(() => {
@@ -90,9 +84,12 @@ export default function SecurityView() {
 			authConfig.admin_password?.value !== bifrostConfig?.auth_config?.admin_password?.value ||
 			authConfig.admin_password?.ref !== bifrostConfig?.auth_config?.admin_password?.ref ||
 			authConfig.admin_password?.type !== bifrostConfig?.auth_config?.admin_password?.type;
-		const authChanged = showPasswordSection
-			? authConfig.is_enabled !== bifrostConfig?.auth_config?.is_enabled || usernameChanged || passwordChanged
-			: false;
+		// When no admin exists yet, auth changes cannot be persisted via HTTP
+		// (the operator must use the CLI) so exclude them from the dirty check.
+		const authChanged =
+			!isFirstTimeSetup && showPasswordSection
+				? authConfig.is_enabled !== bifrostConfig?.auth_config?.is_enabled || usernameChanged || passwordChanged
+				: false;
 
 		const localRequired = localConfig.required_headers?.slice().sort().join(",");
 		const serverRequired = config.required_headers?.slice().sort().join(",");
@@ -117,7 +114,7 @@ export default function SecurityView() {
 			allowDirectKeysChanged ||
 			dualCredentialConflictBehaviorChanged
 		);
-	}, [config, localConfig, authConfig, bifrostConfig, showPasswordSection]);
+	}, [config, localConfig, authConfig, bifrostConfig, showPasswordSection, isFirstTimeSetup]);
 
 	const needsRestart = useMemo(() => {
 		if (!config) return false;
@@ -195,35 +192,29 @@ export default function SecurityView() {
 				passwordInputRef.current?.focus({ preventScroll: true });
 				return;
 			}
-			if (isFirstTimeSetup && authConfig.is_enabled && !setupToken.trim()) {
-				setSetupTokenErrorMessage(t("security.setupTokenError"));
-				return;
-			}
 			setPasswordError("");
 
+			// When no admin exists yet, the HTTP API cannot create one without a
+			// setup_token, so skip auth_config entirely — the operator must use the
+			// pg-gateway-admin CLI. Once the admin is created via CLI and the page
+			// is refreshed, auth_config will be present and the normal management
+			// path (including the save button) becomes available.
 			await updateCoreConfig({
 				...bifrostConfig!,
 				client_config: localConfig,
-				...(showPasswordSection
+				...(showPasswordSection && !isFirstTimeSetup
 					? {
 							auth_config: {
 								...(authConfig.is_enabled && hasUsername && hasPassword ? authConfig : { ...authConfig, is_enabled: false }),
-								...(isFirstTimeSetup ? { setup_token: setupToken.trim() } : {}),
 							},
 						}
 					: {}),
 			}).unwrap();
-			setSetupToken("");
 			toast.success(t("security.toast.settingsUpdated"));
 		} catch (error) {
-			const message = getErrorMessage(error);
-			if (isFirstTimeSetup && message.toLowerCase().includes("setup token")) {
-				setSetupTokenErrorMessage(message);
-			} else {
-				toast.error(message);
-			}
+			toast.error(getErrorMessage(error));
 		}
-	}, [bifrostConfig, localConfig, authConfig, showPasswordSection, updateCoreConfig, isFirstTimeSetup, setupToken]);
+	}, [bifrostConfig, localConfig, authConfig, showPasswordSection, updateCoreConfig, isFirstTimeSetup]);
 
 	return (
 		<div className="mx-auto w-full max-w-4xl space-y-4">
@@ -240,60 +231,55 @@ export default function SecurityView() {
 							<div className="flex items-center justify-between">
 								<div className="space-y-0.5">
 									<Label htmlFor="auth-enabled" className="text-sm font-medium">
-										{t("security.passwordProtect")} <Badge variant="secondary">{t("security.beta")}</Badge>
+										{t("security.passwordProtect")}
 									</Label>
 									<p className="text-muted-foreground text-sm">{t("security.passwordProtectDesc")}</p>
 								</div>
 								<Switch id="auth-enabled" checked={authConfig.is_enabled} onCheckedChange={handleAuthToggle} />
 							</div>
-							<div className="space-y-4">
-								<div className="space-y-2">
-									<Label htmlFor="admin-username">{t("security.username")}</Label>
-									<SecretVarInput
-										id="admin-username"
-										type="text"
-										placeholder={t("security.usernamePlaceholder")}
-										value={authConfig.admin_username}
-										disabled={!authConfig.is_enabled}
-										onChange={(value) => handleAuthFieldChange("admin_username", value)}
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label htmlFor="admin-password">{t("security.password")}</Label>
-									<SecretVarInput
-										ref={passwordInputRef}
-										id="admin-password"
-										aria-invalid={!!passwordError}
-										aria-describedby={passwordError ? "admin-password-error" : undefined}
-										type="password"
-										placeholder={t("security.passwordPlaceholder")}
-										value={authConfig.admin_password}
-										disabled={!authConfig.is_enabled}
-										onChange={(value) => handleAuthFieldChange("admin_password", value)}
-									/>
-									<p className="text-muted-foreground text-xs">{t("security.passwordHint")}</p>
-									{passwordError ? (
-										<p id="admin-password-error" className="text-destructive text-xs" role="alert">
-											{passwordError}
-										</p>
-									) : null}
-								</div>
-								{isFirstTimeSetup && authConfig.is_enabled ? (
+							{!isFirstTimeSetup ? (
+								<div className="space-y-4">
 									<div className="space-y-2">
-										<Label htmlFor="setup-token">{t("security.setupToken")}</Label>
-										<Input
-											id="setup-token"
-											data-testid="security-setup-token-input"
-											type="password"
-											autoComplete="off"
-											placeholder={t("security.setupTokenPlaceholder")}
-											value={setupToken}
-											onChange={(e) => setSetupToken(e.target.value)}
+										<Label htmlFor="admin-username">{t("security.username")}</Label>
+										<SecretVarInput
+											id="admin-username"
+											type="text"
+											placeholder={t("security.usernamePlaceholder")}
+											value={authConfig.admin_username}
+											disabled={!authConfig.is_enabled}
+											onChange={(value) => handleAuthFieldChange("admin_username", value)}
 										/>
-										<p className="text-muted-foreground text-xs">{t("security.setupTokenDesc")}</p>
 									</div>
-								) : null}
-							</div>
+									<div className="space-y-2">
+										<Label htmlFor="admin-password">{t("security.password")}</Label>
+										<SecretVarInput
+											ref={passwordInputRef}
+											id="admin-password"
+											aria-invalid={!!passwordError}
+											aria-describedby={passwordError ? "admin-password-error" : undefined}
+											type="password"
+											placeholder={t("security.passwordPlaceholder")}
+											value={authConfig.admin_password}
+											disabled={!authConfig.is_enabled}
+											onChange={(value) => handleAuthFieldChange("admin_password", value)}
+										/>
+										<p className="text-muted-foreground text-xs">{t("security.passwordHint")}</p>
+										{passwordError ? (
+											<p id="admin-password-error" className="text-destructive text-xs" role="alert">
+												{passwordError}
+											</p>
+										) : null}
+									</div>
+								</div>
+							) : authConfig.is_enabled ? (
+								<div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+									<p className="mb-1 font-semibold">{t("security.setupTokenCliTitle")}</p>
+									<p className="mb-2">{t("security.setupTokenCliDesc")}</p>
+									<code className="block rounded bg-amber-100 px-2 py-1 font-mono text-xs dark:bg-amber-900/40">
+										{t("security.setupTokenCliCommand")}
+									</code>
+								</div>
+							) : null}
 						</div>
 					</div>
 				)}
@@ -409,19 +395,6 @@ export default function SecurityView() {
 					{isLoading ? t("actions.saving") : t("actions.saveChanges")}
 				</Button>
 			</div>
-			<Dialog open={!!setupTokenErrorMessage} onOpenChange={(open) => !open && setSetupTokenErrorMessage(null)}>
-				<DialogContent data-testid="setup-token-error-dialog">
-					<DialogHeader>
-						<DialogTitle>{t("security.setupTokenRequired")}</DialogTitle>
-						<DialogDescription>{setupTokenErrorMessage}</DialogDescription>
-					</DialogHeader>
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setSetupTokenErrorMessage(null)} data-testid="setup-token-error-close">
-							{t("security.close")}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
 		</div>
 	);
 }

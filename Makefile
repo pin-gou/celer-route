@@ -79,7 +79,7 @@ define EXPOSE_ENV
 	fi
 endef
 
-.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-image-multiarch docker-push docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy
+.PHONY: all help dev dev-pulse build-ui build install-air install-pulse clean test install-ui setup-workspace work-init work-clean docs docker-image docker-image-multiarch docker-push docker-run mod-tidy test-integrations-py test-integrations-ts install-playwright run-e2e run-e2e-ui run-e2e-headed run-e2e-api format ui install-newman run-provider-harness-test run-cli-harness-test cli-harness-report test-harness-runner-lib test-semantic-cache test-semantic-cache-complete _test-semantic-cache-complete-inner install-microsocks socks5-proxy install-tinyproxy http-proxy build-admin test-admin
 
 all: help
 
@@ -1655,6 +1655,16 @@ build-test-plugin: ## Build test plugin for E2E tests (copies to tmp/bifrost-tes
 	@mkdir -p tmp
 	@cp examples/plugins/hello-world/build/hello-world.so tmp/bifrost-test-plugin.so
 	@$(ECHO) "$(GREEN)✓ Test plugin ready at tmp/bifrost-test-plugin.so$(NC)"
+
+build-admin: ## Build the pg-gateway-admin CLI (output: tmp/pg-gateway-admin)
+	@$(ECHO) "$(GREEN)Building pg-gateway-admin CLI...$(NC)"
+	@mkdir -p tmp
+	@cd cmd/admin && CGO_ENABLED=1 go build $(if $(LOCAL),,-trimpath) -o ../../tmp/pg-gateway-admin .
+	@$(ECHO) "$(GREEN)✓ pg-gateway-admin ready at tmp/pg-gateway-admin$(NC)"
+
+test-admin: ## Run pg-gateway-admin CLI tests
+	@$(ECHO) "$(GREEN)Running pg-gateway-admin tests...$(NC)"
+	@cd cmd/admin && go test $(if $(TESTCASE),-run $(TESTCASE),./...)
 
 run-e2e: install-playwright ## Run E2E tests (Usage: make run-e2e [FLOW=providers|virtual-keys|config])
 	@$(ECHO) "$(GREEN)Running Playwright E2E tests...$(NC)"

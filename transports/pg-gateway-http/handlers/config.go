@@ -18,6 +18,7 @@ import (
 	"github.com/pin-gou/pg-gateway/core/network"
 	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/pin-gou/pg-gateway/framework"
+	"github.com/pin-gou/pg-gateway/framework/auth"
 	"github.com/pin-gou/pg-gateway/framework/configstore"
 	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
 	"github.com/pin-gou/pg-gateway/framework/encrypt"
@@ -44,43 +45,7 @@ var securityHeaders = []string{
 }
 
 func getPasswordPolicyFailures(password string) []string {
-	failures := make([]string, 0, 5)
-	hasUppercase := false
-	hasLowercase := false
-	hasDigit := false
-	hasSpecial := false
-
-	for i := 0; i < len(password); i++ {
-		char := password[i]
-		switch {
-		case char >= 'A' && char <= 'Z':
-			hasUppercase = true
-		case char >= 'a' && char <= 'z':
-			hasLowercase = true
-		case char >= '0' && char <= '9':
-			hasDigit = true
-		default:
-			hasSpecial = true
-		}
-	}
-
-	if len(password) < 12 {
-		failures = append(failures, "at least 12 characters")
-	}
-	if !hasUppercase {
-		failures = append(failures, "one uppercase letter")
-	}
-	if !hasLowercase {
-		failures = append(failures, "one lowercase letter")
-	}
-	if !hasDigit {
-		failures = append(failures, "one number")
-	}
-	if !hasSpecial {
-		failures = append(failures, "one special character")
-	}
-
-	return failures
+	return auth.GetPasswordPolicyFailures(password)
 }
 
 // ConfigManager is the interface for the config manager
@@ -89,6 +54,12 @@ type ConfigManager interface {
 	// ValidateSetupToken checks the one-time bootstrap token required to create the
 	// first admin account. Returns true once an admin account already exists.
 	ValidateSetupToken(token string) bool
+	// IsSetupTokenConfigured returns true when the operator has configured a
+	// bootstrap setup token (via config.json setup_token or the BIFROST_SETUP_TOKEN
+	// env var), regardless of whether an admin account already exists. The UI uses
+	// this to decide whether to show the setup-token field (configured) or a CLI
+	// hint (not configured).
+	IsSetupTokenConfigured() bool
 	ReloadClientConfigFromConfigStore(ctx context.Context) error
 	UpdateSyncConfig(ctx context.Context) error
 	ForceReloadPricing(ctx context.Context) error
@@ -202,6 +173,12 @@ func (h *ConfigHandler) getConfig(ctx *fasthttp.RequestCtx) {
 		// isFirstTimeSetup check (!bifrostConfig?.auth_config) can tell "no admin
 		// configured yet" apart from "admin configured with empty fields" and show
 		// the setup-token field / include setup_token in the create request.
+		// Also expose whether a bootstrap setup token is configured at all, so the
+		// UI can fall back to the pg-gateway-admin CLI when the operator left it
+		// unset (the HTTP path cannot create the first admin without one).
+		if authConfig == nil {
+			mapConfig["setup_token_configured"] = h.configManager.IsSetupTokenConfigured()
+		}
 	} else {
 		mapConfig["auth_config"] = map[string]any{
 			"admin_username": &schemas.SecretVar{},
@@ -902,7 +879,7 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 			// an unauthenticated network caller racing the real operator to a freshly
 			// exposed instance.
 			if authConfig == nil && !h.configManager.ValidateSetupToken(payload.AuthConfig.SetupToken) {
-				SendError(ctx, fasthttp.StatusForbidden, "a valid setup token is required to create the initial admin account; configure setup_token in config.json (or the BIFROST_SETUP_TOKEN env var) and pass it in this request")
+				SendError(ctx, fasthttp.StatusForbidden, "a valid setup token is required to create the initial admin account; configure setup_token in config.json (or the BIFROST_SETUP_TOKEN env var) and pass it in this request, or create the admin account with the pg-gateway-admin admin reset CLI")
 				return
 			}
 			// Fetching current Auth config

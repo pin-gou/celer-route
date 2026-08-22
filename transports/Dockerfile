@@ -77,11 +77,13 @@ COPY plugins/providercooldown/go.mod plugins/providercooldown/go.sum ./plugins/p
 COPY plugins/semanticcache/go.mod plugins/semanticcache/go.sum ./plugins/semanticcache/
 COPY plugins/rtk/go.mod plugins/rtk/go.sum ./plugins/rtk/
 COPY plugins/telemetry/go.mod plugins/telemetry/go.sum ./plugins/telemetry/
+COPY cmd/admin/go.mod cmd/admin/go.sum ./cmd/admin/
 COPY transports/go.mod transports/go.sum ./transports/
 
 RUN if [ "$USE_LOCAL_MODULES" = "1" ]; then \
       go work init && \
       go work use \
+        ./cmd/admin \
         ./core \
         ./framework \
         ./plugins/compat \
@@ -106,6 +108,7 @@ RUN if [ "$USE_LOCAL_MODULES" = "1" ]; then \
 COPY core/ ./core/
 COPY framework/ ./framework/
 COPY plugins/ ./plugins/
+COPY cmd/admin/ ./cmd/admin/
 COPY transports/ ./transports/
 
 COPY --from=ui-builder /app/out ./transports/pg-gateway-http/ui
@@ -122,6 +125,23 @@ RUN cd /build/transports && \
       -o /app/main \
       ./pg-gateway-http
 RUN test -f /app/main || (echo "Build failed" && exit 1)
+
+# --- pg-gateway-admin CLI (operator-side admin account management) ---
+# Built with the same cross-toolchain + static-linking flags so the binary
+# matches the main server: fully static, glibc-free, runs on the Alpine
+# runtime stage. The CLI writes admin credentials straight to the config
+# store (no HTTP setup_token required) — see
+# `make build-admin` / docs/features/dashboard-auth.mdx for usage.
+RUN cd /build/cmd/admin && \
+    CC=$(if [ "$TARGETARCH" = "arm64" ]; then echo aarch64-linux-gnu-gcc; \
+         elif [ "$TARGETARCH" = "amd64" ]; then echo x86_64-linux-gnu-gcc; \
+         else echo "unknown"; fi) \
+    go build \
+      -ldflags="-w -s -extldflags '-static'" \
+      -trimpath \
+      -tags "sqlite_static" \
+      -o /app/pg-gateway-admin .
+RUN test -f /app/pg-gateway-admin || (echo "pg-gateway-admin build failed" && exit 1)
 
 # --- Runtime Stage: Alpine ---
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
@@ -150,6 +170,7 @@ RUN apk upgrade --no-cache && \
     apk add --no-cache musl libgcc ca-certificates zlib=1.3.2-r0
 
 COPY --from=builder /app/main .
+COPY --from=builder /app/pg-gateway-admin .
 COPY --from=builder /build/transports/docker-entrypoint.sh .
 
 # adduser -D (no -u) on this alpine base assigns the first free UID, which is

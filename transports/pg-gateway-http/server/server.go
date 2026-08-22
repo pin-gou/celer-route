@@ -73,6 +73,7 @@ type ServerCallbacks interface {
 	// Auth related callbacks
 	UpdateAuthConfig(ctx context.Context, authConfig *configstore.AuthConfig) error
 	ValidateSetupToken(token string) bool
+	IsSetupTokenConfigured() bool
 	ReloadClientConfigFromConfigStore(ctx context.Context) error
 	// Pricing related callbacks
 	UpdateSyncConfig(ctx context.Context) error
@@ -1306,6 +1307,16 @@ func (s *BifrostHTTPServer) ValidateSetupToken(token string) bool {
 		return true
 	}
 	return s.AuthMiddleware.CheckBootstrapToken(token)
+}
+
+// IsSetupTokenConfigured reports whether the operator configured a bootstrap setup
+// token (config.json setup_token or the BIFROST_SETUP_TOKEN env var). Unlike
+// CheckBootstrapToken this does not depend on admin-account state — the token can be
+// configured even after the first admin was created (it just no longer gates
+// anything). The security/onboarding UI reads it while no admin exists yet to decide
+// between showing the setup-token field and pointing at the pg-gateway-admin CLI.
+func (s *BifrostHTTPServer) IsSetupTokenConfigured() bool {
+	return s.Config != nil && s.Config.SetupToken != ""
 }
 
 // UpdateDropExcessRequests updates excess requests config

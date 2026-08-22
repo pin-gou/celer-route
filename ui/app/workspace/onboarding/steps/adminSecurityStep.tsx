@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretVarInput } from "@/components/ui/secretVarInput";
 import { Switch } from "@/components/ui/switch";
@@ -26,8 +25,6 @@ export default function AdminSecurityStep() {
 	const [localConfig, setLocalConfig] = useState<CoreConfig>(DefaultCoreConfig);
 	const [authConfig, setAuthConfig] = useState<AuthConfig>(DefaultAuthConfig);
 	const [corsText, setCorsText] = useState("");
-	const [setupToken, setSetupToken] = useState("");
-	const [setupTokenError, setSetupTokenError] = useState<string | null>(null);
 	const [submitted, setSubmitted] = useState(false);
 
 	const isFirstTimeSetup = !bifrostConfig?.auth_config;
@@ -43,12 +40,7 @@ export default function AdminSecurityStep() {
 
 	const handleSave = useCallback(async () => {
 		setSubmitted(true);
-		setSetupTokenError(null);
 
-		if (isFirstTimeSetup && authConfig.is_enabled && !setupToken.trim()) {
-			setSetupTokenError(t("setupTokenError"));
-			return;
-		}
 		const username = authConfig.admin_username?.value?.trim() ?? "";
 		const password = authConfig.admin_password?.value?.trim() ?? "";
 		if (authConfig.is_enabled && (!username || !password)) {
@@ -63,24 +55,24 @@ export default function AdminSecurityStep() {
 					...localConfig,
 					allowed_origins: parseArrayFromText(corsText),
 				},
-				auth_config: {
-					...authConfig,
-					is_enabled: authConfig.is_enabled && !!username && !!password,
-					...(isFirstTimeSetup ? { setup_token: setupToken.trim() } : {}),
-				},
+				// When no admin exists yet, skip auth_config — the operator must
+				// use the CLI to create the first admin account.
+				auth_config: isFirstTimeSetup
+					? undefined
+					: {
+							...authConfig,
+							is_enabled: authConfig.is_enabled && !!username && !!password,
+						},
 			};
 			await updateCoreConfig(nextConfig).unwrap();
 			toast.success("Saved");
 			setSubmitted(false);
 		} catch (err) {
-			const msg = getErrorMessage(err);
-			if (isFirstTimeSetup && msg.toLowerCase().includes("setup token")) {
-				setSetupTokenError(msg);
-			} else {
-				toast.error(msg);
-			}
+			toast.error(getErrorMessage(err));
 		}
-	}, [authConfig, bifrostConfig, corsText, isFirstTimeSetup, localConfig, setupToken, t, updateCoreConfig]);
+	}, [authConfig, bifrostConfig, corsText, isFirstTimeSetup, localConfig, t, updateCoreConfig]);
+
+	const hasAuthConfig = !isFirstTimeSetup;
 
 	return (
 		<div className="space-y-6">
@@ -103,60 +95,47 @@ export default function AdminSecurityStep() {
 						onCheckedChange={(checked) => setAuthConfig((prev) => ({ ...prev, is_enabled: checked }))}
 					/>
 				</div>
-				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<div className="space-y-2">
-						<Label htmlFor="onb-admin-username">{t("adminUsername")}</Label>
-						<SecretVarInput
-							id="onb-admin-username"
-							type="text"
-							placeholder={t("adminUsernamePlaceholder")}
-							value={authConfig.admin_username}
-							disabled={!authConfig.is_enabled}
-							onChange={(value) => setAuthConfig((prev) => ({ ...prev, admin_username: value }))}
-						/>
+
+				{hasAuthConfig ? (
+					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<div className="space-y-2">
+							<Label htmlFor="onb-admin-username">{t("adminUsername")}</Label>
+							<SecretVarInput
+								id="onb-admin-username"
+								type="text"
+								placeholder={t("adminUsernamePlaceholder")}
+								value={authConfig.admin_username}
+								disabled={!authConfig.is_enabled}
+								onChange={(value) => setAuthConfig((prev) => ({ ...prev, admin_username: value }))}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="onb-admin-password">{t("adminPassword")}</Label>
+							<SecretVarInput
+								id="onb-admin-password"
+								type="password"
+								placeholder={t("adminPasswordPlaceholder")}
+								value={authConfig.admin_password}
+								disabled={!authConfig.is_enabled}
+								onChange={(value) => setAuthConfig((prev) => ({ ...prev, admin_password: value }))}
+							/>
+						</div>
 					</div>
-					<div className="space-y-2">
-						<Label htmlFor="onb-admin-password">{t("adminPassword")}</Label>
-						<SecretVarInput
-							id="onb-admin-password"
-							type="password"
-							placeholder={t("adminPasswordPlaceholder")}
-							value={authConfig.admin_password}
-							disabled={!authConfig.is_enabled}
-							onChange={(value) => setAuthConfig((prev) => ({ ...prev, admin_password: value }))}
-						/>
+				) : authConfig.is_enabled ? (
+					<div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+						<p className="mb-1 font-semibold">{t("setupTokenCliTitle")}</p>
+						<p className="mb-2">{t("setupTokenCliDesc")}</p>
+						<code className="block rounded bg-amber-100 px-2 py-1 font-mono text-xs dark:bg-amber-900/40">{t("setupTokenCliCommand")}</code>
 					</div>
-				</div>
-				{isFirstTimeSetup && authConfig.is_enabled && (
-					<div className="space-y-2">
-						<Label htmlFor="onb-setup-token">{t("setupToken")}</Label>
-						<Input
-							id="onb-setup-token"
-							type="password"
-							autoComplete="off"
-							placeholder="••••••••"
-							value={setupToken}
-							onChange={(e) => {
-								setSetupToken(e.target.value);
-								setSetupTokenError(null);
-							}}
-						/>
-						<p className="text-muted-foreground text-xs">{t("setupTokenHint")}</p>
-						{setupTokenError && (
-							<p className="text-destructive text-xs" role="alert">
-								{setupTokenError}
-							</p>
-						)}
+				) : null}
+
+				{!authConfig.is_enabled && (
+					<div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+						<Info className="mt-0.5 h-4 w-4 shrink-0" />
+						<span>{t("adminSkipHint")}</span>
 					</div>
 				)}
 			</div>
-
-			{!authConfig.is_enabled && (
-				<div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-					<Info className="mt-0.5 h-4 w-4 shrink-0" />
-					<span>{t("adminSkipHint")}</span>
-				</div>
-			)}
 
 			<div className="bg-card space-y-2 rounded-md border p-4">
 				<div className="space-y-1">
@@ -190,26 +169,28 @@ export default function AdminSecurityStep() {
 				</div>
 			</div>
 
-			<div className="flex items-center justify-end gap-2">
-				<Button
-					size="sm"
-					onClick={() => void handleSave()}
-					disabled={isLoading || (submitted && isLoading)}
-					data-testid="onboarding-admin-save"
-				>
-					{isLoading ? (
-						<>
-							<Loader2 className="mr-1 h-4 w-4 animate-spin" />
-							Saving…
-						</>
-					) : (
-						<>
-							<Save className="mr-1 h-4 w-4" />
-							{t("action.save", { ns: "common" })}
-						</>
-					)}
-				</Button>
-			</div>
+			{hasAuthConfig && (
+				<div className="flex items-center justify-end gap-2">
+					<Button
+						size="sm"
+						onClick={() => void handleSave()}
+						disabled={isLoading || (submitted && isLoading)}
+						data-testid="onboarding-admin-save"
+					>
+						{isLoading ? (
+							<>
+								<Loader2 className="mr-1 h-4 w-4 animate-spin" />
+								Saving…
+							</>
+						) : (
+							<>
+								<Save className="mr-1 h-4 w-4" />
+								{t("action.save", { ns: "common" })}
+							</>
+						)}
+					</Button>
+				</div>
+			)}
 		</div>
 	);
 }
