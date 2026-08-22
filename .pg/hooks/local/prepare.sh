@@ -19,6 +19,7 @@ LOCAL_DIR="$HOOK_DIR"
 DATA_DIR="$LOCAL_DIR/data"
 FIXTURE_DIR="$LOCAL_DIR/fixature"
 BIFROST_BIN="${BIFROST_BIN:-$PROJECT_ROOT/tmp/pg-gateway-http}"
+ADMIN_BIN="${ADMIN_BIN:-$PROJECT_ROOT/tmp/pg-gateway-admin}"
 PORT="${BIFROST_PREPARE_PORT:-9080}"
 HOST="localhost"
 
@@ -51,7 +52,7 @@ if [[ ! -d "$PROJECT_ROOT/transports/pg-gateway-http/ui" ]]; then
     fi
 fi
 
-# 构建 binary（如缺失）
+# 构建 pg-gateway-http binary（如缺失）
 if [[ ! -x "$BIFROST_BIN" ]]; then
     echo "构建 pg-gateway-http binary..."
     # 确保 Go workspace 存在（跨模块引用需要）
@@ -62,6 +63,17 @@ if [[ ! -x "$BIFROST_BIN" ]]; then
         pg_fail --category=dependency_not_ready --code=PG-E-0800 \
             --message="pg-gateway-http 构建失败" \
             --hint="Run 'make setup-workspace && make build LOCAL=1' in project root" \
+            --agent-recoverable=true
+    }
+fi
+
+# 构建 pg-gateway-admin CLI（如缺失）
+if [[ ! -x "$ADMIN_BIN" ]]; then
+    echo "构建 pg-gateway-admin CLI..."
+    (cd "$PROJECT_ROOT/cmd/admin" && go build -ldflags="-w -s" -o "$ADMIN_BIN" .) || {
+        pg_fail --category=dependency_not_ready --code=PG-E-0800 \
+            --message="pg-gateway-admin 构建失败" \
+            --hint="Run 'make build-admin' in project root" \
             --agent-recoverable=true
     }
 fi
@@ -106,6 +118,20 @@ python3 "$LOCAL_DIR/seed.py" "$FIXTURE_DIR" "$PORT" "$HOST" || SEED_RESULT=$?
 if [ "$SEED_RESULT" -ne 0 ]; then
     echo "WARN: seed 过程有错误（$SEED_RESULT），但已有数据已持久化"
 fi
+
+# 设置默认管理员密码
+ADMIN_USER="${BIFROST_ADMIN_USER:-admin}"
+ADMIN_PASS="${BIFROST_ADMIN_PASS:-Admin@123456}"
+echo "设置默认管理员（$ADMIN_USER）..."
+if ! printf '%s\n%s\n' "$ADMIN_PASS" "$ADMIN_PASS" | "$ADMIN_BIN" admin reset \
+    --app-dir "$DATA_DIR" \
+    --username "$ADMIN_USER" \
+    --password-stdin \
+    --yes 2>&1; then
+    echo "WARN: 设置管理员密码失败（DB 可能被占用或密码策略不满足）"
+    echo "      请手动运行: $ADMIN_BIN admin reset --app-dir $DATA_DIR"
+fi
+echo "  → 管理员 $ADMIN_USER 已就绪"
 
 # 关闭 pg-gateway
 echo "关闭 pg-gateway..."
