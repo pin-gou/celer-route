@@ -11,8 +11,8 @@ function RouteComponent() {
 	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
 	const childMatches = useChildMatches();
 
-	const isVirtualKeysRoute = pathname.startsWith("/workspace/config/security/virtual-keys");
-	const requiredAccess = isVirtualKeysRoute ? hasVirtualKeysAccess : hasSettingsAccess;
+	const isApiKeysRoute = pathname.startsWith("/workspace/config/api-keys");
+	const requiredAccess = isApiKeysRoute ? hasVirtualKeysAccess : hasSettingsAccess;
 
 	const { isLoading } = useGetCoreConfigQuery({ fromDB: true }, { skip: !requiredAccess });
 

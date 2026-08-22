@@ -237,6 +237,20 @@
 	"docs": {
 		"title": "Docs"
 	},
+	"configSync": {
+		"description": "This config is synced from <1>config.json</1>. Any future updates to config.json will overwrite UI changes. If you are using config.json to bootstrap the initial config, you can ignore this alert."
+	},
+	"sheetNav": {
+		"previous": "Previous {{entity}}",
+		"next": "Next {{entity}}",
+		"prev": "Prev",
+		"nextLabel": "Next",
+		"or": "or"
+	},
+	"copyable": {
+		"copyLabel": "Copy {{noun}}",
+		"copiedLabel": "{{noun}} copied"
+	},
 	"sidebar": {
 		"collapse": "Collapse sidebar",
 		"expand": "Expand sidebar",

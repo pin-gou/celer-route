@@ -29,7 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import Toggle from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { resetDurationOptions, supportsCalendarAlignment } from "@/lib/constants/governance";
+import { getResetDurationOptions, supportsCalendarAlignment } from "@/lib/constants/governance";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
 import {
@@ -61,8 +61,11 @@ import { formatDistanceToNow } from "date-fns";
 import { Info, Lock, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
+
+import { getDateLocale } from "@/lib/utils/date";
 
 interface VirtualKeySheetProps {
 	virtualKey?: VirtualKey | null;
@@ -71,72 +74,75 @@ interface VirtualKeySheetProps {
 }
 
 // Provider configuration schema
-const providerConfigSchema = z.object({
-	id: z.number().optional(),
-	provider: z.string().min(1, "Provider is required"),
-	weight: z.number().min(0, "Weight must be at least 0").max(1, "Weight must be at most 1").optional(),
-	allowed_models: z.array(z.string()).optional(),
-	blacklisted_models: z.array(z.string()).optional(),
-	key_ids: z.array(z.string()).optional(), // Keys associated with this provider config
-	// Provider-level budget
-	budgets: z
-		.array(
-			z.object({
-				id: z.string().optional(),
-				max_limit: z.number().nonnegative().optional(),
-				reset_duration: z.string().optional(),
-				// Zod strips unknown keys, so the fiscal quarter has to be declared
-				// here or it is erased from form state on every parse.
-				reset_config: z.object({ quarter_start_month: z.number().int().min(1).max(12).optional() }).optional(),
-			}),
-		)
-		.optional(),
-	// Provider-level rate limits
-	rate_limit: z
-		.object({
-			token_max_limit: z.number().int().nonnegative().optional(),
-			token_reset_duration: z.string().optional(),
-			request_max_limit: z.number().int().nonnegative().optional(),
-			request_reset_duration: z.string().optional(),
-		})
-		.optional(),
-});
+const providerConfigSchema = (t: (key: string) => string) =>
+	z.object({
+		id: z.number().optional(),
+		provider: z.string().min(1, t("virtualKeySheet.providerRequired")),
+		weight: z.number().min(0, t("virtualKeySheet.weightMin")).max(1, t("virtualKeySheet.weightMax")).optional(),
+		allowed_models: z.array(z.string()).optional(),
+		blacklisted_models: z.array(z.string()).optional(),
+		key_ids: z.array(z.string()).optional(), // Keys associated with this provider config
+		// Provider-level budget
+		budgets: z
+			.array(
+				z.object({
+					id: z.string().optional(),
+					max_limit: z.number().nonnegative().optional(),
+					reset_duration: z.string().optional(),
+					// Zod strips unknown keys, so the fiscal quarter has to be declared
+					// here or it is erased from form state on every parse.
+					reset_config: z.object({ quarter_start_month: z.number().int().min(1).max(12).optional() }).optional(),
+				}),
+			)
+			.optional(),
+		// Provider-level rate limits
+		rate_limit: z
+			.object({
+				token_max_limit: z.number().int().nonnegative().optional(),
+				token_reset_duration: z.string().optional(),
+				request_max_limit: z.number().int().nonnegative().optional(),
+				request_reset_duration: z.string().optional(),
+			})
+			.optional(),
+	});
 
-const mcpConfigSchema = z.object({
-	id: z.number().optional(),
-	mcp_client_name: z.string().min(1, "MCP client name is required"),
-	tools_to_execute: z.array(z.string()).optional(),
-});
+const mcpConfigSchema = (t: (key: string) => string) =>
+	z.object({
+		id: z.number().optional(),
+		mcp_client_name: z.string().min(1, t("virtualKeySheet.mcpClientNameRequired")),
+		tools_to_execute: z.array(z.string()).optional(),
+	});
 
 // Main form schema
-const formSchema = z.object({
-	name: z.string().min(1, "Virtual key name is required"),
-	description: z.string().optional(),
-	providerConfigs: z.array(providerConfigSchema).optional(),
-	mcpConfigs: z.array(mcpConfigSchema).optional(),
-	isActive: z.boolean(),
-	expiresAt: z.string().nullable().optional(), // ISO 8601 datetime-local string, or null to clear
-	// Budget
-	budgetCalendarAligned: z.boolean(),
-	budgets: z
-		.array(
-			z.object({
-				id: z.string().optional(),
-				max_limit: z.number().nonnegative().optional(),
-				reset_duration: z.string(),
-				reset_config: z.object({ quarter_start_month: z.number().int().min(1).max(12).optional() }).optional(),
-			}),
-		)
-		.optional(),
-	// Token limits
-	tokenMaxLimit: z.number().int().nonnegative().optional(),
-	tokenResetDuration: z.string().optional(),
-	// Request limits
-	requestMaxLimit: z.number().int().nonnegative().optional(),
-	requestResetDuration: z.string().optional(),
-});
+const formSchema = (t: (key: string) => string) =>
+	z.object({
+		name: z.string().min(1, t("virtualKeySheet.nameRequired")),
+		description: z.string().optional(),
+		providerConfigs: z.array(providerConfigSchema(t)).optional(),
+		mcpConfigs: z.array(mcpConfigSchema(t)).optional(),
+		isActive: z.boolean(),
+		expiresAt: z.string().nullable().optional(), // ISO 8601 datetime-local string, or null to clear
+		// Budget
+		budgetCalendarAligned: z.boolean(),
+		budgets: z
+			.array(
+				z.object({
+					id: z.string().optional(),
+					max_limit: z.number().nonnegative().optional(),
+					reset_duration: z.string(),
+					reset_config: z.object({ quarter_start_month: z.number().int().min(1).max(12).optional() }).optional(),
+				}),
+			)
+			.optional(),
+		// Token limits
+		tokenMaxLimit: z.number().int().nonnegative().optional(),
+		tokenResetDuration: z.string().optional(),
+		// Request limits
+		requestMaxLimit: z.number().int().nonnegative().optional(),
+		requestResetDuration: z.string().optional(),
+	});
 
-type FormData = z.infer<typeof formSchema>;
+type FormData = z.infer<ReturnType<typeof formSchema>>;
 
 /**
  * Why the save dialog is asking about existing usage.
@@ -159,10 +165,10 @@ const toDatetimeLocal = (d: Date) =>
 const presetFromNow = (offsetMs: number) => toDatetimeLocal(new Date(Date.now() + offsetMs));
 
 const EXPIRY_PRESETS = [
-	{ label: "30 min", ms: 30 * 60_000 },
-	{ label: "1 hour", ms: 60 * 60_000 },
-	{ label: "24 hours", ms: 24 * 60 * 60_000 },
-	{ label: "7 days", ms: 7 * 24 * 60 * 60_000 },
+	{ key: "preset30min", ms: 30 * 60_000 },
+	{ key: "preset1hour", ms: 60 * 60_000 },
+	{ key: "preset24hours", ms: 24 * 60 * 60_000 },
+	{ key: "preset7days", ms: 7 * 24 * 60 * 60_000 },
 ] as const;
 
 interface ExpiryFieldProps {
@@ -174,12 +180,18 @@ function ExpiryPickerField({ value, onChange }: ExpiryFieldProps) {
 	// Preset timestamps are computed from Date.now() at click time, so the picked
 	// preset can't be derived back from the value; track it for highlighting.
 	const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+	const { t, i18n } = useTranslation("governance-ui");
+	const dateLocale = getDateLocale(i18n.language);
 
 	return (
 		<FormItem>
-			<FormLabel>Expiry</FormLabel>
+			<FormLabel>{t("virtualKeySheet.expiry")}</FormLabel>
 			<p className="text-muted-foreground text-xs">
-				{value ? `This key expires ${formatDistanceToNow(new Date(value), { addSuffix: true })}.` : "This key never expires."}
+				{value
+					? t("virtualKeySheet.expiresRelative", {
+							relative: formatDistanceToNow(new Date(value), { addSuffix: true, locale: dateLocale }),
+						})
+					: t("virtualKeySheet.neverExpires")}
 			</p>
 			<div className="flex flex-wrap gap-1.5">
 				<Button
@@ -191,20 +203,20 @@ function ExpiryPickerField({ value, onChange }: ExpiryFieldProps) {
 						onChange(null);
 					}}
 				>
-					Never
+					{t("virtualKeySheet.never")}
 				</Button>
-				{EXPIRY_PRESETS.map(({ label, ms }) => (
+				{EXPIRY_PRESETS.map(({ key, ms }) => (
 					<Button
-						key={label}
+						key={key}
 						type="button"
-						variant={value && selectedPreset === label ? "default" : "outline"}
+						variant={value && selectedPreset === key ? "default" : "outline"}
 						size="sm"
 						onClick={() => {
-							setSelectedPreset(label);
+							setSelectedPreset(key);
 							onChange(presetFromNow(ms));
 						}}
 					>
-						{label}
+						{t(`virtualKeySheet.${key}`)}
 					</Button>
 				))}
 				<DateTimePicker
@@ -227,6 +239,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 	const [isOpen, setIsOpen] = useState(true);
 	const navigate = useNavigate();
 	const isEditing = !!virtualKey;
+	const { t } = useTranslation("governance-ui");
 
 	const hasCreateAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.Create);
 	const hasUpdateAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.Update);
@@ -258,7 +271,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 	const persistedOverrideBudgets = [
 		...(virtualKey?.budgets ?? []).map((budget) => ({
 			budget,
-			label: "Virtual key",
+			label: t("budgetWarning.scope"),
 		})),
 		...(virtualKey?.provider_configs ?? []).flatMap((config) =>
 			(config.budgets ?? []).map((budget) => ({
@@ -280,8 +293,8 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 	const availableProviders = providersData || [];
 
 	// Form setup
-	const form = useForm<z.input<typeof formSchema>, unknown, FormData>({
-		resolver: zodResolver(formSchema),
+	const form = useForm<z.input<ReturnType<typeof formSchema>>, unknown, FormData>({
+		resolver: zodResolver(formSchema(t)),
 		defaultValues: {
 			name: virtualKey?.name || "",
 			description: virtualKey?.description || "",
@@ -341,21 +354,21 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 	// Handle keys loading error
 	useEffect(() => {
 		if (keysError) {
-			toast.error(`Failed to load available keys: ${getErrorMessage(keysError)}`);
+			toast.error(t("toast.failedToLoadKeys", { error: getErrorMessage(keysError) }));
 		}
 	}, [keysError]);
 
 	// Handle providers loading error
 	useEffect(() => {
 		if (providersError) {
-			toast.error(`Failed to load available providers: ${getErrorMessage(providersError)}`);
+			toast.error(t("toast.failedToLoadProviders", { error: getErrorMessage(providersError) }));
 		}
 	}, [providersError]);
 
 	// Handle mcp clients loading error
 	useEffect(() => {
 		if (mcpClientsError) {
-			toast.error(`Failed to load available MCP clients: ${getErrorMessage(mcpClientsError)}`);
+			toast.error(t("toast.failedToLoadMcpClients", { error: getErrorMessage(mcpClientsError) }));
 		}
 	}, [mcpClientsError]);
 
@@ -400,7 +413,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 	const handleAddProvider = (provider: string) => {
 		const existingConfig = providerConfigs.find((config) => config.provider === provider);
 		if (existingConfig) {
-			toast.error("This provider is already configured");
+			toast.error(t("toast.providerAlreadyConfigured"));
 			return;
 		}
 
@@ -427,7 +440,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 	const handleAddMCPClient = (mcpClientName: string) => {
 		const existingConfig = mcpConfigs.find((config) => config.mcp_client_name === mcpClientName);
 		if (existingConfig) {
-			toast.error("This MCP client is already configured");
+			toast.error(t("toast.mcpAlreadyConfigured"));
 			return;
 		}
 
@@ -564,7 +577,12 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 				if (configChanged && usage >= budget.max_limit) {
 					return {
 						kind: "over-limit" as const,
-						message: `${scopeLabel} ${budget.reset_duration} budget has ${formatBudgetAmount(usage)} usage, which meets or exceeds the new ${formatBudgetAmount(budget.max_limit)} limit.`,
+						message: t("budgetWarning.overLimit", {
+							scope: scopeLabel,
+							duration: budget.reset_duration,
+							usage: formatBudgetAmount(usage),
+							limit: formatBudgetAmount(budget.max_limit),
+						}),
 					};
 				}
 				// Moving the fiscal quarter moves the reset boundary under a live budget.
@@ -574,7 +592,10 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 				if (budget.reset_duration.endsWith("Q") && quarterStartOf(existing) !== quarterStartOf(budget) && usage > 0) {
 					return {
 						kind: "quarter-shift" as const,
-						message: `${scopeLabel} quarterly budget has ${formatBudgetAmount(usage)} of usage. Changing the fiscal quarter moves the reset date and carries that spend into the new quarter.`,
+						message: t("budgetWarning.quarterShift", {
+							scope: scopeLabel,
+							usage: formatBudgetAmount(usage),
+						}),
 					};
 				}
 				reconciled.push({ ...budget, current_usage: usage });
@@ -597,7 +618,13 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 			if (inheritedUsage >= budget.max_limit) {
 				return {
 					kind: "over-limit" as const,
-					message: `${scopeLabel} ${budget.reset_duration} budget will inherit ${formatBudgetAmount(inheritedUsage)} from the ${closestShorter?.reset_duration} budget, which meets or exceeds the new ${formatBudgetAmount(budget.max_limit)} limit.`,
+					message: t("budgetWarning.overLimitInherited", {
+						scope: scopeLabel,
+						duration: budget.reset_duration,
+						usage: formatBudgetAmount(inheritedUsage),
+						sourceDuration: closestShorter?.reset_duration ?? "",
+						limit: formatBudgetAmount(budget.max_limit),
+					}),
 				};
 			}
 			reconciled.push({ ...budget, current_usage: inheritedUsage });
@@ -611,7 +638,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 			return null;
 		}
 
-		const vkWarning = findBudgetUsageWarning(data.budgets, virtualKey.budgets, "Virtual key");
+		const vkWarning = findBudgetUsageWarning(data.budgets, virtualKey.budgets, t("budgetWarning.scope"));
 		if (vkWarning) {
 			return vkWarning;
 		}
@@ -623,7 +650,11 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 		for (const config of data.providerConfigs || []) {
 			const existingConfig = existingProviderConfigs.get(String(config.id ?? config.provider));
 			const providerLabel = ProviderLabels[config.provider as ProviderName] ?? config.provider;
-			const warning = findBudgetUsageWarning(config.budgets, existingConfig?.budgets, `${providerLabel} provider`);
+			const warning = findBudgetUsageWarning(
+				config.budgets,
+				existingConfig?.budgets,
+				t("budgetWarning.providerScope", { provider: providerLabel }),
+			);
 			if (warning) {
 				return warning;
 			}
@@ -680,12 +711,12 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 	const handleRotateVirtualKey = async () => {
 		if (!virtualKey) return;
 		if (!hasUpdateAccess) {
-			toast.error("You don't have permission to perform this action");
+			toast.error(t("virtualKeySheet.noPermission"));
 			return;
 		}
 		try {
 			await rotateVirtualKey(virtualKey.id).unwrap();
-			toast.success("Virtual key rotated successfully");
+			toast.success(t("toast.rotateSingle"));
 			setShowRotateWarning(false);
 			onSave();
 		} catch (error) {
@@ -695,7 +726,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 
 	const submitVirtualKeyForm = async (data: FormData, resetBudgetUsage = false) => {
 		if (!canSubmit) {
-			toast.error("You don't have permission to perform this action");
+			toast.error(t("virtualKeySheet.noPermission"));
 			return;
 		}
 		try {
@@ -708,7 +739,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 						description: data.description,
 					},
 				}).unwrap();
-				toast.success("Virtual key updated");
+				toast.success(t("toast.vkUpdatedSimple"));
 				onSave();
 				return;
 			}
@@ -776,7 +807,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 					vkId: virtualKey.id,
 					data: updateData,
 				}).unwrap();
-				toast.success("Virtual key updated successfully");
+				toast.success(t("toast.vkUpdated"));
 			} else {
 				// Create new virtual key
 				const createData: CreateVirtualKeyRequest = {
@@ -813,7 +844,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 				}
 
 				const created = await createVirtualKey(createData).unwrap();
-				toast.success("Virtual key created successfully");
+				toast.success(t("toast.vkCreated"));
 			}
 
 			onSave();
@@ -856,12 +887,8 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 				onEscapeKeyDown={() => handleClose()}
 			>
 				<SheetHeader className="flex flex-col items-start px-0 py-4" headerClassName="mb-0 sticky -top-4 bg-card z-10 px-8">
-					<SheetTitle className="flex items-center gap-2">{isEditing ? virtualKey?.name : "Create Virtual Key"}</SheetTitle>
-					<SheetDescription>
-						{isEditing
-							? "Update the virtual key configuration and permissions."
-							: "Create a new virtual key with specific permissions, budgets, and rate limits."}
-					</SheetDescription>
+					<SheetTitle className="flex items-center gap-2">{isEditing ? virtualKey?.name : t("virtualKeySheet.createTitle")}</SheetTitle>
+					<SheetDescription>{isEditing ? t("virtualKeySheet.editDescription") : t("virtualKeySheet.createDescription")}</SheetDescription>
 				</SheetHeader>
 
 				<Form {...form}>
@@ -871,10 +898,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 								<>
 									<Alert variant="info">
 										<Lock className="h-4 w-4" />
-										<AlertDescription>
-											This virtual key is managed by an access profile. Only the name and description can be modified; providers, budgets,
-											rate limits, and MCP access are controlled by the profile.
-										</AlertDescription>
+										<AlertDescription>{t("virtualKeySheet.managedByProfile")}</AlertDescription>
 									</Alert>
 								</>
 							)}
@@ -886,9 +910,9 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 									name="name"
 									render={({ field }) => (
 										<FormItem>
-											<FormLabel>Name *</FormLabel>
+											<FormLabel>{t("virtualKeySheet.nameLabel")}</FormLabel>
 											<FormControl>
-												<Input placeholder="e.g., Production API Key" data-testid="vk-name-input" {...field} />
+												<Input placeholder={t("virtualKeySheet.namePlaceholder")} data-testid="vk-name-input" {...field} />
 											</FormControl>
 											<FormMessage />
 										</FormItem>
@@ -900,9 +924,14 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 									name="description"
 									render={({ field }) => (
 										<FormItem>
-											<FormLabel>Description</FormLabel>
+											<FormLabel>{t("common:common.description")}</FormLabel>
 											<FormControl>
-												<Textarea placeholder="This key is used for..." data-testid="vk-description-input" {...field} rows={3} />
+												<Textarea
+													placeholder={t("virtualKeySheet.descriptionPlaceholder")}
+													data-testid="vk-description-input"
+													{...field}
+													rows={3}
+												/>
 											</FormControl>
 											<FormMessage />
 										</FormItem>
@@ -921,7 +950,12 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 										name="isActive"
 										render={({ field }) => (
 											<FormItem>
-												<Toggle label="Is this key active?" val={field.value} setVal={field.onChange} data-testid="vk-is-active-toggle" />
+												<Toggle
+													label={t("virtualKeySheet.isActiveLabel")}
+													val={field.value}
+													setVal={field.onChange}
+													data-testid="vk-is-active-toggle"
+												/>
 											</FormItem>
 										)}
 									/>
@@ -934,7 +968,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 								{/* Provider Configurations */}
 								<div className="space-y-2">
 									<div className="flex items-center gap-2">
-										<Label className="text-sm font-medium">Provider Configurations</Label>
+										<Label className="text-sm font-medium">{t("virtualKeyDetails.providerConfigurations")}</Label>
 										<TooltipProvider>
 											<Tooltip>
 												<TooltipTrigger asChild>
@@ -943,10 +977,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 													</span>
 												</TooltipTrigger>
 												<TooltipContent>
-													<p>
-														Configure which providers this virtual key can use and their specific settings. Leave empty to block all
-														providers. Add providers to allow them.
-													</p>
+													<p>{t("virtualKeySheet.providerConfigTooltip")}</p>
 												</TooltipContent>
 											</Tooltip>
 										</TooltipProvider>
@@ -967,7 +998,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 											}}
 										>
 											<SelectTrigger className="flex-1" data-testid="vk-provider-select">
-												<SelectValue placeholder="Select a provider to add" />
+												<SelectValue placeholder={t("virtualKeySheet.selectProviderPlaceholder")} />
 											</SelectTrigger>
 											<SelectContent>
 												{(() => {
@@ -984,7 +1015,8 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 																data-testid="vk-provider-config-link"
 															>
 																<span>
-																	No providers left to configure. <span className="text-primary font-medium underline">Click to add</span>
+																	{t("virtualKeySheet.noProvidersLeft")}{" "}
+																	<span className="text-primary font-medium underline">{t("virtualKeySheet.clickToAdd")}</span>
 																</span>
 															</SelectItem>
 														);
@@ -1089,7 +1121,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 								{((mcpClientsData && mcpClientsData.length > 0) || (mcpConfigs && mcpConfigs.length > 0)) && (
 									<div className="mt-6 space-y-2">
 										<div className="flex items-center gap-2">
-											<Label className="text-sm font-medium">MCP Client Configurations</Label>
+											<Label className="text-sm font-medium">{t("virtualKeyDetails.mcpClientConfigurations")}</Label>
 											<TooltipProvider>
 												<Tooltip>
 													<TooltipTrigger asChild>
@@ -1098,11 +1130,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 														</span>
 													</TooltipTrigger>
 													<TooltipContent>
-														<p>
-															Configure which MCP clients this virtual key can use and their allowed tools. Leaving this section empty
-															blocks all MCP tools. After adding an MCP client, you must select specific tools or choose{" "}
-															<span className="font-medium">Allow All Tools</span> to grant tool access.
-														</p>
+														<p>{t("virtualKeySheet.mcpConfigTooltip")}</p>
 													</TooltipContent>
 												</Tooltip>
 											</TooltipProvider>
@@ -1120,9 +1148,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 													<div className="flex items-start gap-1.5">
 														<Info className="mt-0.5 h-3 w-3 shrink-0" />
 														<span>
-															The following MCP servers are available to this key by default with all tools enabled on that client:{" "}
-															<span className="text-foreground font-medium">{defaultMCPClients.map((c) => c.config.name).join(", ")}</span>.
-															Adding an explicit config for any of them below will override the all-tools default for this key.
+															{t("virtualKeySheet.defaultMCPClients", { names: defaultMCPClients.map((c) => c.config.name).join(", ") })}
 														</span>
 													</div>
 												</div>
@@ -1140,7 +1166,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 													}}
 												>
 													<SelectTrigger className="flex-1">
-														<SelectValue placeholder="Select an MCP client to add" />
+														<SelectValue placeholder={t("virtualKeySheet.selectMCPPlaceholder")} />
 													</SelectTrigger>
 													<SelectContent>
 														{mcpClientsData.filter((client) => !mcpConfigs.some((config) => config.mcp_client_name === client.config.name))
@@ -1160,14 +1186,14 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 																			<div className="flex items-center gap-2">
 																				{client.config.name}
 																				<span className="text-muted-foreground text-xs">
-																					({totalTools} {totalTools === 1 ? "enabled tool" : "enabled tools"})
+																					{t("virtualKeySheet.enabledTool", { count: totalTools })}
 																				</span>
 																			</div>
 																		</SelectItem>
 																	);
 																})
 														) : (
-															<div className="text-muted-foreground px-2 py-1.5 text-sm">All MCP clients configured</div>
+															<div className="text-muted-foreground px-2 py-1.5 text-sm">{t("virtualKeySheet.allMCPConfigured")}</div>
 														)}
 													</SelectContent>
 												</Select>
@@ -1180,8 +1206,8 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 												<Table>
 													<TableHeader>
 														<TableRow>
-															<TableHead>MCP Client</TableHead>
-															<TableHead>Allowed Tools</TableHead>
+															<TableHead>{t("virtualKeyDetails.mcpClient")}</TableHead>
+															<TableHead>{t("virtualKeyDetails.allowedTools")}</TableHead>
 															<TableHead className="w-[50px]"></TableHead>
 														</TableRow>
 													</TableHeader>
@@ -1215,9 +1241,9 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 																		<MultiSelect
 																			options={[
 																				{
-																					label: "Allow All Tools",
+																					label: t("virtualKeySheet.allowAllTools"),
 																					value: "*",
-																					description: "Allow all current and future tools",
+																					description: t("virtualKeySheet.allowAllToolsDesc"),
 																				},
 																				...[...availableTools, ...enabledToolsByConfig]
 																					.filter((tool, index, arr) => arr.findIndex((t) => t.name === tool.name) === index)
@@ -1247,10 +1273,10 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 																			}}
 																			placeholder={
 																				selectedTools.length === 0
-																					? "No tools selected"
+																					? t("virtualKeySheet.noToolsSelected")
 																					: selectedTools.includes("*")
-																						? "All tools allowed"
-																						: "Select tools..."
+																						? t("virtualKeySheet.allToolsAllowed")
+																						: t("virtualKeySheet.selectTools")
 																			}
 																			variant="inverted"
 																			className="hover:bg-accent w-full bg-white dark:bg-zinc-800"
@@ -1284,7 +1310,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 								<div className="space-y-4">
 									<MultiBudgetLines
 										data-testid="vk-budget-lines"
-										label="Budget Configuration"
+										label={t("multiBudget.budgetConfiguration")}
 										lines={form.watch("budgets") ?? []}
 										onChange={(lines) => {
 											form.setValue("budgets", lines, { shouldDirty: true });
@@ -1296,21 +1322,21 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 									{isEditing && !isManagedByProfile && persistedOverrideBudgets.length > 0 ? (
 										<div className="space-y-3 rounded-sm border p-4" data-testid="vk-budget-overrides-section">
 											<div>
-												<h4 className="text-sm font-medium">Budget Overrides</h4>
-												<p className="text-muted-foreground text-xs">
-													Add temporary capacity without changing the configured base budgets above.
-												</p>
+												<h4 className="text-sm font-medium">{t("virtualKeySheet.budgetOverrides")}</h4>
+												<p className="text-muted-foreground text-xs">{t("virtualKeySheet.budgetOverrideDesc")}</p>
 											</div>
 											<div className="divide-y">
 												{persistedOverrideBudgets.map(({ budget, label }) => (
 													<div key={budget.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
 														<div className="min-w-0">
 															<p className="truncate text-sm font-medium">
-																{label} · resets every {parseResetPeriod(budget.reset_duration)}
+																{label} · {t("virtualKeySheet.resetsEvery", { period: parseResetPeriod(budget.reset_duration, t) })}
 															</p>
 															<p className="text-muted-foreground text-xs">
-																Base {formatCurrency(budget.max_limit)}
-																{hasActiveBudgetOverride(budget) ? ` · effective ${formatCurrency(getEffectiveBudgetLimit(budget))}` : ""}
+																{t("period.base", { amount: formatCurrency(budget.max_limit) })}
+																{hasActiveBudgetOverride(budget)
+																	? " · " + t("virtualKeySheet.effective", { amount: formatCurrency(getEffectiveBudgetLimit(budget)) })
+																	: ""}
 															</p>
 														</div>
 														<BudgetOverrideDialog
@@ -1329,7 +1355,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 									{/* Rate Limiting Configuration */}
 									<div className="space-y-4">
 										<div className="flex items-center justify-between gap-2">
-											<Label className="text-sm font-medium">Rate Limiting Configuration</Label>
+											<Label className="text-sm font-medium">{t("virtualKeySheet.rateLimitConfiguration")}</Label>
 											{isEditing && (virtualKey?.rate_limit || watchedTokenMaxLimit || watchedRequestMaxLimit) && (
 												<Button
 													type="button"
@@ -1339,7 +1365,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 													data-testid="vk-rate-limit-reset-button"
 												>
 													<RotateCcw className="h-4 w-4" />
-													Reset
+													{t("multiBudget.reset")}
 												</Button>
 											)}
 										</div>
@@ -1352,7 +1378,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 													<NumberAndSelect
 														id="tokenMaxLimit"
 														labelClassName="font-normal"
-														label="Maximum Tokens"
+														label={t("virtualKeySheet.maximumTokens")}
 														value={field.value}
 														selectValue={form.watch("tokenResetDuration") || "1h"}
 														onChangeNumber={(value) => {
@@ -1363,7 +1389,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 																shouldDirty: true,
 															})
 														}
-														options={resetDurationOptions}
+														options={getResetDurationOptions(t)}
 													/>
 													<FormMessage />
 												</FormItem>
@@ -1378,7 +1404,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 													<NumberAndSelect
 														id="requestMaxLimit"
 														labelClassName="font-normal"
-														label="Maximum Requests"
+														label={t("virtualKeySheet.maximumRequests")}
 														value={field.value}
 														selectValue={form.watch("requestResetDuration") || "1h"}
 														onChangeNumber={(value) => {
@@ -1389,7 +1415,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 																shouldDirty: true,
 															})
 														}
-														options={resetDurationOptions}
+														options={getResetDurationOptions(t)}
 													/>
 													<FormMessage />
 												</FormItem>
@@ -1401,11 +1427,10 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 										<div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
 											<div className="space-y-0.5">
 												<Label htmlFor="vk-budget-calendar-aligned-toggle" className="text-sm font-normal">
-													Align to calendar cycle
+													{t("virtualKeySheet.alignToCalendar")}
 												</Label>
 												<p id="vk-budget-calendar-aligned-description" className="text-muted-foreground text-xs">
-													Reset budgets and rate limits at the start of each period (e.g. 1st of month) instead of rolling from creation
-													date. Applies to durations of a day or longer.
+													{t("virtualKeySheet.calendarAlignDesc")}
 												</p>
 											</div>
 											<Switch
@@ -1422,16 +1447,11 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 									<AlertDialog open={showCalendarAlignWarning} onOpenChange={setShowCalendarAlignWarning}>
 										<AlertDialogContent>
 											<AlertDialogHeader>
-												<AlertDialogTitle>Reset budget and rate-limit usage?</AlertDialogTitle>
-												<AlertDialogDescription>
-													Enabling calendar alignment will reset budget usage to <span className="font-semibold">$0.00</span> and
-													token/request rate-limit counters to <span className="font-semibold">0</span> for this virtual key, then snap each
-													reset date to the start of its current period (e.g. start of day, week, month, or year). The usage reset cannot be
-													undone, but calendar alignment can be turned off later. This will take effect when you save.
-												</AlertDialogDescription>
+												<AlertDialogTitle>{t("virtualKeySheet.calendarAlignWarningTitle")}</AlertDialogTitle>
+												<AlertDialogDescription>{t("virtualKeySheet.calendarAlignWarningDesc")}</AlertDialogDescription>
 											</AlertDialogHeader>
 											<AlertDialogFooter>
-												<AlertDialogCancel data-testid="vk-calendar-align-cancel-btn">Cancel</AlertDialogCancel>
+												<AlertDialogCancel data-testid="vk-calendar-align-cancel-btn">{t("common:action.cancel")}</AlertDialogCancel>
 												<AlertDialogAction
 													data-testid="vk-calendar-align-enable-btn"
 													onClick={() => {
@@ -1441,7 +1461,7 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 														setShowCalendarAlignWarning(false);
 													}}
 												>
-													Enable Calendar Alignment
+													{t("virtualKeySheet.enableCalendarAlignment")}
 												</AlertDialogAction>
 											</AlertDialogFooter>
 										</AlertDialogContent>
@@ -1452,17 +1472,13 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 						<AlertDialog open={showRotateWarning} onOpenChange={setShowRotateWarning}>
 							<AlertDialogContent>
 								<AlertDialogHeader>
-									<AlertDialogTitle>Rotate virtual key?</AlertDialogTitle>
-									<AlertDialogDescription>
-										This will replace the secret value for &quot;
-										{virtualKey?.name}&quot;. The key ID, budgets, rate limits, provider permissions, MCP access, and assignments stay the
-										same. The previous key value will stop working immediately.
-									</AlertDialogDescription>
+									<AlertDialogTitle>{t("virtualKeySheet.rotateTitle")}</AlertDialogTitle>
+									<AlertDialogDescription>{t("virtualKeySheet.rotateDesc", { name: virtualKey?.name })}</AlertDialogDescription>
 								</AlertDialogHeader>
 								<AlertDialogFooter>
-									<AlertDialogCancel data-testid="vk-rotate-cancel-btn">Cancel</AlertDialogCancel>
+									<AlertDialogCancel data-testid="vk-rotate-cancel-btn">{t("common:action.cancel")}</AlertDialogCancel>
 									<AlertDialogAction onClick={handleRotateVirtualKey} disabled={isRotating} data-testid="vk-rotate-confirm-btn">
-										{isRotating ? "Rotating..." : "Rotate Key"}
+										{isRotating ? t("virtualKeySheet.rotating") : t("virtualKeySheet.rotateKey")}
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							</AlertDialogContent>
@@ -1472,23 +1488,23 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 								<AlertDialogHeader>
 									<AlertDialogTitle>
 										{pendingBudgetUsageWarning?.kind === "over-limit"
-											? "Preserve over-limit usage?"
+											? t("virtualKeySheet.budgetResetOverLimitTitle")
 											: pendingBudgetUsageWarning?.kind === "quarter-shift"
-												? "Carry usage into the new quarter?"
-												: "Reset budget usage?"}
+												? t("virtualKeySheet.budgetResetQuarterShiftTitle")
+												: t("virtualKeySheet.budgetResetTitle")}
 									</AlertDialogTitle>
 									<AlertDialogDescription>
 										{pendingBudgetUsageWarning
-											? `${pendingBudgetUsageWarning.message} You can preserve usage anyway, or reset usage to 0.`
-											: "You changed a budget amount, reset frequency, or calendar alignment. Reset current budget usage to 0, or preserve the existing usage counters."}
+											? `${pendingBudgetUsageWarning.message} ${t("virtualKeySheet.budgetResetWarningSuffix")}`
+											: t("virtualKeySheet.budgetResetDesc")}
 									</AlertDialogDescription>
 								</AlertDialogHeader>
 								<AlertDialogFooter>
 									<AlertDialogCancel onClick={() => handleBudgetResetChoice(false)} data-testid="vk-budget-reset-preserve-btn">
-										{pendingBudgetUsageWarning ? "Preserve Anyway" : "Preserve Usage"}
+										{pendingBudgetUsageWarning ? t("virtualKeySheet.preserveAnyway") : t("virtualKeySheet.preserveUsage")}
 									</AlertDialogCancel>
 									<AlertDialogAction onClick={() => handleBudgetResetChoice(true)} data-testid="vk-budget-reset-confirm-btn">
-										Reset Usage
+										{t("virtualKeySheet.resetUsage")}
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							</AlertDialogContent>
@@ -1510,21 +1526,21 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 										data-testid="vk-rotate-btn"
 									>
 										<RotateCcw className="h-4 w-4" />
-										{isRotating ? "Rotating..." : "Rotate Key"}
+										{isRotating ? t("virtualKeySheet.rotating") : t("virtualKeySheet.rotateKey")}
 									</Button>
 								) : (
 									<span />
 								)}
 								<div className="flex justify-end gap-2">
 									<Button type="button" variant="outline" onClick={handleClose} data-testid="vk-cancel-btn">
-										Cancel
+										{t("common:action.cancel")}
 									</Button>
 									<TooltipProvider>
 										<Tooltip>
 											<TooltipTrigger asChild>
 												<span className="inline-block">
 													<Button type="submit" disabled={isLoading || !form.formState.isDirty || !canSubmit} data-testid="vk-save-btn">
-														{isLoading ? "Saving..." : isEditing ? "Update" : "Create"}
+														{isLoading ? t("common:state.saving") : isEditing ? t("common:action.save") : t("common:action.create")}
 													</Button>
 												</span>
 											</TooltipTrigger>
@@ -1532,11 +1548,11 @@ export default function VirtualKeySheet({ virtualKey, onSave, onCancel }: Virtua
 												<TooltipContent>
 													<p>
 														{!canSubmit
-															? "You don't have permission to perform this action"
+															? t("virtualKeySheet.noPermission")
 															: isLoading
-																? "Saving..."
+																? t("common:state.saving")
 																: !form.formState.isDirty
-																	? "No changes made"
+																	? t("virtualKeySheet.noChanges")
 																	: ""}
 													</p>
 												</TooltipContent>

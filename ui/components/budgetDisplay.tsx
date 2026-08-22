@@ -4,6 +4,7 @@ import { resetDurationLabels, supportsCalendarAlignment } from "@/lib/constants/
 import { Budget } from "@/lib/types/governance";
 import { cn } from "@/lib/utils";
 import { formatCurrency, getEffectiveBudgetLimit, hasActiveBudgetOverride } from "@/lib/utils/governance";
+import { useTranslation } from "react-i18next";
 
 interface BudgetDisplayProps {
 	budgets: Budget[] | null | undefined;
@@ -11,10 +12,10 @@ interface BudgetDisplayProps {
 	calendarAligned?: boolean;
 }
 
-const formatResetDuration = (duration?: string | null, calendarAligned?: boolean) => {
+const formatResetDuration = (duration?: string | null, calendarAligned?: boolean, t?: (key: string) => string) => {
 	if (!duration) return "";
 	const label = resetDurationLabels[duration] || duration;
-	return calendarAligned && supportsCalendarAlignment(duration) ? `${label} (calendar)` : label;
+	return calendarAligned && supportsCalendarAlignment(duration) ? `${label} ${t?.("period.calendarSuffix")}` : label;
 };
 
 /**
@@ -23,6 +24,7 @@ const formatResetDuration = (duration?: string | null, calendarAligned?: boolean
  * the exact current/max spend. Mirrors RateLimitDisplay for visual consistency across tables.
  */
 export function BudgetDisplay({ budgets, calendarAligned }: BudgetDisplayProps) {
+	const { t } = useTranslation("governance-ui");
 	if (!budgets || budgets.length === 0) {
 		return <span className="text-muted-foreground text-sm">-</span>;
 	}
@@ -43,9 +45,9 @@ export function BudgetDisplay({ budgets, calendarAligned }: BudgetDisplayProps) 
 								<div className="flex items-center justify-between gap-4">
 									<span className="font-medium">
 										{formatCurrency(effectiveMaxLimit)}
-										{hasOverride ? <span className="text-muted-foreground ml-1 text-[10px]">override</span> : null}
+										{hasOverride ? <span className="text-muted-foreground ml-1 text-[10px]">{t("period.override")}</span> : null}
 									</span>
-									<span className="text-muted-foreground text-xs">{formatResetDuration(b.reset_duration, calendarAligned)}</span>
+									<span className="text-muted-foreground text-xs">{formatResetDuration(b.reset_duration, calendarAligned, t)}</span>
 								</div>
 								<Progress value={pct} className={cn("bg-muted/70 dark:bg-muted/30 h-1.5", barClass)} />
 							</div>
@@ -56,11 +58,14 @@ export function BudgetDisplay({ budgets, calendarAligned }: BudgetDisplayProps) 
 							</p>
 							{hasOverride ? (
 								<p className="text-primary-foreground/80 text-xs">
-									Base {formatCurrency(b.max_limit)} + {formatCurrency(b.override_amount ?? 0)} override
+									{t("period.base", { amount: formatCurrency(b.max_limit) })} + {formatCurrency(b.override_amount ?? 0)}{" "}
+									{t("period.override")}
 								</p>
 							) : null}
 							{b.reset_duration ? (
-								<p className="text-primary-foreground/80 text-xs">Resets {formatResetDuration(b.reset_duration, calendarAligned)}</p>
+								<p className="text-primary-foreground/80 text-xs">
+									{t("period.resets", { period: formatResetDuration(b.reset_duration, calendarAligned, t) })}
+								</p>
 							) : null}
 						</TooltipContent>
 					</Tooltip>

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 export default function GovernancePage() {
 	const navigate = useNavigate();
 	useEffect(() => {
-		navigate({ to: "/workspace/config/security/virtual-keys", replace: true });
+		navigate({ to: "/workspace/config/api-keys", replace: true });
 	}, [navigate]);
 	return null;
 }

@@ -21,8 +21,8 @@ export function VirtualKeysEmptyState({ onAddClick, canCreate = true }: VirtualK
 				<h1 className="text-muted-foreground text-xl font-medium">{t("emptyState.title")}</h1>
 				<div className="text-muted-foreground mx-auto mt-2 max-w-[600px] text-sm font-normal">{t("emptyState.description")}</div>
 				<div className="mx-auto mt-6 flex flex-row flex-wrap items-center justify-center gap-2">
-					<Button aria-label="Add your first virtual key" onClick={onAddClick} disabled={!canCreate} data-testid="create-vk-btn">
-						Add Virtual Key
+					<Button aria-label={t("emptyState.addLabel")} onClick={onAddClick} disabled={!canCreate} data-testid="create-vk-btn">
+						{t("emptyState.addButton")}
 					</Button>
 				</div>
 			</div>

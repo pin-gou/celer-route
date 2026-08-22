@@ -58,5 +58,24 @@
 		"noLimitsDesc": "创建您的第一个模型限制以开始使用",
 		"active": "活跃",
 		"inactive": "不活跃"
+	},
+	"periodUnits": {
+		"second": { "singular": "秒", "plural": "秒" },
+		"minute": { "singular": "分钟", "plural": "分钟" },
+		"hour": { "singular": "小时", "plural": "小时" },
+		"day": { "singular": "天", "plural": "天" },
+		"week": { "singular": "周", "plural": "周" },
+		"month": { "singular": "个月", "plural": "个月" },
+		"quarter": { "singular": "个季度", "plural": "个季度" },
+		"year": { "singular": "年", "plural": "年" }
+	},
+	"periodUnknown": "未知",
+	"budgetLabel": {
+		"base": "基础 {{amount}}",
+		"override": "覆盖",
+		"overrideAmount": "基础 {{base}} + {{amount}} 覆盖",
+		"resets": "每 {{period}} 重置",
+		"calendar": "日历",
+		"lastReset": "上次重置 {{relative}}"
 	}
 }

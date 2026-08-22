@@ -314,7 +314,7 @@ export function MCPLogDetailSheet({
 									label="Virtual Key"
 									value={
 										<Link
-											to="/workspace/config/security/virtual-keys"
+											to="/workspace/config/api-keys"
 											search={{ selected_vk: displayLog.virtual_key.id }}
 											className="text-blue-600 hover:underline dark:text-blue-400"
 											data-testid="mcplogdetails-virtual-key-link"

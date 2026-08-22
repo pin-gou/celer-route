@@ -6,12 +6,14 @@ import { getErrorMessage, useGetVirtualKeysQuery } from "@/lib/store";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const POLLING_INTERVAL = 5000;
 const PAGE_SIZE = 25;
 
 export default function SecurityVirtualKeysPage() {
+	const { t } = useTranslation("governance-ui");
 	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
 	const shownErrorsRef = useRef(new Set<string>());
 
@@ -66,7 +68,7 @@ export default function SecurityVirtualKeysPage() {
 		const errorKey = `${!!vkError}`;
 		if (shownErrorsRef.current.has(errorKey)) return;
 		shownErrorsRef.current.add(errorKey);
-		toast.error(`Failed to load virtual keys: ${getErrorMessage(vkError)}`);
+		toast.error(t("page.failedToLoad", { error: getErrorMessage(vkError) }));
 	}, [vkError]);
 
 	if (isLoading) {

@@ -237,6 +237,20 @@
 	"docs": {
 		"title": "文档"
 	},
+	"configSync": {
+		"description": "此配置从 <1>config.json</1> 同步。对 config.json 的任何未来更新都将覆盖 UI 更改。如果您使用 config.json 来引导初始配置，可以忽略此提示。"
+	},
+	"sheetNav": {
+		"previous": "上一个 {{entity}}",
+		"next": "下一个 {{entity}}",
+		"prev": "上一个",
+		"nextLabel": "下一个",
+		"or": "或"
+	},
+	"copyable": {
+		"copyLabel": "复制 {{noun}}",
+		"copiedLabel": "{{noun}} 已复制"
+	},
 	"sidebar": {
 		"collapse": "收起侧边栏",
 		"expand": "展开侧边栏",

@@ -1,29 +1,37 @@
 /**
- * Parses a duration string (e.g., "1m", "5m", "1h", "1d", "1w", "1M") into human readable format
+ * Parses a duration string (e.g., "1m", "5m", "1h", "1d", "1w", "1M") into human readable format.
+ * When `t` is provided, the resulting unit names are localized.
  */
-export function parseResetPeriod(duration: string): string {
-	if (!duration) return "Unknown";
+export function parseResetPeriod(duration: string, t?: TFunction): string {
+	if (!duration) return t ? t("governance:periodUnknown") : "Unknown";
 
 	const timeValue = parseInt(duration.slice(0, -1));
 	const timeUnit = duration.slice(-1);
 
-	const unitMap: Record<string, { singular: string; plural: string }> = {
-		s: { singular: "second", plural: "seconds" },
-		m: { singular: "minute", plural: "minutes" },
-		h: { singular: "hour", plural: "hours" },
-		d: { singular: "day", plural: "days" },
-		w: { singular: "week", plural: "weeks" },
-		M: { singular: "month", plural: "months" },
-		Q: { singular: "quarter", plural: "quarters" },
-		y: { singular: "year", plural: "years" },
+	const unitMap: Record<string, { singular: string; plural: string; key: string }> = {
+		s: { singular: "second", plural: "seconds", key: "second" },
+		m: { singular: "minute", plural: "minutes", key: "minute" },
+		h: { singular: "hour", plural: "hours", key: "hour" },
+		d: { singular: "day", plural: "days", key: "day" },
+		w: { singular: "week", plural: "weeks", key: "week" },
+		M: { singular: "month", plural: "months", key: "month" },
+		Q: { singular: "quarter", plural: "quarters", key: "quarter" },
+		y: { singular: "year", plural: "years", key: "year" },
 	};
 
 	const unit = unitMap[timeUnit];
 	if (!unit) return duration;
 
+	if (t) {
+		const unitName = t(`governance:periodUnits.${unit.key}.${timeValue === 1 ? "singular" : "plural"}`);
+		return `${timeValue} ${unitName}`;
+	}
+
 	const unitName = timeValue === 1 ? unit.singular : unit.plural;
 	return `${timeValue} ${unitName}`;
 }
+
+import type { TFunction } from "i18next";
 
 import { budgetOverrideFormSchema } from "@/lib/types/schemas";
 

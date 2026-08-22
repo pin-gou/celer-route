@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -48,7 +47,6 @@ import {
 	Eye,
 	EyeOff,
 	Loader2,
-	MoreHorizontal,
 	Plus,
 	RotateCcw,
 	ScrollText,
@@ -106,64 +104,6 @@ function VKBudgetCell({ vk }: { vk: VirtualKey }) {
 	return <BudgetDisplay budgets={displayBudgets} calendarAligned={vk.calendar_aligned} />;
 }
 
-// Entity selectors only ever set a value, so a filter built on one needs its own
-// reset back to "all" — this restores the affordance ComboboxSelect gave for free.
-function FilterClearButton({
-	show,
-	label,
-	onClear,
-	"data-testid": dataTestId,
-}: {
-	show: boolean;
-	label: string;
-	onClear: () => void;
-	"data-testid"?: string;
-}) {
-	if (!show) return null;
-	return (
-		<Button
-			type="button"
-			variant="ghost"
-			size="icon"
-			className="h-9 w-7 shrink-0"
-			aria-label={label}
-			onClick={onClear}
-			data-testid={dataTestId}
-		>
-			<X className="h-3.5 w-3.5" />
-		</Button>
-	);
-}
-
-function VKAssignedToCell({ vk }: { vk: VirtualKey }) {
-	const { assignedUsers } = useVirtualKeyUsage(vk);
-	const assignedUser = assignedUsers[0];
-
-	let label: string | null = null;
-	if (vk.team) {
-		label = `Team: ${vk.team.name}`;
-	} else if (vk.customer) {
-		label = `Customer: ${vk.customer.name}`;
-	} else if (assignedUser) {
-		label = `User: ${assignedUser.name || assignedUser.email}`;
-	}
-
-	if (!label) {
-		return <span className="text-muted-foreground max-w-full truncate text-left text-sm">-</span>;
-	}
-
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<Badge variant="outline" className="block max-w-full truncate text-left" data-testid={`vk-assigned-to-tooltip-trigger-${vk.name}`}>
-					{label}
-				</Badge>
-			</TooltipTrigger>
-			<TooltipContent data-testid={`vk-assigned-to-tooltip-content-${vk.name}`}>{label}</TooltipContent>
-		</Tooltip>
-	);
-}
-
 function VKRateLimitCell({ vk }: { vk: VirtualKey }) {
 	const { displayRateLimit } = useVirtualKeyUsage(vk);
 	return <RateLimitDisplay rateLimits={displayRateLimit} calendarAligned={vk.calendar_aligned} />;
@@ -178,15 +118,16 @@ function VKActiveSwitch({
 	hasUpdateAccess: boolean;
 	onToggle: (vk: VirtualKey, checked: boolean) => Promise<void>;
 }) {
+	const { t } = useTranslation("governance-ui");
 	const { isManagedByProfile } = useVirtualKeyUsage(vk);
 
 	return (
 		<Switch
 			checked={vk.is_active}
 			disabled={!hasUpdateAccess || isManagedByProfile}
-			aria-label={`${vk.is_active ? "Disable" : "Enable"} virtual key ${vk.name}`}
+			aria-label={t("table.toggleActive", { action: vk.is_active ? "Disable" : "Enable", name: vk.name })}
 			data-testid={`vk-active-switch-${vk.name}`}
-			title={isManagedByProfile ? "This virtual key is managed by an access profile." : undefined}
+			title={isManagedByProfile ? t("table.managedSwitchTitle") : undefined}
 			onAsyncCheckedChange={(checked) => onToggle(vk, checked)}
 		/>
 	);
@@ -207,80 +148,72 @@ function VKActionsMenu({
 	onEdit: (vk: VirtualKey) => void;
 	onDelete: (vkId: string) => void;
 }) {
-	const [isOpen, setIsOpen] = useState(false);
+	const { t } = useTranslation("governance-ui");
 	const { isManagedByProfile } = useVirtualKeyUsage(vk);
 	const [deleteOpen, setDeleteOpen] = useState(false);
 
 	return (
 		<>
-			<DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-				<DropdownMenuTrigger asChild>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-8 w-8"
-						aria-label="Virtual key actions"
-						data-testid={`vk-actions-btn-${vk.name}`}
-					>
-						<MoreHorizontal className="h-4 w-4" />
-					</Button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end">
-					<DropdownMenuItem
-						className="cursor-pointer"
-						disabled={!hasUpdateAccess}
-						data-testid={`vk-edit-btn-${vk.name}`}
-						onSelect={(e) => {
-							e.preventDefault();
-							onEdit(vk);
-							setIsOpen(false);
-						}}
-					>
-						<Edit className="h-4 w-4" />
-						Edit
-					</DropdownMenuItem>
-					<DropdownMenuItem asChild className="cursor-pointer" data-testid={`vk-view-logs-btn-${vk.name}`}>
-						<Link to="/workspace/logs" search={{ virtual_key_ids: [vk.id] }} onClick={() => setIsOpen(false)}>
-							<ScrollText className="h-4 w-4" />
-							View logs
-						</Link>
-					</DropdownMenuItem>
-					<DropdownMenuItem
-						variant="destructive"
-						className="cursor-pointer"
-						disabled={!hasDeleteAccess || isManagedByProfile}
-						data-testid={`vk-delete-btn-${vk.name}`}
-						title={isManagedByProfile ? "This virtual key is managed by an access profile and can't be deleted here." : undefined}
-						onSelect={(e) => {
-							e.preventDefault();
-							setDeleteOpen(true);
-							setIsOpen(false);
-						}}
-					>
-						<Trash2 className="h-4 w-4" />
-						Delete
-					</DropdownMenuItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
+			<div className="flex items-center justify-end gap-0.5">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							disabled={!hasUpdateAccess}
+							aria-label={t("actions.edit")}
+							data-testid={`vk-edit-btn-${vk.name}`}
+							onClick={() => onEdit(vk)}
+						>
+							<Edit className="h-3.5 w-3.5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{t("actions.edit")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button variant="ghost" size="icon-sm" aria-label={t("actions.viewLogs")} data-testid={`vk-view-logs-btn-${vk.name}`} asChild>
+							<Link to="/workspace/logs" search={{ virtual_key_ids: [vk.id] }}>
+								<ScrollText className="h-3.5 w-3.5" />
+							</Link>
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{t("actions.viewLogs")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							disabled={!hasDeleteAccess || isManagedByProfile}
+							title={isManagedByProfile ? t("deleteDialog.managedDisabledTitle") : undefined}
+							aria-label={t("actions.delete")}
+							data-testid={`vk-delete-btn-${vk.name}`}
+							onClick={() => setDeleteOpen(true)}
+						>
+							<Trash2 className="h-3.5 w-3.5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{t("actions.delete")}</TooltipContent>
+				</Tooltip>
+			</div>
 			<AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete Virtual Key</AlertDialogTitle>
+						<AlertDialogTitle>{t("deleteDialog.title")}</AlertDialogTitle>
 						<AlertDialogDescription>
-							Are you sure you want to delete &quot;
-							{vk.name.length > 20 ? `${vk.name.slice(0, 20)}...` : vk.name}
-							&quot;? This action cannot be undone.
+							{t("deleteDialog.confirmMessage", { name: vk.name.length > 20 ? `${vk.name.slice(0, 20)}...` : vk.name })}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel data-testid={`vk-delete-cancel-${vk.name}`}>Cancel</AlertDialogCancel>
+						<AlertDialogCancel data-testid={`vk-delete-cancel-${vk.name}`}>{t("common:cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={() => onDelete(vk.id)}
 							disabled={isDeleting}
 							className="bg-destructive hover:bg-destructive/90"
 							data-testid={`vk-delete-confirm-${vk.name}`}
 						>
-							{isDeleting ? "Deleting..." : "Delete"}
+							{isDeleting ? t("deleteDialog.deleting") : t("common:delete")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
@@ -320,7 +253,7 @@ export default function VirtualKeysTable({
 	selectedVkId,
 	onSelectedVkChange,
 }: VirtualKeysTableProps) {
-	const { t } = useTranslation("common");
+	const { t } = useTranslation("governance-ui");
 	const [showVirtualKeySheet, setShowVirtualKeySheet] = useState(false);
 	const [editingVirtualKeyId, setEditingVirtualKeyId] = useState<string | null>(null);
 	const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
@@ -398,7 +331,7 @@ export default function VirtualKeysTable({
 	const handleDelete = async (vkId: string) => {
 		try {
 			await deleteVirtualKey(vkId).unwrap();
-			toast.success("Virtual key deleted successfully");
+			toast.success(t("toast.vkDeleted"));
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		}
@@ -410,7 +343,7 @@ export default function VirtualKeysTable({
 				vkId: vk.id,
 				data: { is_active: checked },
 			}).unwrap();
-			toast.success(`Virtual key ${checked ? "enabled" : "disabled"}`);
+			toast.success(t(checked ? "toast.vkEnabled" : "toast.vkDisabled"));
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 			throw error;
@@ -442,9 +375,9 @@ export default function VirtualKeysTable({
 
 			const failureCount = result.errors ? Object.keys(result.errors).length : 0;
 			if (failureCount > 0) {
-				toast.warning(`Rotated ${result.virtual_keys.length} virtual keys. ${failureCount} failed.`);
+				toast.warning(t("toast.rotatePartial", { count: result.virtual_keys.length, failed: failureCount }));
 			} else {
-				toast.success(`Rotated ${result.virtual_keys.length} virtual keys`);
+				toast.success(t("toast.rotateSuccess", { count: result.virtual_keys.length }));
 			}
 		} catch (error) {
 			toast.error(getErrorMessage(error));
@@ -561,7 +494,7 @@ export default function VirtualKeysTable({
 	const handleExportCSV = async () => {
 		if (exportScope === "current_page") {
 			downloadCSV(virtualKeysToCSV(virtualKeys));
-			toast.success(`Exported ${virtualKeys.length} virtual keys`);
+			toast.success(t("toast.exported", { count: virtualKeys.length }));
 			setShowExportDialog(false);
 			return;
 		}
@@ -581,10 +514,10 @@ export default function VirtualKeysTable({
 			}).unwrap();
 
 			downloadCSV(virtualKeysToCSV(result.virtual_keys));
-			toast.success(`Exported ${result.virtual_keys.length} virtual keys`);
+			toast.success(t("toast.exported", { count: result.virtual_keys.length }));
 			setShowExportDialog(false);
 		} catch (error) {
-			toast.error(`Export failed: ${getErrorMessage(error)}`);
+			toast.error(t("toast.exportFailed", { error: getErrorMessage(error) }));
 		}
 	};
 
@@ -637,12 +570,12 @@ export default function VirtualKeysTable({
 			<Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
 				<DialogContent className="sm:max-w-[425px]">
 					<DialogHeader className="pb-0">
-						<DialogTitle>Export Virtual Keys</DialogTitle>
-						<DialogDescription>Download as CSV with current filters and sorting applied.</DialogDescription>
+						<DialogTitle>{t("exportDialog.title")}</DialogTitle>
+						<DialogDescription>{t("exportDialog.description")}</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-4">
 						<div className="space-y-2">
-							<Label className="text-sm">Export scope</Label>
+							<Label className="text-sm">{t("exportDialog.exportScope")}</Label>
 							<div className="grid grid-cols-2 gap-2" data-testid="vk-export-scope">
 								<button
 									type="button"
@@ -654,8 +587,8 @@ export default function VirtualKeysTable({
 											: "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
 									)}
 								>
-									<span className="font-medium">Current page</span>
-									<span className="text-muted-foreground text-xs">{virtualKeys.length} entries</span>
+									<span className="font-medium">{t("exportDialog.currentPage")}</span>
+									<span className="text-muted-foreground text-xs">{t("exportDialog.entries", { count: virtualKeys.length })}</span>
 								</button>
 								<button
 									type="button"
@@ -667,8 +600,8 @@ export default function VirtualKeysTable({
 											: "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
 									)}
 								>
-									<span className="font-medium">All entries</span>
-									<span className="text-muted-foreground text-xs">{totalCount} total</span>
+									<span className="font-medium">{t("exportDialog.allEntries")}</span>
+									<span className="text-muted-foreground text-xs">{t("exportDialog.total", { count: totalCount })}</span>
 								</button>
 							</div>
 						</div>
@@ -676,13 +609,13 @@ export default function VirtualKeysTable({
 						{exportScope === "all" && (
 							<div className="space-y-2">
 								<Label htmlFor="export-max-limit" className="text-sm">
-									Max entries <span className="text-muted-foreground font-normal">(optional)</span>
+									{t("exportDialog.maxEntries")} <span className="text-muted-foreground font-normal">({t("exportDialog.optional")})</span>
 								</Label>
 								<Input
 									id="export-max-limit"
 									type="number"
 									min="1"
-									placeholder={`Leave blank for all ${totalCount}`}
+									placeholder={t("exportDialog.maxEntriesPlaceholder", { count: totalCount })}
 									value={exportMaxLimit}
 									onChange={(e) => setExportMaxLimit(e.target.value)}
 									data-testid="vk-export-max-limit"
@@ -691,30 +624,28 @@ export default function VirtualKeysTable({
 						)}
 
 						{hasActiveFilters && (
-							<p className="text-muted-foreground text-xs">
-								Filters applied: {[debouncedSearch && `search "${debouncedSearch}"`].filter(Boolean).join(", ")}
-							</p>
+							<p className="text-muted-foreground text-xs">{t("exportDialog.filtersApplied", { query: debouncedSearch })}</p>
 						)}
 
 						<div className="text-muted-foreground flex items-center gap-2">
 							<ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-							<p className="text-xs">API tokens are excluded from the export.</p>
+							<p className="text-xs">{t("exportDialog.tokensExcluded")}</p>
 						</div>
 					</div>
 					<DialogFooter className="pt-0">
 						<Button variant="outline" onClick={() => setShowExportDialog(false)} disabled={isExporting}>
-							Cancel
+							{t("common:cancel")}
 						</Button>
 						<Button onClick={handleExportCSV} disabled={isExporting} data-testid="vk-export-confirm-btn">
 							{isExporting ? (
 								<>
 									<Loader2 className="h-4 w-4 animate-spin" />
-									Exporting...
+									{t("exportDialog.exporting")}
 								</>
 							) : (
 								<>
 									<Download className="h-4 w-4" />
-									Export CSV
+									{t("exportDialog.exportCSV")}
 								</>
 							)}
 						</Button>
@@ -725,21 +656,17 @@ export default function VirtualKeysTable({
 			<AlertDialog open={showBulkRotateDialog} onOpenChange={setShowBulkRotateDialog}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Rotate selected virtual keys?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This will replace the secret value for {selectedCount} selected virtual {selectedCount === 1 ? "key" : "keys"}. IDs, budgets,
-							rate limits, provider permissions, MCP access, and assignments stay the same. Previous key values will stop working
-							immediately.
-						</AlertDialogDescription>
+						<AlertDialogTitle>{t("bulkRotate.title")}</AlertDialogTitle>
+						<AlertDialogDescription>{t("bulkRotate.description", { count: selectedCount })}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel data-testid="vk-bulk-rotate-cancel-btn">Cancel</AlertDialogCancel>
+						<AlertDialogCancel data-testid="vk-bulk-rotate-cancel-btn">{t("common:cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={handleBulkRotate}
 							disabled={isBulkRotating || selectedCount === 0}
 							data-testid="vk-bulk-rotate-confirm-btn"
 						>
-							{isBulkRotating ? "Rotating..." : "Rotate Selected"}
+							{isBulkRotating ? t("bulkRotate.rotating") : t("bulkRotate.rotateSelected")}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
@@ -748,8 +675,8 @@ export default function VirtualKeysTable({
 			<div className="flex min-h-0 w-full grow flex-col overflow-hidden">
 				<div className="mb-4 flex shrink-0 items-center justify-between">
 					<div>
-						<h2 className="text-lg font-semibold">Virtual Keys</h2>
-						<p className="text-muted-foreground text-sm">Manage virtual keys, their permissions, budgets, and rate limits.</p>
+						<h2 className="text-lg font-semibold">{t("page.title")}</h2>
+						<p className="text-muted-foreground text-sm">{t("page.description")}</p>
 					</div>
 					<div className="flex items-center gap-2">
 						{selectedCount > 0 && (
@@ -760,16 +687,16 @@ export default function VirtualKeysTable({
 								data-testid="vk-bulk-rotate-btn"
 							>
 								<RotateCcw className="h-4 w-4" />
-								Rotate selected ({selectedCount})
+								{t("page.rotateSelected", { count: selectedCount })}
 							</Button>
 						)}
 						<Button variant="outline" onClick={openExportDialog} disabled={virtualKeys.length === 0} data-testid="vk-export-btn">
 							<Download className="h-4 w-4" />
-							Export CSV
+							{t("page.exportCSV")}
 						</Button>
 						<Button onClick={handleAddVirtualKey} disabled={!hasCreateAccess} data-testid="create-vk-btn">
 							<Plus className="h-4 w-4" />
-							Add Virtual Key
+							{t("page.addVirtualKey")}
 						</Button>
 					</div>
 				</div>
@@ -779,8 +706,8 @@ export default function VirtualKeysTable({
 					<div className="relative max-w-sm flex-1">
 						<Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
 						<Input
-							aria-label="Search virtual keys by name"
-							placeholder="Search by name..."
+							aria-label={t("table.searchLabel")}
+							placeholder={t("table.searchPlaceholder")}
 							value={search}
 							onChange={(e) => onSearchChange(e.target.value)}
 							className="pl-9"
@@ -797,30 +724,31 @@ export default function VirtualKeysTable({
 									<Checkbox
 										checked={allVisibleSelected || (someVisibleSelected ? "indeterminate" : false)}
 										onCheckedChange={(checked) => toggleSelectAllVisible(checked === true)}
-										aria-label="Select all virtual keys on this page"
+										aria-label={t("table.selectAll")}
 										data-testid="vk-select-all-checkbox"
 									/>
 								</TableHead>
 								<TableHead className="w-[250px]">
-									<SortableHeader column="name" label="Name" />
+									<SortableHeader column="name" label={t("table.name")} />
 								</TableHead>
-								<TableHead className="w-[160px]">Assigned To</TableHead>
-								<TableHead className="w-[440px]">Key</TableHead>
+								<TableHead className="w-[440px]">{t("table.key")}</TableHead>
 								<TableHead className="w-[200px]">
-									<SortableHeader column="budget_spent" label="Budget" />
+									<SortableHeader column="budget_spent" label={t("table.budget")} />
 								</TableHead>
-								<TableHead className="w-[200px]">Rate Limits</TableHead>
+								<TableHead className="w-[200px]">{t("table.rateLimits")}</TableHead>
 								<TableHead className="w-[120px]">
-									<SortableHeader column="status" label="Status" />
+									<SortableHeader column="status" label={t("table.status")} />
 								</TableHead>
-								<TableHead className={`bg-muted sticky right-0 z-30 w-[56px] text-right ${PIN_SHADOW_RIGHT}`}></TableHead>
+								<TableHead className={`bg-muted sticky right-0 z-30 w-[104px] text-center ${PIN_SHADOW_RIGHT}`}>
+									{t("common:common.actions")}
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{virtualKeys.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={8} className="h-24 text-center">
-										<span className="text-muted-foreground text-sm">No matching virtual keys found.</span>
+									<TableCell colSpan={7} className="h-24 text-center">
+										<span className="text-muted-foreground text-sm">{t("table.noMatching")}</span>
 									</TableCell>
 								</TableRow>
 							) : (
@@ -840,15 +768,12 @@ export default function VirtualKeysTable({
 												<Checkbox
 													checked={selectedIds.has(vk.id)}
 													onCheckedChange={(checked) => toggleSelectVirtualKey(vk.id, checked === true)}
-													aria-label={`Select virtual key ${vk.name}`}
+													aria-label={t("table.selectOne", { name: vk.name })}
 													data-testid={`vk-select-checkbox-${vk.name}`}
 												/>
 											</TableCell>
 											<TableCell className="max-w-[200px]">
 												<div className="truncate font-medium">{vk.name}</div>
-											</TableCell>
-											<TableCell>
-												<VKAssignedToCell vk={vk} />
 											</TableCell>
 											<TableCell onClick={(e) => e.stopPropagation()}>
 												<div className="flex items-center gap-2">

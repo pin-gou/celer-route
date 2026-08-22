@@ -23,7 +23,8 @@ export const budgetResetDurationOptions = [...resetDurationOptions, { label: "Qu
 // Case matters: "M" is a month while "m" is a minute, so "1q" is not a quarter.
 export const supportsCalendarAlignment = (duration: string): boolean => duration.length > 0 && /[dwMQY]$/.test(duration);
 
-// Map of duration values to short labels for display
+// Map of duration values to short labels for display.
+// For i18n use getResetDurationLabel(t, duration) instead.
 export const resetDurationLabels: Record<string, string> = {
 	"1m": "Every Minute",
 	"5m": "Every 5 Minutes",
@@ -36,6 +37,19 @@ export const resetDurationLabels: Record<string, string> = {
 	"1M": "Monthly",
 	"1Q": "Quarterly",
 };
+
+import type { TFunction } from "i18next";
+
+export const getResetDurationOptions = (t: TFunction) =>
+	resetDurationOptions.map((o) => ({
+		label: t(`governance:reset.${o.value}.label`, { defaultValue: o.label }),
+		value: o.value,
+	}));
+
+export const getBudgetResetDurationOptions = (t: TFunction) => [
+	...getResetDurationOptions(t),
+	{ label: t("governance:reset.1Q.label", { defaultValue: "Quarterly" }), value: "1Q" },
+];
 
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

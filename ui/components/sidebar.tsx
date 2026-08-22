@@ -774,7 +774,7 @@ export default function AppSidebar() {
 					},
 					{
 						title: t("nav.virtualKeys"),
-						url: "/workspace/config/security/virtual-keys",
+						url: "/workspace/config/api-keys",
 						icon: KeyRound,
 						description: "Manage virtual keys & access",
 						hasAccess: hasVirtualKeysAccess,

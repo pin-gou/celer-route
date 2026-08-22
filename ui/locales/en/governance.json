@@ -58,5 +58,24 @@
 		"noLimitsDesc": "Create your first model limit to get started",
 		"active": "Active",
 		"inactive": "Inactive"
+	},
+	"periodUnits": {
+		"second": { "singular": "second", "plural": "seconds" },
+		"minute": { "singular": "minute", "plural": "minutes" },
+		"hour": { "singular": "hour", "plural": "hours" },
+		"day": { "singular": "day", "plural": "days" },
+		"week": { "singular": "week", "plural": "weeks" },
+		"month": { "singular": "month", "plural": "months" },
+		"quarter": { "singular": "quarter", "plural": "quarters" },
+		"year": { "singular": "year", "plural": "years" }
+	},
+	"periodUnknown": "Unknown",
+	"budgetLabel": {
+		"base": "Base {{amount}}",
+		"override": "override",
+		"overrideAmount": "Base {{base}} + {{amount}} override",
+		"resets": "Resets {{period}}",
+		"calendar": "calendar",
+		"lastReset": "Last reset {{relative}}"
 	}
 }

@@ -9,8 +9,8 @@ function RouteComponent() {
 	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
 	const childMatches = useChildMatches();
 
-	const isVirtualKeysRoute = pathname.startsWith("/workspace/config/security/virtual-keys");
-	const requiredAccess = isVirtualKeysRoute ? hasVirtualKeysAccess : hasSettingsAccess;
+	const isApiKeysRoute = pathname.startsWith("/workspace/config/api-keys");
+	const requiredAccess = isApiKeysRoute ? hasVirtualKeysAccess : hasSettingsAccess;
 
 	if (!requiredAccess) {
 		return <NoPermissionView entity="security" entityI18nKey="config:security.title" />;
