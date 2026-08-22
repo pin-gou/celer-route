@@ -3,6 +3,7 @@ package logstore
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,6 +140,101 @@ func TestSQLiteListInputHistoryPassThroughOnBadJSON(t *testing.T) {
 	require.Len(t, result.Logs, 1)
 	assert.Equal(t, `"just-a-string-not-array"`, result.Logs[0].InputHistory,
 		"non-array / malformed column must be passed through verbatim")
+}
+
+// TestRDBWritePersistsLastUserMessageOnly proves that the pure RDB write path
+// (no object storage) applies the same last-user-message projection the hybrid
+// store does. The list-query SQLite projection assumes the column is a JSON
+// array of messages; without this, an RDB row whose raw input history is
+// empty would round-trip as input_history=NULL through the projection, and
+// the log-list preview would fall back to content_summary (which lists every
+// message) instead of the user's last prompt — disagreeing with the SSE
+// /active/stream `message` field.
+//
+// Pins the contract from PrepareLastUserMessagePreview: the persisted
+// input_history column is a single-element array of the last user message
+// (with attachments stripped), and content_summary mirrors that message's
+// text rather than concatenating every prior turn.
+func TestRDBWritePersistsLastUserMessageOnly(t *testing.T) {
+	store := newSqliteInputHistoryTestStore(t)
+	ctx := context.Background()
+
+	messages := []schemas.ChatMessage{
+		{Role: schemas.ChatMessageRoleSystem, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("You are a helpful assistant.")}},
+		{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("first user prompt")}},
+		{Role: schemas.ChatMessageRoleAssistant, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("assistant reply 1")}},
+		// Anthropic inlines mid-conversation system messages as a trailing
+		// text block on the user turn. The preview must surface "real user
+		// question?", not the inline reminder.
+		{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentBlocks: []schemas.ChatContentBlock{
+			{Type: schemas.ChatContentBlockTypeText, Text: schemas.Ptr("real user question?")},
+			{Type: schemas.ChatContentBlockTypeText, Text: schemas.Ptr("<system-reminder>injected by Anthropic</system-reminder>")},
+		}}},
+	}
+
+	row := newSQLiteInputHistoryRow("projection", "chat.completion", messages, nil)
+	row.Timestamp = time.Now().UTC()
+	require.NoError(t, store.Create(ctx, row))
+
+	result, err := store.SearchLogs(ctx, SearchFilters{}, PaginationOptions{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+
+	persisted := &result.Logs[0]
+	require.NoError(t, persisted.DeserializeFields())
+
+	// input_history must be a single-element array with the last user
+	// message (and its blocks) intact. The SQLite list projection further
+	// collapses this to one element, but the stored column carries the full
+	// block so detail views can render the conversation.
+	require.Len(t, persisted.InputHistoryParsed, 1,
+		"RDB write must project to the last user message, not the full conversation")
+	assert.Equal(t, schemas.ChatMessageRoleUser, persisted.InputHistoryParsed[0].Role)
+	require.NotNil(t, persisted.InputHistoryParsed[0].Content)
+	require.Len(t, persisted.InputHistoryParsed[0].Content.ContentBlocks, 2,
+		"attachment stripping must preserve text blocks; only media payloads are replaced")
+	assert.Equal(t, "real user question?", *persisted.InputHistoryParsed[0].Content.ContentBlocks[0].Text)
+
+	// content_summary mirrors the last user message's text, not every turn.
+	assert.Equal(t, "real user question?", persisted.ContentSummary,
+		"content_summary must match the message-column preview, not concatenate prior turns")
+}
+
+// TestRDBWriteLastUserMessagePreservesAttachmentsPlaceholder ensures base64
+// attachments are stripped to a placeholder in the persisted single-element
+// preview. Without the placeholder, a 4 MB audio blob in the last user turn
+// would bloat the DB row even after projection.
+func TestRDBWriteLastUserMessagePreservesAttachmentsPlaceholder(t *testing.T) {
+	store := newSqliteInputHistoryTestStore(t)
+	ctx := context.Background()
+
+	audioData := strings.Repeat("A", 4096) // large audio payload
+	messages := []schemas.ChatMessage{
+		{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentBlocks: []schemas.ChatContentBlock{
+			{Type: schemas.ChatContentBlockTypeText, Text: schemas.Ptr("transcribe this")},
+			{Type: schemas.ChatContentBlockTypeInputAudio, InputAudio: &schemas.ChatInputAudio{Data: audioData, Format: schemas.Ptr("wav")}},
+		}}},
+	}
+
+	row := newSQLiteInputHistoryRow("audio", "chat.completion", messages, nil)
+	row.Timestamp = time.Now().UTC()
+	require.NoError(t, store.Create(ctx, row))
+
+	result, err := store.SearchLogs(ctx, SearchFilters{}, PaginationOptions{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+
+	persisted := &result.Logs[0]
+	require.NoError(t, persisted.DeserializeFields())
+	require.Len(t, persisted.InputHistoryParsed, 1)
+	require.Len(t, persisted.InputHistoryParsed[0].Content.ContentBlocks, 2)
+
+	storedAudio := persisted.InputHistoryParsed[0].Content.ContentBlocks[1].InputAudio
+	require.NotNil(t, storedAudio)
+	assert.Equal(t, attachmentStrippedPlaceholder, storedAudio.Data,
+		"audio data must be replaced by the attachment placeholder to keep DB rows small")
+	assert.NotContains(t, persisted.InputHistory, audioData,
+		"raw audio bytes must never reach the DB column")
 }
 
 func newSqliteInputHistoryTestStore(t *testing.T) *RDBLogStore {

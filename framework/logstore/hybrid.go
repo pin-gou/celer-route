@@ -128,6 +128,21 @@ func (h *HybridLogStore) processUpload(work *uploadWork) {
 	if err := h.objects.Put(ctx, work.key, work.payload, work.tags); err != nil {
 		h.logger.Warn("objectstore: failed to upload log %s: %v", work.logID, err)
 		h.droppedUploads.Add(1)
+		// prepareDBEntry set HasObject=true optimistically so the inner
+		// RDB write path skips re-projection. Roll it back here so the
+		// DB row reflects the failed upload (no payload in object storage).
+		for attempt := 0; attempt < 3; attempt++ {
+			dbCtx, dbCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := h.inner.Update(dbCtx, work.logID, map[string]interface{}{"has_object": false})
+			dbCancel()
+			if err == nil {
+				break
+			}
+			h.logger.Warn("objectstore: failed to clear has_object for log %s (attempt %d/3): %v", work.logID, attempt+1, err)
+			if attempt < 2 {
+				time.Sleep(time.Duration(1<<attempt) * time.Second)
+			}
+		}
 		return
 	}
 
@@ -256,50 +271,36 @@ func prepareDBEntry(dbEntry *Log, excluded map[string]struct{}) {
 		return
 	}
 
-	idx := findLastUserMessageIndex(dbEntry.InputHistoryParsed)
+	PrepareLastUserMessagePreview(dbEntry, excluded)
 
-	// Content summary: extract text from the found user message.
-	// Falls back to BuildInputContentSummary for non-chat inputs (speech, image, etc.).
-	if idx >= 0 {
-		dbEntry.ContentSummary = extractChatMessageText(&dbEntry.InputHistoryParsed[idx])
-	} else {
-		dbEntry.ContentSummary = dbEntry.BuildInputContentSummary()
-	}
-	// Bound content summary to prevent large prompts from bloating the DB row.
-	dbEntry.ContentSummary = truncateTag(dbEntry.ContentSummary, maxContentSummaryBytes)
+	// Flag the row so the inner RDBLogStore write path knows the projection
+	// has already been applied with the right excluded semantics. Without
+	// this, the inner store's idempotent re-projection would collapse an
+	// excluded input_history that the operator explicitly kept DB-resident.
+	// We optimistically set it here; the enqueueUpload callback clears it
+	// if the S3 put fails so the DB row stays accurate (HasObject=false
+	// means "no payload in object storage").
+	dbEntry.HasObject = true
 
-	// Serialize last user message before ClearPayload zeros everything.
-	// Attachment payloads (base64 images/files/audio, media URLs) are replaced
-	// with a placeholder so they never bloat the DB row; the full message stays
-	// in object storage and is merged back on read.
-	var lastUserMessage string
-	if idx >= 0 {
-		stripped := stripChatMessageAttachments(&dbEntry.InputHistoryParsed[idx])
-		lastUserMessage, _ = sonic.MarshalString([]schemas.ChatMessage{stripped})
-	}
-
-	// Responses API requests carry their history in responses_input_history
-	// rather than input_history. Preserve the last user message there too, so
-	// the log list can render a preview instead of "-" once the full history is
-	// offloaded to object storage. Only needed when there is no chat input
-	// history (a request is either chat- or responses-shaped, never both).
-	var lastUserResponsesMessage string
-	if idx < 0 {
-		if responsesIdx := findLastUserResponsesMessageIndex(dbEntry.ResponsesInputHistoryParsed); responsesIdx >= 0 {
-			stripped := stripResponsesMessageAttachments(&dbEntry.ResponsesInputHistoryParsed[responsesIdx])
-			lastUserResponsesMessage, _ = sonic.MarshalString([]schemas.ResponsesMessage{stripped})
-		}
-	}
+	// Snapshot the projected input_history / responses_input_history JSON
+	// strings before ClearPayloadFiltered wipes them. PrepareLastUserMessagePreview
+	// just wrote single-element arrays (with attachments stripped) here; we
+	// restore the same strings after the clear so the DB row carries the
+	// preview even though its Parsed virtual fields were emptied.
+	projectedInputHistory := dbEntry.InputHistory
+	projectedResponsesInputHistory := dbEntry.ResponsesInputHistory
+	projectedContentSummary := dbEntry.ContentSummary
 
 	ClearPayloadFiltered(dbEntry, excluded)
 	restorePricingMetadata()
 
 	if _, hasInputHistoryExclusion := excluded["input_history"]; !hasInputHistoryExclusion {
-		dbEntry.InputHistory = sanitizeJSONForJSONB(lastUserMessage)
+		dbEntry.InputHistory = projectedInputHistory
 	}
 	if _, hasResponsesInputHistoryExclusion := excluded["responses_input_history"]; !hasResponsesInputHistoryExclusion {
-		dbEntry.ResponsesInputHistory = sanitizeJSONForJSONB(lastUserResponsesMessage)
+		dbEntry.ResponsesInputHistory = projectedResponsesInputHistory
 	}
+	dbEntry.ContentSummary = projectedContentSummary
 }
 
 // Create writes a lightweight DB row (with payload fields stripped per

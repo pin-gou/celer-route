@@ -532,7 +532,16 @@ func (l *Log) BuildInputContentSummary() string {
 }
 
 // extractChatMessageText returns the text content from a ChatMessage.
-// It prefers ContentStr; falls back to the last text ContentBlock.
+// It prefers ContentStr; falls back to the FIRST non-empty text ContentBlock.
+//
+// First-not-last matters because some providers (notably Anthropic on the
+// pg-gateway wire shape) inline mid-conversation system messages as a
+// trailing text block on the user turn. The last text block of the last
+// user message then carries a "<system-reminder>..." envelope, and the row
+// preview would surface the reminder instead of the user's actual prompt.
+// The matching Go path used by the SSE /active/stream `message` field
+// (chatMessageContentText in transports/pg-gateway-http/handlers/logging.go)
+// already returns the first non-empty text block; this helper must agree.
 func extractChatMessageText(msg *schemas.ChatMessage) string {
 	if msg.Content == nil {
 		return ""
@@ -541,19 +550,18 @@ func extractChatMessageText(msg *schemas.ChatMessage) string {
 		return *msg.Content.ContentStr
 	}
 	if msg.Content.ContentBlocks != nil {
-		var lastText string
 		for _, block := range msg.Content.ContentBlocks {
 			if block.Text != nil && *block.Text != "" {
-				lastText = *block.Text
+				return *block.Text
 			}
 		}
-		return lastText
 	}
 	return ""
 }
 
 // extractResponsesMessageText returns the text content from a ResponsesMessage.
-// It prefers ContentStr; falls back to the last text ContentBlock.
+// It prefers ContentStr; falls back to the FIRST non-empty text ContentBlock.
+// See extractChatMessageText for why first-not-last.
 func extractResponsesMessageText(msg *schemas.ResponsesMessage) string {
 	if msg.Content == nil {
 		return ""
@@ -562,13 +570,11 @@ func extractResponsesMessageText(msg *schemas.ResponsesMessage) string {
 		return *msg.Content.ContentStr
 	}
 	if msg.Content.ContentBlocks != nil {
-		var lastText string
 		for _, block := range msg.Content.ContentBlocks {
 			if block.Text != nil && *block.Text != "" {
-				lastText = *block.Text
+				return *block.Text
 			}
 		}
-		return lastText
 	}
 	return ""
 }
@@ -677,6 +683,286 @@ func findLastUserResponsesMessageIndex(msgs []schemas.ResponsesMessage) int {
 		}
 	}
 	return -1
+}
+
+// PrepareLastUserMessagePreview rewrites the input-history and content-summary
+// fields on l so the DB row carries only the last user message (with
+// attachments stripped) instead of the full conversation. Both the
+// TEXT columns and the Parsed virtual fields are updated so the GORM
+// BeforeCreate hook (which re-serializes Parsed into the TEXT columns just
+// before INSERT) observes the lightweight form.
+//
+// Hybrid storage applies this projection before offloading payloads to
+// object storage; the full conversation survives there. Pure RDB storage
+// applies it so the input_history column is never NULL on chat-completion
+// rows: the list-query projection (sqliteLastUserInputHistoryExpr on SQLite,
+// the raw jsonb on Postgres) always finds a non-empty array, and the
+// log-list preview agrees with the SSE /active/stream `message` field — both
+// render the same last-user-message text.
+//
+// ContentHidden rows are left untouched so hidden logs keep no request
+// content anywhere.
+//
+// Fields present in the excluded set are left untouched: a hybrid
+// configuration that excludes input_history wants the full conversation
+// kept in the DB row, so the projection must not collapse it to the last
+// user message. ContentSummary is still rewritten to the last user message
+// text because it powers the log-list "message" preview and full-text
+// search, both of which expect a single-message preview rather than a
+// concatenation of every turn.
+//
+// Idempotent across calls: when an outer caller (hybrid prepareDBEntry)
+// has already projected the Parsed slice to a single element and the inner
+// RDB write path calls this again with the same Parsed, the second call
+// is a no-op for the projection (already single-element) but still
+// re-derives ContentSummary, preserving any prior text the outer call
+// wrote. The hybrid "exclude input_history" case is detected by the
+// presence of multi-message Parsed: a single-element Parsed means an
+// outer caller already projected; multi-element Parsed means the caller
+// explicitly wants the full conversation in the DB row (skip projection
+// even when excluded is nil, to preserve hybrid intent).
+func PrepareLastUserMessagePreview(l *Log, excluded map[string]struct{}) {
+	if l == nil || l.ContentHidden {
+		return
+	}
+	_, inputHistoryExcluded := excluded["input_history"]
+	_, responsesInputHistoryExcluded := excluded["responses_input_history"]
+
+	idx := findLastUserMessageIndex(l.InputHistoryParsed)
+	responsesIdx := findLastUserResponsesMessageIndex(l.ResponsesInputHistoryParsed)
+
+	parsedEmpty := len(l.InputHistoryParsed) == 0 && len(l.ResponsesInputHistoryParsed) == 0
+	if parsedEmpty && l.ContentSummary != "" {
+		// Outer caller (hybrid prepareDBEntry) cleared Parsed after
+		// snapshotting the projected JSON. Preserve its ContentSummary
+		// rather than rebuilding from empty Parsed / TEXT.
+		return
+	}
+
+	// ContentSummary: prefer the last chat user message's text so it matches
+	// what the message-column preview shows. Falls back to the last
+	// responses user message, then to BuildInputContentSummary for non-chat
+	// inputs (speech / image / etc.).
+	switch {
+	case idx >= 0:
+		l.ContentSummary = extractChatMessageText(&l.InputHistoryParsed[idx])
+	case responsesIdx >= 0:
+		l.ContentSummary = extractResponsesMessageText(&l.ResponsesInputHistoryParsed[responsesIdx])
+	default:
+		l.ContentSummary = extractChatMessageTextFromText(l.InputHistory)
+		if l.ContentSummary == "" {
+			l.ContentSummary = extractResponsesMessageTextFromText(l.ResponsesInputHistory)
+		}
+		if l.ContentSummary == "" {
+			l.ContentSummary = l.BuildInputContentSummary()
+		}
+	}
+	if l.ContentSummary == "" {
+		l.ContentSummary = contentSummaryFromTextColumns(l)
+	}
+	l.ContentSummary = truncateTag(l.ContentSummary, maxContentSummaryBytes)
+
+	// Project Parsed slices to a single last-user-message element so the
+	// GORM BeforeCreate → SerializeFields chain writes the lightweight
+	// form. Attachment payloads are replaced by [attachment stripped].
+	//
+	// Skip projection when:
+	//   - The Parsed slice is already a single element (an outer caller
+	//     projected; re-projecting would mutate the projected form's
+	//     attachments back to the original base64 if the strip step is
+	//     not idempotent, and there's nothing to gain otherwise).
+	//   - The field is excluded but Parsed holds a multi-message
+	//     conversation (the operator explicitly kept it DB-resident; we
+	//     must not collapse to one element).
+	if idx >= 0 && !inputHistoryExcluded && len(l.InputHistoryParsed) > 1 {
+		stripped := stripChatMessageAttachments(&l.InputHistoryParsed[idx])
+		l.InputHistoryParsed = []schemas.ChatMessage{stripped}
+		if data, err := sonic.Marshal(l.InputHistoryParsed); err == nil {
+			l.InputHistory = sanitizeJSONForJSONB(string(data))
+		}
+	} else if idx >= 0 && !inputHistoryExcluded && len(l.InputHistoryParsed) == 1 {
+		// Already a single element from a prior call. Strip attachments on
+		// the existing single element (idempotent if already stripped) so
+		// the GORM re-serialization carries the placeholder, not base64.
+		stripped := stripChatMessageAttachments(&l.InputHistoryParsed[idx])
+		l.InputHistoryParsed = []schemas.ChatMessage{stripped}
+		if data, err := sonic.Marshal(l.InputHistoryParsed); err == nil {
+			l.InputHistory = sanitizeJSONForJSONB(string(data))
+		}
+	} else if inputHistoryExcluded && idx >= 0 && len(l.InputHistoryParsed) > 1 {
+		// Excluded but TEXT still holds the full conversation: keep Parsed
+		// intact (so GORM re-serialization stays multi-message) but resync
+		// the TEXT column from Parsed in case the caller only set one.
+		if data, err := sonic.Marshal(l.InputHistoryParsed); err == nil {
+			l.InputHistory = sanitizeJSONForJSONB(string(data))
+		}
+	}
+	if responsesIdx >= 0 && !responsesInputHistoryExcluded && len(l.ResponsesInputHistoryParsed) > 1 {
+		stripped := stripResponsesMessageAttachments(&l.ResponsesInputHistoryParsed[responsesIdx])
+		l.ResponsesInputHistoryParsed = []schemas.ResponsesMessage{stripped}
+		if data, err := sonic.Marshal(l.ResponsesInputHistoryParsed); err == nil {
+			l.ResponsesInputHistory = sanitizeJSONForJSONB(string(data))
+		}
+	} else if responsesIdx >= 0 && !responsesInputHistoryExcluded && len(l.ResponsesInputHistoryParsed) == 1 {
+		stripped := stripResponsesMessageAttachments(&l.ResponsesInputHistoryParsed[responsesIdx])
+		l.ResponsesInputHistoryParsed = []schemas.ResponsesMessage{stripped}
+		if data, err := sonic.Marshal(l.ResponsesInputHistoryParsed); err == nil {
+			l.ResponsesInputHistory = sanitizeJSONForJSONB(string(data))
+		}
+	} else if responsesInputHistoryExcluded && responsesIdx >= 0 && len(l.ResponsesInputHistoryParsed) > 1 {
+		if data, err := sonic.Marshal(l.ResponsesInputHistoryParsed); err == nil {
+			l.ResponsesInputHistory = sanitizeJSONForJSONB(string(data))
+		}
+	}
+}
+
+// textColumnIsProjectedChat reports whether the given TEXT column already
+// encodes the projected single-element chat array (the shape
+// PrepareLastUserMessagePreview would produce).
+func textColumnIsProjectedChat(text string) bool {
+	if text == "" {
+		return false
+	}
+	var msgs []schemas.ChatMessage
+	if err := sonic.Unmarshal([]byte(text), &msgs); err != nil {
+		return false
+	}
+	return len(msgs) == 1
+}
+
+// textColumnIsProjectedResponses reports whether the given TEXT column
+// already encodes the projected single-element Responses array.
+func textColumnIsProjectedResponses(text string) bool {
+	if text == "" {
+		return false
+	}
+	var msgs []schemas.ResponsesMessage
+	if err := sonic.Unmarshal([]byte(text), &msgs); err != nil {
+		return false
+	}
+	return len(msgs) == 1
+}
+
+// extractChatMessageTextFromText reads a ChatMessage JSON array out of the
+// given TEXT column and returns the last user-role message's text. Empty
+// input (or non-array content) yields "".
+func extractChatMessageTextFromText(text string) string {
+	if text == "" {
+		return ""
+	}
+	var msgs []schemas.ChatMessage
+	if err := sonic.Unmarshal([]byte(text), &msgs); err != nil {
+		return ""
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == schemas.ChatMessageRoleUser {
+			return extractChatMessageText(&msgs[i])
+		}
+	}
+	return ""
+}
+
+// extractResponsesMessageTextFromText reads a ResponsesMessage JSON array
+// out of the given TEXT column and returns the last user-role message's
+// text. Empty input (or non-array content) yields "".
+func extractResponsesMessageTextFromText(text string) string {
+	if text == "" {
+		return ""
+	}
+	var msgs []schemas.ResponsesMessage
+	if err := sonic.Unmarshal([]byte(text), &msgs); err != nil {
+		return ""
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != nil && *msgs[i].Role == schemas.ResponsesInputMessageRoleUser {
+			return extractResponsesMessageText(&msgs[i])
+		}
+	}
+	return ""
+}
+
+// contentSummaryFromTextColumns reads speech / image / video TEXT columns
+// directly to derive a preview when the Parsed virtual fields have already
+// been cleared (hybrid prepareDBEntry zeroes them after snapshotting the
+// projected JSON). Mirrors the input-side branches of BuildInputContentSummary
+// that look at SpeechInputParsed / ImageGenerationInputParsed / etc., but
+// operates on the TEXT column so it works post-offload.
+func contentSummaryFromTextColumns(l *Log) string {
+	if l.SpeechInput != "" {
+		var s schemas.SpeechInput
+		if err := sonic.Unmarshal([]byte(l.SpeechInput), &s); err == nil && s.Input != "" {
+			return s.Input
+		}
+	}
+	if l.ImageGenerationInput != "" {
+		var v schemas.ImageGenerationInput
+		if err := sonic.Unmarshal([]byte(l.ImageGenerationInput), &v); err == nil && v.Prompt != "" {
+			return v.Prompt
+		}
+	}
+	if l.ImageEditInput != "" {
+		var v schemas.ImageEditInput
+		if err := sonic.Unmarshal([]byte(l.ImageEditInput), &v); err == nil && v.Prompt != "" {
+			return v.Prompt
+		}
+	}
+	if l.VideoGenerationInput != "" {
+		var v schemas.VideoGenerationInput
+		if err := sonic.Unmarshal([]byte(l.VideoGenerationInput), &v); err == nil && v.Prompt != "" {
+			return v.Prompt
+		}
+	}
+	return ""
+}
+
+// projectChatInputHistoryToSingleElement returns a JSON-encoded
+// single-element array containing the last user message from parsed (with
+// attachments stripped). If parsed is empty, it deserializes fallback to
+// recover the messages. The result is "" if no user message exists.
+func projectChatInputHistoryToSingleElement(parsed []schemas.ChatMessage, fallback string) string {
+	var msgs []schemas.ChatMessage
+	if len(parsed) > 0 {
+		msgs = parsed
+	} else if fallback != "" {
+		if err := sonic.Unmarshal([]byte(fallback), &msgs); err != nil {
+			return ""
+		}
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == schemas.ChatMessageRoleUser {
+			stripped := stripChatMessageAttachments(&msgs[i])
+			data, err := sonic.MarshalString([]schemas.ChatMessage{stripped})
+			if err != nil {
+				return ""
+			}
+			return sanitizeJSONForJSONB(data)
+		}
+	}
+	return ""
+}
+
+// projectResponsesInputHistoryToSingleElement mirrors
+// projectChatInputHistoryToSingleElement for the Responses API shape.
+func projectResponsesInputHistoryToSingleElement(parsed []schemas.ResponsesMessage, fallback string) string {
+	var msgs []schemas.ResponsesMessage
+	if len(parsed) > 0 {
+		msgs = parsed
+	} else if fallback != "" {
+		if err := sonic.Unmarshal([]byte(fallback), &msgs); err != nil {
+			return ""
+		}
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != nil && *msgs[i].Role == schemas.ResponsesInputMessageRoleUser {
+			stripped := stripResponsesMessageAttachments(&msgs[i])
+			data, err := sonic.MarshalString([]schemas.ResponsesMessage{stripped})
+			if err != nil {
+				return ""
+			}
+			return sanitizeJSONForJSONB(data)
+		}
+	}
+	return ""
 }
 
 // BuildTags creates the S3 object tag map from a Log's index fields.

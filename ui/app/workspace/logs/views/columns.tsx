@@ -52,13 +52,12 @@ function getMessageFromContent(content?: ChatMessageContent): string {
 	if (typeof content === "string") {
 		return content;
 	}
-	let lastTextContentBlock = "";
 	for (const block of content) {
 		if ((block.type === "text" || block.type === "input_text" || block.type === "output_text") && block.text) {
-			lastTextContentBlock = block.text;
+			return block.text;
 		}
 	}
-	return lastTextContentBlock;
+	return "";
 }
 
 export function getRealtimeTurnMessages(log?: LogEntry): {
@@ -128,14 +127,15 @@ export function getMessage(log?: LogEntry) {
 		if (typeof lastMessageContent === "string") {
 			return lastMessageContent;
 		}
-		let lastTextContentBlock = "";
+		let firstTextContentBlock = "";
 		for (const block of (lastMessageContent ?? []) as ResponsesMessageContentBlock[]) {
 			if (block.text && block.text !== "") {
-				lastTextContentBlock = block.text;
+				firstTextContentBlock = block.text;
+				break;
 			}
 		}
 		// If no content found in content field, check output field for Responses API
-		if (!lastTextContentBlock && lastMessage.output) {
+		if (!firstTextContentBlock && lastMessage.output) {
 			// Handle output field - it could be a string, an array of content blocks, or a computer tool call output data
 			if (typeof lastMessage.output === "string") {
 				return lastMessage.output;
@@ -145,7 +145,7 @@ export function getMessage(log?: LogEntry) {
 				return lastMessage.output.image_url;
 			}
 		}
-		return lastTextContentBlock ?? "";
+		return firstTextContentBlock ?? "";
 	} else if (log?.output_message) {
 		return getMessageFromContent(log.output_message.content);
 	} else if (log?.speech_input) {

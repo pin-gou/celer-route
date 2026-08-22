@@ -498,6 +498,14 @@ func (s *RDBLogStore) Create(ctx context.Context, entry *Log) error {
 	if entry == nil {
 		return fmt.Errorf("log entry is nil")
 	}
+	// Skip projection on rows hybrid prepareDBEntry already prepared
+	// (HasObject=true): the projection was applied there with the right
+	// excluded semantics, and re-running here with excluded=nil would
+	// collapse an excluded input_history that the operator explicitly
+	// asked to keep DB-resident.
+	if !entry.HasObject {
+		PrepareLastUserMessagePreview(entry, nil)
+	}
 	db := s.db.WithContext(ctx)
 	if s.db.Dialector.Name() == "postgres" {
 		db = db.Omit("inc_number")
@@ -510,6 +518,9 @@ func (s *RDBLogStore) Create(ctx context.Context, entry *Log) error {
 func (s *RDBLogStore) CreateIfNotExists(ctx context.Context, entry *Log) error {
 	if entry == nil {
 		return fmt.Errorf("log entry is nil")
+	}
+	if !entry.HasObject {
+		PrepareLastUserMessagePreview(entry, nil)
 	}
 	db := s.db.WithContext(ctx)
 	if s.db.Dialector.Name() == "postgres" {
@@ -530,6 +541,14 @@ func (s *RDBLogStore) BatchCreateIfNotExists(ctx context.Context, entries []*Log
 	db := s.db.WithContext(ctx)
 	if s.db.Dialector.Name() == "postgres" {
 		db = db.Omit("inc_number")
+	}
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		if !entry.HasObject {
+			PrepareLastUserMessagePreview(entry, nil)
+		}
 	}
 	return db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},

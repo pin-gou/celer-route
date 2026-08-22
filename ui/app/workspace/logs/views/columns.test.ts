@@ -113,6 +113,47 @@ describe("getMessage", () => {
 		expect(getMessage(log)).toBe("the real last prompt");
 	});
 
+	it("returns the first text block of the last user message, skipping a trailing <system-reminder> block", () => {
+		// Anthropic providers inline mid-conversation system messages as a
+		// trailing text block on the user turn. The last user message therefore
+		// has two text blocks: the actual user prompt followed by
+		// "<system-reminder>...". The message-column preview must show the user
+		// prompt (the first non-empty text block), matching the SSE preview's
+		// `activeEntryMessage` behavior on the Go side.
+		const log = {
+			object: "chat.completion",
+			input_history: [
+				{
+					role: "user",
+					content: [
+						{ type: "text", text: "the real last prompt" },
+						{ type: "text", text: "<system-reminder>injected by Anthropic</system-reminder>" },
+					],
+				},
+			],
+		} as unknown as LogEntry;
+
+		expect(getMessage(log)).toBe("the real last prompt");
+	});
+
+	it("returns the first text block of the last responses user message, skipping a trailing <system-reminder> block", () => {
+		const log = {
+			object: "responses",
+			input_history: [],
+			responses_input_history: [
+				{
+					role: "user",
+					content: [
+						{ type: "input_text", text: "the real last prompt" },
+						{ type: "input_text", text: "<system-reminder>injected by Anthropic</system-reminder>" },
+					],
+				},
+			],
+		} as unknown as LogEntry;
+
+		expect(getMessage(log)).toBe("the real last prompt");
+	});
+
 	it("falls back to the last message when no user message exists", () => {
 		const log = {
 			object: "chat.completion",
