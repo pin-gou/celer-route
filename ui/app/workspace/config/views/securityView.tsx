@@ -11,7 +11,9 @@ import { SecretVar } from "@/lib/types/schemas";
 import { parseArrayFromText } from "@/lib/utils/array";
 import { getPasswordPolicyFailures, validateOrigins } from "@/lib/utils/validation";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AlertTriangle, ChevronDown, Globe, KeyRound, Network, ShieldCheck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -217,16 +219,17 @@ export default function SecurityView() {
 	}, [bifrostConfig, localConfig, authConfig, showPasswordSection, updateCoreConfig, isFirstTimeSetup]);
 
 	return (
-		<div className="mx-auto w-full max-w-4xl space-y-4">
+		<div className="mx-auto w-full max-w-4xl space-y-6">
 			<div>
 				<h2 className="text-lg font-semibold tracking-tight">{t("security.pageTitle")}</h2>
 				<p className="text-muted-foreground text-sm">{t("security.pageDescription")}</p>
 			</div>
 
-			<div className="space-y-4">
+			<div className="space-y-6">
 				{/* Password Protect the Dashboard */}
-				{showPasswordSection && (
-					<div>
+				<section className="space-y-3">
+					<SectionHeading icon={ShieldCheck} title={t("security.groupDashboardAccess")} />
+					{showPasswordSection && (
 						<div className="space-y-4 rounded-sm border p-4">
 							<div className="flex items-center justify-between">
 								<div className="space-y-0.5">
@@ -258,6 +261,7 @@ export default function SecurityView() {
 											aria-invalid={!!passwordError}
 											aria-describedby={passwordError ? "admin-password-error" : undefined}
 											type="password"
+											showPasswordToggle
 											placeholder={t("security.passwordPlaceholder")}
 											value={authConfig.admin_password}
 											disabled={!authConfig.is_enabled}
@@ -281,115 +285,122 @@ export default function SecurityView() {
 								</div>
 							) : null}
 						</div>
-					</div>
-				)}
-				{/* Enable Auth on Inference */}
-				<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-					<div className="space-y-0.5">
-						<label htmlFor="enforce-auth-on-inference" className="text-sm font-medium">
-							{t("security.enforceVirtualKeys")}
-						</label>
-						<p className="text-muted-foreground text-sm">{t("security.enforceVirtualKeysDesc")} </p>
-					</div>
-					<Switch
-						id="enforce-auth-on-inference"
-						data-testid="enforce-auth-on-inference-switch"
-						checked={localConfig.enforce_auth_on_inference}
-						onCheckedChange={(checked) => handleConfigChange("enforce_auth_on_inference", checked)}
-					/>
-				</div>
-				{/* Dual Credential Conflict Behavior */}
-				{/* Allow Direct API Keys */}
-				<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-					<div className="space-y-0.5">
-						<label htmlFor="allow-direct-keys" className="text-sm font-medium">
-							{t("security.allowDirectKeys")}
-						</label>
-						<p className="text-muted-foreground text-sm">{t("security.allowDirectKeysDesc")}</p>
-					</div>
-					<Switch
-						id="allow-direct-keys"
-						data-testid="security-allow-direct-keys-switch"
-						checked={localConfig.allow_direct_keys}
-						onCheckedChange={(checked) => handleConfigChange("allow_direct_keys", checked)}
-					/>
-				</div>
-				{/* Allowed Origins */}
-				{needsRestart && <RestartWarning t={t} />}
-				<div>
-					<div className="space-y-2 rounded-sm border p-4">
+					)}
+				</section>
+
+				{/* Enable Auth on Inference / Allow Direct API Keys */}
+				<section className="space-y-3">
+					<SectionHeading icon={KeyRound} title={t("security.groupApiAccess")} />
+					<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 						<div className="space-y-0.5">
-							<label htmlFor="allowed-origins" className="text-sm font-medium">
-								{t("security.allowedOrigins")}
+							<label htmlFor="enforce-auth-on-inference" className="text-sm font-medium">
+								{t("security.enforceVirtualKeys")}
 							</label>
-							<p className="text-muted-foreground text-sm">{t("security.allowedOriginsDesc")}</p>
+							<p className="text-muted-foreground text-sm">{t("security.enforceVirtualKeysDesc")}</p>
 						</div>
-						<Textarea
-							id="allowed-origins"
-							className="h-24"
-							placeholder={t("security.allowedOriginsPlaceholder")}
-							value={localValues.allowed_origins}
-							onChange={(e) => handleAllowedOriginsChange(e.target.value)}
+						<Switch
+							id="enforce-auth-on-inference"
+							data-testid="enforce-auth-on-inference-switch"
+							checked={localConfig.enforce_auth_on_inference}
+							onCheckedChange={(checked) => handleConfigChange("enforce_auth_on_inference", checked)}
 						/>
 					</div>
-				</div>
-				{/* Allowed Headers */}
-				<div>
-					<div className="space-y-2 rounded-sm border p-4">
+					<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 						<div className="space-y-0.5">
-							<label htmlFor="allowed-headers" className="text-sm font-medium">
-								{t("security.allowedHeaders")}
+							<label htmlFor="allow-direct-keys" className="text-sm font-medium">
+								{t("security.allowDirectKeys")}
 							</label>
-							<p className="text-muted-foreground text-sm">{t("security.allowedHeadersDesc")}</p>
+							<p className="text-muted-foreground text-sm">{t("security.allowDirectKeysDesc")}</p>
 						</div>
-						<Textarea
-							id="allowed-headers"
-							className="h-24"
-							placeholder={t("security.allowedHeadersPlaceholder")}
-							value={localValues.allowed_headers}
-							onChange={(e) => handleAllowedHeadersChange(e.target.value)}
+						<Switch
+							id="allow-direct-keys"
+							data-testid="security-allow-direct-keys-switch"
+							checked={localConfig.allow_direct_keys}
+							onCheckedChange={(checked) => handleConfigChange("allow_direct_keys", checked)}
 						/>
 					</div>
-				</div>
-				{/* Required Headers */}
-				<div>
-					<div className="space-y-2 rounded-sm border p-4">
-						<div className="space-y-0.5">
-							<label htmlFor="required-headers" className="text-sm font-medium">
-								{t("security.requiredHeaders")}
-							</label>
-							<p className="text-muted-foreground text-sm">{t("security.requiredHeadersDesc")}</p>
-						</div>
-						<Textarea
-							id="required-headers"
-							data-testid="required-headers-textarea"
-							className="h-24"
-							placeholder={t("security.requiredHeadersPlaceholder")}
-							value={localValues.required_headers}
-							onChange={(e) => handleRequiredHeadersChange(e.target.value)}
-						/>
-					</div>
-				</div>
+				</section>
+
+				{/* Allowed Origins / Headers / Required Headers */}
+				<section className="rounded-sm border">
+					<Collapsible defaultOpen={false}>
+						<CollapsibleTrigger asChild>
+							<button
+								type="button"
+								className="hover:bg-muted/50 group flex w-full items-center gap-2 rounded-sm px-4 py-3 text-left"
+								data-testid="security-cors-headers-collapsible-trigger"
+							>
+								<Globe className="text-muted-foreground size-4" />
+								<span className="flex-1 text-sm font-semibold tracking-tight">{t("security.groupCorsHeaders")}</span>
+								<ChevronDown className="text-muted-foreground size-4 transition-transform group-data-[state=open]:rotate-180" />
+							</button>
+						</CollapsibleTrigger>
+						<CollapsibleContent className="border-t px-4 py-4">
+							<div className="space-y-3">
+								{needsRestart && <RestartWarning t={t} />}
+								<TextareaField
+									id="allowed-origins"
+									label={t("security.allowedOrigins")}
+									description={t("security.allowedOriginsDesc")}
+									placeholder={t("security.allowedOriginsPlaceholder")}
+									value={localValues.allowed_origins}
+									onChange={handleAllowedOriginsChange}
+									example={t("security.allowedOriginsExample")}
+								/>
+								<TextareaField
+									id="allowed-headers"
+									label={t("security.allowedHeaders")}
+									description={t("security.allowedHeadersDesc")}
+									placeholder={t("security.allowedHeadersPlaceholder")}
+									value={localValues.allowed_headers}
+									onChange={handleAllowedHeadersChange}
+									example={t("security.allowedHeadersExample")}
+								/>
+								<TextareaField
+									id="required-headers"
+									label={t("security.requiredHeaders")}
+									description={t("security.requiredHeadersDesc")}
+									placeholder={t("security.requiredHeadersPlaceholder")}
+									value={localValues.required_headers}
+									onChange={handleRequiredHeadersChange}
+									testId="required-headers-textarea"
+									example={t("security.requiredHeadersExample")}
+								/>
+							</div>
+						</CollapsibleContent>
+					</Collapsible>
+				</section>
+
 				{/* Whitelisted Routes */}
-				<div>
-					<div className="space-y-2 rounded-sm border p-4">
-						<div className="space-y-0.5">
-							<label htmlFor="whitelisted-routes" className="text-sm font-medium">
-								{t("security.whitelistedRoutes")}
-							</label>
-							<p className="text-muted-foreground text-sm">{t("security.whitelistedRoutesDesc")}</p>
-						</div>
-						<Textarea
-							id="whitelisted-routes"
-							data-testid="whitelisted-routes-textarea"
-							className="h-24"
-							placeholder={t("security.whitelistedRoutesPlaceholder")}
-							value={localValues.whitelisted_routes}
-							onChange={(e) => handleWhitelistedRoutesChange(e.target.value)}
-						/>
-					</div>
-				</div>
+				<section className="rounded-sm border">
+					<Collapsible defaultOpen={false}>
+						<CollapsibleTrigger asChild>
+							<button
+								type="button"
+								className="hover:bg-muted/50 group flex w-full items-center gap-2 rounded-sm px-4 py-3 text-left"
+								data-testid="security-routes-collapsible-trigger"
+							>
+								<Network className="text-muted-foreground size-4" />
+								<span className="flex-1 text-sm font-semibold tracking-tight">{t("security.groupRouteExceptions")}</span>
+								<ChevronDown className="text-muted-foreground size-4 transition-transform group-data-[state=open]:rotate-180" />
+							</button>
+						</CollapsibleTrigger>
+						<CollapsibleContent className="border-t px-4 py-4">
+							<TextareaField
+								id="whitelisted-routes"
+								label={t("security.whitelistedRoutes")}
+								description={t("security.whitelistedRoutesDesc")}
+								placeholder={t("security.whitelistedRoutesPlaceholder")}
+								value={localValues.whitelisted_routes}
+								onChange={handleWhitelistedRoutesChange}
+								testId="whitelisted-routes-textarea"
+								example={t("security.whitelistedRoutesExample")}
+							/>
+						</CollapsibleContent>
+					</Collapsible>
+				</section>
 			</div>
+
 			<div className="bg-card sticky bottom-0 flex justify-end py-2">
 				<Button onClick={handleSave} disabled={!hasChanges || isLoading || !hasSettingsUpdateAccess}>
 					{isLoading ? t("actions.saving") : t("actions.saveChanges")}
@@ -398,6 +409,51 @@ export default function SecurityView() {
 		</div>
 	);
 }
+
+const SectionHeading = ({ icon: Icon, title }: { icon: LucideIcon; title: string }) => (
+	<div className="flex items-center gap-2">
+		<Icon className="text-muted-foreground size-4" />
+		<h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+	</div>
+);
+
+const TextareaField = ({
+	id,
+	label,
+	description,
+	placeholder,
+	value,
+	onChange,
+	example,
+	testId,
+}: {
+	id: string;
+	label: string;
+	description: string;
+	placeholder: string;
+	value: string;
+	onChange: (value: string) => void;
+	example?: string;
+	testId?: string;
+}) => (
+	<div className="space-y-2 rounded-sm border p-4">
+		<div className="space-y-0.5">
+			<label htmlFor={id} className="text-sm font-medium">
+				{label}
+			</label>
+			<p className="text-muted-foreground text-sm">{description}</p>
+		</div>
+		<Textarea
+			id={id}
+			data-testid={testId}
+			className="h-24"
+			placeholder={placeholder}
+			value={value}
+			onChange={(e) => onChange(e.target.value)}
+		/>
+		{example ? <p className="text-muted-foreground text-xs">{example}</p> : null}
+	</div>
+);
 
 const RestartWarning = ({ t }: { t: (key: string) => string }) => {
 	return (

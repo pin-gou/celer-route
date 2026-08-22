@@ -5,8 +5,9 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher/LanguageSwitcher
 import { ThemeToggle } from "@/components/themeToggle";
 import { useBranding } from "@/lib/hooks/useBranding";
 import { getErrorMessage, useLoginMutation } from "@/lib/store/apis";
+import { DEFAULT_POST_LOGIN_PATH, getLoginGotoFromSearch } from "@/lib/utils/loginGoto";
 import { GithubLogoIcon } from "@phosphor-icons/react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -21,6 +22,7 @@ export default function LoginView() {
 	const [showPassword, setShowPassword] = useState(false);
 	const [errorMessage, setErrorMessage] = useState("");
 	const navigate = useNavigate();
+	const location = useLocation();
 	const [isLoading, setIsLoading] = useState(false);
 	const [login, { isLoading: isLoggingIn }] = useLoginMutation();
 
@@ -34,7 +36,21 @@ export default function LoginView() {
 		setErrorMessage("");
 		try {
 			await login({ username, password }).unwrap();
-			navigate({ to: "/workspace" });
+			// Honor the ?goto= redirect (validated against the workspace route
+			// allowlist) so links like /login?goto=/workspace/config/security land
+			// the user exactly where they were headed after login.
+			const gotoPath = getLoginGotoFromSearch(location.searchStr);
+			if (gotoPath) {
+				const [pathAndQuery, hash] = gotoPath.split("#");
+				const [path, queryString] = pathAndQuery.split("?");
+				navigate({
+					to: path,
+					search: queryString ? Object.fromEntries(new URLSearchParams(queryString)) : undefined,
+					hash: hash || undefined,
+				});
+			} else {
+				navigate({ to: DEFAULT_POST_LOGIN_PATH });
+			}
 		} catch (error) {
 			const message = getErrorMessage(error);
 			setErrorMessage(message);

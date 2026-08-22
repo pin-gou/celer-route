@@ -1,7 +1,8 @@
 import { SecretVar } from "@/lib/types/schemas";
 import { cn } from "@/lib/utils";
+import { Eye, EyeOff } from "lucide-react";
 import * as React from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "./badge";
 
 type BaseSecretVarInputProps = {
@@ -15,6 +16,9 @@ type BaseSecretVarInputProps = {
 	redactNonEnvValue?: boolean;
 	maskVisiblePrefix?: number;
 	maskVisibleSuffix?: number;
+	// When true and the input type is "password", render an eye toggle so the
+	// user can switch between masked and plain-text display.
+	showPasswordToggle?: boolean;
 };
 
 type InputVariantProps = BaseSecretVarInputProps & {
@@ -54,12 +58,20 @@ export const SecretVarInput = React.forwardRef<HTMLInputElement | HTMLTextAreaEl
 			redactNonEnvValue = false,
 			maskVisiblePrefix = 4,
 			maskVisibleSuffix = 4,
+			showPasswordToggle = false,
 			...props
 		},
 		ref,
 	) => {
 		const hasChanged = useRef(false);
 		const isUserChange = useRef(false);
+		const isTextarea = variant === "textarea";
+
+		const nativeInputProps = props as Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">;
+		const { type: nativeType, ...inputRest } = nativeInputProps;
+		const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+		const isPasswordField = !isTextarea && nativeType === "password";
+		const effectiveInputType = isPasswordField && showPasswordToggle && isPasswordVisible ? "text" : nativeType;
 
 		// Reset hasChanged when value prop changes externally (save/switch items)
 		useEffect(() => {
@@ -114,8 +126,6 @@ export const SecretVarInput = React.forwardRef<HTMLInputElement | HTMLTextAreaEl
 		// Show hint when user is typing a secret reference (reference set but no resolved value yet)
 		const showEnvHint = (value?.type === "env" || value?.type === "vault") && value?.ref && hasChanged.current;
 
-		const isTextarea = variant === "textarea";
-
 		const sharedClassName = cn(
 			"placeholder:text-muted-foreground/70 selection:bg-primary selection:text-primary-foreground w-full min-w-0 bg-transparent px-3 py-1 text-base shadow-none outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
 			inputClassName,
@@ -143,7 +153,7 @@ export const SecretVarInput = React.forwardRef<HTMLInputElement | HTMLTextAreaEl
 						/>
 					) : (
 						<input
-							type={(props as React.InputHTMLAttributes<HTMLInputElement>).type}
+							type={effectiveInputType}
 							ref={ref as React.Ref<HTMLInputElement>}
 							data-slot="input"
 							className={cn(
@@ -152,8 +162,19 @@ export const SecretVarInput = React.forwardRef<HTMLInputElement | HTMLTextAreaEl
 							)}
 							value={displayValue}
 							onChange={handleChange}
-							{...(props as Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">)}
+							{...inputRest}
 						/>
+					)}
+					{isPasswordField && showPasswordToggle && (
+						<button
+							type="button"
+							tabIndex={-1}
+							aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+							onClick={() => setIsPasswordVisible((prev) => !prev)}
+							className="text-muted-foreground hover:text-foreground mr-2 cursor-pointer"
+						>
+							{isPasswordVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+						</button>
 					)}
 					{showEnvBadge && (
 						<Badge variant="success" className={cn("mr-2 whitespace-nowrap", isTextarea && "mb-2")}>
