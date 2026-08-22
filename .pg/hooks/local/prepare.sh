@@ -70,7 +70,7 @@ fi
 # 构建 pg-gateway-admin CLI（如缺失）
 if [[ ! -x "$ADMIN_BIN" ]]; then
     echo "构建 pg-gateway-admin CLI..."
-    (cd "$PROJECT_ROOT/cmd/admin" && go build -ldflags="-w -s" -o "$ADMIN_BIN" .) || {
+    (cd "$PROJECT_ROOT" && make build-admin) || {
         pg_fail --category=dependency_not_ready --code=PG-E-0800 \
             --message="pg-gateway-admin 构建失败" \
             --hint="Run 'make build-admin' in project root" \
