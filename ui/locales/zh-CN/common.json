@@ -266,6 +266,14 @@
 			"subtitle": "使用此 URL 配合任何 OpenAI 兼容客户端。",
 			"copyLabel": "复制 URL",
 			"copied": "已复制到剪贴板",
+			"providerLabel": "提供商",
+			"providerPlaceholder": "选择提供商",
+			"modelLabel": "模型",
+			"modelPlaceholder": "选择模型",
+			"modelEmpty": "暂无可用模型，请前往提供商页面配置。",
+			"vkLabel": "虚拟 key",
+			"vkPlaceholder": "选择虚拟 key",
+			"vkEmpty": "暂无虚拟 key，请先在治理页面创建。",
 			"codeTabs": {
 				"curl": "cURL",
 				"python": "Python",
@@ -284,13 +292,13 @@
 			"db": "数据库",
 			"logs": "日志存储",
 			"cache": "向量缓存",
-			"providers": "Providers",
+			"providers": "提供商",
 			"storage": "对象存储",
 			"ok": "已连接",
 			"missing": "未配置",
 			"partial": "部分配置",
 			"error": "错误",
-			"emptyProviders": "尚未配置任何 provider"
+			"emptyProviders": "尚未配置任何提供商"
 		},
 		"setupStatus": {
 			"title": "设置状态",
@@ -299,9 +307,9 @@
 			"goToStep": "去配置"
 		},
 		"providers": {
-			"title": "你的 providers",
-			"empty": "尚未配置任何 provider",
-			"addProvider": "添加 provider",
+			"title": "你的提供商",
+			"empty": "尚未配置任何提供商",
+			"addProvider": "添加提供商",
 			"configuredCount": "已配置 {{configured}} / {{total}}",
 			"keysCount": "{{count}} 个 key",
 			"modelsCount": "{{count}} 个模型"
@@ -310,13 +318,13 @@
 			"title": "快速上手",
 			"subtitle": "4 步即可用好 pg-gateway。",
 			"step1Title": "1. 配置提供商",
-			"step1Desc": "添加上游 provider key（OpenAI、Anthropic、Google 等），让 pg-gateway 有东西可路由。",
+			"step1Desc": "添加上游提供商 key（OpenAI、Anthropic、Google 等），让 pg-gateway 有东西可路由。",
 			"step2Title": "2. 配置路由",
-			"step2Desc": "为请求配置路由规则，决定每个请求落到哪个 provider、模型或 key。支持 fallback、权重或 CEL 表达式。",
+			"step2Desc": "为请求配置路由规则，决定每个请求落到哪个提供商、模型或 key。支持 fallback、权重或 CEL 表达式。",
 			"step3Title": "3. 测试接口调用",
-			"step3Desc": "通过已配置的 provider 发一条真实的 chat completion 请求，确认端到端连通和路由生效。",
+			"step3Desc": "通过已配置的提供商发一条真实的 chat completion 请求，确认端到端连通和路由生效。",
 			"step4Title": "4. 观察监控",
-			"step4Desc": "在日志与分析仪表板中追踪 token、成本、延迟与错误，持续优化 provider 与回归早发现。",
+			"step4Desc": "在日志与分析仪表板中追踪 token、成本、延迟与错误，持续优化提供商与回归早发现。",
 			"logsLinkText": "日志",
 			"analyticsLinkText": "分析仪表板"
 		},
