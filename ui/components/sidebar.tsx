@@ -5,7 +5,6 @@ import {
 	BoxIcon,
 	ChartColumnBig,
 	ChevronsLeftRightEllipsis,
-	DatabaseZap,
 	Flag,
 	FlaskConical,
 	FolderGit,
@@ -28,7 +27,6 @@ import {
 	ShieldCheck,
 	SlidersHorizontal,
 	Telescope,
-	TrendingUp,
 	Wallet,
 	Webhook,
 } from "lucide-react";
@@ -745,27 +743,6 @@ export default function AppSidebar() {
 				hasAccess: hasSettingsAccess,
 				subItems: [
 					{
-						title: t("nav.clientSettings"),
-						url: "/workspace/config/client-settings",
-						icon: Settings,
-						description: "Client configuration settings",
-						hasAccess: hasSettingsAccess,
-					},
-					{
-						title: t("nav.compatibility"),
-						url: "/workspace/config/compatibility",
-						icon: Plug,
-						description: "Compatibility conversion settings",
-						hasAccess: hasSettingsAccess,
-					},
-					{
-						title: t("nav.caching"),
-						url: "/workspace/config/caching",
-						icon: DatabaseZap,
-						description: "Caching configuration",
-						hasAccess: hasSettingsAccess,
-					},
-					{
 						title: t("nav.security"),
 						url: "/workspace/config/security",
 						icon: ShieldCheck,
@@ -780,10 +757,17 @@ export default function AppSidebar() {
 						hasAccess: hasVirtualKeysAccess,
 					},
 					{
-						title: t("nav.performanceTuning"),
-						url: "/workspace/config/performance-tuning",
-						icon: TrendingUp,
-						description: "Performance tuning settings",
+						title: t("nav.clientSettings"),
+						url: "/workspace/config/client-settings",
+						icon: Settings,
+						description: "Client configuration settings",
+						hasAccess: hasSettingsAccess,
+					},
+					{
+						title: t("nav.compatibility"),
+						url: "/workspace/config/compatibility",
+						icon: Plug,
+						description: "Compatibility conversion settings",
 						hasAccess: hasSettingsAccess,
 					},
 					{

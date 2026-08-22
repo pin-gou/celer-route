@@ -212,7 +212,37 @@
 	},
 	"clientSettings": {
 		"title": "Client Settings",
-		"description": "Configure client connection settings",
+		"description": "Tune how the pg-gateway instance behaves — traffic control, health checks, and header forwarding. Settings that change LLM behavior live in Compatibility.",
+		"pageDescription": "Behaviour switches for the pg-gateway instance",
+		"tabs": {
+			"common": "Common",
+			"headerForwarding": "Header Forwarding",
+			"appRecognition": "App Recognition"
+		},
+		"sections": {
+			"trafficAndStability": "Traffic & Stability",
+			"trafficAndStabilityDesc": "Control concurrency, request lifetime, and how errors are recorded.",
+			"diagnostics": "Diagnostics",
+			"diagnosticsDesc": "Runtime statistics since the last restart.",
+			"allowlist": "Allowlist",
+			"allowlistDesc": "Headers that may be forwarded to LLM providers directly (without the x-bf-eh- prefix).",
+			"denylist": "Denylist",
+			"denylistDesc": "Headers that are always blocked from forwarding, regardless of allowlist settings.",
+			"securityNote": "Security note",
+			"securityNoteDesc": "The following headers are permanently reserved for security and cannot be allowed via either list:"
+		},
+		"help": {
+			"openRules": "View forwarding rules",
+			"helpDialogTitle": "Header Forwarding Rules",
+			"helpDialogDescription": "Learn how allowlists, denylists, and wildcards work together.",
+			"allowlistExample": "Examples: anthropic-beta, custom-id",
+			"denylistExample": "Examples: x-internal-*, debug-*",
+			"addHeaderPlaceholder": "Type a header name and press Enter to add",
+			"removeHeader": "Remove this header",
+			"close": "Got it"
+		},
+		"allowlistEmptyHint": "No headers yet.",
+		"denylistEmptyHint": "No headers yet.",
 		"timeout": "Client Timeout",
 		"maxRetries": "Max Retries",
 		"connectionPool": "Connection Pool",

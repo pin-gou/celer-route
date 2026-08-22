@@ -212,7 +212,37 @@
 	},
 	"clientSettings": {
 		"title": "客户端设置",
-		"description": "配置客户端连接设置",
+		"description": "这里调整 pg-gateway 自身的行为——流量控制、健康检查和请求头转发。LLM 行为相关设置在「兼容性」里。",
+		"pageDescription": "pg-gateway 实例的行为开关",
+		"tabs": {
+			"common": "常用",
+			"headerForwarding": "请求头转发",
+			"appRecognition": "应用识别"
+		},
+		"sections": {
+			"trafficAndStability": "流量与稳定性",
+			"trafficAndStabilityDesc": "控制并发、请求存活时间，以及错误如何被记录。",
+			"diagnostics": "诊断信息",
+			"diagnosticsDesc": "自上次重启以来的运行统计。",
+			"allowlist": "白名单",
+			"allowlistDesc": "允许直接转发给 LLM 提供商的请求头（无需 x-bf-eh- 前缀）。",
+			"denylist": "黑名单",
+			"denylistDesc": "始终阻止转发的请求头，无论白名单如何设置。",
+			"securityNote": "安全提示",
+			"securityNoteDesc": "以下请求头为安全保留项，无法通过白/黑名单放行："
+		},
+		"help": {
+			"openRules": "查看转发规则说明",
+			"helpDialogTitle": "请求头转发规则",
+			"helpDialogDescription": "了解白名单、黑名单的工作方式以及通配符的用法。",
+			"allowlistExample": "示例：anthropic-beta, custom-id",
+			"denylistExample": "示例：x-internal-*, debug-*",
+			"addHeaderPlaceholder": "输入请求头名后按 Enter 添加",
+			"removeHeader": "移除该请求头",
+			"close": "我知道了"
+		},
+		"allowlistEmptyHint": "尚未添加任何请求头。",
+		"denylistEmptyHint": "尚未添加任何请求头。",
 		"timeout": "客户端超时",
 		"maxRetries": "最大重试次数",
 		"connectionPool": "连接池",
