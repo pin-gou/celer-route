@@ -1,6 +1,7 @@
 // Known provider names array - centralized definition
 export const KnownProvidersNames = [
 	"alibaba",
+	"alibaba_tokenplan",
 	"anthropic",
 	"azure",
 	"bedrock",
@@ -123,6 +124,7 @@ export const RequestTypes = [
 
 export const ProviderLabels: Record<ProviderName, string> = {
 	alibaba: "Alibaba",
+	alibaba_tokenplan: "Alibaba Token Plan",
 	openai: "OpenAI",
 	anthropic: "Anthropic",
 	azure: "Azure",

@@ -102,7 +102,7 @@ func (provider *AlibabaProvider) ChatCompletionStream(ctx *schemas.BifrostContex
 	return openai.HandleOpenAIChatCompletionStreaming(
 		ctx,
 		provider.streamingClient,
-		provider.networkConfig.BaseURL+"/chat/completions",
+		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/chat/completions"),
 		request,
 		openai.BearerAuthHeader(key),
 		provider.networkConfig.ExtraHeaders,
@@ -143,7 +143,19 @@ func (provider *AlibabaProvider) ResponsesStream(ctx *schemas.BifrostContext, po
 }
 
 func (provider *AlibabaProvider) Embedding(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostEmbeddingRequest) (*schemas.BifrostEmbeddingResponse, *schemas.BifrostError) {
-	return nil, providerUtils.NewUnsupportedOperationError(schemas.EmbeddingRequest, provider.GetProviderKey())
+	return openai.HandleOpenAIEmbeddingRequest(
+		ctx,
+		provider.client,
+		provider.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/embeddings"),
+		request,
+		openai.BearerAuthHeader(key),
+		provider.networkConfig.ExtraHeaders,
+		provider.GetProviderKey(),
+		providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest),
+		providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse),
+		nil,
+		provider.logger,
+	)
 }
 
 func (provider *AlibabaProvider) Speech(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostSpeechRequest) (*schemas.BifrostSpeechResponse, *schemas.BifrostError) {

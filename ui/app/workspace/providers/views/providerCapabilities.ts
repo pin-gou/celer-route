@@ -20,6 +20,7 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	cerebras: ["chat"],
 	cohere: ["chat", "embed", "rerank"],
 	alibaba: ["chat", "embed", "vision", "tools", "image", "speech", "rerank"],
+	alibaba_tokenplan: ["chat", "tools", "vision", "image"],
 	minimax: ["chat", "embed", "vision", "tools", "speech", "video"],
 	deepseek: ["chat", "tools"],
 	gemini: ["chat", "embed", "vision", "tools", "speech", "image", "video", "transcription"],

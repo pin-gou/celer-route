@@ -75,6 +75,7 @@ const (
 	Sarvam        ModelProvider = "sarvam"
 	Wafer         ModelProvider = "wafer"
 	Alibaba       ModelProvider = "alibaba"
+	AlibabaTokenplan ModelProvider = "alibaba_tokenplan"
 	Minimax       ModelProvider = "minimax"
 	Moonshot      ModelProvider = "moonshot"
 	Siliconflow   ModelProvider = "siliconflow"
@@ -130,6 +131,7 @@ var StandardProviders = []ModelProvider{
 	Sarvam,
 	Wafer,
 	Alibaba,
+	AlibabaTokenplan,
 	Minimax,
 	Moonshot,
 	Siliconflow,

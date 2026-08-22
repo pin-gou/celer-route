@@ -10,7 +10,20 @@ import type { ProviderName } from "@/lib/constants/logs";
 export type FamilyKey = "domestic" | "overseas" | "gateway" | "other";
 
 export const FAMILY_MAP: Record<FamilyKey, string[]> = {
-	domestic: ["deepseek", "moonshot", "alibaba", "zhipu", "volcengine", "tencent", "baidu", "siliconflow", "sensenova", "minimax", "sarvam"],
+	domestic: [
+		"deepseek",
+		"moonshot",
+		"alibaba",
+		"alibaba_tokenplan",
+		"zhipu",
+		"volcengine",
+		"tencent",
+		"baidu",
+		"siliconflow",
+		"sensenova",
+		"minimax",
+		"sarvam",
+	],
 	overseas: ["openai", "anthropic", "gemini", "vertex", "bedrock", "mistral", "cohere", "groq", "huggingface", "xai", "replicate"],
 	gateway: [
 		"openrouter",

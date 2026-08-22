@@ -32,10 +32,38 @@
 		"attributes": "个属性"
 	},
 	"permissionDenied": "您没有访问模型目录的权限",
+	"attributeSheet": {
+		"title": "编辑模型属性",
+		"description": "更新此模型的描述和其他属性。这些属性存储在定价行中，并在定价同步时保留。",
+		"provider": "提供商",
+		"model": "模型",
+		"pricing": "定价",
+		"source": "来源",
+		"input": "输入",
+		"output": "输出",
+		"cacheWrite": "缓存写入",
+		"cacheRead": "缓存读取",
+		"descriptionLabel": "描述",
+		"descriptionPlaceholder": "此模型的简短描述，在消费 additional_attributes.description 的任何位置显示。",
+		"otherAttributes": "其他属性",
+		"add": "添加",
+		"noAttributes": "没有其他属性。为描述之外的任何内容添加键值对。",
+		"keyPlaceholder": "键",
+		"valuePlaceholder": "值",
+		"cancel": "取消",
+		"saving": "保存中...",
+		"saveChanges": "保存更改",
+		"permissionDenied": "您没有执行此操作的权限",
+		"errors": {
+			"missingKey": "属性行必须包含键",
+			"duplicateKey": "重复的属性键：{{key}}",
+			"reservedDescription": "请使用描述字段，而不是 'description' 属性行"
+		}
+	},
 	"toast": {
 		"catalogRefreshed": "模型目录刷新成功",
 		"catalogRefreshFailed": "刷新模型目录失败",
 		"modelUpdated": "模型更新成功",
-		"attributeSaved": "属性保存成功"
+		"attributeSaved": "属性已保存"
 	}
 }

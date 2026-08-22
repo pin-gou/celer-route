@@ -32,10 +32,38 @@
 		"attributes": "attributes"
 	},
 	"permissionDenied": "You don't have permission to access the model catalog",
+	"attributeSheet": {
+		"title": "Edit Model Attributes",
+		"description": "Update the description and other attributes for this model. These attributes are stored on the pricing row and preserved across the pricing sync.",
+		"provider": "Provider",
+		"model": "Model",
+		"pricing": "Pricing",
+		"source": "Source",
+		"input": "Input",
+		"output": "Output",
+		"cacheWrite": "Cache Write",
+		"cacheRead": "Cache Read",
+		"descriptionLabel": "Description",
+		"descriptionPlaceholder": "A short description of this model, shown anywhere additional_attributes.description is consumed.",
+		"otherAttributes": "Other Attributes",
+		"add": "Add",
+		"noAttributes": "No additional attributes. Add a key-value pair for anything beyond description.",
+		"keyPlaceholder": "key",
+		"valuePlaceholder": "value",
+		"cancel": "Cancel",
+		"saving": "Saving...",
+		"saveChanges": "Save Changes",
+		"permissionDenied": "You don't have permission to perform this action",
+		"errors": {
+			"missingKey": "Attribute rows must have a key",
+			"duplicateKey": "Duplicate attribute key: {{key}}",
+			"reservedDescription": "Use the Description field instead of a 'description' attribute row"
+		}
+	},
 	"toast": {
 		"catalogRefreshed": "Model catalog refreshed successfully",
 		"catalogRefreshFailed": "Failed to refresh model catalog",
 		"modelUpdated": "Model updated successfully",
-		"attributeSaved": "Attribute saved successfully"
+		"attributeSaved": "Attributes saved"
 	}
 }

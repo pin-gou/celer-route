@@ -6232,6 +6232,32 @@
                       ]
                     }
                   }
+                },
+                {
+                  "name": "alibaba/text-embedding-v3",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"model\": \"alibaba/text-embedding-v3\",\n  \"input\": \"Hello world\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{baseUrl}}/v1/embeddings",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "v1",
+                        "embeddings"
+                      ]
+                    }
+                  }
                 }
               ]
             },
@@ -50530,6 +50556,50 @@
           }
         }
       ]
-    }
+    },
+        {
+          "name": "50. Alibaba Token Plan Chat Completion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('alibaba tokenplan chat - non-empty response', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  var c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;",
+                  "  pm.expect(c, 'expected content').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"alibaba_tokenplan/qwen3.8-max\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"hi\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        }
   ]
 }

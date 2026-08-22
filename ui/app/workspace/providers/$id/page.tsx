@@ -125,15 +125,17 @@ export default function ProviderDetailPage() {
 							) : (
 								<span className="text-lg font-semibold">{label}</span>
 							)}
-							{provider.provider_status === "active" ? (
-								<Badge variant="outline" className="border-green-500 text-xs text-green-600">
-									● {t("providers2.detail.active")}
-								</Badge>
-							) : (
-								<Badge variant="outline" className="border-red-500 text-xs text-red-600">
-									● {provider.provider_status}
-								</Badge>
-							)}
+							{provider.keys_count != null && provider.keys_count > 0 ? (
+								provider.provider_status === "active" ? (
+									<Badge variant="outline" className="border-green-500 text-xs text-green-600">
+										● {t("providers2.detail.active")}
+									</Badge>
+								) : (
+									<Badge variant="outline" className="border-red-500 text-xs text-red-600">
+										● {provider.provider_status}
+									</Badge>
+								)
+							) : null}
 						</div>
 						{showApiKeyLink && (
 							<a

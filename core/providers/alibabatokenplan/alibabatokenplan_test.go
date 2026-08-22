@@ -1,4 +1,4 @@
-package alibaba_test
+package alibabatokenplan_test
 
 import (
 	"os"
@@ -9,10 +9,10 @@ import (
 	"github.com/pin-gou/pg-gateway/core/schemas"
 )
 
-func TestAlibaba(t *testing.T) {
+func TestAlibabaTokenplan(t *testing.T) {
 	t.Parallel()
-	if strings.TrimSpace(os.Getenv("ALIBABA_API_KEY")) == "" {
-		t.Skip("Skipping Alibaba tests because ALIBABA_API_KEY is not set")
+	if strings.TrimSpace(os.Getenv("ALIBABA_TOKENPLAN_API_KEY")) == "" {
+		t.Skip("Skipping Alibaba Token Plan tests because ALIBABA_TOKENPLAN_API_KEY is not set")
 	}
 
 	client, ctx, cancel, err := llmtests.SetupTest()
@@ -23,19 +23,17 @@ func TestAlibaba(t *testing.T) {
 	defer client.Shutdown()
 
 	testConfig := llmtests.ComprehensiveTestConfig{
-		Provider:       schemas.Alibaba,
-		ChatModel:      "qwen-turbo",
-		EmbeddingModel: "text-embedding-v3",
+		Provider:  schemas.AlibabaTokenplan,
+		ChatModel: "qwen3.8-max",
 		Scenarios: llmtests.TestScenarios{
 			SimpleChat:            true,
 			MultiTurnConversation: true,
 			ToolCalls:             true,
 			ListModels:            true,
-			Embedding:             true,
 		},
 	}
 
-	t.Run("AlibabaTests", func(t *testing.T) {
+	t.Run("AlibabaTokenplanTests", func(t *testing.T) {
 		llmtests.RunAllComprehensiveTests(t, client, ctx, testConfig)
 	})
 }

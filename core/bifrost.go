@@ -22,6 +22,7 @@ import (
 	"github.com/pin-gou/pg-gateway/core/mcp/codemode/starlark"
 	"github.com/pin-gou/pg-gateway/core/mcp/credstore"
 	"github.com/pin-gou/pg-gateway/core/providers/alibaba"
+	"github.com/pin-gou/pg-gateway/core/providers/alibabatokenplan"
 	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
 	"github.com/pin-gou/pg-gateway/core/providers/azure"
 	"github.com/pin-gou/pg-gateway/core/providers/baidu"
@@ -4498,6 +4499,8 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return sarvam.NewSarvamProvider(config, bifrost.logger)
 	case schemas.Alibaba:
 		return alibaba.NewAlibabaProvider(config, bifrost.logger)
+	case schemas.AlibabaTokenplan:
+		return alibabatokenplan.NewAlibabaTokenplanProvider(config, bifrost.logger)
 	case schemas.Minimax:
 		return minimax.NewMinimaxProvider(config, bifrost.logger)
 	case schemas.Moonshot:

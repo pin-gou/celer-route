@@ -36,7 +36,8 @@ function parseTrialExpiry(dateStr: string | undefined): Date | null {
 // Model placeholders based on provider type
 export const ModelPlaceholders = {
 	default: "e.g. gpt-4, gpt-3.5-turbo. Leave blank for all models.",
-	alibaba: "e.g. qwen-plus, qwen-turbo, qwen-max",
+	alibaba: "e.g. qwen-plus, qwen-turbo, qwen-max, qwen3.8-max, text-embedding-v3",
+	alibaba_tokenplan: "e.g. qwen3.8-max, qwen3.7-max, deepseek-v4-pro, wan2.7-image",
 	anthropic: "e.g. claude-3-haiku, claude-2.1",
 	azure: "e.g. gpt-4, gpt-35-turbo (must match alias keys)",
 	bedrock: "e.g. claude-v2, titan-text-express-v1, ai21-j2-mid",
@@ -81,6 +82,7 @@ export const ModelPlaceholders = {
 // Note: i18n-aware label lookups are handled at the call site.
 export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	alibaba: true,
+	alibaba_tokenplan: true,
 	anthropic: true,
 	azure: true,
 	bedrock: true,
@@ -126,7 +128,8 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 // Custom providers (defined via custom_provider_config at runtime) are not in
 // this map and never get a header link.
 export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
-	alibaba: "https://www.aliyun.com/product/dashscope",
+	alibaba: "https://www.aliyun.com/product/bailian",
+	alibaba_tokenplan: "https://www.aliyun.com/product/bailian",
 	anthropic: "https://www.anthropic.com",
 	azure: "https://azure.microsoft.com/products/ai-services/openai-service",
 	bedrock: "https://aws.amazon.com/bedrock/",
@@ -172,7 +175,8 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 // "Get API key" link on the provider detail header; hidden for custom
 // providers and for keyless providers.
 export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
-	alibaba: "https://www.aliyun.com/product/dashscope",
+	alibaba: "https://www.aliyun.com/product/bailian",
+	alibaba_tokenplan: "https://www.aliyun.com/product/bailian",
 	anthropic: "https://console.anthropic.com/settings/keys",
 	azure: "https://portal.azure.com/#settings/keys",
 	bedrock: "https://us-east-1.console.aws.amazon.com/bedrock/home",

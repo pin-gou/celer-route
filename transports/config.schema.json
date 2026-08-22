@@ -513,6 +513,9 @@
         "alibaba": {
           "$ref": "#/$defs/provider"
         },
+        "alibaba_tokenplan": {
+          "$ref": "#/$defs/provider"
+        },
         "minimax": {
           "$ref": "#/$defs/provider"
         },
@@ -7964,6 +7967,7 @@
             "sarvam",
             "wafer",
             "alibaba",
+            "alibaba_tokenplan",
             "minimax",
             "moonshot",
             "siliconflow",
