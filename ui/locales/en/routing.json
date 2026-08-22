@@ -110,7 +110,45 @@
 		"saveRule": "Save Rule",
 		"loadingCelBuilder": "Loading CEL builder...",
 		"invalidRegex": "Invalid regex pattern:\n{{errors}}",
-		"invalidRuleConfig": "Invalid rule configuration:\n{{errors}}"
+		"invalidRuleConfig": "Invalid rule configuration:\n{{errors}}",
+		"normalizeWeights": "Normalize weights to 1",
+		"stepper": {
+			"basics": "Basics",
+			"conditions": "Match Conditions",
+			"targetsAndFallbacks": "Targets & Fallbacks",
+			"progress": "{{done}}/{{total}} complete",
+			"nextHint": "Next: {{next}}",
+			"title": "Routing rule sections",
+			"saveIn": "Save in {{seconds}}…"
+		},
+		"back": "Back",
+		"next": "Next",
+		"ruleBuilderEmptyState": {
+			"title": "No match conditions yet",
+			"subtitle": "This rule will match every request. Pick an example to start, or click Add Rule below.",
+			"builderInfo": "Leave blank to match every request. Use the visual Builder for most cases; switch to CEL for advanced expressions.",
+			"toggleHint": "Switch to CEL to write the expression directly.",
+			"chipModel": "Model contains \"gpt-\"",
+			"chipProvider": "Provider is OpenAI",
+			"chipRequestType": "Chat completion",
+			"helper": "You can edit or remove the inserted rule after."
+		},
+		"infoPopover": {
+			"chainRule": "On match, re-evaluate other routing rules using the chosen provider/model as input. Useful for chaining model aliasing with model-specific routing.",
+			"priority": "Lower numbers run first. 0 is the highest priority. Ties keep source order.",
+			"targets": "Weight is the share of requests sent to this provider/model. Sum must equal 1. Leave provider/model blank to keep the incoming value.",
+			"fallbacks": "Tried in order when every target fails. Provider is required; model is optional."
+		},
+		"validation": {
+			"title": "Fix the following before saving:",
+			"ready": "Ready to save.",
+			"nameRequired": "Give the rule a name.",
+			"scopeRequired": "Pick an API key for the Virtual Key scope.",
+			"priorityRange": "Priority must be between 0 and 1000.",
+			"weightPositive": "Every target weight must be greater than 0.",
+			"weightSum": "Targets' weights must sum to 1 (currently {{total}}).",
+			"targetRequired": "Add at least one routing target."
+		}
 	},
 	"infoSheet": {
 		"edit": "Edit",
@@ -144,8 +182,21 @@
 		"incomingProvider": "Incoming provider",
 		"incomingModel": "Incoming model",
 		"testCommand": "Test Command",
-		"testCommandDesc": "Copy this curl command and run it to test routing for this rule",
-		"testCommandEmpty": "Add conditions to generate a test command"
+		"testCommandDesc": "Copy this command and run it to test routing for this rule",
+		"testCommandEmpty": "Add conditions to generate a test command",
+		"testCommandPanel": {
+			"vkLabel": "Virtual key",
+			"vkPlaceholder": "Select a virtual key",
+			"vkEmpty": "No API keys yet. Create one in Governance → API Keys.",
+			"usingVk": "Using key: {{name}}",
+			"copyTab": "Copy {{language}} snippet",
+			"codeTabs": {
+				"curl": "cURL",
+				"python": "Python",
+				"node": "Node.js",
+				"go": "Go"
+			}
+		}
 	},
 	"tree": {
 		"title": "Routing Tree",

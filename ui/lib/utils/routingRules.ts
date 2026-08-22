@@ -229,17 +229,33 @@ function scalarValue(value: any): string {
 }
 
 /**
- * Generates a curl command that a user can copy and run to test whether an
- * incoming request would match this routing rule. Conditions that cannot be
- * expressed in a synthetic request (budget/rate-limit usage, complexity tier)
- * — or that would require a deliberately mismatching value (`!=`) — are
- * skipped and listed in a trailing comment.
+ * Resolves the HTTP endpoint path for a routing rule based on its `request_type`
+ * conditions. Defaults to `/v1/chat/completions` when none is specified.
  */
-export function generateRoutingTestCommand(rule: RoutingRule, baseUrl?: string): string {
+export function resolveRoutingEndpoint(rule: RoutingRule): string {
 	const conditions = flattenQueryConditions(rule?.query);
-	if (conditions.length === 0) return "";
+	for (const c of conditions) {
+		if (c.type === "request_type" && c.operator !== "!=" && c.operator !== "notIn") {
+			const value = scalarValue(c.value);
+			if (value && REQUEST_TYPE_ENDPOINTS[value]) return REQUEST_TYPE_ENDPOINTS[value];
+		}
+	}
+	return "/v1/chat/completions";
+}
 
-	const url = baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+/**
+ * Shared test-command derivation. Walks the rule's query once and returns the
+ * pieces four language generators consume: endpoint path, model string,
+ * header lines, query-string pairs, and skipped conditions.
+ */
+function buildRoutingRequestLines(rule: RoutingRule): {
+	endpoint: string;
+	resolvedModel: string;
+	headerLines: string[];
+	paramPairs: string[];
+	skipped: string[];
+} {
+	const conditions = flattenQueryConditions(rule?.query);
 	let endpoint = "/v1/chat/completions";
 	let providerValue = "";
 	let modelValue = "";
@@ -282,25 +298,68 @@ export function generateRoutingTestCommand(rule: RoutingRule, baseUrl?: string):
 		}
 	}
 
-	// Provider is passed inline in the model string ("provider/model").
 	const resolvedModel = providerValue
 		? modelValue
 			? `${providerValue}/${modelValue}`
 			: `${providerValue}/${DEFAULT_RESPONSE_MODEL}`
 		: modelValue;
 
+	return { endpoint, resolvedModel, headerLines, paramPairs, skipped };
+}
+
+function defaultBaseUrl(baseUrl?: string): string {
+	return baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+}
+
+function fullUrl(baseUrl: string, endpoint: string, paramPairs: string[]): string {
 	const queryString = paramPairs.length > 0 ? `?${paramPairs.join("&")}` : "";
-	const fullUrl = `${url}${endpoint}${queryString}`;
+	return `${baseUrl}${endpoint}${queryString}`;
+}
+
+function skippedComment(skipped: string[], prefix: string): string {
+	return skipped.length > 0 ? `\n\n${prefix} Skipped untestable conditions: ${skipped.join(", ")}` : "";
+}
+
+/**
+ * Options accepted by the four language-specific generators.
+ * `vkValue` is the literal API key string; `vkName` is shown only as a comment.
+ */
+interface CommandOptions {
+	baseUrl?: string;
+	vkValue?: string | null;
+	vkName?: string | null;
+}
+
+/**
+ * Generates a curl command that a user can copy and run to test whether an
+ * incoming request would match this routing rule. Conditions that cannot be
+ * expressed in a synthetic request (budget/rate-limit usage, complexity tier)
+ * — or that would require a deliberately mismatching value (`!=`) — are
+ * skipped and listed in a trailing comment.
+ */
+export function generateRoutingTestCommand(rule: RoutingRule, baseUrl?: string): string {
+	return generateRoutingTestCommandCurl(rule, { baseUrl });
+}
+
+export function generateRoutingTestCommandCurl(rule: RoutingRule, opts: CommandOptions = {}): string {
+	const conditions = flattenQueryConditions(rule?.query);
+	if (conditions.length === 0) return "";
+
+	const { endpoint, resolvedModel, headerLines, paramPairs, skipped } = buildRoutingRequestLines(rule);
+	const url = defaultBaseUrl(opts.baseUrl);
+	const targetUrl = fullUrl(url, endpoint, paramPairs);
 
 	const body: Record<string, unknown> = {
 		messages: [{ role: "user", content: "Hello" }],
 	};
 	if (resolvedModel) body.model = resolvedModel;
 
+	const authValue = opts.vkValue ?? "${PG_API_KEY}";
+
 	const lines: string[] = [
-		`curl -X POST ${fullUrl} \\`,
+		`curl -X POST ${targetUrl} \\`,
 		`  -H "Content-Type: application/json" \\`,
-		`  -H "Authorization: Bearer \${PG_API_KEY}" \\`,
+		`  -H "Authorization: Bearer ${authValue}" \\`,
 	];
 	if (rule.scope === "virtual_key" && rule.scope_id) {
 		lines.push(`  -H "x-bf-vk: ${rule.scope_id}" \\`);
@@ -308,9 +367,132 @@ export function generateRoutingTestCommand(rule: RoutingRule, baseUrl?: string):
 	lines.push(...headerLines);
 	lines.push(`  -d '${JSON.stringify(body, null, 2)}'`);
 
-	if (skipped.length > 0) {
-		lines.push("", `# Skipped untestable conditions: ${skipped.join(", ")}`);
-	}
+	return lines.join("\n") + skippedComment(skipped, "#");
+}
 
-	return lines.join("\n");
+export function generateRoutingTestCommandPython(rule: RoutingRule, opts: CommandOptions = {}): string {
+	const conditions = flattenQueryConditions(rule?.query);
+	if (conditions.length === 0) return "";
+
+	const { endpoint, resolvedModel, paramPairs, skipped } = buildRoutingRequestLines(rule);
+	const baseUrl = defaultBaseUrl(opts.baseUrl).replace(/\/$/, "");
+	const targetUrl = fullUrl(baseUrl, endpoint, paramPairs);
+
+	const apiKeyExpr = opts.vkValue ? `"${opts.vkValue}"` : `os.environ["PG_API_KEY"]`;
+	const vkHeaderLine = rule.scope === "virtual_key" && rule.scope_id ? `    "x-bf-vk": "${rule.scope_id}",\n` : "";
+
+	const body: Record<string, unknown> = {
+		messages: [{ role: "user", content: "Hello" }],
+	};
+	if (resolvedModel) body.model = resolvedModel;
+	const bodyStr = JSON.stringify(body, null, 4).replace(/\n/g, "\n");
+
+	const lines: string[] = [
+		`import os`,
+		`import httpx`,
+		``,
+		`headers = {`,
+		vkHeaderLine,
+		`    "Content-Type": "application/json",`,
+		`    "Authorization": f"Bearer ${apiKeyExpr}",`,
+		`}`,
+		``,
+		`payload = ${bodyStr}`,
+		``,
+		`resp = httpx.post(`,
+		`    "${targetUrl}",`,
+		`    headers=headers,`,
+		`    json=payload,`,
+		`    timeout=30.0,`,
+		`)`,
+		`resp.raise_for_status()`,
+		`print(resp.json())`,
+	];
+
+	return lines.join("\n") + skippedComment(skipped, "#");
+}
+
+export function generateRoutingTestCommandNode(rule: RoutingRule, opts: CommandOptions = {}): string {
+	const conditions = flattenQueryConditions(rule?.query);
+	if (conditions.length === 0) return "";
+
+	const { endpoint, resolvedModel, paramPairs, skipped } = buildRoutingRequestLines(rule);
+	const baseUrl = defaultBaseUrl(opts.baseUrl).replace(/\/$/, "");
+	const baseForSdk = baseUrl.replace(/\/v1$/, "");
+
+	const apiKeyValue = opts.vkValue ? `"${opts.vkValue}"` : "process.env.PG_API_KEY";
+	const vkHeaderLine = rule.scope === "virtual_key" && rule.scope_id ? `    "x-bf-vk": "${rule.scope_id}",\n` : "";
+
+	const body: Record<string, unknown> = {
+		messages: [{ role: "user", content: "Hello" }],
+	};
+	if (resolvedModel) body.model = resolvedModel;
+	const bodyStr = JSON.stringify(body, null, 2);
+
+	const lines: string[] = [
+		`import OpenAI from "openai";`,
+		``,
+		`const client = new OpenAI({`,
+		`  apiKey: ${apiKeyValue},`,
+		`  baseURL: "${baseForSdk}",`,
+		`  defaultHeaders: {`,
+		vkHeaderLine.replace(/\n$/, ""),
+		`  },`,
+		`});`,
+		``,
+		`const payload = ${bodyStr};`,
+		``,
+		`const resp = await fetch(payload, { method: "POST" });`,
+		`const data = await resp.json();`,
+		`console.log(data);`,
+	];
+
+	const cleaned = lines.filter((l, idx, arr) => !(l === "" && arr[idx - 1] === ""));
+	return cleaned.join("\n") + skippedComment(skipped, "//");
+}
+
+export function generateRoutingTestCommandGo(rule: RoutingRule, opts: CommandOptions = {}): string {
+	const conditions = flattenQueryConditions(rule?.query);
+	if (conditions.length === 0) return "";
+
+	const { endpoint, resolvedModel, paramPairs, skipped } = buildRoutingRequestLines(rule);
+	const baseUrl = defaultBaseUrl(opts.baseUrl).replace(/\/$/, "");
+	const baseForSdk = baseUrl.replace(/\/v1$/, "");
+
+	const apiKeyExpr = opts.vkValue ? `"${opts.vkValue}"` : `os.Getenv("PG_API_KEY")`;
+	const vkHeaderLine = rule.scope === "virtual_key" && rule.scope_id ? `\t\toption.WithHeader("x-bf-vk", "${rule.scope_id}"),\n` : "";
+
+	const lines: string[] = [
+		`package main`,
+		``,
+		`import (`,
+		`\t"context"`,
+		`\t"fmt"`,
+		`\t"os"`,
+		`\t"github.com/openai/openai-go"`,
+		`\t"github.com/openai/openai-go/option"`,
+		`)`,
+		``,
+		`func main() {`,
+		`\tclient := openai.NewClient(`,
+		`${vkHeaderLine}\t\toption.WithBaseURL("${baseForSdk}"),`,
+		`${vkHeaderLine ? "\t" : ""}\t\toption.WithAPIKey(${apiKeyExpr}),`,
+		`\t)`,
+		`\tresp, err := client.Chat.Completions.New(`,
+		`\t\tcontext.Background(),`,
+		`\t\topenai.ChatCompletionNewParams{`,
+		`\t\t\tModel: openai.F("${resolvedModel || "gpt-4o-mini"}"),`,
+		`\t\t\tMessages: openai.F([]openai.ChatCompletionMessageParamUnion{`,
+		`\t\t\t\topenai.UserMessage("Hello"),`,
+		`\t\t\t}),`,
+		`\t\t},`,
+		`\t)`,
+		`\tif err != nil {`,
+		`\t\tpanic(err)`,
+		`\t}`,
+		`\tfmt.Println(resp.Choices[0].Message.Content)`,
+		`}`,
+	];
+
+	return lines.join("\n") + skippedComment(skipped, "//");
 }

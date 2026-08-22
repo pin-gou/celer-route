@@ -110,7 +110,45 @@
 		"saveRule": "保存规则",
 		"loadingCelBuilder": "加载 CEL 构建器中...",
 		"invalidRegex": "无效的正则表达式模式：\n{{errors}}",
-		"invalidRuleConfig": "无效的规则配置：\n{{errors}}"
+		"invalidRuleConfig": "无效的规则配置：\n{{errors}}",
+		"normalizeWeights": "归一化权重至 1",
+		"stepper": {
+			"basics": "基本信息",
+			"conditions": "匹配条件",
+			"targetsAndFallbacks": "目标与回退",
+			"progress": "{{done}}/{{total}} 已完成",
+			"nextHint": "下一步：{{next}}",
+			"title": "路由规则分区",
+			"saveIn": "{{seconds}} 秒后可保存…"
+		},
+		"back": "上一步",
+		"next": "下一步",
+		"ruleBuilderEmptyState": {
+			"title": "尚未设置匹配条件",
+			"subtitle": "此规则将匹配所有请求。选择一个示例开始，或点击下方「添加规则」。",
+			"builderInfo": "留空即可匹配所有请求。大多数情况使用可视化构建器即可；切换到 CEL 可手写表达式。",
+			"toggleHint": "切换到 CEL 可直接手写表达式。",
+			"chipModel": "模型包含 \"gpt-\"",
+			"chipProvider": "提供商为 OpenAI",
+			"chipRequestType": "聊天补全",
+			"helper": "插入后可随时编辑或删除该规则。"
+		},
+		"infoPopover": {
+			"chainRule": "匹配后，使用解析出的提供商/模型作为新输入重新评估其他路由规则。适用于将模型别名归一化后再按实际模型路由。",
+			"priority": "数字越小优先级越高。0 为最高。相同优先级保持原始顺序。",
+			"targets": "权重决定此目标接收的请求比例，总和必须为 1。留空提供商/模型表示沿用传入请求的值。",
+			"fallbacks": "当所有目标失败时按顺序尝试回退。提供商必填，模型可选。"
+		},
+		"validation": {
+			"title": "保存前请修正以下问题：",
+			"ready": "可以保存。",
+			"nameRequired": "请填写规则名称。",
+			"scopeRequired": "请为虚拟密钥作用域选择一个 API 密钥。",
+			"priorityRange": "优先级必须在 0 到 1000 之间。",
+			"weightPositive": "每个目标的权重大于 0。",
+			"weightSum": "目标权重之和必须为 1（当前为 {{total}}）。",
+			"targetRequired": "请至少添加一个路由目标。"
+		}
 	},
 	"infoSheet": {
 		"edit": "编辑",
@@ -144,8 +182,21 @@
 		"incomingProvider": "传入提供商",
 		"incomingModel": "传入模型",
 		"testCommand": "测试命令",
-		"testCommandDesc": "复制此 curl 命令并运行，测试此规则的路由",
-		"testCommandEmpty": "添加条件后可生成测试命令"
+		"testCommandDesc": "复制此命令并运行，测试此规则的路由",
+		"testCommandEmpty": "添加条件后可生成测试命令",
+		"testCommandPanel": {
+			"vkLabel": "虚拟密钥",
+			"vkPlaceholder": "选择一个虚拟密钥",
+			"vkEmpty": "还没有 API 密钥。请到治理 → API 密钥 中创建。",
+			"usingVk": "正在使用：{{name}}",
+			"copyTab": "复制 {{language}} 代码片段",
+			"codeTabs": {
+				"curl": "cURL",
+				"python": "Python",
+				"node": "Node.js",
+				"go": "Go"
+			}
+		}
 	},
 	"tree": {
 		"title": "路由树",

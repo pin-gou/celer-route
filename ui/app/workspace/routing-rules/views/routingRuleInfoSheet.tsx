@@ -1,21 +1,29 @@
 import { SheetNavigationButtons } from "@/components/sheetNavigationButtons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { DottedSeparator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { useSheetNavigation } from "@/hooks/useSheetNavigation";
 import { baseRoutingFields } from "@/lib/config/celFieldsRouting";
 import { getOperatorLabel } from "@/lib/config/celOperatorsRouting";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
-import { useGetVirtualKeyQuery } from "@/lib/store/apis/governanceApi";
+import { useGetCoreConfigQuery, useGetVirtualKeyQuery, useGetVirtualKeysQuery } from "@/lib/store";
 import { RoutingRule } from "@/lib/types/routingRules";
-import { generateRoutingTestCommand } from "@/lib/utils/routingRules";
+import {
+	generateRoutingTestCommandCurl,
+	generateRoutingTestCommandGo,
+	generateRoutingTestCommandNode,
+	generateRoutingTestCommandPython,
+} from "@/lib/utils/routingRules";
 import { getScopeLabel } from "@/lib/utils/labels";
-import { formatDistanceToNow } from "date-fns";
 import { Check, Copy, GitMerge, Key, Pencil, Terminal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RuleGroupType, RuleType } from "react-querybuilder";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -255,7 +263,34 @@ export function RoutingRuleInfoSheet({
 	const hasQuery = rule?.query && (rule.query.rules?.length ?? 0) > 0;
 	const hasCel = !!rule?.cel_expression?.trim();
 	const scopeName = useScopeName(rule?.scope ?? "global", rule?.scope_id);
-	const testCommand = useMemo(() => (rule ? generateRoutingTestCommand(rule) : ""), [rule]);
+	const createdAt = useRelativeTime(rule?.created_at);
+	const updatedAt = useRelativeTime(rule?.updated_at);
+	const hasTestableConditions = useMemo(() => {
+		if (!rule?.query) return false;
+		// Any rule with non-empty query that isn't "matches all" produces a command
+		return (rule.query.rules?.length ?? 0) > 0;
+	}, [rule]);
+
+	const { data: bifrostConfig } = useGetCoreConfigQuery({}, { skip: !open });
+	const enforceAuth = !!bifrostConfig?.client_config?.enforce_auth_on_inference;
+	const { data: vksResponse } = useGetVirtualKeysQuery(undefined, { skip: !open || !enforceAuth });
+	const virtualKeys = useMemo(() => vksResponse?.virtual_keys ?? [], [vksResponse]);
+
+	const [selectedVkId, setSelectedVkId] = useState<string>("");
+	useEffect(() => {
+		if (!open) return;
+		// Default: rule's own scope_id when virtual_key scope, else first available VK.
+		if (rule?.scope === "virtual_key" && rule.scope_id) {
+			setSelectedVkId(rule.scope_id);
+		} else if (!selectedVkId && virtualKeys.length > 0) {
+			setSelectedVkId(virtualKeys[0].id);
+		}
+	}, [open, rule, virtualKeys, selectedVkId]);
+
+	const selectedVk = useMemo(() => virtualKeys.find((v) => v.id === selectedVkId) ?? null, [virtualKeys, selectedVkId]);
+
+	const vkValue = selectedVk?.value ?? null;
+	const vkName = selectedVk?.name ?? null;
 
 	const { prev: prevKeys, next: nextKeys } = useSheetNavigation({
 		enabled: open,
@@ -390,20 +425,20 @@ export function RoutingRuleInfoSheet({
 							<DottedSeparator />
 
 							<div className="space-y-3">
-								<div className="flex items-center justify-between">
-									<div>
-										<h3 className="text-sm font-semibold">{t("infoSheet.testCommand")}</h3>
-										<p className="text-muted-foreground mt-0.5 text-xs">{t("infoSheet.testCommandDesc")}</p>
-									</div>
-									{testCommand && <CopyButton value={testCommand} label="test command" testId="routing-rule-copy-test-command-btn" />}
+								<div>
+									<h3 className="text-sm font-semibold">{t("infoSheet.testCommand")}</h3>
+									<p className="text-muted-foreground mt-0.5 text-xs">{t("infoSheet.testCommandDesc")}</p>
 								</div>
-								{testCommand ? (
-									<pre
-										className="bg-muted/50 block w-full overflow-x-auto rounded-md border px-3 py-2 font-mono text-xs whitespace-pre"
-										data-testid="routing-rule-test-command"
-									>
-										{testCommand}
-									</pre>
+								{hasTestableConditions ? (
+									<TestCommandPanel
+										rule={rule}
+										vkValue={vkValue}
+										vkName={vkName}
+										enforceAuth={enforceAuth}
+										virtualKeys={virtualKeys}
+										selectedVkId={selectedVkId}
+										onSelectVk={setSelectedVkId}
+									/>
 								) : (
 									<div
 										className="bg-muted/50 text-muted-foreground flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
@@ -420,18 +455,14 @@ export function RoutingRuleInfoSheet({
 							<div className="grid grid-cols-2 gap-4">
 								<div>
 									<p className="text-muted-foreground mb-1 text-xs font-medium tracking-wider uppercase">{t("infoSheet.created")}</p>
-									<span className="text-sm">
-										{formatDistanceToNow(new Date(rule.created_at), {
-											addSuffix: true,
-										})}
+									<span className="text-sm" data-testid="routing-rule-info-created">
+										{createdAt}
 									</span>
 								</div>
 								<div>
 									<p className="text-muted-foreground mb-1 text-xs font-medium tracking-wider uppercase">{t("infoSheet.lastUpdated")}</p>
-									<span className="text-sm">
-										{formatDistanceToNow(new Date(rule.updated_at), {
-											addSuffix: true,
-										})}
+									<span className="text-sm" data-testid="routing-rule-info-last-updated">
+										{updatedAt}
 									</span>
 								</div>
 							</div>
@@ -440,5 +471,124 @@ export function RoutingRuleInfoSheet({
 				)}
 			</SheetContent>
 		</Sheet>
+	);
+}
+
+interface TestCommandPanelProps {
+	rule: RoutingRule;
+	vkValue: string | null;
+	vkName: string | null;
+	enforceAuth: boolean;
+	virtualKeys: Array<{ id: string; name: string; value: string }>;
+	selectedVkId: string;
+	onSelectVk: (id: string) => void;
+}
+
+function TestCommandPanel({ rule, vkValue, vkName, enforceAuth, virtualKeys, selectedVkId, onSelectVk }: TestCommandPanelProps) {
+	const { t } = useTranslation("routing");
+	const [tab, setTab] = useState("curl");
+
+	const curlCode = useMemo(() => generateRoutingTestCommandCurl(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
+	const pythonCode = useMemo(() => generateRoutingTestCommandPython(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
+	const nodeCode = useMemo(() => generateRoutingTestCommandNode(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
+	const goCode = useMemo(() => generateRoutingTestCommandGo(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
+
+	const tabs: Array<{ id: string; label: string; code: string; testId: string }> = [
+		{ id: "curl", label: t("infoSheet.testCommandPanel.codeTabs.curl"), code: curlCode, testId: "curl" },
+		{ id: "python", label: t("infoSheet.testCommandPanel.codeTabs.python"), code: pythonCode, testId: "python" },
+		{ id: "node", label: t("infoSheet.testCommandPanel.codeTabs.node"), code: nodeCode, testId: "node" },
+		{ id: "go", label: t("infoSheet.testCommandPanel.codeTabs.go"), code: goCode, testId: "go" },
+	];
+
+	return (
+		<div className="space-y-3" data-testid="routing-rule-test-command">
+			{enforceAuth && (
+				<div className="space-y-2">
+					<Label htmlFor="routing-rule-test-command-vk">{t("infoSheet.testCommandPanel.vkLabel")}</Label>
+					<Select value={selectedVkId} onValueChange={onSelectVk} disabled={virtualKeys.length === 0}>
+						<SelectTrigger id="routing-rule-test-command-vk" className="w-full" data-testid="routing-rule-test-command-vk">
+							<SelectValue
+								placeholder={
+									virtualKeys.length === 0 ? t("infoSheet.testCommandPanel.vkEmpty") : t("infoSheet.testCommandPanel.vkPlaceholder")
+								}
+							/>
+						</SelectTrigger>
+						<SelectContent>
+							{virtualKeys.length === 0 ? (
+								<SelectItem value="__none__" disabled>
+									—
+								</SelectItem>
+							) : (
+								virtualKeys.map((vk) => (
+									<SelectItem key={vk.id} value={vk.id} data-testid={`routing-rule-test-command-vk-option-${vk.id}`}>
+										{vk.name}
+									</SelectItem>
+								))
+							)}
+						</SelectContent>
+					</Select>
+					{vkName && <p className="text-muted-foreground text-xs">{t("infoSheet.testCommandPanel.usingVk", { name: vkName })}</p>}
+				</div>
+			)}
+
+			<Tabs value={tab} onValueChange={setTab} data-testid="routing-rule-test-command-tabs">
+				<TabsList>
+					{tabs.map((tabItem) => (
+						<TabsTrigger key={tabItem.id} value={tabItem.id} data-testid={`routing-rule-test-command-tab-${tabItem.testId}`}>
+							{tabItem.label}
+						</TabsTrigger>
+					))}
+				</TabsList>
+				{tabs.map((tabItem) => (
+					<TabsContent key={tabItem.id} value={tabItem.id}>
+						<CodeBlock
+							code={tabItem.code}
+							testId={`routing-rule-test-command-${tabItem.testId}`}
+							copyTestId={`routing-rule-test-command-copy-${tabItem.testId}`}
+							copyLabel={t("infoSheet.testCommandPanel.copyTab", { language: tabItem.label })}
+						/>
+					</TabsContent>
+				))}
+			</Tabs>
+		</div>
+	);
+}
+
+interface CodeBlockProps {
+	code: string;
+	testId: string;
+	copyTestId: string;
+	copyLabel: string;
+}
+
+function CodeBlock({ code, testId, copyTestId, copyLabel }: CodeBlockProps) {
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = async () => {
+		try {
+			await navigator.clipboard.writeText(code);
+			setCopied(true);
+			window.setTimeout(() => setCopied(false), 1500);
+		} catch {
+			toast.error("Copy failed");
+		}
+	};
+
+	return (
+		<div className="relative" data-testid={testId}>
+			<pre className="overflow-x-auto rounded-md border bg-zinc-950 px-4 py-3 font-mono text-xs whitespace-pre text-zinc-100">
+				<code>{code}</code>
+			</pre>
+			<button
+				type="button"
+				onClick={handleCopy}
+				className="absolute top-2 right-2 flex items-center gap-1 rounded p-1 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+				aria-label={copyLabel}
+				data-testid={copyTestId}
+			>
+				{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+				<span className="text-[11px]">{copied ? "Copied" : "Copy"}</span>
+			</button>
+		</div>
 	);
 }
