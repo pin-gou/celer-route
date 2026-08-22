@@ -10,7 +10,6 @@ import {
 	PluginType,
 	PROVIDER_COOLDOWN_PLUGIN,
 	RTK_PLUGIN,
-	GOVERNANCE_PLUGIN,
 	OTEL_PLUGIN,
 	LOGGING_PLUGIN,
 	SEMANTIC_CACHE_PLUGIN,
@@ -28,7 +27,6 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import ProvidercooldownFragment from "../fragments/providercooldownFragment";
 import RtkFragment from "../fragments/rtkFragment";
-import GovernanceFragment from "../fragments/governanceFragment";
 import OtelView from "../../observability/views/plugins/otelView";
 import LoggingFragment from "../fragments/loggingFragment";
 import SemanticCacheFragment from "../fragments/semanticCacheFragment";
@@ -178,13 +176,6 @@ export default function PluginsView(props: Props) {
 		return (
 			<div className="ml-4 w-full">
 				<RtkFragment plugin={selectedPlugin} />
-			</div>
-		);
-	}
-	if (selectedPlugin.name === GOVERNANCE_PLUGIN) {
-		return (
-			<div className="ml-4 w-full">
-				<GovernanceFragment plugin={selectedPlugin} />
 			</div>
 		);
 	}

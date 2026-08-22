@@ -169,11 +169,12 @@ describe("PluginsView — dispatch logic (task 11.2)", () => {
 		expect(screen.getByText("pluginForm.noPluginSelected")).toBeTruthy();
 	});
 
-	it("renders GovernanceFragment when selectedPlugin.name is 'governance'", () => {
+	it("renders the default form for governance (no dedicated fragment)", () => {
 		mocks.selectedPlugin = { ...basePlugin, name: "governance", actualName: "governance" };
 		render(<PluginsView onDelete={mocks.onDelete} onCreate={mocks.onCreate} />);
 
-		expect(screen.getByTestId("governance-fragment")).toBeTruthy();
+		expect(screen.getByText("pluginForm.title")).toBeTruthy();
+		expect(screen.getByText("pluginForm.nameLabel")).toBeTruthy();
 	});
 
 	it("renders ProvidercooldownFragment when selectedPlugin.name is 'provider-cooldown'", () => {

@@ -363,31 +363,6 @@
 			"recoveryBody": "The key is automatically re-enabled when its TTL expires. Cooldown state lives in process memory, so restarting pg-gateway clears all cooldowns."
 		}
 	},
-	"governance": {
-		"title": "Governance Configuration",
-		"enableTitle": "Enable Governance Plugin",
-		"enableDescription": "Enforce access control policies, routing rules, and virtual key requirements",
-		"enabledToast": "Governance plugin enabled",
-		"disabledToast": "Governance plugin disabled",
-		"updateFailedToast": "Failed to update governance plugin",
-		"settingsTitle": "Governance Settings",
-		"savedToast": "Governance configuration saved",
-		"saveFailedToast": "Failed to save governance configuration",
-		"formErrorToast": "Please fix the form errors before submitting",
-		"saving": "Saving...",
-		"saveConfiguration": "Save Configuration",
-		"accessControlSection": "Access Control",
-		"isVkMandatoryLabel": "Require API Key",
-		"isVkMandatoryDescription": "Enforce that every request includes a valid virtual key",
-		"requiredHeadersLabel": "Required Headers",
-		"requiredHeadersDescription": "Headers that must be present in every request",
-		"requiredHeadersPlaceholder": "Type a header name and press Enter to add",
-		"behaviorSection": "Behavior",
-		"disableAutoToolInjectLabel": "Disable Auto Tool Injection",
-		"disableAutoToolInjectDescription": "Prevent automatic injection of tools into LLM requests",
-		"routingChainMaxDepthLabel": "Routing Chain Max Depth",
-		"routingChainMaxDepthDescription": "Maximum number of chained routing hops (1–100)"
-	},
 	"pluginNames": {
 		"telemetry": "Telemetry",
 		"prompts": "Prompts",

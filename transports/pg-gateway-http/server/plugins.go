@@ -96,6 +96,13 @@ func loadBuiltinPlugin(ctx context.Context, name string, pluginConfig any, bifro
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal governance plugin config: %w", err)
 		}
+		// All governance config fields mirror ClientConfig — ignore any stored
+		// plugin config values so the native settings pages are the single entry
+		// point for each field.
+		governanceConfig.IsVkMandatory = &bifrostConfig.ClientConfig.EnforceAuthOnInference
+		governanceConfig.RequiredHeaders = &bifrostConfig.ClientConfig.RequiredHeaders
+		governanceConfig.DisableAutoToolInject = &bifrostConfig.ClientConfig.MCPDisableAutoToolInject
+		governanceConfig.RoutingChainMaxDepth = &bifrostConfig.ClientConfig.RoutingChainMaxDepth
 		inMemoryStore := &GovernanceInMemoryStore{Config: bifrostConfig}
 		return governance.Init(ctx, governanceConfig, logger, bifrostConfig.ConfigStore,
 			bifrostConfig.GovernanceConfig, bifrostConfig.ModelCatalog,

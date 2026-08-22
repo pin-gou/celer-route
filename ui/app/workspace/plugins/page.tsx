@@ -49,7 +49,7 @@ export default function PluginsPage() {
 	const [selectedPluginId, setSelectedPluginId] = useQueryState("plugin");
 	const allPlugins = useMemo(() => sortPluginsByRunOrder(plugins ?? []), [plugins]);
 
-	const HIDDEN_PLUGIN_NAMES = new Set(["telemetry", "maxim", "mocker", "otel", "prompts", "semantic_cache", "logging"]);
+	const HIDDEN_PLUGIN_NAMES = new Set(["telemetry", "maxim", "mocker", "otel", "prompts", "semantic_cache", "logging", "governance"]);
 	const visiblePlugins = useMemo(() => allPlugins.filter((p) => !HIDDEN_PLUGIN_NAMES.has(p.name)), [allPlugins]);
 
 	const hasCustomPlugins = useMemo(() => allPlugins.some((plugin) => plugin.isCustom), [allPlugins]);
