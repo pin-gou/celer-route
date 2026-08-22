@@ -1,8 +1,8 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { SecretVarInput } from "@/components/ui/secretVarInput";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } from "@/lib/store";
@@ -13,7 +13,6 @@ import { getPasswordPolicyFailures, validateOrigins } from "@/lib/utils/validati
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertTriangle, ChevronDown, Globe, KeyRound, Network, ShieldCheck } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -227,10 +226,16 @@ export default function SecurityView() {
 
 			<div className="space-y-6">
 				{/* Password Protect the Dashboard */}
-				<section className="space-y-3">
-					<SectionHeading icon={ShieldCheck} title={t("security.groupDashboardAccess")} />
+				<Card className="py-0">
+					<CardHeader className="flex flex-row items-center gap-2 px-5 py-4">
+						<ShieldCheck className="text-muted-foreground size-4" />
+						<div>
+							<h3 className="text-sm font-semibold tracking-tight">{t("security.groupDashboardAccess")}</h3>
+							<p className="text-muted-foreground text-xs">{t("security.groupDashboardAccessDesc")}</p>
+						</div>
+					</CardHeader>
 					{showPasswordSection && (
-						<div className="space-y-4 rounded-sm border p-4">
+						<CardContent className="space-y-4 px-5 pb-5">
 							<div className="flex items-center justify-between">
 								<div className="space-y-0.5">
 									<Label htmlFor="auth-enabled" className="text-sm font-medium">
@@ -284,58 +289,69 @@ export default function SecurityView() {
 									</code>
 								</div>
 							) : null}
-						</div>
+						</CardContent>
 					)}
-				</section>
+				</Card>
 
 				{/* Enable Auth on Inference / Allow Direct API Keys */}
-				<section className="space-y-3">
-					<SectionHeading icon={KeyRound} title={t("security.groupApiAccess")} />
-					<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-						<div className="space-y-0.5">
-							<label htmlFor="enforce-auth-on-inference" className="text-sm font-medium">
-								{t("security.enforceVirtualKeys")}
-							</label>
-							<p className="text-muted-foreground text-sm">{t("security.enforceVirtualKeysDesc")}</p>
+				<Card className="py-0">
+					<CardHeader className="flex flex-row items-center gap-2 px-5 py-4">
+						<KeyRound className="text-muted-foreground size-4" />
+						<div>
+							<h3 className="text-sm font-semibold tracking-tight">{t("security.groupApiAccess")}</h3>
+							<p className="text-muted-foreground text-xs">{t("security.groupApiAccessDesc")}</p>
 						</div>
-						<Switch
-							id="enforce-auth-on-inference"
-							data-testid="enforce-auth-on-inference-switch"
-							checked={localConfig.enforce_auth_on_inference}
-							onCheckedChange={(checked) => handleConfigChange("enforce_auth_on_inference", checked)}
-						/>
-					</div>
-					<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-						<div className="space-y-0.5">
-							<label htmlFor="allow-direct-keys" className="text-sm font-medium">
-								{t("security.allowDirectKeys")}
-							</label>
-							<p className="text-muted-foreground text-sm">{t("security.allowDirectKeysDesc")}</p>
+					</CardHeader>
+					<CardContent className="space-y-4 px-5 pb-5">
+						<div className="flex items-center justify-between space-x-2">
+							<div className="space-y-0.5">
+								<label htmlFor="enforce-auth-on-inference" className="text-sm font-medium">
+									{t("security.enforceVirtualKeys")}
+								</label>
+								<p className="text-muted-foreground text-sm">{t("security.enforceVirtualKeysDesc")}</p>
+							</div>
+							<Switch
+								id="enforce-auth-on-inference"
+								data-testid="enforce-auth-on-inference-switch"
+								checked={localConfig.enforce_auth_on_inference}
+								onCheckedChange={(checked) => handleConfigChange("enforce_auth_on_inference", checked)}
+							/>
 						</div>
-						<Switch
-							id="allow-direct-keys"
-							data-testid="security-allow-direct-keys-switch"
-							checked={localConfig.allow_direct_keys}
-							onCheckedChange={(checked) => handleConfigChange("allow_direct_keys", checked)}
-						/>
-					</div>
-				</section>
+						<div className="flex items-center justify-between space-x-2">
+							<div className="space-y-0.5">
+								<label htmlFor="allow-direct-keys" className="text-sm font-medium">
+									{t("security.allowDirectKeys")}
+								</label>
+								<p className="text-muted-foreground text-sm">{t("security.allowDirectKeysDesc")}</p>
+							</div>
+							<Switch
+								id="allow-direct-keys"
+								data-testid="security-allow-direct-keys-switch"
+								checked={localConfig.allow_direct_keys}
+								onCheckedChange={(checked) => handleConfigChange("allow_direct_keys", checked)}
+							/>
+						</div>
+					</CardContent>
+				</Card>
 
 				{/* Allowed Origins / Headers / Required Headers */}
-				<section className="rounded-sm border">
-					<Collapsible defaultOpen={false}>
+				<Card className="py-0">
+					<Collapsible defaultOpen={true}>
 						<CollapsibleTrigger asChild>
 							<button
 								type="button"
-								className="hover:bg-muted/50 group flex w-full items-center gap-2 rounded-sm px-4 py-3 text-left"
+								className="hover:bg-muted/50 group flex w-full items-center gap-2 rounded-sm px-5 py-4 text-left"
 								data-testid="security-cors-headers-collapsible-trigger"
 							>
 								<Globe className="text-muted-foreground size-4" />
-								<span className="flex-1 text-sm font-semibold tracking-tight">{t("security.groupCorsHeaders")}</span>
+								<div className="flex-1 text-left">
+									<h3 className="text-sm font-semibold tracking-tight">{t("security.groupCorsHeaders")}</h3>
+									<p className="text-muted-foreground text-xs">{t("security.groupCorsHeadersDesc")}</p>
+								</div>
 								<ChevronDown className="text-muted-foreground size-4 transition-transform group-data-[state=open]:rotate-180" />
 							</button>
 						</CollapsibleTrigger>
-						<CollapsibleContent className="border-t px-4 py-4">
+						<CollapsibleContent className="border-t px-5 py-4">
 							<div className="space-y-3">
 								{needsRestart && <RestartWarning t={t} />}
 								<TextareaField
@@ -369,23 +385,26 @@ export default function SecurityView() {
 							</div>
 						</CollapsibleContent>
 					</Collapsible>
-				</section>
+				</Card>
 
 				{/* Whitelisted Routes */}
-				<section className="rounded-sm border">
+				<Card className="py-0">
 					<Collapsible defaultOpen={false}>
 						<CollapsibleTrigger asChild>
 							<button
 								type="button"
-								className="hover:bg-muted/50 group flex w-full items-center gap-2 rounded-sm px-4 py-3 text-left"
+								className="hover:bg-muted/50 group flex w-full items-center gap-2 rounded-sm px-5 py-4 text-left"
 								data-testid="security-routes-collapsible-trigger"
 							>
 								<Network className="text-muted-foreground size-4" />
-								<span className="flex-1 text-sm font-semibold tracking-tight">{t("security.groupRouteExceptions")}</span>
+								<div className="flex-1 text-left">
+									<h3 className="text-sm font-semibold tracking-tight">{t("security.groupRouteExceptions")}</h3>
+									<p className="text-muted-foreground text-xs">{t("security.groupRouteExceptionsDesc")}</p>
+								</div>
 								<ChevronDown className="text-muted-foreground size-4 transition-transform group-data-[state=open]:rotate-180" />
 							</button>
 						</CollapsibleTrigger>
-						<CollapsibleContent className="border-t px-4 py-4">
+						<CollapsibleContent className="border-t px-5 py-4">
 							<TextareaField
 								id="whitelisted-routes"
 								label={t("security.whitelistedRoutes")}
@@ -398,7 +417,7 @@ export default function SecurityView() {
 							/>
 						</CollapsibleContent>
 					</Collapsible>
-				</section>
+				</Card>
 			</div>
 
 			<div className="bg-card sticky bottom-0 flex justify-end py-2">
@@ -409,13 +428,6 @@ export default function SecurityView() {
 		</div>
 	);
 }
-
-const SectionHeading = ({ icon: Icon, title }: { icon: LucideIcon; title: string }) => (
-	<div className="flex items-center gap-2">
-		<Icon className="text-muted-foreground size-4" />
-		<h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-	</div>
-);
 
 const TextareaField = ({
 	id,
