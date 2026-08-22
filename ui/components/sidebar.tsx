@@ -10,6 +10,7 @@ import {
 	FlaskConical,
 	FolderGit,
 	GitCompareArrows,
+	Home as HomeIcon,
 	KeyRound,
 	Landmark,
 	LayoutGrid,
@@ -525,6 +526,13 @@ export default function AppSidebar() {
 
 	const items = useMemo(
 		() => [
+			{
+				title: t("nav.home"),
+				url: "/workspace/home",
+				icon: HomeIcon,
+				description: "Home",
+				hasAccess: true,
+			},
 			{
 				title: t("nav.observability"),
 				url: "/workspace/logs",

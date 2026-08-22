@@ -43,6 +43,12 @@ function AppContent({ children }: { children: React.ReactNode }) {
 	// anonymous visitor arriving with `#t=<token>` gets a stripped MinimalShell.
 	// The auth-via-temp-token half lives in <TempTokenScope>.
 	const matches = useMatches();
+	const pathname = useLocation({ select: (l) => l.pathname });
+	// The floating setup checklist is redundant on the home and onboarding routes
+	// — those pages have their own setup-affordance UI (home's SetupStatusBar
+	// and onboarding's full wizard). Hiding the widget there avoids double
+	// prompts and keeps the first-run experience focused.
+	const suppressOnboardingWidget = pathname.startsWith("/workspace/home") || pathname.startsWith("/workspace/onboarding");
 	const tempTokenScoped = matches.some((m) => (m.staticData as { tempTokenScoped?: boolean } | undefined)?.tempTokenScoped === true);
 	// publicShell: route declares it's a static, auth-free page that should
 	// always render MinimalShell — no chrome, no auth probe, no API calls.
@@ -134,7 +140,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
 						<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 flex-col overflow-y-hidden p-4">
 							{isLoading ? <FullPageLoader /> : <FullPage config={bifrostConfig}>{children}</FullPage>}
 						</main>
-						{bifrostConfig?.is_db_connected && <OnboardingWidget />}
+						{bifrostConfig?.is_db_connected && !suppressOnboardingWidget && <OnboardingWidget />}
 					</div>
 				</SidebarProvider>
 			</CookiesProvider>

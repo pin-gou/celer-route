@@ -17,6 +17,7 @@ import observability_en from "@/locales/en/observability.json";
 import webhooks_en from "@/locales/en/webhooks.json";
 import oauthGrants_en from "@/locales/en/oauth-grants.json";
 import modelCatalog_en from "@/locales/en/model-catalog.json";
+import onboarding_en from "@/locales/en/onboarding.json";
 
 import common_zh from "@/locales/zh-CN/common.json";
 import logs_zh from "@/locales/zh-CN/logs.json";
@@ -33,6 +34,7 @@ import observability_zh from "@/locales/zh-CN/observability.json";
 import webhooks_zh from "@/locales/zh-CN/webhooks.json";
 import oauthGrants_zh from "@/locales/zh-CN/oauth-grants.json";
 import modelCatalog_zh from "@/locales/zh-CN/model-catalog.json";
+import onboarding_zh from "@/locales/zh-CN/onboarding.json";
 
 const NS = [
 	"common",
@@ -50,6 +52,7 @@ const NS = [
 	"webhooks",
 	"oauth-grants",
 	"model-catalog",
+	"onboarding",
 ] as const;
 
 export const SUPPORTED_LOCALES = ["en", "zh-CN"] as const;
@@ -79,6 +82,7 @@ export const resources = {
 		webhooks: webhooks_en,
 		"oauth-grants": oauthGrants_en,
 		"model-catalog": modelCatalog_en,
+		onboarding: onboarding_en,
 	},
 	"zh-CN": {
 		common: common_zh,
@@ -96,6 +100,7 @@ export const resources = {
 		webhooks: webhooks_zh,
 		"oauth-grants": oauthGrants_zh,
 		"model-catalog": modelCatalog_zh,
+		onboarding: onboarding_zh,
 	},
 } as const;
 

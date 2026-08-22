@@ -20,6 +20,7 @@ import type observability from "@/locales/en/observability.json";
 import type webhooks from "@/locales/en/webhooks.json";
 import type oauthGrants from "@/locales/en/oauth-grants.json";
 import type modelCatalog from "@/locales/en/model-catalog.json";
+import type onboarding from "@/locales/en/onboarding.json";
 
 export interface Resources {
 	common: typeof common;
@@ -37,6 +38,7 @@ export interface Resources {
 	webhooks: typeof webhooks;
 	"oauth-grants": typeof oauthGrants;
 	"model-catalog": typeof modelCatalog;
+	onboarding: typeof onboarding;
 }
 
 export type KeysWithNamespace = {

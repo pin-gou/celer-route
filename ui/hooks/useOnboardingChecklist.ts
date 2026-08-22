@@ -57,6 +57,12 @@ export function useOnboardingChecklist({ skip = false }: { skip?: boolean } = {}
 	const authConfig = bifrostConfig?.auth_config;
 	const clientConfig = bifrostConfig?.client_config;
 
+	// True when no admin account has ever been created on this instance. The very
+	// first PUT /api/config that creates one must include the setup token the
+	// operator configured via setup_token in config.json (or BIFROST_SETUP_TOKEN).
+	// Drives the workspace/home → /workspace/onboarding redirect on first login.
+	const isFirstTimeSetup = bifrostConfig !== undefined && !authConfig;
+
 	const steps: OnboardingStep[] = useMemo(() => {
 		// Order: 1) Security, 2) Provider Setup, 3) Everything Else.
 		// Security comes first so admins lock down access before exposing keys.
@@ -94,5 +100,5 @@ export function useOnboardingChecklist({ skip = false }: { skip?: boolean } = {}
 		return common;
 	}, [allKeys, clientConfig, authConfig]);
 
-	return { bifrostConfig, steps, skippedIds, checklistReady, isDismissedForAll };
+	return { bifrostConfig, steps, skippedIds, checklistReady, isDismissedForAll, isFirstTimeSetup };
 }

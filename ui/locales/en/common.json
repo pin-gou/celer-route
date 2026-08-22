@@ -4,6 +4,7 @@
 		"tagline": "AI Gateway"
 	},
 	"nav": {
+		"home": "Home",
 		"observability": "Observability",
 		"models": "Models",
 		"mcpGateway": "MCP Gateway",
@@ -256,5 +257,72 @@
 		"toggleColumns": "Toggle Columns",
 		"resetToDefault": "Reset to default",
 		"columnConfig": "Column configuration"
+	},
+	"home": {
+		"pageTitle": "Home",
+		"pageDescription": "Get up and running in 4 steps. Your gateway is at {{url}}.",
+		"endpointCard": {
+			"title": "Your endpoint",
+			"subtitle": "Use this URL with any OpenAI-compatible client.",
+			"copyLabel": "Copy URL",
+			"copied": "Copied to clipboard",
+			"codeTabs": {
+				"curl": "cURL",
+				"python": "Python",
+				"node": "Node.js",
+				"go": "Go"
+			},
+			"examples": {
+				"curlLabel": "curl",
+				"pythonLabel": "Python (openai)",
+				"nodeLabel": "Node.js (openai)",
+				"goLabel": "Go (openai-go)"
+			}
+		},
+		"systemHealth": {
+			"title": "System health",
+			"db": "Database",
+			"logs": "Logs store",
+			"cache": "Vector cache",
+			"providers": "Providers",
+			"storage": "Object storage",
+			"ok": "Connected",
+			"missing": "Not configured",
+			"partial": "Partial",
+			"error": "Error",
+			"emptyProviders": "No providers configured yet"
+		},
+		"setupStatus": {
+			"title": "Setup status",
+			"complete": "Setup complete",
+			"remaining": "{{n}} setup step(s) remaining",
+			"goToStep": "Configure"
+		},
+		"providers": {
+			"title": "Your providers",
+			"empty": "No providers configured yet",
+			"addProvider": "Add a provider",
+			"configuredCount": "{{configured}} of {{total}} configured",
+			"keysCount": "{{count}} key(s)",
+			"modelsCount": "{{count}} model(s)"
+		},
+		"quickStart": {
+			"title": "Quick Start",
+			"subtitle": "Get the most out of pg-gateway in 4 short steps.",
+			"step1Title": "1. Configure providers",
+			"step1Desc": "Add upstream provider keys (OpenAI, Anthropic, Google, etc.) so pg-gateway has something to route to.",
+			"step2Title": "2. Configure routing",
+			"step2Desc": "Define routing rules that decide which provider, model, or key each request lands on. Use fallbacks, weights, or CEL expressions.",
+			"step3Title": "3. Test the API call",
+			"step3Desc": "Send a real chat completion through a configured provider to confirm end-to-end connectivity and routing works.",
+			"step4Title": "4. Watch the observability",
+			"step4Desc": "Track tokens, cost, latency and errors in Logs and Analytics to tune providers and catch regressions early.",
+			"logsLinkText": "Logs",
+			"analyticsLinkText": "Analytics"
+		},
+		"firstRunGate": {
+			"loading": "Checking setup state…",
+			"redirecting": "Redirecting to first-time setup…"
+		}
 	}
 }

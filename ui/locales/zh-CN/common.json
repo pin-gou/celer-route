@@ -4,6 +4,7 @@
 		"tagline": "AI 网关"
 	},
 	"nav": {
+		"home": "首页",
 		"observability": "可观测性",
 		"models": "模型",
 		"mcpGateway": "MCP 网关",
@@ -256,5 +257,72 @@
 		"toggleColumns": "切换列",
 		"resetToDefault": "恢复默认",
 		"columnConfig": "列配置"
+	},
+	"home": {
+		"pageTitle": "首页",
+		"pageDescription": "4 步即可上手。网关地址：{{url}}。",
+		"endpointCard": {
+			"title": "你的端点",
+			"subtitle": "使用此 URL 配合任何 OpenAI 兼容客户端。",
+			"copyLabel": "复制 URL",
+			"copied": "已复制到剪贴板",
+			"codeTabs": {
+				"curl": "cURL",
+				"python": "Python",
+				"node": "Node.js",
+				"go": "Go"
+			},
+			"examples": {
+				"curlLabel": "curl",
+				"pythonLabel": "Python（openai）",
+				"nodeLabel": "Node.js（openai）",
+				"goLabel": "Go（openai-go）"
+			}
+		},
+		"systemHealth": {
+			"title": "系统健康",
+			"db": "数据库",
+			"logs": "日志存储",
+			"cache": "向量缓存",
+			"providers": "Providers",
+			"storage": "对象存储",
+			"ok": "已连接",
+			"missing": "未配置",
+			"partial": "部分配置",
+			"error": "错误",
+			"emptyProviders": "尚未配置任何 provider"
+		},
+		"setupStatus": {
+			"title": "设置状态",
+			"complete": "设置已完成",
+			"remaining": "还剩 {{n}} 步",
+			"goToStep": "去配置"
+		},
+		"providers": {
+			"title": "你的 providers",
+			"empty": "尚未配置任何 provider",
+			"addProvider": "添加 provider",
+			"configuredCount": "已配置 {{configured}} / {{total}}",
+			"keysCount": "{{count}} 个 key",
+			"modelsCount": "{{count}} 个模型"
+		},
+		"quickStart": {
+			"title": "快速上手",
+			"subtitle": "4 步即可用好 pg-gateway。",
+			"step1Title": "1. 配置提供商",
+			"step1Desc": "添加上游 provider key（OpenAI、Anthropic、Google 等），让 pg-gateway 有东西可路由。",
+			"step2Title": "2. 配置路由",
+			"step2Desc": "为请求配置路由规则，决定每个请求落到哪个 provider、模型或 key。支持 fallback、权重或 CEL 表达式。",
+			"step3Title": "3. 测试接口调用",
+			"step3Desc": "通过已配置的 provider 发一条真实的 chat completion 请求，确认端到端连通和路由生效。",
+			"step4Title": "4. 观察监控",
+			"step4Desc": "在日志与分析仪表板中追踪 token、成本、延迟与错误，持续优化 provider 与回归早发现。",
+			"logsLinkText": "日志",
+			"analyticsLinkText": "分析仪表板"
+		},
+		"firstRunGate": {
+			"loading": "正在检查设置状态…",
+			"redirecting": "正在跳转到首次设置…"
+		}
 	}
 }
