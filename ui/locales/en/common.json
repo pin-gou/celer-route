@@ -37,7 +37,6 @@
 		"compatibility": "Compatibility",
 		"caching": "Caching",
 		"security": "Security",
-		"apiKeys": "API Keys",
 		"performanceTuning": "Performance Tuning",
 		"featureFlags": "Feature Flags",
 		"promptRepository": "Prompt Repository",

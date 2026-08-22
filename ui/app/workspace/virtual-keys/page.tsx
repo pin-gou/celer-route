@@ -4,7 +4,7 @@ import { useEffect } from "react";
 export default function VirtualKeysRedirectPage() {
 	const navigate = useNavigate();
 	useEffect(() => {
-		navigate({ to: "/workspace/governance/virtual-keys", replace: true });
+		navigate({ to: "/workspace/config/security/virtual-keys", replace: true });
 	}, [navigate]);
 	return null;
 }

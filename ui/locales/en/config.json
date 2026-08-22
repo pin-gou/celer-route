@@ -133,28 +133,6 @@
 			}
 		}
 	},
-	"apiKeys": {
-		"title": "API Keys",
-		"description": "Manage API keys for authentication",
-		"createKey": "Create API Key",
-		"editKey": "Edit API Key",
-		"deleteKey": "Delete API Key",
-		"keyName": "Key Name",
-		"keyValue": "Key Value",
-		"status": "Status",
-		"created": "Created",
-		"lastUsed": "Last Used",
-		"noKeys": "No API keys configured",
-		"active": "Active",
-		"inactive": "Inactive",
-		"loading": "Loading...",
-		"setupFirst": "To generate API keys, you need to set up admin username and password first.",
-		"configureSecurity": "Configure Security Settings",
-		"usageInstructions": "Once generated you will need to use this API key for all API calls to the pg-gateway admin APIs and UI.",
-		"authDisabledForInference": "Authentication is currently <0>disabled for inference API calls</0>. You can make inference requests without authentication. Dashboard and admin API calls still require Basic auth with your admin credentials encoded in the standard <1>username:password</1> format with base64 encoding.",
-		"authEnabledForInference": "Use Basic auth with your admin credentials when making API calls to pg-gateway. Encode your credentials in the standard <0>username:password</0> format with base64 encoding.",
-		"example": "Example:"
-	},
 	"caching": {
 		"title": "Caching",
 		"description": "Configure response caching settings",

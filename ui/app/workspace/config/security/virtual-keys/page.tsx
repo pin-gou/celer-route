@@ -11,7 +11,7 @@ import { toast } from "sonner";
 const POLLING_INTERVAL = 5000;
 const PAGE_SIZE = 25;
 
-export default function GovernanceVirtualKeysPage() {
+export default function SecurityVirtualKeysPage() {
 	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
 	const shownErrorsRef = useRef(new Set<string>());
 

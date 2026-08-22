@@ -8,11 +8,11 @@ import ConfigPage from "./page";
 function RouteComponent() {
 	const pathname = useLocation({ select: (l) => l.pathname });
 	const hasSettingsAccess = useRbac(RbacResource.Settings, RbacOperation.View);
-	const hasAPIKeysAccess = useRbac(RbacResource.APIKeys, RbacOperation.View);
+	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
 	const childMatches = useChildMatches();
 
-	const isAPIKeysRoute = pathname.startsWith("/workspace/config/api-keys");
-	const requiredAccess = isAPIKeysRoute ? hasAPIKeysAccess : hasSettingsAccess;
+	const isVirtualKeysRoute = pathname.startsWith("/workspace/config/security/virtual-keys");
+	const requiredAccess = isVirtualKeysRoute ? hasVirtualKeysAccess : hasSettingsAccess;
 
 	const { isLoading } = useGetCoreConfigQuery({ fromDB: true }, { skip: !requiredAccess });
 

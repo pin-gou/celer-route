@@ -1827,7 +1827,7 @@ export function LogDetailView({
 									label={t("detailView.virtualKey")}
 									value={
 										<Link
-											to="/workspace/governance/virtual-keys"
+											to="/workspace/config/security/virtual-keys"
 											search={{ selected_vk: log.virtual_key.id }}
 											className="text-blue-600 hover:underline dark:text-blue-400"
 											data-testid="logdetails-virtual-key-link"

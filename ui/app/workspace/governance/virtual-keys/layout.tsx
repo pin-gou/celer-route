@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import GovernanceVirtualKeysPage from "./page";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/workspace/governance/virtual-keys")({
-	component: GovernanceVirtualKeysPage,
+	beforeLoad: () => {
+		throw redirect({ to: "/workspace/config/security/virtual-keys", replace: true });
+	},
 });

@@ -133,28 +133,6 @@
 			}
 		}
 	},
-	"apiKeys": {
-		"title": "API 密钥",
-		"description": "管理 API 密钥认证",
-		"createKey": "创建 API 密钥",
-		"editKey": "编辑 API 密钥",
-		"deleteKey": "删除 API 密钥",
-		"keyName": "密钥名称",
-		"keyValue": "密钥值",
-		"status": "状态",
-		"created": "创建时间",
-		"lastUsed": "最后使用",
-		"noKeys": "未配置 API 密钥",
-		"active": "活跃",
-		"inactive": "不活跃",
-		"loading": "加载中...",
-		"setupFirst": "要生成 API 密钥，您需要先设置管理员用户名和密码。",
-		"configureSecurity": "配置安全设置",
-		"usageInstructions": "生成后，您需要在所有对 pg-gateway 管理 API 和 UI 的 API 调用中使用此 API 密钥。",
-		"authDisabledForInference": "推理 API 调用的身份验证当前已禁用。您可以在没有身份验证的情况下进行推理请求。仪表板和管理 API 调用仍需使用您的管理员凭据以标准 <0>username:password</0> 格式进行 base64 编码的 Basic 身份验证。",
-		"authEnabledForInference": "在对 pg-gateway 进行 API 调用时，使用您的管理员凭据进行 Basic 身份验证。以标准 <0>username:password</0> 格式对您的凭据进行 base64 编码。",
-		"example": "示例："
-	},
 	"caching": {
 		"title": "缓存",
 		"description": "配置响应缓存设置",

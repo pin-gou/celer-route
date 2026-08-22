@@ -37,7 +37,6 @@
 		"compatibility": "兼容性",
 		"caching": "缓存",
 		"security": "安全",
-		"apiKeys": "API 密钥",
 		"performanceTuning": "性能调优",
 		"featureFlags": "功能开关",
 		"promptRepository": "提示词仓库",

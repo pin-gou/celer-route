@@ -495,7 +495,7 @@ export default function AppSidebar() {
 	const hasPluginsAccess = useRbac(RbacResource.Plugins, RbacOperation.View);
 	const hasRoutingRulesAccess = useRbac(RbacResource.RoutingRules, RbacOperation.View);
 	const hasSettingsAccess = useRbac(RbacResource.Settings, RbacOperation.View);
-	const hasAPIKeyAccess = useRbac(RbacResource.APIKeys, RbacOperation.View);
+	const hasVirtualKeysAccess = useRbac(RbacResource.VirtualKeys, RbacOperation.View);
 	const { data: coreConfig } = useGetCoreConfigQuery({});
 	const isDbConnected = coreConfig?.is_db_connected ?? false;
 	const envLabel = coreConfig?.env_label ?? null;
@@ -773,11 +773,11 @@ export default function AppSidebar() {
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: t("nav.apiKeys"),
-						url: "/workspace/config/api-keys",
+						title: t("nav.virtualKeys"),
+						url: "/workspace/config/security/virtual-keys",
 						icon: KeyRound,
-						description: "API keys management",
-						hasAccess: hasAPIKeyAccess,
+						description: "Manage virtual keys & access",
+						hasAccess: hasVirtualKeysAccess,
 					},
 					{
 						title: t("nav.performanceTuning"),
@@ -798,7 +798,7 @@ export default function AppSidebar() {
 		],
 		[
 			hasLogsAccess,
-			hasAPIKeyAccess,
+			hasVirtualKeysAccess,
 			hasDashboardAccess,
 			hasModelProvidersAccess,
 			hasPluginsAccess,
