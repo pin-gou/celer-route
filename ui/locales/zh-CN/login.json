@@ -1,0 +1,14 @@
+{
+	"welcomeBack": "欢迎回来",
+	"signInToContinue": "登录您的账户以继续",
+	"username": "用户名",
+	"usernamePlaceholder": "请输入用户名",
+	"password": "密码",
+	"passwordPlaceholder": "请输入密码",
+	"signIn": "登录",
+	"signingIn": "登录中...",
+	"hidePassword": "隐藏密码",
+	"showPassword": "显示密码",
+	"checkingAuth": "正在检查认证状态...",
+	"githubRepository": "GitHub 仓库"
+}

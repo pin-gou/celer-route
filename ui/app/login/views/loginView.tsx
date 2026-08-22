@@ -1,28 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher/LanguageSwitcher";
+import { ThemeToggle } from "@/components/themeToggle";
 import { useBranding } from "@/lib/hooks/useBranding";
 import { getErrorMessage, useLoginMutation } from "@/lib/store/apis";
-import { DiscordLogoIcon, GithubLogoIcon } from "@phosphor-icons/react";
+import { GithubLogoIcon } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-
-const externalLinks = [
-	{
-		title: "Discord Server",
-		url: "https://discord.gg/exN5KAydbU",
-		icon: DiscordLogoIcon,
-	},
-	{
-		title: "GitHub Repository",
-		url: "https://github.com/pin-gou/pg-gateway",
-		icon: GithubLogoIcon,
-	},
-];
+import { useTranslation } from "react-i18next";
 
 export default function LoginView() {
+	const { t } = useTranslation("login");
 	const { resolvedTheme } = useTheme();
 	const [mounted, setMounted] = useState(false);
 	const [username, setUsername] = useState("");
@@ -64,8 +55,8 @@ export default function LoginView() {
 					</div>
 
 					<div className="space-y-2 text-center">
-						<h1 className="text-foreground text-lg font-semibold">Welcome back</h1>
-						<p className="text-muted-foreground text-sm">Sign in to your account to continue</p>
+						<h1 className="text-foreground text-lg font-semibold">{t("welcomeBack")}</h1>
+						<p className="text-muted-foreground text-sm">{t("signInToContinue")}</p>
 					</div>
 
 					<form onSubmit={handleSubmit} className="space-y-5">
@@ -73,12 +64,12 @@ export default function LoginView() {
 
 						<div className="space-y-2">
 							<Label htmlFor="username" className="text-sm font-medium">
-								Username
+								{t("username")}
 							</Label>
 							<Input
 								id="username"
 								type="text"
-								placeholder="Enter your username"
+								placeholder={t("usernamePlaceholder")}
 								value={username}
 								onChange={(e) => setUsername(e.target.value)}
 								required
@@ -89,13 +80,13 @@ export default function LoginView() {
 
 						<div className="space-y-2">
 							<Label htmlFor="password" className="text-sm font-medium">
-								Password
+								{t("password")}
 							</Label>
 							<div className="relative">
 								<Input
 									id="password"
 									type={showPassword ? "text" : "password"}
-									placeholder="Enter your password"
+									placeholder={t("passwordPlaceholder")}
 									value={password}
 									onChange={(e) => setPassword(e.target.value)}
 									required
@@ -106,7 +97,7 @@ export default function LoginView() {
 									type="button"
 									onClick={() => setShowPassword(!showPassword)}
 									className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
-									aria-label={showPassword ? "Hide password" : "Show password"}
+									aria-label={showPassword ? t("hidePassword") : t("showPassword")}
 								>
 									{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
 								</button>
@@ -114,24 +105,23 @@ export default function LoginView() {
 						</div>
 
 						<Button type="submit" className="h-9 w-full text-sm" isLoading={isLoading} disabled={isLoading}>
-							{isLoading || isLoggingIn ? "Signing in..." : "Sign in"}
+							{isLoading || isLoggingIn ? t("signingIn") : t("signIn")}
 						</Button>
 					</form>
 
-					{/* Social Links */}
+					{/* Footer icons — mirrors the main sidebar footer (GitHub + theme + language) */}
 					<div className="flex items-center justify-center gap-4 pt-4">
-						{externalLinks.map((item, index) => (
-							<a
-								key={index}
-								href={item.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="text-muted-foreground hover:text-primary transition-colors"
-								title={item.title}
-							>
-								<item.icon className="h-5 w-5" size={20} weight="regular" />
-							</a>
-						))}
+						<a
+							href="https://github.com/pin-gou/pg-gateway"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-muted-foreground hover:text-primary transition-colors"
+							title={t("githubRepository")}
+						>
+							<GithubLogoIcon className="h-5 w-5" size={22} weight="regular" />
+						</a>
+						<ThemeToggle />
+						<LanguageSwitcher />
 					</div>
 				</div>
 			</div>

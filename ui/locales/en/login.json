@@ -1,0 +1,14 @@
+{
+	"welcomeBack": "Welcome back",
+	"signInToContinue": "Sign in to your account to continue",
+	"username": "Username",
+	"usernamePlaceholder": "Enter your username",
+	"password": "Password",
+	"passwordPlaceholder": "Enter your password",
+	"signIn": "Sign in",
+	"signingIn": "Signing in...",
+	"hidePassword": "Hide password",
+	"showPassword": "Show password",
+	"checkingAuth": "Checking authentication...",
+	"githubRepository": "GitHub Repository"
+}
