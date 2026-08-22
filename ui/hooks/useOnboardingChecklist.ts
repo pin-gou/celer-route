@@ -16,7 +16,7 @@ export const HIDDEN_UNTIL_NAV_COOKIE = "bifrost_onboarding_hidden_until_nav";
 
 export interface OnboardingStep {
 	id: string;
-	// i18n key into the "onboarding" namespace (e.g. "step.cors").
+	// i18n key into the "onboarding" namespace (e.g. "step.dashboardAuth").
 	titleKey: string;
 	// i18n key into the "onboarding" namespace (e.g. "section.security").
 	sectionKey: string;
@@ -66,15 +66,7 @@ export function useOnboardingChecklist({ skip = false }: { skip?: boolean } = {}
 	const steps: OnboardingStep[] = useMemo(() => {
 		// Order: 1) Security, 2) Provider Setup, 3) Everything Else.
 		// Security comes first so admins lock down access before exposing keys.
-		const allowedOrigins = clientConfig?.allowed_origins ?? [];
 		const common: OnboardingStep[] = [
-			{
-				id: "cors",
-				titleKey: "step.cors",
-				sectionKey: "section.security",
-				route: "/workspace/config/security",
-				complete: allowedOrigins.some((origin) => origin.trim().length > 0) && allowedOrigins.every((origin) => origin.trim() !== "*"),
-			},
 			{
 				id: "dashboard-auth",
 				titleKey: "step.dashboardAuth",
