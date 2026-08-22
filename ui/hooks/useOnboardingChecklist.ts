@@ -14,14 +14,14 @@ export const REMIND_LATER_COOKIE = "bifrost_onboarding_remind_at";
 // card can read the same hidden/snoozed state the floating widget uses.
 export const HIDDEN_UNTIL_NAV_COOKIE = "bifrost_onboarding_hidden_until_nav";
 
-export type OnboardingSection = "Security" | "Provider Setup" | "Everything Else";
-
 export interface OnboardingStep {
 	id: string;
-	title: string;
+	// i18n key into the "onboarding" namespace (e.g. "step.cors").
+	titleKey: string;
+	// i18n key into the "onboarding" namespace (e.g. "section.security").
+	sectionKey: string;
 	route: string;
 	complete: boolean;
-	section: OnboardingSection;
 }
 
 export const parseSkippedIds = (raw: unknown) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : []);
@@ -70,30 +70,30 @@ export function useOnboardingChecklist({ skip = false }: { skip?: boolean } = {}
 		const common: OnboardingStep[] = [
 			{
 				id: "cors",
-				title: "Restrict CORS origins",
+				titleKey: "step.cors",
+				sectionKey: "section.security",
 				route: "/workspace/config/security",
-				section: "Security",
 				complete: allowedOrigins.some((origin) => origin.trim().length > 0) && allowedOrigins.every((origin) => origin.trim() !== "*"),
 			},
 			{
 				id: "dashboard-auth",
-				title: "Set up dashboard auth",
+				titleKey: "step.dashboardAuth",
+				sectionKey: "section.security",
 				route: "/workspace/config/security",
-				section: "Security",
 				complete: !!authConfig?.is_enabled && authValueSet(authConfig?.admin_username) && authValueSet(authConfig?.admin_password),
 			},
 			{
 				id: "enforce-inference-auth",
-				title: "Enforce auth on inference",
+				titleKey: "step.enforceAuth",
+				sectionKey: "section.security",
 				route: "/workspace/config/security",
-				section: "Security",
 				complete: !!clientConfig?.enforce_auth_on_inference,
 			},
 			{
 				id: "provider-key",
-				title: "Add a provider key",
+				titleKey: "step.providerKey",
+				sectionKey: "section.providerSetup",
 				route: "/workspace/providers",
-				section: "Provider Setup",
 				complete: (allKeys?.length ?? 0) > 0,
 			},
 		];

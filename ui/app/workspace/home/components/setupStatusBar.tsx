@@ -6,6 +6,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 export default function SetupStatusBar() {
 	const { t } = useTranslation("common");
+	const { t: tOnboarding } = useTranslation("onboarding");
 	const { steps, skippedIds, checklistReady } = useOnboardingChecklist({});
 	const navigate = useNavigate();
 
@@ -43,7 +44,7 @@ export default function SetupStatusBar() {
 										<Circle className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
 									)}
 									<div className="min-w-0">
-										<div className="truncate text-xs font-medium">{step.title}</div>
+										<div className="truncate text-xs font-medium">{tOnboarding(step.titleKey)}</div>
 										<div className="text-muted-foreground text-[10px]">{t("home.setupStatus.goToStep")}</div>
 									</div>
 								</button>

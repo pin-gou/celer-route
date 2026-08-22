@@ -17,7 +17,11 @@
 		"provider": "提供商",
 		"test": "连通测试",
 		"ready": "完成！",
-		"done": "完成！"
+		"done": "完成！",
+		"cors": "限制 CORS 来源",
+		"dashboardAuth": "设置 dashboard 登录认证",
+		"enforceAuth": "对推理请求强制鉴权",
+		"providerKey": "添加提供商 key"
 	},
 	"providerCard": {
 		"recommended": "推荐",
@@ -89,5 +93,25 @@
 		"node": "Node.js",
 		"go": "Go"
 	},
-	"alreadySetUpNotice": "你的 pg-gateway 已经配置完成。可以随时重新运行此向导。"
+	"alreadySetUpNotice": "你的 pg-gateway 已经配置完成。可以随时重新运行此向导。",
+	"section": {
+		"security": "安全",
+		"providerSetup": "提供商设置",
+		"everythingElse": "其他"
+	},
+	"widget": {
+		"title": "设置清单",
+		"expandLabel": "展开设置清单",
+		"stepsComplete": "已完成 {{done}}/{{total}} 步",
+		"minimize": "最小化",
+		"close": "暂时关闭",
+		"skip": "跳过",
+		"skipped": "已跳过",
+		"remindLater": "稍后提醒我",
+		"warning": "不完成这些步骤会使你的 pg-gateway 设置存在风险。",
+		"tomorrow": "明天",
+		"inAWeek": "一周后",
+		"pickDate": "选择日期…",
+		"acceptRisk": "我接受风险 - 对所有人隐藏"
+	}
 }

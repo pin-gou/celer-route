@@ -17,7 +17,11 @@
 		"provider": "Provider",
 		"test": "Test",
 		"ready": "Ready!",
-		"done": "Ready!"
+		"done": "Ready!",
+		"cors": "Restrict CORS origins",
+		"dashboardAuth": "Set up dashboard auth",
+		"enforceAuth": "Enforce auth on inference",
+		"providerKey": "Add a provider key"
 	},
 	"providerCard": {
 		"recommended": "Recommended",
@@ -88,5 +92,25 @@
 		"node": "Node.js",
 		"go": "Go"
 	},
-	"alreadySetUpNotice": "Your pg-gateway is already configured. You can re-run this wizard any time."
+	"alreadySetUpNotice": "Your pg-gateway is already configured. You can re-run this wizard any time.",
+	"section": {
+		"security": "Security",
+		"providerSetup": "Provider Setup",
+		"everythingElse": "Everything Else"
+	},
+	"widget": {
+		"title": "Setup checklist",
+		"expandLabel": "Expand setup checklist",
+		"stepsComplete": "{{done}} of {{total}} steps complete",
+		"minimize": "Minimize",
+		"close": "Close for now",
+		"skip": "Skip",
+		"skipped": "Skipped",
+		"remindLater": "Remind me later",
+		"warning": "Not completing these steps keeps your pg-gateway setup vulnerable.",
+		"tomorrow": "Tomorrow",
+		"inAWeek": "In a week",
+		"pickDate": "Pick a date…",
+		"acceptRisk": "I accept the risk - hide for everyone"
+	}
 }
