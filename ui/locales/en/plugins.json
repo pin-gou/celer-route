@@ -377,7 +377,7 @@
 		"saving": "Saving...",
 		"saveConfiguration": "Save Configuration",
 		"accessControlSection": "Access Control",
-		"isVkMandatoryLabel": "Require Virtual Key",
+		"isVkMandatoryLabel": "Require API Key",
 		"isVkMandatoryDescription": "Enforce that every request includes a valid virtual key",
 		"requiredHeadersLabel": "Required Headers",
 		"requiredHeadersDescription": "Headers that must be present in every request",

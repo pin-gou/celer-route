@@ -267,8 +267,8 @@ test.describe("i18n Language Switching", () => {
     },
     {
       path: "/workspace/virtual-keys",
-      zhTitle: /虚拟密钥|虚拟钥匙/i,
-      enTitle: /virtual.?keys/i,
+      zhTitle: /api.?keys/i,
+      enTitle: /api.?keys/i,
     },
     {
       path: "/workspace/docs",

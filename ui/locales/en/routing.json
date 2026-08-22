@@ -27,7 +27,7 @@
 		"priorityHint": "Lower numbers = higher priority (0 is highest)",
 		"scope": "Scope",
 		"scopePlaceholder": "Select scope...",
-		"virtualKeyRequired": "Virtual Key is required",
+		"virtualKeyRequired": "API Key is required",
 		"routingTargetRequired": "At least one routing target is required",
 		"targetWeightMustBePositive": "Each target weight must be greater than 0",
 		"targetWeightsMustSumToOne": "Target weights must sum to 1, current total: {{total}}",
@@ -186,7 +186,7 @@
 		"passthrough": "Passthrough",
 		"originalProviderModel": "original provider & model",
 		"scope": {
-			"virtual_key": "Virtual Key",
+			"virtual_key": "API Key",
 			"global": "Global"
 		}
 	},

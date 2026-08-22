@@ -15,7 +15,7 @@
 			"server_label": "服务器",
 			"latency": "耗时",
 			"cost": "成本",
-			"virtual_key": "虚拟密钥"
+			"virtual_key": "API Keys"
 		},
 		"emptyState": {
 			"title": "开始使用 MCP 工具执行",
@@ -33,7 +33,7 @@
 			"toolName": "工具名称",
 			"server": "服务器",
 			"status": "状态",
-			"virtualKey": "虚拟密钥"
+			"virtualKey": "API Keys"
 		},
 		"page": "MCP 日志"
 	},
@@ -77,7 +77,7 @@
 		"cost": "成本",
 		"compressed_before": "压缩前",
 		"compressed_after": "压缩后",
-		"virtual_key": "虚拟密钥",
+		"virtual_key": "API Keys",
 		"routing_rule": "路由规则",
 		"team": "团队",
 		"customer": "客户",
@@ -399,8 +399,8 @@
 		"app": "应用",
 		"selectedKey": "已选密钥",
 		"selectedKeys": "已选密钥",
-		"virtualKey": "虚拟密钥",
-		"virtualKeys": "虚拟密钥",
+		"virtualKey": "API Keys",
+		"virtualKeys": "API Keys",
 		"stopReason": "停止原因",
 		"routingEngine": "路由引擎",
 		"routingEngines": "路由引擎",
@@ -661,7 +661,7 @@
 		"user": "用户",
 		"filterByUser": "按用户筛选",
 		"fallbackIndex": "回退索引",
-		"virtualKey": "虚拟密钥",
+		"virtualKey": "API Keys",
 		"routingEnginesUsed": "使用的路由引擎",
 		"routingRule": "路由规则",
 		"audioFormat": "音频格式",

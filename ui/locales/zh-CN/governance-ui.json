@@ -1,11 +1,11 @@
 {
 	"title": "治理",
 	"virtualKeys": {
-		"title": "虚拟密钥",
+		"title": "API Keys",
 		"description": "管理虚拟 API 密钥和访问策略",
-		"createKey": "创建虚拟密钥",
-		"editKey": "编辑虚拟密钥",
-		"deleteKey": "删除虚拟密钥",
+		"createKey": "创建 API Keys",
+		"editKey": "编辑 API Keys",
+		"deleteKey": "删除 API Keys",
 		"keyName": "密钥名称",
 		"keyValue": "密钥值",
 		"provider": "提供商",
@@ -16,9 +16,9 @@
 		"lastUsed": "最后使用",
 		"expiresAt": "过期时间",
 		"neverExpires": "永不过期",
-		"search": "搜索虚拟密钥...",
-		"noKeys": "未找到虚拟密钥",
-		"noKeysDescription": "虚拟密钥允许您通过细粒度权限控制对 AI 模型的访问。"
+		"search": "搜索 API Keys...",
+		"noKeys": "未找到 API Keys",
+		"noKeysDescription": "API Keys 允许您通过细粒度权限控制对 AI 模型的访问。"
 	},
 	"statuses": {
 		"active": "活跃",
@@ -48,12 +48,12 @@
 		"activate": "激活"
 	},
 	"empty": {
-		"title": "无虚拟密钥",
-		"description": "尚未配置虚拟密钥。创建您的第一个虚拟密钥以开始使用。"
+		"title": "无 API Keys",
+		"description": "尚未配置 API Keys。创建您的第一个 API Keys 以开始使用。"
 	},
 	"emptyState": {
-		"title": "虚拟密钥控制访问权限、预算和速率限制",
-		"description": "创建虚拟密钥，为团队、客户或 API 客户端分配权限、支出限制和使用配额。"
+		"title": "API Keys 控制访问权限、预算和速率限制",
+		"description": "创建 API Keys，为团队、客户或 API 客户端分配权限、支出限制和使用配额。"
 	},
 	"toast": {
 		"created": "创建成功",

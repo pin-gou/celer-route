@@ -27,7 +27,7 @@
 		"priorityHint": "数值越小优先级越高（0 为最高）",
 		"scope": "作用域",
 		"scopePlaceholder": "选择作用域...",
-		"virtualKeyRequired": "虚拟密钥为必填项",
+		"virtualKeyRequired": "API Keys 为必填项",
 		"routingTargetRequired": "至少需要一个路由目标",
 		"targetWeightMustBePositive": "每个目标权重必须大于 0",
 		"targetWeightsMustSumToOne": "目标权重之和必须为 1，当前总计：{{total}}",
@@ -186,7 +186,7 @@
 		"passthrough": "直通",
 		"originalProviderModel": "原始提供商与模型",
 		"scope": {
-			"virtual_key": "虚拟密钥",
+			"virtual_key": "API Keys",
 			"global": "全局"
 		}
 	},

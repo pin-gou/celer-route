@@ -32,7 +32,7 @@
 		"authSessions": "Auth Sessions",
 		"oauthGrants": "OAuth Grants",
 		"mcpSettings": "MCP Settings",
-		"virtualKeys": "Virtual Keys",
+		"virtualKeys": "API Keys",
 		"clientSettings": "Client Settings",
 		"compatibility": "Compatibility",
 		"caching": "Caching",
@@ -272,7 +272,7 @@
 			"modelEmpty": "No models available. Configure models on the providers page.",
 			"vkLabel": "Virtual key",
 			"vkPlaceholder": "Select a virtual key",
-			"vkEmpty": "No virtual keys yet. Create one in Governance → Virtual Keys.",
+			"vkEmpty": "No API keys yet. Create one in Governance → API Keys.",
 			"codeTabs": {
 				"curl": "cURL",
 				"python": "Python",

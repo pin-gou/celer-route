@@ -77,7 +77,7 @@
 	"testModelEmpty": "No models available. Configure models on the providers page.",
 	"testVkLabel": "Virtual key",
 	"testVkPlaceholder": "Select a virtual key",
-	"testVkEmpty": "No virtual keys yet. Create one in Governance → Virtual Keys.",
+	"testVkEmpty": "No API keys yet. Create one in Governance → API Keys.",
 	"testPromptLabel": "Prompt",
 	"testPromptPlaceholder": "Say hi in one sentence.",
 	"testSuccess": "Success! Response time {{ms}}ms.",

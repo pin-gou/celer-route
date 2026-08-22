@@ -32,7 +32,7 @@
 		"authSessions": "认证会话",
 		"oauthGrants": "OAuth 授权",
 		"mcpSettings": "MCP 设置",
-		"virtualKeys": "虚拟密钥",
+		"virtualKeys": "API Keys",
 		"clientSettings": "客户端设置",
 		"compatibility": "兼容性",
 		"caching": "缓存",

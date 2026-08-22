@@ -7,7 +7,7 @@
 		"mcpUsage": "MCP 用量",
 		"teamRankings": "团队排名",
 		"userRankings": "用户排名",
-		"virtualKeyRankings": "虚拟密钥排名",
+		"virtualKeyRankings": "API Keys 排名",
 		"customerRankings": "客户排名",
 		"buRankings": "业务单元排名",
 		"appRankings": "应用排名"
@@ -102,7 +102,7 @@
 		"new": "新"
 	},
 	"dimensions": {
-		"virtualKey": "虚拟密钥",
+		"virtualKey": "API Keys",
 		"app": "应用"
 	},
 	"toast": {

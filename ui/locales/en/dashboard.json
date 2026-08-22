@@ -7,7 +7,7 @@
 		"mcpUsage": "MCP usage",
 		"teamRankings": "Team Rankings",
 		"userRankings": "User Rankings",
-		"virtualKeyRankings": "Virtual Key Rankings",
+		"virtualKeyRankings": "API Key Rankings",
 		"customerRankings": "Customer Rankings",
 		"buRankings": "BU Rankings",
 		"appRankings": "App Rankings"
@@ -102,7 +102,7 @@
 		"new": "new"
 	},
 	"dimensions": {
-		"virtualKey": "Virtual Key",
+		"virtualKey": "API Key",
 		"app": "App"
 	},
 	"toast": {

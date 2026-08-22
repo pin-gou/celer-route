@@ -15,7 +15,7 @@
 			"server_label": "Server",
 			"latency": "Latency",
 			"cost": "Cost",
-			"virtual_key": "Virtual Key"
+			"virtual_key": "API Key"
 		},
 		"emptyState": {
 			"title": "Get Started with MCP Tool Execution",
@@ -33,7 +33,7 @@
 			"toolName": "Tool Name",
 			"server": "Server",
 			"status": "Status",
-			"virtualKey": "Virtual Key"
+			"virtualKey": "API Key"
 		},
 		"page": "MCP Logs"
 	},
@@ -77,7 +77,7 @@
 		"cost": "Cost",
 		"compressed_before": "Before Comp.",
 		"compressed_after": "After Comp.",
-		"virtual_key": "Virtual Key",
+		"virtual_key": "API Key",
 		"routing_rule": "Routing Rule",
 		"team": "Team",
 		"customer": "Customer",
@@ -399,8 +399,8 @@
 		"app": "App",
 		"selectedKey": "Selected Key",
 		"selectedKeys": "Selected Keys",
-		"virtualKey": "Virtual Key",
-		"virtualKeys": "Virtual Keys",
+		"virtualKey": "API Key",
+		"virtualKeys": "API Keys",
 		"stopReason": "Stop Reason",
 		"routingEngine": "Routing Engine",
 		"routingEngines": "Routing Engines",
@@ -661,7 +661,7 @@
 		"user": "User",
 		"filterByUser": "Filter by user",
 		"fallbackIndex": "Fallback Index",
-		"virtualKey": "Virtual Key",
+		"virtualKey": "API Key",
 		"routingEnginesUsed": "Routing Engines Used",
 		"routingRule": "Routing Rule",
 		"audioFormat": "Audio Format",
