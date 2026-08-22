@@ -88,7 +88,7 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 			<button
 				type="button"
 				onClick={collapsed ? toggleCollapsed : undefined}
-				className={`bg-card group flex w-10 shrink-0 cursor-pointer flex-col items-center gap-3 rounded-r-md py-4 text-sm font-medium transition-opacity duration-300 ${collapsed ? "" : "pointer-events-none opacity-0"}`}
+				className={`bg-card group flex shrink-0 cursor-pointer flex-col items-center gap-3 overflow-hidden rounded-r-md py-4 text-sm font-medium transition-[width] duration-300 ease-in-out ${collapsed ? "w-10" : "w-0"}`}
 				title={collapsed ? showFiltersLabel : undefined}
 				aria-label={collapsed ? showFiltersLabel : undefined}
 			>

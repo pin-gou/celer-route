@@ -37,6 +37,7 @@ export interface ActiveLogEntry {
 	fallback_index?: number;
 	content_summary?: string;
 	message?: string;
+	metadata?: Record<string, unknown>;
 }
 
 export interface UseLogsTimelineSSEOptions {
@@ -76,6 +77,7 @@ function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
 		fallback_index: update.fallback_index ?? 0,
 		content_summary: update.content_summary,
 		message: update.message,
+		metadata: update.metadata,
 	};
 }
 
@@ -134,6 +136,7 @@ function mergeActiveEntry(existing: ActiveLogEntry, fresh: ActiveLogEntry): Acti
 		fallback_index: fresh.fallback_index ?? existing.fallback_index,
 		content_summary: fresh.content_summary ?? existing.content_summary,
 		message: fresh.message ?? existing.message,
+		metadata: fresh.metadata ?? existing.metadata,
 	};
 }
 

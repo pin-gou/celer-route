@@ -251,5 +251,10 @@
 		"resumeSetup": "继续设置",
 		"viewReleaseNotes": "查看发布说明",
 		"releaseAvailable": "{{name}} 现已可用。"
+	},
+	"table": {
+		"toggleColumns": "切换列",
+		"resetToDefault": "恢复默认",
+		"columnConfig": "列配置"
 	}
 }

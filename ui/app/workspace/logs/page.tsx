@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
 	getErrorMessage,
-	useGetAvailableFilterDataQuery,
 	useGetLogsHistogramQuery,
 	useGetLogsQuery,
 	useGetLogsStatsQuery,
@@ -80,6 +79,7 @@ function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 		// concatenated with the system prompt first — so a completed row would
 		// render the system prompt instead of the user's last prompt.
 		content_summary: a.message || a.content_summary || "",
+		metadata: a.metadata as Record<string, string> | undefined,
 		__processing: true,
 	} as DisplayLogEntry;
 }
@@ -763,16 +763,6 @@ export default function LogsPage() {
 		[t, stats, rtkStats],
 	);
 
-	// Only need metadata_keys here (used to render dynamic columns even when the
-	// current page has no rows). Scope the request to that one dimension.
-	const { data: filterData } = useGetAvailableFilterDataQuery({ dimensions: ["metadata_keys"] });
-
-	// Get metadata keys from filterdata API so columns always show even with no data on current page
-	const metadataKeys = useMemo(() => {
-		if (!filterData?.metadata_keys) return [];
-		return Object.keys(filterData.metadata_keys).sort();
-	}, [filterData?.metadata_keys]);
-
 	const { data: userAgentMappingsData } = useGetUserAgentMappingsQuery();
 	const customAppIcons = useMemo(() => {
 		const icons: Record<string, string> = {};
@@ -784,7 +774,7 @@ export default function LogsPage() {
 		return icons;
 	}, [userAgentMappingsData?.mappings]);
 
-	const columns = useMemo(() => createColumns(metadataKeys, customAppIcons, grouped), [customAppIcons, metadataKeys, grouped]);
+	const columns = useMemo(() => createColumns(customAppIcons, grouped), [customAppIcons, grouped]);
 
 	const columnIds = useMemo(
 		() => columns.map((col) => ("id" in col && col.id ? col.id : "accessorKey" in col ? String(col.accessorKey) : "")).filter(Boolean),

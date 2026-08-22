@@ -251,5 +251,10 @@
 		"resumeSetup": "Resume setup",
 		"viewReleaseNotes": "View release notes",
 		"releaseAvailable": "{{name}} is now available."
+	},
+	"table": {
+		"toggleColumns": "Toggle Columns",
+		"resetToDefault": "Reset to default",
+		"columnConfig": "Column configuration"
 	}
 }

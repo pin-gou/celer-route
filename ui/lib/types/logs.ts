@@ -1450,4 +1450,5 @@ export interface ActiveLogStreamEvent {
 	fallback_index?: number;
 	content_summary?: string;
 	message?: string;
+	metadata?: Record<string, unknown>;
 }

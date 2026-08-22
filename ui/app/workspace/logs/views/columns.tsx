@@ -258,11 +258,7 @@ function AttributionCell({ names, name, ids, id }: { names?: string[]; name?: st
 	);
 }
 
-export const createColumns = (
-	metadataKeys: string[] = [],
-	customAppIcons: Record<string, string> = {},
-	groupedView = false,
-): ColumnDef<LogEntry>[] => {
+export const createColumns = (customAppIcons: Record<string, string> = {}, groupedView = false): ColumnDef<LogEntry>[] => {
 	// Chevron that expands a fallback chain in the grouped view. Child rows get a
 	// corner connector instead so the hierarchy stays readable in any column order.
 	const expandColumn: ColumnDef<LogEntry>[] = groupedView
@@ -662,35 +658,5 @@ export const createColumns = (
 		},
 	];
 
-	// RTK observability collapses into the single dedicated "RTK" column
-	// (compression ratio). All other RTK-derived metadata keys — techniques,
-	// filter matched, the pre-compression snapshot payload, and the
-	// original/compressed token counts — are only meaningful in the log
-	// detail view, so they are excluded from the dynamic column list to
-	// keep the table lean.
-	const RTK_METADATA_KEYS = new Set([
-		"rtk_compression_ratio",
-		"rtk_filter_matched",
-		"rtk_snapshot_mode",
-		"rtk_techniques",
-		"rtk_original_snapshot",
-		"original_prompt_tokens",
-		"compressed_prompt_tokens",
-	]);
-
-	const metadataColumns: ColumnDef<LogEntry>[] = metadataKeys
-		.filter((key) => !RTK_METADATA_KEYS.has(key))
-		.map((key) => ({
-			id: `metadata_${key}`,
-			header: key.charAt(0).toUpperCase() + key.slice(1),
-			size: 126,
-			cell: ({ row }) => {
-				const value = row.original.metadata?.[key];
-				if (value == null) return <div className="max-w-[150px] truncate font-mono text-xs">-</div>;
-				const display = typeof value === "object" ? JSON.stringify(value) : String(value);
-				return <div className="max-w-[150px] truncate font-mono text-xs">{display}</div>;
-			},
-		}));
-
-	return [...expandColumn, ...baseColumns, ...attributionColumns, ...metadataColumns];
+	return [...expandColumn, ...baseColumns, ...attributionColumns];
 };

@@ -3124,6 +3124,7 @@ type activeLogEntry struct {
 	FallbackIndex   int                      `json:"fallback_index"`
 	ContentSummary  string                   `json:"content_summary,omitempty"`
 	Message         string                   `json:"message,omitempty"`
+	Metadata        map[string]interface{}   `json:"metadata,omitempty"`
 }
 
 // activeEntryMessage extracts a short user-facing message preview for the log
@@ -3236,6 +3237,20 @@ func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
 	}
 	if l.SelectedKeyName != "" {
 		entry.SelectedKeyName = &l.SelectedKeyName
+	}
+	// Copy metadata, stripping the same heavy RTK fields the list endpoint
+	// strips (getLogs strips rtk_original_snapshot, rtk_snapshot_mode,
+	// rtk_techniques, rtk_filter_matched) — these are only meaningful in the
+	// log detail view and bloat every SSE event row.
+	if md := l.MetadataParsed; len(md) > 0 {
+		entry.Metadata = make(map[string]interface{}, len(md))
+		for k, v := range md {
+			if k == "rtk_original_snapshot" || k == "rtk_snapshot_mode" ||
+				k == "rtk_techniques" || k == "rtk_filter_matched" {
+				continue
+			}
+			entry.Metadata[k] = v
+		}
 	}
 	return entry
 }
