@@ -334,7 +334,10 @@ export default function DashboardPage() {
 			const isAbsolutePeriod = period === "today" || period === "yesterday";
 			const endTs = isAbsolutePeriod ? Math.floor(to.getTime() / 1000) : null;
 			setUrlState({
-				period,
+				// Absolute calendar days (today/yesterday) are fixed ranges, not relative
+				// durations — send them as explicit start/end so the backend resolves the
+				// exact day in the selected timezone. Only relative periods use `period`.
+				period: isAbsolutePeriod ? "" : period,
 				start_time: Math.floor(from.getTime() / 1000),
 				end_time: endTs,
 			});

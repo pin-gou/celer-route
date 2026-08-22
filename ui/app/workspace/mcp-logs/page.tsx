@@ -276,7 +276,10 @@ export default function MCPLogsPage() {
 				const isAbsolutePeriod = p === "today" || p === "yesterday";
 				const endTs = isAbsolutePeriod ? Math.floor((to ?? computedTo).getTime() / 1000) : null;
 				setUrlState({
-					period: p,
+					// Absolute calendar days (today/yesterday) are fixed ranges, not relative
+					// durations — send them as explicit start/end so the backend resolves the
+					// exact day in the selected timezone. Only relative periods use `period`.
+					period: isAbsolutePeriod ? "" : p,
 					start_time: startTs,
 					end_time: endTs,
 					offset: 0,
