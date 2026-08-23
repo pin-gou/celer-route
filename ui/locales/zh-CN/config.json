@@ -10,7 +10,7 @@
 		"caching": "缓存",
 		"security": "安全设置",
 		"mcpGateway": "MCP 网关",
-		"observability": "可观测性",
+		"observability": "日志与监控",
 		"largePayload": "大载荷"
 	},
 	"providers": {
@@ -417,12 +417,12 @@
 		"noConfig": "无 MCP 网关配置"
 	},
 	"observability": {
-		"title": "可观测性",
-		"description": "配置可观测性设置",
+		"title": "日志与监控",
+		"description": "配置日志与监控设置",
 		"tracing": "链路追踪",
 		"metrics": "指标",
 		"exporters": "导出器",
-		"noConfig": "无可观测性配置",
+		"noConfig": "无日志与监控配置",
 		"fields": {
 			"prometheusLabels": "Prometheus 标签"
 		},
@@ -654,7 +654,7 @@
 		"pricingUpdated": "定价配置更新成功。",
 		"pricingSynced": "定价同步成功。",
 		"compatibilityUpdated": "兼容性设置更新成功。",
-		"observabilityUpdated": "可观测性设置更新成功。",
+		"observabilityUpdated": "日志与监控设置更新成功。",
 		"proxyUpdated": "代理配置更新成功。",
 		"modelSettingsUpdated": "模型设置更新成功。"
 	}

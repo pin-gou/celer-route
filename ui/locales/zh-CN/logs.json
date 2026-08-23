@@ -598,7 +598,7 @@
 	},
 	"detailSheet": {
 		"loggingSettings": "日志记录设置",
-		"observabilitySettings": "可观测性设置"
+		"observabilitySettings": "日志与监控设置"
 	},
 	"detailPage": {
 		"title": "日志详情",
@@ -935,6 +935,6 @@
 		"unknown": "未知"
 	},
 	"connectors": {
-		"observability": "可观测性设置"
+		"observability": "日志与监控设置"
 	}
 }

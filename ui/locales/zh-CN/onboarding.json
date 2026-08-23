@@ -40,7 +40,7 @@
 		"rtkDesc": "基于规则的 tool output 压缩，显著降低 token 与成本",
 		"governance": "治理",
 		"governanceDesc": "虚拟 key、预算、限流、RBAC",
-		"observability": "可观测性",
+		"observability": "日志与监控",
 		"observabilityDesc": "日志、成本追踪、分布式链路追踪"
 	},
 	"adminDesc": "为 dashboard 设置管理员账号，保护后台安全。如果仅本地个人使用，可以跳过此步。",

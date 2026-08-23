@@ -5,7 +5,7 @@
 	},
 	"nav": {
 		"home": "首页",
-		"observability": "可观测性",
+		"observability": "日志与监控",
 		"models": "模型",
 		"mcpGateway": "MCP 网关",
 		"plugins": "插件",

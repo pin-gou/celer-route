@@ -532,57 +532,6 @@ export default function AppSidebar() {
 				hasAccess: true,
 			},
 			{
-				title: t("nav.observability"),
-				url: "/workspace/logs",
-				icon: Telescope,
-				description: "Request logs & monitoring",
-				hasAccess: hasLogsAccess,
-				subItems: [
-					{
-						title: t("nav.dashboard"),
-						url: "/workspace/dashboard",
-						icon: ChartColumnBig,
-						description: "Dashboard",
-						hasAccess: hasDashboardAccess,
-					},
-					{
-						title: t("nav.llmLogs"),
-						url: "/workspace/logs",
-						icon: Logs,
-						description: "LLM request logs & monitoring",
-						hasAccess: hasLogsAccess,
-					},
-					{
-						title: t("nav.timeline"),
-						url: "/workspace/logs/timeline",
-						icon: History,
-						description: "Request timeline & Gantt chart",
-						hasAccess: hasLogsAccess,
-					},
-					{
-						title: t("nav.mcpLogs"),
-						url: "/workspace/mcp-logs",
-						icon: MCPIcon,
-						description: "MCP tool execution logs",
-						hasAccess: false, // hidden
-					},
-					{
-						title: t("nav.connectors"),
-						url: "/workspace/observability",
-						icon: ChevronsLeftRightEllipsis,
-						description: "Log connectors",
-						hasAccess: false, // hidden
-					},
-					{
-						title: t("nav.logsSettings"),
-						url: "/workspace/config/logging",
-						icon: Settings,
-						description: "Logs configuration",
-						hasAccess: hasSettingsAccess,
-					},
-				],
-			},
-			{
 				title: t("nav.models"),
 				url: "/workspace/providers",
 				icon: BoxIcon,
@@ -632,6 +581,57 @@ export default function AppSidebar() {
 						icon: GitCompareArrows,
 						description: "Complexity tier routing",
 						hasAccess: hasRoutingRulesAccess,
+					},
+				],
+			},
+			{
+				title: t("nav.observability"),
+				url: "/workspace/logs",
+				icon: Telescope,
+				description: "Request logs & monitoring",
+				hasAccess: hasLogsAccess,
+				subItems: [
+					{
+						title: t("nav.dashboard"),
+						url: "/workspace/dashboard",
+						icon: ChartColumnBig,
+						description: "Dashboard",
+						hasAccess: hasDashboardAccess,
+					},
+					{
+						title: t("nav.llmLogs"),
+						url: "/workspace/logs",
+						icon: Logs,
+						description: "LLM request logs & monitoring",
+						hasAccess: hasLogsAccess,
+					},
+					{
+						title: t("nav.timeline"),
+						url: "/workspace/logs/timeline",
+						icon: History,
+						description: "Request timeline & Gantt chart",
+						hasAccess: hasLogsAccess,
+					},
+					{
+						title: t("nav.mcpLogs"),
+						url: "/workspace/mcp-logs",
+						icon: MCPIcon,
+						description: "MCP tool execution logs",
+						hasAccess: false, // hidden
+					},
+					{
+						title: t("nav.connectors"),
+						url: "/workspace/observability",
+						icon: ChevronsLeftRightEllipsis,
+						description: "Log connectors",
+						hasAccess: false, // hidden
+					},
+					{
+						title: t("nav.logsSettings"),
+						url: "/workspace/config/logging",
+						icon: Settings,
+						description: "Logs configuration",
+						hasAccess: hasSettingsAccess,
 					},
 				],
 			},
