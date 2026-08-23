@@ -288,6 +288,65 @@ func TestRtkPutConfigUpdateExisting(t *testing.T) {
 	}
 }
 
+// TestRtkPutConfigPersistsEnabled asserts that PUT /api/context/rtk/config
+// round-trips Config.Enabled through to the persisted row. This is the
+// regression guard for the production incident where a null config_json
+// deserialised to Config{Enabled: false} and silently disabled RTK: the
+// handler must keep enabled=true in storage so the Init() zero-detect
+// guard never has to recover from a save that drops the field.
+func TestRtkPutConfigPersistsEnabled(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callPUT(t, r, "/api/context/rtk/config", PutRtkConfigRequest{
+		Enabled: ptrBool(true),
+		Config: rtk.Config{
+			Enabled:           true,
+			Intensity:         "standard",
+			MaxLinesPerResult: 120,
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	row, err := cs.GetPlugin(ctxTest(), rtk.PluginName)
+	if err != nil {
+		t.Fatalf("GetPlugin: %v", err)
+	}
+	cfgMap, ok := row.Config.(map[string]any)
+	if !ok {
+		t.Fatalf("row.Config is %T, want map[string]any", row.Config)
+	}
+	if enabled, ok := cfgMap["enabled"]; !ok || enabled != true {
+		t.Errorf("cfgMap[enabled] = %v (present=%v), want true", enabled, ok)
+	}
+
+	// A subsequent PUT that explicitly disables the plugin must round-trip
+	// the false value, not be silently turned into a zero-default. The
+	// zero-detect safeguard in plugins/rtk/config.go only kicks in for
+	// the all-zero storage shape — an explicit operator intent of
+	// enabled=false is preserved end-to-end.
+	status, body = callPUT(t, r, "/api/context/rtk/config", PutRtkConfigRequest{
+		Enabled: ptrBool(false),
+		Config: rtk.Config{
+			Enabled:   false,
+			Intensity: "standard",
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	row, err = cs.GetPlugin(ctxTest(), rtk.PluginName)
+	if err != nil {
+		t.Fatalf("GetPlugin: %v", err)
+	}
+	cfgMap = row.Config.(map[string]any)
+	if enabled, ok := cfgMap["enabled"]; !ok || enabled != false {
+		t.Errorf("after disabling, cfgMap[enabled] = %v (present=%v), want false", enabled, ok)
+	}
+}
+
 func TestRtkPutConfigInvalidIntensity(t *testing.T) {
 	cs := newMemoryConfigStore()
 	resolver := &stubRtkResolver{found: true}

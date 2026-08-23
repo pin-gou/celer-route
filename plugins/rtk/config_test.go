@@ -549,3 +549,116 @@ func TestConfigValidateSnapshot(t *testing.T) {
 		}
 	})
 }
+
+// TestLooksLikeAllZero exercises the heuristic that drives the all-zero
+// safeguard in applyConfigDefaults. The predicate is intentionally tight:
+// it must fire on a fully-default Config (the post-mortem signature) and
+// must NOT fire the moment the operator expresses any intent via a
+// tunable — otherwise it would override an explicit "enabled: false" that
+// happens to ship with all-default tuning values.
+func TestLooksLikeAllZero(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+		want bool
+	}{
+		{name: "literal zero value", cfg: Config{}, want: true},
+		{name: "all booleans false, all ints zero, all strings empty", cfg: Config{
+			Enabled: false, ApplyToToolResults: false, ApplyToCodeBlocks: false,
+			PreserveCacheControl: false, EnableGrouping: false,
+			ApplyToAssistantMessages: false, CustomFiltersEnabled: false,
+			TrustProjectFilters: false, EnableRenderers: false,
+		}, want: true},
+		{name: "operator set Intensity", cfg: Config{Intensity: "aggressive"}, want: false},
+		{name: "operator set MaxLinesPerResult", cfg: Config{MaxLinesPerResult: 50}, want: false},
+		{name: "operator set MinTokensToCompress", cfg: Config{MinTokensToCompress: 1024}, want: false},
+		{name: "operator enabled ApplyToToolResults", cfg: Config{ApplyToToolResults: true}, want: false},
+		{name: "operator enabled ApplyToCodeBlocks", cfg: Config{ApplyToCodeBlocks: true}, want: false},
+		{name: "operator enabled ApplyToAssistantMessages", cfg: Config{ApplyToAssistantMessages: true}, want: false},
+		{name: "operator enabled PreserveCacheControl", cfg: Config{PreserveCacheControl: true}, want: false},
+		{name: "operator enabled EnableGrouping", cfg: Config{EnableGrouping: true}, want: false},
+		{name: "operator enabled EnableRenderers", cfg: Config{EnableRenderers: true}, want: false},
+		{name: "operator enabled CustomFiltersEnabled", cfg: Config{CustomFiltersEnabled: true}, want: false},
+		{name: "operator enabled TrustProjectFilters", cfg: Config{TrustProjectFilters: true}, want: false},
+		{name: "operator set RawOutputRetention", cfg: Config{RawOutputRetention: "always"}, want: false},
+		{name: "operator set RawOutputMaxBytes", cfg: Config{RawOutputMaxBytes: 4096}, want: false},
+		{name: "operator set SnapshotMode", cfg: Config{SnapshotMode: "split"}, want: false},
+		{name: "operator set SnapshotMaxBytes", cfg: Config{SnapshotMaxBytes: 1024}, want: false},
+		{name: "operator set GroupingThreshold", cfg: Config{GroupingThreshold: 5}, want: false},
+		{name: "operator set DedupThreshold", cfg: Config{DedupThreshold: 5}, want: false},
+		{name: "operator set MaxCharsPerResult", cfg: Config{MaxCharsPerResult: 5000}, want: false},
+		{name: "operator set Pipeline", cfg: Config{Pipeline: []PipelineStep{{ID: "rtk"}}}, want: false}, // Pipeline is handled separately by applyConfigDefaults
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := looksLikeAllZero(&tc.cfg); got != tc.want {
+				t.Errorf("looksLikeAllZero(%+v) = %v, want %v", tc.cfg, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestApplyConfigDefaults_ZeroConfigEnables verifies the post-mortem fix:
+// a config_json that round-trips to all-zero values (e.g. null stored in
+// the config_plugins row) must default to Enabled=true, not stay false.
+// Otherwise PreLLMHook short-circuits and the plugin becomes a silent
+// no-op on every request — which is exactly the production incident that
+// motivated this guard.
+func TestApplyConfigDefaults_ZeroConfigEnables(t *testing.T) {
+	t.Run("literal zero config flips Enabled to true", func(t *testing.T) {
+		cfg := Config{}
+		applyConfigDefaults(&cfg)
+		if !cfg.Enabled {
+			t.Fatalf("applyConfigDefaults on zero-value Config left Enabled=false; want true (zero-detect safeguard)")
+		}
+	})
+	t.Run("explicit Enabled=false on zero config still flips to true", func(t *testing.T) {
+		// This mirrors the production incident: storage serialised to an
+		// all-zero map, the operator never had a chance to express intent,
+		// but the JSON round-trip produced Enabled=false. We must promote
+		// it back to true to recover the plugin.
+		cfg := Config{Enabled: false}
+		applyConfigDefaults(&cfg)
+		if !cfg.Enabled {
+			t.Fatalf("applyConfigDefaults on zero-value Config{Enabled:false} left Enabled=false; want true")
+		}
+	})
+	t.Run("explicit Enabled=false with any operator-tunable is preserved", func(t *testing.T) {
+		// If the operator set ANY other field, they touched the config
+		// deliberately. Honoring their explicit Enabled=false is the
+		// principle of least surprise — the guard exists to recover
+		// never-saved configs, not to second-guess operators.
+		cfg := Config{Enabled: false, Intensity: "aggressive"}
+		applyConfigDefaults(&cfg)
+		if cfg.Enabled {
+			t.Fatalf("applyConfigDefaults overrode explicit Enabled=false when Intensity is set; want false (operator intent)")
+		}
+		if cfg.Intensity != "aggressive" {
+			t.Fatalf("applyConfigDefaults clobbered explicit Intensity=%q", cfg.Intensity)
+		}
+	})
+	t.Run("explicit Enabled=true on zero config stays true", func(t *testing.T) {
+		cfg := Config{Enabled: true}
+		applyConfigDefaults(&cfg)
+		if !cfg.Enabled {
+			t.Fatalf("applyConfigDefaults flipped an explicit Enabled=true to false")
+		}
+	})
+	t.Run("config_json simulation via JSON round-trip enables", func(t *testing.T) {
+		// End-to-end simulation of the bug: storage held null, the handler
+		// does MarshalPluginConfig(nil) which gives a zero Config, then
+		// Init calls applyConfigDefaults. The result must be Enabled=true.
+		cfg := Config{}
+		applyConfigDefaults(&cfg)
+		if !cfg.Enabled {
+			t.Fatalf("post-round-trip config left Enabled=false")
+		}
+		// And applyConfigDefaults should still fill the other sensible defaults.
+		if cfg.Intensity != "standard" {
+			t.Errorf("Intensity = %q, want standard", cfg.Intensity)
+		}
+		if cfg.MaxLinesPerResult != 120 {
+			t.Errorf("MaxLinesPerResult = %d, want 120", cfg.MaxLinesPerResult)
+		}
+	})
+}

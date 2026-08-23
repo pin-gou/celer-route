@@ -165,8 +165,51 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// looksLikeAllZero reports whether c has every field at its zero value.
+// We use it as a heuristic to distinguish "the operator never saved a config
+// (storage held null/{} and round-tripped to all-zeros)" from "the operator
+// explicitly tuned every value and landed on zero by design". The former is
+// the only case where zero-valued Enabled is a footgun: the plain-bool zero
+// value cannot distinguish "explicit false" from "unset", so a null/empty
+// stored config deserialises to Enabled=false and silently turns RTK into a
+// no-op. Promoting it to Enabled=true here closes that hole without changing
+// the semantics of explicit configurations (an operator who sets Intensity,
+// MaxLinesPerResult, ApplyToToolResults or any other tunable will have at
+// least one non-zero field and therefore opt out of this guard).
+func looksLikeAllZero(c *Config) bool {
+	if c == nil {
+		return true
+	}
+	return c.Intensity == "" &&
+		c.MaxLinesPerResult == 0 &&
+		c.MaxCharsPerResult == 0 &&
+		c.DedupThreshold == 0 &&
+		c.GroupingThreshold == 0 &&
+		!c.ApplyToToolResults &&
+		!c.ApplyToCodeBlocks &&
+		!c.ApplyToAssistantMessages &&
+		!c.PreserveCacheControl &&
+		!c.EnableGrouping &&
+		!c.CustomFiltersEnabled &&
+		!c.TrustProjectFilters &&
+		!c.EnableRenderers &&
+		c.RawOutputRetention == "" &&
+		c.RawOutputMaxBytes == 0 &&
+		c.SnapshotMode == "" &&
+		c.SnapshotMaxBytes == 0 &&
+		c.MinTokensToCompress == 0 &&
+		len(c.Pipeline) == 0
+}
+
 // applyConfigDefaults fills in zero-value fields with sensible defaults.
 func applyConfigDefaults(c *Config) {
+	// Zero-detect safeguard: when storage produced an all-zero Config (the
+	// usual signature of a never-saved / null config_json), the absence of
+	// any explicit operator intent means we should *enable* RTK rather than
+	// leave it disabled. See looksLikeAllZero for the rationale.
+	if looksLikeAllZero(c) && !c.Enabled {
+		c.Enabled = true
+	}
 	if c.Intensity == "" {
 		c.Intensity = "standard"
 	}

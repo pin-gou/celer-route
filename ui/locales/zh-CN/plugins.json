@@ -117,6 +117,7 @@
 		"subtitle": "自动压缩工具输出与代码块，减少 token 用量与延迟",
 		"enableTitle": "启用 RTK 压缩",
 		"enableDescription": "压缩工具输出以减少 Token 用量和延迟",
+		"enableSubDescription": "关闭后所有请求的压缩管线都会被跳过，便于 A/B 对比压缩前后的成本与质量差异。",
 		"enabledToast": "RTK 压缩已启用",
 		"disabledToast": "RTK 压缩已禁用",
 		"updateFailedToast": "更新 RTK 状态失败",

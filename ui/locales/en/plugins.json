@@ -117,6 +117,7 @@
 		"subtitle": "Automatically compress tool outputs and code blocks to reduce token usage and latency",
 		"enableTitle": "Enable RTK Compression",
 		"enableDescription": "Compress tool outputs to reduce token usage and latency",
+		"enableSubDescription": "When off, every request passes through uncompressed. Useful for A/B-comparing tool-output cost vs. quality.",
 		"enabledToast": "RTK compression enabled",
 		"disabledToast": "RTK compression disabled",
 		"updateFailedToast": "Failed to update RTK state",
