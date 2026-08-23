@@ -355,4 +355,11 @@ describe("LogsTimeline — Gantt component", () => {
 		const allText = container.textContent || "";
 		expect(allText).toMatch(/gpt-4/i);
 	});
+
+	it("should render provider icon on narrow bars", () => {
+		const { container } = render(<LogsTimeline {...defaultProps} logs={[mockLogs[0]]} />);
+		const bar = container.querySelector("[data-log-id='log-1']");
+		const svg = bar?.querySelector("svg");
+		expect(svg).toBeTruthy();
+	});
 });

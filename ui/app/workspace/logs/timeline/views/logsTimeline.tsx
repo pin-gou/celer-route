@@ -598,11 +598,9 @@ export function LogsTimeline({
 							onMouseLeave={handleMouseLeave}
 							onClick={() => handleBarClick(bar.log)}
 						>
+							<RenderProviderIcon provider={bar.log.provider as ProviderIconType} size="xs" className="mr-0.5 h-3 w-3 shrink-0" />
 							{bar.widthPct > 3 && (
-								<>
-									<RenderProviderIcon provider={bar.log.provider as ProviderIconType} size="xs" className="mr-0.5 h-3 w-3" />
-									<span className="truncate font-mono text-[11px] whitespace-nowrap text-white/90">{truncateModel(bar.log.model)}</span>
-								</>
+								<span className="truncate font-mono text-[11px] whitespace-nowrap text-white/90">{truncateModel(bar.log.model)}</span>
 							)}
 							<span data-testid={`timeline-bar-${bar.log.id}`} className="sr-only">
 								bar-{bar.log.id}
