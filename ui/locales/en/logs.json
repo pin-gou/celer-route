@@ -798,7 +798,8 @@
 		"rtkCompressedLabel": "Compressed",
 		"rtkMessageLabel": "Message #{{index}}",
 		"rtkUnchangedLines": "[{{count}} unchanged lines]",
-		"rtkNoSnapshots": "No snapshots available"
+		"rtkNoSnapshots": "No snapshots available",
+		"rtkCompressedOnlyHint": "Snapshot persistence is off, so originals can't be compared. Below are the compressed tool outputs after RTK applied. Enable log detail snapshot mode to see before/after diffs."
 	},
 	"sessionSheet": {
 		"logs": "Logs",

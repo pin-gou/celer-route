@@ -798,7 +798,8 @@
 		"rtkCompressedLabel": "压缩后",
 		"rtkMessageLabel": "消息 #{{index}}",
 		"rtkUnchangedLines": "[{{count}} 行未变]",
-		"rtkNoSnapshots": "暂无可用快照"
+		"rtkNoSnapshots": "暂无可用快照",
+		"rtkCompressedOnlyHint": "快照未启用，无法对比原文。以下为 RTK 压缩后的工具输出内容。如需查看前后对比，请启用日志详情快照模式。"
 	},
 	"sessionSheet": {
 		"logs": "日志数",

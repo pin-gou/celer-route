@@ -83,6 +83,21 @@ export default function RTKCompressionDiffView({ metadata, compressedItems }: Pr
 						</Link>
 					</AlertDescription>
 				</Alert>
+				{compressedItems != null && compressedItems.length > 0 && (
+					<div className="space-y-3">
+						<p className="text-muted-foreground text-xs">{t("detailView.rtkCompressedOnlyHint")}</p>
+						<div className="flex flex-col gap-4">
+							{compressedItems.map((item) => (
+								<div key={`comp-only-${item.index}`} className="rounded-sm border" data-testid={`rtk-compressed-only-${item.index}`}>
+									<div className="bg-muted/20 rounded-t-sm border-b px-4 py-2 text-xs font-medium">
+										{t("detailView.rtkMessageLabel", { index: item.index >= 0 ? item.index : 0 })}
+									</div>
+									<DiffPane label={t("detailView.rtkCompressedLabel")} content={item.content} side="compressed" />
+								</div>
+							))}
+						</div>
+					</div>
+				)}
 			</div>
 		);
 	}
