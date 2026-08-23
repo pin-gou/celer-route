@@ -257,6 +257,7 @@
 		"searchNav": "搜索侧边栏导航",
 		"searchPlaceholder": "搜索...",
 		"logout": "退出登录",
+		"documentation": "文档",
 		"githubRepo": "GitHub 仓库",
 		"restartRequired": "需要重启",
 		"restartReason": "配置变更需要重启服务器才能生效。",

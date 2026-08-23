@@ -8,7 +8,7 @@ import { getErrorMessage, useLoginMutation } from "@/lib/store/apis";
 import { DEFAULT_POST_LOGIN_PATH, getLoginGotoFromSearch } from "@/lib/utils/loginGoto";
 import { GithubLogoIcon } from "@phosphor-icons/react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Globe } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -125,8 +125,17 @@ export default function LoginView() {
 						</Button>
 					</form>
 
-					{/* Footer icons — mirrors the main sidebar footer (GitHub + theme + language) */}
+					{/* Footer icons — mirrors the main sidebar footer (home + GitHub + theme + language) */}
 					<div className="flex items-center justify-center gap-4 pt-4">
+						<a
+							href="https://pin-gou.github.io/pg-gateway/"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-muted-foreground hover:text-primary transition-colors"
+							title="Documentation"
+						>
+							<Globe className="h-5 w-5" />
+						</a>
 						<a
 							href="https://github.com/pin-gou/pg-gateway"
 							target="_blank"

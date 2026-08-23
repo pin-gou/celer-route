@@ -9,6 +9,7 @@ import {
 	FlaskConical,
 	FolderGit,
 	GitCompareArrows,
+	Globe,
 	Home as HomeIcon,
 	KeyRound,
 	Landmark,
@@ -92,6 +93,11 @@ const MCPIcon = ({ className }: { className?: string }) => (
 
 // External links
 const externalLinks = [
+	{
+		title: "sidebar.documentation",
+		url: "https://pin-gou.github.io/pg-gateway/",
+		icon: Globe,
+	},
 	{
 		title: "sidebar.githubRepo",
 		url: "https://github.com/pin-gou/pg-gateway",

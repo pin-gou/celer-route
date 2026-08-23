@@ -257,6 +257,7 @@
 		"searchNav": "Search sidebar navigation",
 		"searchPlaceholder": "Search...",
 		"logout": "Logout",
+		"documentation": "Documentation",
 		"githubRepo": "GitHub Repository",
 		"restartRequired": "Restart Required",
 		"restartReason": "Configuration changes require a server restart to take effect.",
