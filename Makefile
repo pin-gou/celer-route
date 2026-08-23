@@ -483,6 +483,7 @@ docker-image: _docker-image-setup-builder ## Build Docker image. LOCAL=1: use go
 			-f $(DOCKERFILE) --load \
 			--build-arg VERSION=$(VERSION_ARG) \
 			--build-arg USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG) \
+			$(if $(NO_CACHE_UI),--no-cache-filter=ui-builder) \
 			-t $(DOCKER_IMAGE) -t $(DOCKER_IMAGE):$(VERSION_TAG) -t $(DOCKER_IMAGE):latest . ; \
 	else \
 		$(ECHO) "$(CYAN)Multi-platform build: $(PLATFORMS) -> local manifest list$(NC)"; \
@@ -493,7 +494,8 @@ docker-image: _docker-image-setup-builder ## Build Docker image. LOCAL=1: use go
 			USE_LOCAL_MODULES_FLAG='$(USE_LOCAL_MODULES_FLAG)' \
 			DOCKERFILE='$(DOCKERFILE)' \
 			DOCKER_IMAGE='$(DOCKER_IMAGE)' \
-			DOCKER_BUILDER='$(DOCKER_BUILDER)' ; \
+			DOCKER_BUILDER='$(DOCKER_BUILDER)' \
+			NO_CACHE_UI='$(NO_CACHE_UI)' ; \
 	fi
 	@$(ECHO) "$(GREEN)Docker image built: $(DOCKER_IMAGE):$(VERSION_TAG), $(DOCKER_IMAGE):latest (PLATFORMS=$(if $(PLATFORMS),$(PLATFORMS),host))$(NC)"
 
@@ -522,6 +524,7 @@ _docker-image-build: # Internal: buildx multi-platform --output type=oci (tar) -
 		-f '$(DOCKERFILE)' --platform $(PLATFORMS) \
 		--build-arg VERSION='$(VERSION_ARG)' \
 		--build-arg USE_LOCAL_MODULES='$(USE_LOCAL_MODULES_FLAG)' \
+		$(if $(NO_CACHE_UI),--no-cache-filter=ui-builder) \
 		-t '$(DOCKER_IMAGE):$(VERSION_TAG)' \
 		-t '$(DOCKER_IMAGE):latest' \
 		--output "type=oci,dest=$$TAR" . ; \
