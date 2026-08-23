@@ -15,8 +15,8 @@ import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { RTK_PLUGIN, rtkConfigSchema, type Plugin } from "@/lib/types/plugins";
 import { Link } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Activity, Beaker, ExternalLink, FlaskConical, HelpCircle, Image as ImageIcon, Info, RotateCcw } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { Activity, Beaker, ExternalLink, FlaskConical, HelpCircle, Image as ImageIcon, Info, RotateCcw, Undo2 } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -102,6 +102,19 @@ const RTK_INTENSITY_PRESETS: Record<Intensity, IntensityPreset> = {
 		min_tokens_to_compress: 1000,
 	},
 };
+
+// PRESET_FIELDS — the 7 fields that quick presets touch. Used by revertPreset
+// to reset only these fields to their last-saved values without disturbing
+// independent settings (scope, snapshot, renderers, etc.).
+const PRESET_FIELDS: (keyof IntensityPreset & keyof RTKFormValues)[] = [
+	"intensity",
+	"max_lines_per_result",
+	"max_chars_per_result",
+	"dedup_threshold",
+	"enable_grouping",
+	"grouping_threshold",
+	"min_tokens_to_compress",
+];
 
 // ---------------------------------------------------------------------------
 // MonitoringPanel — process-lifetime compression counters. Polls the RTK
@@ -337,6 +350,8 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
+			enable_renderers: pluginConfig.enable_renderers ?? true,
+			renderers: pluginConfig.renderers ?? [],
 			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
 			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
 		},
@@ -372,9 +387,19 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
+			enable_renderers: pluginConfig.enable_renderers ?? true,
+			renderers: pluginConfig.renderers ?? [],
 			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
 			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
 		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [JSON.stringify(pluginConfig)]);
+
+	// lastSavedRef tracks the most recently saved values so revertPreset can
+	// reset only the 7 preset-managed fields without touching independent ones.
+	const lastSavedRef = useRef<Partial<RTKFormValues>>({});
+	useEffect(() => {
+		lastSavedRef.current = form.formState.defaultValues as Partial<RTKFormValues>;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [JSON.stringify(pluginConfig)]);
 
@@ -388,6 +413,7 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 					config: values,
 				},
 			}).unwrap();
+			lastSavedRef.current = values;
 			toast.success(t("rtk.savedToast"));
 		} catch {
 			toast.error(t("rtk.saveFailedToast"));
@@ -414,11 +440,20 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 		toast.info(t("rtk.presetAppliedToast", { name: t(`rtk.intensity${preset.id.charAt(0).toUpperCase()}${preset.id.slice(1)}`) }));
 	};
 
+	const revertPreset = () => {
+		const saved = lastSavedRef.current;
+		if (!saved) return;
+		PRESET_FIELDS.forEach((field) => {
+			form.setValue(field, saved[field] as any, { shouldDirty: true });
+		});
+		toast.info(t("rtk.revertPresetToast"));
+	};
+
 	return (
 		<Form {...form}>
 			<form onSubmit={form.handleSubmit(onSubmit, onError)}>
 				<div className="space-y-6">
-					{/* ── Intro card: "What is RTK?" + quick presets ─────────────────────── */}
+					{/* ── Intro card: "What is RTK?" + quick presets + revert button ───── */}
 					<Card data-testid="rtk-intro-card">
 						<CardHeader className="pb-3">
 							<div className="flex items-center gap-2">
@@ -441,80 +476,31 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 										<HelpHint>{t("rtk.presetHelp")}</HelpHint>
 									</div>
 								</div>
-								<IntensityPresetButtons intensity={intensity} onPick={applyPreset} disabled={!hasUpdateAccess} />
+								<div className="flex items-end gap-2">
+									<div className="min-w-0 flex-1">
+										<IntensityPresetButtons intensity={intensity} onPick={applyPreset} disabled={!hasUpdateAccess} />
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={revertPreset}
+										disabled={!hasUpdateAccess}
+										data-testid="rtk-revert-preset-btn"
+										className="shrink-0"
+									>
+										<Undo2 className="h-4 w-4" />
+										{t("rtk.revertPreset")}
+									</Button>
+								</div>
 							</div>
 						</CardContent>
 					</Card>
 
-					{/* ── ① 作用范围 (always open) ─────────────────────────────────────── */}
-					<fieldset className="rounded-lg border p-4">
-						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.scopeSection")}</legend>
-						<div className="mt-2 space-y-3">
-							<FormField
-								control={form.control}
-								name="apply_to_tool_results"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-										<FormControl>
-											<Checkbox data-testid="rtk-field-apply-to-tool-results" checked={field.value} onCheckedChange={field.onChange} />
-										</FormControl>
-										<div className="space-y-1 leading-none">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.applyToToolResultsLabel")}</FormLabel>
-												<HelpHint>{t("rtk.applyToToolResultsWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.applyToToolResultsDescription")}</FormDescription>
-										</div>
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="apply_to_code_blocks"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-										<FormControl>
-											<Checkbox data-testid="rtk-field-apply-to-code-blocks" checked={field.value} onCheckedChange={field.onChange} />
-										</FormControl>
-										<div className="space-y-1 leading-none">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.applyToCodeBlocksLabel")}</FormLabel>
-												<HelpHint>{t("rtk.applyToCodeBlocksWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.applyToCodeBlocksDescription")}</FormDescription>
-										</div>
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="apply_to_assistant_messages"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-										<FormControl>
-											<Checkbox
-												data-testid="rtk-field-apply-to-assistant-messages"
-												checked={field.value}
-												onCheckedChange={field.onChange}
-											/>
-										</FormControl>
-										<div className="space-y-1 leading-none">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.applyToAssistantMessagesLabel")}</FormLabel>
-												<HelpHint>{t("rtk.applyToAssistantMessagesWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.applyToAssistantMessagesDescription")}</FormDescription>
-										</div>
-									</FormItem>
-								)}
-							/>
-						</div>
-					</fieldset>
-
-					{/* ── ② 压缩强度 (always open) ─────────────────────────────────────── */}
-					<fieldset className="rounded-lg border p-4">
-						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.intensitySection")}</legend>
-						<div className="mt-2 space-y-3">
+					{/* ── ① Managed by Quick Presets (7 fields) ───────────────────────── */}
+					<fieldset className="rounded-lg border p-4" data-testid="rtk-preset-managed-section">
+						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.presetManagedSection")}</legend>
+						<div className="mt-2 space-y-4">
 							<FormField
 								control={form.control}
 								name="intensity"
@@ -541,97 +527,85 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 									</FormItem>
 								)}
 							/>
-						</div>
-					</fieldset>
-
-					{/* ── ③ 单条工具结果保留多少 (always open) ────────────────────────── */}
-					<fieldset className="rounded-lg border p-4">
-						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.limitsSection")}</legend>
-						<div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-3">
-							<FormField
-								control={form.control}
-								name="max_lines_per_result"
-								render={({ field }) => (
-									<FormItem>
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.maxLinesLabel")}</FormLabel>
-											<HelpHint>{t("rtk.maxLinesWhen")}</HelpHint>
-										</div>
-										<FormControl>
-											<Input
-												data-testid="rtk-field-max-lines"
-												type="number"
-												min={0}
-												{...field}
-												onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-											/>
-										</FormControl>
-										<FormDescription>
-											{t("rtk.maxLinesDescription")}
-											{Number(maxLines) > 0 && (
-												<>
-													{" · "}
-													<span className="font-medium">{t("rtk.effectiveValue", { value: effectiveLines })}</span>
-												</>
-											)}
-										</FormDescription>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="max_chars_per_result"
-								render={({ field }) => (
-									<FormItem>
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.maxCharsLabel")}</FormLabel>
-											<HelpHint>{t("rtk.maxCharsWhen")}</HelpHint>
-										</div>
-										<FormControl>
-											<Input
-												data-testid="rtk-field-max-chars"
-												type="number"
-												min={0}
-												{...field}
-												onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-											/>
-										</FormControl>
-										<FormDescription>{t("rtk.maxCharsDescription")}</FormDescription>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="dedup_threshold"
-								render={({ field }) => (
-									<FormItem>
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.dedupThresholdLabel")}</FormLabel>
-											<HelpHint>{t("rtk.dedupThresholdWhen")}</HelpHint>
-										</div>
-										<FormControl>
-											<Input
-												data-testid="rtk-field-dedup-threshold"
-												type="number"
-												min={0}
-												{...field}
-												onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-											/>
-										</FormControl>
-										<FormDescription>{t("rtk.dedupThresholdDescription")}</FormDescription>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						</div>
-					</fieldset>
-
-					{/* ── ④ 智能分组 (always open, gating) ─────────────────────────────── */}
-					<fieldset className="rounded-lg border p-4">
-						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.groupingSection")}</legend>
-						<div className="mt-2 space-y-3">
+							<div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+								<FormField
+									control={form.control}
+									name="max_lines_per_result"
+									render={({ field }) => (
+										<FormItem>
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.maxLinesLabel")}</FormLabel>
+												<HelpHint>{t("rtk.maxLinesWhen")}</HelpHint>
+											</div>
+											<FormControl>
+												<Input
+													data-testid="rtk-field-max-lines"
+													type="number"
+													min={0}
+													{...field}
+													onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+												/>
+											</FormControl>
+											<FormDescription>
+												{t("rtk.maxLinesDescription")}
+												{Number(maxLines) > 0 && (
+													<>
+														{" · "}
+														<span className="font-medium">{t("rtk.effectiveValue", { value: effectiveLines })}</span>
+													</>
+												)}
+											</FormDescription>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+								<FormField
+									control={form.control}
+									name="max_chars_per_result"
+									render={({ field }) => (
+										<FormItem>
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.maxCharsLabel")}</FormLabel>
+												<HelpHint>{t("rtk.maxCharsWhen")}</HelpHint>
+											</div>
+											<FormControl>
+												<Input
+													data-testid="rtk-field-max-chars"
+													type="number"
+													min={0}
+													{...field}
+													onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+												/>
+											</FormControl>
+											<FormDescription>{t("rtk.maxCharsDescription")}</FormDescription>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+								<FormField
+									control={form.control}
+									name="dedup_threshold"
+									render={({ field }) => (
+										<FormItem>
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.dedupThresholdLabel")}</FormLabel>
+												<HelpHint>{t("rtk.dedupThresholdWhen")}</HelpHint>
+											</div>
+											<FormControl>
+												<Input
+													data-testid="rtk-field-dedup-threshold"
+													type="number"
+													min={0}
+													{...field}
+													onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+												/>
+											</FormControl>
+											<FormDescription>{t("rtk.dedupThresholdDescription")}</FormDescription>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
 							<FormField
 								control={form.control}
 								name="enable_grouping"
@@ -675,59 +649,25 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 									)}
 								/>
 							)}
-						</div>
-					</fieldset>
-
-					{/* ── ⑤ 日志详情对比 (always open) ───────────────────────────────── */}
-					<fieldset className="rounded-lg border p-4">
-						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.snapshotSection")}</legend>
-						<div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
 							<FormField
 								control={form.control}
-								name="snapshot_mode"
+								name="min_tokens_to_compress"
 								render={({ field }) => (
 									<FormItem>
 										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.snapshotModeLabel")}</FormLabel>
-											<HelpHint>{t("rtk.snapshotModeWhen")}</HelpHint>
-										</div>
-										<Select value={field.value} onValueChange={field.onChange}>
-											<FormControl>
-												<SelectTrigger data-testid="rtk-field-snapshot-mode">
-													<SelectValue />
-												</SelectTrigger>
-											</FormControl>
-											<SelectContent>
-												<SelectItem value="off">{t("rtk.snapshotModeOff")}</SelectItem>
-												<SelectItem value="split">{t("rtk.snapshotModeSplit")}</SelectItem>
-												<SelectItem value="merged">{t("rtk.snapshotModeMerged")}</SelectItem>
-											</SelectContent>
-										</Select>
-										<FormDescription>{t("rtk.snapshotModeDescription")}</FormDescription>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="snapshot_max_bytes"
-								render={({ field }) => (
-									<FormItem>
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.snapshotMaxBytesLabel")}</FormLabel>
-											<HelpHint>{t("rtk.snapshotMaxBytesWhen")}</HelpHint>
+											<FormLabel>{t("rtk.minTokensToCompressLabel")}</FormLabel>
+											<HelpHint>{t("rtk.minTokensToCompressWhen")}</HelpHint>
 										</div>
 										<FormControl>
 											<Input
-												data-testid="rtk-field-snapshot-max-bytes"
+												data-testid="rtk-field-min-tokens"
 												type="number"
 												min={0}
-												step={1024}
 												{...field}
 												onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
 											/>
 										</FormControl>
-										<FormDescription>{t("rtk.snapshotMaxBytesHelp")}</FormDescription>
+										<FormDescription>{t("rtk.minTokensToCompressDescription")}</FormDescription>
 										<FormMessage />
 									</FormItem>
 								)}
@@ -735,271 +675,365 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 						</div>
 					</fieldset>
 
-					{/* ── ⑥ 高级折叠区 (collapsible) ─────────────────────────────────── */}
-					<Accordion type="multiple" className="rounded-lg border">
-						{/* Semantic renderers */}
-						<AccordionItem value="renderers" className="px-4">
-							<AccordionTrigger data-testid="rtk-section-renderers-trigger">{t("rtk.renderersSection")}</AccordionTrigger>
-							<AccordionContent className="space-y-3">
-								<FormField
-									control={form.control}
-									name="enable_renderers"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-											<FormControl>
-												<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
-											</FormControl>
-											<div className="space-y-1 leading-none">
-												<div className="flex items-center gap-1.5">
-													<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
-													<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
-												</div>
-												<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
-											</div>
-										</FormItem>
-									)}
-								/>
-								{form.watch("enable_renderers") && (
+					{/* ── ② Independent Advanced Settings ────────────────────────────── */}
+					<fieldset className="rounded-lg border p-4" data-testid="rtk-independent-section">
+						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.independentAdvancedSection")}</legend>
+						<div className="mt-2 space-y-4">
+							{/* Scope: 3 checkboxes */}
+							<fieldset className="rounded-lg border p-4">
+								<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.scopeSection")}</legend>
+								<div className="mt-2 space-y-3">
 									<FormField
 										control={form.control}
-										name="renderers"
-										render={({ field }) => {
-											const selected = Array.isArray(field.value) ? field.value : [];
-											const options = [
-												"git-diff",
-												"test-pytest",
-												"test-jest",
-												"test-vitest",
-												"test-go",
-												"build-eslint",
-												"terraform-plan",
-												"tofu-plan",
-												"aws",
-												"json-output",
-											];
-											return (
-												<FormItem>
-													<div className="flex items-center gap-1.5">
-														<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
-														<HelpHint>{t("rtk.renderersWhen")}</HelpHint>
-													</div>
-													<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
-													<div className="mt-2 grid grid-cols-2 gap-2">
-														{options.map((opt) => {
-															const checked = selected.includes(opt);
-															return (
-																<label key={opt} className="flex items-center gap-2 text-sm" data-testid={`rtk-field-renderer-${opt}`}>
-																	<Checkbox
-																		checked={checked}
-																		onCheckedChange={(v) => {
-																			if (v) {
-																				field.onChange([...selected, opt]);
-																			} else {
-																				field.onChange(selected.filter((s: string) => s !== opt));
-																			}
-																		}}
-																	/>
-																	<span>{opt}</span>
-																</label>
-															);
-														})}
-													</div>
-													<FormMessage />
-												</FormItem>
-											);
-										}}
-									/>
-								)}
-							</AccordionContent>
-						</AccordionItem>
-
-						{/* Debug / raw output */}
-						<AccordionItem value="rawOutput" className="px-4">
-							<AccordionTrigger data-testid="rtk-section-raw-output-trigger">{t("rtk.rawOutputSection")}</AccordionTrigger>
-							<AccordionContent className="space-y-3">
-								<FormField
-									control={form.control}
-									name="raw_output_retention"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.rawOutputRetentionLabel")}</FormLabel>
-												<HelpHint>{t("rtk.rawOutputRetentionWhen")}</HelpHint>
-											</div>
-											<Select value={field.value} onValueChange={field.onChange}>
-												<FormControl>
-													<SelectTrigger data-testid="rtk-field-raw-output-retention">
-														<SelectValue placeholder={t("rtk.rawOutputRetentionPlaceholder")} />
-													</SelectTrigger>
-												</FormControl>
-												<SelectContent>
-													<SelectItem value="never">{t("rtk.rawOutputRetentionNever")}</SelectItem>
-													<SelectItem value="failures">{t("rtk.rawOutputRetentionFailures")}</SelectItem>
-													<SelectItem value="always">{t("rtk.rawOutputRetentionAlways")}</SelectItem>
-												</SelectContent>
-											</Select>
-											<FormDescription>{t("rtk.rawOutputRetentionDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="raw_output_max_bytes"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
-												<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
-											</div>
-											<FormControl>
-												<Input
-													data-testid="rtk-field-raw-output-max-bytes"
-													type="number"
-													min={0}
-													{...field}
-													onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-												/>
-											</FormControl>
-											<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-							</AccordionContent>
-						</AccordionItem>
-
-						{/* Filters & custom */}
-						<AccordionItem value="filters" className="px-4">
-							<AccordionTrigger data-testid="rtk-section-filters-trigger">{t("rtk.filtersSection")}</AccordionTrigger>
-							<AccordionContent className="space-y-3">
-								<FormField
-									control={form.control}
-									name="custom_filters_enabled"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-											<div className="space-y-0.5">
-												<div className="flex items-center gap-1.5">
-													<FormLabel>{t("rtk.customFiltersEnabledLabel")}</FormLabel>
-													<HelpHint>{t("rtk.customFiltersEnabledWhen")}</HelpHint>
-												</div>
-												<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
-											</div>
-											<FormControl>
-												<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
-											</FormControl>
-										</FormItem>
-									)}
-								/>
-								{form.watch("custom_filters_enabled") && (
-									<FormField
-										control={form.control}
-										name="trust_project_filters"
+										name="apply_to_tool_results"
 										render={({ field }) => (
-											<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-												<div className="space-y-0.5">
-													<div className="flex items-center gap-1.5">
-														<FormLabel>{t("rtk.trustProjectFiltersLabel")}</FormLabel>
-														<HelpHint>{t("rtk.trustProjectFiltersWhen")}</HelpHint>
-													</div>
-													<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
-												</div>
+											<FormItem className="flex flex-row items-start space-y-0 space-x-3">
 												<FormControl>
-													<Switch data-testid="rtk-field-trust-project-filters" checked={field.value} onCheckedChange={field.onChange} />
+													<Checkbox data-testid="rtk-field-apply-to-tool-results" checked={field.value} onCheckedChange={field.onChange} />
 												</FormControl>
+												<div className="space-y-1 leading-none">
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.applyToToolResultsLabel")}</FormLabel>
+														<HelpHint>{t("rtk.applyToToolResultsWhen")}</HelpHint>
+													</div>
+													<FormDescription>{t("rtk.applyToToolResultsDescription")}</FormDescription>
+												</div>
 											</FormItem>
 										)}
 									/>
-								)}
-								<div className="text-muted-foreground text-xs">
-									{t("rtk.filterCatalogHint")}{" "}
-									<Link to="/workspace/plugins/rtk/filters" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-										{t("rtk.admin.tabs.filters")}
-										<ExternalLink className="ml-0.5 inline h-3 w-3" />
-									</Link>
-								</div>
-							</AccordionContent>
-						</AccordionItem>
-
-						{/* Advanced: pipeline + min tokens + cache_control + renderers whitelist (already above) */}
-						<AccordionItem value="advanced" className="px-4">
-							<AccordionTrigger data-testid="rtk-section-advanced-trigger">{t("rtk.advancedSection")}</AccordionTrigger>
-							<AccordionContent className="space-y-3">
-								<FormField
-									control={form.control}
-									name="preserve_cache_control"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-											<FormControl>
-												<Checkbox data-testid="rtk-field-preserve-cache-control" checked={field.value} onCheckedChange={field.onChange} />
-											</FormControl>
-											<div className="space-y-1 leading-none">
-												<div className="flex items-center gap-1.5">
-													<FormLabel>{t("rtk.preserveCacheControlLabel")}</FormLabel>
-													<HelpHint>{t("rtk.preserveCacheControlWhen")}</HelpHint>
+									<FormField
+										control={form.control}
+										name="apply_to_code_blocks"
+										render={({ field }) => (
+											<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+												<FormControl>
+													<Checkbox data-testid="rtk-field-apply-to-code-blocks" checked={field.value} onCheckedChange={field.onChange} />
+												</FormControl>
+												<div className="space-y-1 leading-none">
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.applyToCodeBlocksLabel")}</FormLabel>
+														<HelpHint>{t("rtk.applyToCodeBlocksWhen")}</HelpHint>
+													</div>
+													<FormDescription>{t("rtk.applyToCodeBlocksDescription")}</FormDescription>
 												</div>
-												<FormDescription>{t("rtk.preserveCacheControlDescription")}</FormDescription>
-											</div>
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="min_tokens_to_compress"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.minTokensToCompressLabel")}</FormLabel>
-												<HelpHint>{t("rtk.minTokensToCompressWhen")}</HelpHint>
-											</div>
-											<FormControl>
-												<Input
-													data-testid="rtk-field-min-tokens"
-													type="number"
-													min={0}
-													{...field}
-													onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-												/>
-											</FormControl>
-											<FormDescription>{t("rtk.minTokensToCompressDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="pipeline"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.pipelineLabel")}</FormLabel>
-												<HelpHint>{t("rtk.pipelineWhen")}</HelpHint>
-											</div>
-											<FormControl>
-												<Textarea
-													data-testid="rtk-field-pipeline"
-													className="font-mono text-xs"
-													rows={4}
-													{...field}
-													value={typeof field.value === "string" ? field.value : JSON.stringify(field.value, null, 2)}
-													onChange={(e) => {
-														try {
-															const parsed = JSON.parse(e.target.value);
-															field.onChange(parsed);
-														} catch {
-															field.onChange(e.target.value);
-														}
-													}}
-												/>
-											</FormControl>
-											<FormDescription>{t("rtk.pipelineDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-							</AccordionContent>
-						</AccordionItem>
-					</Accordion>
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="apply_to_assistant_messages"
+										render={({ field }) => (
+											<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+												<FormControl>
+													<Checkbox
+														data-testid="rtk-field-apply-to-assistant-messages"
+														checked={field.value}
+														onCheckedChange={field.onChange}
+													/>
+												</FormControl>
+												<div className="space-y-1 leading-none">
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.applyToAssistantMessagesLabel")}</FormLabel>
+														<HelpHint>{t("rtk.applyToAssistantMessagesWhen")}</HelpHint>
+													</div>
+													<FormDescription>{t("rtk.applyToAssistantMessagesDescription")}</FormDescription>
+												</div>
+											</FormItem>
+										)}
+									/>
+								</div>
+							</fieldset>
+
+							{/* Snapshot: mode + max bytes */}
+							<fieldset className="rounded-lg border p-4">
+								<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.snapshotSection")}</legend>
+								<div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+									<FormField
+										control={form.control}
+										name="snapshot_mode"
+										render={({ field }) => (
+											<FormItem>
+												<div className="flex items-center gap-1.5">
+													<FormLabel>{t("rtk.snapshotModeLabel")}</FormLabel>
+													<HelpHint>{t("rtk.snapshotModeWhen")}</HelpHint>
+												</div>
+												<Select value={field.value} onValueChange={field.onChange}>
+													<FormControl>
+														<SelectTrigger data-testid="rtk-field-snapshot-mode">
+															<SelectValue />
+														</SelectTrigger>
+													</FormControl>
+													<SelectContent>
+														<SelectItem value="off">{t("rtk.snapshotModeOff")}</SelectItem>
+														<SelectItem value="split">{t("rtk.snapshotModeSplit")}</SelectItem>
+														<SelectItem value="merged">{t("rtk.snapshotModeMerged")}</SelectItem>
+													</SelectContent>
+												</Select>
+												<FormDescription>{t("rtk.snapshotModeDescription")}</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="snapshot_max_bytes"
+										render={({ field }) => (
+											<FormItem>
+												<div className="flex items-center gap-1.5">
+													<FormLabel>{t("rtk.snapshotMaxBytesLabel")}</FormLabel>
+													<HelpHint>{t("rtk.snapshotMaxBytesWhen")}</HelpHint>
+												</div>
+												<FormControl>
+													<Input
+														data-testid="rtk-field-snapshot-max-bytes"
+														type="number"
+														min={0}
+														step={1024}
+														{...field}
+														onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+													/>
+												</FormControl>
+												<FormDescription>{t("rtk.snapshotMaxBytesHelp")}</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+								</div>
+							</fieldset>
+
+							{/* Collapsible advanced */}
+							<Accordion type="multiple" className="rounded-lg border">
+								{/* Semantic renderers */}
+								<AccordionItem value="renderers" className="px-4">
+									<AccordionTrigger data-testid="rtk-section-renderers-trigger">{t("rtk.renderersSection")}</AccordionTrigger>
+									<AccordionContent className="space-y-3">
+										<FormField
+											control={form.control}
+											name="enable_renderers"
+											render={({ field }) => (
+												<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+													<FormControl>
+														<Switch
+															checked={Boolean(field.value)}
+															onCheckedChange={field.onChange}
+															data-testid="rtk-field-enable-renderers"
+														/>
+													</FormControl>
+													<div className="space-y-1 leading-none">
+														<div className="flex items-center gap-1.5">
+															<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
+															<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
+														</div>
+														<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
+													</div>
+												</FormItem>
+											)}
+										/>
+										{form.watch("enable_renderers") && (
+											<FormField
+												control={form.control}
+												name="renderers"
+												render={({ field }) => (
+													<FormItem>
+														<div className="flex items-center gap-1.5">
+															<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
+															<HelpHint>{t("rtk.renderersWhen")}</HelpHint>
+														</div>
+														<FormControl>
+															<Input
+																data-testid="rtk-field-renderers"
+																placeholder="e.g. git-diff, test-green, terraform-plan"
+																{...field}
+																value={Array.isArray(field.value) ? field.value.join(", ") : ""}
+																onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
+															/>
+														</FormControl>
+														<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
+														<FormMessage />
+													</FormItem>
+												)}
+											/>
+										)}
+									</AccordionContent>
+								</AccordionItem>
+
+								{/* Debug / raw output */}
+								<AccordionItem value="rawOutput" className="px-4">
+									<AccordionTrigger data-testid="rtk-section-raw-output-trigger">{t("rtk.rawOutputSection")}</AccordionTrigger>
+									<AccordionContent className="space-y-3">
+										<FormField
+											control={form.control}
+											name="raw_output_retention"
+											render={({ field }) => (
+												<FormItem>
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.rawOutputRetentionLabel")}</FormLabel>
+														<HelpHint>{t("rtk.rawOutputRetentionWhen")}</HelpHint>
+													</div>
+													<Select value={field.value} onValueChange={field.onChange}>
+														<FormControl>
+															<SelectTrigger data-testid="rtk-field-raw-output-retention">
+																<SelectValue placeholder={t("rtk.rawOutputRetentionPlaceholder")} />
+															</SelectTrigger>
+														</FormControl>
+														<SelectContent>
+															<SelectItem value="never">{t("rtk.rawOutputRetentionNever")}</SelectItem>
+															<SelectItem value="failures">{t("rtk.rawOutputRetentionFailures")}</SelectItem>
+															<SelectItem value="always">{t("rtk.rawOutputRetentionAlways")}</SelectItem>
+														</SelectContent>
+													</Select>
+													<FormDescription>{t("rtk.rawOutputRetentionDescription")}</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+										<FormField
+											control={form.control}
+											name="raw_output_max_bytes"
+											render={({ field }) => (
+												<FormItem>
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
+														<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
+													</div>
+													<FormControl>
+														<Input
+															data-testid="rtk-field-raw-output-max-bytes"
+															type="number"
+															min={0}
+															{...field}
+															onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+														/>
+													</FormControl>
+													<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									</AccordionContent>
+								</AccordionItem>
+
+								{/* Filters & custom */}
+								<AccordionItem value="filters" className="px-4">
+									<AccordionTrigger data-testid="rtk-section-filters-trigger">{t("rtk.filtersSection")}</AccordionTrigger>
+									<AccordionContent className="space-y-3">
+										<FormField
+											control={form.control}
+											name="custom_filters_enabled"
+											render={({ field }) => (
+												<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+													<div className="space-y-0.5">
+														<div className="flex items-center gap-1.5">
+															<FormLabel>{t("rtk.customFiltersEnabledLabel")}</FormLabel>
+															<HelpHint>{t("rtk.customFiltersEnabledWhen")}</HelpHint>
+														</div>
+														<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
+													</div>
+													<FormControl>
+														<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
+													</FormControl>
+												</FormItem>
+											)}
+										/>
+										{form.watch("custom_filters_enabled") && (
+											<FormField
+												control={form.control}
+												name="trust_project_filters"
+												render={({ field }) => (
+													<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+														<div className="space-y-0.5">
+															<div className="flex items-center gap-1.5">
+																<FormLabel>{t("rtk.trustProjectFiltersLabel")}</FormLabel>
+																<HelpHint>{t("rtk.trustProjectFiltersWhen")}</HelpHint>
+															</div>
+															<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
+														</div>
+														<FormControl>
+															<Switch
+																data-testid="rtk-field-trust-project-filters"
+																checked={field.value}
+																onCheckedChange={field.onChange}
+															/>
+														</FormControl>
+													</FormItem>
+												)}
+											/>
+										)}
+										<div className="text-muted-foreground text-xs">
+											{t("rtk.filterCatalogHint")}{" "}
+											<Link
+												to="/workspace/plugins/rtk/filters"
+												className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+											>
+												{t("rtk.admin.tabs.filters")}
+												<ExternalLink className="ml-0.5 inline h-3 w-3" />
+											</Link>
+										</div>
+									</AccordionContent>
+								</AccordionItem>
+
+								{/* Advanced: pipeline + cache_control (min_tokens moved to presets) */}
+								<AccordionItem value="advanced" className="px-4">
+									<AccordionTrigger data-testid="rtk-section-advanced-trigger">{t("rtk.advancedSection")}</AccordionTrigger>
+									<AccordionContent className="space-y-3">
+										<FormField
+											control={form.control}
+											name="preserve_cache_control"
+											render={({ field }) => (
+												<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+													<FormControl>
+														<Checkbox
+															data-testid="rtk-field-preserve-cache-control"
+															checked={field.value}
+															onCheckedChange={field.onChange}
+														/>
+													</FormControl>
+													<div className="space-y-1 leading-none">
+														<div className="flex items-center gap-1.5">
+															<FormLabel>{t("rtk.preserveCacheControlLabel")}</FormLabel>
+															<HelpHint>{t("rtk.preserveCacheControlWhen")}</HelpHint>
+														</div>
+														<FormDescription>{t("rtk.preserveCacheControlDescription")}</FormDescription>
+													</div>
+												</FormItem>
+											)}
+										/>
+										<FormField
+											control={form.control}
+											name="pipeline"
+											render={({ field }) => (
+												<FormItem>
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.pipelineLabel")}</FormLabel>
+														<HelpHint>{t("rtk.pipelineWhen")}</HelpHint>
+													</div>
+													<FormControl>
+														<Textarea
+															data-testid="rtk-field-pipeline"
+															className="font-mono text-xs"
+															rows={4}
+															{...field}
+															value={typeof field.value === "string" ? field.value : JSON.stringify(field.value, null, 2)}
+															onChange={(e) => {
+																try {
+																	const parsed = JSON.parse(e.target.value);
+																	field.onChange(parsed);
+																} catch {
+																	field.onChange(e.target.value);
+																}
+															}}
+														/>
+													</FormControl>
+													<FormDescription>{t("rtk.pipelineDescription")}</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									</AccordionContent>
+								</AccordionItem>
+							</Accordion>
+						</div>
+					</fieldset>
 
 					{/* ── 效果验证侧边提示 ───────────────────────────────────────── */}
 					<div className="bg-muted/30 text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
