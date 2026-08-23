@@ -14,7 +14,6 @@ import {
 	LOGGING_PLUGIN,
 	SEMANTIC_CACHE_PLUGIN,
 	MOCKER_PLUGIN,
-	COMPAT_PLUGIN,
 	PROMPTS_PLUGIN,
 	MODELCATALOGRESOLVER_PLUGIN,
 	JSONPARSER_PLUGIN,
@@ -31,7 +30,6 @@ import OtelView from "../../observability/views/plugins/otelView";
 import LoggingFragment from "../fragments/loggingFragment";
 import SemanticCacheFragment from "../fragments/semanticCacheFragment";
 import MockerFragment from "../fragments/mockerFragment";
-import CompatFragment from "../fragments/compatFragment";
 import { PromptsFragment, ModelcatalogresolverFragment, JsonparserFragment } from "../fragments/promptsFragment";
 import { toast } from "sonner";
 import * as z from "zod";
@@ -206,13 +204,6 @@ export default function PluginsView(props: Props) {
 		return (
 			<div className="ml-4 w-full">
 				<MockerFragment plugin={selectedPlugin} />
-			</div>
-		);
-	}
-	if (selectedPlugin.name === COMPAT_PLUGIN) {
-		return (
-			<div className="ml-4 w-full">
-				<CompatFragment plugin={selectedPlugin} />
 			</div>
 		);
 	}

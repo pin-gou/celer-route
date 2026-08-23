@@ -435,21 +435,6 @@
 		"invalidJsonError": "JSON 无效或未通过模式校验",
 		"editorDescription": "以 JSON 格式编辑 mocker 插件配置。"
 	},
-	"compatConfig": {
-		"settingsTitle": "兼容层设置",
-		"saveConfiguration": "保存配置",
-		"saving": "保存中...",
-		"savedToast": "兼容层配置已保存",
-		"saveFailedToast": "保存兼容层配置失败",
-		"convertTextToChatLabel": "将文本补全转为对话",
-		"convertTextToChatDescription": "将文本补全请求转换为对话补全格式。",
-		"convertChatToResponsesLabel": "将对话补全转为 Responses",
-		"convertChatToResponsesDescription": "将对话补全请求转换为 Responses API 格式。",
-		"shouldDropParamsLabel": "丢弃不支持的参数",
-		"shouldDropParamsDescription": "转换时丢弃目标 API 不支持的参数。",
-		"shouldConvertParamsLabel": "转换参数",
-		"shouldConvertParamsDescription": "转换时按目标 API 映射参数名。"
-	},
 	"placeholderConfig": {
 		"model catalog description": "模型目录解析器无配置项；启用后自动解析模型目录。",
 		"pluginTitle": "{{name}}",

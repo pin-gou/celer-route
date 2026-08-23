@@ -41,7 +41,7 @@ import { describe, expect, it } from "vitest";
 // Red phase: these schemas are not yet exported from plugins.ts.
 // In the TDD red phase this import will fail at load time.
 // ---------------------------------------------------------------------------
-import { loggingConfigSchema, semanticCacheConfigSchema, mockerConfigSchema, compatConfigSchema } from "@/lib/types/plugins";
+import { loggingConfigSchema, semanticCacheConfigSchema, mockerConfigSchema } from "@/lib/types/plugins";
 
 // ---------------------------------------------------------------------------
 // loggingConfigSchema tests
@@ -331,85 +331,5 @@ describe("mockerConfigSchema (task 11.1)", () => {
 	it("rejects null input (illegal JSON equivalent)", () => {
 		const result = mockerConfigSchema.safeParse(null);
 		expect(result.success).toBe(false);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// compatConfigSchema tests
-// ---------------------------------------------------------------------------
-
-describe("compatConfigSchema (task 11.1)", () => {
-	it("exports compatConfigSchema as a ZodObject", () => {
-		expect(compatConfigSchema).toBeDefined();
-		expect(compatConfigSchema.constructor.name).toBe("ZodObject");
-	});
-
-	it("accepts a valid config with all 4 fields", () => {
-		const result = compatConfigSchema.safeParse({
-			convert_text_to_chat: true,
-			convert_chat_to_responses: false,
-			should_drop_params: true,
-			should_convert_params: false,
-		});
-		expect(result.success).toBe(true);
-	});
-
-	it("accepts an empty object (all fields optional)", () => {
-		const result = compatConfigSchema.safeParse({});
-		expect(result.success).toBe(true);
-	});
-
-	// -----------------------------------------------------------------------
-	// Default values
-	// -----------------------------------------------------------------------
-
-	it("defaults convert_text_to_chat to true when omitted", () => {
-		const result = compatConfigSchema.parse({});
-		expect(result.convert_text_to_chat).toBe(true);
-	});
-
-	it("defaults convert_chat_to_responses to true when omitted", () => {
-		const result = compatConfigSchema.parse({});
-		expect(result.convert_chat_to_responses).toBe(true);
-	});
-
-	it("defaults should_drop_params to true when omitted", () => {
-		const result = compatConfigSchema.parse({});
-		expect(result.should_drop_params).toBe(true);
-	});
-
-	it("defaults should_convert_params to false when omitted", () => {
-		const result = compatConfigSchema.parse({});
-		expect(result.should_convert_params).toBe(false);
-	});
-
-	// -----------------------------------------------------------------------
-	// Type rejection
-	// -----------------------------------------------------------------------
-
-	it("rejects convert_text_to_chat when type is not boolean", () => {
-		const result = compatConfigSchema.safeParse({ convert_text_to_chat: "yes" });
-		expect(result.success).toBe(false);
-	});
-
-	it("rejects convert_chat_to_responses when type is not boolean", () => {
-		const result = compatConfigSchema.safeParse({ convert_chat_to_responses: 1 });
-		expect(result.success).toBe(false);
-	});
-
-	it("rejects should_drop_params when type is not boolean", () => {
-		const result = compatConfigSchema.safeParse({ should_drop_params: "true" });
-		expect(result.success).toBe(false);
-	});
-
-	it("rejects should_convert_params when type is not boolean", () => {
-		const result = compatConfigSchema.safeParse({ should_convert_params: 0 });
-		expect(result.success).toBe(false);
-	});
-
-	it("strips unknown extra fields (non-strict object)", () => {
-		const result = compatConfigSchema.parse({ convert_text_to_chat: true, unknown_field: "value" });
-		expect(result.convert_text_to_chat).toBe(true);
-		expect("unknown_field" in result).toBe(false);
 	});
 });

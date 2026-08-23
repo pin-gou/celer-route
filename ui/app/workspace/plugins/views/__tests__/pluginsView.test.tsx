@@ -233,11 +233,11 @@ describe("PluginsView — dispatch logic (task 11.2)", () => {
 		expect(screen.getByTestId("mocker-fragment")).toBeTruthy();
 	});
 
-	it("renders CompatFragment when selectedPlugin.name is 'compat'", () => {
+	it("renders the default form for compat (no dedicated fragment)", () => {
 		mocks.selectedPlugin = { ...basePlugin, name: "compat", actualName: "compat" };
 		render(<PluginsView onDelete={mocks.onDelete} onCreate={mocks.onCreate} />);
 
-		expect(screen.getByTestId("compat-fragment")).toBeTruthy();
+		expect(screen.getByText("pluginForm.title")).toBeTruthy();
 	});
 });
 

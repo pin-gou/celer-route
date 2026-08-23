@@ -435,21 +435,6 @@
 		"invalidJsonError": "Invalid JSON or schema validation failed",
 		"editorDescription": "Edit the mocker plugin configuration as JSON."
 	},
-	"compatConfig": {
-		"settingsTitle": "Compat Settings",
-		"saveConfiguration": "Save Configuration",
-		"saving": "Saving...",
-		"savedToast": "Compat configuration saved",
-		"saveFailedToast": "Failed to save compat configuration",
-		"convertTextToChatLabel": "Convert Text to Chat",
-		"convertTextToChatDescription": "Convert text completion requests to chat completion format.",
-		"convertChatToResponsesLabel": "Convert Chat to Responses",
-		"convertChatToResponsesDescription": "Convert chat completion requests to the Responses API format.",
-		"shouldDropParamsLabel": "Drop Unsupported Params",
-		"shouldDropParamsDescription": "Drop parameters the target API does not support during conversion.",
-		"shouldConvertParamsLabel": "Convert Params",
-		"shouldConvertParamsDescription": "Map parameter names to the target API during conversion."
-	},
 	"placeholderConfig": {
 		"model catalog description": "Model Catalog Resolver has no configuration items; it is enabled automatically.",
 		"pluginTitle": "{{name}}",

@@ -273,24 +273,6 @@ export const mockerConfigSchema = z.object({
 export type MockerConfig = z.infer<typeof mockerConfigSchema>;
 
 // ---------------------------------------------------------------------------
-// Compat (built-in plugin) — form schema
-// ---------------------------------------------------------------------------
-
-export const COMPAT_PLUGIN = "compat";
-
-// Zod schema for the compat plugin's config.
-// Mirrors plugins/compat/main.go's Config struct.
-// 3 fields default to true, 1 field defaults to false.
-export const compatConfigSchema = z.object({
-	convert_text_to_chat: z.boolean().default(true),
-	convert_chat_to_responses: z.boolean().default(true),
-	should_drop_params: z.boolean().default(true),
-	should_convert_params: z.boolean().default(false),
-});
-
-export type CompatConfig = z.infer<typeof compatConfigSchema>;
-
-// ---------------------------------------------------------------------------
 // Plugin fragment i18n label mapping
 // ---------------------------------------------------------------------------
 

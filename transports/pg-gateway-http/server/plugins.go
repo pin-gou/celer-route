@@ -142,6 +142,14 @@ func loadBuiltinPlugin(ctx context.Context, name string, pluginConfig any, bifro
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal compat plugin config: %w", err)
 		}
+		// All compat config fields mirror ClientConfig.Compat — ignore any stored
+		// plugin config values so the client-settings compatibility page is the
+		// single entry point.
+		cc := bifrostConfig.ClientConfig.Compat
+		compatConfig.ConvertTextToChat = cc.ConvertTextToChat
+		compatConfig.ConvertChatToResponses = cc.ConvertChatToResponses
+		compatConfig.ShouldDropParams = cc.ShouldDropParams
+		compatConfig.ShouldConvertParams = cc.ShouldConvertParams
 		return compat.Init(*compatConfig, logger, bifrostConfig.ModelCatalog)
 
 	case mocker.PluginName:
