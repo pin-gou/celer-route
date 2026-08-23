@@ -7,12 +7,20 @@ import { Link } from "@tanstack/react-router";
 import { KeyRound, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+type DotState = "ok" | "missing" | "degraded" | "error";
+
+const dotClass: Record<DotState, string> = {
+	ok: "bg-emerald-500",
+	missing: "bg-zinc-400",
+	degraded: "bg-amber-500",
+	error: "bg-red-500",
+};
+
 interface ProviderHealthSummary {
 	provider: string;
 	keysCount: number;
 	modelsCount: number;
-	enabled: boolean;
-	lastError: boolean;
+	dotState: DotState;
 }
 
 export default function ProviderTopologyCard() {
@@ -26,12 +34,22 @@ export default function ProviderTopologyCard() {
 		for (const k of keysForProvider) {
 			for (const m of k.models ?? []) models.add(m);
 		}
+
+		let dotState: DotState;
+		if (p.is_key_less) {
+			// Keyless providers (opencode, custom keyless) have no keys — infer
+			// health from the operational status instead of key presence.
+			dotState = p.provider_status === "error" ? "missing" : p.status === "list_models_failed" ? "degraded" : "ok";
+		} else {
+			const enabled = (p.keys_enabled ?? true) && keysForProvider.length > 0;
+			dotState = !enabled ? "missing" : p.last_error_at ? "error" : "ok";
+		}
+
 		return {
 			provider: p.name,
 			keysCount: keysForProvider.length,
-			modelsCount: models.size,
-			enabled: (p.keys_enabled ?? true) && keysForProvider.length > 0,
-			lastError: !!p.last_error_at,
+			modelsCount: p.is_key_less ? (p.models_count ?? 0) : models.size,
+			dotState,
 		};
 	});
 
@@ -63,8 +81,6 @@ export default function ProviderTopologyCard() {
 				) : (
 					<ul className="space-y-2">
 						{summaries.map((s) => {
-							const dotState = !s.enabled ? "missing" : s.lastError ? "error" : "ok";
-							const dotClass = dotState === "ok" ? "bg-emerald-500" : dotState === "error" ? "bg-red-500" : "bg-zinc-400";
 							return (
 								<li
 									key={s.provider}
@@ -73,7 +89,7 @@ export default function ProviderTopologyCard() {
 								>
 									<Provider provider={s.provider} size={22} className="mt-0 shrink-0" />
 									<span className="flex-1 truncate text-sm font-medium capitalize">{s.provider}</span>
-									<span className={["inline-block h-2 w-2 shrink-0 rounded-full", dotClass].join(" ")} aria-hidden />
+									<span className={["inline-block h-2 w-2 shrink-0 rounded-full", dotClass[s.dotState]].join(" ")} aria-hidden />
 									<span
 										className="text-muted-foreground flex items-center gap-1 text-xs"
 										title={t("home.providers.keysCount", { count: String(s.keysCount) })}
