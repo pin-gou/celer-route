@@ -1237,6 +1237,15 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 
 	// Path A: Error with nil result
 	if result == nil && bifrostErr != nil {
+		// Silent short-circuit (e.g. provider-cooldown PreProviderHook on all-keys-cooled)
+		// asks presentation plugins to skip their end-user-visible side effects. The
+		// framework still calls PostLLMHook so other plugins can clean up, but no log
+		// row should be persisted — the caller already gets the synthetic 503 error
+		// through the fallback chain and writing a "cancelled" row here is what the
+		// Silent flag was added to suppress.
+		if silent, _ := ctx.Value(schemas.BifrostContextKeySilentLog).(bool); silent {
+			return result, bifrostErr, nil
+		}
 		entry.Status = logStatusForError(bifrostErr)
 		applyModelAlias(entry, originalModelRequested, resolvedModelUsed)
 		if bifrost.IsStreamRequestType(requestType) {

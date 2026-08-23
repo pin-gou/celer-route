@@ -78,6 +78,7 @@ func (r *headerResolver) Resolve(ctx *schemas.BifrostContext, req *schemas.Bifro
 //   - promptsByID: prompt ID → prompt row (includes LatestVersion when using “latest”)
 //   - versionsByPromptAndNumber: prompt ID → version number → version row
 type Plugin struct {
+	schemas.LLMPluginNoOpHooks
 	store    InMemoryStore
 	logger   schemas.Logger
 	resolver PromptResolver
@@ -204,9 +205,7 @@ func (p *Plugin) HTTPTransportStreamChunkHook(ctx *schemas.BifrostContext, req *
 }
 
 // PreRequestHook implements schemas.LLMPlugin (no-op — required for plugin indexing).
-func (p *Plugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
-	return nil
-}
+// PreRequestHook is provided by schemas.LLMPluginNoOpHooks — see Plugin struct.
 
 // PreLLMHook resolves the prompt via PromptResolver, loads the version from the in-memory
 // cache, sets governance/observability context (selected prompt name and version), merges

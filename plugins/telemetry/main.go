@@ -143,6 +143,7 @@ func hideResolvedEnvValue(v *schemas.SecretVar) *schemas.SecretVar {
 //   - Request latency
 //   - Error counts
 type PrometheusPlugin struct {
+	schemas.LLMPluginNoOpHooks
 	pricingManager *modelcatalog.ModelCatalog
 	registry       *prometheus.Registry // Bifrost metrics only — used for push gateway
 	systemRegistry *prometheus.Registry // Go/process collectors — /metrics scraping only
@@ -670,9 +671,7 @@ func (p *PrometheusPlugin) HTTPTransportStreamChunkHook(ctx *schemas.BifrostCont
 }
 
 // PreRequestHook implements schemas.LLMPlugin (no-op — required for plugin indexing).
-func (p *PrometheusPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
-	return nil
-}
+// PreRequestHook is provided by schemas.LLMPluginNoOpHooks — see PrometheusPlugin struct.
 
 // PreLLMHook records the start time of the request in the context.
 // This time is used later in PostLLMHook to calculate request duration.

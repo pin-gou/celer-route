@@ -23,6 +23,7 @@ import (
 // helpers that DO normalize (getNormalizedInputForCaching) — what we want
 // here is a contract test on the request that flows downstream.
 type requestCapturer struct {
+	schemas.LLMPluginNoOpHooks
 	mu       sync.Mutex
 	captured *schemas.BifrostRequest
 }
@@ -30,9 +31,7 @@ type requestCapturer struct {
 func (p *requestCapturer) GetName() string { return "test-request-capturer" }
 func (p *requestCapturer) Cleanup() error  { return nil }
 
-func (p *requestCapturer) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
-	return nil
-}
+// PreRequestHook is provided by schemas.LLMPluginNoOpHooks (embedded).
 
 func (p *requestCapturer) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
 	p.mu.Lock()

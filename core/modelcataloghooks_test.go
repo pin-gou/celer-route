@@ -76,6 +76,10 @@ func (d *catalogProbePlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schema
 	}, nil
 }
 
+func (d *catalogProbePlugin) PreProviderHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
 func (d *catalogProbePlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
 	d.postRan = true
 	d.postInfo = ctx.GetModelInfo(schemas.OpenAI, "gpt-4o")

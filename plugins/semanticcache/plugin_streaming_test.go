@@ -197,15 +197,14 @@ func TestStreamingVsNonStreaming(t *testing.T) {
 // ChatCompletionStreamRequest passes through untouched to the next plugin
 // (mocker).
 type chunkStreamPlugin struct {
+	schemas.LLMPluginNoOpHooks
 	chunks []string
 }
 
 func (p *chunkStreamPlugin) GetName() string { return "chunk-stream-test-plugin" }
 func (p *chunkStreamPlugin) Cleanup() error  { return nil }
 
-func (p *chunkStreamPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
-	return nil
-}
+// PreRequestHook is provided by schemas.LLMPluginNoOpHooks (embedded).
 
 func (p *chunkStreamPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
 	if req.RequestType != schemas.ChatCompletionStreamRequest {

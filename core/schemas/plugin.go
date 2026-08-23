@@ -281,7 +281,7 @@ type LLMPlugin interface {
 	BasePlugin
 
 	// PreRequestHook is called once per top-level request, after HTTPTransportPreHook and before
-	// PreLLMHook. It is the canonical phase for deciding which provider/model/fallbacks the
+	// PreProviderHook/PreLLMHook. It is the canonical phase for deciding which provider/model/fallbacks the
 	// request should be sent to. Plugins are free to mutate any field on req (Provider, Model,
 	// Fallbacks, Input, Params, Tools, ...) — unlike PreLLMHook, mutations made here are
 	// committed to the request and are observed by all subsequent plugins, the provider call,
@@ -291,10 +291,27 @@ type LLMPlugin interface {
 	// warning, the request continues, and the pipeline moves on to the next plugin. PreRequestHook
 	// CANNOT abort the request via error return. Plugins that need to gate or reject a request
 	// (e.g., authorization, content policy) must do so in HTTPTransportPreHook or via a
-	// short-circuit response in PreLLMHook — not by returning an error here.
+	// short-circuit response in PreProviderHook/PreLLMHook — not by returning an error here.
 	//
 	// Plugins that don't participate in routing should return nil.
 	PreRequestHook(ctx *BifrostContext, req *BifrostRequest) error
+
+	// PreProviderHook runs once per attempt (primary + every fallback), after PreRequestHook
+	// has pinned req.Provider/Model and before PreLLMHook writes any pending side effects.
+	// The framework stamps ctx[BifrostContextKeyProviderKeys] with the full per-provider key
+	// pool before calling this hook, so plugins can decide whether the targeted provider has
+	// any eligible keys (e.g. provider-cooldown short-circuiting on all-keys-cooled) without
+	// having to round-trip through the worker queue.
+	//
+	// Plugins MAY return a non-nil *LLMPluginShortCircuit to abort this attempt; the framework
+	// then runs PostLLMHook (so the PreLLMHook/PostLLMHook pairing contract still holds) and
+	// consults the error's AllowFallbacks to decide whether to continue down the fallback chain.
+	// Setting ShortCircuit.Silent=true additionally asks presentation plugins (logging) to
+	// suppress the end-user-visible log entry for this attempt — the underlying BifrostError
+	// still propagates to the caller.
+	//
+	// Plugins that don't participate in pre-provider decisions should return (req, nil, nil).
+	PreProviderHook(ctx *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLMPluginShortCircuit, error)
 
 	PreLLMHook(ctx *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLMPluginShortCircuit, error)
 	PostLLMHook(ctx *BifrostContext, resp *BifrostResponse, bifrostErr *BifrostError) (*BifrostResponse, *BifrostError, error)
@@ -329,6 +346,36 @@ type MCPConnectionPlugin interface {
 
 	PreMCPConnectionHook(ctx *BifrostContext, req *BifrostMCPConnectRequest) (*BifrostMCPConnectRequest, *MCPConnectionShortCircuit, error)
 	PostMCPConnectionHook(ctx *BifrostContext, resp *BifrostMCPConnectResponse, bifrostErr *BifrostError) (*BifrostMCPConnectResponse, *BifrostError, error)
+}
+
+// LLMPluginNoOpHooks provides no-op implementations of every LLMPlugin hook
+// (PreRequestHook, PreProviderHook, PreLLMHook, PostLLMHook). Plugins that
+// only want to implement a subset of the LLMPlugin surface can embed this
+// helper instead of writing trivial pass-through methods themselves.
+//
+// Plugins must still provide their own GetName and Cleanup (from BasePlugin).
+type LLMPluginNoOpHooks struct{}
+
+// PreRequestHook is a no-op passthrough.
+func (LLMPluginNoOpHooks) PreRequestHook(_ *BifrostContext, _ *BifrostRequest) error {
+	return nil
+}
+
+// PreProviderHook is a no-op passthrough. Plugins that want to short-circuit
+// on pre-provider decisions (e.g. provider-cooldown on all-keys-cooled) must
+// override this method.
+func (LLMPluginNoOpHooks) PreProviderHook(_ *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
+// PreLLMHook is a no-op passthrough.
+func (LLMPluginNoOpHooks) PreLLMHook(_ *BifrostContext, req *BifrostRequest) (*BifrostRequest, *LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
+// PostLLMHook is a no-op passthrough that returns resp/bifrostErr unchanged.
+func (LLMPluginNoOpHooks) PostLLMHook(_ *BifrostContext, resp *BifrostResponse, bifrostErr *BifrostError) (*BifrostResponse, *BifrostError, error) {
+	return resp, bifrostErr, nil
 }
 
 // MCPPluginNoOpHooks provides no-op implementations of PreMCPHook and PostMCPHook.

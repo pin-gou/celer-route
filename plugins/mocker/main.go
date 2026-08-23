@@ -49,6 +49,7 @@ type compiledRule struct {
 
 // MockerPlugin provides comprehensive request/response mocking capabilities
 type MockerPlugin struct {
+	schemas.LLMPluginNoOpHooks
 	config        MockerConfig
 	rules         []MockRule
 	compiledRules []compiledRule // Pre-compiled rules for performance
@@ -499,9 +500,7 @@ func (p *MockerPlugin) HTTPTransportStreamChunkHook(ctx *schemas.BifrostContext,
 }
 
 // PreRequestHook implements schemas.LLMPlugin (no-op — required for plugin indexing).
-func (p *MockerPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
-	return nil
-}
+// PreRequestHook is provided by schemas.LLMPluginNoOpHooks — see MockerPlugin struct.
 
 // PreLLMHook intercepts requests and applies mocking rules based on configuration
 // This is called before the actual provider request and can short-circuit the flow

@@ -29,6 +29,7 @@ type AccumulatedContent struct {
 // JsonParserPlugin provides JSON parsing capabilities for streaming responses
 // It handles partial JSON chunks by accumulating them and making the accumulated content valid JSON
 type JsonParserPlugin struct {
+	schemas.LLMPluginNoOpHooks
 	usage Usage
 	// State management for accumulating chunks
 	accumulatedContent map[string]*AccumulatedContent // requestID -> accumulated content with timestamp
@@ -99,9 +100,7 @@ func (p *JsonParserPlugin) HTTPTransportStreamChunkHook(ctx *schemas.BifrostCont
 }
 
 // PreRequestHook implements schemas.LLMPlugin (no-op — required for plugin indexing).
-func (p *JsonParserPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
-	return nil
-}
+// PreRequestHook is provided by schemas.LLMPluginNoOpHooks — see JsonParserPlugin struct.
 
 // PreLLMHook is not used for this plugin as we only process responses
 // Parameters:

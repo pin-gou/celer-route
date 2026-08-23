@@ -497,6 +497,82 @@ func (p *CooldownPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.Bi
 	return nil
 }
 
+// PreProviderHook inspects the targeted provider's key pool against the cooldown
+// state and short-circuits the attempt with a synthetic 503 "no_eligible_keys"
+// BifrostError when every key is in cooldown. The framework stamps
+// ctx[BifrostContextKeyProviderKeys] with the per-provider key snapshot before
+// calling this hook, so we never have to round-trip through bifrost.account.
+//
+// Returning a Silent short-circuit asks presentation plugins (logging) to skip
+// their log writes for this attempt — the underlying BifrostError still
+// propagates to the caller so the fallback chain can proceed (and the cooldown
+// timeline updates cleanly). Without this hook, the request would otherwise
+// reach the worker queue, have every key vetoed by AsFilter, surface a
+// "no_eligible_keys" 503 there, and force a "spurious" status=cancelled log
+// row before the fallback attempt ran.
+//
+// PreProviderHook is also called for each fallback attempt, so cooldown re-
+// checks the fallback provider's key pool before the fallback is enqueued.
+// AsFilter inside the worker's keyProvider still runs for the retry /
+// unfiltered-key paths so this hook is purely an early-out optimization, not
+// the sole veto authority.
+func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	if p.State == nil || req == nil {
+		return req, nil, nil
+	}
+	provider, model, _ := req.GetRequestFields()
+	if provider == "" || model == "" {
+		return req, nil, nil
+	}
+
+	providerKeysAny := ctx.Value(schemas.BifrostContextKeyProviderKeys)
+	providerKeys, _ := providerKeysAny.(map[schemas.ModelProvider][]schemas.Key)
+	keys, ok := providerKeys[provider]
+	if !ok || len(keys) == 0 {
+		// No keys configured for this provider — let the normal pipeline surface
+		// the error so the caller sees the usual diagnostics.
+		return req, nil, nil
+	}
+
+	filter := p.State.AsFilter(p.logger)
+	available, err := filter(ctx, provider, model, keys)
+	if err != nil {
+		// Filter error shouldn't take down the request — let the worker's
+		// KeyPoolFilter path handle it.
+		if p.logger != nil {
+			p.logger.Warn("[provider-cooldown] PreProviderHook filter failed for provider %s: %v", provider, err)
+		}
+		return req, nil, nil
+	}
+	if len(available) > 0 {
+		return req, nil, nil
+	}
+
+	// All keys are in cooldown — synthesize the same 503 that the worker would
+	// have produced via AsFilter, but surface it here so logging sees the
+	// SilentLog flag and skips the spurious "cancelled" row.
+	statusCode := 503
+	errType := "no_eligible_keys"
+	message := fmt.Sprintf("no eligible keys for provider %s (all in cooldown)", provider)
+	if p.logger != nil {
+		p.logger.Info("[provider-cooldown] short-circuit on %s/%s — all %d key(s) in cooldown", provider, model, len(keys))
+	}
+	return req, &schemas.LLMPluginShortCircuit{
+		Error: &schemas.BifrostError{
+			IsBifrostError: false,
+			StatusCode:     &statusCode,
+			Type:           &errType,
+			Error: &schemas.ErrorField{
+				Type:    &errType,
+				Message: message,
+			},
+			// AllowFallbacks stays nil (= allow) so the configured fallback chain
+			// can pick up the request, matching the worker's errAllKeysFiltered path.
+		},
+		Silent: true,
+	}, nil
+}
+
 // PostLLMHook inspects the response and (when applicable) the error. On a
 // quota-exhausted error it reads the (provider, keyID) of the last attempt
 // from the AttemptTrail and marks the (provider, key) pair in cooldown.

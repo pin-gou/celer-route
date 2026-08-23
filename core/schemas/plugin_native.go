@@ -19,9 +19,18 @@ type EventBroadcaster func(eventType string, data interface{})
 // LLMPluginShortCircuit represents a plugin's decision to short-circuit the normal flow.
 // It can contain either a response (success short-circuit), a stream (streaming short-circuit), or an error (error short-circuit).
 type LLMPluginShortCircuit struct {
-	Response *BifrostResponse    // If set, short-circuit with this response (skips provider call)
+	Response *BifrostResponse       // If set, short-circuit with this response (skips provider call)
 	Stream   chan *BifrostStreamChunk // If set, short-circuit with this stream (skips provider call)
-	Error    *BifrostError       // If set, short-circuit with this error (can set AllowFallbacks field)
+	Error    *BifrostError          // If set, short-circuit with this error (can set AllowFallbacks field)
+	// Silent, when true, asks presentation plugins (logging, etc.) to suppress
+	// end-user-visible side effects for this short-circuit. The framework still
+	// runs PostLLMHook so the PreLLMHook/PostLLMHook pairing contract holds; only
+	// plugins that opt in (by reading BifrostContextKeySilentLog) skip writing.
+	// Intended for system-policy rejections like provider-cooldown's
+	// no_eligible_keys, where the "spurious cancelled" log entry is what we
+	// want to suppress, while the underlying BifrostError is still surfaced to
+	// the caller so the fallback chain can proceed.
+	Silent bool
 }
 
 // MCPPluginShortCircuit represents a plugin's decision to short-circuit the normal flow.

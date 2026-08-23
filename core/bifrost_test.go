@@ -2876,6 +2876,10 @@ func (f *fakeRoutingPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas
 func (f *fakeRoutingPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
 	return resp, bifrostErr, nil
 }
+// PreProviderHook is provided by schemas.LLMPluginNoOpHooks (embedded below).
+func (f *fakeRoutingPlugin) PreProviderHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
 
 func newRoutingCommitPipeline(plugins ...schemas.LLMPlugin) *PluginPipeline {
 	return &PluginPipeline{

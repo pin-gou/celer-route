@@ -139,6 +139,7 @@ type EmbeddingRequestExecutor func(ctx *schemas.BifrostContext, req *schemas.Bif
 // Streaming responses are accumulated chunk-by-chunk and stored as a single
 // entry on the final chunk; TTL bookkeeping is per-entry via expires_at.
 type Plugin struct {
+	schemas.LLMPluginNoOpHooks
 	store                    vectorstore.VectorStore
 	config                   *Config
 	logger                   schemas.Logger
@@ -331,9 +332,7 @@ func (plugin *Plugin) HTTPTransportStreamChunkHook(ctx *schemas.BifrostContext, 
 }
 
 // PreRequestHook implements schemas.LLMPlugin (no-op — required for plugin indexing).
-func (plugin *Plugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
-	return nil
-}
+// PreRequestHook is provided by schemas.LLMPluginNoOpHooks — see Plugin struct.
 
 // PreLLMHook performs the cache lookup before the request reaches the
 // provider. It runs the direct hash path first (cheapest), falls back to

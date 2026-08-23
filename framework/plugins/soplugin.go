@@ -30,9 +30,10 @@ type DynamicPlugin struct {
 	// preRequestHook is forward-compat: new .so plugins built against LLMPlugin can export
 	// PreRequestHook to participate in the per-request routing phase. Legacy plugins predating
 	// PreRequestHook leave it nil and silently no-op for routing.
-	preRequestHook func(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) error
-	preLLMHook     func(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error)
-	postLLMHook    func(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error)
+	preRequestHook   func(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) error
+	preProviderHook  func(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error)
+	preLLMHook       func(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error)
+	postLLMHook      func(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error)
 
 	// MCPPlugin (optional)
 	preMCPHook  func(ctx *schemas.BifrostContext, req *schemas.BifrostMCPRequest) (*schemas.BifrostMCPRequest, *schemas.MCPPluginShortCircuit, error)
@@ -91,6 +92,18 @@ func (dp *DynamicPlugin) PreRequestHook(ctx *schemas.BifrostContext, req *schema
 		return nil
 	}
 	return dp.preRequestHook(ctx, req)
+}
+
+// PreProviderHook is invoked once per attempt after PreRequestHook pins req.Provider
+// but before PreLLMHook runs (LLMPlugin interface). Plugins like provider-cooldown
+// use this to short-circuit on system-policy rejections (e.g. all keys cooled) before
+// the request reaches the worker queue. Defaults to a no-op passthrough for plugins
+// that don't export PreProviderHook.
+func (dp *DynamicPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	if dp.preProviderHook == nil {
+		return req, nil, nil
+	}
+	return dp.preProviderHook(ctx, req)
 }
 
 // PreLLMHook is invoked before LLM provider calls (LLMPlugin interface)

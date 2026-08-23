@@ -443,7 +443,9 @@ const (
 	BifrostContextKeyRTKCompressionRatio                 BifrostContextKey = "x-bf-rtk-compression-ratio"     // float64 (set by compression plugin - ratio of bytes removed by compression, 0.0-1.0)
 	BifrostContextKeyRTKOriginalSnapshot                 BifrostContextKey = "x-bf-rtk-original-snapshot"     // json.RawMessage (set by compression plugin - JSON snapshot of pre-compression tool message contents, for log detail diff view)
 	BifrostContextKeyRTKSnapshotMode                     BifrostContextKey = "x-bf-rtk-snapshot-mode"         // string (set by compression plugin - "split" | "merged" | "off")
-	BifrostContextKeyRTKRawOutputID                      BifrostContextKey = "x-bf-rtk-raw-output-id"         // string (set by compression plugin - 24-char SHA256 prefix of the persisted raw output file, when RawOutputRetention is not "never")
+	BifrostContextKeyRTKRawOutputID                      BifrostContextKey = "x-bf-rtk-raw-output-id"            // string (set by compression plugin - 24-char SHA256 prefix of the persisted raw output file, when RawOutputRetention is not "never")
+	BifrostContextKeyProviderKeys                        BifrostContextKey = "bifrost-provider-keys"             // map[ModelProvider][]Key (set by bifrost - DO NOT SET THIS MANUALLY) - per-provider key pool snapshot stamped before PreProviderHook so plugins like provider-cooldown can decide whether to short-circuit before the request enters the worker queue
+	BifrostContextKeySilentLog                           BifrostContextKey = "bifrost-silent-log"                // bool (set by bifrost - DO NOT SET THIS MANUALLY) - when true, presentation plugins (e.g. logging) suppress end-user-visible side effects for the current attempt; the framework still runs PostLLMHook so the plugin pipeline contract holds
 )
 
 const (

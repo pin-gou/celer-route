@@ -973,3 +973,149 @@ func TestAsFilterLogsSuppressedKeysAtInfo(t *testing.T) {
 		t.Fatalf("expected info-level suppression log, got %d messages: %v", log.count(), log.msgs)
 	}
 }
+
+// TestPreProviderHookShortCircuitOnAllKeysCooled verifies the new silent
+// short-circuit contract: when every key for the targeted provider is in
+// cooldown, PreProviderHook returns an LLMPluginShortCircuit with a synthetic
+// 503 "no_eligible_keys" BifrostError and Silent=true so the framework can
+// skip the worker queue (and the logging plugin can skip the spurious
+// "cancelled" row).
+func TestPreProviderHookShortCircuitOnAllKeysCooled(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	provider := schemas.OpenAI
+	p.State.Mark(provider, "key-1")
+	p.State.Mark(provider, "key-2")
+
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, map[schemas.ModelProvider][]schemas.Key{
+		provider: {{ID: "key-1"}, {ID: "key-2"}},
+	})
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: provider,
+			Model:    "gpt-4o",
+		},
+	}
+
+	gotReq, sc, err := p.PreProviderHook(ctx, req)
+	if err != nil {
+		t.Fatalf("PreProviderHook must not return an error, got %v", err)
+	}
+	if sc == nil {
+		t.Fatal("expected short-circuit when every key is in cooldown")
+	}
+	if !sc.Silent {
+		t.Fatal("silent short-circuit must be set so logging skips the spurious cancelled row")
+	}
+	if sc.Error == nil {
+		t.Fatal("short-circuit must carry the synthetic 503 BifrostError")
+	}
+	if sc.Error.StatusCode == nil || *sc.Error.StatusCode != 503 {
+		t.Fatalf("expected 503 status code, got %+v", sc.Error.StatusCode)
+	}
+	if sc.Error.Type == nil || *sc.Error.Type != "no_eligible_keys" {
+		t.Fatalf("expected no_eligible_keys error type, got %+v", sc.Error.Type)
+	}
+	if gotReq != req {
+		t.Fatal("PreProviderHook must return the SAME request pointer")
+	}
+}
+
+// TestPreProviderHookPassesThroughWhenSomeKeysAvailable verifies that with at
+// least one eligible key, PreProviderHook is a no-op passthrough (no
+// short-circuit) so the request reaches the worker as usual.
+func TestPreProviderHookPassesThroughWhenSomeKeysAvailable(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	provider := schemas.OpenAI
+	p.State.Mark(provider, "key-1") // only key-1 cooled; key-2 must remain eligible
+
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, map[schemas.ModelProvider][]schemas.Key{
+		provider: {{ID: "key-1"}, {ID: "key-2"}},
+	})
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: provider,
+			Model:    "gpt-4o",
+		},
+	}
+
+	gotReq, sc, err := p.PreProviderHook(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sc != nil {
+		t.Fatalf("must not short-circuit when at least one key is available, got %+v", sc)
+	}
+	if gotReq != req {
+		t.Fatal("PreProviderHook must return the same request pointer on passthrough")
+	}
+}
+
+// TestPreProviderHookPassesThroughWhenNoKeySnapshot ensures the hook is a
+// no-op (not a panic, not a short-circuit) when the framework hasn't stamped
+// the provider key snapshot — typically because the hook is invoked from a
+// caller that bypasses stampProviderKeysOnContext. The worker's KeyPoolFilter
+// remains the sole veto authority in that case.
+func TestPreProviderHookPassesThroughWhenNoKeySnapshot(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o",
+		},
+	}
+
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	gotReq, sc, err := p.PreProviderHook(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sc != nil {
+		t.Fatalf("must not short-circuit without a provider key snapshot, got %+v", sc)
+	}
+	if gotReq != req {
+		t.Fatal("must return the same request pointer on passthrough")
+	}
+}
+
+// TestPreProviderHookPassesThroughWhenProviderUnknown covers the case where
+// the request's provider has no entry in the snapshot (typically because the
+// routing layer chose a custom provider the account doesn't list). The hook
+// must not fabricate a short-circuit; the normal pipeline surfaces the
+// underlying "no keys configured" error.
+func TestPreProviderHookPassesThroughWhenProviderUnknown(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, map[schemas.ModelProvider][]schemas.Key{
+		schemas.OpenAI: {{ID: "key-1"}},
+	})
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.Anthropic, // not in snapshot
+			Model:    "claude-3",
+		},
+	}
+
+	gotReq, sc, err := p.PreProviderHook(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sc != nil {
+		t.Fatalf("must not short-circuit on an unconfigured provider, got %+v", sc)
+	}
+	if gotReq != req {
+		t.Fatal("must return the same request pointer on passthrough")
+	}
+}

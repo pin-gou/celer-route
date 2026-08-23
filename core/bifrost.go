@@ -187,6 +187,9 @@ type PluginPipeline struct {
 
 	// Number of PreHooks that were executed (used to determine which PostHooks to run in reverse order)
 	executedPreHooks int
+	// Number of PreProviderHooks that were executed (used to determine which PostHooks to run in
+	// reverse order when a PreProviderHook short-circuits before PreLLMHook ever runs)
+	executedPreProviderHooks int
 	// Errors from PreHooks and PostHooks
 	preHookErrors  []error
 	postHookErrors []error
@@ -477,6 +480,41 @@ func (bifrost *Bifrost) setModelCatalogOnContext(ctx *schemas.BifrostContext) {
 		return
 	}
 	ctx.SetValue(schemas.BifrostContextKeyModelCatalog, catalog)
+}
+
+// stampProviderKeysOnContext snapshots every configured provider's key pool into
+// ctx[BifrostContextKeyProviderKeys] so PreProviderHook can decide whether the
+// targeted provider has any eligible keys without round-tripping through the
+// worker queue. Scoped plugin contexts delegate Value lookups to the root, so
+// stamping the root once is enough for every plugin in the pipeline.
+//
+// Called once per attempt (handleRequest stamps it for the primary, tryRequest
+// re-stamps it before the fallback's PreProviderHook so cooldown sees the
+// fallback provider's key pool rather than the primary's). Errors are
+// swallowed — a missing entry means "no keys configured for this provider",
+// which is the correct signal for PreProviderHook to short-circuit.
+func (bifrost *Bifrost) stampProviderKeysOnContext(ctx *schemas.BifrostContext) {
+	if ctx == nil {
+		return
+	}
+	providers, err := bifrost.account.GetConfiguredProviders()
+	if err != nil || len(providers) == 0 {
+		return
+	}
+	snapshot := make(map[schemas.ModelProvider][]schemas.Key, len(providers))
+	for _, p := range providers {
+		keys, err := bifrost.account.GetKeysForProvider(ctx, p)
+		if err != nil {
+			continue
+		}
+		if len(keys) > 0 {
+			snapshot[p] = keys
+		}
+	}
+	if len(snapshot) == 0 {
+		return
+	}
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, snapshot)
 }
 
 // ReloadConfig reloads the config from DB
@@ -4785,6 +4823,33 @@ func (bifrost *Bifrost) RunStreamPreHooks(ctx *schemas.BifrostContext, req *sche
 	// no-ops by design; proper request metadata is preserved and tampering is discouraged.
 	reqProvider, reqModel, _ := req.GetRequestFields()
 
+	// PreProviderHook short-circuits the WS bridge before any plugin writes pending state,
+	// mirroring tryStreamRequest/tryRequest. Silent=true lets presentation plugins skip
+	// log writes for system-policy rejections (e.g. provider-cooldown no_eligible_keys).
+	bifrost.stampProviderKeysOnContext(ctx)
+	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
+	if providerSC != nil {
+		if providerSC.Silent {
+			ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+		}
+		if providerSC.Error != nil {
+			providerSC.Error.PopulateExtraFields(req.RequestType, reqProvider, reqModel, reqModel)
+			_, bifrostErr := pipeline.RunPostLLMHooks(ctx, nil, providerSC.Error, providerPreCount)
+			if bifrostErr != nil {
+				bifrostErr.PopulateExtraFields(req.RequestType, reqProvider, reqModel, reqModel)
+			}
+			drainAndAttachPluginLogs(ctx)
+			if traceID, ok := ctx.Value(schemas.BifrostContextKeyTraceID).(string); ok && strings.TrimSpace(traceID) != "" {
+				tracer.CompleteAndFlushTrace(strings.TrimSpace(traceID))
+			}
+			cleanup()
+			return nil, providerSC.Error
+		}
+	}
+	if providerReq != nil {
+		req = providerReq
+	}
+
 	preReq, shortCircuit, preCount := pipeline.RunLLMPreHooks(ctx, req)
 	if preReq == nil && shortCircuit == nil {
 		bifrostErr := newBifrostErrorFromMsg("bifrost request after plugin hooks cannot be nil")
@@ -4911,6 +4976,33 @@ func (bifrost *Bifrost) RunRealtimeTurnPreHooks(ctx *schemas.BifrostContext, req
 		bifrost.releasePluginPipeline(pipeline)
 	}
 	provider, model, _ := req.GetRequestFields()
+
+	// PreProviderHook: short-circuits the realtime turn before any plugin writes pending
+	// state, mirroring RunStreamPreHooks. Silent=true lets presentation plugins skip log
+	// writes for system-policy rejections (e.g. provider-cooldown no_eligible_keys).
+	bifrost.stampProviderKeysOnContext(ctx)
+	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
+	if providerSC != nil {
+		if providerSC.Silent {
+			ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+		}
+		if providerSC.Error != nil {
+			providerSC.Error.PopulateExtraFields(schemas.RealtimeRequest, provider, model, model)
+			_, bifrostErr := pipeline.RunPostLLMHooks(ctx, nil, providerSC.Error, providerPreCount)
+			if bifrostErr != nil {
+				bifrostErr.PopulateExtraFields(schemas.RealtimeRequest, provider, model, model)
+			}
+			drainAndAttachPluginLogs(ctx)
+			if traceID, ok := ctx.Value(schemas.BifrostContextKeyTraceID).(string); ok && strings.TrimSpace(traceID) != "" {
+				tracer.CompleteAndFlushTrace(strings.TrimSpace(traceID))
+			}
+			cleanup()
+			return nil, providerSC.Error
+		}
+	}
+	if providerReq != nil {
+		req = providerReq
+	}
 
 	preReq, shortCircuit, preCount := pipeline.RunLLMPreHooks(ctx, req)
 	if preReq == nil && shortCircuit == nil {
@@ -5495,6 +5587,59 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 	pipeline := bifrost.getPluginPipeline()
 	defer bifrost.releasePluginPipeline(pipeline)
 
+	// PreProviderHook runs once per attempt (primary + every fallback), after PreRequestHook
+	// has pinned req.Provider/Model and before any plugin writes pending side effects
+	// (logging.PreLLMHook pushes a status=processing row, etc.). Snapshot the per-provider
+	// key pool into ctx first so plugins like provider-cooldown can decide whether the
+	// targeted provider has any eligible keys without round-tripping through the worker
+	// queue. A short-circuit here with Silent=true lets cooldown suppress the "spurious
+	// cancelled" log entry while still surfacing the synthetic 503 to the caller so the
+	// fallback chain can proceed.
+	bifrost.stampProviderKeysOnContext(ctx)
+	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
+	if providerSC != nil {
+		if providerSC.Silent {
+			ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+		}
+		// Materialize the short-circuit with PostLLMHook pairing. Reuse the same
+		// pipeline instance so the post-hook count (providerPreCount) is observed
+		// correctly; PostLLMHooks walks p.llmPlugins in reverse up to that count.
+		if providerSC.Response != nil {
+			providerSC.Response.PopulateExtraFields(req.RequestType, provider, model, model)
+			resp, bifrostErr := pipeline.RunPostLLMHooks(ctx, providerSC.Response, nil, providerPreCount)
+			if bifrostErr != nil {
+				bifrostErr.PopulateExtraFields(req.RequestType, provider, model, model)
+			} else if resp != nil {
+				resp.PopulateExtraFields(req.RequestType, provider, model, model)
+			}
+			drainAndAttachPluginLogs(ctx)
+			if bifrostErr != nil {
+				return nil, bifrostErr
+			}
+			return resp, nil
+		}
+		if providerSC.Error != nil {
+			providerSC.Error.PopulateExtraFields(req.RequestType, provider, model, model)
+			resp, bifrostErr := pipeline.RunPostLLMHooks(ctx, nil, providerSC.Error, providerPreCount)
+			if bifrostErr != nil {
+				bifrostErr.PopulateExtraFields(req.RequestType, provider, model, model)
+			} else if resp != nil {
+				resp.PopulateExtraFields(req.RequestType, provider, model, model)
+			}
+			drainAndAttachPluginLogs(ctx)
+			if bifrostErr != nil {
+				return nil, bifrostErr
+			}
+			return resp, nil
+		}
+	}
+	if providerReq == nil {
+		bifrostErr := newBifrostErrorFromMsg("bifrost request after PreProviderHook cannot be nil")
+		bifrostErr.PopulateExtraFields(req.RequestType, provider, model, model)
+		return nil, bifrostErr
+	}
+	req = providerReq
+
 	// RequestType, Provider, OriginalModelRequested, and ResolvedModelUsed are always
 	// overwritten around RunPostLLMHooks — plugin modifications to these 4 fields are
 	// no-ops by design; proper request metadata is preserved and tampering is discouraged.
@@ -5750,6 +5895,52 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 			bifrost.releasePluginPipeline(pipeline)
 		}
 	}()
+
+	// PreProviderHook runs once per attempt (primary + every fallback), after PreRequestHook
+	// has pinned req.Provider/Model and before any plugin writes pending side effects.
+	// Snapshot the per-provider key pool into ctx first so plugins like provider-cooldown
+	// can decide whether the targeted provider has any eligible keys without round-tripping
+	// through the worker queue. A short-circuit here with Silent=true lets cooldown suppress
+	// the "spurious cancelled" log entry while still surfacing the synthetic 503 to the
+	// caller so the fallback chain can proceed.
+	bifrost.stampProviderKeysOnContext(ctx)
+	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
+	if providerSC != nil {
+		if providerSC.Silent {
+			ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+		}
+		if providerSC.Response != nil {
+			providerSC.Response.PopulateExtraFields(req.RequestType, provider, model, model)
+			resp, bifrostErr := pipeline.RunPostLLMHooks(ctx, providerSC.Response, nil, providerPreCount)
+			if bifrostErr != nil {
+				bifrostErr.PopulateExtraFields(req.RequestType, provider, model, model)
+			} else if resp != nil {
+				resp.PopulateExtraFields(req.RequestType, provider, model, model)
+			}
+			drainAndAttachPluginLogs(ctx)
+			if bifrostErr != nil {
+				return nil, bifrostErr
+			}
+			return newBifrostMessageChan(resp), nil
+		}
+		if providerSC.Error != nil {
+			providerSC.Error.PopulateExtraFields(req.RequestType, provider, model, model)
+			resp, bifrostErr := pipeline.RunPostLLMHooks(ctx, nil, providerSC.Error, providerPreCount)
+			if bifrostErr != nil {
+				bifrostErr.PopulateExtraFields(req.RequestType, provider, model, model)
+			} else if resp != nil {
+				resp.PopulateExtraFields(req.RequestType, provider, model, model)
+			}
+			drainAndAttachPluginLogs(ctx)
+			if bifrostErr != nil {
+				return nil, bifrostErr
+			}
+			return nil, bifrostErr
+		}
+	}
+	if providerReq != nil {
+		req = providerReq
+	}
 
 	// RequestType, Provider, OriginalModelRequested, and ResolvedModelUsed are always
 	// overwritten around RunPostLLMHooks — plugin modifications to these 4 fields are
@@ -7680,6 +7871,64 @@ func (p *PluginPipeline) RunLLMPreHooks(ctx *schemas.BifrostContext, req *schema
 	return req, nil, p.executedPreHooks
 }
 
+// RunPreProviderHooks executes PreProviderHook on each LLM plugin in registration order, once per
+// attempt (primary + every fallback). It runs AFTER PreRequestHook has pinned req.Provider/Model
+// and BEFORE PreLLMHook writes any pending side effects (logging.PreLLMHook pushes a status=processing
+// row, etc.). The framework stamps ctx[BifrostContextKeyProviderKeys] with the per-provider key pool
+// before calling this hook, so plugins can decide whether the targeted provider has any eligible keys
+// without round-tripping through the worker queue.
+//
+// Short-circuit semantics mirror PreLLMHook: a plugin returning a non-nil *LLMPluginShortCircuit
+// stops the iteration immediately, and the framework runs PostLLMHook so the pairing contract
+// still holds. Setting ShortCircuit.Silent=true additionally asks presentation plugins (logging)
+// to skip writing for this attempt — the underlying BifrostError still propagates to the caller.
+// Errors are non-blocking (logged + accumulated) so a transient plugin bug doesn't take down
+// unrelated providers.
+func (p *PluginPipeline) RunPreProviderHooks(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, int) {
+	if skipPluginPipeline, ok := ctx.Value(schemas.BifrostContextKeySkipPluginPipeline).(bool); ok && skipPluginPipeline {
+		return req, nil, 0
+	}
+	var shortCircuit *schemas.LLMPluginShortCircuit
+	var err error
+	ctx.BlockRestrictedWrites()
+	defer ctx.UnblockRestrictedWrites()
+	for i, plugin := range p.llmPlugins {
+		pluginName := plugin.GetName()
+		p.logger.Debug("running pre-provider-hook for plugin %s", pluginName)
+		spanCtx, handle := p.tracer.StartSpan(ctx, fmt.Sprintf("plugin.%s.preproviderhook", sanitizeSpanName(pluginName)), schemas.SpanKindPlugin)
+		if spanCtx != nil {
+			if spanID, ok := spanCtx.Value(schemas.BifrostContextKeySpanID).(string); ok {
+				ctx.SetValue(schemas.BifrostContextKeySpanID, spanID)
+			}
+		}
+
+		pluginCtx := ctx.WithPluginScope(&pluginName)
+		req, shortCircuit, err = plugin.PreProviderHook(pluginCtx, req)
+		pluginCtx.ReleasePluginScope()
+
+		if err != nil {
+			p.tracer.SetAttribute(handle, "error", err.Error())
+			p.tracer.EndSpan(handle, schemas.SpanStatusError, err.Error())
+			p.preHookErrors = append(p.preHookErrors, err)
+			p.logger.Warn("error in PreProviderHook for plugin %s: %s", pluginName, err.Error())
+		} else if shortCircuit != nil {
+			p.tracer.SetAttribute(handle, "short_circuit", true)
+			if shortCircuit.Silent {
+				p.tracer.SetAttribute(handle, "silent", true)
+			}
+			p.tracer.EndSpan(handle, schemas.SpanStatusOk, "short-circuit")
+		} else {
+			p.tracer.EndSpan(handle, schemas.SpanStatusOk, "")
+		}
+
+		p.executedPreProviderHooks = i + 1
+		if shortCircuit != nil {
+			return req, shortCircuit, p.executedPreProviderHooks
+		}
+	}
+	return req, nil, p.executedPreProviderHooks
+}
+
 // RunPreRequestHooks executes PreRequestHook on each LLM plugin in registration order, once per
 // top-level request. Plugins mutate req.Provider, req.Model, req.Fallbacks (and any other field
 // they choose); mutations are committed to the shared *BifrostRequest and observed by every
@@ -8067,6 +8316,7 @@ func (p *PluginPipeline) resetPluginPipeline() {
 	p.llmPlugins = nil
 	p.mcpPlugins = nil
 	p.executedPreHooks = 0
+	p.executedPreProviderHooks = 0
 	clear(p.preHookErrors)
 	p.preHookErrors = p.preHookErrors[:0]
 	clear(p.postHookErrors)
