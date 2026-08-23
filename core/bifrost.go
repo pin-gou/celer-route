@@ -5794,8 +5794,13 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 		// this branch skipped PostLLMHooks to avoid logging a "spurious" 0ms
 		// failure, but doing so left the request stuck in "processing" forever
 		// in the timeline because PreLLMHook already pushed a processing event.
-		// Always running PostLLMHooks records the terminal status correctly
-		// (the logging plugin emits a log_updated event with status="error").
+		// Always running PostLLMHooks records the terminal status correctly.
+		// When the error is the synthetic no_eligible_keys, we set the SilentLog
+		// flag so the logging plugin suppresses the log entry — matching the
+		// PreProviderHook short-circuit path which already does this.
+		if isSyntheticNoEligibleKeysError(&bifrostErrVal) {
+			msg.Context.SetValue(schemas.BifrostContextKeySilentLog, true)
+		}
 		bifrostErrPtr := &bifrostErrVal
 		resp, bifrostErrPtr = pipeline.RunPostLLMHooks(msg.Context, nil, bifrostErrPtr, pluginCount)
 		if bifrostErrPtr != nil {
@@ -6161,8 +6166,13 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 		// this branch skipped PostLLMHooks to avoid logging a "spurious" 0ms
 		// failure, but doing so left the request stuck in "processing" forever
 		// in the timeline because PreLLMHook already pushed a processing event.
-		// Always running PostLLMHooks records the terminal status correctly
-		// (the logging plugin emits a log_updated event with status="error").
+		// Always running PostLLMHooks records the terminal status correctly.
+		// When the error is the synthetic no_eligible_keys, we set the SilentLog
+		// flag so the logging plugin suppresses the log entry — matching the
+		// PreProviderHook short-circuit path which already does this.
+		if isSyntheticNoEligibleKeysError(&bifrostErrVal) {
+			ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+		}
 		// Marking final chunk
 		ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
 		// On error we will complete post-hooks

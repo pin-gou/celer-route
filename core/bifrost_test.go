@@ -2876,6 +2876,7 @@ func (f *fakeRoutingPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas
 func (f *fakeRoutingPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
 	return resp, bifrostErr, nil
 }
+
 // PreProviderHook is provided by schemas.LLMPluginNoOpHooks (embedded below).
 func (f *fakeRoutingPlugin) PreProviderHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
 	return req, nil, nil
@@ -3359,5 +3360,134 @@ func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys(
 	}
 	if got := atomic.LoadInt32(&handlerCalls); got != 0 {
 		t.Fatalf("provider requestHandler must not be invoked when every key is vetoed, called %d time(s)", got)
+	}
+}
+
+// recordingSilentLogPlugin is a minimal LLMPlugin that records whether
+// BifrostContextKeySilentLog was visible in PostLLMHook. It mimics the
+// logging plugin's lifecycle (PreLLMHook runs, then PostLLMHook) but
+// never writes log rows.
+type recordingSilentLogPlugin struct {
+	name       string
+	mu         sync.Mutex
+	preRan     bool
+	postRan    bool
+	postSilent bool
+}
+
+func (p *recordingSilentLogPlugin) GetName() string { return p.name }
+func (p *recordingSilentLogPlugin) Cleanup() error  { return nil }
+
+func (p *recordingSilentLogPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
+	return nil
+}
+
+func (p *recordingSilentLogPlugin) PreProviderHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
+func (p *recordingSilentLogPlugin) PreLLMHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	p.mu.Lock()
+	p.preRan = true
+	p.mu.Unlock()
+	return req, nil, nil
+}
+
+func (p *recordingSilentLogPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	silent, _ := ctx.Value(schemas.BifrostContextKeySilentLog).(bool)
+	p.mu.Lock()
+	p.postRan = true
+	p.postSilent = silent
+	p.mu.Unlock()
+	return resp, bifrostErr, nil
+}
+
+func (p *recordingSilentLogPlugin) snapshot() (preRan, postRan, postSilent bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.preRan, p.postRan, p.postSilent
+}
+
+// TestWorkerNoEligibleKeysSetsSilentLog is the regression test for the
+// worker-side key-pool veto path. When PreProviderHook does NOT short-circuit
+// (some keys looked available) but the worker's KeyPoolFilter then suppresses
+// every key, the synthetic 503 "no_eligible_keys" flows back through msg.Err.
+// Core must set BifrostContextKeySilentLog before running PostLLMHooks so
+// presentation plugins (logging) suppress the spurious entry — matching the
+// PreProviderHook short-circuit path.
+func TestWorkerNoEligibleKeysSetsSilentLog(t *testing.T) {
+	vetoAll := func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, _ []schemas.Key) ([]schemas.Key, error) {
+		return nil, nil
+	}
+
+	for _, tc := range []struct {
+		name      string
+		streaming bool
+	}{
+		{name: "non-streaming"},
+		{name: "streaming"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			account := NewMockAccount()
+			account.AddProvider(schemas.OpenAI, 1, 1)
+			account.SetKeysForProvider(schemas.OpenAI, []schemas.Key{
+				{ID: "solo", Value: *schemas.NewSecretVar("sk-test"), Models: schemas.WhiteList{"*"}, Weight: 100},
+			})
+			account.configs[schemas.OpenAI].NetworkConfig.MaxRetries = 0
+
+			rec := &recordingSilentLogPlugin{name: "recorder"}
+			client, err := Init(context.Background(), schemas.BifrostConfig{
+				Account:       account,
+				Logger:        NewDefaultLogger(schemas.LogLevelError),
+				LLMPlugins:    []schemas.LLMPlugin{rec},
+				KeyPoolFilter: vetoAll,
+			})
+			if err != nil {
+				t.Fatalf("Init failed: %v", err)
+			}
+			t.Cleanup(client.Shutdown)
+
+			ctx := schemas.NewBifrostContext(context.Background(), time.Now().Add(30*time.Second))
+
+			req := &schemas.BifrostChatRequest{
+				Provider: schemas.OpenAI,
+				Model:    "gpt-4o",
+				Input: []schemas.ChatMessage{
+					{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("hi")}},
+				},
+			}
+
+			if tc.streaming {
+				stream, bifrostErr := client.ChatCompletionStreamRequest(ctx, req)
+				if bifrostErr == nil {
+					t.Fatal("expected 503 no_eligible_keys error for streaming request, got nil")
+				}
+				if !isSyntheticNoEligibleKeysError(bifrostErr) {
+					t.Fatalf("expected synthetic 503 no_eligible_keys, got %v", bifrostErr)
+				}
+				if stream != nil {
+					t.Fatal("expected nil stream when every key is vetoed")
+				}
+			} else {
+				_, bifrostErr := client.ChatCompletionRequest(ctx, req)
+				if bifrostErr == nil {
+					t.Fatal("expected 503 no_eligible_keys error, got nil")
+				}
+				if !isSyntheticNoEligibleKeysError(bifrostErr) {
+					t.Fatalf("expected synthetic 503 no_eligible_keys, got %v", bifrostErr)
+				}
+			}
+
+			preRan, postRan, postSilent := rec.snapshot()
+			if !preRan {
+				t.Error("PreLLMHook must have been called")
+			}
+			if !postRan {
+				t.Error("PostLLMHook must have been called to close the pending processing entry")
+			}
+			if !postSilent {
+				t.Error("BifrostContextKeySilentLog must be set when the worker returns a synthetic no_eligible_keys error")
+			}
+		})
 	}
 }
