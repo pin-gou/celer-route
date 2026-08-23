@@ -41,6 +41,13 @@ export const KnownProvidersNames = [
 	"zhipu",
 	"tencent",
 	"baidu",
+	"baichuan",
+	"iflytek",
+	"stepfun",
+	"xiaomi_mimo",
+	"modelscope",
+	"coze",
+	"coze_cn",
 ] as const;
 
 // Local Provider type derived from KNOWN_PROVIDERS constant
@@ -123,8 +130,8 @@ export const RequestTypes = [
 ] as const;
 
 export const ProviderLabels: Record<ProviderName, string> = {
-	alibaba: "Alibaba",
-	alibaba_tokenplan: "Alibaba Token Plan",
+	alibaba: "阿里云百炼",
+	alibaba_tokenplan: "阿里云百炼 Token 计划",
 	openai: "OpenAI",
 	anthropic: "Anthropic",
 	azure: "Azure",
@@ -135,7 +142,7 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	vertex: "Vertex AI",
 	minimax: "MiniMax",
 	mistral: "Mistral AI",
-	moonshot: "Moonshot",
+	moonshot: "月之暗面 Kimi",
 	ollama: "Ollama",
 	opencode: "OpenCode Free",
 	"opencode-go": "OpenCode Go",
@@ -150,20 +157,27 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	openrouter: "OpenRouter",
 	huggingface: "HuggingFace",
 	nebius: "Nebius Token Factory",
-	volcengine: "Volcengine",
+	volcengine: "火山引擎",
 	xai: "xAI",
 	replicate: "Replicate",
-	sensenova: "SenseNova",
-	siliconflow: "SiliconFlow",
+	sensenova: "商汤日日新",
+	siliconflow: "硅基流动",
 	vllm: "vLLM",
 	runway: "Runway",
 	runware: "Runware",
 	fireworks: "Fireworks AI",
 	sarvam: "Sarvam AI",
 	wafer: "Wafer",
-	zhipu: "Zhipu AI",
-	tencent: "Tencent",
-	baidu: "Baidu",
+	zhipu: "智谱 AI",
+	tencent: "腾讯混元",
+	baidu: "百度千帆",
+	baichuan: "百川智能",
+	iflytek: "讯飞星火",
+	stepfun: "阶跃星辰",
+	xiaomi_mimo: "小米 MiMo",
+	modelscope: "魔搭 ModelScope",
+	coze: "Coze",
+	coze_cn: "Coze (国内版)",
 } as const;
 
 // Helper function to get provider label, supporting custom providers

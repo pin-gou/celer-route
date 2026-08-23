@@ -25,19 +25,24 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/alibabatokenplan"
 	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
 	"github.com/pin-gou/pg-gateway/core/providers/azure"
+	"github.com/pin-gou/pg-gateway/core/providers/baichuan"
 	"github.com/pin-gou/pg-gateway/core/providers/baidu"
 	"github.com/pin-gou/pg-gateway/core/providers/bedrock"
 	"github.com/pin-gou/pg-gateway/core/providers/bedrockmantle"
 	"github.com/pin-gou/pg-gateway/core/providers/cerebras"
 	"github.com/pin-gou/pg-gateway/core/providers/cohere"
+	"github.com/pin-gou/pg-gateway/core/providers/coze"
+	"github.com/pin-gou/pg-gateway/core/providers/cozecn"
 	"github.com/pin-gou/pg-gateway/core/providers/deepseek"
 	"github.com/pin-gou/pg-gateway/core/providers/elevenlabs"
 	"github.com/pin-gou/pg-gateway/core/providers/fireworks"
 	"github.com/pin-gou/pg-gateway/core/providers/gemini"
 	"github.com/pin-gou/pg-gateway/core/providers/groq"
 	"github.com/pin-gou/pg-gateway/core/providers/huggingface"
+	"github.com/pin-gou/pg-gateway/core/providers/iflytek"
 	"github.com/pin-gou/pg-gateway/core/providers/minimax"
 	"github.com/pin-gou/pg-gateway/core/providers/mistral"
+	"github.com/pin-gou/pg-gateway/core/providers/modelscope"
 	"github.com/pin-gou/pg-gateway/core/providers/moonshot"
 	"github.com/pin-gou/pg-gateway/core/providers/nebius"
 	"github.com/pin-gou/pg-gateway/core/providers/ollama"
@@ -50,9 +55,10 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/runware"
 	"github.com/pin-gou/pg-gateway/core/providers/runway"
 	"github.com/pin-gou/pg-gateway/core/providers/sarvam"
-"github.com/pin-gou/pg-gateway/core/providers/sensenova"
+	"github.com/pin-gou/pg-gateway/core/providers/sensenova"
 	"github.com/pin-gou/pg-gateway/core/providers/sgl"
 	"github.com/pin-gou/pg-gateway/core/providers/siliconflow"
+	"github.com/pin-gou/pg-gateway/core/providers/stepfun"
 	"github.com/pin-gou/pg-gateway/core/providers/tencent"
 	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
 	"github.com/pin-gou/pg-gateway/core/providers/vertex"
@@ -60,6 +66,7 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/volcengine"
 	"github.com/pin-gou/pg-gateway/core/providers/wafer"
 	"github.com/pin-gou/pg-gateway/core/providers/xai"
+	"github.com/pin-gou/pg-gateway/core/providers/xiaomimimo"
 	"github.com/pin-gou/pg-gateway/core/providers/zhipu"
 	schemas "github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/valyala/fasthttp"
@@ -4517,6 +4524,20 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return baidu.NewBaiduProvider(config, bifrost.logger)
 	case schemas.Sensenova:
 		return sensenova.NewSensenovaProvider(config, bifrost.logger)
+	case schemas.Baichuan:
+		return baichuan.NewBaichuanProvider(config, bifrost.logger)
+	case schemas.Iflytek:
+		return iflytek.NewIflytekProvider(config, bifrost.logger)
+	case schemas.Stepfun:
+		return stepfun.NewStepfunProvider(config, bifrost.logger)
+	case schemas.XiaomiMimo:
+		return xiaomimimo.NewXiaomiMimoProvider(config, bifrost.logger)
+	case schemas.Modelscope:
+		return modelscope.NewModelscopeProvider(config, bifrost.logger)
+	case schemas.Coze:
+		return coze.NewCozeProvider(config, bifrost.logger)
+	case schemas.CozeCn:
+		return cozecn.NewCozeCnProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

@@ -548,6 +548,34 @@ func ModifyExpectationsForProvider(expectations ResponseExpectations, provider s
 		expectations.ShouldHaveTimestamps = false
 		expectations.ShouldHaveLatency = true
 
+	case schemas.Baichuan:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.Iflytek:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.Stepfun:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.XiaomiMimo:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.Modelscope:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.Coze:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.CozeCn:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
 	default:
 		// Keep default expectations — all true from BasicChatExpectations
 	}

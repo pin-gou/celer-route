@@ -53,4 +53,11 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	tencent: ["chat", "embed", "vision", "tools", "image", "speech"],
 	baidu: ["chat", "embed", "vision", "tools", "image", "speech"],
 	sensenova: ["chat", "embed", "vision", "tools", "image", "speech"],
+	baichuan: ["chat"],
+	iflytek: ["chat"],
+	stepfun: ["chat"],
+	xiaomi_mimo: ["chat"],
+	modelscope: ["chat"],
+	coze: ["chat"],
+	coze_cn: ["chat"],
 };

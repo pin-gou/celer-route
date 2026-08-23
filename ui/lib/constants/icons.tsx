@@ -920,6 +920,104 @@ export const ProviderIcons = {
 		);
 	},
 
+	baichuan: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/baichuan-icon.png"
+				alt="百川智能"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	iflytek: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/iflytek-icon.png"
+				alt="讯飞星火"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	stepfun: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/stepfun-icon.png"
+				alt="阶跃星辰"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	xiaomi_mimo: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/xiaomi_mimo-icon.png"
+				alt="小米 MiMo"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	modelscope: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/modelscope-icon.png"
+				alt="魔搭 ModelScope"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	coze: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/coze-icon.png"
+				alt="Coze"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	coze_cn: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/coze_cn-icon.png"
+				alt="Coze (国内版)"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
 	volcengine: ({ size = "md", className = "" }: IconProps) => {
 		const resolvedSize = resolveSize(size);
 		return (

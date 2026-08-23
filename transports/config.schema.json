@@ -539,6 +539,27 @@
         },
         "sensenova": {
           "$ref": "#/$defs/provider"
+        },
+        "baichuan": {
+          "$ref": "#/$defs/provider"
+        },
+        "iflytek": {
+          "$ref": "#/$defs/provider"
+        },
+        "stepfun": {
+          "$ref": "#/$defs/provider"
+        },
+        "xiaomi_mimo": {
+          "$ref": "#/$defs/provider"
+        },
+        "modelscope": {
+          "$ref": "#/$defs/provider"
+        },
+        "coze": {
+          "$ref": "#/$defs/provider"
+        },
+        "coze_cn": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -7975,7 +7996,14 @@
             "zhipu",
             "tencent",
             "baidu",
-            "sensenova"
+            "sensenova",
+            "baichuan",
+            "iflytek",
+            "stepfun",
+            "xiaomi_mimo",
+            "modelscope",
+            "coze",
+            "coze_cn"
           ],
           "description": "Base provider type to extend"
         },

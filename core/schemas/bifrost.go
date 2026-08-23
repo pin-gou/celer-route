@@ -43,47 +43,54 @@ type BifrostConfig struct {
 type ModelProvider string
 
 const (
-	OpenAI        ModelProvider = "openai"
-	Azure         ModelProvider = "azure"
-	Anthropic     ModelProvider = "anthropic"
-	Bedrock       ModelProvider = "bedrock"
-	BedrockMantle ModelProvider = "bedrock_mantle"
-	Cohere        ModelProvider = "cohere"
-	Vertex        ModelProvider = "vertex"
-	Mistral       ModelProvider = "mistral"
-	Ollama        ModelProvider = "ollama"
-	Opencode      ModelProvider = "opencode"
-	OpencodeGo    ModelProvider = "opencode-go"
-	OpencodeZen   ModelProvider = "opencode-zen"
-	Groq          ModelProvider = "groq"
-	SGL           ModelProvider = "sgl"
-	Parasail      ModelProvider = "parasail"
-	Perplexity    ModelProvider = "perplexity"
-	Cerebras      ModelProvider = "cerebras"
-	DeepSeek      ModelProvider = "deepseek"
-	Gemini        ModelProvider = "gemini"
-	OpenRouter    ModelProvider = "openrouter"
-	Elevenlabs    ModelProvider = "elevenlabs"
-	HuggingFace   ModelProvider = "huggingface"
-	Nebius        ModelProvider = "nebius"
-	XAI           ModelProvider = "xai"
-	Replicate     ModelProvider = "replicate"
-	VLLM          ModelProvider = "vllm"
-	Runway        ModelProvider = "runway"
-	Runware       ModelProvider = "runware"
-	Fireworks     ModelProvider = "fireworks"
-	Sarvam        ModelProvider = "sarvam"
-	Wafer         ModelProvider = "wafer"
-	Alibaba       ModelProvider = "alibaba"
+	OpenAI           ModelProvider = "openai"
+	Azure            ModelProvider = "azure"
+	Anthropic        ModelProvider = "anthropic"
+	Bedrock          ModelProvider = "bedrock"
+	BedrockMantle    ModelProvider = "bedrock_mantle"
+	Cohere           ModelProvider = "cohere"
+	Vertex           ModelProvider = "vertex"
+	Mistral          ModelProvider = "mistral"
+	Ollama           ModelProvider = "ollama"
+	Opencode         ModelProvider = "opencode"
+	OpencodeGo       ModelProvider = "opencode-go"
+	OpencodeZen      ModelProvider = "opencode-zen"
+	Groq             ModelProvider = "groq"
+	SGL              ModelProvider = "sgl"
+	Parasail         ModelProvider = "parasail"
+	Perplexity       ModelProvider = "perplexity"
+	Cerebras         ModelProvider = "cerebras"
+	DeepSeek         ModelProvider = "deepseek"
+	Gemini           ModelProvider = "gemini"
+	OpenRouter       ModelProvider = "openrouter"
+	Elevenlabs       ModelProvider = "elevenlabs"
+	HuggingFace      ModelProvider = "huggingface"
+	Nebius           ModelProvider = "nebius"
+	XAI              ModelProvider = "xai"
+	Replicate        ModelProvider = "replicate"
+	VLLM             ModelProvider = "vllm"
+	Runway           ModelProvider = "runway"
+	Runware          ModelProvider = "runware"
+	Fireworks        ModelProvider = "fireworks"
+	Sarvam           ModelProvider = "sarvam"
+	Wafer            ModelProvider = "wafer"
+	Alibaba          ModelProvider = "alibaba"
 	AlibabaTokenplan ModelProvider = "alibaba_tokenplan"
-	Minimax       ModelProvider = "minimax"
-	Moonshot      ModelProvider = "moonshot"
-	Siliconflow   ModelProvider = "siliconflow"
-	Volcengine    ModelProvider = "volcengine"
-	Zhipu         ModelProvider = "zhipu"
-	Tencent       ModelProvider = "tencent"
-	Baidu         ModelProvider = "baidu"
-	Sensenova     ModelProvider = "sensenova"
+	Minimax          ModelProvider = "minimax"
+	Moonshot         ModelProvider = "moonshot"
+	Siliconflow      ModelProvider = "siliconflow"
+	Volcengine       ModelProvider = "volcengine"
+	Zhipu            ModelProvider = "zhipu"
+	Tencent          ModelProvider = "tencent"
+	Baidu            ModelProvider = "baidu"
+	Sensenova        ModelProvider = "sensenova"
+	Baichuan         ModelProvider = "baichuan"
+	Iflytek          ModelProvider = "iflytek"
+	Stepfun          ModelProvider = "stepfun"
+	XiaomiMimo       ModelProvider = "xiaomi_mimo"
+	Modelscope       ModelProvider = "modelscope"
+	Coze             ModelProvider = "coze"
+	CozeCn           ModelProvider = "coze_cn"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
@@ -140,6 +147,13 @@ var StandardProviders = []ModelProvider{
 	Tencent,
 	Baidu,
 	Sensenova,
+	Baichuan,
+	Iflytek,
+	Stepfun,
+	XiaomiMimo,
+	Modelscope,
+	Coze,
+	CozeCn,
 }
 
 // KeylessProviders is the set of built-in (non-custom) providers that never

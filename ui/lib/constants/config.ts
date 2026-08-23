@@ -77,6 +77,13 @@ export const ModelPlaceholders = {
 	tencent: "e.g. hunyuan-turbos-latest, hunyuan-t1-latest, hunyuan-pro",
 	baidu: "e.g. ernie-5.1, ernie-5.0, ernie-4.5-turbo-128k",
 	sensenova: "e.g. SenseNova-v5, SenseChat-32K",
+	baichuan: "e.g. Baichuan4-Turbo, Baichuan4",
+	iflytek: "e.g. generalv3.5, generalv3",
+	stepfun: "e.g. step-3.7-flash, step-3-pro",
+	xiaomi_mimo: "e.g. mimo-pro, mimo-70b",
+	modelscope: "e.g. Qwen/Qwen2.5-72B-Instruct",
+	coze: "e.g. claude-3-7-sonnet-20250514, gpt-4o",
+	coze_cn: "e.g. claude-3-7-sonnet-20250514, gpt-4o",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
@@ -122,6 +129,13 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	tencent: true,
 	baidu: true,
 	sensenova: true,
+	baichuan: true,
+	iflytek: true,
+	stepfun: true,
+	xiaomi_mimo: true,
+	modelscope: true,
+	coze: true,
+	coze_cn: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
@@ -169,6 +183,13 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	tencent: "https://cloud.tencent.com/product/hunyuan",
 	baidu: "https://cloud.baidu.com/product/wenxinworkshop",
 	sensenova: "https://platform.sensenova.cn",
+	baichuan: "https://platform.baichuan-ai.com",
+	iflytek: "https://xinghuo.xfyun.cn",
+	stepfun: "https://platform.stepfun.com",
+	xiaomi_mimo: "https://xiaomimimo.com",
+	modelscope: "https://modelscope.cn",
+	coze: "https://www.coze.com",
+	coze_cn: "https://www.coze.cn",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
@@ -216,6 +237,13 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	tencent: "https://console.cloud.tencent.com/hunyuan/api-key",
 	baidu: "https://console.bce.baidu.com/qianfan/ais/console/application/list",
 	sensenova: "https://platform.sensenova.cn/console/keys",
+	baichuan: "https://platform.baichuan-ai.com/user-center",
+	iflytek: "https://console.xfyun.cn/services/cbm",
+	stepfun: "https://platform.stepfun.com/api-key",
+	xiaomi_mimo: "https://xiaomimimo.com/console/api-keys",
+	modelscope: "https://modelscope.cn/my/myAccessKey",
+	coze: "https://www.coze.com/settings/api",
+	coze_cn: "https://www.coze.cn/settings/api",
 };
 
 export const DefaultNetworkConfig = {
