@@ -358,6 +358,13 @@ func clearCtxForFallback(ctx *schemas.BifrostContext) {
 	ctx.ClearValue(schemas.BifrostContextKeyStreamEndIndicator)
 	ctx.ClearValue(schemas.BifrostContextKeyConnectionClosed)
 	ctx.ClearValue(schemas.BifrostContextKeySupportsAssistantPrefill)
+	// SilentLog is set by PreProviderHook short-circuits (e.g. provider-cooldown
+	// all-keys-cooled) on the primary attempt. The flag must NOT leak into the
+	// fallback attempt — otherwise the logging plugin's PostLLMHook would treat
+	// the fallback's success as a silent cancellation and skip both the DB write
+	// and the SSE "success" notification, leaving the fallback request without a
+	// persisted log row.
+	ctx.ClearValue(schemas.BifrostContextKeySilentLog)
 }
 
 // ClearContextForInternalRequest clears context state that is specific to the

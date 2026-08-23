@@ -3491,3 +3491,48 @@ func TestWorkerNoEligibleKeysSetsSilentLog(t *testing.T) {
 		})
 	}
 }
+
+// TestClearCtxForFallbackClearsSilentLog pins the contract that the
+// BifrostContextKeySilentLog flag (set by a PreProviderHook short-circuit such
+// as provider-cooldown's all-keys-cooled path) is reset before a fallback
+// attempt re-uses the same BifrostContext. Without this clear, the logging
+// plugin's PostLLMHook would see SilentLog=true on the fallback attempt and
+// skip both the log row write and the SSE "success" notification — leaving the
+// user with a "processing" row that never lands and never finishes.
+func TestClearCtxForFallbackClearsSilentLog(t *testing.T) {
+	ctx := schemas.NewBifrostContext(context.Background(), time.Now().Add(30*time.Second))
+
+	// Seed every key that clearCtxForFallback touches, so a missing ClearValue
+	// would surface as a residual ctx value after the call.
+	ctx.SetValue(schemas.BifrostContextKeyAPIKeyID, "primary-key-id")
+	ctx.SetValue(schemas.BifrostContextKeyAPIKeyName, "primary-key-name")
+	ctx.SetValue(schemas.BifrostContextKeyGovernanceIncludeOnlyKeys, []string{"k1"})
+	ctx.SetValue(schemas.BifrostContextKeyChangeRequestType, true)
+	ctx.SetValue(schemas.BifrostContextKeyAttemptTrail, []schemas.KeyAttemptRecord{{KeyID: "k1"}})
+	ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
+	ctx.SetValue(schemas.BifrostContextKeyConnectionClosed, true)
+	ctx.SetValue(schemas.BifrostContextKeySupportsAssistantPrefill, true)
+	ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+
+	clearCtxForFallback(ctx)
+
+	mustBeCleared := []struct {
+		name string
+		key  schemas.BifrostContextKey
+	}{
+		{"APIKeyID", schemas.BifrostContextKeyAPIKeyID},
+		{"APIKeyName", schemas.BifrostContextKeyAPIKeyName},
+		{"GovernanceIncludeOnlyKeys", schemas.BifrostContextKeyGovernanceIncludeOnlyKeys},
+		{"ChangeRequestType", schemas.BifrostContextKeyChangeRequestType},
+		{"AttemptTrail", schemas.BifrostContextKeyAttemptTrail},
+		{"StreamEndIndicator", schemas.BifrostContextKeyStreamEndIndicator},
+		{"ConnectionClosed", schemas.BifrostContextKeyConnectionClosed},
+		{"SupportsAssistantPrefill", schemas.BifrostContextKeySupportsAssistantPrefill},
+		{"SilentLog", schemas.BifrostContextKeySilentLog},
+	}
+	for _, k := range mustBeCleared {
+		if v := ctx.Value(k); v != nil {
+			t.Errorf("clearCtxForFallback must clear %s, but ctx still has value %v", k.name, v)
+		}
+	}
+}
