@@ -1,19 +1,14 @@
 // @vitest-environment jsdom
 /**
- * @file RtkFragment — ConfigForm enabled switch tests
+ * @file RtkFragment — EnabledSwitch tests
  *
- * Post-mortem of the production incident where RTK silently stopped
- * compressing tool outputs because storage held a null config_json that
- * deserialised to Config{Enabled: false}. Two safeguards back the fix:
- *
- *   1. plugins/rtk/config.go zero-detect — applies a default on Init.
- *   2. UI ConfigForm must surface `enabled` and write it through on save.
- *
- * The tests below pin (2). They check the in-form switch exists, mirrors
- * the stored value, and is the sole source of truth (no second top-level
- * toggle). Submit-time mutation shape is covered by the shared plugin
- * API contract — see providercooldownFragment.test.tsx for the analogous
- * 3-field pattern.
+ * Mirrors the structure of providercooldownFragment.test.tsx so the RTK
+ * and provider-cooldown on/off toggles share one verification pattern.
+ * The regression target is the production incident where RTK silently
+ * stopped compressing tool outputs because storage held a null config_json
+ * — the server-side fix (plugins/rtk/config.go zero-detect) keeps RTK
+ * enabled by default, and the UI here drives the operator-visible toggle
+ * with the same instant-write semantics as provider-cooldown.
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -23,7 +18,8 @@ import { RtkFragment } from "../rtkFragment";
 import type { Plugin } from "@/lib/types/plugins";
 
 // ---------------------------------------------------------------------------
-// Mocks — keep the network out of the picture.
+// Mocks — keep the network out of the picture. We only care that the form
+// dispatches a mutation with the right shape.
 // ---------------------------------------------------------------------------
 
 const mocks = vi.hoisted(() => ({
@@ -79,7 +75,7 @@ vi.mock("sonner", () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makePlugin(overrides: Partial<Plugin["config"]> = {}): Plugin {
+function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
 	return {
 		name: "rtk",
 		actualName: "rtk",
@@ -107,9 +103,9 @@ function makePlugin(overrides: Partial<Plugin["config"]> = {}): Plugin {
 			enable_renderers: true,
 			snapshot_mode: "off",
 			snapshot_max_bytes: 30720,
-			...overrides,
 		} as any,
 		status: { name: "rtk", status: "active", logs: [], types: ["llm", "http"] },
+		...overrides,
 	};
 }
 
@@ -117,42 +113,46 @@ function makePlugin(overrides: Partial<Plugin["config"]> = {}): Plugin {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("RtkFragment — enabled switch in ConfigForm", () => {
+describe("RtkFragment — EnabledSwitch mirrors provider-cooldown UX", () => {
 	beforeEach(() => {
 		mocks.updatePlugin.mockReset();
 	});
 
-	it("renders the enabled switch reflecting config.enabled (true by default)", () => {
-		render(<RtkFragment plugin={makePlugin()} />);
-
-		const sw = screen.getByTestId("rtk-field-enabled") as HTMLElement;
-		// Radix Switch encodes checked via data-state="checked".
+	it("renders the switch reflecting the plugin's enabled state (true)", () => {
+		render(<RtkFragment plugin={makePlugin({ enabled: true })} />);
+		const sw = screen.getByTestId("rtk-enabled-switch") as HTMLElement;
 		expect(sw.getAttribute("data-state")).toBe("checked");
 	});
 
-	it("renders the enabled switch unchecked when storage carried enabled=false", () => {
+	it("renders the switch unchecked when the plugin is disabled", () => {
 		render(<RtkFragment plugin={makePlugin({ enabled: false })} />);
-
-		const sw = screen.getByTestId("rtk-field-enabled") as HTMLElement;
+		const sw = screen.getByTestId("rtk-enabled-switch") as HTMLElement;
 		expect(sw.getAttribute("data-state")).toBe("unchecked");
 	});
 
-	it("does NOT render the legacy top-level rtk-enabled-switch test id (two-toggle guard)", () => {
-		render(<RtkFragment plugin={makePlugin()} />);
+	it("dispatches an immediate enable mutation on switch click — no Save button required", async () => {
+		render(<RtkFragment plugin={makePlugin({ enabled: false })} />);
 
-		// The old EnabledSwitch used data-testid="rtk-enabled-switch". With
-		// the unified design, only the in-form "rtk-field-enabled" remains.
-		expect(screen.queryByTestId("rtk-enabled-switch")).toBeNull();
+		fireEvent.click(screen.getByTestId("rtk-enabled-switch"));
+
+		await waitFor(() => {
+			expect(mocks.updatePlugin).toHaveBeenCalledWith({
+				name: "rtk",
+				data: { enabled: true },
+			});
+		});
 	});
 
-	it("does NOT render the top-level enableDescription card (old EnabledSwitch body)", () => {
-		render(<RtkFragment plugin={makePlugin()} />);
+	it("dispatches an immediate disable mutation on switch click", async () => {
+		render(<RtkFragment plugin={makePlugin({ enabled: true })} />);
 
-		// The old layout had a card with "Compress tool outputs to reduce
-		// token usage and latency" as standalone body copy. The new layout
-		// reuses the same copy as a help hint next to the in-form label,
-		// so it appears once — not inside a separate card.
-		const helpHints = screen.queryAllByText(/Compress tool outputs to reduce token usage and latency/i);
-		expect(helpHints.length).toBeLessThanOrEqual(1);
+		fireEvent.click(screen.getByTestId("rtk-enabled-switch"));
+
+		await waitFor(() => {
+			expect(mocks.updatePlugin).toHaveBeenCalledWith({
+				name: "rtk",
+				data: { enabled: false },
+			});
+		});
 	});
 });

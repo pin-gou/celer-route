@@ -253,6 +253,57 @@ function IntensityPresetButtons({
 }
 
 // ---------------------------------------------------------------------------
+// EnabledSwitch — top-level on/off toggle with RBAC gating. Mirrors the
+// ProvidercooldownFragment.EnabledSwitch UX: clicking flips the boolean
+// immediately and toasts success without a separate Save step. Only the
+// outer plugin.enabled flag is sent; the inner Config.Enabled is recovered
+// on the server by applyConfigDefaults' zero-detect (see plugins/rtk/
+// config.go), so a config_json=null/{} row still boots RTK enabled.
+//
+// We deliberately do NOT round-trip the existing config payload here —
+// doing so would force the operator's untuned toggles (intensity,
+// thresholds, renderers whitelist, etc.) to be persisted as part of a
+// pure enable/disable action, which is surprising. If those knobs need to
+// move, the operator edits them via ConfigForm and clicks Save.
+// ---------------------------------------------------------------------------
+
+export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
+	const { t } = useTranslation("plugins");
+	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
+	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
+
+	const handleToggle = async (checked: boolean) => {
+		if (!hasUpdateAccess) return;
+		try {
+			await updatePlugin({
+				name: RTK_PLUGIN,
+				data: { enabled: checked },
+			}).unwrap();
+			toast.success(checked ? t("rtk.enabledToast") : t("rtk.disabledToast"));
+		} catch {
+			toast.error(t("rtk.updateFailedToast"));
+		}
+	};
+
+	return (
+		<div className="rounded-lg border p-4">
+			<div className="flex flex-row items-center justify-between">
+				<div className="space-y-0.5">
+					<label className="text-sm font-medium">{t("rtk.enableTitle")}</label>
+					<p className="text-muted-foreground text-sm">{t("rtk.enableDescription")}</p>
+				</div>
+				<Switch
+					data-testid="rtk-enabled-switch"
+					checked={plugin.enabled}
+					onCheckedChange={handleToggle}
+					disabled={isLoading || !hasUpdateAccess}
+				/>
+			</div>
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
 // ConfigForm — react-hook-form + zod for all RTK config fields. Reorganized
 // from a flat 8-section layout into a guided flow: intro card → presets →
 // daily-tune sections → collapsed advanced sections → save.
@@ -268,13 +319,6 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 	const form = useForm<RTKFormValues>({
 		resolver: zodResolver(rtkConfigSchema),
 		defaultValues: {
-			// RTK's `enabled` flag lives inside the config payload so the
-			// storage row carries it — without it, the backend Init() can
-			// deserialise to Enabled=false and silently turn RTK into a
-			// no-op. The standalone top-level switch was removed to avoid
-			// two toggles driving the same setting (see zero-detect in
-			// plugins/rtk/config.go for the production post-mortem fix).
-			enabled: pluginConfig.enabled ?? true,
 			intensity: pluginConfig.intensity ?? "standard",
 			apply_to_tool_results: pluginConfig.apply_to_tool_results ?? true,
 			apply_to_code_blocks: pluginConfig.apply_to_code_blocks ?? false,
@@ -310,7 +354,6 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 	// when the operator-visible config actually moves.
 	useEffect(() => {
 		form.reset({
-			enabled: pluginConfig.enabled ?? true,
 			intensity: pluginConfig.intensity ?? "standard",
 			apply_to_tool_results: pluginConfig.apply_to_tool_results ?? true,
 			apply_to_code_blocks: pluginConfig.apply_to_code_blocks ?? false,
@@ -375,36 +418,6 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 		<Form {...form}>
 			<form onSubmit={form.handleSubmit(onSubmit, onError)}>
 				<div className="space-y-6">
-					{/* ── 启用 RTK (top of form, single source of truth for the
-					   plugin-level on/off). Stored inside config.enabled so
-					   that the row round-trips through Init() with the
-					   intended state — see plugins/rtk/config.go zero-detect. ── */}
-					<fieldset className="rounded-lg border p-4">
-						<div className="flex flex-row items-center justify-between">
-							<div className="space-y-0.5">
-								<div className="flex items-center gap-1.5">
-									<label className="text-sm font-medium">{t("rtk.enableTitle")}</label>
-									<HelpHint>{t("rtk.enableDescription")}</HelpHint>
-								</div>
-								<p className="text-muted-foreground text-sm">{t("rtk.enableSubDescription")}</p>
-							</div>
-							<FormField
-								control={form.control}
-								name="enabled"
-								render={({ field }) => (
-									<FormControl>
-										<Switch
-											data-testid="rtk-field-enabled"
-											checked={Boolean(field.value)}
-											onCheckedChange={field.onChange}
-											disabled={!hasUpdateAccess}
-										/>
-									</FormControl>
-								)}
-							/>
-						</div>
-					</fieldset>
-
 					{/* ── Intro card: "What is RTK?" + quick presets ─────────────────────── */}
 					<Card data-testid="rtk-intro-card">
 						<CardHeader className="pb-3">
@@ -1078,9 +1091,13 @@ function FileSearchIcon() {
 }
 
 // ---------------------------------------------------------------------------
-// RtkFragment — MonitoringPanel + ConfigForm. The RTK on/off switch now
-// lives at the top of ConfigForm (bound to config.enabled) so there is one
-// toggle instead of two.
+// RtkFragment — MonitoringPanel + EnabledSwitch + ConfigForm. The on/off
+// toggle is a dedicated switch (mirrors ProvidercooldownFragment.EnabledSwitch)
+// so flipping it takes effect immediately without a separate Save click.
+// Server-side, plugins/rtk/config.go's applyConfigDefaults zero-detect
+// safeguard keeps RTK enabled even when the persisted config_json is null
+// or all-zero — the inner Config.Enabled flag never gets a chance to silently
+// turn the plugin into a no-op.
 // ---------------------------------------------------------------------------
 
 export function RtkFragment({ plugin }: { plugin: Plugin }) {
@@ -1099,6 +1116,8 @@ export function RtkFragment({ plugin }: { plugin: Plugin }) {
 				</div>
 				<MonitoringPanel />
 			</div>
+
+			<EnabledSwitch plugin={plugin} />
 
 			<div className="rounded-lg border p-4">
 				<h4 className="mb-4 text-sm font-medium">{t("rtk.settingsTitle")}</h4>
