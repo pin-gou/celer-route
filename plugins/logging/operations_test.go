@@ -317,6 +317,116 @@ func TestPostLLMHookNoPendingErrorPreservesMetadata(t *testing.T) {
 	}
 }
 
+// TestPostLLMHookSilentShortCircuitNoPending verifies that a Silent
+// short-circuit (e.g. provider-cooldown PreProviderHook on all-keys-cooled)
+// does not persist any log row. Because PreProviderHook runs BEFORE PreLLMHook,
+// there is NO pending entry — without the top-of-function SilentLog guard, the
+// !hasPending branch would write a minimal error entry (status=cancelled for
+// no_eligible_keys) that the Silent flag exists to suppress.
+func TestPostLLMHookSilentShortCircuitNoPending(t *testing.T) {
+	store := newTestStore(t)
+	plugin, err := Init(context.Background(), &Config{}, testLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, "req-silent-no-pending")
+	ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+
+	statusCode := 503
+	errType := "no_eligible_keys"
+	noEligible := &schemas.BifrostError{
+		IsBifrostError: false,
+		StatusCode:     &statusCode,
+		Type:           &errType,
+		Error: &schemas.ErrorField{
+			Type:    &errType,
+			Message: "no eligible keys for provider minimax (all in cooldown)",
+		},
+		ExtraFields: schemas.BifrostErrorExtraFields{
+			RequestType:            schemas.ChatCompletionRequest,
+			Provider:               schemas.Minimax,
+			OriginalModelRequested: "MiniMax-M3",
+			ResolvedModelUsed:      "MiniMax-M3",
+		},
+	}
+
+	_, _, err = plugin.PostLLMHook(ctx, nil, noEligible)
+	if err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	// The silent short-circuit must not persist ANY log row.
+	if _, err := store.FindByID(context.Background(), "req-silent-no-pending"); err == nil {
+		t.Fatal("expected NO log entry for a silent short-circuit, but one was found")
+	}
+
+	// And the request must not linger in the pending map (defensive cleanup).
+	if _, loaded := plugin.pendingLogsEntries.Load("req-silent-no-pending"); loaded {
+		t.Fatal("silent short-circuit left a pending log entry behind")
+	}
+}
+
+// TestPostLLMHookSilentWithPending verifies the defensive cleanup path: even if
+// a pending entry somehow exists for the request, a silent short-circuit drops
+// it without writing a row.
+func TestPostLLMHookSilentWithPending(t *testing.T) {
+	store := newTestStore(t)
+	plugin, err := Init(context.Background(), &Config{}, testLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, "req-silent-with-pending")
+	ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+
+	// Manually seed a pending entry (simulating the case where PreLLMHook ran
+	// before a silent short-circuit — normally impossible, but defensive).
+	plugin.pendingLogsEntries.Store("req-silent-with-pending", &PendingLogData{
+		RequestID: "req-silent-with-pending",
+		Status:    "processing",
+		CreatedAt: time.Now(),
+	})
+
+	statusCode := 503
+	errType := "no_eligible_keys"
+	noEligible := &schemas.BifrostError{
+		IsBifrostError: false,
+		StatusCode:     &statusCode,
+		Type:           &errType,
+		Error: &schemas.ErrorField{
+			Type:    &errType,
+			Message: "no eligible keys",
+		},
+		ExtraFields: schemas.BifrostErrorExtraFields{
+			RequestType:            schemas.ChatCompletionRequest,
+			Provider:               schemas.OpenAI,
+			OriginalModelRequested: "gpt-4o",
+			ResolvedModelUsed:      "gpt-4o",
+		},
+	}
+
+	_, _, err = plugin.PostLLMHook(ctx, nil, noEligible)
+	if err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	if _, err := store.FindByID(context.Background(), "req-silent-with-pending"); err == nil {
+		t.Fatal("expected NO log row for a silent short-circuit with pending data")
+	}
+	if _, loaded := plugin.pendingLogsEntries.Load("req-silent-with-pending"); loaded {
+		t.Fatal("silent short-circuit must clean up the pending entry")
+	}
+}
+
 func TestPostLLMHookStreamingErrorPreservesHeaderMetadata(t *testing.T) {
 	store := newTestStore(t)
 	loggingHeaders := []string{"x-custom-log"}

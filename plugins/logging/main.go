@@ -1058,6 +1058,21 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 	if ok && fallbackRequestID != "" {
 		requestID = fallbackRequestID
 	}
+
+	// Silent short-circuit: a PreProviderHook (e.g. provider-cooldown on all-keys-cooled)
+	// short-circuited before PreLLMHook ran, so there is no pending entry to close.
+	// We must NOT write a log row — the caller already gets the synthetic BifrostError
+	// through the fallback chain, and writing a "cancelled" minimal entry (which is what
+	// the !hasPending branch below would do) is what the Silent flag was added to suppress.
+	// This check MUST be before the !hasPending branch (line 1101) and before Path A.
+	if silent, _ := ctx.Value(schemas.BifrostContextKeySilentLog).(bool); silent {
+		// Defensive cleanup: if by any chance a pending entry was created (should not
+		// happen since PreProviderHook runs before PreLLMHook), remove it to prevent
+		// memory leaks.
+		p.pendingLogsEntries.Delete(requestID)
+		return result, bifrostErr, nil
+	}
+
 	selectedKeyID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeySelectedKeyID)
 	selectedKeyName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeySelectedKeyName)
 	virtualKeyID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID)
@@ -1242,15 +1257,9 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 
 	// Path A: Error with nil result
 	if result == nil && bifrostErr != nil {
-		// Silent short-circuit (e.g. provider-cooldown PreProviderHook on all-keys-cooled)
-		// asks presentation plugins to skip their end-user-visible side effects. The
-		// framework still calls PostLLMHook so other plugins can clean up, but no log
-		// row should be persisted — the caller already gets the synthetic 503 error
-		// through the fallback chain and writing a "cancelled" row here is what the
-		// Silent flag was added to suppress.
-		if silent, _ := ctx.Value(schemas.BifrostContextKeySilentLog).(bool); silent {
-			return result, bifrostErr, nil
-		}
+		// NOTE: the SilentLog check lives at the top of PostLLMHook (before the
+		// !hasPending branch and Path A) so a silent short-circuit never writes even
+		// the minimal error entry for requests where PreLLMHook didn't run.
 		entry.Status = logStatusForError(bifrostErr)
 		applyModelAlias(entry, originalModelRequested, resolvedModelUsed)
 		if bifrost.IsStreamRequestType(requestType) {
