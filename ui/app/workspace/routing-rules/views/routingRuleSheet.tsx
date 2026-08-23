@@ -73,11 +73,14 @@ const CELRuleBuilderLazy = lazy(() =>
 		default: mod.CELRuleBuilder,
 	})),
 );
-const CELRuleBuilder = (props: React.ComponentProps<typeof CELRuleBuilderLazy>) => (
-	<Suspense fallback={<div className="text-sm text-gray-500">Loading CEL builder...</div>}>
-		<CELRuleBuilderLazy {...props} />
-	</Suspense>
-);
+function CELRuleBuilder(props: React.ComponentProps<typeof CELRuleBuilderLazy>) {
+	const { t } = useTranslation("routing");
+	return (
+		<Suspense fallback={<div className="text-sm text-gray-500">{t("sheet.loadingBuilder")}</div>}>
+			<CELRuleBuilderLazy {...props} />
+		</Suspense>
+	);
+}
 
 const STEPS_ORDER: SheetStepId[] = ["basics", "conditions", "targets-and-fallbacks"];
 
@@ -160,6 +163,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 			setQuery(newQuery);
 			setValue("cel_expression", expression);
 			setCelError(null);
+			setBuilderKey((prev) => prev + 1);
 		},
 		[query, setValue],
 	);

@@ -11,6 +11,7 @@ import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
 import { useEffect, useState } from "react";
 import { ValueEditorProps, ValueEditorType } from "react-querybuilder";
+import { useTranslation } from "react-i18next";
 
 type CELValueEditorContext = {
 	validateRegex?: (pattern: string) => string | null;
@@ -26,6 +27,7 @@ export function ValueEditor({
 	type,
 	context,
 }: ValueEditorProps & { context?: CELValueEditorContext }) {
+	const { t } = useTranslation("routing");
 	// Compute all conditions upfront before any early returns
 	const isArrayOperator = operator === "in" || operator === "notIn";
 	const isRegexOperator = operator === "matches";
@@ -233,7 +235,7 @@ export function ValueEditor({
 				type="text"
 				value={keyValuePair.value}
 				onChange={(e) => handleKeyValueValueChange(e.target.value)}
-				placeholder="Value"
+				placeholder={t("sheet.keyValueValuePlaceholder")}
 				className="w-[180px]"
 				data-testid="cel-builder-keyvalue-value-input"
 			/>

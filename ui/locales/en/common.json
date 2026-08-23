@@ -334,7 +334,7 @@
 			"step1Title": "1. Configure providers",
 			"step1Desc": "Add upstream provider keys (OpenAI, Anthropic, Google, etc.) so pg-gateway has something to route to.",
 			"step2Title": "2. Configure routing",
-			"step2Desc": "Define routing rules that decide which provider, model, or key each request lands on. Use fallbacks, weights, or CEL expressions.",
+			"step2Desc": "Define routing rules that decide which provider, model, or key each request lands on. Use fallbacks, weights, or custom expressions.",
 			"step3Title": "3. Test the API call",
 			"step3Desc": "Send a real chat completion through a configured provider to confirm end-to-end connectivity and routing works.",
 			"step4Title": "4. Watch the observability",

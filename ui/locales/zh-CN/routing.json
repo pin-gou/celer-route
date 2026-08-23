@@ -1,7 +1,7 @@
 {
 	"page": {
 		"title": "路由规则",
-		"description": "管理基于 CEL 的路由规则，实现跨提供商的智能请求路由",
+		"description": "管理路由规则，按条件将请求分发到不同提供商",
 		"viewTree": "树形视图",
 		"newRule": "新建规则"
 	},
@@ -89,7 +89,7 @@
 		"editTitle": "编辑路由规则",
 		"createTitle": "新建路由规则",
 		"editDescription": "更新路由规则配置",
-		"createDescription": "创建基于 CEL 的路由规则，实现智能请求路由",
+		"createDescription": "创建路由规则，按条件将请求分发到不同提供商或模型",
 		"ruleBuilder": "规则构建器",
 		"ruleBuilderDesc": "构建条件以确定此规则何时适用。留空将此规则应用于所有请求。",
 		"budgetNote": "注意：确保在 <1>模型提供商 → 配置 → {provider} → 治理</1>（提供商级别）或 <3>模型提供商 → 预算和限制</3>（模型级别）中配置了词元限制、请求限制和预算，然后再在路由规则中使用它们。",
@@ -108,7 +108,19 @@
 		"cancel": "取消",
 		"updateRule": "更新规则",
 		"saveRule": "保存规则",
-		"loadingCelBuilder": "加载 CEL 构建器中...",
+		"loadingBuilder": "正在加载规则构建器...",
+		"builderModeLabel": "可视化构建器",
+		"celModeLabel": "手写表达式",
+		"expressionPreviewLabel": "表达式预览",
+		"expressionLabel": "表达式",
+		"celPlaceholder": "e.g. model == \"claude-sonnet-4-6\"",
+		"emptyExpressionPreview": "暂无规则",
+		"emptyExpressionHelper": "留空以匹配所有请求。",
+		"switchToBuilderTitle": "切换到可视化构建器？",
+		"switchToBuilderDesc": "可视化构建器无法导入手写的表达式，当前表达式将丢失，构建器将重新开始。如需保留，请先复制。",
+		"switchToBuilderAction": "放弃并切换",
+		"addRule": "添加规则",
+		"addRuleGroup": "添加规则组",
 		"invalidRegex": "无效的正则表达式模式：\n{{errors}}",
 		"invalidRuleConfig": "无效的规则配置：\n{{errors}}",
 		"normalizeWeights": "归一化权重至 1",
@@ -126,12 +138,43 @@
 		"ruleBuilderEmptyState": {
 			"title": "尚未设置匹配条件",
 			"subtitle": "此规则将匹配所有请求。选择一个示例开始，或点击下方「添加规则」。",
-			"builderInfo": "留空即可匹配所有请求。大多数情况使用可视化构建器即可；切换到 CEL 可手写表达式。",
-			"toggleHint": "切换到 CEL 可直接手写表达式。",
+			"builderInfo": "留空即可匹配所有请求。大多数情况使用可视化构建器即可；需要高级条件时可切换到手写表达式模式。",
+			"toggleHint": "切换到手写表达式模式可直接编写条件。",
 			"chipModel": "模型包含 \"gpt-\"",
 			"chipProvider": "提供商为 OpenAI",
 			"chipRequestType": "聊天补全",
 			"helper": "插入后可随时编辑或删除该规则。"
+		},
+		"fieldGroup": {
+			"request": "请求属性",
+			"metadata": "元数据",
+			"usage": "用量与预算"
+		},
+		"fieldLabel": {
+			"model": "模型",
+			"provider": "提供商",
+			"request_type": "请求类型",
+			"complexity_tier": "复杂度层级",
+			"headers": "请求头",
+			"params": "URL 查询参数",
+			"tokens_used": "词元用量 (%)",
+			"request": "请求用量 (%)",
+			"budget_used": "预算用量 (%)"
+		},
+		"fieldSelectPlaceholder": "选择字段...",
+		"keyValueHasKey": "键为",
+		"keyValueKeyName": "{{label}} 名称（如 x-api-key）",
+		"keyValueValuePlaceholder": "值",
+		"fieldDescription": {
+			"model": "按请求的模型名称匹配。支持精确值、列表、包含、前缀/后缀以及正则表达式模式。",
+			"provider": "按处理请求的上游提供商匹配。",
+			"request_type": "按 API 请求类型（聊天、文本、嵌入、图像、音频等）过滤规则。流式与非流式请求属于不同类型：如需覆盖某类请求的全部，请同时选中两者。",
+			"complexity_tier": "按复杂度路由器分配的复杂度类别（简单、中等、复杂或推理）路由。",
+			"headers": "按传入的 HTTP 请求头匹配。请使用小写请求头名称。",
+			"params": "按请求 URL 的查询字符串参数匹配。",
+			"tokens_used": "按量（百分比）检查词元用量，对照模型和提供商配置中的上限。",
+			"request": "按量（百分比）检查请求用量，对照模型和提供商配置中的上限。",
+			"budget_used": "按量（百分比）检查预算用量，对照模型和提供商配置中的上限。"
 		},
 		"infoPopover": {
 			"chainRule": "匹配后，使用解析出的提供商/模型作为新输入重新评估其他路由规则。适用于将模型别名归一化后再按实际模型路由。",
@@ -157,8 +200,8 @@
 		"scope": "作用域",
 		"priority": "优先级",
 		"conditions": "条件",
-		"celExpression": "CEL 表达式",
-		"celExpressionBelow": "以下定义为 CEL 表达式",
+		"celExpression": "条件表达式",
+		"celExpressionBelow": "规则条件以表达式形式存储",
 		"matchesAll": "匹配所有请求",
 		"targets": "目标（{{count}}）",
 		"noTargets": "未配置目标",
@@ -306,8 +349,8 @@
 	},
 	"permissionDenied": "您没有访问路由规则的权限",
 	"routingRules": {
-		"emptyTitle": "路由规则使用 CEL 条件来分发请求",
-		"emptyDescription": "创建基于 CEL 的规则，按模型、提供商、预算或自定义属性路由请求。控制每个请求由哪个提供商或模型处理。"
+		"emptyTitle": "路由规则按匹配条件分发请求",
+		"emptyDescription": "创建匹配条件，按模型、提供商、预算或自定义属性路由请求。控制每个请求由哪个提供商或模型处理。"
 	},
 	"toast": {
 		"ruleCreated": "路由规则创建成功",

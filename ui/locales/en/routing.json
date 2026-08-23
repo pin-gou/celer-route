@@ -1,7 +1,7 @@
 {
 	"page": {
 		"title": "Routing Rules",
-		"description": "Manage CEL-based routing rules for intelligent request routing across providers",
+		"description": "Manage routing rules to control how requests are routed across providers",
 		"viewTree": "View Tree",
 		"newRule": "New Rule"
 	},
@@ -89,7 +89,7 @@
 		"editTitle": "Edit Routing Rule",
 		"createTitle": "Create New Routing Rule",
 		"editDescription": "Update the routing rule configuration",
-		"createDescription": "Create a new CEL-based routing rule for intelligent request routing",
+		"createDescription": "Create a new routing rule with conditions",
 		"ruleBuilder": "Rule Builder",
 		"ruleBuilderDesc": "Build conditions to determine when this rule should apply. Leave empty to apply this rule to all requests.",
 		"budgetNote": "Note: Ensure token limits, request limits, and budget are configured in <1>Model Providers → Configurations → {provider} → Governance</1> (provider-level) or <3>Model Providers → Budgets & Limits</3> section (model-level) before using them in routing rules.",
@@ -108,7 +108,19 @@
 		"cancel": "Cancel",
 		"updateRule": "Update Rule",
 		"saveRule": "Save Rule",
-		"loadingCelBuilder": "Loading CEL builder...",
+		"loadingBuilder": "Loading rule builder...",
+		"builderModeLabel": "Visual Builder",
+		"celModeLabel": "Expression (CEL)",
+		"expressionPreviewLabel": "Expression Preview",
+		"expressionLabel": "Expression",
+		"celPlaceholder": "e.g. model == \"claude-sonnet-4-6\"",
+		"emptyExpressionPreview": "No rules defined yet",
+		"emptyExpressionHelper": "Leave empty to match all requests.",
+		"switchToBuilderTitle": "Switch to the visual builder?",
+		"switchToBuilderDesc": "The visual builder can't import a hand-written expression, so your current expression will be discarded and the builder will start empty. Copy it first if you want to keep it.",
+		"switchToBuilderAction": "Discard & switch",
+		"addRule": "Add Rule",
+		"addRuleGroup": "Add Rule Group",
 		"invalidRegex": "Invalid regex pattern:\n{{errors}}",
 		"invalidRuleConfig": "Invalid rule configuration:\n{{errors}}",
 		"normalizeWeights": "Normalize weights to 1",
@@ -126,12 +138,43 @@
 		"ruleBuilderEmptyState": {
 			"title": "No match conditions yet",
 			"subtitle": "This rule will match every request. Pick an example to start, or click Add Rule below.",
-			"builderInfo": "Leave blank to match every request. Use the visual Builder for most cases; switch to CEL for advanced expressions.",
-			"toggleHint": "Switch to CEL to write the expression directly.",
+			"builderInfo": "Leave blank to match every request. Use the visual Builder for most cases; switch to Expression mode for advanced conditions.",
+			"toggleHint": "Switch to Expression mode to write conditions directly.",
 			"chipModel": "Model contains \"gpt-\"",
 			"chipProvider": "Provider is OpenAI",
 			"chipRequestType": "Chat completion",
 			"helper": "You can edit or remove the inserted rule after."
+		},
+		"fieldGroup": {
+			"request": "Request Properties",
+			"metadata": "Metadata",
+			"usage": "Usage & Budget"
+		},
+		"fieldLabel": {
+			"model": "Model",
+			"provider": "Provider",
+			"request_type": "Request Type",
+			"complexity_tier": "Complexity Tier",
+			"headers": "Request Header",
+			"params": "URL Query Parameter",
+			"tokens_used": "Token Usage (%)",
+			"request": "Request Usage (%)",
+			"budget_used": "Budget Usage (%)"
+		},
+		"fieldSelectPlaceholder": "Select field...",
+		"keyValueHasKey": "has key",
+		"keyValueKeyName": "{{label}} name (e.g., x-api-key)",
+		"keyValueValuePlaceholder": "Value",
+		"fieldDescription": {
+			"model": "Match requests by the requested model name. Supports exact values, lists, contains, prefix/suffix, and regex patterns.",
+			"provider": "Match requests by the upstream provider handling them.",
+			"request_type": "Filter rules by the type of API request (chat, text, embeddings, images, audio, etc.). Streaming and non-streaming requests are distinct types: select both to cover all requests of a kind.",
+			"complexity_tier": "Route by the complexity category assigned by the Complexity Router (Simple, Medium, Complex, or Reasoning).",
+			"headers": "Match on an incoming HTTP request header. Use lowercase header names.",
+			"params": "Match on a query string parameter of the request URL.",
+			"tokens_used": "Check token usage as percentage. Checked against max of model and provider configs.",
+			"request": "Check request usage as percentage. Checked against max of model and provider configs.",
+			"budget_used": "Check budget usage as percentage. Checked against max of model and provider configs."
 		},
 		"infoPopover": {
 			"chainRule": "On match, re-evaluate other routing rules using the chosen provider/model as input. Useful for chaining model aliasing with model-specific routing.",
@@ -157,8 +200,8 @@
 		"scope": "Scope",
 		"priority": "Priority",
 		"conditions": "Conditions",
-		"celExpression": "CEL Expression",
-		"celExpressionBelow": "Defined as a CEL expression below",
+		"celExpression": "Condition Expression",
+		"celExpressionBelow": "Defined as a condition expression",
 		"matchesAll": "Matches all requests",
 		"targets": "Targets ({{count}})",
 		"noTargets": "No targets configured",
@@ -306,8 +349,8 @@
 	},
 	"permissionDenied": "You don't have permission to access routing rules",
 	"routingRules": {
-		"emptyTitle": "Routing rules direct requests using CEL conditions",
-		"emptyDescription": "Create CEL-based rules to route requests by model, provider, budget, or custom attributes. Control which provider or model handles each request."
+		"emptyTitle": "Routing rules match requests by conditions",
+		"emptyDescription": "Create rules to route requests by model, provider, budget, or custom attributes. Control which provider or model handles each request."
 	},
 	"toast": {
 		"ruleCreated": "Routing rule created successfully",

@@ -334,7 +334,7 @@
 			"step1Title": "1. 配置提供商",
 			"step1Desc": "添加上游提供商 key（OpenAI、Anthropic、Google 等），让 pg-gateway 有东西可路由。",
 			"step2Title": "2. 配置路由",
-			"step2Desc": "为请求配置路由规则，决定每个请求落到哪个提供商、模型或 key。支持 fallback、权重或 CEL 表达式。",
+			"step2Desc": "为请求配置路由规则，决定每个请求落到哪个提供商、模型或 key。支持回退、权重或自定义表达式。",
 			"step3Title": "3. 测试接口调用",
 			"step3Desc": "通过已配置的提供商发一条真实的 chat completion 请求，确认端到端连通和路由生效。",
 			"step4Title": "4. 观察监控",

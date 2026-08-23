@@ -26,6 +26,7 @@ import { Check, Copy, GitMerge, Key, Pencil, Terminal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { RuleGroupType, RuleType } from "react-querybuilder";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
 interface Props {
@@ -39,9 +40,9 @@ interface Props {
 	canUpdate?: boolean;
 }
 
-function getFieldLabel(fieldName: string): string {
+function getFieldLabel(fieldName: string, t: TFunction): string {
 	const field = baseRoutingFields.find((f) => f.name === fieldName);
-	return field?.label ?? fieldName;
+	return t(`sheet.fieldLabel.${fieldName}`, field?.label ?? fieldName);
 }
 
 function formatRuleValue(value: any): string {
@@ -100,7 +101,7 @@ function CopyButton({ value, label, testId }: { value: string; label?: string; t
 
 function ConditionRow({ rule }: { rule: RuleType }) {
 	const { t } = useTranslation("routing");
-	const fieldLabel = getFieldLabel(rule.field);
+	const fieldLabel = getFieldLabel(rule.field, t);
 	const opLabel = getOperatorLabel(rule.operator);
 	const value = formatRuleValue(rule.value);
 	const isExistence = rule.operator === "null" || rule.operator === "notNull";

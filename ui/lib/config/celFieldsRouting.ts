@@ -6,9 +6,14 @@
 import { getProviderLabel } from "@/lib/constants/logs";
 import { COMPLEXITY_TIER_VALUES } from "@/lib/types/complexityRouter";
 
+export type FieldGroup = "request" | "metadata" | "usage";
+
+export const FIELD_GROUP_ORDER: FieldGroup[] = ["request", "metadata", "usage"];
+
 export interface CELFieldDefinition {
 	name: string;
 	label: string;
+	group?: FieldGroup;
 	placeholder?: string;
 	inputType?: "text" | "select" | "keyValue" | "number";
 	valueEditorType?:
@@ -24,12 +29,14 @@ export interface CELFieldDefinition {
 	defaultValue?: any;
 	values?: Array<{ name: string; label: string; disabled?: boolean }>;
 	metricOptions?: Array<{ name: string; label: string }>; // For budgetNumber type
-	description?: string; // Helpful note for the user
+	/** @deprecated Description moved to locale (`sheet.fieldDescription.<name>`); kept as fallback only. */
+	description?: string;
 }
 
 export const baseRoutingFields: CELFieldDefinition[] = [
 	{
 		name: "model",
+		group: "request",
 		label: "Model",
 		placeholder: "e.g., gpt-4, claude-3-sonnet",
 		inputType: "text",
@@ -40,6 +47,7 @@ export const baseRoutingFields: CELFieldDefinition[] = [
 	},
 	{
 		name: "provider",
+		group: "request",
 		label: "Provider",
 		placeholder: "Select provider",
 		inputType: "select",
@@ -50,6 +58,7 @@ export const baseRoutingFields: CELFieldDefinition[] = [
 	},
 	{
 		name: "request_type",
+		group: "request",
 		label: "Request Type",
 		placeholder: "Select request type",
 		inputType: "select",
@@ -78,50 +87,10 @@ export const baseRoutingFields: CELFieldDefinition[] = [
 			{ name: "rerank", label: "Rerank" },
 			{ name: "video_generation", label: "Video Generation" },
 		],
-		description:
-			"Filter rules by the type of API request (chat, text, embeddings, images, audio, etc.). Streaming and non-streaming requests are distinct types: select both to cover all requests of a kind.",
-	},
-	{
-		name: "headers",
-		label: "Header",
-		placeholder: "e.g., authorization, x-custom-header (use lowercase)",
-		inputType: "keyValue",
-		valueEditorType: "keyValue",
-		operators: ["=", "!=", "contains", "beginsWith", "endsWith", "matches", "null", "notNull"],
-		defaultOperator: "=",
-	},
-	{
-		name: "tokens_used",
-		label: "Tokens Used (%)",
-		placeholder: "e.g., 80",
-		inputType: "text",
-		valueEditorType: "number",
-		operators: ["=", "!=", ">", "<", ">=", "<="],
-		defaultOperator: ">=",
-		description: "Check token usage as percentage. Checked against max of model and provider configs.",
-	},
-	{
-		name: "request",
-		label: "Request (%)",
-		placeholder: "e.g., 80",
-		inputType: "text",
-		valueEditorType: "number",
-		operators: ["=", "!=", ">", "<", ">=", "<="],
-		defaultOperator: ">=",
-		description: "Check request usage as percentage. Checked against max of model and provider configs.",
-	},
-	{
-		name: "budget_used",
-		label: "Budget Used (%)",
-		placeholder: "e.g., 50",
-		inputType: "text",
-		valueEditorType: "number",
-		operators: ["=", "!=", ">", "<", ">=", "<="],
-		defaultOperator: ">=",
-		description: "Check budget usage as percentage. Checked against max of model and provider configs.",
 	},
 	{
 		name: "complexity_tier",
+		group: "request",
 		label: "Complexity Tier",
 		placeholder: "Select complexity tier",
 		inputType: "select",
@@ -131,13 +100,54 @@ export const baseRoutingFields: CELFieldDefinition[] = [
 		values: COMPLEXITY_TIER_VALUES.map((tier) => ({ name: tier, label: tier.charAt(0) + tier.slice(1).toLowerCase() })),
 	},
 	{
+		name: "headers",
+		group: "metadata",
+		label: "Request Header",
+		placeholder: "e.g., authorization, x-custom-header (use lowercase)",
+		inputType: "keyValue",
+		valueEditorType: "keyValue",
+		operators: ["=", "!=", "contains", "beginsWith", "endsWith", "matches", "null", "notNull"],
+		defaultOperator: "=",
+	},
+	{
 		name: "params",
-		label: "Query Parameter",
+		group: "metadata",
+		label: "URL Query Parameter",
 		placeholder: "e.g., api_key, user_id",
 		inputType: "keyValue",
 		valueEditorType: "keyValue",
 		operators: ["=", "!=", "contains", "beginsWith", "endsWith", "matches", "null", "notNull"],
 		defaultOperator: "=",
+	},
+	{
+		name: "tokens_used",
+		group: "usage",
+		label: "Token Usage (%)",
+		placeholder: "e.g., 80",
+		inputType: "text",
+		valueEditorType: "number",
+		operators: ["=", "!=", ">", "<", ">=", "<="],
+		defaultOperator: ">=",
+	},
+	{
+		name: "request",
+		group: "usage",
+		label: "Request Usage (%)",
+		placeholder: "e.g., 80",
+		inputType: "text",
+		valueEditorType: "number",
+		operators: ["=", "!=", ">", "<", ">=", "<="],
+		defaultOperator: ">=",
+	},
+	{
+		name: "budget_used",
+		group: "usage",
+		label: "Budget Usage (%)",
+		placeholder: "e.g., 50",
+		inputType: "text",
+		valueEditorType: "number",
+		operators: ["=", "!=", ">", "<", ">=", "<="],
+		defaultOperator: ">=",
 	},
 ];
 

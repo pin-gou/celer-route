@@ -318,7 +318,7 @@ test.describe('Routing Rules', () => {
 
       // Get CEL expression - should show no rules message when empty
       const celExpression = await routingRulesPage.getCelExpression()
-      expect(celExpression).toContain('No rules defined')
+      expect(celExpression).toContain('No rules defined yet')
 
       await routingRulesPage.cancelRule()
     })
@@ -336,7 +336,7 @@ test.describe('Routing Rules', () => {
 
       // Verify initial CEL is empty/no rules
       const initialCel = await routingRulesPage.getCelExpression()
-      expect(initialCel).toContain('No rules defined')
+      expect(initialCel).toContain('No rules defined yet')
 
       // Add a rule condition
       await routingRulesPage.clickAddRule()
@@ -347,7 +347,7 @@ test.describe('Routing Rules', () => {
       // After adding a rule, CEL should no longer say "No rules defined"
       // The default rule shows model == "" (empty model condition)
       const celAfterAdd = await routingRulesPage.getCelExpression()
-      expect(celAfterAdd).not.toContain('No rules defined')
+      expect(celAfterAdd).not.toContain('No rules defined yet')
       expect(celAfterAdd).toContain('model') // Default field is Model
 
       await routingRulesPage.cancelRule()

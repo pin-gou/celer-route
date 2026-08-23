@@ -1,13 +1,27 @@
 /**
  * Field Selector Component for CEL Rule Builder
  * Allows selection of fields for building CEL expressions
+ * Fields are grouped by category (Request Properties / Metadata / Usage & Budget)
  * For keyValue fields (headers/params), also renders "has value" label and key input
  */
 
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectLabel,
+	SelectSeparator,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { FIELD_GROUP_ORDER, FieldGroup } from "@/lib/config/celFieldsRouting";
+import { Info } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { FieldSelectorProps, RuleGroupType, RuleType } from "react-querybuilder";
+import { useTranslation } from "react-i18next";
 
 /**
  * Recursively find and update a rule's value by path in the query tree.
@@ -30,7 +44,20 @@ function updateRuleValueAtPath(query: RuleGroupType, targetPath: number[], newVa
 	return { ...query, rules: newRules };
 }
 
+interface FieldOption {
+	name: string;
+	label: string;
+	value?: string;
+	disabled?: boolean;
+	group?: FieldGroup;
+	description?: string;
+	options?: unknown;
+	[key: string]: unknown;
+}
+
 export function FieldSelector({ value, handleOnChange, options, rule, path, schema }: FieldSelectorProps) {
+	const { t } = useTranslation("routing");
+
 	// Check if this is a keyValue field (headers/params)
 	const fieldData = useMemo(() => schema?.fields?.find((f) => "value" in f && f.value === value), [schema?.fields, value]);
 	const isKeyValueField = fieldData && "inputType" in fieldData && fieldData.inputType === "keyValue";
@@ -42,6 +69,24 @@ export function FieldSelector({ value, handleOnChange, options, rule, path, sche
 		if (colonIndex > 0) return rule.value.substring(0, colonIndex).trim();
 		return rule.value.trim();
 	}, [isKeyValueField, rule?.value]);
+
+	// Localized field label for the key-name placeholder
+	const keyLabel = useMemo(() => {
+		if (!fieldData || !("name" in fieldData)) return "Key";
+		return t(`sheet.fieldLabel.${fieldData.name}`, fieldData.label || "Key");
+	}, [fieldData, t]);
+
+	// Group the flat option list into ordered categories: request → metadata → usage
+	const groupedOptions = useMemo(() => {
+		const flat = (options as FieldOption[]).filter((opt) => !("options" in opt) && opt.name && opt.name !== "~" && opt.value !== "~");
+		const byGroup = new Map<FieldGroup, FieldOption[]>();
+		for (const opt of flat) {
+			const g = opt.group || "request";
+			if (!byGroup.has(g)) byGroup.set(g, []);
+			byGroup.get(g)!.push(opt);
+		}
+		return FIELD_GROUP_ORDER.map((g) => ({ group: g, options: byGroup.get(g) || [] })).filter((grp) => grp.options.length > 0);
+	}, [options]);
 
 	const handleKeyChange = useCallback(
 		(newKey: string) => {
@@ -72,34 +117,47 @@ export function FieldSelector({ value, handleOnChange, options, rule, path, sche
 		<div className="flex items-center gap-2">
 			<Select value={value || ""} onValueChange={handleOnChange}>
 				<SelectTrigger className="w-[180px]" data-testid="cel-builder-field-selector-select">
-					<SelectValue placeholder="Select field..." />
+					<SelectValue placeholder={t("sheet.fieldSelectPlaceholder")} />
 				</SelectTrigger>
 				<SelectContent>
-					{options.map((option) => {
-						// Handle option groups (not currently used, but type-safe)
-						if ("options" in option) {
-							return null;
-						}
-						// Handle regular options - skip empty values
-						if (!option.name) {
-							return null;
-						}
-						return (
-							<SelectItem key={option.name} value={option.name} disabled={option.disabled}>
-								{option.label}
-							</SelectItem>
-						);
-					})}
+					{groupedOptions.map((group, index) => (
+						<SelectGroup key={group.group}>
+							{index > 0 && <SelectSeparator />}
+							<SelectLabel>{t(`sheet.fieldGroup.${group.group}`)}</SelectLabel>
+							{group.options.map((option) => {
+								const description = t(`sheet.fieldDescription.${option.name}`, option.description || "");
+								return (
+									<SelectItem key={option.name} value={option.name} disabled={option.disabled}>
+										<span className="flex-1 truncate">{t(`sheet.fieldLabel.${option.name}`, option.label)}</span>
+										{description && (
+											<TooltipProvider delayDuration={150}>
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<span tabIndex={-1} className="text-muted-foreground ml-auto flex size-4 shrink-0 items-center justify-center">
+															<Info className="size-3.5" />
+														</span>
+													</TooltipTrigger>
+													<TooltipContent side="right" className="z-[10001] max-w-xs text-xs">
+														{description}
+													</TooltipContent>
+												</Tooltip>
+											</TooltipProvider>
+										)}
+									</SelectItem>
+								);
+							})}
+						</SelectGroup>
+					))}
 				</SelectContent>
 			</Select>
 			{isKeyValueField && (
 				<>
-					<span className="text-muted-foreground text-sm whitespace-nowrap">has key</span>
+					<span className="text-muted-foreground text-sm whitespace-nowrap">{t("sheet.keyValueHasKey")}</span>
 					<Input
 						type="text"
 						value={headerKey}
 						onChange={(e) => handleKeyChange(e.target.value)}
-						placeholder={`${fieldData?.label || "Key"} name (e.g., x-api-key)`}
+						placeholder={t("sheet.keyValueKeyName", { label: keyLabel })}
 						className="w-[180px]"
 						data-testid="cel-builder-field-selector-key-input"
 					/>
