@@ -117,6 +117,11 @@ func (p *Plugin) PreRequestHook(ctx *schemas.BifrostContext, req *schemas.Bifros
 	return nil
 }
 
+// PreProviderHook implements schemas.LLMPlugin (no-op passthrough).
+func (p *Plugin) PreProviderHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
 // ResolveProviderFromCatalog performs the deterministic, integration-aware provider pick
 // that PreRequestHook does, exposed for transport paths that can't run through
 // PreRequestHook (realtime client_secrets, WebRTC). Returns the selected provider plus the

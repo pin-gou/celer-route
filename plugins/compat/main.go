@@ -98,6 +98,11 @@ func (p *CompatPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.Bifr
 	return nil
 }
 
+// PreProviderHook implements schemas.LLMPlugin (no-op passthrough).
+func (p *CompatPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
 // PreLLMHook intercepts requests and applies LiteLLM-compatible request normalization.
 func (p *CompatPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
 	if ctx == nil || req == nil {

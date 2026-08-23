@@ -739,6 +739,11 @@ func (p *OtelPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.Bifros
 	return nil
 }
 
+// PreProviderHook implements schemas.LLMPlugin (no-op passthrough).
+func (p *OtelPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
 // PreLLMHook is a no-op - tracing is handled via the Inject method.
 // The OTEL plugin receives completed traces from TracingMiddleware.
 func (p *OtelPlugin) PreLLMHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {

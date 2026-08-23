@@ -1247,6 +1247,11 @@ func (p *GovernancePlugin) PreRequestHook(ctx *schemas.BifrostContext, req *sche
 	return nil
 }
 
+// PreProviderHook implements schemas.LLMPlugin (no-op passthrough).
+func (p *GovernancePlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
 // PreLLMHook intercepts requests before they are processed (governance decision point)
 // Parameters:
 //   - ctx: The Bifrost context

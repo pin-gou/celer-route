@@ -769,6 +769,11 @@ func (p *LoggerPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.Bifr
 	return nil
 }
 
+// PreProviderHook implements schemas.LLMPlugin (no-op passthrough).
+func (p *LoggerPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
 // PreLLMHook is called before a request is processed - FULLY ASYNC, NO DATABASE I/O
 // Parameters:
 //   - ctx: The Bifrost context
