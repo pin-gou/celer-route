@@ -158,6 +158,13 @@ func (p *Plugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostReq
 	return nil
 }
 
+// PreProviderHook implements schemas.LLMPlugin (no-op passthrough). RTK
+// decides what to compress in PreLLMHook once a provider is pinned, so
+// there is nothing to gate here.
+func (p *Plugin) PreProviderHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+
 // HTTPTransportPreHook implements schemas.HTTPTransportPlugin (no-op).
 func (p *Plugin) HTTPTransportPreHook(ctx *schemas.BifrostContext, req *schemas.HTTPRequest) (*schemas.HTTPResponse, error) {
 	return nil, nil
