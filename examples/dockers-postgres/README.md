@@ -18,7 +18,7 @@ pg-gateway 使用 PostgreSQL 作为 `config_store` 和 `logs_store`，获得跨�
 ├── docker-compose.yml   # pg-gateway + postgres:16-alpine 编排
 ├── data/
 │   └── config.json      # pg-gateway 配置（postgres 模式）
-├── .env.example         # 环境变量模板（数据库密码等）
+├── example.env          # 环境变量模板（数据库密码等）
 └── README.md
 ```
 
@@ -26,7 +26,7 @@ pg-gateway 使用 PostgreSQL 作为 `config_store` 和 `logs_store`，获得跨�
 
 ```bash
 # 1. 复制环境变量模板并按需修改
-cp .env.example .env
+cp example.env .env
 
 # 2. 启动两个服务（后台运行）
 docker compose up -d
