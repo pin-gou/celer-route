@@ -1,0 +1,58 @@
+{
+  "$schema": "https://pin-gou.github.io/pg-gateway/schema",
+  "config_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "postgres",
+      "port": "5432",
+      "user": "pg_gateway",
+      "password": "change-me-in-production",
+      "db_name": "pg_gateway",
+      "ssl_mode": "disable",
+      "max_idle_conns": 10,
+      "max_open_conns": 100,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "10m"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "postgres",
+      "port": "5432",
+      "user": "pg_gateway",
+      "password": "change-me-in-production",
+      "db_name": "pg_gateway",
+      "ssl_mode": "disable",
+      "max_idle_conns": 10,
+      "max_open_conns": 100,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "10m"
+    }
+  },
+  "client": {
+    "drop_excess_requests": false,
+    "initial_pool_size": 5000,
+    "prometheus_labels": [],
+    "enable_logging": true,
+    "disable_content_logging": false,
+    "log_retention_days": 365,
+    "enforce_auth_on_inference": false,
+    "allowed_origins": [
+      "*"
+    ],
+    "max_request_body_size_mb": 100,
+    "compat": {
+      "should_convert_params": false
+    }
+  },
+  "framework": {
+    "pricing": {
+      "pricing_url": "https://getbifrost.ai/datasheet",
+      "pricing_sync_interval": 86400,
+      "model_parameters_url": "https://getbifrost.ai/datasheet/model-parameters"
+    }
+  }
+}

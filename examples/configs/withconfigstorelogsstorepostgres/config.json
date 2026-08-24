@@ -9,7 +9,11 @@
       "user": "bifrost",
       "password": "bifrost_password",
       "db_name": "bifrost",
-      "ssl_mode": "disable"
+      "ssl_mode": "disable",
+      "max_idle_conns": 5,
+      "max_open_conns": 50,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "5m"
     }
   },
   "logs_store": {
@@ -21,7 +25,11 @@
       "user": "bifrost",
       "password": "bifrost_password",
       "db_name": "bifrost",
-      "ssl_mode": "disable"
+      "ssl_mode": "disable",
+      "max_idle_conns": 5,
+      "max_open_conns": 50,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "5m"
     }
   }
 }

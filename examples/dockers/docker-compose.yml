@@ -1,7 +1,7 @@
 services:
-  bifrost:
-    image: maximhq/bifrost:v1.4.3
-    container_name: bifrost
+  pg-gateway:
+    image: ghcr.io/pin-gou/pg-gateway:latest
+    container_name: pg-gateway
     ports:
       - "8080:8080"
     volumes:
