@@ -59,21 +59,60 @@ if [[ -z "$PROVIDERS" ]]; then
 fi
 echo "providers: ${PROVIDERS:-none}"
 echo ""
+IFS=' ' read -ra PROVIDER_ARRAY <<< "${PROVIDERS:-}"
 
-# ---- 2. 查询 models ----
-echo "--- Querying models ---"
-MODELS=$(curl -s "${BASE}/api/models" | python3 -c "
+# ---- 2. 按 provider 查询其 models，保证模型与 provider 匹配 ----
+# 逐个 provider 用 /api/models?provider=<name> 拉取专属模型列表，
+# 而不是先取全部模型再单独查 provider（两者各自独立，会导致模型与
+# provider 错配）。每个条目保存为 "<model> <provider>" 的配对。
+echo "--- Querying models per provider ---"
+MODEL_PROVIDER=()
+
+if [[ ${#PROVIDER_ARRAY[@]} -gt 0 ]]; then
+  for PIDX in "${PROVIDER_ARRAY[@]}"; do
+    MODELS_FOR_PROVIDER=$(curl -s "${BASE}/api/models?provider=${PIDX}&limit=50" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
-names = [m['name'] for m in d.get('models', []) if m.get('name')]
-print(' '.join(names))
+for m in d.get('models', []):
+    if m.get('name'):
+        print(m['name'])
 " 2>/dev/null || echo "")
+    while IFS= read -r mname; do
+      [[ -n "$mname" ]] && MODEL_PROVIDER+=("${mname} ${PIDX}")
+    done <<< "$MODELS_FOR_PROVIDER"
+  done
+fi
 
-if [[ -z "$MODELS" ]]; then
+if [[ ${#MODEL_PROVIDER[@]} -eq 0 ]]; then
+  # 兜底: 从全局 models 列表提取 name+provider（仍保证两者同源）
+  echo "WARN: 逐 provider 查询 models 失败，退回全局 models 列表"
+  while IFS=$'\t' read -r mname pname; do
+    [[ -n "$mname" ]] && MODEL_PROVIDER+=("${mname} ${pname}")
+  done < <(curl -s "${BASE}/api/models?limit=100" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for m in d.get('models', []):
+    if m.get('name') and m.get('provider'):
+        print(m['name'] + '\t' + m['provider'])
+" 2>/dev/null)
+fi
+
+if [[ ${#MODEL_PROVIDER[@]} -eq 0 ]]; then
   echo "WARN: 无法获取 models 列表，使用 fixture 模型名称"
   MODELS="deepseek-v4-flash-0731 deepseek-v4-pro glm-5.2 qwen3.6-flash qwen3.7-max"
+  for MK in $MODELS; do
+    MODEL_PROVIDER+=("${MK}")
+  done
 fi
+
+MODELS=""
+for MP in "${MODEL_PROVIDER[@]}"; do
+  set -- $MP
+  MODELS="${MODELS} $1"
+done
+MODELS="${MODELS# }"
 echo "models: ${MODELS}"
+echo "model-provider pairs: ${#MODEL_PROVIDER[@]}"
 echo ""
 
 # ---- 3. 查询 routing rules ----
@@ -93,7 +132,6 @@ echo "routes: ${ROUTES}"
 echo ""
 
 # ---- 将列表转数组 ----
-IFS=' ' read -ra MODEL_ARRAY <<< "$MODELS"
 IFS=' ' read -ra ROUTE_ARRAY <<< "$ROUTES"
 
 # ---- 4. 发送测试请求 ----
@@ -696,18 +734,30 @@ send_llm_request() {
 
     USE_MODEL=$((RANDOM % 2))
 
-    if [[ USE_MODEL -eq 0 && ${#MODEL_ARRAY[@]} -gt 0 ]]; then
-      idx=$((RANDOM % ${#MODEL_ARRAY[@]}))
-      MODEL="${MODEL_ARRAY[$idx]}"
-      echo "mode: by-model | model: ${MODEL}"
+    if [[ USE_MODEL -eq 0 && ${#MODEL_PROVIDER[@]} -gt 0 ]]; then
+      idx=$((RANDOM % ${#MODEL_PROVIDER[@]}))
+      MP="${MODEL_PROVIDER[$idx]}"
+      set -- $MP
+      MODEL="$1"
+      PROVIDER="$2"
+      if [[ -n "${PROVIDER}" ]]; then
+        echo "mode: by-model | model: ${MODEL} | provider: ${PROVIDER}"
+      else
+        echo "mode: by-model | model: ${MODEL}"
+      fi
     elif [[ ${#ROUTE_ARRAY[@]} -gt 0 ]]; then
       idx=$((RANDOM % ${#ROUTE_ARRAY[@]}))
       MODEL="${ROUTE_ARRAY[$idx]}"
       echo "mode: by-route | route: ${MODEL}"
-    else
-      idx=$((RANDOM % ${#MODEL_ARRAY[@]}))
-      MODEL="${MODEL_ARRAY[$idx]}"
+    elif [[ ${#MODEL_PROVIDER[@]} -gt 0 ]]; then
+      idx=$((RANDOM % ${#MODEL_PROVIDER[@]}))
+      MP="${MODEL_PROVIDER[$idx]}"
+      set -- $MP
+      MODEL="$1"
       echo "mode: by-model (route fallback) | model: ${MODEL}"
+    else
+      echo "WARN: 无可用 model 或 route，跳过"
+      return
     fi
 
     scenario_idx=$(( (i - 1) % 12 ))
