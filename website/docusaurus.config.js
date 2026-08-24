@@ -77,8 +77,7 @@ const config = {
           title: '文档',
           items: [
             { label: '入门', to: '/deployment/sqlite' },
-            { label: '数据存储', to: '/features/data-storage' },
-            { label: 'Provider 接入', to: '/providers/supported-providers/coze' },
+            { label: '部署 PostgreSQL', to: '/deployment/postgres' },
           ],
         },
         {
