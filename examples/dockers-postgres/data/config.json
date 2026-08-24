@@ -6,7 +6,7 @@
     "config": {
       "host": "postgres",
       "port": "5432",
-      "user": "pg_gateway",
+      "user": "pg-gateway",
       "password": "change-me-in-production",
       "db_name": "pg_gateway",
       "ssl_mode": "disable",
@@ -22,7 +22,7 @@
     "config": {
       "host": "postgres",
       "port": "5432",
-      "user": "pg_gateway",
+      "user": "pg-gateway",
       "password": "change-me-in-production",
       "db_name": "pg_gateway",
       "ssl_mode": "disable",
