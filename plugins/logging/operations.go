@@ -419,7 +419,7 @@ func (p *LoggerPlugin) updateLogEntry(
 	if virtualKeyName != "" {
 		updatePayload.VirtualKeyName = &virtualKeyName
 	}
-	p.notifyActiveLogSubscribers(updatePayload)
+	p.notifyActiveLogSubscribers(nil, updatePayload)
 	return nil
 }
 
@@ -441,7 +441,7 @@ func (p *LoggerPlugin) makePostWriteCallback(enrichFn func(*logstore.Log)) func(
 			callback(p.ctx, entry)
 		}
 		// Notify SSE subscribers of the log status update (processing→success/error etc.)
-		p.notifyActiveLogSubscribers(entry)
+		p.notifyActiveLogSubscribers(nil, entry)
 	}
 }
 
@@ -1505,7 +1505,19 @@ func (p *LoggerPlugin) UnsubscribeActiveLogStream(ctx context.Context, ch <-chan
 
 // notifyActiveLogSubscribers broadcasts a log entry to all active SSE subscribers.
 // Non-blocking: if a subscriber's buffer is full, the update is dropped.
-func (p *LoggerPlugin) notifyActiveLogSubscribers(entry *logstore.Log) {
+//
+// ctx is used only to check BifrostContextKeySilentLog: when set, the broadcast is
+// suppressed because the request was short-circuited before any log row should
+// appear in the UI (e.g. provider-cooldown's all-keys-cooled path). Existing
+// callers that don't have a ctx handy can pass nil — those callers fire from
+// post-DB-flush callbacks that already ran the SilentLog guard at PostLLMHook
+// entry, so a re-check would only be belt-and-braces.
+func (p *LoggerPlugin) notifyActiveLogSubscribers(ctx *schemas.BifrostContext, entry *logstore.Log) {
+	if ctx != nil {
+		if silent, _ := ctx.Value(schemas.BifrostContextKeySilentLog).(bool); silent {
+			return
+		}
+	}
 	p.activeLogSubMu.RLock()
 	defer p.activeLogSubMu.RUnlock()
 	for _, ch := range p.activeLogSubscribers {

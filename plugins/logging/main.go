@@ -1028,7 +1028,7 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 	}
 	// Notify SSE subscribers so the timeline shows the blue "processing" bar
 	// immediately, before the log is written to the DB by the batch writer.
-	p.notifyActiveLogSubscribers(buildInitialLogEntry(pending))
+	p.notifyActiveLogSubscribers(ctx, buildInitialLogEntry(pending))
 	return req, nil, nil
 }
 
@@ -1150,6 +1150,11 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 				entry.ClusterNodeID = &nodeID
 			}
 			applyLargePayloadPreviewsToEntry(ctx, entry, contentLoggingEnabled)
+			// Fire terminal preview immediately so the SSE client sees the
+			// status transition (processing→success/error) before the DB write
+			// completes. The post-write callback fires the same entry again
+			// later — the frontend deduplicates via mergeActiveEntry (latest wins).
+			p.notifyActiveLogSubscribers(ctx, entry)
 			p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil))
 		} else {
 			p.logger.Warn("no pending log data found for request %s, skipping log write", requestID)
@@ -1302,6 +1307,11 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		p.applyErrorBillingFromBilledUsage(ctx, entry, bifrostErr.ExtraFields.BilledUsage, requestType)
 		p.applyInternalCallCosts(ctx, entry, guardrailDebug)
 		applyLargePayloadPreviewsToEntry(ctx, entry, contentLoggingEnabled)
+		// Fire terminal preview before enqueuing so the SSE client sees the
+		// status transition (processing→error/cancelled) before the DB write
+		// completes. The post-write callback in makePostWriteCallback fires
+		// the same entry again — the frontend dedupes via mergeActiveEntry.
+		p.notifyActiveLogSubscribers(ctx, entry)
 		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
 		p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 		return result, bifrostErr, nil
@@ -1398,6 +1408,11 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		if tracer != nil && traceID != "" {
 			tracer.CleanupStreamAccumulator(traceID)
 		}
+		// Fire terminal preview before enqueuing so the SSE client sees the
+		// status transition (processing→success/error/cancelled) before the
+		// DB write completes. The post-write callback fires the same entry
+		// again — the frontend dedupes via mergeActiveEntry.
+		p.notifyActiveLogSubscribers(ctx, entry)
 		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
 		p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 		return result, bifrostErr, nil
@@ -1461,6 +1476,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 			Name: *entry.RoutingRuleName,
 		}
 	}
+	p.notifyActiveLogSubscribers(ctx, entry)
 	p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
 	p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 	return result, bifrostErr, nil

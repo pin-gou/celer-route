@@ -2652,3 +2652,232 @@ func TestUpdateLogEntryNotifyOmitsEmptyRoutingAndVirtualKey(t *testing.T) {
 		t.Fatal("timed out waiting for SSE update payload")
 	}
 }
+
+// TestPostLLMHookFiresSSEPreviewBeforeDBFlush is the regression test for the
+// production symptom where a finished LLM request took 5-20s to surface as
+// "success" / "error" / "cancelled" on the LLM Logs page. The terminal SSE
+// event used to fire from inside makePostWriteCallback, which only runs after
+// batchWriter flushed + BatchUpsert committed + the post-write goroutine
+// scheduled the callback — adding the full batch_interval on top of DB latency.
+//
+// After the fix, PostLLMHook must broadcast a terminal preview directly to SSE
+// subscribers BEFORE enqueueing the write — the post-write callback still
+// fires later (carrying the full token/cost/error payload), but the user sees
+// the status transition the moment the request finishes.
+//
+// The test sets BatchInterval to 1 hour so the batchWriter cannot flush in time,
+// then verifies the SSE subscriber receives the terminal preview in <100ms.
+func TestPostLLMHookFiresSSEPreviewBeforeDBFlush(t *testing.T) {
+	store := newTestStore(t)
+	plugin, err := Init(context.Background(), &Config{
+		Writer: &logstore.WriterConfig{
+			BatchInterval: "1h", // effectively never flushes
+			MaxBatchSize:  1000,
+		},
+	}, testLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	subCtx, subCancel := context.WithCancel(context.Background())
+	defer subCancel()
+	sub, err := plugin.SubscribeActiveLogStream(subCtx)
+	if err != nil {
+		t.Fatalf("SubscribeActiveLogStream() error = %v", err)
+	}
+
+	requestID := "req-preview-fires-before-flush"
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
+	ctx.SetValue(schemas.BifrostContextKeySelectedKeyID, "key-test")
+	ctx.SetValue(schemas.BifrostContextKeySelectedKeyName, "test-key")
+	ctx.SetValue(schemas.BifrostContextKeyGovernanceVirtualKeyID, "vk-1")
+
+	// PreLLMHook: seed the pending entry so PostLLMHook takes the !hasPending==false
+	// path and exercises Path C (non-streaming success).
+	if _, _, err := plugin.PreLLMHook(ctx, &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o-mini",
+			Params:   &schemas.ChatParameters{},
+		},
+	}); err != nil {
+		t.Fatalf("PreLLMHook() error = %v", err)
+	}
+
+	// Drain the PreLLMHook "processing" event so it does not race the terminal
+	// preview we are about to assert on.
+	select {
+	case got := <-sub:
+		if got.Status != "processing" {
+			t.Fatalf("first event status = %q, want processing", got.Status)
+		}
+		if got.ID != requestID {
+			t.Fatalf("first event id = %q, want %q", got.ID, requestID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for PreLLMHook processing event")
+	}
+
+	// Build a successful response and run PostLLMHook. We expect the SSE
+	// subscriber to receive a terminal-status preview BEFORE the batchWriter
+	// ever gets a chance to flush (which is configured to take 1 hour).
+	latencyMs := 250
+	chatResp := &schemas.BifrostChatResponse{
+		ID:    "chatcmpl-test",
+		Model: "gpt-4o-mini",
+		Choices: []schemas.BifrostResponseChoice{
+			{
+				Index: 0,
+				ChatNonStreamResponseChoice: &schemas.ChatNonStreamResponseChoice{
+					Message: &schemas.ChatMessage{
+						Role:    schemas.ChatMessageRoleAssistant,
+						Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("hello")},
+					},
+				},
+			},
+		},
+		ExtraFields: schemas.BifrostResponseExtraFields{
+			Latency:                int64(latencyMs),
+			RequestType:            schemas.ChatCompletionRequest,
+			Provider:               schemas.OpenAI,
+			OriginalModelRequested: "gpt-4o-mini",
+			ResolvedModelUsed:      "gpt-4o-mini",
+		},
+	}
+	resp := &schemas.BifrostResponse{
+		ChatResponse: chatResp,
+	}
+	postStart := time.Now()
+	if _, _, err := plugin.PostLLMHook(ctx, resp, nil); err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+
+	select {
+	case got := <-sub:
+		elapsed := time.Since(postStart)
+		if elapsed > 500*time.Millisecond {
+			t.Fatalf("terminal SSE preview took %v — should be <500ms (DB flush is configured for 1h)", elapsed)
+		}
+		if got.ID != requestID {
+			t.Fatalf("terminal SSE preview id = %q, want %q", got.ID, requestID)
+		}
+		if got.Status != "success" {
+			t.Fatalf("terminal SSE preview status = %q, want success", got.Status)
+		}
+		if got.Provider != string(schemas.OpenAI) {
+			t.Fatalf("terminal SSE preview provider = %q, want openai", got.Provider)
+		}
+		if got.Model != "gpt-4o-mini" {
+			t.Fatalf("terminal SSE preview model = %q, want gpt-4o-mini", got.Model)
+		}
+		if got.Latency == nil || *got.Latency != float64(latencyMs) {
+			t.Fatalf("terminal SSE preview latency = %v, want %dms", got.Latency, latencyMs)
+		}
+		if got.VirtualKeyID == nil || *got.VirtualKeyID != "vk-1" {
+			t.Fatalf("terminal SSE preview VirtualKeyID = %v, want vk-1", got.VirtualKeyID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for terminal SSE preview — preview is likely still coupled to batchWriter flush")
+	}
+}
+
+// TestPostLLMHookPreviewRespectsSilentLog pins the SilentLog short-circuit
+// contract for the new preview broadcast. A PreProviderHook short-circuit
+// (e.g. provider-cooldown on all-keys-cooled) sets BifrostContextKeySilentLog
+// before PostLLMHook runs. PostLLMHook early-returns at the SilentLog guard,
+// and must NOT fire the SSE preview — otherwise the UI would briefly flash a
+// row that the logging path then refuses to write, breaking the
+// processing-then-disappear pattern that the SilentLog guard exists to enforce.
+func TestPostLLMHookPreviewRespectsSilentLog(t *testing.T) {
+	store := newTestStore(t)
+	plugin, err := Init(context.Background(), &Config{
+		Writer: &logstore.WriterConfig{
+			BatchInterval: "1h",
+			MaxBatchSize:  1000,
+		},
+	}, testLogger{}, store, nil, nil)
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	subCtx, subCancel := context.WithCancel(context.Background())
+	defer subCancel()
+	sub, err := plugin.SubscribeActiveLogStream(subCtx)
+	if err != nil {
+		t.Fatalf("SubscribeActiveLogStream() error = %v", err)
+	}
+
+	requestID := "req-preview-silent"
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
+	ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+
+	if _, _, err := plugin.PostLLMHook(ctx, nil, nil); err != nil {
+		t.Fatalf("PostLLMHook() error = %v", err)
+	}
+
+	select {
+	case got := <-sub:
+		t.Fatalf("SilentLog path must not fire SSE preview, got id=%q status=%q", got.ID, got.Status)
+	case <-time.After(200 * time.Millisecond):
+		// Expected: nothing arrives.
+	}
+}
+
+// TestNotifyActiveLogSubscribersSilentLogDrop is the unit-level guard for the
+// notifyActiveLogSubscribers helper itself. The SilentLog early-return must
+// happen even when callers pass ctx — verifies the ctx guard wired into the
+// helper rather than relying on PostLLMHook's own top-of-function check.
+func TestNotifyActiveLogSubscribersSilentLogDrop(t *testing.T) {
+	plugin := &LoggerPlugin{
+		logger:               testLogger{},
+		activeLogSubscribers: make(map[string]chan *logstore.Log),
+	}
+	subCtx, subCancel := context.WithCancel(context.Background())
+	defer subCancel()
+	sub, err := plugin.SubscribeActiveLogStream(subCtx)
+	if err != nil {
+		t.Fatalf("SubscribeActiveLogStream() error = %v", err)
+	}
+
+	silentCtx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	silentCtx.SetValue(schemas.BifrostContextKeySilentLog, true)
+	plugin.notifyActiveLogSubscribers(silentCtx, &logstore.Log{
+		ID:     "should-be-dropped",
+		Status: "success",
+	})
+
+	select {
+	case got := <-sub:
+		t.Fatalf("notify with SilentLog must drop, got id=%q", got.ID)
+	case <-time.After(100 * time.Millisecond):
+		// Expected.
+	}
+
+	// Sanity: without SilentLog, the same call delivers. This guards against
+	// the ctx guard accidentally becoming a total no-op.
+	plugin.notifyActiveLogSubscribers(nil, &logstore.Log{
+		ID:     "should-be-delivered",
+		Status: "success",
+	})
+	select {
+	case got := <-sub:
+		if got.ID != "should-be-delivered" {
+			t.Fatalf("delivered id = %q, want should-be-delivered", got.ID)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("notify without SilentLog must deliver")
+	}
+}
