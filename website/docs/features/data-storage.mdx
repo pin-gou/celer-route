@@ -1,0 +1,158 @@
+---
+title: 数据存储后端
+description: config_store 和 logs_store 支持 SQLite（单机）与 PostgreSQL（生产）部署时切换
+sidebar_position: 1
+---
+
+# 数据存储后端
+
+pg-gateway 通过 `config.json` 中的 `config_store` 与 `logs_store` 段配置持久化后端。
+**同一 Docker 镜像同时包含 SQLite 与 PostgreSQL 驱动**，部署时无需更换镜像，仅需修改
+`config.json` 中的 `type` 字段。
+
+## 默认行为
+
+- 若 `config.json` 不含 `config_store` 段，pg-gateway **默认启用 SQLite**，数据库文件
+  落在 `${app-dir}/config.db`
+- 若 `config.json` 不含 `logs_store` 段，**默认启用 SQLite**，数据库文件落在
+  `${app-dir}/logs.db`
+
+## SQLite
+
+### 适用场景
+
+- 单机部署、试用、PoC
+- 低写入量场景
+- 不想引入外部数据库依赖
+
+### 最小配置
+
+```json
+{
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/config.db"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/logs.db"
+    }
+  }
+}
+```
+
+详见 [部署：SQLite](../deployment/sqlite)。
+
+## PostgreSQL
+
+### 适用场景
+
+- 生产部署
+- 跨节点 HA / 集群部署
+- 高写入量 / 大数据量日志存储
+
+### 前置要求
+
+- **PostgreSQL 16 或更高版本**（pg-gateway 启动时硬性检查 `server_version_num >= 160000`）
+- 一个可用的数据库（pg-gateway 会自动建表，但不会创建数据库本身）
+
+### 配置示例
+
+```json
+{
+  "config_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "postgres",
+      "port": "5432",
+      "user": "pg_gateway",
+      "password": "${POSTGRES_PASSWORD}",
+      "db_name": "pg_gateway",
+      "ssl_mode": "require",
+      "max_idle_conns": 10,
+      "max_open_conns": 100,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "10m"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": { "...": "同上" }
+  }
+}
+```
+
+详见 [部署：PostgreSQL](../deployment/postgres)。
+
+### PostgreSQL 独有优势
+
+切换到 PostgreSQL 后，pg-gateway 会启用若干 SQLite 不具备的能力：
+
+- **物化视图（matview）** — 仪表盘与统计接口走 matview 加速
+- **GIN 索引** — 元数据 JSONB 上的高效过滤
+- **Advisory Lock** — 跨节点迁移串行化，避免并发 DDL
+- **批量更新优化** — `UPDATE ... FROM (VALUES ...)` 高效批改
+- **全文搜索** — 基于 `to_tsvector` / `plainto_tsquery`
+
+## ClickHouse（日志存储专用）
+
+`logs_store` 还支持 ClickHouse 类型——为海量日志场景设计：
+
+```json
+{
+  "logs_store": {
+    "enabled": true,
+    "type": "clickhouse",
+    "config": {
+      "host": "clickhouse",
+      "port": "9000",
+      "user": "default",
+      "password": "...",
+      "db_name": "pg_gateway_logs"
+    }
+  }
+}
+```
+
+## 连接池调优
+
+| 字段                 | 作用                                  | 推荐值（低 / 中 / 高并发）   |
+| -------------------- | ------------------------------------- | ---------------------------- |
+| `max_idle_conns`     | 连接池中保持的空闲连接数              | 5 / 10 / 25                   |
+| `max_open_conns`     | 连接池最大并发连接数                  | 50 / 100 / 200                |
+| `conn_max_lifetime`  | 单个连接的最大存活时间                | `1h` / `30m` / `15m`         |
+| `conn_max_idle_time` | 空闲连接的最大保留时间                | `10m` / `5m` / `2m`          |
+| `password_command`   | 动态获取密码的命令（IAM / Vault）     | —                            |
+
+`conn_max_lifetime` 不要设得过短，否则会触发 pgx 的 `SQLSTATE 0A000` "cached plan
+must not change result type" 错误。建议不低于 `15m`。
+
+## 备份与恢复
+
+### SQLite
+
+```bash
+# 在线备份（不锁库）
+sqlite3 /app/data/config.db ".backup '/backup/config.db.$(date +%Y%m%d)'"
+sqlite3 /app/data/logs.db ".backup '/backup/logs.db.$(date +%Y%m%d)'"
+```
+
+或使用 `VACUUM INTO`（会短暂锁库）：
+
+```bash
+sqlite3 /app/data/config.db "VACUUM INTO '/backup/config.db.$(date +%Y%m%d)'"
+```
+
+### PostgreSQL
+
+```bash
+pg_dump -h <host> -U <user> -d pg_gateway -F c -f pg_gateway_$(date +%Y%m%d).dump
+pg_restore -h <host> -U <user> -d pg_gateway pg_gateway_20240101.dump
+```

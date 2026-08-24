@@ -1,0 +1,25 @@
+---
+title: pg-gateway 简介
+description: 高性能个人 LLM 网关——一套 API 串联 30+ 模型
+sidebar_position: 0
+---
+
+# pg-gateway
+
+pg-gateway 是一个高性能的个人 LLM 接口网关，将 20+ 主流 LLM 提供商统一为 OpenAI
+兼容 API。你只需学会一套 API，就能在 30+ 模型间自由切换、组合、路由。
+
+## 核心特性
+
+- **多提供商统一接入** — 一套 API 访问 OpenAI、Anthropic、AWS Bedrock、Google
+  Gemini、Azure、Cohere、Mistral、Ollama、Groq、DeepSeek、Fireworks 等 30+ 提供商
+- **Web 管理界面** — 仪表盘实时监控请求量 / 延迟 / Token 用量，提供请求日志查询
+- **智能路由** — 路由规则与权重路由，支持自动故障转移和跨 API Key 负载均衡
+- **插件系统** — 提供商冷却、语义缓存、请求日志、模拟响应、提示词管理等插件
+- **双数据库后端** — 同一镜像同时支持 SQLite（单机零依赖）与 PostgreSQL（生产 HA）
+
+## 接下来阅读
+
+import DocCardList from '@theme/DocCardList';
+
+<DocCardList />

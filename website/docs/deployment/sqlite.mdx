@@ -1,0 +1,137 @@
+---
+title: 部署：SQLite（单机/快速试用）
+description: 使用 SQLite 作为 config_store 和 logs_store 的部署指南
+sidebar_position: 1
+---
+
+# 部署：SQLite
+
+SQLite 模式适合**单机部署、试用、PoC**。零外部依赖，启动即用。
+
+## 适用场景
+
+- 单节点 pg-gateway 实例
+- 试用 / Demo / PoC
+- 低写入量场景（日志 < 1000 QPS）
+- 不想引入 PostgreSQL 的运维负担
+
+## 快速启动
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs>
+<TabItem value="docker" label="Docker Compose（推荐）" default>
+
+仓库根目录 [`examples/dockers/`](https://github.com/pin-gou/pg-gateway/tree/master/examples/dockers) 提供了完整示例：
+
+```bash
+cd examples/dockers
+docker compose up -d
+```
+
+启动后访问 [`http://localhost:8080`](http://localhost:8080) 进入 Web 管理界面。
+
+</TabItem>
+<TabItem value="binary" label="二进制">
+
+```bash
+# 1. 下载镜像中的二进制（或 make build）
+make build
+# 产物在 transports/pg-gateway-http/
+
+# 2. 准备数据目录
+mkdir -p ~/pg-gateway-data
+
+# 3. 准备 config.json（见下方配置示例）
+
+# 4. 启动
+./main -app-dir ~/pg-gateway-data -port 8080
+```
+
+</TabItem>
+</Tabs>
+
+## 配置示例
+
+完整 `config.json`（位于 `${app-dir}/config.json`）：
+
+```json
+{
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/config.db"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/logs.db"
+    }
+  },
+  "client": {
+    "drop_excess_requests": false,
+    "initial_pool_size": 5000,
+    "enable_logging": true,
+    "log_retention_days": 365
+  },
+  "framework": {
+    "pricing": {
+      "pricing_url": "https://getbifrost.ai/datasheet",
+      "pricing_sync_interval": 86400
+    }
+  }
+}
+```
+
+## 数据持久化
+
+SQLite 是单文件数据库，**必须将数据目录挂载到宿主机**才能保证容器重启后数据不丢：
+
+```yaml
+# docker-compose.yml 片段
+volumes:
+  - ./data:/app/data
+```
+
+文件权限：
+
+```bash
+# 容器内运行用户为 appuser，确保 /app/data 可写
+chown -R 1000:1000 ./data
+```
+
+## 备份
+
+```bash
+# 推荐：在线热备份（不锁库）
+sqlite3 /app/data/config.db ".backup '/backup/config.db.$(date +%Y%m%d)'"
+sqlite3 /app/data/logs.db   ".backup '/backup/logs.db.$(date +%Y%m%d)'"
+
+# 容器场景
+docker exec pg-gateway sqlite3 /app/data/config.db \
+  ".backup '/backup/config.db.$(date +%Y%m%d)'"
+```
+
+详见 [数据存储后端 — 备份与恢复](../features/data-storage#备份与恢复)。
+
+## 限制
+
+- **单写者锁**：SQLite 同时只允许一个写入连接，高并发写入下会成为瓶颈
+- **不支持水平扩展**：多副本部署 SQLite 会数据不一致，**仅用于单实例**
+- **不适合作为共享存储**：NFS 上的 SQLite 性能与可靠性均不达生产标准
+- 大数据量日志（> 10 GB）建议改用 PostgreSQL 或 ClickHouse
+
+## 升级到 PostgreSQL
+
+当单机部署无法满足需求时，可以平滑切换到 PostgreSQL：
+
+1. 停止当前 pg-gateway 容器
+2. 修改 `config.json` 中两个 store 的 `type` 为 `"postgres"` 并填写连接参数
+3. 启动新后端，pg-gateway 会自动在新数据库中创建表结构
+4. （如有需要）从 SQLite 备份恢复历史日志数据
+
+详见 [数据存储后端 — PostgreSQL](../features/data-storage#postgresql)。

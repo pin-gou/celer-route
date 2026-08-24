@@ -1,0 +1,385 @@
+/**
+ * pg-gateway 文档站自定义样式
+ * 复刻原 docs/index.html 的设计风格
+ * 优先使用 Docusaurus 的 --ifm-* 变量，保留自定义品牌色
+ */
+
+/* ===== 品牌色变量（覆盖 Docusaurus 默认） ===== */
+:root {
+  --pg-primary: #2563eb;
+  --pg-primary-light: #3b82f6;
+  --pg-secondary: #7c3aed;
+  --pg-accent: #1e40af;
+  --pg-success: #059669;
+  --pg-warning: #d97706;
+  --pg-danger: #dc2626;
+  --pg-muted: #64748b;
+  --pg-border: #e2e8f0;
+  --pg-radius: 0.5rem;
+}
+
+[data-theme='dark'] {
+  --pg-border: #334155;
+}
+
+/* ===== 首页布局 ===== */
+.pg-home main {
+  max-width: 100%;
+  padding: 0;
+}
+
+.pg-home {
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+}
+
+.pg-hero {
+  text-align: center;
+  padding: 4rem 1.5rem 2rem;
+  border-bottom: 1px solid var(--pg-border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--pg-primary) 8%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+.pg-hero h1 {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  background: linear-gradient(90deg, var(--pg-primary), var(--pg-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.pg-hero p.tagline {
+  font-size: 1.125rem;
+  color: var(--pg-muted);
+  margin: 0 0 1.5rem;
+}
+
+.pg-hero .cta {
+  display: inline-flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--pg-radius);
+  font-weight: 500;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.pg-btn-primary {
+  background: var(--pg-primary);
+  color: white;
+}
+.pg-btn-primary:hover {
+  background: var(--pg-accent);
+  color: white;
+  text-decoration: none;
+}
+
+.pg-btn-secondary {
+  background: transparent;
+  border-color: var(--pg-border);
+  color: var(--ifm-font-color-base);
+}
+.pg-btn-secondary:hover {
+  border-color: var(--pg-primary);
+  color: var(--pg-primary);
+  text-decoration: none;
+}
+
+/* ===== Section 通用 ===== */
+.pg-section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+  border-bottom: 1px solid var(--pg-border);
+}
+
+.pg-section:last-of-type {
+  border-bottom: none;
+}
+
+.pg-section h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+
+.pg-section p {
+  margin: 0.75rem 0;
+  line-height: 1.6;
+}
+
+.pg-section p.lead {
+  color: var(--pg-muted);
+  font-style: italic;
+}
+
+/* ===== Feature Grid（sec1/sec4 共用） ===== */
+.pg-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.pg-feature-card {
+  padding: 1.25rem;
+  border: 1px solid var(--pg-border);
+  border-radius: var(--pg-radius);
+  background: var(--ifm-card-background-color, var(--ifm-background-color));
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.pg-feature-card:hover {
+  border-color: var(--pg-primary);
+  transform: translateY(-2px);
+}
+
+.pg-feature-card .icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--pg-primary) 12%, transparent);
+  color: var(--pg-primary);
+  margin-bottom: 0.75rem;
+}
+
+.pg-feature-card h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.4rem;
+}
+
+.pg-feature-card p {
+  font-size: 0.9rem;
+  color: var(--pg-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ===== 架构图 SVG 容器 ===== */
+.pg-svg-container {
+  background: var(--ifm-background-color);
+  border: 1px solid var(--pg-border);
+  border-radius: var(--pg-radius);
+  padding: 1.25rem;
+  margin: 1.25rem 0;
+  overflow-x: auto;
+}
+
+.pg-svg-container svg {
+  width: 100%;
+  height: auto;
+  max-width: 700px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* ===== Step Card（sec3） ===== */
+.pg-step-card {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--pg-border);
+  border-radius: var(--pg-radius);
+  background: var(--ifm-background-color);
+}
+
+.pg-step-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.pg-step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--pg-primary);
+  color: white;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.pg-step-card pre {
+  background: var(--ifm-pre-background);
+  border: 1px solid var(--pg-border);
+  border-radius: var(--pg-radius);
+  padding: 0.85rem;
+  overflow-x: auto;
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.pg-step-card pre code {
+  font-family: var(--ifm-font-family-monospace);
+}
+
+/* ===== Info card / 提示框 ===== */
+.pg-info-card {
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--pg-success);
+  background: color-mix(in srgb, var(--pg-success) 6%, transparent);
+  border-radius: 0 var(--pg-radius) var(--pg-radius) 0;
+  margin: 0.75rem 0;
+}
+
+.pg-info-card p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* ===== Tag ===== */
+.pg-tag {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+.pg-tag-green {
+  background: color-mix(in srgb, var(--pg-success) 18%, transparent);
+  color: var(--pg-success);
+}
+
+.pg-tag-blue {
+  background: color-mix(in srgb, var(--pg-primary) 18%, transparent);
+  color: var(--pg-primary);
+}
+
+/* ===== 仓库结构卡片（sec5） ===== */
+.pg-dir-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.pg-dir-card {
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--pg-border);
+  border-radius: var(--pg-radius);
+  background: var(--ifm-background-color);
+}
+
+.pg-dir-name {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pg-primary);
+  margin-bottom: 0.4rem;
+}
+
+.pg-dir-card p {
+  font-size: 0.875rem;
+  color: var(--pg-muted);
+  margin: 0 0 0.5rem;
+  line-height: 1.5;
+}
+
+.pg-dir-path {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.78rem;
+  color: var(--pg-muted);
+  background: var(--ifm-pre-background);
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+/* ===== 命令表（sec6） ===== */
+.pg-cmd-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+
+.pg-cmd-table th,
+.pg-cmd-table td {
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--pg-border);
+}
+
+.pg-cmd-table th {
+  background: var(--ifm-pre-background);
+  font-weight: 600;
+}
+
+.pg-cmd-table code {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  color: var(--pg-primary);
+  background: color-mix(in srgb, var(--pg-primary) 8%, transparent);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
+}
+
+/* ===== 页脚 ===== */
+.pg-footer {
+  border-top: 1px solid var(--pg-border);
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--pg-muted);
+  background: var(--ifm-pre-background);
+}
+
+.pg-footer a {
+  color: var(--pg-primary);
+}
+
+/* ===== 暗色模式调整 ===== */
+[data-theme='dark'] .pg-step-card {
+  background: var(--ifm-background-color);
+}
+
+[data-theme='dark'] .pg-feature-card {
+  background: color-mix(in srgb, var(--ifm-font-color-base) 4%, var(--ifm-background-color));
+}
+
+[data-theme='dark'] .pg-dir-card {
+  background: color-mix(in srgb, var(--ifm-font-color-base) 4%, var(--ifm-background-color));
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 768px) {
+  .pg-section {
+    padding: 2rem 1rem;
+  }
+  .pg-hero {
+    padding: 2.5rem 1rem 1.5rem;
+  }
+  .pg-step-card pre {
+    font-size: 0.78rem;
+  }
+}
