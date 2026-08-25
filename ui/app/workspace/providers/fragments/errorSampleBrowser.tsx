@@ -69,7 +69,11 @@ export function ErrorSampleBrowser({ provider, onApply }: ErrorSampleBrowserProp
 									<div className="flex items-center gap-1 text-xs">
 										<span className="font-semibold">#{p.rank}</span>
 										<span className="text-muted-foreground">{p.count}×</span>
-										{p.status_code !== undefined && <span className="text-muted-foreground font-mono">{p.status_code}</span>}
+										{p.status_code !== undefined && (
+											<span className="text-muted-foreground font-mono">
+												{p.status_code >= 100 && p.status_code <= 599 ? p.status_code : "—"}
+											</span>
+										)}
 									</div>
 									<div className="text-muted-foreground truncate font-mono text-xs">
 										{p.error_type && <span>{p.error_type} </span>}

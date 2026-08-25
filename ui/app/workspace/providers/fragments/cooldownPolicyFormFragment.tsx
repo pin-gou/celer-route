@@ -15,7 +15,7 @@ import {
 } from "@/lib/types/schemas";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HelpCircle, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { HelpCircle, PencilIcon, PlusIcon, Trash2Icon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm, useFormContext, useWatch, type Control, type Resolver } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -39,6 +39,13 @@ const DEFAULT_RULE = (ttlSeconds: number): NonNullable<CooldownPolicyFormSchema[
 	match_mode: "any",
 	ttl_seconds: ttlSeconds,
 });
+
+const STATUS_CODE_MIN = 100;
+const STATUS_CODE_MAX = 599;
+
+function isValidStatusCode(value: unknown): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value >= STATUS_CODE_MIN && value <= STATUS_CODE_MAX;
+}
 
 export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolicyFormFragmentProps) {
 	const { t } = useTranslation("providers");
@@ -196,7 +203,13 @@ function ErrorSampleBrowserBridge({ provider }: { provider: ModelProvider["name"
 		const newMatch: CooldownPolicyMatchFormSchema = {};
 
 		if (pattern.status_code !== undefined) {
-			newMatch.status_code = pattern.status_code;
+			if (isValidStatusCode(pattern.status_code)) {
+				newMatch.status_code = pattern.status_code;
+			} else {
+				toast.warning(t("fragments.cooldownPolicy.errorSample.toast.skippedInvalidStatusCode"), {
+					description: String(pattern.status_code),
+				});
+			}
 		}
 		if (pattern.error_type) {
 			newMatch.type = [pattern.error_type];
@@ -515,30 +528,83 @@ function MatchEditor({
 }) {
 	const { t } = useTranslation("providers");
 	const baseName = `${ruleKey}.match.${index}` as const;
+	const { setValue, watch } = useFormContext<CooldownPolicyFormSchema>();
+	const fieldName = `${baseName}.status_code` as const;
+	const watchedStatusCode = watch(fieldName as never) as unknown as number | undefined;
+	// Local mirror of the field value so the controlled input always reflects
+	// the latest form state, even when RHF's Controller fails to propagate a
+	// numeric → undefined transition through its `field` prop (observed bug).
+	// The mirror is a string so we can preserve the user's in-progress typing
+	// (e.g. "5" while they're still typing "500") without immediately
+	// collapsing the input to empty just because an intermediate digit is
+	// outside the [100, 599] band.
+	const [statusCodeText, setStatusCodeText] = useState<string>(watchedStatusCode === undefined ? "" : String(watchedStatusCode));
+	const inputRef = useRef<HTMLInputElement | null>(null);
+	useEffect(() => {
+		setStatusCodeText(watchedStatusCode === undefined ? "" : String(watchedStatusCode));
+	}, [watchedStatusCode]);
+
+	const clearStatusCode = () => {
+		setStatusCodeText("");
+		setValue(fieldName, undefined as never, { shouldDirty: true, shouldValidate: true });
+		if (inputRef.current) inputRef.current.value = "";
+	};
 
 	return (
 		<div className="space-y-3">
 			<FormField
 				control={control}
-				name={`${baseName}.status_code`}
-				render={({ field }) => (
+				name={fieldName}
+				render={() => (
 					<FormItem>
 						<FormLabel className="text-xs">{t("fragments.cooldownPolicy.matchField.statusCode")}</FormLabel>
 						<FormControl>
-							<Input
-								type="number"
-								min={100}
-								max={599}
-								placeholder="429"
-								data-testid={`provider-cooldown-${ruleKey}-match-${index}-status-code`}
-								value={field.value ?? ""}
-								onChange={(e) => {
-									const v = e.target.value;
-									const n = v === "" ? undefined : Number(v);
-									field.onChange(Number.isNaN(n) ? undefined : n);
-								}}
-							/>
+							<div className="flex items-center gap-1">
+								<Input
+									ref={inputRef}
+									type="number"
+									min={STATUS_CODE_MIN}
+									max={STATUS_CODE_MAX}
+									placeholder={t("fragments.cooldownPolicy.matchField.statusCodePlaceholder")}
+									data-testid={`provider-cooldown-${ruleKey}-match-${index}-status-code`}
+									value={statusCodeText}
+									onChange={(e) => {
+										const v = e.target.value;
+										setStatusCodeText(v);
+										if (v === "") {
+											setValue(fieldName, undefined as never, {
+												shouldDirty: true,
+												shouldValidate: true,
+											});
+											return;
+										}
+										const n = Number(v);
+										if (isValidStatusCode(n)) {
+											setValue(fieldName, n as never, {
+												shouldDirty: true,
+												shouldValidate: true,
+											});
+										}
+										// Intermediate digits outside [100, 599] (e.g. typing "5"
+										// before "500") are kept in the local mirror but not
+										// written to RHF, so the schema isn't violated mid-type.
+									}}
+								/>
+								{statusCodeText !== "" && (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onClick={clearStatusCode}
+										data-testid={`provider-cooldown-${ruleKey}-match-${index}-status-code-clear`}
+										aria-label={t("fragments.cooldownPolicy.matchField.clearStatusCode")}
+									>
+										<X className="h-3.5 w-3.5" />
+									</Button>
+								)}
+							</div>
 						</FormControl>
+						<FormMessage />
 					</FormItem>
 				)}
 			/>

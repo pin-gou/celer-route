@@ -472,6 +472,8 @@
 			"noItems": "No items.",
 			"matchField": {
 				"statusCode": "HTTP status code (optional)",
+				"clearStatusCode": "Clear HTTP status code",
+				"statusCodePlaceholder": "Please enter an HTTP status code (optional)",
 				"messageContains": "Message contains (any one matches, optional)",
 				"type": "Error type (exact, optional)",
 				"code": "Error code (exact, optional)"
@@ -494,7 +496,8 @@
 				"applyDialogTitle": "Choose apply target",
 				"applyDialogDescription": "Choose which limit rule to add this error sample to as a new match:",
 				"toast": {
-					"applied": "Added error sample as a new match"
+					"applied": "Added error sample as a new match",
+					"skippedInvalidStatusCode": "Skipped invalid HTTP status code from error sample (only 100–599 are accepted); the match was added by error type / code / message instead."
 				}
 			},
 			"typeSelect": {

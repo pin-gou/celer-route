@@ -472,9 +472,11 @@
 			"noItems": "暂无项。",
 			"matchField": {
 				"statusCode": "HTTP 状态码（可选）",
+				"clearStatusCode": "清除 HTTP 状态码",
+				"statusCodePlaceholder": "请输入 HTTP 状态码（可选）",
 				"messageContains": "消息包含（任一命中，可选）",
 				"type": "错误类型（精确匹配，可选）",
-				"code": "错误代码（精确匹配，可选）"
+				"code": "错误代码（精确匹配，可选)"
 			},
 			"clear": "清除自定义策略",
 			"cancel": "取消",
@@ -494,7 +496,8 @@
 				"applyDialogTitle": "选择应用目标",
 				"applyDialogDescription": "选择要将该错误样本作为新匹配项添加到的限制规则：",
 				"toast": {
-					"applied": "已将错误样本作为新匹配项添加"
+					"applied": "已将错误样本作为新匹配项添加",
+					"skippedInvalidStatusCode": "已忽略错误样本中无效的 HTTP 状态码（仅接受 100–599），本次匹配项已通过错误类型 / 代码 / 消息添加。"
 				}
 			},
 			"typeSelect": {
