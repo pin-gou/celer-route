@@ -1,1 +1,0 @@
-{"count":1,"plugins":[{"name":"provider-cooldown","actualName":"provider-cooldown","enabled":true,"config":{"default_ttl_seconds":300,"quota_patterns":["用量上限","token plan","2056"],"ttl_overrides":{"minimax":600,"sensova":60}},"isCustom":false,"path":null}]}

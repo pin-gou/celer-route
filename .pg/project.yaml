@@ -55,6 +55,10 @@ environments:
       host: localhost
       script: .pg/hooks/local/prepare.sh
       description: 启动 pg-gateway 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
+    clean_env:
+      script: .pg/hooks/local/clean_env.sh
+      timeout_seconds: 60
+      description: 停止 local 环境所有服务，清除数据/日志/构建产物，与 prepare.sh 配对
     describe_env:
       script: .pg/hooks/local/describe_env.sh
       timeout_seconds: 30
