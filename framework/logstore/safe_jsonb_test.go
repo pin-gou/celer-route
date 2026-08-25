@@ -265,13 +265,20 @@ func TestBifrostSafeJsonb_DirectInvocation(t *testing.T) {
 		{name: "empty_string", in: "", want: ""},
 		{name: "empty_array", in: "[]", want: "[]"},
 
-		// happy path: last-element extraction
+		// happy path: last-user-role element extraction
 		{name: "valid_two_element_array", in: `[{"a":1},{"b":2}]`, want: `[{"b": 2}]`},
 		{name: "single_element_array", in: `[{"a":1}]`, want: `[{"a": 1}]`},
 		{name: "array_of_primitives", in: `[1,2,3]`, want: `[3]`},
 		{name: "array_with_null_last", in: `[{"a":1},null]`, want: `[null]`},
 		{name: "nested_object_last", in: `[{"x":{"y":{"z":42}}}]`, want: `[{"x": {"y": {"z": 42}}}]`},
 		{name: "large_valid_array_last_only", in: big.String(), want: `[{"last": true}]`},
+
+		// user-role scanning: last user-role element, not literal last
+		{name: "trailing_system_after_user", in: `[{"role":"user","content":"hi"},{"role":"system","content":"reminder"}]`, want: `[{"role": "user", "content": "hi"}]`},
+		{name: "last_user_wins_among_multiple_users", in: `[{"role":"user","content":"first"},{"role":"user","content":"latest"}]`, want: `[{"role": "user", "content": "latest"}]`},
+		{name: "no_user_role_falls_back_to_last", in: `[{"role":"assistant","content":"a"},{"role":"developer","content":"b"}]`, want: `[{"role": "developer", "content": "b"}]`},
+		{name: "conversation_ends_on_tool_result", in: `[{"role":"user","content":"tell me x"},{"role":"assistant","content":"ok"},{"role":"tool","content":"result"}]`, want: `[{"role": "user", "content": "tell me x"}]`},
+		{name: "last_user_after_tool_calls", in: `[{"role":"user","content":"first"},{"role":"assistant","content":"thinking..."},{"role":"user","content":"final question"},{"role":"assistant","content":"answer"},{"role":"tool","tool_call_id":"call_1"}]`, want: `[{"role": "user", "content": "final question"}]`},
 
 		// non-array values: function returns raw TEXT unchanged
 		{name: "object_not_array_returns_raw", in: `{"x":1}`, want: `{"x":1}`},

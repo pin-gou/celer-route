@@ -263,6 +263,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"logs_add_ocr_input_column"}, run: migrationAddOCRInputColumn},
 	{IDs: []string{"logs_add_stop_reason_column"}, run: migrationAddStopReasonColumn},
 	{IDs: []string{"logs_add_safe_jsonb_function"}, run: migrationAddSafeJsonbFunction},
+	{IDs: []string{"logs_update_safe_jsonb_function_last_user_message"}, run: migrationUpdateSafeJsonbFunctionLastUserMessage},
 	{IDs: []string{"mcp_tool_logs_add_dac_columns"}, run: migrationAddDACColumnsToMCPToolLogs},
 	{IDs: []string{"logs_add_cluster_governance_columns"}, run: migrationAddClusterGovernanceColumns},
 	{IDs: []string{"logs_add_inc_number_column"}, run: migrationAddLogIncNumberColumn},
@@ -3813,9 +3814,53 @@ func migrationAddMCPRedactionMappingColumn(ctx context.Context, db *gorm.DB, log
 	return nil
 }
 
+// safeJsonbFunctionStmt is the PL/pgSQL body of bifrost_safe_jsonb. Kept as a
+// shared constant so the initial install migration and later update migrations
+// (CREATE OR REPLACE) cannot drift.
+const safeJsonbFunctionStmt = `
+CREATE OR REPLACE FUNCTION bifrost_safe_jsonb(t text) RETURNS text
+LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE
+    j jsonb;
+    elem jsonb;
+    i int;
+BEGIN
+    IF t IS NULL OR t = '' OR t = '[]' THEN
+        RETURN t;
+    END IF;
+    IF left(btrim(t), 1) <> '[' THEN
+        RETURN t;
+    END IF;
+    BEGIN
+        j := t::jsonb;
+    EXCEPTION WHEN invalid_text_representation OR untranslatable_character THEN
+        RETURN t;
+    END;
+    IF jsonb_typeof(j) <> 'array' OR jsonb_array_length(j) = 0 THEN
+        RETURN t;
+    END IF;
+    -- Scan for the last user-role element so the /api/logs list preview agrees
+    -- with the SSE /active/stream message field and the SQLite list path
+    -- (sqliteLastUserInputHistoryExpr) even when the conversation ends on a
+    -- trailing <system-reminder> / developer / tool / assistant message. Fall
+    -- back to the literal last element when no user-role element exists so a
+    -- developer-only or assistant-only row still gets a preview.
+    FOR i IN 0..jsonb_array_length(j)-1 LOOP
+        IF j->i->>'role' = 'user' THEN
+            elem := j->i;
+        END IF;
+    END LOOP;
+    IF elem IS NOT NULL THEN
+        RETURN jsonb_build_array(elem)::text;
+    END IF;
+    RETURN jsonb_build_array(j->-1)::text;
+END;
+$$;`
+
 // migrationAddSafeJsonbFunction installs a PL/pgSQL helper that the
-// /api/logs list query uses to extract the last element of input_history /
-// responses_input_history without aborting the whole query on a single bad row.
+// /api/logs list query uses to extract the last user-role element of
+// input_history / responses_input_history without aborting the whole query on a
+// single bad row.
 //
 // The previous inline guard (`left(btrim(x),1)='['`) only checked the first
 // character before casting to jsonb. Any row that looked array-shaped but
@@ -3838,30 +3883,7 @@ func migrationAddSafeJsonbFunction(ctx context.Context, db *gorm.DB, logger sche
 				return nil
 			}
 			tx = tx.WithContext(ctx)
-			const stmt = `
-CREATE OR REPLACE FUNCTION bifrost_safe_jsonb(t text) RETURNS text
-LANGUAGE plpgsql IMMUTABLE AS $$
-DECLARE
-    j jsonb;
-BEGIN
-    IF t IS NULL OR t = '' OR t = '[]' THEN
-        RETURN t;
-    END IF;
-    IF left(btrim(t), 1) <> '[' THEN
-        RETURN t;
-    END IF;
-    BEGIN
-        j := t::jsonb;
-    EXCEPTION WHEN invalid_text_representation OR untranslatable_character THEN
-        RETURN t;
-    END;
-    IF jsonb_typeof(j) <> 'array' OR jsonb_array_length(j) = 0 THEN
-        RETURN t;
-    END IF;
-    RETURN jsonb_build_array(j->-1)::text;
-END;
-$$;`
-			if err := tx.Exec(stmt).Error; err != nil {
+			if err := tx.Exec(safeJsonbFunctionStmt).Error; err != nil {
 				return fmt.Errorf("failed to create bifrost_safe_jsonb: %w", err)
 			}
 			return nil
@@ -3873,6 +3895,45 @@ $$;`
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while adding bifrost_safe_jsonb function: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationUpdateSafeJsonbFunctionLastUserMessage re-runs the bifrost_safe_jsonb
+// body for deployments that already installed the original function (which
+// extracted the literal last array element). The updated body scans for the last
+// user-role element instead, so the log-list "message" preview matches the SSE
+// /active/stream `message` field and the SQLite list projection when a request
+// conversation ends on a system / developer / tool / assistant message. New
+// deployments get the same function from migrationAddSafeJsonbFunction; this
+// migration exists only to upgrade existing Postgres installations.
+func migrationUpdateSafeJsonbFunctionLastUserMessage(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_update_safe_jsonb_function_last_user_message"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			if db.Dialector.Name() != "postgres" {
+				return nil
+			}
+			tx = tx.WithContext(ctx)
+			if err := tx.Exec(safeJsonbFunctionStmt).Error; err != nil {
+				return fmt.Errorf("failed to update bifrost_safe_jsonb: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			// CREATE OR REPLACE cannot be undone; the previous function body is
+			// not recoverable. Restoring the last-element behavior is not needed
+			// for correctness (it was the buggy behavior), so rollback is a no-op.
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while updating bifrost_safe_jsonb function: %s", err.Error())
 	}
 	return nil
 }

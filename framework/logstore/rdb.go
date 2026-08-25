@@ -1354,7 +1354,7 @@ func normalizeAggregateTimestamp(value any) string {
 
 // listSelectColumns returns a SELECT clause for list queries that omits large
 // output/detail TEXT columns and uses SQL JSON functions to extract only the
-// last element from input_history and responses_input_history arrays.
+// last user-role element from input_history and responses_input_history arrays.
 //
 // Realtime turn rows are kept intact because the logs table renders them as a
 // combined Tool/User/Assistant summary and needs the full turn context.
