@@ -175,14 +175,11 @@ export function MonitoringPanel() {
 					<div className="mt-1 text-2xl font-bold text-blue-500">{kindStats.quotaSuppressed}</div>
 				</div>
 			</div>
-			<div data-testid="providercooldown-stats-active" className="bg-muted/40 flex items-center gap-2 rounded-lg border p-3">
-				<span className="text-muted-foreground text-sm">{t("providerCooldown.currentlyActive")}</span>
-				<span className="text-2xl font-bold text-red-500">{stats.activeCount}</span>
-			</div>
-
 			{/* State entries */}
 			<div>
-				<h4 className="mb-2 text-sm font-medium">{t("providerCooldown.activeStateTitle")}</h4>
+				<h4 data-testid="providercooldown-stats-active" className="mb-2 text-sm font-medium">
+					{t("providerCooldown.activeStateTitle")} <span className="text-[0.825rem] font-bold text-red-500">{stats.activeCount}</span>
+				</h4>
 				{entries.length === 0 ? (
 					<p className="text-muted-foreground py-4 text-center text-sm">{t("providerCooldown.noActiveKeys")}</p>
 				) : (
@@ -290,24 +287,25 @@ export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
 	);
 }
 
-function summarizeRule(rule: CooldownPolicyRule): string {
-	const mode = rule.match_mode ?? "any";
-	return `${rule.match.length} match${rule.match.length === 1 ? "" : "es"} (${mode}), TTL ${rule.ttl_seconds}s`;
+function summarizeRule(rule: CooldownPolicyRule, t: TFunction): string {
+	const mode = rule.match_mode === "all" ? t("providerCooldown.matchModeAll") : t("providerCooldown.matchModeAny");
+	return t("providerCooldown.ruleSummary", { count: rule.match.length, mode, ttl: rule.ttl_seconds });
 }
 
 function summarizeMatch(
 	m: CooldownPolicy["rate_limit"] extends infer R ? (R extends { match: infer M } ? (M extends Array<infer X> ? X : never) : never) : never,
+	t: TFunction,
 ): string {
 	const parts: string[] = [];
-	if (m.status_code !== undefined) parts.push(`status=${m.status_code}`);
+	if (m.status_code !== undefined) parts.push(t("providerCooldown.matchStatus", { code: m.status_code }));
 	if (m.message_contains && m.message_contains.length > 0) {
-		parts.push(`msg⊇${m.message_contains.map((s) => `"${s}"`).join("|")}`);
+		parts.push(t("providerCooldown.matchMessage", { messages: m.message_contains.map((s) => `"${s}"`).join("|") }));
 	}
 	if (m.type && m.type.length > 0) {
-		parts.push(`type∈{${m.type.join(",")}}`);
+		parts.push(t("providerCooldown.matchType", { types: m.type.join(",") }));
 	}
 	if (m.code && m.code.length > 0) {
-		parts.push(`code∈{${m.code.join(",")}}`);
+		parts.push(t("providerCooldown.matchCode", { codes: m.code.join(",") }));
 	}
 	return parts.join(", ");
 }
@@ -360,11 +358,11 @@ function PerProviderPolicyOverview() {
 							{p.cooldown_policy?.rate_limit && (
 								<div className="text-muted-foreground mt-1 text-xs">
 									<span className="font-medium">{t("providerCooldown.rateLimitLabel")}: </span>
-									{summarizeRule(p.cooldown_policy.rate_limit)}
+									{summarizeRule(p.cooldown_policy.rate_limit, t)}
 									<ul className="mt-1 ml-4 list-disc">
 										{p.cooldown_policy.rate_limit.match.map((m, i) => (
 											<li key={i} className="font-mono">
-												{summarizeMatch(m)}
+												{summarizeMatch(m, t)}
 											</li>
 										))}
 									</ul>
@@ -373,11 +371,11 @@ function PerProviderPolicyOverview() {
 							{p.cooldown_policy?.quota && (
 								<div className="text-muted-foreground mt-2 text-xs">
 									<span className="font-medium">{t("providerCooldown.quotaLabel")}: </span>
-									{summarizeRule(p.cooldown_policy.quota)}
+									{summarizeRule(p.cooldown_policy.quota, t)}
 									<ul className="mt-1 ml-4 list-disc">
 										{p.cooldown_policy.quota.match.map((m, i) => (
 											<li key={i} className="font-mono">
-												{summarizeMatch(m)}
+												{summarizeMatch(m, t)}
 											</li>
 										))}
 									</ul>
@@ -442,7 +440,8 @@ function ProviderKindStats({ providerName, stats, t }: { providerName: string; s
 				<span className="font-semibold text-blue-500">{stats.quota?.suppressedCount ?? 0}</span>
 			</span>
 			<span className="ml-1">
-				（<span className="text-red-500">标记</span>/<span className="text-blue-500">抑制</span>）
+				（<span className="text-red-500">{t("providerCooldown.marked")}</span>/
+				<span className="text-blue-500">{t("providerCooldown.suppressed")}</span>）
 			</span>
 		</span>
 	);
