@@ -46,11 +46,18 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
 
-	const buildDefaultValues = () =>
-		({
-			rate_limit: provider.cooldown_policy?.rate_limit ?? DEFAULT_RULE(60),
-			quota: provider.cooldown_policy?.quota ?? undefined,
-		}) as CooldownPolicyFormSchema;
+	const buildDefaultValues = () => {
+		const policy = provider.cooldown_policy;
+		// No custom policy → show the built-in default rate_limit rule (enabled).
+		// Explicit policy (even empty) → reflect exactly what's stored, so a
+		// stored `{}` (no cooldown rules) shows both rate_limit AND quota OFF
+		// instead of re-injecting the default rate_limit rule.
+		const hasPolicy = policy != null;
+		return {
+			rate_limit: hasPolicy ? policy?.rate_limit : DEFAULT_RULE(60),
+			quota: policy?.quota ?? undefined,
+		} as CooldownPolicyFormSchema;
+	};
 
 	const form = useForm<CooldownPolicyFormSchema, any, CooldownPolicyFormSchema>({
 		resolver: zodResolver(cooldownPolicySchema) as Resolver<CooldownPolicyFormSchema, any, CooldownPolicyFormSchema>,
@@ -275,6 +282,7 @@ function InnerFields({ provider }: { provider: string }) {
 											const saved = savedRules.current[ruleKey];
 											setValue(ruleKey, current ?? saved ?? DEFAULT_RULE(60), {
 												shouldDirty: true,
+												shouldValidate: true,
 											});
 											delete savedRules.current[ruleKey];
 										} else {
@@ -282,7 +290,7 @@ function InnerFields({ provider }: { provider: string }) {
 											if (current) {
 												savedRules.current[ruleKey] = JSON.parse(JSON.stringify(current)) as CooldownPolicyRuleFormSchema;
 											}
-											setValue(ruleKey, undefined as never, { shouldDirty: true });
+											setValue(ruleKey, undefined as never, { shouldDirty: true, shouldValidate: true });
 										}
 									}}
 								/>
@@ -299,6 +307,7 @@ function InnerFields({ provider }: { provider: string }) {
 
 function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; control: Control<CooldownPolicyFormSchema>; provider: string }) {
 	const { t } = useTranslation("providers");
+	const { trigger } = useFormContext<CooldownPolicyFormSchema>();
 	const matchName = `${ruleKey}.match` as const;
 	const { fields, append, remove } = useFieldArray({ control, name: matchName });
 
@@ -358,7 +367,10 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 						type="button"
 						variant="outline"
 						size="sm"
-						onClick={() => append({ status_code: 429 })}
+						onClick={() => {
+							append({ status_code: 429 });
+							trigger(matchName);
+						}}
 						data-testid={`provider-cooldown-${ruleKey}-add-match`}
 					>
 						<PlusIcon className="mr-1 h-3 w-3" />
@@ -375,7 +387,10 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 						index={index}
 						control={control}
 						provider={provider}
-						onRemove={() => remove(index)}
+						onRemove={() => {
+							remove(index);
+							trigger(matchName);
+						}}
 					/>
 				))}
 			</div>
@@ -560,13 +575,23 @@ function StringListField({
 	baseName: string;
 }) {
 	const { t } = useTranslation("providers");
+	const { trigger } = useFormContext<CooldownPolicyFormSchema>();
 	const { fields, append, remove } = useFieldArray({ control, name: baseName as never });
 
 	return (
 		<div className="space-y-1">
 			<div className="flex items-center justify-between">
 				<span className="text-xs font-medium">{label}</span>
-				<Button type="button" variant="outline" size="sm" onClick={() => append("")} data-testid={`${testId}-add`}>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onClick={() => {
+						append("");
+						trigger(baseName as never);
+					}}
+					data-testid={`${testId}-add`}
+				>
 					<PlusIcon className="mr-1 h-3 w-3" />
 					{t("fragments.cooldownPolicy.addItem")}
 				</Button>
@@ -583,7 +608,16 @@ function StringListField({
 							<Input data-testid={`${testId}-${i}`} value={(field.value as unknown as string) ?? ""} onChange={field.onChange} />
 						)}
 					/>
-					<Button type="button" variant="ghost" size="sm" onClick={() => remove(i)} data-testid={`${testId}-${i}-remove`}>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						onClick={() => {
+							remove(i);
+							trigger(baseName as never);
+						}}
+						data-testid={`${testId}-${i}-remove`}
+					>
 						<Trash2Icon className="h-4 w-4" />
 					</Button>
 				</div>
@@ -604,7 +638,7 @@ function TypeCodeField({
 	fieldKind: "type" | "code";
 }) {
 	const { t } = useTranslation("providers");
-	const { control, getValues, setValue } = useFormContext<CooldownPolicyFormSchema>();
+	const { control, getValues, setValue, trigger } = useFormContext<CooldownPolicyFormSchema>();
 	const { data: catalog } = useGetProviderErrorCatalogQuery(provider, { skip: !provider });
 	const options = catalog?.[fieldKind === "type" ? "types" : "codes"] ?? [];
 	const { fields, append, remove } = useFieldArray({
@@ -612,11 +646,24 @@ function TypeCodeField({
 		name: baseName as never,
 	});
 
+	const revalidate = () => {
+		trigger(baseName as never);
+	};
+
 	return (
 		<div className="space-y-1">
 			<div className="flex items-center justify-between">
 				<span className="text-xs font-medium">{label}</span>
-				<Button type="button" variant="outline" size="sm" onClick={() => append("" as never)} data-testid={`cooldown-${baseName}-add`}>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onClick={() => {
+						append("" as never);
+						revalidate();
+					}}
+					data-testid={`cooldown-${baseName}-add`}
+				>
 					<PlusIcon className="mr-1 h-3 w-3" />
 					{t("fragments.cooldownPolicy.addItem")}
 				</Button>
@@ -637,7 +684,7 @@ function TypeCodeField({
 									const nvUse = nv === "__custom__" ? "" : nv;
 									const next = [...currentValues];
 									next[i] = nvUse;
-									setValue(baseName as never, next as never, { shouldDirty: true });
+									setValue(baseName as never, next as never, { shouldDirty: true, shouldValidate: true });
 								}}
 							>
 								<SelectTrigger className="h-8 flex-1 text-xs" data-testid={`cooldown-${fieldKind}-select-${i}`}>
@@ -669,7 +716,16 @@ function TypeCodeField({
 								)}
 							/>
 						)}
-						<Button type="button" variant="ghost" size="sm" onClick={() => remove(i)} data-testid={`cooldown-${fieldKind}-remove-${i}`}>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => {
+								remove(i);
+								revalidate();
+							}}
+							data-testid={`cooldown-${fieldKind}-remove-${i}`}
+						>
 							<Trash2Icon className="h-4 w-4" />
 						</Button>
 					</div>

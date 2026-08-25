@@ -679,14 +679,10 @@ export const cooldownPolicyRuleSchema = z.object({
 	ttl_seconds: z.number().int().min(1),
 });
 
-export const cooldownPolicySchema = z
-	.object({
-		rate_limit: cooldownPolicyRuleSchema.optional(),
-		quota: cooldownPolicyRuleSchema.optional(),
-	})
-	.refine((p) => p.rate_limit !== undefined || p.quota !== undefined, {
-		message: "cooldown_policy must include at least one of rate_limit or quota",
-	});
+export const cooldownPolicySchema = z.object({
+	rate_limit: cooldownPolicyRuleSchema.optional(),
+	quota: cooldownPolicyRuleSchema.optional(),
+});
 
 export type CooldownPolicyFormSchema = z.infer<typeof cooldownPolicySchema>;
 export type CooldownPolicyRuleFormSchema = z.infer<typeof cooldownPolicyRuleSchema>;
