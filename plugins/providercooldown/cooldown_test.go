@@ -1428,3 +1428,186 @@ func TestClassify_ReturnsKind(t *testing.T) {
 		t.Fatalf("kind = %q, want \"\" on no match", kind)
 	}
 }
+
+// --- Keyless provider (e.g. bare opencode) regression tests ---
+//
+// Keyless providers never carry API credentials; bifrost's GetKeysForProvider
+// returns a single []schemas.Key{{}} with empty ID/Name/Value. The retry
+// loop routes every attempt through that sentinel. The plugin must therefore
+// allow the empty-string keyID to be marked, looked up, and filtered on the
+// keyless provider, while keeping the existing "no-op on empty keyID" safety
+// net for every other provider (no regression on the per-key model).
+
+func TestCooldownState_KeylessProvider_MarksEmptyKeyID(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	// Mark with empty keyID on a keyless provider — must NOT be a no-op.
+	s.Mark(schemas.Opencode, "")
+	if !s.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("keyless provider with empty keyID must be markable and lookup-able")
+	}
+	if s.Size() != 1 {
+		t.Fatalf("Size = %d, want 1", s.Size())
+	}
+}
+
+func TestCooldownState_NonKeylessProvider_EmptyKeyIDStillNoOp(t *testing.T) {
+	// Regression guard: the original "empty keyID is a no-op" invariant must
+	// still hold for every provider that isn't in schemas.KeylessProviders,
+	// so a caller bug cannot accidentally cool the whole provider pool.
+	for _, p := range []schemas.ModelProvider{schemas.OpenAI, schemas.Anthropic, schemas.Bedrock, schemas.Gemini, schemas.OpencodeGo, schemas.OpencodeZen, "some-other-provider"} {
+		s := NewCooldownState(time.Minute)
+		s.Mark(p, "")
+		if s.IsCoolingDown(p, "") {
+			t.Fatalf("provider %q: empty keyID must remain a no-op", p)
+		}
+		if s.Size() != 0 {
+			t.Fatalf("provider %q: Size = %d, want 0", p, s.Size())
+		}
+	}
+}
+
+func TestAsFilter_KeylessProvider_FiltersSentinelWhenCooled(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.Mark(schemas.Opencode, "")
+	keys := []schemas.Key{{}}
+	out, err := s.AsFilter(nil)(nil, schemas.Opencode, "opencode-model", keys)
+	if err != nil {
+		t.Fatalf("AsFilter returned error: %v", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("expected the keyless sentinel to be filtered out when cooled, got %d keys", len(out))
+	}
+}
+
+func TestAsFilter_KeylessProvider_PassesThroughWhenNotCooled(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	keys := []schemas.Key{{}}
+	out, err := s.AsFilter(nil)(nil, schemas.Opencode, "opencode-model", keys)
+	if err != nil {
+		t.Fatalf("AsFilter returned error: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected the keyless sentinel to pass through when not cooled, got %d keys", len(out))
+	}
+}
+
+func TestAsFilter_KeylessProvider_NonKeylessEmptyKeyIDNotFiltered(t *testing.T) {
+	// Even if a caller mistakenly passes an empty keyID for a non-keyless
+	// provider, AsFilter must not treat the empty keyID as "suppressed" —
+	// lookupCooldown returns false for that case, so the key passes through.
+	s := NewCooldownState(time.Minute)
+	keys := []schemas.Key{{ID: ""}}
+	out, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("AsFilter returned error: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected empty-keyID to pass through on non-keyless provider, got %d keys", len(out))
+	}
+}
+
+func TestAsMarker_KeylessProvider_MarksOnRateLimit(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	policy := &schemas.CooldownPolicy{
+		RateLimit: &schemas.CooldownPolicyRule{
+			MatchMode:  "any",
+			TTLSeconds: 60,
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
+		},
+	}
+	ctx := withTrail(t, policy)
+	err := newErr(429, "", "", "rate limit exceeded")
+
+	// Empty keyID on the keyless provider — marker must mark and not skip.
+	s.AsMarker(nil)(ctx, schemas.Opencode, "", "", "opencode-model", err)
+
+	if !s.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("AsMarker must mark the keyless provider even with empty keyID")
+	}
+	stats := s.Stats()
+	if stats.PerProvider[schemas.Opencode].RateLimit.MarkCount != 1 {
+		t.Fatalf("PerProvider[opencode].RateLimit.MarkCount = %d, want 1", stats.PerProvider[schemas.Opencode].RateLimit.MarkCount)
+	}
+}
+
+func TestAsMarker_NonKeylessProvider_EmptyKeyIDStillSkipped(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	policy := &schemas.CooldownPolicy{
+		RateLimit: &schemas.CooldownPolicyRule{
+			MatchMode:  "any",
+			TTLSeconds: 60,
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
+		},
+	}
+	ctx := withTrail(t, policy)
+	err := newErr(429, "", "", "rate limit exceeded")
+
+	s.AsMarker(nil)(ctx, schemas.OpenAI, "", "", "gpt-4o", err)
+
+	if s.IsCoolingDown(schemas.OpenAI, "") {
+		t.Fatal("AsMarker must skip empty keyID on non-keyless provider")
+	}
+	if s.Size() != 0 {
+		t.Fatalf("Size = %d, want 0", s.Size())
+	}
+}
+
+func TestPostLLMHook_KeylessProvider_MarksOnTerminalQuotaError(t *testing.T) {
+	p := NewPlugin(nil)
+	policy := &schemas.CooldownPolicy{
+		Quota: &schemas.CooldownPolicyRule{
+			MatchMode:  "any",
+			TTLSeconds: 600,
+			Match:      []schemas.CooldownPolicyMatch{{MessageContains: []string{"insufficient_quota"}}},
+		},
+	}
+	ctx := withTrail(t, policy)
+	// Stamp the resolved provider as Opencode on the error so the policy
+	// lookup targets the keyless default rule set.
+	err := newErrOn(429, "", "insufficient_quota", "insufficient_quota: workspace quota", string(schemas.Opencode))
+	// Force the trail to record the empty-keyID attempt (mirrors what the
+	// retry loop appends for a keyless provider).
+	ctx.SetValue(schemas.BifrostContextKeyAttemptTrail, []schemas.KeyAttemptRecord{
+		{Attempt: 1, KeyID: "", KeyName: ""},
+	})
+
+	_, _, _ = p.PostLLMHook(ctx, nil, err)
+
+	if !p.State.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("PostLLMHook must mark the keyless provider when terminal error is quota exhaustion")
+	}
+	stats := p.State.Stats()
+	if stats.PerProvider[schemas.Opencode].Quota.MarkCount != 1 {
+		t.Fatalf("PerProvider[opencode].Quota.MarkCount = %d, want 1", stats.PerProvider[schemas.Opencode].Quota.MarkCount)
+	}
+}
+
+func TestCooldownState_KeylessProvider_ExpiresAndRevives(t *testing.T) {
+	s := NewCooldownState(20 * time.Millisecond)
+	s.Mark(schemas.Opencode, "")
+	if !s.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("expected keyless sentinel to be cooled immediately after Mark")
+	}
+	// Wait past TTL — cooldown must expire and the sentinel revive.
+	time.Sleep(40 * time.Millisecond)
+	if s.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("keyless sentinel must not stay cooled past TTL")
+	}
+}
+
+func TestClearKey_KeylessProvider_EmptyKeyIDNoOp(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.Mark(schemas.Opencode, "")
+	if !s.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("setup: expected keyless sentinel to be cooled")
+	}
+	// ClearKey intentionally rejects empty keyID even for keyless providers
+	// — there is no operator path that targets the synthetic sentinel; if
+	// an operator wants to lift the cooldown they wait for it to expire.
+	if s.ClearKey(schemas.Opencode, "") {
+		t.Fatal("ClearKey must NOT clear the keyless sentinel via empty keyID")
+	}
+	if !s.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("keyless sentinel must remain cooled after a no-op ClearKey")
+	}
+}

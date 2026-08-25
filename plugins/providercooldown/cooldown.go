@@ -213,12 +213,19 @@ func (c *CooldownState) IsCoolingDown(provider schemas.ModelProvider, keyID stri
 
 // lookupCooldown is the internal accessor used by both IsCoolingDown (for the
 // boolean answer) and AsFilter (which also needs the CooldownKind so it can
-// attribute suppressions to the right by_kind / per_provider bucket).
+// attribute each suppression to the right by_kind / per_provider bucket).
 // Returns (expiresAt, kind, true) when the entry exists AND is not expired.
-// Expired entries are pruned lazily. Callers MUST treat the bool as
+// Expired entries are pruned lazily on access. Callers MUST treat the bool as
 // authoritative — the time/kind values are only meaningful when true.
+//
+// For keyless providers (see schemas.IsKeylessProvider, e.g. bare `opencode`)
+// the empty keyID is a legal sentinel: bifrost's GetKeysForProvider returns a
+// single []schemas.Key{{}} for keyless providers and the retry loop routes
+// every attempt through that single sentinel key. Empty keyID on a non-keyless
+// provider is still treated as a no-op so a caller bug cannot silently mark
+// "the whole provider" by accident.
 func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID string) (time.Time, CooldownKind, bool) {
-	if keyID == "" {
+	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return time.Time{}, "", false
 	}
 	k := c.key(provider, keyID)
@@ -242,8 +249,10 @@ func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID str
 }
 
 // Mark records a cooldown for the given (provider, keyID) with no classified
-// kind. A no-op when keyID is empty (avoids accidentally cooling "the whole
-// provider" when the request hit a non-key-bound error).
+// kind. A no-op when keyID is empty AND the provider is not a known keyless
+// provider — for keyless providers (e.g. bare `opencode`), the empty keyID is
+// a legal sentinel representing the whole provider, so we mark at the
+// provider level there.
 //
 // Unclassified marks still bump the lifetime markCount counter for backward
 // compatibility with the original single-counter API, but do NOT contribute
@@ -257,12 +266,17 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 // cooldown duration, attributing the mark to the given kind (rate_limit or
 // quota). A ttl <= 0 falls back to the provider's effective TTL (the configured
 // default or per-provider override), preserving the behaviour of Mark.
-// keyID empty is a no-op so callers don't need to guard.
+//
+// For keyless providers (schemas.IsKeylessProvider, e.g. bare `opencode`),
+// an empty keyID is the legal sentinel key returned by bifrost's
+// GetKeysForProvider; the mark is then recorded against the whole provider
+// (the "<provider>::" map entry). On any other provider, keyID empty remains
+// a no-op so a caller bug cannot accidentally cool "the whole provider".
 //
 // kind="rate_limit" / "quota" also bumps by_kind and per_provider counters.
 // kind="" only bumps the legacy markCount counter.
 func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string, ttl time.Duration, kind CooldownKind) {
-	if keyID == "" {
+	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return
 	}
 	c.mu.Lock()
@@ -362,6 +376,12 @@ func (c *CooldownState) Snapshot() []CooldownEntry {
 // if an entry was removed. Calling on an unknown key or empty keyID is a
 // no-op (returns false). Useful when an operator manually un-cools a key
 // after fixing the underlying issue (e.g. topping up quota).
+//
+// The empty keyID is rejected even for keyless providers because there is no
+// meaningful UI/operator path that targets the synthetic "<provider>::"
+// sentinel — if an operator wants to lift a provider-level cooldown they can
+// wait for it to expire. Mark/lookup on the same sentinel are intentionally
+// permitted (see MarkWithTTL) so the cooldown can actually take hold.
 func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string) bool {
 	if keyID == "" {
 		return false
@@ -559,7 +579,14 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 // The logger can be nil — a no-op implementation is acceptable.
 func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMarker {
 	return func(ctx *schemas.BifrostContext, provider schemas.ModelProvider, keyID string, keyName string, model string, bifrostErr *schemas.BifrostError) {
-		if c == nil || bifrostErr == nil || keyID == "" {
+		// Empty keyID is the legal sentinel for keyless providers (see
+		// MarkWithTTL); for those we still want to mark the provider as a
+		// whole. For non-keyless providers an empty keyID means the retry
+		// loop could not identify the failing key — skip rather than guess.
+		if c == nil || bifrostErr == nil {
+			return
+		}
+		if keyID == "" && !schemas.IsKeylessProvider(provider) {
 			return
 		}
 		// Reuse classify() — single source of truth for rate_limit vs quota
@@ -872,7 +899,11 @@ func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schem
 		return 0, "", "", "", false
 	}
 	provider, keyID, keyName := lastAttemptProviderAndKey(ctx, bifrostErr)
-	if keyID == "" {
+	// lastAttemptProviderAndKey returns an empty keyID for non-keyless
+	// providers when no trail record carried a key; for keyless providers
+	// the empty sentinel is valid and we fall through to classifyForMarker
+	// so the policy lookup still runs.
+	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return 0, "", "", "", false
 	}
 	return classifyForMarker(ctx, provider, keyID, keyName, bifrostErr)
@@ -893,7 +924,14 @@ func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schem
 // Quota-first precedence mirrors (*CooldownPlugin).classify — a single error
 // must never be attributed to both rate_limit and quota.
 func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvider, keyID string, keyName string, bifrostErr *schemas.BifrostError) (ttl time.Duration, rKeyID string, rKeyName string, kind CooldownKind, ok bool) {
-	if bifrostErr == nil || keyID == "" {
+	if bifrostErr == nil {
+		return 0, "", "", "", false
+	}
+	// Empty keyID is the legal sentinel for keyless providers (see
+	// MarkWithTTL); for those we still want to classify and mark. For
+	// non-keyless providers an empty keyID means the caller could not
+	// identify the failing key — skip rather than guess.
+	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return 0, "", "", "", false
 	}
 	var policy *schemas.CooldownPolicy
@@ -929,7 +967,11 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 		// per-kind breakdown stays faithful to CooldownPolicy-driven marks.
 		if p.isQuotaExhausted(bifrostErr) {
 			provider, fallbackKeyID, fallbackKeyName := lastAttemptProviderAndKey(ctx, bifrostErr)
-			if fallbackKeyID == "" {
+			// lastAttemptProviderAndKey already widens the "skip empty keyID"
+			// rule for keyless providers, so an empty fallbackKeyID only
+			// happens when the provider is non-keyless and the trail did not
+			// record a usable key.
+			if fallbackKeyID == "" && !schemas.IsKeylessProvider(provider) {
 				return resp, bifrostErr, nil
 			}
 			p.State.Mark(provider, fallbackKeyID)
@@ -1040,8 +1082,12 @@ func matchesAnyErrorField(err *schemas.BifrostError, patterns []string) bool {
 //  3. The last KeyAttemptRecord with a non-success outcome (carries keyID).
 //
 // Returns an empty keyID when none can be determined — callers MUST treat
-// that as "do not mark" rather than "mark the whole provider". The keyName is
-// only populated when resolved from a KeyAttemptRecord; otherwise it is empty.
+// that as "do not mark" rather than "mark the whole provider" UNLESS the
+// resolved provider is a known keyless provider (schemas.IsKeylessProvider),
+// in which case the empty keyID is the legal sentinel key for that provider
+// and is returned as-is so PostLLMHook can mark at the provider level. The
+// keyName is only populated when resolved from a KeyAttemptRecord; otherwise
+// it is empty.
 func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (schemas.ModelProvider, string, string) {
 	var provider schemas.ModelProvider
 	if bifrostErr != nil {
@@ -1058,11 +1104,14 @@ func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.
 	if !ok {
 		return provider, "", ""
 	}
-	// Pick the last record that has a KeyID. AttemptTrail is append-only and
-	// ordered, so iterating in reverse finds the most recent attempt.
+	// Pick the last record. AttemptTrail is append-only and ordered, so
+	// iterating in reverse finds the most recent attempt. Empty keyID on the
+	// trail is acceptable for keyless providers (their single sentinel key
+	// has KeyID=""); for other providers an empty keyID means "no key info
+	// captured" so we keep scanning further back.
 	for i := len(trail) - 1; i >= 0; i-- {
 		rec := trail[i]
-		if rec.KeyID == "" {
+		if rec.KeyID == "" && !schemas.IsKeylessProvider(provider) {
 			continue
 		}
 		return provider, rec.KeyID, rec.KeyName
