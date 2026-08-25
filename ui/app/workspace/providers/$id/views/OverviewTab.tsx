@@ -214,9 +214,18 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 	function CooldownPolicySummary({ provider }: { provider: ModelProvider }) {
 		const { t } = useTranslation("providers");
 		const policy = provider.cooldown_policy;
-		const hasRateLimit = !!policy?.rate_limit;
-		const hasQuota = !!policy?.quota;
+		const hasRateLimit = !!policy?.rate_limit && policy.rate_limit.enabled !== false;
+		const hasQuota = !!policy?.quota && policy.quota.enabled !== false;
+		const hasDisabledOnly = !!policy && !hasRateLimit && !hasQuota && (!!policy.rate_limit || !!policy.quota);
 		if (!hasRateLimit && !hasQuota) {
+			if (hasDisabledOnly) {
+				return (
+					<div className="text-muted-foreground space-y-1 text-xs">
+						<p>{t("providers2.overview.cooldownPolicyAllDisabled")}</p>
+						{policy && <p className="mt-1 text-xs italic">{t("providers2.overview.cooldownPolicyOverride")}</p>}
+					</div>
+				);
+			}
 			return <p className="text-muted-foreground text-xs">{t("providers2.overview.cooldownPolicyUsingDefault")}</p>;
 		}
 		return (

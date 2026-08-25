@@ -334,6 +334,7 @@
 		"quotaLabel": "配额耗尽",
 		"marked": "标记",
 		"suppressed": "抑制",
+		"disabled": "已禁用",
 		"monitoringLoading": "正在加载监控数据...",
 		"defaultTTLLabel": "默认 TTL（秒）",
 		"defaultTTLPlaceholder": "300",

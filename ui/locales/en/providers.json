@@ -126,6 +126,7 @@
 			"openaiConfig": "OpenAI Config",
 			"cooldownPolicy": "Cooldown Policy",
 			"cooldownPolicyUsingDefault": "Using the built-in default cooldown policy. Click Edit to customize.",
+			"cooldownPolicyAllDisabled": "All cooldown rules are disabled.",
 			"cooldownPolicyOverride": "Custom cooldown policy is overriding the built-in default.",
 			"cooldownPolicyRateLimitTtl": "Rate-limit TTL",
 			"cooldownPolicyQuotaTtl": "Quota-exhausted TTL",

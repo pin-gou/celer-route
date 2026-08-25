@@ -334,6 +334,7 @@
 		"quotaLabel": "Quota exhausted",
 		"marked": "marked",
 		"suppressed": "suppressed",
+		"disabled": "disabled",
 		"monitoringLoading": "Loading monitoring data...",
 		"defaultTTLLabel": "Default TTL (seconds)",
 		"defaultTTLPlaceholder": "300",

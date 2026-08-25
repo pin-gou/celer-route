@@ -419,10 +419,13 @@ export interface CooldownPolicyMatch {
 // CooldownPolicyRule groups one or more matches and the TTL applied when the
 // rule fires. match_mode "any" (default) requires any single match to succeed;
 // "all" requires every match to succeed. ttl_seconds is the cooldown duration.
+// Set enabled=false to retain the rule's match data for later re-enable without
+// applying the cooldown. nil/absent enabled means the rule is active.
 export interface CooldownPolicyRule {
 	match: CooldownPolicyMatch[];
 	match_mode?: "any" | "all";
 	ttl_seconds: number;
+	enabled?: boolean;
 }
 
 // CooldownPolicy attaches rate_limit / quota rules to a single provider. quota

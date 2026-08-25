@@ -265,7 +265,8 @@ function InnerFields({ provider }: { provider: string }) {
 	return (
 		<>
 			{RULE_FIELDS.map((ruleKey) => {
-				const enabled = watch(ruleKey) !== undefined;
+				const rule = watch(ruleKey);
+				const enabled = rule !== undefined && rule.enabled !== false;
 				return (
 					<div key={ruleKey} className="space-y-3 rounded-md border p-3">
 						<div className="flex items-center justify-between">
@@ -280,7 +281,8 @@ function InnerFields({ provider }: { provider: string }) {
 										if (checked) {
 											const current = getValues(ruleKey);
 											const saved = savedRules.current[ruleKey];
-											setValue(ruleKey, current ?? saved ?? DEFAULT_RULE(60), {
+											const base = current ?? saved ?? DEFAULT_RULE(60);
+											setValue(ruleKey, { ...base, enabled: true } as never, {
 												shouldDirty: true,
 												shouldValidate: true,
 											});
@@ -289,8 +291,10 @@ function InnerFields({ provider }: { provider: string }) {
 											const current = getValues(ruleKey);
 											if (current) {
 												savedRules.current[ruleKey] = JSON.parse(JSON.stringify(current)) as CooldownPolicyRuleFormSchema;
+												setValue(ruleKey, { ...current, enabled: false } as never, { shouldDirty: true, shouldValidate: true });
+											} else {
+												setValue(ruleKey, undefined as never, { shouldDirty: true, shouldValidate: true });
 											}
-											setValue(ruleKey, undefined as never, { shouldDirty: true, shouldValidate: true });
 										}
 									}}
 								/>

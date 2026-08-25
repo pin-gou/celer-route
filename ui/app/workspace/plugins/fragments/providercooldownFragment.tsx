@@ -358,27 +358,39 @@ function PerProviderPolicyOverview() {
 							{p.cooldown_policy?.rate_limit && (
 								<div className="text-muted-foreground mt-1 text-xs">
 									<span className="font-medium">{t("providerCooldown.rateLimitLabel")}: </span>
-									{summarizeRule(p.cooldown_policy.rate_limit, t)}
-									<ul className="mt-1 ml-4 list-disc">
-										{p.cooldown_policy.rate_limit.match.map((m, i) => (
-											<li key={i} className="font-mono">
-												{summarizeMatch(m, t)}
-											</li>
-										))}
-									</ul>
+									{p.cooldown_policy.rate_limit.enabled === false ? (
+										<span className="italic">{t("providerCooldown.disabled")}</span>
+									) : (
+										<>
+											{summarizeRule(p.cooldown_policy.rate_limit, t)}
+											<ul className="mt-1 ml-4 list-disc">
+												{p.cooldown_policy.rate_limit.match.map((m, i) => (
+													<li key={i} className="font-mono">
+														{summarizeMatch(m, t)}
+													</li>
+												))}
+											</ul>
+										</>
+									)}
 								</div>
 							)}
 							{p.cooldown_policy?.quota && (
 								<div className="text-muted-foreground mt-2 text-xs">
 									<span className="font-medium">{t("providerCooldown.quotaLabel")}: </span>
-									{summarizeRule(p.cooldown_policy.quota, t)}
-									<ul className="mt-1 ml-4 list-disc">
-										{p.cooldown_policy.quota.match.map((m, i) => (
-											<li key={i} className="font-mono">
-												{summarizeMatch(m, t)}
-											</li>
-										))}
-									</ul>
+									{p.cooldown_policy.quota.enabled === false ? (
+										<span className="italic">{t("providerCooldown.disabled")}</span>
+									) : (
+										<>
+											{summarizeRule(p.cooldown_policy.quota, t)}
+											<ul className="mt-1 ml-4 list-disc">
+												{p.cooldown_policy.quota.match.map((m, i) => (
+													<li key={i} className="font-mono">
+														{summarizeMatch(m, t)}
+													</li>
+												))}
+											</ul>
+										</>
+									)}
 								</div>
 							)}
 						</div>

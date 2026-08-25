@@ -126,6 +126,7 @@
 			"openaiConfig": "OpenAI 配置",
 			"cooldownPolicy": "冷却策略",
 			"cooldownPolicyUsingDefault": "使用内置默认冷却策略。可点击编辑进行自定义。",
+			"cooldownPolicyAllDisabled": "所有冷却规则已禁用。",
 			"cooldownPolicyOverride": "已覆盖内置默认值。",
 			"cooldownPolicyRateLimitTtl": "速率限制 TTL",
 			"cooldownPolicyQuotaTtl": "配额耗尽 TTL",

@@ -677,6 +677,7 @@ export const cooldownPolicyRuleSchema = z.object({
 	match: z.array(cooldownPolicyMatchSchema).min(1),
 	match_mode: z.enum(["any", "all"]).default("any"),
 	ttl_seconds: z.number().int().min(1),
+	enabled: z.boolean().optional(),
 });
 
 export const cooldownPolicySchema = z.object({
