@@ -47,10 +47,10 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
 
 	const buildDefaultValues = () =>
-	({
-		rate_limit: provider.cooldown_policy?.rate_limit ?? DEFAULT_RULE(60),
-		quota: provider.cooldown_policy?.quota ?? undefined,
-	}) as CooldownPolicyFormSchema;
+		({
+			rate_limit: provider.cooldown_policy?.rate_limit ?? DEFAULT_RULE(60),
+			quota: provider.cooldown_policy?.quota ?? undefined,
+		}) as CooldownPolicyFormSchema;
 
 	const form = useForm<CooldownPolicyFormSchema, any, CooldownPolicyFormSchema>({
 		resolver: zodResolver(cooldownPolicySchema) as Resolver<CooldownPolicyFormSchema, any, CooldownPolicyFormSchema>,

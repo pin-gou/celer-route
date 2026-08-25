@@ -160,24 +160,24 @@ export function MonitoringPanel() {
 			<div className="grid grid-cols-2 gap-3 md:grid-cols-4">
 				<div data-testid="providercooldown-stats-rate_limit-mark" className="rounded-lg border p-4">
 					<div className="text-muted-foreground text-xs">{t("providerCooldown.markRateLimit")}</div>
-					<div className="mt-1 text-2xl font-bold">{kindStats.rateLimitMark}</div>
-				</div>
-				<div data-testid="providercooldown-stats-quota-mark" className="rounded-lg border p-4">
-					<div className="text-muted-foreground text-xs">{t("providerCooldown.markQuota")}</div>
-					<div className="mt-1 text-2xl font-bold">{kindStats.quotaMark}</div>
+					<div className="mt-1 text-2xl font-bold text-red-500">{kindStats.rateLimitMark}</div>
 				</div>
 				<div data-testid="providercooldown-stats-rate_limit-suppressed" className="rounded-lg border p-4">
 					<div className="text-muted-foreground text-xs">{t("providerCooldown.suppressedRateLimit")}</div>
-					<div className="mt-1 text-2xl font-bold">{kindStats.rateLimitSuppressed}</div>
+					<div className="mt-1 text-2xl font-bold text-blue-500">{kindStats.rateLimitSuppressed}</div>
+				</div>
+				<div data-testid="providercooldown-stats-quota-mark" className="rounded-lg border p-4">
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.markQuota")}</div>
+					<div className="mt-1 text-2xl font-bold text-red-500">{kindStats.quotaMark}</div>
 				</div>
 				<div data-testid="providercooldown-stats-quota-suppressed" className="rounded-lg border p-4">
 					<div className="text-muted-foreground text-xs">{t("providerCooldown.suppressedQuota")}</div>
-					<div className="mt-1 text-2xl font-bold">{kindStats.quotaSuppressed}</div>
+					<div className="mt-1 text-2xl font-bold text-blue-500">{kindStats.quotaSuppressed}</div>
 				</div>
 			</div>
-			<div data-testid="providercooldown-stats-active" className="bg-muted/40 flex items-center justify-between rounded-lg border p-3">
+			<div data-testid="providercooldown-stats-active" className="bg-muted/40 flex items-center gap-2 rounded-lg border p-3">
 				<span className="text-muted-foreground text-sm">{t("providerCooldown.currentlyActive")}</span>
-				<span className="text-lg font-semibold">{stats.activeCount}</span>
+				<span className="text-2xl font-bold text-red-500">{stats.activeCount}</span>
 			</div>
 
 			{/* State entries */}
