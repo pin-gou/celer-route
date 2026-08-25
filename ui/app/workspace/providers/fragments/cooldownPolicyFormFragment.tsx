@@ -16,7 +16,7 @@ import {
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { HelpCircle, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm, useFormContext, useWatch, type Control, type Resolver } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -46,25 +46,33 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
 
+	const buildDefaultValues = () =>
+	({
+		rate_limit: provider.cooldown_policy?.rate_limit ?? DEFAULT_RULE(60),
+		quota: provider.cooldown_policy?.quota ?? undefined,
+	}) as CooldownPolicyFormSchema;
+
 	const form = useForm<CooldownPolicyFormSchema, any, CooldownPolicyFormSchema>({
 		resolver: zodResolver(cooldownPolicySchema) as Resolver<CooldownPolicyFormSchema, any, CooldownPolicyFormSchema>,
 		mode: "onChange",
 		reValidateMode: "onChange",
-		defaultValues: {
-			rate_limit: provider.cooldown_policy?.rate_limit ?? DEFAULT_RULE(60),
-			quota: provider.cooldown_policy?.quota ?? undefined,
-		},
+		defaultValues: buildDefaultValues(),
 	});
 
-	useEffect(() => {
-		dispatch(setProviderFormDirtyState(form.formState.isDirty));
-	}, [form.formState.isDirty, dispatch]);
+	const initialValuesRef = useRef<CooldownPolicyFormSchema>(buildDefaultValues());
+
+	const watchedFormValues = useWatch({ control: form.control }) as CooldownPolicyFormSchema;
+
+	const isFormChanged = useMemo(() => JSON.stringify(watchedFormValues) !== JSON.stringify(initialValuesRef.current), [watchedFormValues]);
 
 	useEffect(() => {
-		form.reset({
-			rate_limit: provider.cooldown_policy?.rate_limit ?? DEFAULT_RULE(60),
-			quota: provider.cooldown_policy?.quota ?? undefined,
-		});
+		dispatch(setProviderFormDirtyState(isFormChanged));
+	}, [isFormChanged, dispatch]);
+
+	useEffect(() => {
+		const next = buildDefaultValues();
+		initialValuesRef.current = next;
+		form.reset(next);
 	}, [form, provider.name, provider.cooldown_policy]);
 
 	const onSubmit = (data: CooldownPolicyFormSchema) => {
@@ -79,6 +87,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 			.unwrap()
 			.then(() => {
 				toast.success(t("fragments.cooldownPolicy.toast.updated"));
+				initialValuesRef.current = JSON.parse(JSON.stringify(data)) as CooldownPolicyFormSchema;
 				form.reset(data);
 			})
 			.catch((err: unknown) => {
@@ -97,7 +106,9 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 			.unwrap()
 			.then(() => {
 				toast.success(t("fragments.cooldownPolicy.toast.cleared"));
-				form.reset({ rate_limit: DEFAULT_RULE(60), quota: undefined });
+				const resetValues = { rate_limit: DEFAULT_RULE(60), quota: undefined } as CooldownPolicyFormSchema;
+				initialValuesRef.current = JSON.parse(JSON.stringify(resetValues)) as CooldownPolicyFormSchema;
+				form.reset(resetValues);
 			})
 			.catch((err: unknown) => {
 				toast.error(t("fragments.cooldownPolicy.toast.failedToUpdate"), {
@@ -141,7 +152,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 						)}
 						<Button
 							type="submit"
-							disabled={!form.formState.isDirty || !form.formState.isValid || !hasUpdateProviderAccess || isUpdatingProvider}
+							disabled={!isFormChanged || !form.formState.isValid || !hasUpdateProviderAccess || isUpdatingProvider}
 							isLoading={isUpdatingProvider}
 							data-testid="provider-cooldown-save-button"
 						>
@@ -192,12 +203,12 @@ function ErrorSampleBrowserBridge({ provider }: { provider: ModelProvider["name"
 
 		const current = getValues(targetRule);
 		if (!current) {
-			setValue(targetRule, DEFAULT_RULE(60), { shouldDirty: true });
+			setValue(targetRule, DEFAULT_RULE(60), { shouldDirty: true, shouldValidate: true });
 		}
 
 		const matchPath = `${targetRule}.match` as const;
 		const currentMatches = getValues(matchPath as never) ?? [];
-		setValue(matchPath as never, [...currentMatches, newMatch] as never, { shouldDirty: true });
+		setValue(matchPath as never, [...currentMatches, newMatch] as never, { shouldDirty: true, shouldValidate: true });
 
 		setDialogOpen(false);
 		setPendingPattern(null);
