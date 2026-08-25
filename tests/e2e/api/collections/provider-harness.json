@@ -50108,7 +50108,7 @@
           }
         },
         {
-          "name": "provider-cooldown stats endpoint - shape is mark_count + suppressed_count + current_active_count",
+          "name": "provider-cooldown stats endpoint - shape includes legacy counters + by_kind + per_provider",
           "event": [
             {
               "listen": "test",
@@ -50124,6 +50124,18 @@
                   "  pm.expect(typeof j.mark_count, 'mark_count should be numeric').to.eql('number');",
                   "  pm.expect(typeof j.suppressed_count, 'suppressed_count should be numeric').to.eql('number');",
                   "  pm.expect(typeof j.current_active_count, 'current_active_count should be numeric').to.eql('number');",
+                  "});",
+                  "pm.test('by_kind and per_provider fields are present', function () {",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.ok;",
+                  "  pm.expect(j.by_kind, 'by_kind should be present').to.be.ok;",
+                  "  pm.expect(j.by_kind.rate_limit, 'by_kind.rate_limit should be present').to.be.ok;",
+                  "  pm.expect(typeof j.by_kind.rate_limit.mark_count, 'by_kind.rate_limit.mark_count should be numeric').to.eql('number');",
+                  "  pm.expect(typeof j.by_kind.rate_limit.suppressed_count, 'by_kind.rate_limit.suppressed_count should be numeric').to.eql('number');",
+                  "  pm.expect(j.by_kind.quota, 'by_kind.quota should be present').to.be.ok;",
+                  "  pm.expect(typeof j.by_kind.quota.mark_count, 'by_kind.quota.mark_count should be numeric').to.eql('number');",
+                  "  pm.expect(typeof j.by_kind.quota.suppressed_count, 'by_kind.quota.suppressed_count should be numeric').to.eql('number');",
+                  "  pm.expect(j.per_provider, 'per_provider should be present').to.be.an('object');",
                   "});"
                 ]
               }

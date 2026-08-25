@@ -1148,3 +1148,152 @@ func TestSchemaProviderCooldownConfig(t *testing.T) {
 		})
 	}
 }
+
+// TestSchemaProviderCooldownPolicy pins the per-provider cooldown_policy
+// schema on the provider_config branch. Accepts valid fixtures; rejects
+// invalid ones (negative TTL, missing match, unknown match field).
+func TestSchemaProviderCooldownPolicy(t *testing.T) {
+	compiled := compileSchema(t)
+
+	t.Run("valid rate_limit policy accepts", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}, {"type": ["rate_limit_error"]}],
+							"match_mode": "any",
+							"ttl_seconds": 30
+						},
+						"quota": {
+							"match": [{"message_contains": ["workspace allocated quota"]}],
+							"ttl_seconds": 600
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected cooldown_policy to validate, got: %v", err)
+		}
+	})
+
+	t.Run("valid all-mode match accepts", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"quota": {
+							"match_mode": "all",
+							"match": [
+								{"status_code": 429},
+								{"code": ["insufficient_quota"]}
+							],
+							"ttl_seconds": 600
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected all-mode policy to validate, got: %v", err)
+		}
+	})
+
+	t.Run("ttl_seconds <= 0 is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 0
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("ttl_seconds: 0 must be rejected")
+		}
+	})
+
+	t.Run("match array is required", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"ttl_seconds": 30
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("missing match array must be rejected")
+		}
+	})
+
+	t.Run("match array must be non-empty", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [],
+							"ttl_seconds": 30
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("empty match array must be rejected")
+		}
+	})
+
+	t.Run("unknown match_mode is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"match_mode": "sometimes",
+							"ttl_seconds": 30
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("invalid match_mode must be rejected")
+		}
+	})
+
+	t.Run("unknown match field is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"header_contains": ["foo"]}],
+							"ttl_seconds": 30
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("unknown match field must be rejected by additionalProperties:false")
+		}
+	})
+}

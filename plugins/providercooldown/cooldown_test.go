@@ -796,7 +796,7 @@ func TestAsFilterLogsSuppressedKeys(t *testing.T) {
 	if len(out) != 1 || out[0].ID != "cold-key" {
 		t.Fatalf("expected only cold-key, got %+v", out)
 	}
-	if !log.contains("suppressed key openai/hot-key (name=hot, model=gpt-4o)") {
+	if !log.contains("suppressed key openai/hot-key (name=hot, model=gpt-4o") {
 		t.Fatalf("expected suppression log, got %d messages: %v", log.count(), log.msgs)
 	}
 }
@@ -969,7 +969,7 @@ func TestAsFilterLogsSuppressedKeysAtInfo(t *testing.T) {
 	if _, err := filter(nil, schemas.OpenAI, "gpt-4o", keys); err != nil {
 		t.Fatalf("filter: %v", err)
 	}
-	if !log.contains("info [provider-cooldown] suppressed key openai/hot-key (name=, model=gpt-4o)") {
+	if !log.contains("info [provider-cooldown] suppressed key openai/hot-key (name=, model=gpt-4o") {
 		t.Fatalf("expected info-level suppression log, got %d messages: %v", log.count(), log.msgs)
 	}
 }
@@ -1117,5 +1117,191 @@ func TestPreProviderHookPassesThroughWhenProviderUnknown(t *testing.T) {
 	}
 	if gotReq != req {
 		t.Fatal("must return the same request pointer on passthrough")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Per-kind counters (rate_limit / quota) — see core plugin proposal §3.2.
+// The CooldownState is expected to attribute lifetime mark / suppressed
+// counters to the CooldownKind that triggered them, so the monitoring
+// UI can show "速率限制标记 7 / 抑制 5, 配额标记 5 / 抑制 3" rather than
+// a single rolled-up total.
+// ---------------------------------------------------------------------------
+
+// TestMarkWithKind_AttributesToByKind pins that a kind-classified mark
+// bumps the matching by_kind counter (and the legacy markCount for
+// backward compatibility), but an unclassified Mark() bumps ONLY the
+// legacy counter.
+func TestMarkWithKind_AttributesToByKind(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "k1", 60*time.Second, CooldownKindRateLimit)
+	s.MarkWithTTL(schemas.OpenAI, "k2", 60*time.Second, CooldownKindRateLimit)
+	s.MarkWithTTL(schemas.Anthropic, "k3", 60*time.Second, CooldownKindQuota)
+	s.Mark(schemas.Anthropic, "k4") // unclassified (legacy quota_patterns path)
+
+	stats := s.Stats()
+
+	// Legacy field covers EVERYTHING including unclassified.
+	if got, want := stats.MarkCount, uint64(4); got != want {
+		t.Fatalf("legacy mark_count = %d, want %d (covers all kinds)", got, want)
+	}
+	// By-kind only counts classified marks.
+	if got, want := stats.ByKind.RateLimit.MarkCount, uint64(2); got != want {
+		t.Fatalf("by_kind.rate_limit.mark_count = %d, want %d", got, want)
+	}
+	if got, want := stats.ByKind.Quota.MarkCount, uint64(1); got != want {
+		t.Fatalf("by_kind.quota.mark_count = %d, want %d", got, want)
+	}
+	if stats.ByKind.RateLimit.SuppressedCount != 0 {
+		t.Fatalf("expected no suppressions yet, got %d", stats.ByKind.RateLimit.SuppressedCount)
+	}
+}
+
+// TestAsFilter_AttributesSuppressionToKind confirms that a key marked as
+// rate_limit, when later vetoed by AsFilter, bumps by_kind.rate_limit and
+// per_provider[<provider>].rate_limit.suppressed_count — NOT quota's
+// counters, even when the request would otherwise have looked like quota
+// to a downstream observer.
+func TestAsFilter_AttributesSuppressionToKind(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "rl-hot", 60*time.Second, CooldownKindRateLimit)
+	s.MarkWithTTL(schemas.OpenAI, "q-hot", 60*time.Second, CooldownKindQuota)
+	s.Mark(schemas.OpenAI, "u-hot") // unclassified
+
+	keys := []schemas.Key{{ID: "rl-hot"}, {ID: "q-hot"}, {ID: "u-hot"}, {ID: "cold"}}
+	filter := s.AsFilter(nil)
+	out, err := filter(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("filter: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != "cold" {
+		t.Fatalf("expected only cold-key to remain, got %+v", out)
+	}
+
+	stats := s.Stats()
+
+	// Legacy suppressed_count = 3 (rl-hot + q-hot + u-hot).
+	if got, want := stats.SuppressedCount, uint64(3); got != want {
+		t.Fatalf("legacy suppressed_count = %d, want %d", got, want)
+	}
+	// by_kind only attributes the classified ones.
+	if got, want := stats.ByKind.RateLimit.SuppressedCount, uint64(1); got != want {
+		t.Fatalf("by_kind.rate_limit.suppressed_count = %d, want %d", got, want)
+	}
+	if got, want := stats.ByKind.Quota.SuppressedCount, uint64(1); got != want {
+		t.Fatalf("by_kind.quota.suppressed_count = %d, want %d", got, want)
+	}
+	// Unclassified mark should NOT appear in any by_kind.SuppressedCount.
+	if total := stats.ByKind.RateLimit.SuppressedCount + stats.ByKind.Quota.SuppressedCount; total != 2 {
+		t.Fatalf("expected by_kind totals to sum to 2 (skipping unclassified), got %d", total)
+	}
+
+	// per_provider must reflect the per-kind breakdown.
+	pp, ok := stats.PerProvider[schemas.OpenAI]
+	if !ok {
+		t.Fatalf("per_provider[openai] missing, got %+v", stats.PerProvider)
+	}
+	if pp.RateLimit.SuppressedCount != 1 {
+		t.Fatalf("per_provider[openai].rate_limit.suppressed_count = %d, want 1", pp.RateLimit.SuppressedCount)
+	}
+	if pp.Quota.SuppressedCount != 1 {
+		t.Fatalf("per_provider[openai].quota.suppressed_count = %d, want 1", pp.Quota.SuppressedCount)
+	}
+	if pp.RateLimit.MarkCount != 1 {
+		t.Fatalf("per_provider[openai].rate_limit.mark_count = %d, want 1", pp.RateLimit.MarkCount)
+	}
+	if pp.Quota.MarkCount != 1 {
+		t.Fatalf("per_provider[openai].quota.mark_count = %d, want 1", pp.Quota.MarkCount)
+	}
+}
+
+// TestStats_PerProviderOmitsUnseenProviders confirms that providers with
+// no classified events do NOT appear in the per_provider map — keeps the
+// payload compact for the UI's per-provider listing.
+func TestStats_PerProviderOmitsUnseenProviders(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "k1", 60*time.Second, CooldownKindRateLimit)
+	// sensenova never gets a classified event.
+
+	stats := s.Stats()
+	if _, ok := stats.PerProvider[schemas.OpenAI]; !ok {
+		t.Fatalf("expected openai in per_provider, got %+v", stats.PerProvider)
+	}
+	if _, ok := stats.PerProvider[schemas.Sensenova]; ok {
+		t.Fatalf("sensenova should not appear (no classified events), got %+v", stats.PerProvider)
+	}
+}
+
+// TestSnapshot_IncludesKind confirms Snapshot returns entries tagged with
+// the kind that triggered each mark, so the GET state endpoint can surface
+// "速率限制" vs "配额耗尽" badges on each row.
+func TestSnapshot_IncludesKind(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "rl", 60*time.Second, CooldownKindRateLimit)
+	s.MarkWithTTL(schemas.OpenAI, "q", 60*time.Second, CooldownKindQuota)
+	s.Mark(schemas.OpenAI, "u") // unclassified → Kind=""
+
+	entries := s.Snapshot()
+	got := map[string]CooldownKind{}
+	for _, e := range entries {
+		got[e.KeyID] = e.Kind
+	}
+	if got["rl"] != CooldownKindRateLimit {
+		t.Fatalf("entry[rl].Kind = %q, want %q", got["rl"], CooldownKindRateLimit)
+	}
+	if got["q"] != CooldownKindQuota {
+		t.Fatalf("entry[q].Kind = %q, want %q", got["q"], CooldownKindQuota)
+	}
+	if got["u"] != "" {
+		t.Fatalf("entry[u].Kind = %q, want \"\" (unclassified)", got["u"])
+	}
+}
+
+// TestClassify_ReturnsKind confirms classify attributes the matched rule
+// to its kind so PostLLMHook can pass it to MarkWithTTL.
+func TestClassify_ReturnsKind(t *testing.T) {
+	plugin := NewPlugin(nil)
+	policy := &schemas.CooldownPolicy{
+		Quota: &schemas.CooldownPolicyRule{
+			MatchMode: "any",
+			TTLSeconds: 600,
+			Match:     []schemas.CooldownPolicyMatch{{MessageContains: []string{"quota"}}},
+		},
+		RateLimit: &schemas.CooldownPolicyRule{
+			MatchMode: "any",
+			TTLSeconds: 60,
+			Match:     []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
+		},
+	}
+	ctx := withTrail(t, policy)
+
+	// Quota rule wins on the "quota" message.
+	err := newErr(429, "", "", "quota exceeded")
+	_, _, _, kind, ok := plugin.classify(ctx, err)
+	if !ok {
+		t.Fatal("expected classify to fire on quota message")
+	}
+	if kind != CooldownKindQuota {
+		t.Fatalf("kind = %q, want %q", kind, CooldownKindQuota)
+	}
+
+	// Rate-limit rule wins on a bare 429 with no quota signal.
+	err = newErr(429, "", "", "rate exceeded")
+	_, _, _, kind, ok = plugin.classify(ctx, err)
+	if !ok {
+		t.Fatal("expected classify to fire on rate-limit message")
+	}
+	if kind != CooldownKindRateLimit {
+		t.Fatalf("kind = %q, want %q", kind, CooldownKindRateLimit)
+	}
+
+	// No match → kind is empty (unclassified), ok=false.
+	err = newErr(500, "", "", "server error")
+	_, _, _, kind, ok = plugin.classify(ctx, err)
+	if ok {
+		t.Fatal("expected classify to NOT fire on 500")
+	}
+	if kind != "" {
+		t.Fatalf("kind = %q, want \"\" on no match", kind)
 	}
 }

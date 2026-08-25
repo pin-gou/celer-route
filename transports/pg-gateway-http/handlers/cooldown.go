@@ -61,13 +61,21 @@ func (h *CooldownHandler) RegisterRoutes(r *router.Router, middlewares ...schema
 
 // cooldownStateEntryResponse is the per-entry JSON shape returned by GET
 // state. It mirrors providercooldown.CooldownEntry but adds an optional
-// KeyName resolved from the configured provider keys.
+// KeyName resolved from the configured provider keys and surfaces the
+// Reason (= the CooldownKind that triggered the mark, or "quota"/
+// "rate_limit" enum strings) so the UI can render "速率限制" / "配额耗尽"
+// badges without a separate lookup.
+//
+// `Reason` is the human-readable counterpart of `Kind` from the
+// providercooldown package — they are deliberately aliased here rather
+// than renaming so the existing UI field name keeps working.
 type cooldownStateEntryResponse struct {
 	Provider  string        `json:"provider"`
 	KeyID     string        `json:"key_id"`
 	KeyName   string        `json:"key_name,omitempty"`
 	ExpiresAt time.Time     `json:"expires_at"`
 	Remaining time.Duration `json:"remaining"`
+	Reason    string        `json:"reason,omitempty"`
 }
 
 // cooldownStateResponse is the JSON shape returned by GET state.
@@ -99,6 +107,7 @@ func (h *CooldownHandler) getState(ctx *fasthttp.RequestCtx) {
 			KeyName:   keyName,
 			ExpiresAt: e.ExpiresAt,
 			Remaining: e.Remaining,
+			Reason:    string(e.Kind),
 		})
 	}
 	SendJSON(ctx, cooldownStateResponse{
@@ -114,11 +123,18 @@ func (h *CooldownHandler) getState(ctx *fasthttp.RequestCtx) {
 // mark_count" means a filter is constantly vetoing) versus a stuck state
 // ("mark_count grows but suppressed_count stays flat" means the filter
 // was never installed — the classic single-key-provider symptom).
+//
+// ByKind and PerProvider are added on top of the legacy fields to break
+// down the same counters by CooldownKind (rate_limit / quota) and by
+// (provider, kind). The legacy fields are preserved verbatim so older
+// clients keep working without changes.
 type cooldownStatsResponse struct {
-	Plugin             string `json:"plugin"`
-	MarkCount          uint64 `json:"mark_count"`
-	SuppressedCount    uint64 `json:"suppressed_count"`
-	CurrentActiveCount int    `json:"current_active_count"`
+	Plugin             string                              `json:"plugin"`
+	MarkCount          uint64                              `json:"mark_count"`
+	SuppressedCount    uint64                              `json:"suppressed_count"`
+	CurrentActiveCount int                                 `json:"current_active_count"`
+	ByKind             providercooldown.ByKindCounters      `json:"by_kind"`
+	PerProvider        map[string]providercooldown.ProviderKindCounters `json:"per_provider"`
 }
 
 func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
@@ -128,11 +144,21 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	stats := plugin.Stats()
+	// Marshal the per-provider map with string keys (UI uses string
+	// provider names) for a friendlier on-the-wire shape than
+	// ModelProvider (which is also a string alias but reads ambiguously
+	// in raw JSON).
+	perProvider := make(map[string]providercooldown.ProviderKindCounters, len(stats.PerProvider))
+	for provider, counters := range stats.PerProvider {
+		perProvider[string(provider)] = counters
+	}
 	SendJSON(ctx, cooldownStatsResponse{
 		Plugin:             providercooldown.PluginName,
 		MarkCount:          stats.MarkCount,
 		SuppressedCount:    stats.SuppressedCount,
 		CurrentActiveCount: stats.CurrentActiveCount,
+		ByKind:             stats.ByKind,
+		PerProvider:        perProvider,
 	})
 }
 

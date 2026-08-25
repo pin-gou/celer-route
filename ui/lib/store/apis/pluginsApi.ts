@@ -132,7 +132,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 							keyId: e.key_id ?? e.keyId,
 							keyName: e.key_name ?? e.keyName,
 							expireAt: e.expires_at ?? e.expireAt,
-							reason: e.reason || "cooldown",
+							reason: e.reason || "",
 						})),
 					};
 				}
@@ -141,19 +141,55 @@ export const pluginsApi = baseApi.injectEndpoints({
 		}),
 
 		// GET /api/plugins/provider-cooldown/stats — lifetime counters + active
-		// count. Backend returns { plugin, mark_count, suppressed_count,
-		// current_active_count } — map to camelCase for the UI contract.
+		// count, plus by_kind (rate_limit vs quota) and per_provider breakdowns.
+		// Backend returns:
+		//   { plugin, mark_count, suppressed_count, current_active_count,
+		//     by_kind: { rate_limit: {mark_count, suppressed_count},
+		//               quota:      {mark_count, suppressed_count} },
+		//     per_provider: { <provider>: { rate_limit: {...}, quota: {...} } } }
+		// — mapped to camelCase for the UI contract.
 		getCooldownStats: builder.query<CooldownStatsResponse, void>({
 			query: () => "/plugins/provider-cooldown/stats",
 			providesTags: ["Plugins"],
 			transformResponse: (response: any) => {
 				if (response && response.stats) return response;
 				if (response && "mark_count" in response) {
+					const byKind = response.by_kind
+						? {
+								rate_limit: {
+									markCount: response.by_kind.rate_limit?.mark_count ?? 0,
+									suppressedCount: response.by_kind.rate_limit?.suppressed_count ?? 0,
+								},
+								quota: {
+									markCount: response.by_kind.quota?.mark_count ?? 0,
+									suppressedCount: response.by_kind.quota?.suppressed_count ?? 0,
+								},
+							}
+						: undefined;
+					let perProvider: CooldownStats["perProvider"];
+					if (response.per_provider && typeof response.per_provider === "object") {
+						perProvider = {};
+						for (const [name, counters] of Object.entries(response.per_provider)) {
+							const c = counters as { rate_limit?: any; quota?: any };
+							perProvider[name] = {
+								rate_limit: {
+									markCount: c.rate_limit?.mark_count ?? 0,
+									suppressedCount: c.rate_limit?.suppressed_count ?? 0,
+								},
+								quota: {
+									markCount: c.quota?.mark_count ?? 0,
+									suppressedCount: c.quota?.suppressed_count ?? 0,
+								},
+							};
+						}
+					}
 					return {
 						stats: {
 							markCount: response.mark_count,
 							suppressedCount: response.suppressed_count,
 							activeCount: response.current_active_count,
+							byKind,
+							perProvider,
 						},
 					};
 				}

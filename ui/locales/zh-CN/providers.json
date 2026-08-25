@@ -124,6 +124,11 @@
 			"governance": "治理",
 			"betaHeaders": "Beta 头部",
 			"openaiConfig": "OpenAI 配置",
+			"cooldownPolicy": "冷却策略",
+			"cooldownPolicyUsingDefault": "使用内置默认冷却策略。可点击编辑进行自定义。",
+			"cooldownPolicyOverride": "已覆盖内置默认值。",
+			"cooldownPolicyRateLimitTtl": "速率限制 TTL",
+			"cooldownPolicyQuotaTtl": "配额耗尽 TTL",
 			"cancel": "取消",
 			"edit": "编辑",
 			"baseUrl": "基础 URL",
@@ -440,6 +445,67 @@
 			"toast": {
 				"updated": "OpenAI 配置更新成功",
 				"failedToUpdate": "OpenAI 配置更新失败"
+			}
+		},
+		"cooldownPolicy": {
+			"description": "按提供商配置冷却规则。配额耗尽优先于速率限制匹配，每个 key 独立进入冷却状态。留空或关闭全部开关即使用内置默认值。",
+			"rate_limit": {
+				"label": "速率限制规则"
+			},
+			"quota": {
+				"label": "配额耗尽规则"
+			},
+			"enableRule": "启用",
+			"matchModeLabel": "匹配模式",
+			"matchModeAny": "任一规则命中（any）",
+			"matchModeAll": "所有规则都命中（all）",
+			"ttlLabel": "冷却时长（秒）",
+			"ttlDescription": "命中的 key 进入冷却的秒数；冷却期间不会被路由选中。",
+			"matchesLabel": "匹配项",
+			"addMatch": "添加匹配项",
+			"noMatches": "暂无匹配项，至少需要 1 个。",
+			"editMatchTitle": "编辑匹配项",
+			"emptyMatch": "空匹配项",
+			"done": "完成",
+			"addItem": "添加",
+			"noItems": "暂无项。",
+			"matchField": {
+				"statusCode": "HTTP 状态码（可选）",
+				"messageContains": "消息包含（任一命中，可选）",
+				"type": "错误类型（精确匹配，可选）",
+				"code": "错误代码（精确匹配，可选）"
+			},
+			"clear": "清除自定义策略",
+			"cancel": "取消",
+			"save": "保存冷却策略",
+			"errorSample": {
+				"title": "错误样本",
+				"loading": "正在加载错误样本...",
+				"error": "加载错误样本失败",
+				"noErrors": "此时间窗内暂无错误记录。",
+				"tryChangingWindow": "可尝试切换到 24 小时窗口查看。",
+				"totalErrors": "共 {{count}} 条错误",
+				"apply": "应用",
+				"windowOptions": {
+					"1h": "最近 1 小时",
+					"24h": "最近 24 小时"
+				},
+				"applyDialogTitle": "选择应用目标",
+				"applyDialogDescription": "选择要将该错误样本作为新匹配项添加到的限制规则：",
+				"toast": {
+					"applied": "已将错误样本作为新匹配项添加"
+				}
+			},
+			"typeSelect": {
+				"selectPlaceholder": "选择已知值…",
+				"custom": "自定义…",
+				"customPlaceholder": "输入自定义值",
+				"reset": "重置"
+			},
+			"toast": {
+				"updated": "冷却策略更新成功",
+				"cleared": "已恢复为内置默认冷却策略",
+				"failedToUpdate": "冷却策略更新失败"
 			}
 		},
 		"performance": {

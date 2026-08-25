@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
 	ApiStructureFormFragment,
 	BetaHeadersFormFragment,
+	CooldownPolicyFormFragment,
 	GovernanceFormFragment,
 	OpenAIConfigFormFragment,
 	ProxyFormFragment,
@@ -65,6 +66,10 @@ const availableTabs = (hasCustomProviderConfig: boolean, hasGovernanceAccess: bo
 			label: "OpenAI Config",
 		});
 	}
+	tabs.push({
+		id: "cooldown-policy",
+		label: "Cooldown Policy",
+	});
 	return tabs;
 };
 
@@ -129,6 +134,9 @@ export default function ProviderConfigSheet({ show, onCancel, provider }: Props)
 							</TabsContent>
 							<TabsContent value="openai-config">
 								<OpenAIConfigFormFragment provider={provider} />
+							</TabsContent>
+							<TabsContent value="cooldown-policy">
+								<CooldownPolicyFormFragment provider={provider} />
 							</TabsContent>
 							<TabsContent value="network">
 								<NetworkFormFragment provider={provider} />

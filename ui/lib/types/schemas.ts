@@ -654,6 +654,44 @@ export const openaiConfigFormSchema = z.object({
 
 export type OpenAIConfigFormSchema = z.infer<typeof openaiConfigFormSchema>;
 
+// Cooldown policy schemas — mirror backend's CooldownPolicy / CooldownPolicyRule
+// / CooldownPolicyMatch. Each match must have at least one predicate set;
+// backend rejects fully empty matches as no-ops. ttl_seconds is required.
+export const cooldownPolicyMatchSchema = z
+	.object({
+		status_code: z.number().int().min(100).max(599).optional(),
+		message_contains: z.array(z.string().min(1)).optional(),
+		type: z.array(z.string().min(1)).optional(),
+		code: z.array(z.string().min(1)).optional(),
+	})
+	.refine(
+		(m) =>
+			m.status_code !== undefined ||
+			(m.message_contains && m.message_contains.length > 0) ||
+			(m.type && m.type.length > 0) ||
+			(m.code && m.code.length > 0),
+		{ message: "match must include at least one of status_code, message_contains, type, or code" },
+	);
+
+export const cooldownPolicyRuleSchema = z.object({
+	match: z.array(cooldownPolicyMatchSchema).min(1),
+	match_mode: z.enum(["any", "all"]).default("any"),
+	ttl_seconds: z.number().int().min(1),
+});
+
+export const cooldownPolicySchema = z
+	.object({
+		rate_limit: cooldownPolicyRuleSchema.optional(),
+		quota: cooldownPolicyRuleSchema.optional(),
+	})
+	.refine((p) => p.rate_limit !== undefined || p.quota !== undefined, {
+		message: "cooldown_policy must include at least one of rate_limit or quota",
+	});
+
+export type CooldownPolicyFormSchema = z.infer<typeof cooldownPolicySchema>;
+export type CooldownPolicyRuleFormSchema = z.infer<typeof cooldownPolicyRuleSchema>;
+export type CooldownPolicyMatchFormSchema = z.infer<typeof cooldownPolicyMatchSchema>;
+
 // Allowed requests schema
 export const allowedRequestsSchema = z.object({
 	text_completion: z.boolean(),
@@ -779,6 +817,7 @@ export const addProviderRequestSchema = z.object({
 	store_raw_request_response: z.boolean().optional(),
 	custom_provider_config: customProviderConfigSchema.optional(),
 	openai_config: openaiConfigFormSchema.optional(),
+	cooldown_policy: cooldownPolicySchema.optional(),
 });
 
 // Update provider request schema
@@ -792,6 +831,7 @@ export const updateProviderRequestSchema = z.object({
 	store_raw_request_response: z.boolean().optional(),
 	custom_provider_config: customProviderConfigSchema.optional(),
 	openai_config: openaiConfigFormSchema.optional(),
+	cooldown_policy: cooldownPolicySchema.nullish(),
 });
 
 // Cache config schema

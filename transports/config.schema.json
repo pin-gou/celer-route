@@ -1162,6 +1162,9 @@
               },
               "openai_config": {
                 "$ref": "#/$defs/openai_config"
+              },
+              "cooldown_policy": {
+                "$ref": "#/$defs/cooldown_policy"
               }
             },
             "required": [
@@ -3764,6 +3767,72 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "cooldown_policy_match": {
+      "type": "object",
+      "description": "Single predicate contributing to a cooldown rule. All non-zero fields must hold against the BifrostError for the match to fire; matching across multiple MessageContains values is OR. A match with no fields set is a no-op.",
+      "properties": {
+        "status_code": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "HTTP status code that must equal BifrostError.StatusCode"
+        },
+        "message_contains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Case-insensitive substrings; any one matching BifrostError.Error.Message satisfies the predicate"
+        },
+        "type": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Exact (case-insensitive) values matching BifrostError.Error.Type"
+        },
+        "code": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Exact (case-insensitive) values matching BifrostError.Error.Code"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_policy_rule": {
+      "type": "object",
+      "description": "Cooldown rule: matches are OR-combined under match_mode \"any\" (default) or AND-combined under \"all\". TTLSeconds is the cooldown duration applied when the rule fires.",
+      "properties": {
+        "match": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/cooldown_policy_match" },
+          "minItems": 1,
+          "description": "Predicates combined per match_mode; quota rules are checked before rate_limit rules"
+        },
+        "match_mode": {
+          "type": "string",
+          "enum": ["any", "all"],
+          "default": "any",
+          "description": "How matches combine: \"any\" requires a single Match to fire; \"all\" requires every Match to fire"
+        },
+        "ttl_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Cooldown TTL in seconds applied to a key when the rule fires"
+        }
+      },
+      "required": ["match", "ttl_seconds"],
+      "additionalProperties": false
+    },
+    "cooldown_policy": {
+      "type": "object",
+      "description": "Per-provider cooldown policy: rules for rate-limit and quota errors. Quota is checked before rate_limit. A nil/unset CooldownPolicy falls back to bifrost's built-in default for that provider (see docs).",
+      "properties": {
+        "rate_limit": {
+          "$ref": "#/$defs/cooldown_policy_rule"
+        },
+        "quota": {
+          "$ref": "#/$defs/cooldown_policy_rule"
+        }
+      },
+      "additionalProperties": false
+    },
     "otel_endpoint": {
       "type": "string",
       "anyOf": [
@@ -5473,6 +5542,9 @@
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
+        },
+        "cooldown_policy": {
+          "$ref": "#/$defs/cooldown_policy"
         }
       },
       "required": [
@@ -5514,6 +5586,9 @@
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
+        },
+        "cooldown_policy": {
+          "$ref": "#/$defs/cooldown_policy"
         }
       },
       "required": [
@@ -5555,6 +5630,9 @@
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
+        },
+        "cooldown_policy": {
+          "$ref": "#/$defs/cooldown_policy"
         }
       },
       "required": [

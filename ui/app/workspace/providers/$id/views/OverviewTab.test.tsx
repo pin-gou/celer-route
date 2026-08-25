@@ -17,6 +17,11 @@ vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: () => {} },
 }));
 
+vi.mock("nuqs", () => ({
+	useQueryState: () => [null, vi.fn()],
+	parseAsString: {},
+}));
+
 // The following import does not exist yet — this is TDD red phase.
 // Compilation will fail with "Cannot find module" error.
 import { OverviewTab } from "./OverviewTab";

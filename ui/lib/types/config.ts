@@ -405,6 +405,34 @@ export interface OpenAIConfig {
 	disable_store?: boolean;
 }
 
+// CooldownPolicyMatch is a single predicate contributing to a cooldown rule.
+// At least one field must be set per match — empty matches are no-ops and
+// rejected by the schema. message_contains / type / code are case-insensitive;
+// type and code match exactly. Multiple message_contains values are OR-combined.
+export interface CooldownPolicyMatch {
+	status_code?: number;
+	message_contains?: string[];
+	type?: string[];
+	code?: string[];
+}
+
+// CooldownPolicyRule groups one or more matches and the TTL applied when the
+// rule fires. match_mode "any" (default) requires any single match to succeed;
+// "all" requires every match to succeed. ttl_seconds is the cooldown duration.
+export interface CooldownPolicyRule {
+	match: CooldownPolicyMatch[];
+	match_mode?: "any" | "all";
+	ttl_seconds: number;
+}
+
+// CooldownPolicy attaches rate_limit / quota rules to a single provider. quota
+// is checked before rate_limit. nil falls back to the built-in default for
+// that provider (see docs).
+export interface CooldownPolicy {
+	rate_limit?: CooldownPolicyRule;
+	quota?: CooldownPolicyRule;
+}
+
 // ProviderConfig matching Go's lib.ProviderConfig
 export interface ModelProviderConfig {
 	network_config?: NetworkConfig;
@@ -415,6 +443,7 @@ export interface ModelProviderConfig {
 	store_raw_request_response?: boolean;
 	custom_provider_config?: CustomProviderConfig;
 	openai_config?: OpenAIConfig;
+	cooldown_policy?: CooldownPolicy;
 	status?: "unknown" | "success" | "list_models_failed";
 	description?: string;
 }
@@ -472,6 +501,9 @@ export interface UpdateProviderRequest {
 	store_raw_request_response?: boolean;
 	custom_provider_config?: CustomProviderConfig;
 	openai_config?: OpenAIConfig;
+	// Per-provider cooldown policy. Sent explicitly so the user can clear an
+	// override (by submitting null) — undefined means "leave as-is".
+	cooldown_policy?: CooldownPolicy | null;
 }
 
 export interface CreateProviderKeyRequest extends ModelProviderKey {}

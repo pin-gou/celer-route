@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ModelProvider } from "@/lib/types/config";
 import { NetworkFormFragment } from "@/app/workspace/providers/fragments/networkFormFragment";
@@ -6,9 +6,11 @@ import { ProxyFormFragment } from "@/app/workspace/providers/fragments/proxyForm
 import { PerformanceFormFragment } from "@/app/workspace/providers/fragments/performanceFormFragment";
 import { BetaHeadersFormFragment } from "@/app/workspace/providers/fragments/betaHeadersFormFragment";
 import { OpenAIConfigFormFragment } from "@/app/workspace/providers/fragments/openaiConfigFormFragment";
+import { CooldownPolicyFormFragment } from "@/app/workspace/providers/fragments/cooldownPolicyFormFragment";
 import { GovernanceFormFragment } from "@/app/workspace/providers/fragments/governanceFormFragment";
 import { DebuggingFormFragment } from "@/app/workspace/providers/fragments/debuggingFormFragment";
 import { ApiStructureFormFragment } from "@/app/workspace/providers/fragments/apiStructureFormFragment";
+import { parseAsString, useQueryState } from "nuqs";
 
 export interface OverviewTabProps {
 	provider: ModelProvider;
@@ -24,6 +26,7 @@ type EditableSection =
 	| "governance"
 	| "beta-headers"
 	| "openai-config"
+	| "cooldown-policy"
 	| "debugging"
 	| "api-structure"
 	| null;
@@ -62,6 +65,19 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 	const [editingSection, setEditingSection] = useState<EditableSection>(null);
 	const isAnthropicFamily = ANTHROPIC_FAMILY_PROVIDERS.includes(String(provider.name).toLowerCase());
 	const isOpenAI = String(provider.name) === "openai";
+
+	// Support deep-linking straight into the cooldown policy editor: the
+	// provider-cooldown plugin page navigates here with `?editing=cooldown-policy`,
+	// which auto-expands the section. The query param is intentionally not
+	// cleared on open — navigating again with a different value (or none) just
+	// re-evaluates; the user closing the editor returns to the overview list.
+	const [editingParam] = useQueryState("editing", parseAsString);
+
+	useEffect(() => {
+		if (editingParam === "cooldown-policy") {
+			setEditingSection("cooldown-policy");
+		}
+	}, [editingParam]);
 
 	const nw = provider.network_config;
 	const perf = provider.concurrency_and_buffer_size;
@@ -159,6 +175,24 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 		);
 	}
 
+	if (editingSection === "cooldown-policy") {
+		return (
+			<div className="rounded-lg border p-4">
+				<div className="mb-3 flex items-center justify-between">
+					<h3 className="text-sm font-medium">{t("providers2.overview.cooldownPolicy")}</h3>
+					<button
+						data-testid="providers2-overview-cooldown-policy-cancel"
+						className="text-muted-foreground text-xs underline"
+						onClick={handleCancelEdit}
+					>
+						{t("providers2.overview.cancel")}
+					</button>
+				</div>
+				<CooldownPolicyFormFragment provider={provider} onCancel={handleCancelEdit} />
+			</div>
+		);
+	}
+
 	if (editingSection === "governance") {
 		return (
 			<div className="rounded-lg border p-4">
@@ -173,6 +207,33 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 					</button>
 				</div>
 				<GovernanceFormFragment provider={provider} onCancel={handleCancelEdit} />
+			</div>
+		);
+	}
+
+	function CooldownPolicySummary({ provider }: { provider: ModelProvider }) {
+		const { t } = useTranslation("providers");
+		const policy = provider.cooldown_policy;
+		const hasRateLimit = !!policy?.rate_limit;
+		const hasQuota = !!policy?.quota;
+		if (!hasRateLimit && !hasQuota) {
+			return <p className="text-muted-foreground text-xs">{t("providers2.overview.cooldownPolicyUsingDefault")}</p>;
+		}
+		return (
+			<div className="text-muted-foreground space-y-1 text-xs">
+				{hasRateLimit && (
+					<div className="flex justify-between">
+						<span>{t("providers2.overview.cooldownPolicyRateLimitTtl")}</span>
+						<span className="font-mono">{policy!.rate_limit!.ttl_seconds}s</span>
+					</div>
+				)}
+				{hasQuota && (
+					<div className="flex justify-between">
+						<span>{t("providers2.overview.cooldownPolicyQuotaTtl")}</span>
+						<span className="font-mono">{policy!.quota!.ttl_seconds}s</span>
+					</div>
+				)}
+				{policy && <p className="mt-2 text-xs italic">{t("providers2.overview.cooldownPolicyOverride")}</p>}
 			</div>
 		);
 	}
@@ -309,6 +370,15 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 					) : (
 						<p className="text-muted-foreground text-xs">{t("providers2.overview.openaiConfigGenericDescription")}</p>
 					)}
+				</Section>
+
+				<Section
+					testId="providers2-overview-cooldown-policy"
+					title={t("providers2.overview.cooldownPolicy")}
+					editTestId="providers2-overview-cooldown-policy-edit"
+					onEdit={() => setEditingSection("cooldown-policy")}
+				>
+					<CooldownPolicySummary provider={provider} />
 				</Section>
 
 				<Section

@@ -181,8 +181,8 @@ describe("PluginsView — dispatch logic (task 11.2)", () => {
 		mocks.selectedPlugin = { ...basePlugin, name: "provider-cooldown", actualName: "provider-cooldown" };
 		render(<PluginsView onDelete={mocks.onDelete} onCreate={mocks.onCreate} />);
 
-		// The provider-cooldown fragment renders a default-ttl field
-		expect(screen.getByTestId("providercooldown-field-default-ttl")).toBeTruthy();
+		// The provider-cooldown fragment renders the enabled switch at minimum
+		expect(screen.getByTestId("providercooldown-enabled-switch")).toBeTruthy();
 	});
 
 	it("renders RtkFragment when selectedPlugin.name is 'rtk'", () => {

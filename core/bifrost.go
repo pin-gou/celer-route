@@ -180,6 +180,12 @@ func (pq *ProviderQueue) isClosing() bool {
 
 // PluginPipeline encapsulates the execution of plugin PreHooks and PostHooks, tracks how many plugins ran, and manages short-circuiting and error aggregation.
 type PluginPipeline struct {
+	// bifrost is a back-pointer used by RunPreProviderHooks to refresh the
+	// per-provider CooldownPolicy stamp on ctx before plugin hooks fire.
+	// Safe to read concurrently because all plugin hooks run on the request
+	// goroutine for a given pipeline instance, and resetPluginPipeline nils
+	// it before the pipeline returns to the pool.
+	bifrost    *Bifrost
 	llmPlugins []schemas.LLMPlugin
 	mcpPlugins []schemas.MCPPlugin
 	logger     schemas.Logger
@@ -515,6 +521,30 @@ func (bifrost *Bifrost) stampProviderKeysOnContext(ctx *schemas.BifrostContext) 
 		return
 	}
 	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, snapshot)
+}
+
+// stampProviderCooldownPolicyOnContext writes the per-provider CooldownPolicy
+// into ctx so the provider-cooldown plugin's PostLLMHook can match errors
+// against provider-specific rules without holding a reference to the bifrost
+// account interface. A nil or missing provider config falls back to
+// DefaultCooldownPolicy so callers always see a non-nil entry.
+//
+// Called once per attempt alongside stampProviderKeysOnContext — the two
+// stamps are co-located so a fallback's PreProviderHook sees the fallback
+// provider's policy rather than the primary's.
+func (bifrost *Bifrost) stampProviderCooldownPolicyOnContext(ctx *schemas.BifrostContext, provider schemas.ModelProvider) {
+	if ctx == nil || provider == "" {
+		return
+	}
+	cfg, err := bifrost.account.GetConfigForProvider(provider)
+	if err != nil || cfg == nil {
+		ctx.SetValue(schemas.BifrostContextKeyCooldownPolicy, schemas.DefaultCooldownPolicy(provider))
+		return
+	}
+	if cfg.CooldownPolicy == nil {
+		cfg.CooldownPolicy = schemas.DefaultCooldownPolicy(provider)
+	}
+	ctx.SetValue(schemas.BifrostContextKeyCooldownPolicy, cfg.CooldownPolicy)
 }
 
 // ReloadConfig reloads the config from DB
@@ -7898,6 +7928,16 @@ func (p *PluginPipeline) RunPreProviderHooks(ctx *schemas.BifrostContext, req *s
 	if skipPluginPipeline, ok := ctx.Value(schemas.BifrostContextKeySkipPluginPipeline).(bool); ok && skipPluginPipeline {
 		return req, nil, 0
 	}
+	// Re-stamp the per-provider CooldownPolicy here rather than at the call site
+	// because the request's Provider may have been swapped by routing/fallback
+	// between attempts. Plugins reading this key in PreProviderHook or
+	// PostLLMHook always see the policy for the attempt's targeted provider.
+	if ctx != nil && req != nil {
+		provider, _, _ := req.GetRequestFields()
+		if p.bifrost != nil && provider != "" {
+			p.bifrost.stampProviderCooldownPolicyOnContext(ctx, provider)
+		}
+	}
 	var shortCircuit *schemas.LLMPluginShortCircuit
 	var err error
 	ctx.BlockRestrictedWrites()
@@ -8323,6 +8363,7 @@ func (p *PluginPipeline) resetPluginPipeline() {
 	// Drop cross-request references while the object sits in the pool.
 	// getPluginPipeline rebinds all four on acquisition, so nil'ing here
 	// only affects GC hygiene — important when plugins are hot-swapped.
+	p.bifrost = nil
 	p.llmPlugins = nil
 	p.mcpPlugins = nil
 	p.executedPreHooks = 0
@@ -8500,6 +8541,7 @@ func (p *PluginPipeline) GetChunkCount() int {
 // getPluginPipeline gets a PluginPipeline from the pool and configures it
 func (bifrost *Bifrost) getPluginPipeline() *PluginPipeline {
 	pipeline := bifrost.pluginPipelinePool.Get().(*PluginPipeline)
+	pipeline.bifrost = bifrost
 	pipeline.llmPlugins = *bifrost.llmPlugins.Load()
 	pipeline.mcpPlugins = *bifrost.mcpPlugins.Load()
 	pipeline.logger = bifrost.logger

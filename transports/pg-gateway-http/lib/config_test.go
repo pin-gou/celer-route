@@ -3913,6 +3913,32 @@ func TestGenerateProviderConfigHash(t *testing.T) {
 		t.Error("Expected different hash for configs with CustomProviderConfig")
 	}
 
+	// Different CooldownPolicy should produce a different hash, otherwise the
+	// DB-vs-config.json sync would never re-persist when only the policy changed.
+	config9 := configstore.ProviderConfig{
+		Keys: []schemas.Key{
+			{ID: "key-1", Name: "test-key", Value: *schemas.NewSecretVar("sk-123"), Weight: 1},
+		},
+		NetworkConfig: &schemas.NetworkConfig{
+			BaseURL: "https://api.example.com",
+		},
+		SendBackRawResponse: true,
+		CooldownPolicy: &schemas.CooldownPolicy{
+			RateLimit: &schemas.CooldownPolicyRule{
+				Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+				MatchMode: "any",
+				TTLSeconds: 60,
+			},
+		},
+	}
+	hash9, err := config9.GenerateConfigHash("openai")
+	if err != nil {
+		t.Fatalf("Failed to generate hash: %v", err)
+	}
+	if hash1 == hash9 {
+		t.Error("Expected different hash for configs with CooldownPolicy")
+	}
+
 	t.Log("✓ ProviderConfig hash generation works correctly for all fields")
 }
 

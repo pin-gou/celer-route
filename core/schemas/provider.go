@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 )
 
@@ -558,11 +559,300 @@ type ProviderConfig struct {
 	StoreRawRequestResponse bool                  `json:"store_raw_request_response"` // Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)
 	CustomProviderConfig    *CustomProviderConfig `json:"custom_provider_config,omitempty"`
 	OpenAIConfig            *OpenAIConfig         `json:"openai_config,omitempty"`
+	CooldownPolicy          *CooldownPolicy       `json:"cooldown_policy,omitempty"` // Per-provider cooldown rules; nil falls back to DefaultCooldownPolicy
 }
 
 // OpenAIConfig holds OpenAI-specific provider configuration.
 type OpenAIConfig struct {
 	DisableStore bool `json:"disable_store"` // When true, forces store=false on all outgoing OpenAI requests (default: false)
+}
+
+// CooldownPolicyMatch is a single predicate that contributes to a cooldown rule.
+// All non-zero fields of a match must hold against the BifrostError for the
+// match to be considered satisfied. A match with all fields unset is a no-op
+// and never fires — use at least one of status_code/message_contains/type/code.
+//
+// StatusCode matches against BifrostError.StatusCode when set.
+// MessageContains performs case-insensitive substring matching against the
+// rendered error message (BifrostError.Error.Message).
+// Type matches the BifrostError.Error.Type field (exact, case-insensitive).
+// Code matches the BifrostError.Error.Code field (exact, case-insensitive).
+type CooldownPolicyMatch struct {
+	StatusCode      *int     `json:"status_code,omitempty"`
+	MessageContains []string `json:"message_contains,omitempty"`
+	Type            []string `json:"type,omitempty"`
+	Code            []string `json:"code,omitempty"`
+}
+
+// CooldownPolicyRule groups one or more matches and the TTL applied when the
+// matches fire. MatchMode controls whether ANY rule firing is enough
+// ("any", default) or ALL rules must fire ("all"). TTLSeconds is the
+// cooldown duration for keys marked under this rule.
+type CooldownPolicyRule struct {
+	Match      []CooldownPolicyMatch `json:"match"`
+	MatchMode  string                `json:"match_mode,omitempty"` // "any" | "all"; defaults to "any" when empty
+	TTLSeconds int                   `json:"ttl_seconds"`
+}
+
+// CooldownPolicy attaches rate_limit and quota cooldown rules to a single
+// provider. Quota matches are checked first (slower / longer cooldown), then
+// rate_limit. A nil CooldownPolicy falls back to the package-level default
+// (DefaultCooldownPolicy) which mirrors bifrost's built-in rate-limit
+// pattern set and quota-exhausted substrings.
+type CooldownPolicy struct {
+	RateLimit *CooldownPolicyRule `json:"rate_limit,omitempty"`
+	Quota     *CooldownPolicyRule `json:"quota,omitempty"`
+}
+
+// Cooldown policy TTL defaults applied by DefaultCooldownPolicy. Tuned per
+// provider based on observed error semantics in production:
+//
+//   - Sensenova: workspace-level quota shared across keys, so a short
+//     rate-limit cooldown (30s) lets the whole pool probe before the
+//     window resets; quota cooldown is longer (600s) since quota exhaustion
+//     is rarely self-healing.
+//   - Anthropic: no quota concept (billing uses 402) — rate_limit only.
+//   - Gemini/Vertex: quota exhaustion hits the same window as rate limit
+//     but is harder to recover from (per-day/per-project quotas).
+const (
+	DefaultCooldownTTLSeconds         = 300
+	SensenovaRateLimitTTLSeconds      = 30
+	SensenovaQuotaTTLSeconds          = 600
+	AnthropicRateLimitTTLSeconds      = 60
+	GeminiRateLimitTTLSeconds         = 60
+	GeminiQuotaTTLSeconds             = 600
+	OpenAIRateLimitTTLSeconds         = 60
+	OpenAIQuotaTTLSeconds             = 600
+	BedrockRateLimitTTLSeconds        = 60
+)
+
+// DefaultCooldownPolicy returns the built-in cooldown policy for a given
+// provider. Used by ProviderConfig.CheckAndSetDefaults when a user leaves
+// CooldownPolicy unset, and by the provider-cooldown plugin when ctx does
+// not carry a per-attempt policy stamp.
+//
+// The rule sets are derived from bifrost's own rateLimitPatterns and
+// quotaExhaustedSubstrings so the defaults are consistent with the rest
+// of the system (key rotation, retry classification).
+func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
+	switch provider {
+	case Sensenova:
+		return &CooldownPolicy{
+			RateLimit: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: SensenovaRateLimitTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{MessageContains: []string{"http error 429", "rate_limit_error"}},
+					{Type: []string{"rate_limit_error"}},
+				},
+			},
+			Quota: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: SensenovaQuotaTTLSeconds,
+				// quota deliberately requires a quota-specific signal
+				// (message/code/type) — bare status_code 429 must NOT match,
+				// or every transient rate limit would silently take the
+				// 10-minute quota cooldown.
+				Match: []CooldownPolicyMatch{
+					{MessageContains: []string{"workspace allocated quota", "insufficient_quota", "quota exceeded", "quota_exceeded"}},
+					{Code: []string{"insufficient_quota"}},
+				},
+			},
+		}
+	case Anthropic:
+		return &CooldownPolicy{
+			RateLimit: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: AnthropicRateLimitTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{Type: []string{"rate_limit_error"}},
+					{MessageContains: []string{"rate limit", "too many requests", "tokens per minute", "requests per minute"}},
+				},
+			},
+		}
+	case Gemini, Vertex:
+		return &CooldownPolicy{
+			RateLimit: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: GeminiRateLimitTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{MessageContains: []string{"rate limit", "throttled", "throttling"}},
+					{Type: []string{"rate_limit_error"}},
+				},
+			},
+			Quota: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: GeminiQuotaTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{MessageContains: []string{"quota exceeded", "quota_exceeded", "resource_exhausted"}},
+					{Type: []string{"resource_exhausted"}},
+				},
+			},
+		}
+	case OpenAI:
+		return &CooldownPolicy{
+			RateLimit: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: OpenAIRateLimitTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{Type: []string{"rate_limit_error"}},
+					{MessageContains: []string{"rate limit reached", "rate limit exceeded"}},
+				},
+			},
+			Quota: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: OpenAIQuotaTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{Type: []string{"insufficient_quota"}},
+					{Code: []string{"insufficient_quota"}},
+					{MessageContains: []string{"insufficient_quota", "quota exceeded"}},
+				},
+			},
+		}
+	case Bedrock:
+		return &CooldownPolicy{
+			RateLimit: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: BedrockRateLimitTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{MessageContains: []string{"throttling", "throttled", "rate limit"}},
+					{Type: []string{"throttlingexception"}},
+				},
+			},
+		}
+	default:
+		return &CooldownPolicy{
+			RateLimit: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: DefaultCooldownTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{MessageContains: []string{"rate limit", "rate_limit", "ratelimit", "too many requests", "throttled", "throttling", "rate exceeded", "limit exceeded"}},
+					{Type: []string{"rate_limit_error"}},
+				},
+			},
+			Quota: &CooldownPolicyRule{
+				MatchMode: "any",
+				TTLSeconds: DefaultCooldownTTLSeconds,
+				Match: []CooldownPolicyMatch{
+					{MessageContains: []string{"insufficient_quota", "quota exceeded", "quota_exceeded", "billing", "usage limit"}},
+					{Code: []string{"insufficient_quota"}},
+				},
+			},
+		}
+	}
+}
+
+func intPtr(v int) *int { return &v }
+
+// Matches reports whether the given BifrostError satisfies every non-zero
+// field of this match. A match with no non-zero fields never matches.
+//
+// BifrostError may be nil; in that case Matches returns false.
+func (m *CooldownPolicyMatch) Matches(err *BifrostError) bool {
+	if m == nil || err == nil {
+		return false
+	}
+	// Reject degenerate matches with no predicates — they would otherwise
+	// match every error and inadvertently Mark every key on every attempt.
+	if m.StatusCode == nil && len(m.MessageContains) == 0 && len(m.Type) == 0 && len(m.Code) == 0 {
+		return false
+	}
+	if m.StatusCode != nil {
+		if err.StatusCode == nil || *err.StatusCode != *m.StatusCode {
+			return false
+		}
+	}
+	if len(m.MessageContains) > 0 {
+		msg := strings.ToLower(err.GetErrorString())
+		matched := false
+		for _, sub := range m.MessageContains {
+			if strings.Contains(msg, strings.ToLower(sub)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	if len(m.Type) > 0 {
+		if err.Error == nil || err.Error.Type == nil {
+			return false
+		}
+		typ := strings.ToLower(*err.Error.Type)
+		matched := false
+		for _, want := range m.Type {
+			if strings.ToLower(want) == typ {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	if len(m.Code) > 0 {
+		if err.Error == nil || err.Error.Code == nil {
+			return false
+		}
+		code := strings.ToLower(*err.Error.Code)
+		matched := false
+		for _, want := range m.Code {
+			if strings.ToLower(want) == code {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchesRule applies the policy rule against the BifrostError. match_mode
+// "all" requires every Match to succeed; "any" (default) succeeds on the
+// first Match that fires.
+func (r *CooldownPolicyRule) MatchesRule(err *BifrostError) bool {
+	if r == nil || len(r.Match) == 0 || err == nil {
+		return false
+	}
+	mode := r.MatchModeOrDefault()
+	if mode == "all" {
+		for _, m := range r.Match {
+			if !m.Matches(err) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, m := range r.Match {
+		if m.Matches(err) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *CooldownPolicyRule) MatchModeOrDefault() string {
+	if r == nil || r.MatchMode == "" {
+		return "any"
+	}
+	return r.MatchMode
+}
+
+// ResolveCooldownPolicy returns the CooldownPolicy that should govern the
+// (provider, attempt) given to the cooldown plugin. The configured policy
+// always wins; nil CooldownPolicy falls back to DefaultCooldownPolicy so
+// every provider gets a sensible rule set without explicit configuration.
+//
+// Provider may be empty (only happens during fallback paths that lost the
+// original request metadata); in that case the generic default applies.
+func ResolveCooldownPolicy(provider ModelProvider, configured *CooldownPolicy) *CooldownPolicy {
+	if configured != nil {
+		return configured
+	}
+	return DefaultCooldownPolicy(provider)
 }
 
 func (config *ProviderConfig) CheckAndSetDefaults() {
@@ -622,6 +912,23 @@ func (config *ProviderConfig) CheckAndSetDefaults() {
 		overridesCopy := make(map[string]bool, len(config.NetworkConfig.BetaHeaderOverrides))
 		maps.Copy(overridesCopy, config.NetworkConfig.BetaHeaderOverrides)
 		config.NetworkConfig.BetaHeaderOverrides = overridesCopy
+	}
+
+	// Force CooldownPolicy rule MatchMode defaults. JSON unmarshaling does not
+	// apply schema "default" annotations, so users leaving match_mode unset get
+	// "any" regardless of provider quirks. Normalizing here keeps the runtime
+	// classifier branch-free.
+	if config.CooldownPolicy != nil {
+		if r := config.CooldownPolicy.RateLimit; r != nil {
+			if r.MatchMode == "" {
+				r.MatchMode = "any"
+			}
+		}
+		if r := config.CooldownPolicy.Quota; r != nil {
+			if r.MatchMode == "" {
+				r.MatchMode = "any"
+			}
+		}
 	}
 }
 

@@ -105,6 +105,7 @@ type ProviderResponse struct {
 	StoreRawRequestResponse  bool                             `json:"store_raw_request_response"`       // Capture raw request/response for internal logging only
 	CustomProviderConfig     *schemas.CustomProviderConfig    `json:"custom_provider_config,omitempty"` // Custom provider configuration
 	OpenAIConfig             *schemas.OpenAIConfig            `json:"openai_config,omitempty"`          // OpenAI-specific configuration
+	CooldownPolicy           *schemas.CooldownPolicy          `json:"cooldown_policy,omitempty"`        // Per-provider cooldown policy
 	ProviderStatus           ProviderStatus                   `json:"provider_status"`                  // Health/initialization status of the provider
 	Status                   string                           `json:"status,omitempty"`                 // Operational status (e.g., list_models_failed)
 	Description              string                           `json:"description,omitempty"`            // Error/status description
@@ -170,7 +171,8 @@ type providerCreatePayload struct {
 	SendBackRawResponse      *bool                             `json:"send_back_raw_response,omitempty"`
 	StoreRawRequestResponse  *bool                             `json:"store_raw_request_response,omitempty"`
 	CustomProviderConfig     *schemas.CustomProviderConfig     `json:"custom_provider_config,omitempty"`
-	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"` // OpenAI-specific configuration
+	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`          // OpenAI-specific configuration
+	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`        // Per-provider cooldown policy (rate_limit / quota)
 }
 
 type providerUpdatePayload struct {
@@ -182,6 +184,7 @@ type providerUpdatePayload struct {
 	StoreRawRequestResponse  *bool                            `json:"store_raw_request_response,omitempty"`
 	CustomProviderConfig     *schemas.CustomProviderConfig    `json:"custom_provider_config,omitempty"`
 	OpenAIConfig             *schemas.OpenAIConfig            `json:"openai_config,omitempty"` // OpenAI-specific configuration
+	CooldownPolicy           *schemas.CooldownPolicy          `json:"cooldown_policy,omitempty"` // Per-provider cooldown policy; nil clears the override and falls back to the built-in default
 }
 
 // RegisterRoutes registers all provider management routes
@@ -402,6 +405,7 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 		StoreRawRequestResponse:  payload.StoreRawRequestResponse != nil && *payload.StoreRawRequestResponse,
 		CustomProviderConfig:     payload.CustomProviderConfig,
 		OpenAIConfig:             payload.OpenAIConfig,
+		CooldownPolicy:           payload.CooldownPolicy,
 	}
 	// Validate custom provider configuration before persisting
 	if err := lib.ValidateCustomProvider(config, payload.Provider); err != nil {
@@ -444,6 +448,7 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 			SendBackRawResponse:      config.SendBackRawResponse,
 			StoreRawRequestResponse:  config.StoreRawRequestResponse,
 			CustomProviderConfig:     config.CustomProviderConfig,
+			CooldownPolicy:           config.CooldownPolicy,
 			Status:                   config.Status,
 			Description:              config.Description,
 		}, ProviderStatusActive)
@@ -597,6 +602,10 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 	config.ProxyConfig = payload.ProxyConfig
 	config.CustomProviderConfig = payload.CustomProviderConfig
 	config.OpenAIConfig = payload.OpenAIConfig
+	// payload.CooldownPolicy == nil is meaningful: it clears the per-provider
+	// override so the built-in default policy takes over. This matches how
+	// CustomProviderConfig / OpenAIConfig behave on this endpoint.
+	config.CooldownPolicy = payload.CooldownPolicy
 	if payload.SendBackRawRequest != nil {
 		config.SendBackRawRequest = *payload.SendBackRawRequest
 	}
@@ -1327,6 +1336,7 @@ func (h *ProviderHandler) getProviderResponseFromConfig(provider schemas.ModelPr
 		StoreRawRequestResponse:  config.StoreRawRequestResponse,
 		CustomProviderConfig:     config.CustomProviderConfig,
 		OpenAIConfig:             config.OpenAIConfig,
+		CooldownPolicy:           config.CooldownPolicy,
 		IsKeyLess:                keyless,
 		ProviderStatus:           status,
 		Status:                   config.Status,

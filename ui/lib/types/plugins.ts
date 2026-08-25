@@ -293,6 +293,10 @@ export const pluginFragmentLabels: Record<string, string> = {
 
 // One entry in the cooldown state list surfaced by GET
 // /api/plugins/provider-cooldown/state.
+//
+// `reason` carries the CooldownKind that triggered the mark: either
+// `"rate_limit"` or `"quota"`. Unclassified legacy marks leave it
+// empty — UI should fall back to a generic "冷却中" label.
 export interface CooldownStateEntry {
 	provider: string;
 	keyId: string;
@@ -301,12 +305,43 @@ export interface CooldownStateEntry {
 	reason: string;
 }
 
+// Per-kind counter pair used inside CooldownStats.byKind and
+// CooldownStats.perProvider[<provider>]. Both fields are lifetime
+// monotonic counters.
+export interface KindCounters {
+	markCount: number;
+	suppressedCount: number;
+}
+
+// Per-provider breakdown of CooldownStats. Only providers that have
+// experienced at least one classified mark/suppressed event appear;
+// providers with no classified traffic are omitted (not "all zeros").
+export interface ProviderKindCounters {
+	rate_limit: KindCounters;
+	quota: KindCounters;
+}
+
+// Rollup of CooldownStats broken down by CooldownKind. The two kinds
+// are independent — a workload hitting rate_limit will not appear under
+// quota, and vice versa.
+export interface ByKindCounters {
+	rate_limit: KindCounters;
+	quota: KindCounters;
+}
+
 // Lifetime counters + point-in-time active count surfaced by GET
 // /api/plugins/provider-cooldown/stats.
+//
+// The legacy fields (markCount / suppressedCount / activeCount) cover
+// ALL marks including unclassified ones; byKind / perProvider split
+// the SAME counters by CooldownKind (and by provider). Sum of byKind
+// {rate_limit, quota} ≤ markCount when some marks were unclassified.
 export interface CooldownStats {
 	markCount: number;
 	suppressedCount: number;
 	activeCount: number;
+	byKind?: ByKindCounters;
+	perProvider?: Record<string, ProviderKindCounters>;
 }
 
 export interface CooldownStateResponse {

@@ -380,6 +380,7 @@ func (h *LoggingHandler) RegisterRoutes(r *router.Router, middlewares ...schemas
 	r.GET("/api/logs/active/stream", lib.ChainMiddlewares(h.getActiveLogStream, middlewares...))
 	r.GET("/api/logs/{id}/timeline", lib.ChainMiddlewares(h.getLogTimeline, middlewares...))
 	r.GET("/api/logs/{id}", lib.ChainMiddlewares(h.getLogByID, middlewares...))
+	r.GET("/api/logs/error-patterns", lib.ChainMiddlewares(h.getErrorPatterns, middlewares...))
 	r.GET("/api/logs/stats", lib.ChainMiddlewares(h.getLogsStats, middlewares...))
 	r.GET("/api/logs/histogram", lib.ChainMiddlewares(h.getLogsHistogram, middlewares...))
 	r.GET("/api/logs/histogram/tokens", lib.ChainMiddlewares(h.getLogsTokenHistogram, middlewares...))

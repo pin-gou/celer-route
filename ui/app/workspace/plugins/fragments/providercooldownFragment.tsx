@@ -1,29 +1,20 @@
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { ProviderLabels } from "@/lib/constants/logs";
-import { PROVIDER_COOLDOWN_PLUGIN, providerCooldownConfigSchema, type Plugin } from "@/lib/types/plugins";
+import { PROVIDER_COOLDOWN_PLUGIN, type Plugin } from "@/lib/types/plugins";
 import { formatLocalDateTime, formatRelativeDistanceToNow, getDateLocale } from "@/lib/utils/date";
-import { zodResolver } from "@hookform/resolvers/zod";
+import type { CooldownPolicy, CooldownPolicyRule } from "@/lib/types/config";
+import type { CooldownStats, CooldownStateEntry, ProviderKindCounters } from "@/lib/types/plugins";
 import type { Locale } from "date-fns";
-import { Info, PlusIcon, Trash2Icon } from "lucide-react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
-import { z } from "zod";
 import { useGetCooldownStateQuery, useGetCooldownStatsQuery, useUnfreezeCooldownMutation } from "@/lib/store/apis/pluginsApi";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type ProviderCooldownFormValues = z.infer<typeof providerCooldownConfigSchema>;
+import { useNavigate } from "@tanstack/react-router";
 
 // ---------------------------------------------------------------------------
 // EnabledSwitch — top-level enabled toggle with RBAC gating
@@ -85,238 +76,6 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 }
 
 // ---------------------------------------------------------------------------
-// ConfigForm — react-hook-form + zod for the 3 config fields
-// ---------------------------------------------------------------------------
-
-export function ConfigForm({ plugin }: { plugin: Plugin }) {
-	const { t } = useTranslation("plugins");
-	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
-	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
-	const { data: providers = [] } = useGetProvidersQuery();
-
-	const pluginConfig = (plugin.config || {}) as Record<string, any>;
-
-	const form = useForm<ProviderCooldownFormValues>({
-		resolver: zodResolver(providerCooldownConfigSchema),
-		defaultValues: {
-			default_ttl_seconds: pluginConfig.default_ttl_seconds ?? 300,
-			ttl_overrides: pluginConfig.ttl_overrides ?? {},
-			quota_patterns: pluginConfig.quota_patterns ?? ["用量上限", "token plan", "token-plan"],
-		},
-	});
-
-	const {
-		fields: quotaFields,
-		append: appendQuota,
-		remove: removeQuota,
-	} = useFieldArray<any>({
-		control: form.control,
-		name: "quota_patterns",
-	});
-
-	const ttlOverrides = form.watch("ttl_overrides") || {};
-	const ttlOverrideKeys = Object.keys(ttlOverrides);
-	const usedProviders = new Set(ttlOverrideKeys);
-	const availableProviders = providers.filter((p) => !usedProviders.has(p.name));
-	const firstAvailableProvider = availableProviders[0]?.name;
-	const allProvidersConsumed = ttlOverrideKeys.length > 0 && availableProviders.length === 0;
-
-	const renameOverride = (from: string, to: string) => {
-		const next = { ...ttlOverrides };
-		const ttl = next[from];
-		delete next[from];
-		next[to] = ttl;
-		form.setValue("ttl_overrides", next, { shouldValidate: true, shouldDirty: true });
-	};
-
-	const providerLabel = (name: string) => ProviderLabels[name as keyof typeof ProviderLabels] ?? name;
-
-	const onSubmit = async (values: ProviderCooldownFormValues) => {
-		if (!hasUpdateAccess) return;
-		try {
-			await updatePlugin({
-				name: PROVIDER_COOLDOWN_PLUGIN,
-				data: {
-					enabled: plugin.enabled,
-					config: {
-						default_ttl_seconds: values.default_ttl_seconds,
-						ttl_overrides: values.ttl_overrides,
-						quota_patterns: values.quota_patterns,
-					},
-				},
-			}).unwrap();
-			toast.success(t("providerCooldown.savedToast"));
-		} catch {
-			toast.error(t("providerCooldown.saveFailedToast"));
-		}
-	};
-
-	const onError = () => {
-		toast.error(t("providerCooldown.formErrorToast"));
-	};
-
-	return (
-		<Form {...form}>
-			<form onSubmit={form.handleSubmit(onSubmit, onError)} className="space-y-6">
-				{/* default_ttl_seconds */}
-				<FormField
-					control={form.control}
-					name="default_ttl_seconds"
-					render={({ field }) => (
-						<FormItem>
-							<FormLabel>{t("providerCooldown.defaultTTLLabel")}</FormLabel>
-							<FormControl>
-								<Input
-									data-testid="providercooldown-field-default-ttl"
-									type="number"
-									min={1}
-									max={86400}
-									placeholder={t("providerCooldown.defaultTTLPlaceholder")}
-									{...field}
-									onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-								/>
-							</FormControl>
-							<p className="text-muted-foreground text-xs">{t("providerCooldown.defaultTTLDescription")}</p>
-							<FormMessage />
-						</FormItem>
-					)}
-				/>
-
-				{/* ttl_overrides */}
-				<FormItem>
-					<FormLabel>{t("providerCooldown.ttlOverridesLabel")}</FormLabel>
-					<p className="text-muted-foreground mb-2 text-xs">{t("providerCooldown.ttlOverridesDescription")}</p>
-					<FormControl>
-						<div className="space-y-2">
-							{ttlOverrideKeys.length === 0 && <p className="text-muted-foreground text-sm">{t("providerCooldown.noOverrides")}</p>}
-							{ttlOverrideKeys.map((providerKey) => {
-								const otherKeys = ttlOverrideKeys.filter((k) => k !== providerKey);
-								const otherSet = new Set<string>(otherKeys);
-								const rowOptionNames: string[] = providers.map((p) => p.name).filter((name) => !otherSet.has(name));
-								if (!rowOptionNames.includes(providerKey)) {
-									rowOptionNames.push(providerKey);
-								}
-								return (
-									<div key={providerKey} className="flex items-center gap-2">
-										<Select value={providerKey} onValueChange={(next) => renameOverride(providerKey, next)}>
-											<SelectTrigger className="w-1/3" data-testid={`providercooldown-field-ttl-overrides-provider-${providerKey}`}>
-												<SelectValue placeholder={t("providerCooldown.selectProviderPlaceholder")} />
-											</SelectTrigger>
-											<SelectContent>
-												{rowOptionNames.map((name) => (
-													<SelectItem key={name} value={name}>
-														{providerLabel(name)}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										<Input
-											data-testid={`providercooldown-field-ttl-overrides-value-${providerKey}`}
-											type="number"
-											min={1}
-											placeholder={t("providerCooldown.ttlSecondsPlaceholder")}
-											value={ttlOverrides[providerKey]}
-											onChange={(e) => {
-												const num = e.target.valueAsNumber;
-												if (Number.isNaN(num)) return;
-												form.setValue(
-													"ttl_overrides",
-													{ ...ttlOverrides, [providerKey]: num },
-													{ shouldValidate: true, shouldDirty: true },
-												);
-											}}
-										/>
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											onClick={() => {
-												form.setValue(
-													"ttl_overrides",
-													Object.fromEntries(Object.entries(ttlOverrides).filter(([k]) => k !== providerKey)) as Record<string, number>,
-													{ shouldValidate: true, shouldDirty: true },
-												);
-											}}
-										>
-											<Trash2Icon className="h-4 w-4" />
-										</Button>
-									</div>
-								);
-							})}
-							{allProvidersConsumed && providers.length > 0 && (
-								<p className="text-muted-foreground text-xs">{t("providerCooldown.allProvidersConsumed")}</p>
-							)}
-							{providers.length === 0 && <p className="text-muted-foreground text-xs">{t("providerCooldown.noProviders")}</p>}
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={!firstAvailableProvider}
-								onClick={() => {
-									if (firstAvailableProvider) {
-										form.setValue(
-											"ttl_overrides",
-											{ ...ttlOverrides, [firstAvailableProvider]: 300 },
-											{ shouldValidate: true, shouldDirty: true },
-										);
-									}
-								}}
-							>
-								<PlusIcon className="mr-1 h-3 w-3" />
-								{t("providerCooldown.addOverride")}
-							</Button>
-						</div>
-					</FormControl>
-					<FormMessage />
-				</FormItem>
-
-				{/* quota_patterns */}
-				<FormItem>
-					<FormLabel>{t("providerCooldown.quotaPatternsLabel")}</FormLabel>
-					<p className="text-muted-foreground mb-2 text-xs">{t("providerCooldown.quotaPatternsDescription")}</p>
-					<FormControl>
-						<div className="space-y-2">
-							{quotaFields.map((field, index) => (
-								<div key={field.id} className="flex items-center gap-2">
-									<FormField
-										control={form.control}
-										name={`quota_patterns.${index}`}
-										render={({ field: innerField }) => (
-											<>
-												<Input
-													data-testid={`providercooldown-field-quota-patterns-${index}`}
-													placeholder={t("providerCooldown.quotaPatternPlaceholder")}
-													{...innerField}
-												/>
-												<Button type="button" variant="ghost" size="sm" onClick={() => removeQuota(index)}>
-													<Trash2Icon className="h-4 w-4" />
-												</Button>
-											</>
-										)}
-									/>
-								</div>
-							))}
-							<Button type="button" variant="outline" size="sm" onClick={() => appendQuota("")}>
-								<PlusIcon className="mr-1 h-3 w-3" />
-								{t("providerCooldown.addPattern")}
-							</Button>
-						</div>
-					</FormControl>
-					<FormMessage />
-				</FormItem>
-
-				{/* Save button */}
-				<div className="flex justify-end">
-					<Button type="submit" disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess}>
-						{isLoading ? t("providerCooldown.saving") : t("providerCooldown.saveConfiguration")}
-					</Button>
-				</div>
-			</form>
-		</Form>
-	);
-}
-
-// ---------------------------------------------------------------------------
 // MonitoringPanel — cooldown state + stats + unfreeze
 // ---------------------------------------------------------------------------
 
@@ -344,6 +103,25 @@ function formatExpires(t: TFunction, expireAt: string, dateLocale: Locale): stri
 	return t("providerCooldown.expires", { date, in: relative });
 }
 
+// Format the CooldownStats response into the 4-card layout expected by the
+// monitoring panel. Each kind gets one "marked" card + one "suppressed"
+// card; unclassified marks do NOT contribute to byKind numbers (they
+// show up only in the legacy total fields, which we don't display in the
+// new layout). Returns zeroed-out cards when the backend hasn't sent
+// byKind yet (older API responses).
+function readKindStats(stats: CooldownStats) {
+	const byKind = stats.byKind ?? {
+		rate_limit: { markCount: 0, suppressedCount: 0 },
+		quota: { markCount: 0, suppressedCount: 0 },
+	};
+	return {
+		rateLimitMark: byKind.rate_limit?.markCount ?? 0,
+		rateLimitSuppressed: byKind.rate_limit?.suppressedCount ?? 0,
+		quotaMark: byKind.quota?.markCount ?? 0,
+		quotaSuppressed: byKind.quota?.suppressedCount ?? 0,
+	};
+}
+
 export function MonitoringPanel() {
 	const { t, i18n } = useTranslation("plugins");
 	const { data: stateData, isLoading: stateLoading } = useGetCooldownStateQuery(undefined, {
@@ -356,7 +134,12 @@ export function MonitoringPanel() {
 	const dateLocale = getDateLocale(i18n.language);
 
 	const entries = stateData?.state ?? [];
-	const stats = statsData?.stats ?? { markCount: 0, suppressedCount: 0, activeCount: 0 };
+	const stats: CooldownStats = statsData?.stats ?? {
+		markCount: 0,
+		suppressedCount: 0,
+		activeCount: 0,
+	};
+	const kindStats = readKindStats(stats);
 
 	const handleUnfreeze = async (provider: string, keyId: string) => {
 		try {
@@ -373,20 +156,28 @@ export function MonitoringPanel() {
 
 	return (
 		<div className="space-y-6">
-			{/* Stats cards */}
-			<div className="grid grid-cols-3 gap-4">
-				<div data-testid="providercooldown-stats-mark" className="rounded-lg border p-4 text-center">
-					<div className="text-2xl font-bold">{stats.markCount}</div>
-					<div className="text-muted-foreground text-xs">{t("providerCooldown.totalMarked")}</div>
+			{/* Stats cards — 4 kind-bucketed counters + 1 active count, separated visually */}
+			<div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+				<div data-testid="providercooldown-stats-rate_limit-mark" className="rounded-lg border p-4">
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.markRateLimit")}</div>
+					<div className="mt-1 text-2xl font-bold">{kindStats.rateLimitMark}</div>
 				</div>
-				<div data-testid="providercooldown-stats-suppressed" className="rounded-lg border p-4 text-center">
-					<div className="text-2xl font-bold">{stats.suppressedCount}</div>
-					<div className="text-muted-foreground text-xs">{t("providerCooldown.suppressedRequests")}</div>
+				<div data-testid="providercooldown-stats-quota-mark" className="rounded-lg border p-4">
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.markQuota")}</div>
+					<div className="mt-1 text-2xl font-bold">{kindStats.quotaMark}</div>
 				</div>
-				<div data-testid="providercooldown-stats-active" className="rounded-lg border p-4 text-center">
-					<div className="text-2xl font-bold">{stats.activeCount}</div>
-					<div className="text-muted-foreground text-xs">{t("providerCooldown.currentlyActive")}</div>
+				<div data-testid="providercooldown-stats-rate_limit-suppressed" className="rounded-lg border p-4">
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.suppressedRateLimit")}</div>
+					<div className="mt-1 text-2xl font-bold">{kindStats.rateLimitSuppressed}</div>
 				</div>
+				<div data-testid="providercooldown-stats-quota-suppressed" className="rounded-lg border p-4">
+					<div className="text-muted-foreground text-xs">{t("providerCooldown.suppressedQuota")}</div>
+					<div className="mt-1 text-2xl font-bold">{kindStats.quotaSuppressed}</div>
+				</div>
+			</div>
+			<div data-testid="providercooldown-stats-active" className="bg-muted/40 flex items-center justify-between rounded-lg border p-3">
+				<span className="text-muted-foreground text-sm">{t("providerCooldown.currentlyActive")}</span>
+				<span className="text-lg font-semibold">{stats.activeCount}</span>
 			</div>
 
 			{/* State entries */}
@@ -397,35 +188,14 @@ export function MonitoringPanel() {
 				) : (
 					<div className="space-y-2">
 						{entries.map((entry) => (
-							<div
+							<ActiveStateRow
 								key={entry.keyId}
-								data-testid={`providercooldown-state-row-${entry.keyId}`}
-								className="flex items-center justify-between rounded-md border p-3"
-							>
-								<div className="min-w-0 flex-1">
-									<div className="flex items-center gap-2">
-										<span className="font-medium">{entry.provider}</span>
-										<span className="text-muted-foreground text-xs">
-											{entry.keyId}
-											{entry.keyName ? ` (${entry.keyName})` : ""}
-										</span>
-									</div>
-									<div className="text-muted-foreground mt-1 text-xs">
-										<span>{t("providerCooldown.reason", { reason: entry.reason })}</span>
-										<span className="ml-3">{formatExpires(t, entry.expireAt, dateLocale)}</span>
-									</div>
-								</div>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									data-testid={`providercooldown-state-row-${entry.keyId}-unfreeze`}
-									onClick={() => handleUnfreeze(entry.provider, entry.keyId)}
-									disabled={unfreezeLoading}
-								>
-									{t("providerCooldown.unfreeze")}
-								</Button>
-							</div>
+								entry={entry}
+								t={t}
+								dateLocale={dateLocale}
+								unfreezeLoading={unfreezeLoading}
+								onUnfreeze={handleUnfreeze}
+							/>
 						))}
 					</div>
 				)}
@@ -435,7 +205,65 @@ export function MonitoringPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// ProvidercooldownFragment — full three-section fragment
+// ActiveStateRow — single active cooldown entry. Reason chip uses
+// `entry.reason` which is the CooldownKind enum string ("rate_limit" /
+// "quota"); we render an i18n label instead of the raw enum.
+// ---------------------------------------------------------------------------
+
+function ActiveStateRow({
+	entry,
+	t,
+	dateLocale,
+	unfreezeLoading,
+	onUnfreeze,
+}: {
+	entry: CooldownStateEntry;
+	t: TFunction;
+	dateLocale: Locale;
+	unfreezeLoading: boolean;
+	onUnfreeze: (provider: string, keyId: string) => void;
+}) {
+	const reasonKey =
+		entry.reason === "rate_limit" ? "providerCooldown.reasonRateLimit" : entry.reason === "quota" ? "providerCooldown.reasonQuota" : null;
+	return (
+		<div
+			key={entry.keyId}
+			data-testid={`providercooldown-state-row-${entry.keyId}`}
+			className="flex items-center justify-between rounded-md border p-3"
+		>
+			<div className="min-w-0 flex-1">
+				<div className="flex items-center gap-2">
+					<span className="font-medium">{entry.provider}</span>
+					<span className="text-muted-foreground text-xs">
+						{entry.keyId}
+						{entry.keyName ? ` (${entry.keyName})` : ""}
+					</span>
+					{reasonKey && (
+						<span data-testid={`providercooldown-state-row-${entry.keyId}-kind`} className="bg-muted rounded px-1.5 py-0.5 text-xs">
+							{t(reasonKey)}
+						</span>
+					)}
+				</div>
+				<div className="text-muted-foreground mt-1 text-xs">
+					<span>{formatExpires(t, entry.expireAt, dateLocale)}</span>
+				</div>
+			</div>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				data-testid={`providercooldown-state-row-${entry.keyId}-unfreeze`}
+				onClick={() => onUnfreeze(entry.provider, entry.keyId)}
+				disabled={unfreezeLoading}
+			>
+				{t("providerCooldown.unfreeze")}
+			</Button>
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// ProvidercooldownFragment — monitoring + per-provider policy overview + toggle
 // ---------------------------------------------------------------------------
 
 export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
@@ -450,15 +278,173 @@ export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
 				<MonitoringPanel />
 			</div>
 
-			{/* Section 2: enabled switch */}
-			<EnabledSwitch plugin={plugin} />
-
-			{/* Section 3: config form */}
+			{/* Section 2: per-provider policy overview with edit jump */}
 			<div className="rounded-lg border p-4">
-				<h4 className="mb-4 text-sm font-medium">{t("providerCooldown.settingsTitle")}</h4>
-				<ConfigForm plugin={plugin} />
+				<h4 className="mb-4 text-sm font-medium">{t("providerCooldown.perProviderPoliciesTitle")}</h4>
+				<PerProviderPolicyOverview />
 			</div>
+
+			{/* Section 3: enabled switch */}
+			<EnabledSwitch plugin={plugin} />
 		</div>
+	);
+}
+
+function summarizeRule(rule: CooldownPolicyRule): string {
+	const mode = rule.match_mode ?? "any";
+	return `${rule.match.length} match${rule.match.length === 1 ? "" : "es"} (${mode}), TTL ${rule.ttl_seconds}s`;
+}
+
+function summarizeMatch(
+	m: CooldownPolicy["rate_limit"] extends infer R ? (R extends { match: infer M } ? (M extends Array<infer X> ? X : never) : never) : never,
+): string {
+	const parts: string[] = [];
+	if (m.status_code !== undefined) parts.push(`status=${m.status_code}`);
+	if (m.message_contains && m.message_contains.length > 0) {
+		parts.push(`msg⊇${m.message_contains.map((s) => `"${s}"`).join("|")}`);
+	}
+	if (m.type && m.type.length > 0) {
+		parts.push(`type∈{${m.type.join(",")}}`);
+	}
+	if (m.code && m.code.length > 0) {
+		parts.push(`code∈{${m.code.join(",")}}`);
+	}
+	return parts.join(", ");
+}
+
+function PerProviderPolicyOverview() {
+	const { t } = useTranslation("plugins");
+	const navigate = useNavigate();
+	const { data: providers = [], isLoading } = useGetProvidersQuery();
+	const { data: statsData } = useGetCooldownStatsQuery(undefined, { pollingInterval: 5000 });
+
+	if (isLoading) {
+		return <div className="text-muted-foreground py-4 text-sm">{t("providerCooldown.providersLoading")}</div>;
+	}
+
+	const withPolicy = providers.filter((p) => p.cooldown_policy !== undefined);
+	const usingDefault = providers.filter((p) => p.cooldown_policy === undefined);
+	const perProviderStats = statsData?.stats?.perProvider ?? {};
+
+	const editPolicy = (providerName: string) => {
+		navigate({
+			to: "/workspace/providers/$id",
+			params: { id: providerName },
+			search: { tab: "overview", editing: "cooldown-policy" },
+		});
+	};
+
+	return (
+		<div className="space-y-3">
+			<p className="text-muted-foreground text-xs">{t("providerCooldown.perProviderPoliciesHint")}</p>
+
+			{withPolicy.length > 0 && (
+				<div className="space-y-2">
+					{withPolicy.map((p) => (
+						<div key={p.name} data-testid={`providercooldown-policy-row-${p.name}`} className="rounded-md border p-3">
+							<div className="flex items-center justify-between">
+								<span className="font-medium">{ProviderLabels[p.name as keyof typeof ProviderLabels] ?? p.name}</span>
+								<div className="flex items-center gap-3">
+									<ProviderKindStats providerName={p.name} stats={perProviderStats[p.name]} t={t} />
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={() => editPolicy(p.name)}
+										data-testid={`providercooldown-policy-edit-${p.name}`}
+									>
+										{t("providerCooldown.editPolicy")}
+									</Button>
+								</div>
+							</div>
+							{p.cooldown_policy?.rate_limit && (
+								<div className="text-muted-foreground mt-1 text-xs">
+									<span className="font-medium">{t("providerCooldown.rateLimitLabel")}: </span>
+									{summarizeRule(p.cooldown_policy.rate_limit)}
+									<ul className="mt-1 ml-4 list-disc">
+										{p.cooldown_policy.rate_limit.match.map((m, i) => (
+											<li key={i} className="font-mono">
+												{summarizeMatch(m)}
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
+							{p.cooldown_policy?.quota && (
+								<div className="text-muted-foreground mt-2 text-xs">
+									<span className="font-medium">{t("providerCooldown.quotaLabel")}: </span>
+									{summarizeRule(p.cooldown_policy.quota)}
+									<ul className="mt-1 ml-4 list-disc">
+										{p.cooldown_policy.quota.match.map((m, i) => (
+											<li key={i} className="font-mono">
+												{summarizeMatch(m)}
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
+						</div>
+					))}
+				</div>
+			)}
+
+			{usingDefault.length > 0 && (
+				<div className="space-y-2">
+					{usingDefault.map((p) => (
+						<div key={p.name} data-testid={`providercooldown-policy-row-${p.name}`} className="rounded-md border border-dashed p-3">
+							<div className="flex items-center justify-between">
+								<span className="font-medium">{ProviderLabels[p.name as keyof typeof ProviderLabels] ?? p.name}</span>
+								<div className="flex items-center gap-3">
+									<ProviderKindStats providerName={p.name} stats={perProviderStats[p.name]} t={t} />
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onClick={() => editPolicy(p.name)}
+										data-testid={`providercooldown-policy-goto-${p.name}`}
+									>
+										{t("providerCooldown.gotoConfig")}
+									</Button>
+								</div>
+							</div>
+						</div>
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
+// Per-provider kind counter group rendered next to the Edit/Configure
+// button on each row. Format: "速率限制 4/3 配额耗尽 1/1（标记/抑制）"
+// — two compact `marked/suppressed` pairs with bold numbers, monospace
+// so columns line up across rows. Mark counts and 标记 label are red;
+// suppressed counts and 抑制 label are blue. When the provider has no
+// classified traffic yet (no entry in perProviderStats) we render "—"
+// to make the empty state visually distinct from explicit "0/0" counts.
+function ProviderKindStats({ providerName, stats, t }: { providerName: string; stats: ProviderKindCounters | undefined; t: TFunction }) {
+	if (!stats) {
+		return (
+			<span data-testid={`providercooldown-policy-stats-${providerName}`} className="text-muted-foreground font-mono text-xs">
+				—
+			</span>
+		);
+	}
+	return (
+		<span data-testid={`providercooldown-policy-stats-${providerName}`} className="text-muted-foreground font-mono text-xs">
+			<span data-testid={`providercooldown-policy-stats-${providerName}-rate_limit`}>
+				{t("providerCooldown.rateLimitLabel")} <span className="font-semibold text-red-500">{stats.rate_limit?.markCount ?? 0}</span>/
+				<span className="font-semibold text-blue-500">{stats.rate_limit?.suppressedCount ?? 0}</span>
+			</span>
+			<span className="text-border mx-2">·</span>
+			<span data-testid={`providercooldown-policy-stats-${providerName}-quota`}>
+				{t("providerCooldown.quotaLabel")} <span className="font-semibold text-red-500">{stats.quota?.markCount ?? 0}</span>/
+				<span className="font-semibold text-blue-500">{stats.quota?.suppressedCount ?? 0}</span>
+			</span>
+			<span className="ml-1">
+				（<span className="text-red-500">标记</span>/<span className="text-blue-500">抑制</span>）
+			</span>
+		</span>
 	);
 }
 

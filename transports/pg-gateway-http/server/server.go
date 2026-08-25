@@ -2325,6 +2325,8 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	}
 	cacheHandler.RegisterRoutes(s.Router, middlewares...)
 	cooldownHandler.RegisterRoutes(s.Router, middlewares...)
+	errorCatalogHandler := handlers.NewErrorCatalogHandler()
+	errorCatalogHandler.RegisterRoutes(s.Router, middlewares...)
 	if featureFlagsHandler != nil {
 		featureFlagsHandler.RegisterRoutes(s.Router, middlewares...)
 	}

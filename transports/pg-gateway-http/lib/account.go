@@ -101,5 +101,8 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelPr
 	if config.OpenAIConfig != nil {
 		providerConfig.OpenAIConfig = config.OpenAIConfig
 	}
+	if config.CooldownPolicy != nil {
+		providerConfig.CooldownPolicy = config.CooldownPolicy
+	}
 	return providerConfig, nil
 }

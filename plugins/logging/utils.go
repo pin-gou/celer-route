@@ -146,6 +146,10 @@ type LogManager interface {
 	// the final metadata JSON to persist.
 	RunCostRecalcJob(ctx context.Context, metaJSON string, checkpoint func(string) error) (string, error)
 
+	// ErrorPatterns returns aggregated error buckets for a provider in the
+	// given window. Used by the CooldownPolicy UI's error-sample browser.
+	ErrorPatterns(ctx context.Context, provider schemas.ModelProvider, window string, limit int) ([]logstore.ErrorPattern, int64, error)
+
 	// MCP Tool Log methods
 	// GetMCPToolLog retrieves a single MCP tool log entry by ID.
 	GetMCPToolLog(ctx context.Context, id string) (*logstore.MCPToolLog, error)
@@ -210,6 +214,21 @@ type PluginLogManager struct {
 
 func (p *PluginLogManager) GetLog(ctx context.Context, id string) (*logstore.Log, error) {
 	return p.plugin.GetLog(ctx, id)
+}
+
+// ErrorPatterns returns aggregated error buckets for the provider in window.
+// The RDBLogStore implements this for sqlite/postgres/clickhouse; other store
+// wrappers (e.g. scoped store) fall back to an empty result — the UI degrades
+// to the built-in catalog dropdown when the error browser has no data.
+func (p *PluginLogManager) ErrorPatterns(ctx context.Context, provider schemas.ModelProvider, window string, limit int) ([]logstore.ErrorPattern, int64, error) {
+	if p.plugin == nil || p.plugin.store == nil {
+		return nil, 0, nil
+	}
+	rdb, ok := p.plugin.store.(*logstore.RDBLogStore)
+	if !ok {
+		return nil, 0, nil
+	}
+	return rdb.ErrorPatterns(ctx, provider, window, limit)
 }
 
 func (p *PluginLogManager) Search(ctx context.Context, filters *logstore.SearchFilters, pagination *logstore.PaginationOptions) (*logstore.SearchResult, error) {

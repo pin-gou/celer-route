@@ -42,15 +42,108 @@ var quotaExhaustedSubstrings = []string{
 	"usage limit",
 }
 
+// CooldownKind classifies why a (provider, key) was marked for cooldown.
+// Used to attribute lifetime mark / suppressed counters to the underlying
+// trigger (a transient rate-limit hit vs. a quota exhaustion) so the UI can
+// surface "速率限制被标记 7 次 / 抑制 5 次" vs. "配额耗尽被标记 5 次 / 抑制 3 次"
+// rather than a single rolled-up total.
+//
+// Empty ("") means "unclassified" — used by the legacy quota_patterns path
+// that does not consult the per-provider CooldownPolicy; those marks still
+// bump the lifetime markCount/suppressedCount counters (for backward
+// compatibility with the original single-counter API) but are NOT attributed
+// to any specific kind.
+type CooldownKind string
+
+const (
+	CooldownKindRateLimit CooldownKind = "rate_limit"
+	CooldownKindQuota     CooldownKind = "quota"
+)
+
+// kindIndex maps a CooldownKind to a fixed array index used by the atomic
+// counter pair. Unknown / empty kinds are attributed to the legacy "unclassified"
+// slot (index 2), which the by_kind JSON output omits — those marks show up
+// only in the top-level mark_count / suppressed_count fields.
+func kindIndex(k CooldownKind) int {
+	switch k {
+	case CooldownKindRateLimit:
+		return 0
+	case CooldownKindQuota:
+		return 1
+	default:
+		return 2
+	}
+}
+
+const (
+	kindIdxUnclassified = 2
+	kindIndexCount      = 3
+)
+
+// CooldownRecord is the per-entry state stored in CooldownState.cooldowns.
+// It pairs the wall-clock expiry with the kind that triggered the mark so
+// AsFilter can attribute each suppression to the right kind when the filter
+// vetoes the key.
+type CooldownRecord struct {
+	expiresAt time.Time
+	kind      CooldownKind
+}
+
+// KindCounters holds lifetime mark + suppressed counters for one (provider, kind)
+// bucket. Exposed via Stats() so the monitoring UI can show per-provider
+// breakdown (e.g. "OpenAI · 速率限制标记 4 / 抑制 2, 配额标记 1 / 抑制 0").
+//
+// Safe for concurrent reads/writes via sync/atomic when used standalone; here
+// they live inside CooldownState's per-provider map which is itself guarded by
+// c.mu, so direct field access is sufficient.
+type KindCounters struct {
+	MarkCount       uint64 `json:"mark_count"`
+	SuppressedCount uint64 `json:"suppressed_count"`
+}
+
+// ProviderKindCounters aggregates per-kind counters for a single provider.
+// The two kinds are independent (a provider can have rate-limit hits but no
+// quota hits, and vice versa).
+type ProviderKindCounters struct {
+	RateLimit KindCounters `json:"rate_limit"`
+	Quota     KindCounters `json:"quota"`
+}
+
+// ByKindCounters is the global by-kind rollup surfaced under stats.by_kind.
+// "Unclassified" lifetime marks (from the legacy quota_patterns path) do NOT
+// appear here — they are reflected only in the top-level mark_count /
+// suppressed_count fields to keep the per-kind breakdown faithful to the
+// CooldownPolicy-driven classification.
+type ByKindCounters struct {
+	RateLimit KindCounters `json:"rate_limit"`
+	Quota     KindCounters `json:"quota"`
+}
+
 // CooldownState holds the per-(provider, key_id) cooldown clock.
 //
 // Safe for concurrent use. The map is keyed by "<provider>::<keyID>"; values
-// are the wall-clock time at which the entry expires. Reads are O(1) with a
-// RWMutex's RLock; the GC goroutine prunes expired entries on a ticker to
-// keep the map from growing unboundedly under churn.
+// are CooldownRecord{expiresAt, kind}. Reads are O(1) with a RWMutex's RLock;
+// the GC goroutine prunes expired entries on a ticker to keep the map from
+// growing unboundedly under churn.
+//
+// Lifetime counters are split into three layers:
+//
+//   - markCount / suppressedCount (atomic): the lifetime total across all
+//     kinds, including unclassified. Surfaced as the top-level
+//     mark_count / suppressed_count JSON fields; preserved for backward
+//     compatibility with the original single-counter API.
+//
+//   - markByKind / suppressedByKind (atomic, indexed by kindIndex): the
+//     same counters broken down by CooldownKind. Surfaced under
+//     stats.by_kind.{rate_limit,quota}. Unclassified marks do NOT bump
+//     these — only policy-driven classifications do.
+//
+//   - perProvider (guarded by mu, RWMutex): the same counters broken down
+//     by (provider, kind). Surfaced under stats.per_provider.{provider}.
+//     {rate_limit,quota}. Used by the per-provider UI section.
 type CooldownState struct {
 	mu        sync.RWMutex
-	cooldowns map[string]time.Time
+	cooldowns map[string]CooldownRecord
 	ttl       time.Duration
 
 	// ttlOverrides lets callers tune TTL per provider. Useful when a provider
@@ -58,12 +151,18 @@ type CooldownState struct {
 	// would cause avoidable fallback churn after the reset.
 	ttlOverrides map[schemas.ModelProvider]time.Duration
 
-	// Lifetime counters surfaced via Stats() so operators can confirm the
-	// filter is actually vetoing keys at the core boundary. Counters are
-	// monotonic across the lifetime of the state — they survive GC and
-	// transient filter reloads, but reset on plugin re-Init.
+	// Lifetime totals (atomic; cover all kinds including unclassified).
 	markCount       atomic.Uint64
 	suppressedCount atomic.Uint64
+
+	// Lifetime by-kind totals (atomic). Indexed by kindIndex().
+	markByKind       [kindIndexCount]atomic.Uint64
+	suppressedByKind [kindIndexCount]atomic.Uint64
+
+	// perProvider is keyed by ModelProvider; only providers that have
+	// experienced at least one classified mark/suppressed event appear.
+	// Guarded by c.mu (RWMutex) for reads/writes.
+	perProvider map[schemas.ModelProvider]*ProviderKindCounters
 }
 
 // NewCooldownState returns a CooldownState with the given default TTL.
@@ -73,9 +172,10 @@ func NewCooldownState(ttl time.Duration) *CooldownState {
 		ttl = DefaultCooldownTTL
 	}
 	return &CooldownState{
-		cooldowns:    make(map[string]time.Time),
+		cooldowns:    make(map[string]CooldownRecord),
 		ttl:          ttl,
 		ttlOverrides: make(map[schemas.ModelProvider]time.Duration),
+		perProvider:  make(map[schemas.ModelProvider]*ProviderKindCounters),
 	}
 }
 
@@ -107,39 +207,93 @@ func (c *CooldownState) effectiveTTLLocked(provider schemas.ModelProvider) time.
 // IsCoolingDown reports whether the given (provider, keyID) is currently
 // suppressed. Expired entries are pruned lazily on access.
 func (c *CooldownState) IsCoolingDown(provider schemas.ModelProvider, keyID string) bool {
-	if keyID == "" {
-		return false
-	}
-	c.mu.RLock()
-	exp, ok := c.cooldowns[c.key(provider, keyID)]
-	c.mu.RUnlock()
-	if !ok {
-		return false
-	}
-	if !time.Now().Before(exp) {
-		// lazy prune
-		c.mu.Lock()
-		// re-check in case another goroutine already pruned
-		if cur, ok := c.cooldowns[c.key(provider, keyID)]; ok && !time.Now().Before(cur) {
-			delete(c.cooldowns, c.key(provider, keyID))
-		}
-		c.mu.Unlock()
-		return false
-	}
-	return true
+	_, _, ok := c.lookupCooldown(provider, keyID)
+	return ok
 }
 
-// Mark records a cooldown for the given (provider, keyID). A no-op when
-// keyID is empty (avoids accidentally cooling "the whole provider" when
-// the request hit a non-key-bound error).
+// lookupCooldown is the internal accessor used by both IsCoolingDown (for the
+// boolean answer) and AsFilter (which also needs the CooldownKind so it can
+// attribute suppressions to the right by_kind / per_provider bucket).
+// Returns (expiresAt, kind, true) when the entry exists AND is not expired.
+// Expired entries are pruned lazily. Callers MUST treat the bool as
+// authoritative — the time/kind values are only meaningful when true.
+func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID string) (time.Time, CooldownKind, bool) {
+	if keyID == "" {
+		return time.Time{}, "", false
+	}
+	k := c.key(provider, keyID)
+	now := time.Now()
+	c.mu.RLock()
+	rec, ok := c.cooldowns[k]
+	c.mu.RUnlock()
+	if !ok {
+		return time.Time{}, "", false
+	}
+	if !now.Before(rec.expiresAt) {
+		// lazy prune
+		c.mu.Lock()
+		if cur, ok := c.cooldowns[k]; ok && !time.Now().Before(cur.expiresAt) {
+			delete(c.cooldowns, k)
+		}
+		c.mu.Unlock()
+		return time.Time{}, "", false
+	}
+	return rec.expiresAt, rec.kind, true
+}
+
+// Mark records a cooldown for the given (provider, keyID) with no classified
+// kind. A no-op when keyID is empty (avoids accidentally cooling "the whole
+// provider" when the request hit a non-key-bound error).
+//
+// Unclassified marks still bump the lifetime markCount counter for backward
+// compatibility with the original single-counter API, but do NOT contribute
+// to by_kind or per_provider stats. Callers that have a classified reason
+// (policy hit) should use MarkWithTTL(..., kind) instead.
 func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
+	c.MarkWithTTL(provider, keyID, 0, "")
+}
+
+// MarkWithTTL records a cooldown for (provider, keyID) using ttl as the
+// cooldown duration, attributing the mark to the given kind (rate_limit or
+// quota). A ttl <= 0 falls back to the provider's effective TTL (the configured
+// default or per-provider override), preserving the behaviour of Mark.
+// keyID empty is a no-op so callers don't need to guard.
+//
+// kind="rate_limit" / "quota" also bumps by_kind and per_provider counters.
+// kind="" only bumps the legacy markCount counter.
+func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string, ttl time.Duration, kind CooldownKind) {
 	if keyID == "" {
 		return
 	}
 	c.mu.Lock()
-	c.cooldowns[c.key(provider, keyID)] = time.Now().Add(c.effectiveTTLLocked(provider))
+	effective := ttl
+	if effective <= 0 {
+		effective = c.effectiveTTLLocked(provider)
+	}
+	c.cooldowns[c.key(provider, keyID)] = CooldownRecord{
+		expiresAt: time.Now().Add(effective),
+		kind:      kind,
+	}
+	idx := kindIndex(kind)
+	c.markByKind[idx].Add(1)
+	if kind == CooldownKindRateLimit {
+		c.perProviderMarkLocked(provider).RateLimit.MarkCount++
+	} else if kind == CooldownKindQuota {
+		c.perProviderMarkLocked(provider).Quota.MarkCount++
+	}
 	c.mu.Unlock()
 	c.markCount.Add(1)
+}
+
+// perProviderMarkLocked returns the per-provider counter struct for the
+// given provider, creating it on demand. The caller MUST hold c.mu (write).
+func (c *CooldownState) perProviderMarkLocked(provider schemas.ModelProvider) *ProviderKindCounters {
+	pc, ok := c.perProvider[provider]
+	if !ok {
+		pc = &ProviderKindCounters{}
+		c.perProvider[provider] = pc
+	}
+	return pc
 }
 
 // EffectiveTTL returns the TTL that applies to the given provider, respecting
@@ -162,11 +316,16 @@ func (c *CooldownState) Size() int {
 // CooldownEntry is a read-only view of one cooldown entry, exposed via the
 // state-monitoring API. ExpiresAt is the wall-clock time at which the
 // cooldown will no longer suppress the key.
+//
+// Kind carries the CooldownKind that triggered the mark (empty when the
+// mark was unclassified, e.g. via the legacy quota_patterns path). Surfaced
+// via the API so the UI can render "速率限制" vs "配额耗尽" badges on each row.
 type CooldownEntry struct {
 	Provider  schemas.ModelProvider `json:"provider"`
 	KeyID     string                `json:"key_id"`
 	ExpiresAt time.Time             `json:"expires_at"`
 	Remaining time.Duration         `json:"remaining"`
+	Kind      CooldownKind          `json:"kind,omitempty"`
 }
 
 // Snapshot returns a copy of every active (non-expired) cooldown entry,
@@ -178,8 +337,8 @@ func (c *CooldownState) Snapshot() []CooldownEntry {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	out := make([]CooldownEntry, 0, len(c.cooldowns))
-	for k, exp := range c.cooldowns {
-		if !now.Before(exp) {
+	for k, rec := range c.cooldowns {
+		if !now.Before(rec.expiresAt) {
 			continue
 		}
 		// k is "provider::keyID". Find the first "::" (provider names
@@ -191,8 +350,9 @@ func (c *CooldownState) Snapshot() []CooldownEntry {
 		out = append(out, CooldownEntry{
 			Provider:  schemas.ModelProvider(k[:i]),
 			KeyID:     k[i+2:],
-			ExpiresAt: exp,
-			Remaining: exp.Sub(now),
+			ExpiresAt: rec.expiresAt,
+			Remaining: rec.expiresAt.Sub(now),
+			Kind:      rec.kind,
 		})
 	}
 	return out
@@ -217,27 +377,57 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string) b
 }
 
 // CooldownStats is the read-only lifetime summary surfaced via Stats() and
-// the GET /api/plugins/provider-cooldown/stats endpoint. MarkCount and
-// SuppressedCount are monotonic counters across the state lifetime;
-// CurrentActiveCount is a point-in-time snapshot of how many (provider, key)
-// pairs are mid-cooldown right now.
+// the GET /api/plugins/provider-cooldown/stats endpoint.
+//
+//   - MarkCount / SuppressedCount are monotonic counters across the state
+//     lifetime covering ALL kinds (including unclassified). Preserved for
+//     backward compatibility with the original single-counter API.
+//   - CurrentActiveCount is a point-in-time snapshot of how many
+//     (provider, key) pairs are mid-cooldown right now.
+//   - ByKind splits mark / suppressed counters by CooldownKind (rate_limit
+//     vs quota). Unclassified marks do NOT contribute — they only show up
+//     in the top-level fields.
+//   - PerProvider is the same kind-bucketed counters broken down per
+//     provider. Only providers that have experienced at least one
+//     classified event appear.
 type CooldownStats struct {
-	MarkCount          uint64 `json:"mark_count"`
-	SuppressedCount    uint64 `json:"suppressed_count"`
-	CurrentActiveCount int    `json:"current_active_count"`
+	MarkCount          uint64                              `json:"mark_count"`
+	SuppressedCount    uint64                              `json:"suppressed_count"`
+	CurrentActiveCount int                                 `json:"current_active_count"`
+	ByKind             ByKindCounters                      `json:"by_kind"`
+	PerProvider        map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider"`
 }
 
 // Stats returns the lifetime counters and the current number of active
 // cooldowns. Safe for concurrent use.
+//
+// Returns a fully-populated CooldownStats including the new ByKind and
+// PerProvider breakdowns; older callers that read only the top-level
+// MarkCount / SuppressedCount / CurrentActiveCount are unaffected by the
+// new fields.
 func (c *CooldownState) Stats() CooldownStats {
-	c.mu.RLock()
-	active := len(c.cooldowns)
-	c.mu.RUnlock()
-	return CooldownStats{
-		MarkCount:          c.markCount.Load(),
-		SuppressedCount:    c.suppressedCount.Load(),
-		CurrentActiveCount: active,
+	stats := CooldownStats{
+		MarkCount:       c.markCount.Load(),
+		SuppressedCount: c.suppressedCount.Load(),
+		ByKind: ByKindCounters{
+			RateLimit: KindCounters{
+				MarkCount:       c.markByKind[kindIndex(CooldownKindRateLimit)].Load(),
+				SuppressedCount: c.suppressedByKind[kindIndex(CooldownKindRateLimit)].Load(),
+			},
+			Quota: KindCounters{
+				MarkCount:       c.markByKind[kindIndex(CooldownKindQuota)].Load(),
+				SuppressedCount: c.suppressedByKind[kindIndex(CooldownKindQuota)].Load(),
+			},
+		},
 	}
+	c.mu.RLock()
+	stats.CurrentActiveCount = len(c.cooldowns)
+	stats.PerProvider = make(map[schemas.ModelProvider]ProviderKindCounters, len(c.perProvider))
+	for p, pc := range c.perProvider {
+		stats.PerProvider[p] = *pc
+	}
+	c.mu.RUnlock()
+	return stats
 }
 
 // runGCLocked is the inner GC loop, factored out so tests can drive it with a
@@ -255,8 +445,8 @@ func (c *CooldownState) runGCLocked(logger schemas.Logger, interval time.Duratio
 			c.mu.Lock()
 			pruned := 0
 			remaining := 0
-			for k, exp := range c.cooldowns {
-				if !now.Before(exp) {
+			for k, rec := range c.cooldowns {
+				if !now.Before(rec.expiresAt) {
 					delete(c.cooldowns, k)
 					pruned++
 				}
@@ -288,9 +478,19 @@ func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
 // in cooldown. Wire it into BifrostConfig.KeyPoolFilter at startup. The given
 // logger records each suppression decision (may be nil).
 //
-// The filter is read-only against the state — Bifrost's retry loop calls it
-// on every attempt, and we must not introduce back-pressure by holding the
-// write lock here.
+// Each suppression is attributed to the kind that originally marked the key
+// (looked up from the cooldown record), so by_kind / per_provider counters
+// reflect the actual reason the request was vetoed — not the most recent
+// mark, which can differ if the same key was quota-marked then re-marked
+// for rate_limit.
+//
+// The filter is read-only against the state on the happy path — Bifrost's
+// retry loop calls it on every attempt, and we must not introduce
+// back-pressure by holding the write lock here. The one write it performs
+// (incrementing the suppressed counters per key) is a quick
+// perProvider[provider][kind].Suppressed++ under a short write lock; in
+// practice this is uncontended because filter calls are not concurrent
+// with each other for the same provider.
 func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 	return func(_ *schemas.BifrostContext, provider schemas.ModelProvider, model string, keys []schemas.Key) ([]schemas.Key, error) {
 		if len(keys) == 0 {
@@ -298,13 +498,30 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 		}
 		out := make([]schemas.Key, 0, len(keys))
 		for _, k := range keys {
-			if !c.IsCoolingDown(provider, k.ID) {
+			_, kind, suppressed := c.lookupCooldown(provider, k.ID)
+			if !suppressed {
 				out = append(out, k)
-			} else {
-				c.suppressedCount.Add(1)
-				if logger != nil {
-					logger.Info("[provider-cooldown] suppressed key %s/%s (name=%s, model=%s)", provider, k.ID, k.Name, model)
+				continue
+			}
+			// Attribute this suppression to the kind that triggered the mark.
+			c.suppressedCount.Add(1)
+			idx := kindIndex(kind)
+			// Unclassified suppressions still bump the legacy total but
+			// skip by_kind / per_provider attribution — keeping the
+			// per-kind breakdown faithful to CooldownPolicy-driven marks.
+			if kind != "" {
+				c.suppressedByKind[idx].Add(1)
+				c.mu.Lock()
+				switch kind {
+				case CooldownKindRateLimit:
+					c.perProviderMarkLocked(provider).RateLimit.SuppressedCount++
+				case CooldownKindQuota:
+					c.perProviderMarkLocked(provider).Quota.SuppressedCount++
 				}
+				c.mu.Unlock()
+			}
+			if logger != nil {
+				logger.Info("[provider-cooldown] suppressed key %s/%s (name=%s, model=%s, kind=%s)", provider, k.ID, k.Name, model, kind)
 			}
 		}
 		return out, nil
@@ -587,21 +804,72 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 // error for every downstream consumer. A plugin only nils one of them when
 // it deliberately recovers from an error (nil err + new resp) or invalidates
 // a response (nil resp + new err) — neither applies here.
+// classify runs the provider's CooldownPolicy against the BifrostError and
+// returns the TTL to apply plus the key to mark. Quota is checked before
+// rate_limit; a non-policy match (nil policy, both rules absent) returns ok=false.
+//
+// The policy is read from ctx[BifrostContextKeyCooldownPolicy]; when the
+// stamp is missing or nil (e.g. older builds without the stamp), the
+// function falls back to DefaultCooldownPolicy so every provider still gets
+// a sensible rule set.
+func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (ttl time.Duration, keyID string, keyName string, kind CooldownKind, ok bool) {
+	if p.State == nil || bifrostErr == nil {
+		return 0, "", "", "", false
+	}
+	provider, keyID, keyName := lastAttemptProviderAndKey(ctx, bifrostErr)
+	if keyID == "" {
+		return 0, "", "", "", false
+	}
+
+	var policy *schemas.CooldownPolicy
+	if ctx != nil {
+		if v, has := ctx.Value(schemas.BifrostContextKeyCooldownPolicy).(*schemas.CooldownPolicy); has && v != nil {
+			policy = v
+		}
+	}
+	if policy == nil {
+		policy = schemas.DefaultCooldownPolicy(provider)
+	}
+
+	if policy.Quota != nil && policy.Quota.MatchesRule(bifrostErr) {
+		return time.Duration(policy.Quota.TTLSeconds) * time.Second, keyID, keyName, CooldownKindQuota, true
+	}
+	if policy.RateLimit != nil && policy.RateLimit.MatchesRule(bifrostErr) {
+		return time.Duration(policy.RateLimit.TTLSeconds) * time.Second, keyID, keyName, CooldownKindRateLimit, true
+	}
+	return 0, keyID, keyName, "", false
+}
+
 func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
 	if p.State == nil || bifrostErr == nil {
 		return resp, bifrostErr, nil
 	}
-	if !p.isQuotaExhausted(bifrostErr) {
+
+	ttl, keyID, keyName, kind, ok := p.classify(ctx, bifrostErr)
+	if !ok {
+		// Fallback for builds / providers without a per-provider policy stamp:
+		// preserve the original quota_patterns behaviour so legacy configs
+		// keep working until they migrate to provider.cooldown_policy. The
+		// legacy path marks with empty kind (unclassified) so the lifetime
+		// markCount still increments for backward compatibility, but the
+		// per-kind breakdown stays faithful to CooldownPolicy-driven marks.
+		if p.isQuotaExhausted(bifrostErr) {
+			provider, fallbackKeyID, fallbackKeyName := lastAttemptProviderAndKey(ctx, bifrostErr)
+			if fallbackKeyID == "" {
+				return resp, bifrostErr, nil
+			}
+			p.State.Mark(provider, fallbackKeyID)
+			if p.logger != nil {
+				p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, legacy quota_patterns match)", provider, fallbackKeyID, fallbackKeyName, p.State.EffectiveTTL(provider))
+			}
+		}
 		return resp, bifrostErr, nil
 	}
 
-	provider, keyID, keyName := lastAttemptProviderAndKey(ctx, bifrostErr)
-	if keyID == "" {
-		return resp, bifrostErr, nil
-	}
-	p.State.Mark(provider, keyID)
+	provider, _, _ := lastAttemptProviderAndKey(ctx, bifrostErr)
+	p.State.MarkWithTTL(provider, keyID, ttl, kind)
 	if p.logger != nil {
-		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v)", provider, keyID, keyName, p.State.EffectiveTTL(provider))
+		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, kind=%s)", provider, keyID, keyName, ttl, kind)
 	}
 	return resp, bifrostErr, nil
 }

@@ -3633,3 +3633,110 @@ func TestRDBConfigStore_SyncRoutingRules(t *testing.T) {
 		})
 	}
 }
+
+// TestProviderConfig_CooldownPolicyRoundTrip pins the DB persistence path for
+// per-provider CooldownPolicy. Before this was added, the field was stored only
+// in memory: GET /api/providers/{provider} returned cooldown_policy=nil because
+// TableProvider had no column and UpdateProvider/AddProvider never wrote the
+// field, so any user edits were lost on the next refresh / restart.
+func TestProviderConfig_CooldownPolicyRoundTrip(t *testing.T) {
+	store := setupRDBTestStore(t)
+	ctx := context.Background()
+
+	policy := &schemas.CooldownPolicy{
+		RateLimit: &schemas.CooldownPolicyRule{
+			Match: []schemas.CooldownPolicyMatch{
+				{StatusCode: schemas.Ptr(429), Type: []string{"rate_limit_error"}, Code: []string{"insufficient_quota"}},
+			},
+			MatchMode: "any",
+			TTLSeconds: 600,
+		},
+		Quota: &schemas.CooldownPolicyRule{
+			Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+			MatchMode: "any",
+			TTLSeconds: 1800,
+		},
+	}
+
+	// AddProvider should persist the field.
+	require.NoError(t, store.AddProvider(ctx, "sensenova", ProviderConfig{
+		CooldownPolicy: policy,
+	}))
+
+	// GetProviderConfig (used by GET /api/providers/{provider}) must round-trip.
+	got, err := store.GetProviderConfig(ctx, "sensenova")
+	require.NoError(t, err)
+	require.NotNil(t, got.CooldownPolicy, "CooldownPolicy must survive AddProvider → GetProviderConfig")
+	require.NotNil(t, got.CooldownPolicy.RateLimit)
+	require.Equal(t, 600, got.CooldownPolicy.RateLimit.TTLSeconds)
+	require.Equal(t, []string{"rate_limit_error"}, got.CooldownPolicy.RateLimit.Match[0].Type)
+	require.NotNil(t, got.CooldownPolicy.Quota)
+	require.Equal(t, 1800, got.CooldownPolicy.Quota.TTLSeconds)
+
+	// UpdateProvider should also persist the field (replace, not append).
+	updated := &schemas.CooldownPolicy{
+		RateLimit: &schemas.CooldownPolicyRule{
+			Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+			MatchMode: "any",
+			TTLSeconds: 60,
+		},
+		Quota: nil, // cleared
+	}
+	require.NoError(t, store.UpdateProvider(ctx, "sensenova", ProviderConfig{
+		CooldownPolicy: updated,
+	}))
+
+	got2, err := store.GetProviderConfig(ctx, "sensenova")
+	require.NoError(t, err)
+	require.NotNil(t, got2.CooldownPolicy, "CooldownPolicy must survive UpdateProvider")
+	require.NotNil(t, got2.CooldownPolicy.RateLimit)
+	require.Equal(t, 60, got2.CooldownPolicy.RateLimit.TTLSeconds)
+	require.Nil(t, got2.CooldownPolicy.Quota, "Quota should be cleared after UpdateProvider set it to nil")
+
+	// UpdateProvidersConfig (file-sync path) must also persist the field.
+	require.NoError(t, store.UpdateProvidersConfig(ctx, map[schemas.ModelProvider]ProviderConfig{
+		"sensenova": {CooldownPolicy: policy},
+	}))
+	got3, err := store.GetProvidersConfig(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, got3["sensenova"].CooldownPolicy, "CooldownPolicy must survive UpdateProvidersConfig → GetProvidersConfig")
+	require.Equal(t, 600, got3["sensenova"].CooldownPolicy.RateLimit.TTLSeconds)
+}
+
+// TestTableProvider_CooldownPolicyJSON verifies the schema marshalling hooks:
+// BeforeSave serializes the struct into the JSON column; AfterFind deserializes
+// it back. Without these hooks, AddProvider/UpdateProvider would save the struct
+// pointer (which GORM ignores for gorm:"-" fields) and reload as nil.
+func TestTableProvider_CooldownPolicyJSON(t *testing.T) {
+	policy := &schemas.CooldownPolicy{
+		RateLimit: &schemas.CooldownPolicyRule{
+			Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+			MatchMode: "any",
+			TTLSeconds: 60,
+		},
+	}
+
+	store := setupRDBTestStore(t)
+	ctx := context.Background()
+
+	require.NoError(t, store.DB().WithContext(ctx).Create(&tables.TableProvider{
+		Name:           "anthropic",
+		CooldownPolicy: policy,
+	}).Error)
+
+	// Read raw column — must contain JSON, not blank.
+	var raw string
+	require.NoError(t, store.DB().WithContext(ctx).
+		Table("config_providers").
+		Select("cooldown_policy_json").
+		Where("name = ?", "anthropic").
+		Scan(&raw).Error)
+	require.NotEmpty(t, raw, "cooldown_policy_json column must be populated by BeforeSave")
+	require.Contains(t, raw, `"ttl_seconds":60`)
+
+	// Read via the table row — AfterFind must repopulate the virtual struct.
+	var row tables.TableProvider
+	require.NoError(t, store.DB().WithContext(ctx).Where("name = ?", "anthropic").First(&row).Error)
+	require.NotNil(t, row.CooldownPolicy, "AfterFind must populate the virtual CooldownPolicy field")
+	require.Equal(t, 60, row.CooldownPolicy.RateLimit.TTLSeconds)
+}

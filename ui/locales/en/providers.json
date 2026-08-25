@@ -124,6 +124,11 @@
 			"governance": "Governance",
 			"betaHeaders": "Beta Headers",
 			"openaiConfig": "OpenAI Config",
+			"cooldownPolicy": "Cooldown Policy",
+			"cooldownPolicyUsingDefault": "Using the built-in default cooldown policy. Click Edit to customize.",
+			"cooldownPolicyOverride": "Custom cooldown policy is overriding the built-in default.",
+			"cooldownPolicyRateLimitTtl": "Rate-limit TTL",
+			"cooldownPolicyQuotaTtl": "Quota-exhausted TTL",
 			"cancel": "Cancel",
 			"edit": "Edit",
 			"baseUrl": "Base URL",
@@ -440,6 +445,67 @@
 			"toast": {
 				"updated": "OpenAI configuration updated successfully",
 				"failedToUpdate": "Failed to update OpenAI configuration"
+			}
+		},
+		"cooldownPolicy": {
+			"description": "Per-provider cooldown rules. Quota matches take precedence over rate-limit matches; each key is cooled independently. Leave empty or disable all rules to fall back to the built-in default.",
+			"rate_limit": {
+				"label": "Rate-limit rule"
+			},
+			"quota": {
+				"label": "Quota-exhausted rule"
+			},
+			"enableRule": "Enable",
+			"matchModeLabel": "Match mode",
+			"matchModeAny": "Any single match fires (any)",
+			"matchModeAll": "Every match must fire (all)",
+			"ttlLabel": "Cooldown TTL (seconds)",
+			"ttlDescription": "How long the matched key stays out of rotation; cooldown expires automatically.",
+			"matchesLabel": "Matches",
+			"addMatch": "Add match",
+			"noMatches": "At least one match is required.",
+			"editMatchTitle": "Edit match",
+			"emptyMatch": "Empty match",
+			"done": "Done",
+			"addItem": "Add",
+			"noItems": "No items.",
+			"matchField": {
+				"statusCode": "HTTP status code (optional)",
+				"messageContains": "Message contains (any one matches, optional)",
+				"type": "Error type (exact, optional)",
+				"code": "Error code (exact, optional)"
+			},
+			"clear": "Clear custom policy",
+			"cancel": "Cancel",
+			"save": "Save cooldown policy",
+			"errorSample": {
+				"title": "Error samples",
+				"loading": "Loading error samples...",
+				"error": "Failed to load error samples",
+				"noErrors": "No errors in this window.",
+				"tryChangingWindow": "Try the 24h window if you expect recent errors.",
+				"totalErrors": "{{count}} total errors",
+				"apply": "Apply",
+				"windowOptions": {
+					"1h": "Last 1 hour",
+					"24h": "Last 24 hours"
+				},
+				"applyDialogTitle": "Choose apply target",
+				"applyDialogDescription": "Choose which limit rule to add this error sample to as a new match:",
+				"toast": {
+					"applied": "Added error sample as a new match"
+				}
+			},
+			"typeSelect": {
+				"selectPlaceholder": "Select a known value…",
+				"custom": "Custom…",
+				"customPlaceholder": "Type a custom value",
+				"reset": "Reset"
+			},
+			"toast": {
+				"updated": "Cooldown policy updated successfully",
+				"cleared": "Reverted to the built-in default cooldown policy",
+				"failedToUpdate": "Failed to update cooldown policy"
 			}
 		},
 		"performance": {

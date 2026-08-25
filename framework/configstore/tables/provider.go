@@ -22,6 +22,7 @@ type TableProvider struct {
 	ProxyConfigJSON          string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ProxyConfig
 	CustomProviderConfigJSON string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CustomProviderConfig
 	OpenAIConfigJSON         string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.OpenAIConfig
+	CooldownPolicyJSON       string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CooldownPolicy (rate_limit / quota rules)
 	SendBackRawRequest       bool      `json:"send_back_raw_request"`
 	SendBackRawResponse      bool      `json:"send_back_raw_response"`
 	StoreRawRequestResponse  bool      `json:"store_raw_request_response"`
@@ -39,6 +40,10 @@ type TableProvider struct {
 	// Custom provider fields
 	CustomProviderConfig *schemas.CustomProviderConfig `gorm:"-" json:"custom_provider_config,omitempty"`
 	OpenAIConfig         *schemas.OpenAIConfig         `gorm:"-" json:"openai_config,omitempty"`
+
+	// Per-provider cooldown policy (rate_limit / quota rules). Optional — when nil,
+	// the runtime falls back to schemas.DefaultCooldownPolicy(provider).
+	CooldownPolicy *schemas.CooldownPolicy `gorm:"-" json:"cooldown_policy,omitempty"`
 
 	// Foreign keys
 	Models []TableModel `gorm:"foreignKey:ProviderID;constraint:OnDelete:CASCADE" json:"models"`
@@ -109,6 +114,15 @@ func (p *TableProvider) BeforeSave(tx *gorm.DB) error {
 	} else {
 		p.OpenAIConfigJSON = ""
 	}
+	if p.CooldownPolicy != nil {
+		data, err := json.Marshal(p.CooldownPolicy)
+		if err != nil {
+			return err
+		}
+		p.CooldownPolicyJSON = string(data)
+	} else {
+		p.CooldownPolicyJSON = ""
+	}
 	// Validate governance fields
 	if p.BudgetID != nil && strings.TrimSpace(*p.BudgetID) == "" {
 		return fmt.Errorf("budget_id cannot be an empty string")
@@ -178,6 +192,14 @@ func (p *TableProvider) AfterFind(tx *gorm.DB) error {
 			return err
 		}
 		p.OpenAIConfig = &openaiConfig
+	}
+
+	if p.CooldownPolicyJSON != "" {
+		var cooldownPolicy schemas.CooldownPolicy
+		if err := json.Unmarshal([]byte(p.CooldownPolicyJSON), &cooldownPolicy); err != nil {
+			return err
+		}
+		p.CooldownPolicy = &cooldownPolicy
 	}
 
 	return nil

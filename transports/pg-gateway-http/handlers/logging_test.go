@@ -592,6 +592,13 @@ type dashboardLogManager struct {
 	sseDisconnected bool
 }
 
+// ErrorPatterns is a test stub needed to satisfy the LogManager interface.
+// No dashboard test exercises the error-patterns endpoint, so it returns
+// empty results with zero total.
+func (m *dashboardLogManager) ErrorPatterns(ctx context.Context, provider schemas.ModelProvider, window string, limit int) ([]logstore.ErrorPattern, int64, error) {
+	return nil, 0, nil
+}
+
 func (m *dashboardLogManager) GetLog(ctx context.Context, id string) (*logstore.Log, error) {
 	if m.failGetLog {
 		return nil, errors.New("internal error")
