@@ -1202,6 +1202,26 @@ func TestSchemaProviderCooldownPolicy(t *testing.T) {
 		}
 	})
 
+	t.Run("enabled=false retains match data and validates", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"enabled": false,
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 60
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected enabled=false cooldown rule to validate, got: %v", err)
+		}
+	})
+
 	t.Run("ttl_seconds <= 0 is rejected", func(t *testing.T) {
 		cfg := `{
 			"providers": {

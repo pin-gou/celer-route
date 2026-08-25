@@ -100,20 +100,58 @@ func TestClassify_RateLimitRule_FiresOnBare429(t *testing.T) {
 	}
 }
 
+func TestClassify_EnabledFalseDoesNotFire(t *testing.T) {
+	plugin := NewPlugin(nil)
+	disabled := false
+	policy := &schemas.CooldownPolicy{
+		RateLimit: &schemas.CooldownPolicyRule{
+			Enabled:    &disabled,
+			MatchMode:  "any",
+			TTLSeconds: 30,
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
+		},
+	}
+	ctx := withTrail(t, policy)
+	err := newErr(429, "", "", "")
+
+	if _, _, _, _, ok := plugin.classify(ctx, err); ok {
+		t.Fatal("rule with enabled=false must not fire even when a match fires")
+	}
+}
+
+func TestClassify_EnabledTruePreservesNilDefault(t *testing.T) {
+	plugin := NewPlugin(nil)
+	enabled := true
+	policy := &schemas.CooldownPolicy{
+		RateLimit: &schemas.CooldownPolicyRule{
+			Enabled:    &enabled,
+			MatchMode:  "any",
+			TTLSeconds: 30,
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
+		},
+	}
+	ctx := withTrail(t, policy)
+	err := newErr(429, "", "", "")
+
+	if _, _, _, _, ok := plugin.classify(ctx, err); !ok {
+		t.Fatal("rule with enabled=true must fire on a matching error")
+	}
+}
+
 func TestClassify_QuotaCheckedBeforeRateLimit(t *testing.T) {
 	plugin := NewPlugin(nil)
 	policy := &schemas.CooldownPolicy{
 		Quota: &schemas.CooldownPolicyRule{
-			MatchMode: "any",
+			MatchMode:  "any",
 			TTLSeconds: 1000,
 			Match: []schemas.CooldownPolicyMatch{
 				{StatusCode: intPtr(429)},
 			},
 		},
 		RateLimit: &schemas.CooldownPolicyRule{
-			MatchMode: "any",
+			MatchMode:  "any",
 			TTLSeconds: 10,
-			Match:     []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
 		},
 	}
 	ctx := withTrail(t, policy)
@@ -132,7 +170,7 @@ func TestClassify_AllModeRequiresEveryMatch(t *testing.T) {
 	plugin := NewPlugin(nil)
 	policy := &schemas.CooldownPolicy{
 		RateLimit: &schemas.CooldownPolicyRule{
-			MatchMode: "all",
+			MatchMode:  "all",
 			TTLSeconds: 30,
 			Match: []schemas.CooldownPolicyMatch{
 				{StatusCode: intPtr(429)},
@@ -159,7 +197,7 @@ func TestClassify_MessageContainsIsCaseInsensitive(t *testing.T) {
 	plugin := NewPlugin(nil)
 	policy := &schemas.CooldownPolicy{
 		RateLimit: &schemas.CooldownPolicyRule{
-			MatchMode: "any",
+			MatchMode:  "any",
 			TTLSeconds: 30,
 			Match: []schemas.CooldownPolicyMatch{
 				{MessageContains: []string{"WORKSPACE ALLOCATED QUOTA"}},
@@ -205,7 +243,7 @@ func TestClassify_NoMatchReturnsFalse(t *testing.T) {
 	plugin := NewPlugin(nil)
 	policy := &schemas.CooldownPolicy{
 		RateLimit: &schemas.CooldownPolicyRule{
-			MatchMode: "any",
+			MatchMode:  "any",
 			TTLSeconds: 30,
 			Match: []schemas.CooldownPolicyMatch{
 				{MessageContains: []string{"never matches"}},

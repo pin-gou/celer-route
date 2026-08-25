@@ -589,6 +589,7 @@ type CooldownPolicyMatch struct {
 // ("any", default) or ALL rules must fire ("all"). TTLSeconds is the
 // cooldown duration for keys marked under this rule.
 type CooldownPolicyRule struct {
+	Enabled    *bool                 `json:"enabled,omitempty"` // nil/default = enabled; false = disabled but retains Match data for re-enable
 	Match      []CooldownPolicyMatch `json:"match"`
 	MatchMode  string                `json:"match_mode,omitempty"` // "any" | "all"; defaults to "any" when empty
 	TTLSeconds int                   `json:"ttl_seconds"`
@@ -615,15 +616,15 @@ type CooldownPolicy struct {
 //   - Gemini/Vertex: quota exhaustion hits the same window as rate limit
 //     but is harder to recover from (per-day/per-project quotas).
 const (
-	DefaultCooldownTTLSeconds         = 300
-	SensenovaRateLimitTTLSeconds      = 30
-	SensenovaQuotaTTLSeconds          = 600
-	AnthropicRateLimitTTLSeconds      = 60
-	GeminiRateLimitTTLSeconds         = 60
-	GeminiQuotaTTLSeconds             = 600
-	OpenAIRateLimitTTLSeconds         = 60
-	OpenAIQuotaTTLSeconds             = 600
-	BedrockRateLimitTTLSeconds        = 60
+	DefaultCooldownTTLSeconds    = 300
+	SensenovaRateLimitTTLSeconds = 30
+	SensenovaQuotaTTLSeconds     = 600
+	AnthropicRateLimitTTLSeconds = 60
+	GeminiRateLimitTTLSeconds    = 60
+	GeminiQuotaTTLSeconds        = 600
+	OpenAIRateLimitTTLSeconds    = 60
+	OpenAIQuotaTTLSeconds        = 600
+	BedrockRateLimitTTLSeconds   = 60
 )
 
 // DefaultCooldownPolicy returns the built-in cooldown policy for a given
@@ -639,7 +640,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 	case Sensenova:
 		return &CooldownPolicy{
 			RateLimit: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: SensenovaRateLimitTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{MessageContains: []string{"http error 429", "rate_limit_error"}},
@@ -647,7 +648,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 				},
 			},
 			Quota: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: SensenovaQuotaTTLSeconds,
 				// quota deliberately requires a quota-specific signal
 				// (message/code/type) — bare status_code 429 must NOT match,
@@ -662,7 +663,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 	case Anthropic:
 		return &CooldownPolicy{
 			RateLimit: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: AnthropicRateLimitTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{Type: []string{"rate_limit_error"}},
@@ -673,7 +674,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 	case Gemini, Vertex:
 		return &CooldownPolicy{
 			RateLimit: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: GeminiRateLimitTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{MessageContains: []string{"rate limit", "throttled", "throttling"}},
@@ -681,7 +682,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 				},
 			},
 			Quota: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: GeminiQuotaTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{MessageContains: []string{"quota exceeded", "quota_exceeded", "resource_exhausted"}},
@@ -692,7 +693,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 	case OpenAI:
 		return &CooldownPolicy{
 			RateLimit: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: OpenAIRateLimitTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{Type: []string{"rate_limit_error"}},
@@ -700,7 +701,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 				},
 			},
 			Quota: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: OpenAIQuotaTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{Type: []string{"insufficient_quota"}},
@@ -712,7 +713,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 	case Bedrock:
 		return &CooldownPolicy{
 			RateLimit: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: BedrockRateLimitTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{MessageContains: []string{"throttling", "throttled", "rate limit"}},
@@ -723,7 +724,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 	default:
 		return &CooldownPolicy{
 			RateLimit: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: DefaultCooldownTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{MessageContains: []string{"rate limit", "rate_limit", "ratelimit", "too many requests", "throttled", "throttling", "rate exceeded", "limit exceeded"}},
@@ -731,7 +732,7 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 				},
 			},
 			Quota: &CooldownPolicyRule{
-				MatchMode: "any",
+				MatchMode:  "any",
 				TTLSeconds: DefaultCooldownTTLSeconds,
 				Match: []CooldownPolicyMatch{
 					{MessageContains: []string{"insufficient_quota", "quota exceeded", "quota_exceeded", "billing", "usage limit"}},
@@ -815,6 +816,9 @@ func (m *CooldownPolicyMatch) Matches(err *BifrostError) bool {
 // first Match that fires.
 func (r *CooldownPolicyRule) MatchesRule(err *BifrostError) bool {
 	if r == nil || len(r.Match) == 0 || err == nil {
+		return false
+	}
+	if r.Enabled != nil && !*r.Enabled {
 		return false
 	}
 	mode := r.MatchModeOrDefault()

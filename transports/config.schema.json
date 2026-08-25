@@ -3797,8 +3797,13 @@
     },
     "cooldown_policy_rule": {
       "type": "object",
-      "description": "Cooldown rule: matches are OR-combined under match_mode \"any\" (default) or AND-combined under \"all\". TTLSeconds is the cooldown duration applied when the rule fires.",
+      "description": "Cooldown rule: matches are OR-combined under match_mode \"any\" (default) or AND-combined under \"all\". TTLSeconds is the cooldown duration applied when the rule fires. Set enabled=false to retain the rule's match data for later re-enable without applying the cooldown.",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the rule is active. Set to false to keep the rule's match data for later re-enable while temporarily disabling the cooldown."
+        },
         "match": {
           "type": "array",
           "items": { "$ref": "#/$defs/cooldown_policy_match" },
