@@ -42,9 +42,9 @@ type testLogger struct {
 }
 
 func (l *testLogger) Debug(msg string, args ...any) { l.record("debug", msg, args) }
-func (l *testLogger) Info(msg string, args ...any)   { l.record("info", msg, args) }
-func (l *testLogger) Warn(msg string, args ...any)   { l.record("warn", msg, args) }
-func (l *testLogger) Error(msg string, args ...any)  { l.record("error", msg, args) }
+func (l *testLogger) Info(msg string, args ...any)  { l.record("info", msg, args) }
+func (l *testLogger) Warn(msg string, args ...any)  { l.record("warn", msg, args) }
+func (l *testLogger) Error(msg string, args ...any) { l.record("error", msg, args) }
 
 func (l *testLogger) record(level, msg string, args []any) {
 	line := level + " " + fmt.Sprintf(msg, args...)
@@ -70,9 +70,9 @@ func (l *testLogger) count() int {
 	return len(l.msgs)
 }
 
-func (l *testLogger) Fatal(msg string, args ...any)               { l.record("fatal", msg, args) }
-func (l *testLogger) SetLevel(schemas.LogLevel)                   {}
-func (l *testLogger) SetOutputType(schemas.LoggerOutputType)      {}
+func (l *testLogger) Fatal(msg string, args ...any)          { l.record("fatal", msg, args) }
+func (l *testLogger) SetLevel(schemas.LogLevel)              {}
+func (l *testLogger) SetOutputType(schemas.LoggerOutputType) {}
 func (l *testLogger) LogHTTPRequest(schemas.LogLevel, string) schemas.LogEventBuilder {
 	return schemas.NoopLogEvent
 }
@@ -145,6 +145,129 @@ func TestAsFilterSkipsCooledKeys(t *testing.T) {
 	if len(out) != 1 || out[0].ID != "cold-key" {
 		t.Fatalf("expected only cold-key to survive the filter, got %+v", out)
 	}
+}
+
+// TestAsMarkerMarksOnRateLimit covers the central reason the marker exists:
+// the retry loop rotates past a 429 on key A and succeeds on key B, but A
+// is the one that actually failed and we want A — not B — marked in cooldown.
+// PostLLMHook would only see the terminal success and skip A entirely; the
+// marker is the path that closes that gap.
+func TestAsMarkerMarksOnRateLimit(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	provider := schemas.OpenAI
+	marker := s.AsMarker(nil)
+
+	status := 429
+	rateErr := &schemas.BifrostError{
+		StatusCode: &status,
+		Error: &schemas.ErrorField{
+			Message: "Rate limit reached for requests",
+			Code:    strPtr("rate_limit_exceeded"),
+		},
+	}
+
+	marker(nil, provider, "key-A", "A", "gpt-4o", rateErr)
+
+	if !s.IsCoolingDown(provider, "key-A") {
+		t.Fatal("expected key-A to be in cooldown after marker observed a rate-limit failure")
+	}
+	if s.IsCoolingDown(provider, "key-B") {
+		t.Fatal("key-B must not be marked — the marker only acts on the failed key")
+	}
+}
+
+// TestAsMarkerPrefersQuotaOverRateLimit pins the rule precedence: an error
+// matching both rules (would only happen with a custom policy that overlaps,
+// but we want the behaviour documented) must be attributed to quota — the
+// longer, harder-to-recover kind — never to rate_limit.
+func TestAsMarkerPrefersQuotaOverRateLimit(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	provider := schemas.OpenAI
+	// Custom policy that intentionally makes both rules match the same error.
+	// The test pins behaviour, not the default policy's narrow rule set.
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	ctx.SetValue(schemas.BifrostContextKeyCooldownPolicy, &schemas.CooldownPolicy{
+		Quota: &schemas.CooldownPolicyRule{
+			MatchMode:  "any",
+			TTLSeconds: 600,
+			Match: []schemas.CooldownPolicyMatch{
+				{MessageContains: []string{"dual-matched"}},
+			},
+		},
+		RateLimit: &schemas.CooldownPolicyRule{
+			MatchMode:  "any",
+			TTLSeconds: 60,
+			Match: []schemas.CooldownPolicyMatch{
+				{MessageContains: []string{"dual-matched"}},
+			},
+		},
+	})
+	marker := s.AsMarker(nil)
+
+	status := 429
+	err := &schemas.BifrostError{
+		StatusCode: &status,
+		Error:      &schemas.ErrorField{Message: "dual-matched signal"},
+	}
+	marker(ctx, provider, "key-X", "X", "gpt-4o", err)
+
+	if !s.IsCoolingDown(provider, "key-X") {
+		t.Fatal("expected key-X to be marked")
+	}
+	_, kind, ok := s.lookupCooldown(provider, "key-X")
+	if !ok || kind != CooldownKindQuota {
+		t.Fatalf("expected kind=quota (precedence over rate_limit), got ok=%v kind=%q", ok, kind)
+	}
+}
+
+// TestAsMarkerIgnoresPolicyMiss covers the silent no-op path: the per-provider
+// CooldownPolicy doesn't match the failure (e.g. sensenova default policy
+// doesn't match a bare HTTP 429 without a quota-specific signal). The marker
+// must NOT bump counters for those, otherwise we would silently cool every
+// key that hits a generic 429.
+func TestAsMarkerIgnoresPolicyMiss(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	provider := schemas.Sensenova
+	marker := s.AsMarker(nil)
+
+	status := 429
+	err := &schemas.BifrostError{
+		StatusCode: &status,
+		Error: &schemas.ErrorField{
+			// sensenova rate-limit rule requires message containing
+			// "http error 429" or Type "rate_limit_error" — neither of
+			// which a generic 400-class error carries, so the policy
+			// miss path is exactly what we want to exercise here.
+			Message: "validation failed",
+			Type:    strPtr("invalid_request_error"),
+		},
+	}
+	before := s.Size()
+	marker(nil, provider, "key-Z", "Z", "deepseek-v4-flash", err)
+
+	if s.IsCoolingDown(provider, "key-Z") {
+		t.Fatal("policy-miss errors must not be marked")
+	}
+	if got := s.Size(); got != before {
+		t.Fatalf("policy-miss must not change state size: before=%d after=%d", before, got)
+	}
+}
+
+// TestAsMarkerNilArgsNoPanic pins the guard rails — bifrost can race a
+// ctx-cancel or skip-key edge case through the marker, and the marker must
+// never panic on missing inputs.
+func TestAsMarkerNilArgsNoPanic(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	marker := s.AsMarker(nil)
+
+	// nil error: no-op, no panic
+	marker(nil, schemas.OpenAI, "k", "k", "gpt-4o", nil)
+	// empty keyID: no-op
+	marker(nil, schemas.OpenAI, "", "", "gpt-4o", &schemas.BifrostError{StatusCode: intPtr(429)})
+	// nil state: caller-side, but we still want the marker closure to be
+	// safe even if bifrost hands us a nil receiver somehow.
+	nilMarker := (*CooldownState)(nil).AsMarker(nil)
+	nilMarker(nil, schemas.OpenAI, "k", "k", "gpt-4o", &schemas.BifrostError{StatusCode: intPtr(429)})
 }
 
 func TestAsFilterEmptyInput(t *testing.T) {
@@ -1263,14 +1386,14 @@ func TestClassify_ReturnsKind(t *testing.T) {
 	plugin := NewPlugin(nil)
 	policy := &schemas.CooldownPolicy{
 		Quota: &schemas.CooldownPolicyRule{
-			MatchMode: "any",
+			MatchMode:  "any",
 			TTLSeconds: 600,
-			Match:     []schemas.CooldownPolicyMatch{{MessageContains: []string{"quota"}}},
+			Match:      []schemas.CooldownPolicyMatch{{MessageContains: []string{"quota"}}},
 		},
 		RateLimit: &schemas.CooldownPolicyRule{
-			MatchMode: "any",
+			MatchMode:  "any",
 			TTLSeconds: 60,
-			Match:     []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: intPtr(429)}},
 		},
 	}
 	ctx := withTrail(t, policy)

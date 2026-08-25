@@ -370,6 +370,13 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 	// which the server consumes at the bifrost core boundary. Both must be wired for
 	// the feature to take effect: the LLMPlugin records events, the filter applies them.
 	//
+	// The PerKeyFailureMarker is the third wire of the same feature: bifrost's
+	// retry loop invokes it on every per-key failure (transient 429/quota), so
+	// cross-request cooldown bookkeeping sees the 429 a later retry succeeded
+	// around — which PostLLMHook alone would miss. Wire it symmetrically with
+	// the filter; both consume the same plugin State and must be re-pointed on
+	// every plugin reload (see SyncLoadedPlugin in server.go).
+	//
 	// Default-on semantics: no entry in PluginConfigs, or an explicit entry with
 	// enabled=true, both result in the plugin being loaded. Only an explicit
 	// enabled=false disables the plugin. This matches telemetry's default-on behavior
@@ -396,6 +403,13 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 		// bifrost.Init at server.go:2466 (LoadPlugins fires at server.go:2425),
 		// so the very first request sees the filter.
 		s.KeyPoolFilter = plugin.State.AsFilter(logger)
+		// Same lifecycle for the marker: stash it on the server struct so
+		// Bootstrap / ReloadConfig can wire it into bifrost after Init —
+		// s.Client is nil at this point (loadBuiltinPlugins runs pre-Init),
+		// and SetPerKeyFailureMarker would panic on a nil receiver. The
+		// wire itself happens symmetrically with KeyPoolFilter at the same
+		// Bootstrap + ReloadConfig + SyncLoadedPlugin boundaries.
+		s.PerKeyFailureMarker = plugin.State.AsMarker(logger)
 	} else {
 		s.markPluginDisabled(providercooldown.PluginName)
 		// When explicitly disabled, ensure KeyPoolFilter is nil so no stale

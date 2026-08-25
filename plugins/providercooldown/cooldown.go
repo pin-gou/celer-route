@@ -391,10 +391,10 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string) b
 //     provider. Only providers that have experienced at least one
 //     classified event appear.
 type CooldownStats struct {
-	MarkCount          uint64                              `json:"mark_count"`
-	SuppressedCount    uint64                              `json:"suppressed_count"`
-	CurrentActiveCount int                                 `json:"current_active_count"`
-	ByKind             ByKindCounters                      `json:"by_kind"`
+	MarkCount          uint64                                         `json:"mark_count"`
+	SuppressedCount    uint64                                         `json:"suppressed_count"`
+	CurrentActiveCount int                                            `json:"current_active_count"`
+	ByKind             ByKindCounters                                 `json:"by_kind"`
 	PerProvider        map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider"`
 }
 
@@ -525,6 +525,55 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 			}
 		}
 		return out, nil
+	}
+}
+
+// AsMarker returns a schemas.PerKeyFailureMarker that bifrost's retry loop
+// calls every time it observes a per-key failure it has excluded from the
+// current request via usedKeyIDs (the transient branch: 429 / quota-style
+// errors; permanent 401/402/403 failures go through deadKeyIDs and are
+// intentionally not signalled here because they are already isolated for
+// the lifetime of the request).
+//
+// Wire it into bifrost.SetPerKeyFailureMarker at startup. The given logger
+// records each mark and may be nil.
+//
+// Why a marker is needed even though PostLLMHook already marks on quota
+// errors: PostLLMHook fires once on the terminal outcome. When the retry
+// loop rotates past a 429 on key A and succeeds on key B, PostLLMHook
+// receives (response, nil) and short-circuits — key A never gets marked,
+// so the next incoming request reaches for A again, hits 429, rotates
+// again, and the whole pool thrashes until quota genuinely recovers.
+// The marker closes that gap by letting us mark A the moment its failure
+// is observed, not the moment the request as a whole settles.
+//
+// Classification reuses classifyForMarker() — the same rule lookup
+// PostLLMHook.classify uses — so the per-provider CooldownPolicy stamp
+// on ctx (or DefaultCooldownPolicy when the stamp is absent) is the single
+// source of truth for what counts as rate_limit / quota. The marker
+// threads the (provider, keyID, keyName) tuple through directly instead of
+// re-deriving it from ctx via lastAttemptProviderAndKey — the retry loop
+// already knows which key it just failed with, and skipping the ctx scan
+// keeps the marker hot-path allocation-free.
+//
+// The logger can be nil — a no-op implementation is acceptable.
+func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMarker {
+	return func(ctx *schemas.BifrostContext, provider schemas.ModelProvider, keyID string, keyName string, model string, bifrostErr *schemas.BifrostError) {
+		if c == nil || bifrostErr == nil || keyID == "" {
+			return
+		}
+		// Reuse classify() — single source of truth for rate_limit vs quota
+		// matching against the per-provider CooldownPolicy. classify reads
+		// the policy from ctx[BifrostContextKeyCooldownPolicy] and falls
+		// back to DefaultCooldownPolicy(provider) when the stamp is absent.
+		ttl, _, _, kind, ok := classifyForMarker(ctx, provider, keyID, keyName, bifrostErr)
+		if !ok {
+			return
+		}
+		c.MarkWithTTL(provider, keyID, ttl, kind)
+		if logger != nil {
+			logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, kind=%s) from per-key-failure marker", provider, keyID, keyName, ttl, kind)
+		}
 	}
 }
 
@@ -808,6 +857,12 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 // returns the TTL to apply plus the key to mark. Quota is checked before
 // rate_limit; a non-policy match (nil policy, both rules absent) returns ok=false.
 //
+// The (provider, keyID, keyName) is derived from ctx via lastAttemptProviderAndKey
+// — PostLLMHook fires once on the terminal outcome and only has the AttemptTrail
+// to consult, so it cannot accept these as arguments. The marker path takes a
+// different shape (see classifyForMarker) because the retry loop already knows
+// which key it just failed with.
+//
 // The policy is read from ctx[BifrostContextKeyCooldownPolicy]; when the
 // stamp is missing or nil (e.g. older builds without the stamp), the
 // function falls back to DefaultCooldownPolicy so every provider still gets
@@ -820,7 +875,27 @@ func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schem
 	if keyID == "" {
 		return 0, "", "", "", false
 	}
+	return classifyForMarker(ctx, provider, keyID, keyName, bifrostErr)
+}
 
+// classifyForMarker is the marker-side counterpart of (*CooldownPlugin).classify:
+// same CooldownPolicy lookup, same rule priority (quota > rate_limit), but it
+// takes the (provider, keyID, keyName) tuple as arguments instead of deriving
+// them from ctx via lastAttemptProviderAndKey. The retry loop already knows
+// which key it just failed with — passing through keeps the marker path free
+// of a ctx scan and avoids re-deriving the same value PostLLMHook will later
+// derive independently.
+//
+// The function returns ok=false when the error is not interesting to the
+// configured policy; the marker uses that to skip the Mark call entirely so
+// we don't bump counters on policy-non-matching errors.
+//
+// Quota-first precedence mirrors (*CooldownPlugin).classify — a single error
+// must never be attributed to both rate_limit and quota.
+func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvider, keyID string, keyName string, bifrostErr *schemas.BifrostError) (ttl time.Duration, rKeyID string, rKeyName string, kind CooldownKind, ok bool) {
+	if bifrostErr == nil || keyID == "" {
+		return 0, "", "", "", false
+	}
 	var policy *schemas.CooldownPolicy
 	if ctx != nil {
 		if v, has := ctx.Value(schemas.BifrostContextKeyCooldownPolicy).(*schemas.CooldownPolicy); has && v != nil {
@@ -830,7 +905,6 @@ func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schem
 	if policy == nil {
 		policy = schemas.DefaultCooldownPolicy(provider)
 	}
-
 	if policy.Quota != nil && policy.Quota.MatchesRule(bifrostErr) {
 		return time.Duration(policy.Quota.TTLSeconds) * time.Second, keyID, keyName, CooldownKindQuota, true
 	}

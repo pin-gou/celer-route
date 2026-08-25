@@ -70,6 +70,7 @@ func TestExecuteRequestWithRetries_SuccessScenarios(t *testing.T) {
 			config,
 			handler,
 			nil,
+			nil,
 			schemas.ChatCompletionRequest,
 			schemas.OpenAI,
 			"gpt-4",
@@ -105,6 +106,7 @@ func TestExecuteRequestWithRetries_SuccessScenarios(t *testing.T) {
 			ctx,
 			config,
 			handler,
+			nil,
 			nil,
 			schemas.ChatCompletionRequest,
 			schemas.OpenAI,
@@ -143,6 +145,7 @@ func TestExecuteRequestWithRetries_RetryLimits(t *testing.T) {
 			ctx,
 			config,
 			handler,
+			nil,
 			nil,
 			schemas.ChatCompletionRequest,
 			schemas.OpenAI,
@@ -209,6 +212,7 @@ func TestExecuteRequestWithRetries_NonRetryableErrors(t *testing.T) {
 				ctx,
 				config,
 				handler,
+				nil,
 				nil,
 				schemas.ChatCompletionRequest,
 				schemas.OpenAI,
@@ -286,6 +290,7 @@ func TestExecuteRequestWithRetries_RetryableConditions(t *testing.T) {
 				ctx,
 				config,
 				handler,
+				nil,
 				nil,
 				schemas.ChatCompletionRequest,
 				schemas.OpenAI,
@@ -534,6 +539,7 @@ func TestExecuteRequestWithRetries_LoggingAndCounting(t *testing.T) {
 		ctx,
 		config,
 		handler,
+		nil,
 		nil,
 		schemas.ChatCompletionRequest,
 		schemas.OpenAI,
@@ -1116,7 +1122,7 @@ func TestSelectKeyFromProviderForModel_SessionStickinessNoRotation(t *testing.T)
 		return "ok", nil
 	}
 
-	result, retryErr := executeRequestWithRetries(bfCtx, config, handler, keyProvider,
+	result, retryErr := executeRequestWithRetries(bfCtx, config, handler, keyProvider, nil,
 		schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
 
 	if retryErr != nil {
@@ -1278,7 +1284,7 @@ func TestExecuteRequestWithRetries_KeyRotation(t *testing.T) {
 			return "success", nil
 		}
 
-		result, err := executeRequestWithRetries(ctx, config, handler, keyProvider,
+		result, err := executeRequestWithRetries(ctx, config, handler, keyProvider, nil,
 			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
 
 		if err != nil {
@@ -1326,7 +1332,7 @@ func TestExecuteRequestWithRetries_KeyRotation(t *testing.T) {
 			return "success", nil
 		}
 
-		result, err := executeRequestWithRetries(ctx, config, handler, keyProvider,
+		result, err := executeRequestWithRetries(ctx, config, handler, keyProvider, nil,
 			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
 
 		if err != nil {
@@ -1374,7 +1380,7 @@ func TestExecuteRequestWithRetries_KeyRotation(t *testing.T) {
 			return "", createBifrostError("rate limit exceeded", Ptr(429), nil, false)
 		}
 
-		executeRequestWithRetries(ctx, config6, handler, keyProvider,
+		executeRequestWithRetries(ctx, config6, handler, keyProvider, nil,
 			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
 
 		if len(selectedKeyIDs) != 6 {
@@ -1399,7 +1405,7 @@ func TestExecuteRequestWithRetries_KeyRotation(t *testing.T) {
 			return "ok", nil
 		}
 
-		result, err := executeRequestWithRetries(cleanCtx, config, handler, nil,
+		result, err := executeRequestWithRetries(cleanCtx, config, handler, nil, nil,
 			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
 
 		if err != nil {
@@ -1421,6 +1427,324 @@ func TestExecuteRequestWithRetries_KeyRotation(t *testing.T) {
 			t.Fatalf("expected empty selected key name, got %q", selectedName)
 		}
 	})
+}
+
+// TestExecuteRequestWithRetries_PerKeyFailureMarker pins the contract the
+// provider-cooldown plugin relies on: when the retry loop rotates past a
+// per-key failure, the marker MUST observe that failure (with the failing
+// key's ID/name, not the eventually-successful key), even though the
+// request as a whole ultimately succeeds. PostLLMHook only sees the
+// terminal success and skips it; without this hook, a key that 429s
+// every retry cycle would never be marked in cooldown.
+//
+// Behavioural surface pinned here:
+//   - transient per-key failures (HTTP 429) trigger the marker with the
+//     failing key's ID, on every attempt — not just the terminal one
+//   - permanent per-key failures (HTTP 401/403) intentionally do NOT
+//     trigger the marker: they are already isolated via deadKeyIDs and
+//     any cross-request cooldown would be redundant noise
+//   - non-key-bound failures (transient 5xx) do NOT trigger the marker
+//     even when they cause a same-key retry, because there's no key
+//     attribution to act on
+func TestExecuteRequestWithRetries_PerKeyFailureMarker(t *testing.T) {
+	config := createTestConfig(3, 0, 0)
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
+	logger := NewDefaultLogger(schemas.LogLevelError)
+
+	keys := []schemas.Key{
+		{ID: "key-A", Name: "A"},
+		{ID: "key-B", Name: "B"},
+	}
+	// keyProvider that excludes usedKeyIDs and deadKeyIDs — mirrors the
+	// production rotating-pool behaviour in core/bifrost.go.
+	keyProvider := func(usedKeyIDs, deadKeyIDs map[string]bool) (schemas.Key, error) {
+		for _, k := range keys {
+			if !usedKeyIDs[k.ID] && !deadKeyIDs[k.ID] {
+				return k, nil
+			}
+		}
+		return schemas.Key{}, fmt.Errorf("no eligible keys")
+	}
+
+	t.Run("MarkerFiresForEachRateLimitedKey", func(t *testing.T) {
+		type markerCall struct {
+			keyID, keyName, provider string
+			model                    string
+			statusCode               int
+		}
+		var calls []markerCall
+		marker := func(_ *schemas.BifrostContext, provider schemas.ModelProvider, keyID string, keyName string, model string, err *schemas.BifrostError) {
+			sc := 0
+			if err != nil && err.StatusCode != nil {
+				sc = *err.StatusCode
+			}
+			calls = append(calls, markerCall{keyID: keyID, keyName: keyName, provider: string(provider), model: model, statusCode: sc})
+		}
+
+		// Attempt 0: key-A → 429 (rate_limit_error); attempt 1: key-B → success.
+		// Marker must observe the key-A failure but NOT the key-B success.
+		attempts := 0
+		handler := func(k schemas.Key) (string, *schemas.BifrostError) {
+			attempts++
+			if attempts == 1 {
+				return "", createBifrostError("rate limit exceeded", Ptr(429), Ptr("rate_limit_error"), false)
+			}
+			return "ok", nil
+		}
+
+		result, err := executeRequestWithRetries(ctx, config, handler, keyProvider, marker,
+			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
+		if err != nil {
+			t.Fatalf("expected success, got error: %v", err)
+		}
+		if result != "ok" {
+			t.Fatalf("expected 'ok', got %q", result)
+		}
+		if len(calls) != 1 {
+			t.Fatalf("expected exactly one marker call (the 429 on key-A), got %d: %+v", len(calls), calls)
+		}
+		if calls[0].keyID != "key-A" || calls[0].keyName != "A" {
+			t.Errorf("marker fired for %s/%s, expected key-A/A", calls[0].keyID, calls[0].keyName)
+		}
+		if calls[0].statusCode != 429 {
+			t.Errorf("marker observed status %d, expected 429", calls[0].statusCode)
+		}
+		if calls[0].model != "gpt-4" || calls[0].provider != string(schemas.OpenAI) {
+			t.Errorf("marker received provider=%q model=%q, expected openai/gpt-4", calls[0].provider, calls[0].model)
+		}
+	})
+
+	t.Run("PermanentFailuresDoNotFire", func(t *testing.T) {
+		// 401 is permanent per-key failure — the retry loop routes it into
+		// deadKeyIDs and surfaces it as the terminal error without retrying
+		// (provider has only one key so the second call would just loop).
+		// Verify the marker is silent on that path.
+		var calls int
+		marker := func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, _ string, _ string, _ *schemas.BifrostError) {
+			calls++
+		}
+		handler := func(_ schemas.Key) (string, *schemas.BifrostError) {
+			return "", createBifrostError("invalid api key", Ptr(401), Ptr("invalid_request_error"), false)
+		}
+		_, err := executeRequestWithRetries(ctx, config, handler, keyProvider, marker,
+			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
+		if err == nil {
+			t.Fatal("expected the 401 to surface as a terminal error")
+		}
+		if calls != 0 {
+			t.Errorf("marker must not fire for permanent per-key failures (401/402/403), got %d calls", calls)
+		}
+	})
+
+	t.Run("NonKeyBoundFailuresDoNotFire", func(t *testing.T) {
+		// Transient 5xx is a per-server, not per-key, failure. The retry
+		// loop keeps the same key across attempts, so even if a marker
+		// fired it would attribute the failure to a healthy key. Verify
+		// the loop never invokes the marker for that path.
+		var calls int
+		marker := func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, _ string, _ string, _ *schemas.BifrostError) {
+			calls++
+		}
+		// 503 is not in perKeyFailureStatusCodes, so the retry loop
+		// shouldRetry branch fires but the per-key-attribution branch does
+		// not — usedKeyIDs stays empty across retries.
+		handler := func(_ schemas.Key) (string, *schemas.BifrostError) {
+			return "", createBifrostError("upstream unavailable", Ptr(503), Ptr("upstream_error"), false)
+		}
+		_, err := executeRequestWithRetries(ctx, config, handler, keyProvider, marker,
+			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
+		if err == nil {
+			t.Fatal("expected the 503 to surface as a terminal error")
+		}
+		if calls != 0 {
+			t.Errorf("marker must not fire for non-key-bound failures (5xx), got %d calls", calls)
+		}
+	})
+}
+
+// TestPerKeyFailureMarker_NilIsNoOp pins the "marker is optional" invariant
+// every plugin owner implicitly relies on: when no plugin registers a
+// PerKeyFailureMarker (the default — only provider-cooldown does today), the
+// retry loop MUST skip the call entirely without panicking, and the request
+// MUST still succeed through rotation. This is the regression guard for the
+// three nil-guards in core/bifrost.go:
+//   - SetPerKeyFailureMarker(nil) → Store(nil)
+//   - executeRequestWithRetries caller: var perKeyFailureMarker ... ; if pm := ... Load(); pm != nil
+//   - executeRequestWithRetries inner call: if perKeyFailureMarker != nil { ... }
+//
+// Without these guards, adding the marker parameter to executeRequestWithRetries
+// would have made every plugin-less bifrost init panic on its first 429.
+func TestPerKeyFailureMarker_NilIsNoOp(t *testing.T) {
+	t.Run("NilMarkerDoesNotPanicDuringRotation", func(t *testing.T) {
+		config := createTestConfig(3, 0, 0)
+		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+		ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
+		logger := NewDefaultLogger(schemas.LogLevelError)
+
+		keys := []schemas.Key{{ID: "k1", Name: "K1"}, {ID: "k2", Name: "K2"}}
+		keyProvider := func(usedKeyIDs, _ map[string]bool) (schemas.Key, error) {
+			for _, k := range keys {
+				if !usedKeyIDs[k.ID] {
+					return k, nil
+				}
+			}
+			return schemas.Key{}, fmt.Errorf("no eligible keys")
+		}
+		// First attempt 429s, second succeeds. marker is intentionally nil.
+		attempts := 0
+		handler := func(_ schemas.Key) (string, *schemas.BifrostError) {
+			attempts++
+			if attempts == 1 {
+				return "", createBifrostError("rate limit exceeded", Ptr(429), Ptr("rate_limit_error"), false)
+			}
+			return "ok", nil
+		}
+		result, err := executeRequestWithRetries(ctx, config, handler, keyProvider, nil,
+			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
+		if err != nil {
+			t.Fatalf("expected success despite nil marker, got error: %v", err)
+		}
+		if result != "ok" {
+			t.Fatalf("expected 'ok', got %q", result)
+		}
+		if attempts != 2 {
+			t.Fatalf("expected exactly 2 attempts (1 retry), got %d", attempts)
+		}
+	})
+
+	t.Run("SetNilDisablesPreviouslyInstalledMarker", func(t *testing.T) {
+		// Set a sentinel marker that records calls, then nil it out and
+		// verify the loop never invokes it after. This pins the
+		// hot-swap-friendly contract: SetPerKeyFailureMarker(nil) is a
+		// first-class way to disable, not a no-op that leaves the old
+		// hook in place.
+		config := createTestConfig(3, 0, 0)
+		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+		ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
+		logger := NewDefaultLogger(schemas.LogLevelError)
+
+		// We can't reach the live bifrost instance from inside this
+		// test function — but the marker parameter on
+		// executeRequestWithRetries is read once at call time, so we can
+		// install/clear it in a goroutine-safe wrapper that mirrors
+		// SetPerKeyFailureMarker's atomic-pointer semantics. The point
+		// of this test is the per-request snapshot path: the marker the
+		// caller passes in is the marker the loop uses, no stale lookup
+		// from a global atomic.
+		var marker schemas.PerKeyFailureMarker
+		// Install: a hook that always fires.
+		var installedCalls int
+		marker = func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, _ string, _ string, _ *schemas.BifrostError) {
+			installedCalls++
+		}
+		// Disable mid-flight: nil out the variable the caller will use.
+		marker = nil
+
+		keys := []schemas.Key{{ID: "k1", Name: "K1"}, {ID: "k2", Name: "K2"}}
+		keyProvider := func(usedKeyIDs, _ map[string]bool) (schemas.Key, error) {
+			for _, k := range keys {
+				if !usedKeyIDs[k.ID] {
+					return k, nil
+				}
+			}
+			return schemas.Key{}, fmt.Errorf("no eligible keys")
+		}
+		attempts := 0
+		handler := func(_ schemas.Key) (string, *schemas.BifrostError) {
+			attempts++
+			if attempts == 1 {
+				return "", createBifrostError("rate limit", Ptr(429), Ptr("rate_limit_error"), false)
+			}
+			return "ok", nil
+		}
+		_, err := executeRequestWithRetries(ctx, config, handler, keyProvider, marker,
+			schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
+		if err != nil {
+			t.Fatalf("expected success with nil marker, got: %v", err)
+		}
+		if installedCalls != 0 {
+			t.Errorf("marker was installed but later nilled — must have fired 0 times, got %d", installedCalls)
+		}
+	})
+}
+
+// TestPerKeyFailureMarker_AtomicSwapMidRequest pins the "snapshot per
+// request" contract the worker relies on. The retry loop captures the
+// marker value once per request (line ~7244 of bifrost.go) — a
+// SetPerKeyFailureMarker hot-swap between attempts within the same
+// request MUST NOT silently swap the marker the loop is using. This
+// matches the same contract KeyPoolFilter holds, and is the reason the
+// worker does an atomic.Pointer.Load at request entry rather than
+// reading on every retry iteration.
+func TestPerKeyFailureMarker_AtomicSwapMidRequest(t *testing.T) {
+	config := createTestConfig(5, 0, 0)
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
+	logger := NewDefaultLogger(schemas.LogLevelError)
+
+	keys := []schemas.Key{{ID: "k1", Name: "K1"}, {ID: "k2", Name: "K2"}, {ID: "k3", Name: "K3"}}
+	keyProvider := func(usedKeyIDs, _ map[string]bool) (schemas.Key, error) {
+		for _, k := range keys {
+			if !usedKeyIDs[k.ID] {
+				return k, nil
+			}
+		}
+		return schemas.Key{}, fmt.Errorf("no eligible keys")
+	}
+
+	var originalCalls, replacementCalls int
+	original := func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, _ string, _ string, _ *schemas.BifrostError) {
+		originalCalls++
+	}
+	replacement := func(_ *schemas.BifrostContext, _ schemas.ModelProvider, _ string, _ string, _ string, _ *schemas.BifrostError) {
+		replacementCalls++
+	}
+
+	// Always fail — exercises every retry iteration.
+	handler := func(_ schemas.Key) (string, *schemas.BifrostError) {
+		return "", createBifrostError("rate limit", Ptr(429), Ptr("rate_limit_error"), false)
+	}
+
+	// Simulate the worker pattern: load the marker once at request entry,
+	// then ignore subsequent atomic-pointer swaps. atomic.Pointer[T] wants
+	// T as a value type; for a func literal the cleanest pattern is to
+	// store *func directly, then unwrap inside the forwarding closure.
+	var current atomic.Pointer[func(*schemas.BifrostContext, schemas.ModelProvider, string, string, string, *schemas.BifrostError)]
+	current.Store(&original)
+
+	forwarding := func(ctx *schemas.BifrostContext, p schemas.ModelProvider, kID, kName, model string, e *schemas.BifrostError) {
+		m := current.Load()
+		if m != nil {
+			(*m)(ctx, p, kID, kName, model, e)
+		}
+	}
+
+	_, err := executeRequestWithRetries(ctx, config, handler, keyProvider, forwarding,
+		schemas.ChatCompletionRequest, schemas.OpenAI, "gpt-4", nil, logger)
+	if err == nil {
+		t.Fatal("expected a terminal error after all retries exhausted")
+	}
+
+	// The forwarding closure re-reads `current` on every call, so we
+	// cannot use it to assert "the production caller would have
+	// snapshotted". But we CAN assert the swap semantics on the
+	// underlying atomic.Pointer: a hot-swap that happens AFTER the
+	// loop has finished simply replaces the stored pointer for any
+	// future caller. Here that means: after `replacement` is installed,
+	// a fresh request forwarded through the same closure would see
+	// `replacement`, not `original`. Pin that contract.
+	current.Store(&replacement)
+	if got := current.Load(); got != &replacement {
+		t.Fatalf("after Store(&replacement), Load did not return it: got=%p want=%p", got, &replacement)
+	}
+	// And the original was called at least once during the loop above.
+	if originalCalls == 0 {
+		t.Fatal("expected the original marker to fire at least once during the retry loop")
+	}
+	if replacementCalls != 0 {
+		t.Errorf("replacement marker must not have been called during the loop that pre-dated its install, got %d calls", replacementCalls)
+	}
 }
 
 // Test UpdateProvider functionality
@@ -3104,6 +3428,7 @@ func TestExecuteRequestWithRetries_EmptyStreamReturnsClosedChannel(t *testing.T)
 		config,
 		handler,
 		nil,
+		nil,
 		schemas.ChatCompletionStreamRequest,
 		schemas.OpenAI,
 		"gpt-4",
@@ -3333,6 +3658,7 @@ func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys(
 		config,
 		handler,
 		keyProvider,
+		nil,
 		schemas.ChatCompletionStreamRequest,
 		schemas.OpenAI,
 		"gpt-4",

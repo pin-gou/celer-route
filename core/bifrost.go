@@ -87,32 +87,33 @@ type ChannelMessage struct {
 type Bifrost struct {
 	ctx                 *schemas.BifrostContext
 	cancel              context.CancelFunc
-	account             schemas.Account                       // account interface
-	llmPlugins          atomic.Pointer[[]schemas.LLMPlugin]   // list of llm plugins
-	mcpPlugins          atomic.Pointer[[]schemas.MCPPlugin]   // list of mcp plugins
-	providers           atomic.Pointer[[]schemas.Provider]    // list of providers
-	requestQueues       sync.Map                              // provider request queues (thread-safe), stores *ProviderQueue
-	waitGroups          sync.Map                              // wait groups for each provider (thread-safe)
-	oldWorkerCleanups   sync.WaitGroup                        // tracks async cleanup of old workers after provider updates
-	retiredWorkerWaits  sync.Map                              // provider old-worker cleanup wait groups (thread-safe), stores *sync.WaitGroup
-	providerLifecycleMu sync.RWMutex                          // prevents provider updates from racing with shutdown cleanup waits
-	providerMutexes     sync.Map                              // mutexes for each provider to prevent concurrent updates (thread-safe)
-	channelMessagePool  sync.Pool                             // Pool for ChannelMessage objects, initial pool size is set in Init
-	responseChannelPool sync.Pool                             // Pool for response channels, initial pool size is set in Init
-	errorChannelPool    sync.Pool                             // Pool for error channels, initial pool size is set in Init
-	responseStreamPool  sync.Pool                             // Pool for response stream channels, initial pool size is set in Init
-	pluginPipelinePool  sync.Pool                             // Pool for PluginPipeline objects
-	bifrostRequestPool  sync.Pool                             // Pool for BifrostRequest objects
-	logger              schemas.Logger                        // logger instance, default logger is used if not provided
-	tracer              atomic.Value                          // tracer for distributed tracing (stores schemas.Tracer, NoOpTracer if not configured)
-	modelCatalog        schemas.ModelInfoProvider             // model pricing/capability catalog exposed to plugins via ctx.GetModelInfo (nil if not configured); set once from BifrostConfig at Init
-	MCPManager          mcp.MCPManagerInterface               // MCP integration manager (nil if MCP not configured)
-	mcpCredStore        schemas.MCPCredentialStore            // Per-call credential resolver for MCP tool execution (wraps oauth2Provider for OAuth-flavored auth types)
-	mcpInitOnce         sync.Once                             // Ensures MCP manager is initialized only once
-	dropExcessRequests  atomic.Bool                           // If true, in cases where the queue is full, requests will not wait for the queue to be empty and will be dropped instead.
-	keySelector         schemas.KeySelector                   // Custom key selector function
-	keyPoolFilter       atomic.Pointer[schemas.KeyPoolFilter] // optional hook to veto keys before selection (nil pointer = all eligible); hot-swappable via SetKeyPoolFilter
-	kvStore             schemas.KVStore                       // optional KV store for session stickiness (nil = disabled)
+	account             schemas.Account                             // account interface
+	llmPlugins          atomic.Pointer[[]schemas.LLMPlugin]         // list of llm plugins
+	mcpPlugins          atomic.Pointer[[]schemas.MCPPlugin]         // list of mcp plugins
+	providers           atomic.Pointer[[]schemas.Provider]          // list of providers
+	requestQueues       sync.Map                                    // provider request queues (thread-safe), stores *ProviderQueue
+	waitGroups          sync.Map                                    // wait groups for each provider (thread-safe)
+	oldWorkerCleanups   sync.WaitGroup                              // tracks async cleanup of old workers after provider updates
+	retiredWorkerWaits  sync.Map                                    // provider old-worker cleanup wait groups (thread-safe), stores *sync.WaitGroup
+	providerLifecycleMu sync.RWMutex                                // prevents provider updates from racing with shutdown cleanup waits
+	providerMutexes     sync.Map                                    // mutexes for each provider to prevent concurrent updates (thread-safe)
+	channelMessagePool  sync.Pool                                   // Pool for ChannelMessage objects, initial pool size is set in Init
+	responseChannelPool sync.Pool                                   // Pool for response channels, initial pool size is set in Init
+	errorChannelPool    sync.Pool                                   // Pool for error channels, initial pool size is set in Init
+	responseStreamPool  sync.Pool                                   // Pool for response stream channels, initial pool size is set in Init
+	pluginPipelinePool  sync.Pool                                   // Pool for PluginPipeline objects
+	bifrostRequestPool  sync.Pool                                   // Pool for BifrostRequest objects
+	logger              schemas.Logger                              // logger instance, default logger is used if not provided
+	tracer              atomic.Value                                // tracer for distributed tracing (stores schemas.Tracer, NoOpTracer if not configured)
+	modelCatalog        schemas.ModelInfoProvider                   // model pricing/capability catalog exposed to plugins via ctx.GetModelInfo (nil if not configured); set once from BifrostConfig at Init
+	MCPManager          mcp.MCPManagerInterface                     // MCP integration manager (nil if MCP not configured)
+	mcpCredStore        schemas.MCPCredentialStore                  // Per-call credential resolver for MCP tool execution (wraps oauth2Provider for OAuth-flavored auth types)
+	mcpInitOnce         sync.Once                                   // Ensures MCP manager is initialized only once
+	dropExcessRequests  atomic.Bool                                 // If true, in cases where the queue is full, requests will not wait for the queue to be empty and will be dropped instead.
+	keySelector         schemas.KeySelector                         // Custom key selector function
+	keyPoolFilter       atomic.Pointer[schemas.KeyPoolFilter]       // optional hook to veto keys before selection (nil pointer = all eligible); hot-swappable via SetKeyPoolFilter
+	perKeyFailureMarker atomic.Pointer[schemas.PerKeyFailureMarker] // optional hook called per failed attempt in executeRequestWithRetries (nil pointer = no-op); hot-swappable via SetPerKeyFailureMarker — lets cross-request key-state see the 429 a later retry succeeded around, which PostLLMHook never observes
+	kvStore             schemas.KVStore                             // optional KV store for session stickiness (nil = disabled)
 }
 
 // ProviderQueue wraps a provider's request channel with lifecycle management
@@ -418,6 +419,21 @@ func (bifrost *Bifrost) SetKeyPoolFilter(f schemas.KeyPoolFilter) {
 		return
 	}
 	bifrost.keyPoolFilter.Store(&f)
+}
+
+// SetPerKeyFailureMarker atomically installs a new PerKeyFailureMarker on the
+// running Bifrost instance. Pass nil to disable. The marker is invoked from
+// executeRequestWithRetries on every per-key failure (the same point that
+// pushes the key into usedKeyIDs/deadKeyIDs) so cross-request key-state
+// — e.g. the provider-cooldown plugin — observes the 429 a later retry
+// succeeded around. PostLLMHook only fires on the terminal outcome and
+// therefore misses these intermediate failures; the marker closes that gap.
+func (bifrost *Bifrost) SetPerKeyFailureMarker(f schemas.PerKeyFailureMarker) {
+	if f == nil {
+		bifrost.perKeyFailureMarker.Store(nil)
+		return
+	}
+	bifrost.perKeyFailureMarker.Store(&f)
 }
 
 // newFixedKeyProvider builds a keyProvider closure for the canRotate=false
@@ -6285,6 +6301,7 @@ func executeRequestWithRetries[T any](
 	config *schemas.ProviderConfig,
 	requestHandler func(key schemas.Key) (T, *schemas.BifrostError),
 	keyProvider func(usedKeyIDs, deadKeyIDs map[string]bool) (schemas.Key, error),
+	perKeyFailureMarker schemas.PerKeyFailureMarker,
 	requestType schemas.RequestType,
 	providerKey schemas.ModelProvider,
 	model string,
@@ -6819,6 +6836,16 @@ func executeRequestWithRetries[T any](
 					usedKeyIDs = make(map[string]bool)
 				}
 				usedKeyIDs[currentKey.ID] = true
+				// Fire the PerKeyFailureMarker so cross-request key-state
+				// (e.g. provider-cooldown) sees the 429/quota failure even
+				// when a later retry succeeds — PostLLMHook only observes the
+				// terminal outcome and would miss this otherwise. Permanent
+				// failures (401/402/403) are intentionally NOT signalled: they
+				// are already isolated for the rest of this request via
+				// deadKeyIDs and any cross-request cooldown would be redundant.
+				if perKeyFailureMarker != nil {
+					perKeyFailureMarker(ctx, providerKey, currentKey.ID, currentKey.Name, model, bifrostError)
+				}
 			}
 		}
 		lastWasPerKeyFailure = isPerKeyFailure
@@ -7210,6 +7237,15 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 		// triggered by CheckFirstStreamChunkForError could run against a
 		// pipeline the previous attempt's provider goroutine has already
 		// returned to the pool via its deferred finalizer.
+		// Snapshot the PerKeyFailureMarker once per request so a SetPerKeyFailureMarker
+		// hot-swap between attempts cannot land mid-retry-loop. Mirrors the keyProvider
+		// pattern (snapshot-at-construction) — the retry loop is single-threaded for
+		// this request, so atomic.Pointer.Load is enough.
+		var perKeyFailureMarker schemas.PerKeyFailureMarker
+		if pm := bifrost.perKeyFailureMarker.Load(); pm != nil {
+			perKeyFailureMarker = *pm
+		}
+
 		if IsStreamRequestType(req.RequestType) {
 			stream, bifrostError = executeRequestWithRetries(req.Context, config, func(k schemas.Key) (chan *schemas.BifrostStreamChunk, *schemas.BifrostError) {
 				if aliasConfig := k.Aliases.ResolveConfig(originalModelRequested); aliasConfig != nil {
@@ -7308,7 +7344,7 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					})
 				}
 				return streamCh, streamErr
-			}, keyProvider, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
+			}, keyProvider, perKeyFailureMarker, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
 		} else {
 			result, bifrostError = executeRequestWithRetries(req.Context, config, func(k schemas.Key) (*schemas.BifrostResponse, *schemas.BifrostError) {
 				if aliasConfig := k.Aliases.ResolveConfig(originalModelRequested); aliasConfig != nil {
@@ -7321,7 +7357,7 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 				req.SetModel(resolvedModel)
 				attemptRoutingInfo = schemas.BuildRoutingInfo(req.Context, provider.GetProviderKey(), originalModelRequested, k)
 				return bifrost.handleProviderRequest(provider, config, req, k, keys)
-			}, keyProvider, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
+			}, keyProvider, perKeyFailureMarker, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
 		}
 
 		// For streaming with an error, route release through the LAST attempt's

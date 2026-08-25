@@ -61,6 +61,23 @@ func TestLoadBuiltinPlugins_ProviderCooldown_DefaultOn(t *testing.T) {
 	if server.KeyPoolFilter == nil {
 		t.Fatal("KeyPoolFilter is nil, expected non-nil after default-on loading")
 	}
+	// PerKeyFailureMarker is wired symmetrically with the filter (same State,
+	// same lifecycle). We can't reach into bifrost's private atomic.Pointer
+	// directly, but we CAN reach the loaded plugin instance and assert the
+	// State is populated — if it is, the marker closure (captured by the
+	// bifrost client) can act on it.
+	cp, cpErr := lib.FindPluginAs[*providercooldown.CooldownPlugin](server.Config, providercooldown.PluginName)
+	if cpErr != nil {
+		t.Fatalf("FindPluginAs(provider-cooldown) failed: %v", cpErr)
+	}
+	if cp == nil || cp.State == nil {
+		t.Fatal("expected provider-cooldown plugin instance with non-nil State after default-on loading")
+	}
+	// AsMarker must return a non-nil closure even with a nil logger — the
+	// transport wires it with the same logger it passes to AsFilter.
+	if cp.State.AsMarker(nil) == nil {
+		t.Fatal("AsMarker returned nil — bifrost client would skip the marker entirely")
+	}
 }
 
 // TestLoadBuiltinPlugins_ProviderCooldown_ExplicitDisabled verifies that when
@@ -248,10 +265,10 @@ func TestInstantiatePlugin_RTK_FreshInstallSeed(t *testing.T) {
 
 	// Simulate the fresh-install seed config that loadBuiltinPlugins creates.
 	seedConfig := map[string]any{
-		"enabled":                true,
-		"enable_renderers":       true,
-		"apply_to_tool_results":  true,
-		"snapshot_mode":          "off",
+		"enabled":               true,
+		"enable_renderers":      true,
+		"apply_to_tool_results": true,
+		"snapshot_mode":         "off",
 	}
 
 	plugin, err := InstantiatePlugin(context.Background(), "rtk", nil, seedConfig, config)

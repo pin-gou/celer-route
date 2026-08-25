@@ -217,6 +217,15 @@ type BifrostHTTPServer struct {
 	// selection. Nil = all keys eligible (the default).
 	KeyPoolFilter schemas.KeyPoolFilter
 
+	// PerKeyFailureMarker is the symmetric cross-request key-state hook:
+	// bifrost's retry loop invokes it on every transient per-key failure
+	// (the same point it pushes the key into usedKeyIDs), so a plugin like
+	// provider-cooldown can mark the failed key in cooldown even when a
+	// later retry succeeded — PostLLMHook alone would miss the intermediate
+	// 429. Wired at the same boundaries as KeyPoolFilter (Bootstrap +
+	// ReloadConfig + SyncLoadedPlugin). Nil = no per-key failure accounting.
+	PerKeyFailureMarker schemas.PerKeyFailureMarker
+
 	Server *fasthttp.Server
 	Router *router.Router
 
@@ -1253,6 +1262,14 @@ func (s *BifrostHTTPServer) ReloadClientConfigFromConfigStore(ctx context.Contex
 			Logger:             logger,
 			KeyPoolFilter:      s.KeyPoolFilter,
 		})
+		// Wire the per-key-failure marker symmetrically with the filter —
+		// loadBuiltinPlugins stashed it on s.PerKeyFailureMarker pre-Init,
+		// and we hand it to the bifrost client here now that s.Client is
+		// live. Mirrors KeyPoolFilter wiring; both come from the same
+		// cooldown plugin State and must be kept in sync on every reload.
+		if s.PerKeyFailureMarker != nil {
+			s.Client.SetPerKeyFailureMarker(s.PerKeyFailureMarker)
+		}
 		if err := s.Client.UpdateToolManagerConfig(
 			s.Config.ClientConfig.MCPAgentDepth,
 			s.Config.ClientConfig.MCPToolExecutionTimeout,
@@ -1990,11 +2007,18 @@ func (s *BifrostHTTPServer) SyncLoadedPlugin(ctx context.Context, name string, p
 	// closure captures. Without this, after a plugin reload the filter would
 	// still point at the old (now-orphaned) State and new Mark() calls would
 	// never reach it — the cooldown would silently stop working.
+	//
+	// The PerKeyFailureMarker is wired the same way: bifrost's retry loop
+	// invokes it on every per-key failure, and the marker must capture the
+	// live State (not the orphaned one) so cross-request cooldown bookkeeping
+	// keeps working after a reload.
 	if cp, ok := plugin.(*providercooldown.CooldownPlugin); ok && cp.State != nil {
 		f := cp.State.AsFilter(logger)
+		m := cp.State.AsMarker(logger)
 		s.KeyPoolFilter = f
 		s.Client.SetKeyPoolFilter(f)
-		logger.Info("provider-cooldown: filter rewired after plugin reload")
+		s.Client.SetPerKeyFailureMarker(m)
+		logger.Info("provider-cooldown: filter+marker rewired after plugin reload")
 	}
 	// 3d. Special-case: rtk caches a typed pointer so the admin API can
 	// resolve the live plugin instance after a reload. The pointer is
@@ -2685,6 +2709,13 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize bifrost: %v", err)
 	}
 	logger.Info("bifrost client initialized")
+	// Wire the per-key-failure marker now that s.Client is live. s.Client
+	// was nil during loadBuiltinPlugins, so we stashed the marker on
+	// s.PerKeyFailureMarker then and consume it here — same lifecycle as
+	// KeyPoolFilter, same source (cooldown plugin State).
+	if s.PerKeyFailureMarker != nil {
+		s.Client.SetPerKeyFailureMarker(s.PerKeyFailureMarker)
+	}
 	// Sync plugin execution order from config to core (defensive — Init receives sorted list,
 	// but this ensures order consistency if the loading path changes in the future)
 	s.Client.ReorderPlugins(s.Config.GetPluginOrder())

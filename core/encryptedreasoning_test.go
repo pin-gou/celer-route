@@ -90,7 +90,7 @@ func TestExecuteRequestWithRetries_StripsEncryptedContentAndRetries(t *testing.T
 		return "success", nil
 	}
 
-	result, err := executeRequestWithRetries(ctx, config, handler, nil,
+	result, err := executeRequestWithRetries(ctx, config, handler, nil, nil,
 		schemas.ResponsesRequest, schemas.OpenAI, "gpt-5.6-sol", req, logger)
 
 	if err != nil {
@@ -137,7 +137,7 @@ func TestExecuteRequestWithRetries_EncryptedContentStripRetriesOnce(t *testing.T
 		return "", encryptedContentError()
 	}
 
-	_, err := executeRequestWithRetries(ctx, config, handler, nil,
+	_, err := executeRequestWithRetries(ctx, config, handler, nil, nil,
 		schemas.ResponsesRequest, schemas.OpenAI, "gpt-5.6-sol", req, logger)
 
 	if err == nil {
@@ -177,7 +177,7 @@ func TestExecuteRequestWithRetries_FailSoftRetrySkipsBackoff(t *testing.T) {
 	}
 
 	start := time.Now()
-	result, err := executeRequestWithRetries(ctx, config, handler, nil,
+	result, err := executeRequestWithRetries(ctx, config, handler, nil, nil,
 		schemas.ResponsesRequest, schemas.OpenAI, "gpt-5.6-sol", req, logger)
 	elapsed := time.Since(start)
 
@@ -222,7 +222,7 @@ func TestExecuteRequestWithRetries_OrdinaryRetryPaysBackoff(t *testing.T) {
 	}
 
 	start := time.Now()
-	result, err := executeRequestWithRetries(ctx, config, handler, nil,
+	result, err := executeRequestWithRetries(ctx, config, handler, nil, nil,
 		schemas.ResponsesRequest, schemas.OpenAI, "gpt-5.6-sol", req, logger)
 	elapsed := time.Since(start)
 
@@ -286,7 +286,7 @@ func TestExecuteRequestWithRetries_FailSoftAttemptCountsTowardRotationAccounting
 		}
 	}
 
-	result, err := executeRequestWithRetries(ctx, config, handler, keyProvider,
+	result, err := executeRequestWithRetries(ctx, config, handler, keyProvider, nil,
 		schemas.ResponsesRequest, schemas.OpenAI, "gpt-5.6-sol", req, logger)
 
 	if err != nil {
@@ -337,7 +337,7 @@ func TestExecuteRequestWithRetries_NoStripWhenNothingEncrypted(t *testing.T) {
 		return "", encryptedContentError()
 	}
 
-	if _, err := executeRequestWithRetries(ctx, config, handler, nil,
+	if _, err := executeRequestWithRetries(ctx, config, handler, nil, nil,
 		schemas.ResponsesRequest, schemas.OpenAI, "gpt-5.6-sol", req, logger); err == nil {
 		t.Fatal("expected the upstream error to be returned")
 	}
