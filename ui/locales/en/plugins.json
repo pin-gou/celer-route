@@ -364,6 +364,7 @@
 		"noActiveKeys": "No keys are currently in cooldown",
 		"reasonRateLimit": "Rate limit",
 		"reasonQuota": "Quota exhausted",
+		"keylessLabel": "(keyless)",
 		"expiresAt": "Expires: {{date}}",
 		"expiresIn": "(about {{in}})",
 		"expires": "Expires: {{date}} (about {{in}})",

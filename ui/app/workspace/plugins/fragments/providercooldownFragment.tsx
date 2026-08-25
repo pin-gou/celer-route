@@ -232,7 +232,7 @@ function ActiveStateRow({
 				<div className="flex items-center gap-2">
 					<span className="font-medium">{entry.provider}</span>
 					<span className="text-muted-foreground text-xs">
-						{entry.keyId}
+						{entry.keyId === "" ? t("providerCooldown.keylessLabel") : entry.keyId}
 						{entry.keyName ? ` (${entry.keyName})` : ""}
 					</span>
 					{reasonKey && (

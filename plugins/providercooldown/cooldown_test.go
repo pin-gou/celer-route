@@ -1611,3 +1611,188 @@ func TestClearKey_KeylessProvider_EmptyKeyIDNoOp(t *testing.T) {
 		t.Fatal("keyless sentinel must remain cooled after a no-op ClearKey")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Keyless provider — PreProviderHook must still see the cooled sentinel.
+//
+// Background: schemas.KeylessProviders (e.g. bare `opencode`, the no-auth
+// OpenCode Free tier) never get a real key in the user config. The framework
+// stamps provider keys into ctx[BifrostContextKeyProviderKeys] before
+// PreProviderHook, but stampProviderKeysOnContext (core/bifrost.go:518) only
+// writes an entry when len(keys) > 0 — a keyless provider with no configured
+// keys is therefore absent from the snapshot, and PreProviderHook used to
+// bail out early ("no keys configured") without ever calling AsFilter.
+//
+// The mark path still fired (PostLLMHook + PerKeyFailureMarker both treat
+// empty keyID as the legal sentinel for keyless providers), so cooldowns
+// were recorded against "<provider>::" but never observed by the suppression
+// path — the UI's "配额耗尽 抑制" counter stayed at 0 even as
+// "配额耗尽 标记" climbed on every failed request.
+//
+// These tests pin the contract that PreProviderHook synthesizes a sentinel
+// key for keyless providers when the snapshot is empty/missing, so the
+// existing mark entry ("<provider>::") is honored by AsFilter and the
+// per-kind suppressed counter increments.
+// ---------------------------------------------------------------------------
+
+// TestPreProviderHook_KeylessProviderSynthesizesSentinelKey reproduces the
+// real-world bug: a keyless provider (Opencode) has no keys in the snapshot
+// (because no API keys are configured for it) but state already holds a
+// quota-mark from an earlier failed attempt. PreProviderHook must
+// short-circuit AND bump the byKind.quota.suppressed counter, mirroring the
+// behavior of providers with real keys.
+//
+// Before the fix this test fails: PreProviderHook returns (req, nil, nil)
+// because the snapshot lacks the provider, AsFilter never runs, and the
+// suppressed counter stays at 0 even though the user can see the cooldown
+// entry on the monitoring panel.
+func TestPreProviderHook_KeylessProviderSynthesizesSentinelKey(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	provider := schemas.Opencode
+	// Pre-condition: a quota mark already exists for the keyless sentinel
+	// (empty keyID is the legal sentinel for schemas.IsKeylessProvider).
+	p.State.MarkWithTTL(provider, "", time.Minute, CooldownKindQuota)
+	if !p.State.IsCoolingDown(provider, "") {
+		t.Fatal("setup: expected keyless sentinel to be cooled")
+	}
+
+	// Snapshot intentionally lacks the keyless provider — this matches what
+	// stampProviderKeysOnContext produces when config has no keys for the
+	// provider (the real-world scenario for OpenCode Free).
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, map[schemas.ModelProvider][]schemas.Key{
+		schemas.OpenAI: {{ID: "key-1"}}, // some other provider, not Opencode
+	})
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: provider,
+			Model:    "hermes-operator",
+		},
+	}
+
+	preStats := p.State.Stats()
+	gotReq, sc, err := p.PreProviderHook(ctx, req)
+	if err != nil {
+		t.Fatalf("PreProviderHook must not return an error, got %v", err)
+	}
+	if gotReq != req {
+		t.Fatal("PreProviderHook must return the SAME request pointer")
+	}
+
+	// Expectation: the only key (the synthesized sentinel) is in cooldown,
+	// so the hook must short-circuit exactly like a regular all-cooled case.
+	if sc == nil {
+		t.Fatal("expected short-circuit for keyless provider with cooldown on the sentinel")
+	}
+	if !sc.Silent {
+		t.Fatal("short-circuit must be Silent=true (logging plugin skips the spurious cancelled row)")
+	}
+	if sc.Error == nil || sc.Error.StatusCode == nil || *sc.Error.StatusCode != 503 {
+		t.Fatalf("expected 503 short-circuit error, got %+v", sc.Error)
+	}
+	if sc.Error.Type == nil || *sc.Error.Type != "no_eligible_keys" {
+		t.Fatalf("expected no_eligible_keys type, got %+v", sc.Error.Type)
+	}
+
+	// Expectation: the per-kind suppressed counter for quota advanced by 1.
+	postStats := p.State.Stats()
+	if got, want := postStats.ByKind.Quota.SuppressedCount, preStats.ByKind.Quota.SuppressedCount+1; got != want {
+		t.Fatalf("byKind.quota.suppressed = %d, want %d", got, want)
+	}
+	if got, want := postStats.SuppressedCount, preStats.SuppressedCount+1; got != want {
+		t.Fatalf("legacy suppressed_count = %d, want %d", got, want)
+	}
+}
+
+// TestPreProviderHook_KeylessProviderNoCooldown_NoSuppress covers the
+// negative case for keyless providers: when the snapshot lacks the
+// keyless provider AND no cooldown is currently active for it, the hook
+// must not short-circuit and must not bump suppressed counters — a
+// keyless provider with no cooldown is exactly the same as a regular
+// provider that simply has no keys configured.
+func TestPreProviderHook_KeylessProviderNoCooldown_NoSuppress(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	provider := schemas.Opencode
+
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	// Snapshot intentionally lacks the keyless provider.
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, map[schemas.ModelProvider][]schemas.Key{
+		schemas.OpenAI: {{ID: "key-1"}},
+	})
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: provider,
+			Model:    "hermes-operator",
+		},
+	}
+
+	preStats := p.State.Stats()
+	gotReq, sc, err := p.PreProviderHook(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sc != nil {
+		t.Fatalf("must not short-circuit when keyless sentinel is not cooled, got %+v", sc)
+	}
+	if gotReq != req {
+		t.Fatal("must return the same request pointer on passthrough")
+	}
+
+	postStats := p.State.Stats()
+	if postStats.SuppressedCount != preStats.SuppressedCount {
+		t.Fatalf("suppressed_count must not advance when there is no cooldown, got %d (was %d)",
+			postStats.SuppressedCount, preStats.SuppressedCount)
+	}
+	if postStats.ByKind.Quota.SuppressedCount != preStats.ByKind.Quota.SuppressedCount {
+		t.Fatalf("byKind.quota.suppressed must not advance when there is no cooldown, got %d (was %d)",
+			postStats.ByKind.Quota.SuppressedCount, preStats.ByKind.Quota.SuppressedCount)
+	}
+}
+
+// TestPreProviderHook_NonKeylessProviderEmptySnapshotStillPassesThrough
+// pins the unchanged contract for regular (non-keyless) providers: when the
+// snapshot lacks the provider, the hook must still pass through. We do NOT
+// synthesize a sentinel for non-keyless providers because that would mark
+// the whole provider on the next mark — exactly the operator-bug we want to
+// avoid (see lookupCooldown: empty keyID on non-keyless is treated as a
+// no-op, but synthesizing a sentinel would route future marks there).
+func TestPreProviderHook_NonKeylessProviderEmptySnapshotStillPassesThrough(t *testing.T) {
+	p := NewPlugin(nil)
+	defer p.Cleanup()
+
+	provider := schemas.Anthropic // non-keyless
+
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, map[schemas.ModelProvider][]schemas.Key{
+		schemas.OpenAI: {{ID: "key-1"}},
+	})
+
+	req := &schemas.BifrostRequest{
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: provider,
+			Model:    "claude-3",
+		},
+	}
+
+	preStats := p.State.Stats()
+	gotReq, sc, err := p.PreProviderHook(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sc != nil {
+		t.Fatalf("non-keyless provider with empty snapshot must NOT short-circuit, got %+v", sc)
+	}
+	if gotReq != req {
+		t.Fatal("must return the same request pointer on passthrough")
+	}
+	if post := p.State.Stats(); post.SuppressedCount != preStats.SuppressedCount {
+		t.Fatalf("suppressed_count must not advance for non-keyless empty snapshot, got %d (was %d)",
+			post.SuppressedCount, preStats.SuppressedCount)
+	}
+}

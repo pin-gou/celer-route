@@ -364,6 +364,7 @@
 		"noActiveKeys": "当前没有密钥处于冷却状态",
 		"reasonRateLimit": "速率限制",
 		"reasonQuota": "配额耗尽",
+		"keylessLabel": "（无密钥）",
 		"expiresAt": "过期时间：{{date}}",
 		"expiresIn": "（大约 {{in}}后）",
 		"expires": "过期时间：{{date}}（大约 {{in}}后）",

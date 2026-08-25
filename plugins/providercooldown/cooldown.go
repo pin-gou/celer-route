@@ -822,9 +822,29 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 	providerKeys, _ := providerKeysAny.(map[schemas.ModelProvider][]schemas.Key)
 	keys, ok := providerKeys[provider]
 	if !ok || len(keys) == 0 {
-		// No keys configured for this provider — let the normal pipeline surface
-		// the error so the caller sees the usual diagnostics.
-		return req, nil, nil
+		// No keys configured for this provider. For keyless providers
+		// (schemas.IsKeylessProvider, e.g. bare `opencode` / OpenCode Free)
+		// the framework's stampProviderKeysOnContext (core/bifrost.go:518)
+		// skips the entry entirely because GetKeysForProvider returns an
+		// empty slice when no keys are configured — but the legal sentinel
+		// key for keyless providers is the empty Key struct, the same
+		// sentinel getAllSupportedKeys (core/bifrost.go:8816-8824)
+		// synthesizes for ListModels. Without this backfill, AsFilter
+		// never runs for keyless providers and a mark recorded by the
+		// PerKeyFailureMarker / PostLLMHook path (against "<provider>::")
+		// would never suppress — the UI would show "配额耗尽 标记"
+		// climbing while "配额耗尽 抑制" stayed at 0.
+		//
+		// Synthesizing a sentinel ONLY for keyless providers is safe:
+		// AsFilter's lookupCooldown treats empty keyID as the legal
+		// sentinel for keyless providers, and a non-keyless provider with
+		// no keys still falls through to the normal pipeline (so the
+		// operator-facing "no keys configured" diagnostics stay visible).
+		if schemas.IsKeylessProvider(provider) {
+			keys = []schemas.Key{{}}
+		} else {
+			return req, nil, nil
+		}
 	}
 
 	filter := p.State.AsFilter(p.logger)
