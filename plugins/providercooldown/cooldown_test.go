@@ -2081,3 +2081,128 @@ func TestPerProviderModel_AsFilterKeyGranularityDoesNotBumpModel(t *testing.T) {
 		t.Fatal("PerProviderModel must be empty after key-granularity suppression only")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// PerProviderScopeKey / PerProviderScopeModel split tests
+//
+// The split maps let the UI attribute the per-provider total to
+// "key-scope hits" vs "model-scope hits", so mixed-scope policies no longer
+// show "总 304 但按模型细分只有 300" without explanation. For every provider
+// PerProviderScopeKey + PerProviderScopeModel == PerProvider (modulo
+// unclassified legacy marks, which contribute to neither sub-bucket).
+// ---------------------------------------------------------------------------
+
+func TestPerProviderScope_SplitMirrorsPerProvider(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	// Key-scope mark: contributes to PerProviderScopeKey.
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindRateLimit, schemas.CooldownScopeKey)
+	s.MarkWithTTL(schemas.OpenAI, "key-b", "gpt-4o", time.Minute, CooldownKindRateLimit, schemas.CooldownScopeKey)
+	// Model-scope mark: contributes to PerProviderScopeModel.
+	s.MarkWithTTL(schemas.OpenAI, "key-c", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+	// AsFilter on the same key/model to bump suppressed counts.
+	_, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", []schemas.Key{{ID: "key-a"}})
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+	_, err = s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", []schemas.Key{{ID: "key-c"}})
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+
+	stats := s.Stats()
+	openaiTotal, ok := stats.PerProvider[schemas.OpenAI]
+	if !ok {
+		t.Fatalf("PerProvider[openai] missing, got %+v", stats.PerProvider)
+	}
+	keyScope, ok := stats.PerProviderScopeKey[schemas.OpenAI]
+	if !ok {
+		t.Fatalf("PerProviderScopeKey[openai] missing, got %+v", stats.PerProviderScopeKey)
+	}
+	modelScope, ok := stats.PerProviderScopeModel[schemas.OpenAI]
+	if !ok {
+		t.Fatalf("PerProviderScopeModel[openai] missing, got %+v", stats.PerProviderScopeModel)
+	}
+
+	// 2 key-scope rate_limit marks + 1 model-scope quota mark = total 3
+	if got, want := openaiTotal.RateLimit.MarkCount+openaiTotal.Quota.MarkCount, uint64(3); got != want {
+		t.Errorf("PerProvider total marks = %d, want %d", got, want)
+	}
+	if got, want := keyScope.RateLimit.MarkCount+keyScope.Quota.MarkCount, uint64(2); got != want {
+		t.Errorf("PerProviderScopeKey[openai] marks = %d, want %d", got, want)
+	}
+	if got, want := modelScope.RateLimit.MarkCount+modelScope.Quota.MarkCount, uint64(1); got != want {
+		t.Errorf("PerProviderScopeModel[openai] marks = %d, want %d", got, want)
+	}
+	// keyScope+modelScope must reproduce openaiTotal (modulo unclassified).
+	sumRateLimit := keyScope.RateLimit.MarkCount + modelScope.RateLimit.MarkCount
+	if sumRateLimit != openaiTotal.RateLimit.MarkCount {
+		t.Errorf("key+model rate_limit.mark = %d, want %d (sum must equal total)", sumRateLimit, openaiTotal.RateLimit.MarkCount)
+	}
+	sumQuotaMark := keyScope.Quota.MarkCount + modelScope.Quota.MarkCount
+	if sumQuotaMark != openaiTotal.Quota.MarkCount {
+		t.Errorf("key+model quota.mark = %d, want %d (sum must equal total)", sumQuotaMark, openaiTotal.Quota.MarkCount)
+	}
+	sumRateLimitSupp := keyScope.RateLimit.SuppressedCount + modelScope.RateLimit.SuppressedCount
+	if sumRateLimitSupp != openaiTotal.RateLimit.SuppressedCount {
+		t.Errorf("key+model rate_limit.suppressed = %d, want %d (sum must equal total)", sumRateLimitSupp, openaiTotal.RateLimit.SuppressedCount)
+	}
+	sumQuotaSupp := keyScope.Quota.SuppressedCount + modelScope.Quota.SuppressedCount
+	if sumQuotaSupp != openaiTotal.Quota.SuppressedCount {
+		t.Errorf("key+model quota.suppressed = %d, want %d (sum must equal total)", sumQuotaSupp, openaiTotal.Quota.SuppressedCount)
+	}
+}
+
+func TestPerProviderScope_UnclassifiedDoesNotContribute(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	// Legacy quota-patterns path: empty kind → only markCount increments,
+	// split maps must stay empty (no kind = no scope attribution).
+	s.Mark(schemas.Sensenova, "key-z")
+	stats := s.Stats()
+	if _, ok := stats.PerProvider[schemas.Sensenova]; ok {
+		t.Errorf("PerProvider[sensenova] must NOT include unclassified marks")
+	}
+	if _, ok := stats.PerProviderScopeKey[schemas.Sensenova]; ok {
+		t.Errorf("PerProviderScopeKey[sensenova] must NOT include unclassified marks")
+	}
+	if _, ok := stats.PerProviderScopeModel[schemas.Sensenova]; ok {
+		t.Errorf("PerProviderScopeModel[sensenova] must NOT include unclassified marks")
+	}
+	if got, want := stats.MarkCount, uint64(1); got != want {
+		t.Errorf("legacy markCount = %d, want %d", got, want)
+	}
+}
+
+func TestPerProviderScope_EmptyScopeDefaultsToKey(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	// Empty scope string should resolve to CooldownScopeKey (the default).
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindRateLimit, "")
+	stats := s.Stats()
+	if _, ok := stats.PerProviderScopeKey[schemas.OpenAI]; !ok {
+		t.Errorf("empty scope must attribute to PerProviderScopeKey")
+	}
+	if _, ok := stats.PerProviderScopeModel[schemas.OpenAI]; ok {
+		t.Errorf("empty scope must NOT attribute to PerProviderScopeModel")
+	}
+}
+
+func TestPerProviderScope_KeySuppressionRoutesToScopeKey(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	// Mark at key scope, then trigger a model-scope filter call — the
+	// lookupSuppressed will match the key-scope entry first (broader
+	// wins), so suppression attribution must land on PerProviderScopeKey.
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "", time.Minute, CooldownKindQuota, schemas.CooldownScopeKey)
+
+	keys := []schemas.Key{{ID: "key-a"}}
+	_, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+
+	stats := s.Stats()
+	if got, want := stats.PerProviderScopeKey[schemas.OpenAI].Quota.SuppressedCount, uint64(1); got != want {
+		t.Errorf("PerProviderScopeKey[openai].quota.suppressed = %d, want %d", got, want)
+	}
+	if _, ok := stats.PerProviderScopeModel[schemas.OpenAI]; ok {
+		t.Errorf("PerProviderScopeModel must remain unset when only key-scope hits exist")
+	}
+}

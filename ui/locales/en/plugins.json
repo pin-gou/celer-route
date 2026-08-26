@@ -378,6 +378,7 @@
 		"scopeKey": "per-key",
 		"modelLabel": "model",
 		"modelBreakdownTitle": "By model",
+		"modelBreakdownKeyScopeRemainder": "Remaining at key scope",
 		"matchModeAny": "any",
 		"matchModeAll": "all",
 		"matchStatus": "status={{code}}",

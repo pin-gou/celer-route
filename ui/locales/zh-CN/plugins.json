@@ -378,6 +378,7 @@
 		"scopeKey": "按 Key",
 		"modelLabel": "模型",
 		"modelBreakdownTitle": "按模型细分",
+		"modelBreakdownKeyScopeRemainder": "按 key 粒度的剩余",
 		"matchModeAny": "任意",
 		"matchModeAll": "全部",
 		"matchStatus": "状态码={{code}}",

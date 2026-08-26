@@ -185,6 +185,45 @@ describe("PerProviderPolicyOverview — renders customised policies and edit jum
 		});
 	});
 
+	it("shows scope label on every rule (default key scope is not hidden)", () => {
+		mocks.providersData = [
+			{
+				name: "sensenova",
+				network_config: {},
+				concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 },
+				cooldown_policy: {
+					rate_limit: {
+						match: [
+							{ status_code: 429 },
+							{ message_contains: ["http error 429", "rate_limit_error"] },
+							{ type: ["rate_limit_error"] },
+							{ code: ["insufficient_balance"] },
+							{ message_contains: ["insufficient_balance"] },
+						],
+						match_mode: "any",
+						ttl_seconds: 15,
+					},
+					quota: {
+						match: [{ message_contains: ["workspace allocated quota"] }],
+						match_mode: "any",
+						ttl_seconds: 20,
+						scope: "model",
+					},
+				},
+			} as never,
+		];
+		render(<ProvidercooldownFragment plugin={mockPlugin} />);
+
+		const row = screen.getByTestId("providercooldown-policy-row-sensenova");
+		// rate_limit rule (scope omitted → resolves to key) must surface "per-key"
+		expect(row.textContent).toContain("per-key");
+		// quota rule (scope=model) must surface "per-model"
+		expect(row.textContent).toContain("per-model");
+		// TTL numbers from each rule must still be visible
+		expect(row.textContent).toContain("15");
+		expect(row.textContent).toContain("20");
+	});
+
 	it("renders per-provider kind stats from useGetCooldownStatsQuery", () => {
 		mocks.providersData = [
 			{ name: "sensenova", network_config: {}, concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 } } as never,
@@ -208,5 +247,107 @@ describe("PerProviderPolicyOverview — renders customised policies and edit jum
 		expect(statsEl.textContent).toContain("2");
 		expect(statsEl.textContent).toContain("7");
 		expect(statsEl.textContent).toContain("4");
+	});
+
+	it("renders the key-scope remainder when per-model breakdown totals do not match the provider total", () => {
+		// Reproduces the sensenova case: rate_limit stays at key scope (so
+		// perProviderModel has no rate_limit row), and quota is split
+		// (model=deepseek-v4-flash carries 300/1608, the rest is key scope).
+		mocks.providersData = [
+			{
+				name: "sensenova",
+				network_config: {},
+				concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 },
+				cooldown_policy: {
+					rate_limit: { match: [{ status_code: 429 }], ttl_seconds: 30 },
+					quota: {
+						match: [{ message_contains: ["workspace allocated quota"] }],
+						ttl_seconds: 600,
+						scope: "model",
+					},
+				},
+			} as never,
+		];
+		mocks.statsData = {
+			markCount: 1236,
+			suppressedCount: 4112,
+			activeCount: 0,
+			byKind: {
+				rate_limit: { markCount: 932, suppressedCount: 2482 },
+				quota: { markCount: 304, suppressedCount: 1630 },
+			},
+			perProvider: {
+				sensenova: {
+					rate_limit: { markCount: 932, suppressedCount: 2482 },
+					quota: { markCount: 304, suppressedCount: 1630 },
+				},
+			},
+			perProviderModel: {
+				sensenova: {
+					"deepseek-v4-flash": {
+						rate_limit: { markCount: 0, suppressedCount: 0 },
+						quota: { markCount: 300, suppressedCount: 1608 },
+					},
+				},
+			},
+			perProviderScopeKey: {
+				sensenova: {
+					rate_limit: { markCount: 932, suppressedCount: 2482 },
+					quota: { markCount: 4, suppressedCount: 22 },
+				},
+			},
+			perProviderScopeModel: {
+				sensenova: {
+					rate_limit: { markCount: 0, suppressedCount: 0 },
+					quota: { markCount: 300, suppressedCount: 1608 },
+				},
+			},
+		};
+		render(<ProvidercooldownFragment plugin={mockPlugin} />);
+
+		// The model breakdown row carries the per-model rate_limit/quota counts.
+		const modelRow = screen.getByTestId("providercooldown-policy-model-stats-sensenova-deepseek-v4-flash");
+		expect(modelRow.textContent).toContain("deepseek-v4-flash");
+		expect(modelRow.textContent).toContain("0");
+
+		// The key-scope remainder row explains the gap: rate_limit 全是
+		// key-scope (932/2482), quota 有 4/22 走 key-scope, 300/1608 走
+		// model-scope.
+		const remainderRow = screen.getByTestId("providercooldown-policy-model-stats-sensenova-key-scope-remainder");
+		expect(remainderRow).toBeTruthy();
+		expect(remainderRow.textContent).toContain("932");
+		expect(remainderRow.textContent).toContain("2482");
+		expect(remainderRow.textContent).toContain("4");
+		expect(remainderRow.textContent).toContain("22");
+	});
+
+	it("does not render the key-scope remainder when per-model breakdown matches the provider total", () => {
+		// All-classified model-scope policy: every per-model bucket sums
+		// to the perProvider total — no gap, no remainder row.
+		mocks.providersData = [
+			{ name: "openai", network_config: {}, concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 } } as never,
+		];
+		mocks.statsData = {
+			markCount: 5,
+			suppressedCount: 3,
+			activeCount: 0,
+			perProvider: {
+				openai: {
+					rate_limit: { markCount: 5, suppressedCount: 3 },
+					quota: { markCount: 0, suppressedCount: 0 },
+				},
+			},
+			perProviderModel: {
+				openai: {
+					"gpt-4o": {
+						rate_limit: { markCount: 5, suppressedCount: 3 },
+						quota: { markCount: 0, suppressedCount: 0 },
+					},
+				},
+			},
+		};
+		render(<ProvidercooldownFragment plugin={mockPlugin} />);
+
+		expect(screen.queryByTestId("providercooldown-policy-model-stats-openai-key-scope-remainder")).toBeNull();
 	});
 });

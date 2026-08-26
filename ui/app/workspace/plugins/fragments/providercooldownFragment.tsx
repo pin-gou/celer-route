@@ -292,11 +292,9 @@ export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
 
 function summarizeRule(rule: CooldownPolicyRule, t: TFunction): string {
 	const mode = rule.match_mode === "all" ? t("providerCooldown.matchModeAll") : t("providerCooldown.matchModeAny");
-	let summary = t("providerCooldown.ruleSummary", { count: rule.match.length, mode, ttl: rule.ttl_seconds });
-	if (rule.scope === "model") {
-		summary += ` · ${t("providerCooldown.scopeModel")}`;
-	}
-	return summary;
+	const summary = t("providerCooldown.ruleSummary", { count: rule.match.length, mode, ttl: rule.ttl_seconds });
+	const scopeLabel = rule.scope === "model" ? t("providerCooldown.scopeModel") : t("providerCooldown.scopeKey");
+	return `${summary} · ${scopeLabel}`;
 }
 
 function summarizeMatch(
@@ -404,6 +402,9 @@ function PerProviderPolicyOverview() {
 							{(() => {
 								const modelStats = perProviderModelStats[p.name];
 								if (!modelStats || Object.keys(modelStats).length === 0) return null;
+								const total = perProviderStats[p.name];
+								const scopeKey = statsData?.stats?.perProviderScopeKey?.[p.name];
+								const scopeModel = statsData?.stats?.perProviderScopeModel?.[p.name];
 								return (
 									<div className="mt-2 border-t pt-2" data-testid={`providercooldown-policy-model-stats-${p.name}`}>
 										<div className="text-muted-foreground mb-1 text-xs font-medium">{t("providerCooldown.modelBreakdownTitle")}</div>
@@ -424,6 +425,41 @@ function PerProviderPolicyOverview() {
 												</span>
 											</div>
 										))}
+										{(() => {
+											if (!total) return null;
+											const modelRlMarkSum = Object.values(modelStats).reduce((acc, ms) => acc + (ms.rate_limit?.markCount ?? 0), 0);
+											const modelRlSupSum = Object.values(modelStats).reduce((acc, ms) => acc + (ms.rate_limit?.suppressedCount ?? 0), 0);
+											const modelQMarkSum = Object.values(modelStats).reduce((acc, ms) => acc + (ms.quota?.markCount ?? 0), 0);
+											const modelQSupSum = Object.values(modelStats).reduce((acc, ms) => acc + (ms.quota?.suppressedCount ?? 0), 0);
+											const rlMarkRemain = (total.rate_limit?.markCount ?? 0) - modelRlMarkSum;
+											const rlSupRemain = (total.rate_limit?.suppressedCount ?? 0) - modelRlSupSum;
+											const qMarkRemain = (total.quota?.markCount ?? 0) - modelQMarkSum;
+											const qSupRemain = (total.quota?.suppressedCount ?? 0) - modelQSupSum;
+											if (rlMarkRemain === 0 && rlSupRemain === 0 && qMarkRemain === 0 && qSupRemain === 0) return null;
+											return (
+												<div
+													className="text-muted-foreground mt-1 font-mono text-xs italic"
+													data-testid={`providercooldown-policy-model-stats-${p.name}-key-scope-remainder`}
+												>
+													<span className="font-medium">{t("providerCooldown.modelBreakdownKeyScopeRemainder")}:</span>{" "}
+													<span className="text-red-500">{rlMarkRemain}</span>/<span className="text-blue-500">{rlSupRemain}</span>
+													<span className="text-border mx-1">·</span>
+													<span className="text-red-500">{qMarkRemain}</span>/<span className="text-blue-500">{qSupRemain}</span>
+													{scopeKey && (
+														<span className="text-muted-foreground/70 ml-1 text-[0.7rem]">
+															(scope=key 标记 {scopeKey.rate_limit?.markCount ?? 0 + (scopeKey.quota?.markCount ?? 0)} / 抑制{" "}
+															{scopeKey.rate_limit?.suppressedCount ?? 0 + (scopeKey.quota?.suppressedCount ?? 0)})
+														</span>
+													)}
+													{scopeModel && (
+														<span className="text-muted-foreground/70 ml-1 text-[0.7rem]">
+															(scope=model 标记 {scopeModel.rate_limit?.markCount ?? 0 + (scopeModel.quota?.markCount ?? 0)} / 抑制{" "}
+															{scopeModel.rate_limit?.suppressedCount ?? 0 + (scopeModel.quota?.suppressedCount ?? 0)})
+														</span>
+													)}
+												</div>
+											);
+										})()}
 									</div>
 								);
 							})()}

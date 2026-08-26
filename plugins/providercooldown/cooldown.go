@@ -168,6 +168,25 @@ type CooldownState struct {
 	// pairs that have experienced at least one model-granularity (scope=model)
 	// classified mark/suppressed event appear. Guarded by c.mu (RWMutex).
 	perProviderModel map[string]*ProviderKindCounters
+
+	// perProviderScopeKey splits the same per-provider counters by mark
+	// scope, so the UI can surface "key-scope 标记 / 抑制" alongside the
+	// aggregated total in perProvider. Without this split, the
+	// per-provider total includes both scope=key and scope=model hits and
+	// there is no way to attribute the difference between the total and
+	// the per-model breakdown — a real source of confusion in mixed-scope
+	// policies. Only providers that have experienced at least one
+	// classified event under scope=key appear. Guarded by c.mu (RWMutex).
+	perProviderScopeKey map[schemas.ModelProvider]*ProviderKindCounters
+
+	// perProviderScopeModel is the model-scope mirror of
+	// perProviderScopeKey: same shape, same atomic accounting rules, but
+	// only fires when a mark is recorded with scope=model and a non-empty
+	// model. The sum of perProviderScopeKey[provider] and
+	// perProviderScopeModel[provider] equals perProvider[provider] for
+	// every provider (modulo unclassified legacy marks, which contribute
+	// to neither sub-bucket). Guarded by c.mu (RWMutex).
+	perProviderScopeModel map[schemas.ModelProvider]*ProviderKindCounters
 }
 
 // NewCooldownState returns a CooldownState with the given default TTL.
@@ -177,11 +196,13 @@ func NewCooldownState(ttl time.Duration) *CooldownState {
 		ttl = DefaultCooldownTTL
 	}
 	return &CooldownState{
-		cooldowns:         make(map[string]CooldownRecord),
-		ttl:               ttl,
-		ttlOverrides:      make(map[schemas.ModelProvider]time.Duration),
-		perProvider:       make(map[schemas.ModelProvider]*ProviderKindCounters),
-		perProviderModel:  make(map[string]*ProviderKindCounters),
+		cooldowns:           make(map[string]CooldownRecord),
+		ttl:                 ttl,
+		ttlOverrides:        make(map[schemas.ModelProvider]time.Duration),
+		perProvider:         make(map[schemas.ModelProvider]*ProviderKindCounters),
+		perProviderModel:    make(map[string]*ProviderKindCounters),
+		perProviderScopeKey: make(map[schemas.ModelProvider]*ProviderKindCounters),
+		perProviderScopeModel: make(map[schemas.ModelProvider]*ProviderKindCounters),
 	}
 }
 
@@ -403,6 +424,17 @@ func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string
 		} else if kind == CooldownKindQuota {
 			c.perProviderModelMarkLocked(provider, model).Quota.MarkCount++
 		}
+		if kind == CooldownKindRateLimit {
+			c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeModel).RateLimit.MarkCount++
+		} else if kind == CooldownKindQuota {
+			c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeModel).Quota.MarkCount++
+		}
+	} else if kind != "" {
+		if kind == CooldownKindRateLimit {
+			c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeKey).RateLimit.MarkCount++
+		} else if kind == CooldownKindQuota {
+			c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeKey).Quota.MarkCount++
+		}
 	}
 	c.mu.Unlock()
 	c.markCount.Add(1)
@@ -429,6 +461,29 @@ func (c *CooldownState) perProviderModelMarkLocked(provider schemas.ModelProvide
 	if !ok {
 		pc = &ProviderKindCounters{}
 		c.perProviderModel[key] = pc
+	}
+	return pc
+}
+
+// perProviderScopeMarkLocked returns the per-(provider, scope) counter struct
+// for the given (provider, scope), creating it on demand. The caller MUST
+// hold c.mu (write). This split lets the UI attribute per-provider totals
+// to "key-scope hits" vs "model-scope hits" without losing information —
+// perProviderScopeKey + perProviderScopeModel == perProvider for every
+// provider (modulo unclassified legacy marks, which contribute to neither
+// sub-bucket because they have no kind).
+func (c *CooldownState) perProviderScopeMarkLocked(provider schemas.ModelProvider, scope schemas.CooldownPolicyScope) *ProviderKindCounters {
+	var bucket map[schemas.ModelProvider]*ProviderKindCounters
+	switch scope.OrDefault() {
+	case schemas.CooldownScopeModel:
+		bucket = c.perProviderScopeModel
+	default:
+		bucket = c.perProviderScopeKey
+	}
+	pc, ok := bucket[provider]
+	if !ok {
+		pc = &ProviderKindCounters{}
+		bucket[provider] = pc
 	}
 	return pc
 }
@@ -541,13 +596,22 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string, m
 //     for model-granularity (scope=model) events. Keyed by "provider::model".
 //     Only (provider, model) pairs that have experienced at least one
 //     model-granularity event appear.
+//   - PerProviderScopeKey / PerProviderScopeModel split the same per-provider
+//     totals by mark scope so the UI can attribute the difference between
+//     the aggregated per-provider total and the per-model breakdown (e.g.
+//     "rate_limit 总 932, 但按模型细分 deepseek-v4-flash 是 0, 那剩下的 932
+//     全来自 key-scope 命中"). For every provider the two sub-buckets sum
+//     to PerProvider (modulo unclassified legacy marks, which contribute to
+//     neither sub-bucket because they have no kind).
 type CooldownStats struct {
-	MarkCount          uint64                                         `json:"mark_count"`
-	SuppressedCount    uint64                                         `json:"suppressed_count"`
-	CurrentActiveCount int                                            `json:"current_active_count"`
-	ByKind             ByKindCounters                                 `json:"by_kind"`
-	PerProvider        map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider"`
-	PerProviderModel   map[string]ProviderKindCounters                `json:"per_provider_model,omitempty"`
+	MarkCount             uint64                                         `json:"mark_count"`
+	SuppressedCount       uint64                                         `json:"suppressed_count"`
+	CurrentActiveCount    int                                            `json:"current_active_count"`
+	ByKind                ByKindCounters                                 `json:"by_kind"`
+	PerProvider           map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider"`
+	PerProviderModel      map[string]ProviderKindCounters                `json:"per_provider_model,omitempty"`
+	PerProviderScopeKey   map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider_scope_key,omitempty"`
+	PerProviderScopeModel map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider_scope_model,omitempty"`
 }
 
 // Stats returns the lifetime counters and the current number of active
@@ -581,6 +645,14 @@ func (c *CooldownState) Stats() CooldownStats {
 	stats.PerProviderModel = make(map[string]ProviderKindCounters, len(c.perProviderModel))
 	for mk, mc := range c.perProviderModel {
 		stats.PerProviderModel[mk] = *mc
+	}
+	stats.PerProviderScopeKey = make(map[schemas.ModelProvider]ProviderKindCounters, len(c.perProviderScopeKey))
+	for p, pc := range c.perProviderScopeKey {
+		stats.PerProviderScopeKey[p] = *pc
+	}
+	stats.PerProviderScopeModel = make(map[schemas.ModelProvider]ProviderKindCounters, len(c.perProviderScopeModel))
+	for p, pc := range c.perProviderScopeModel {
+		stats.PerProviderScopeModel[p] = *pc
 	}
 	c.mu.RUnlock()
 	return stats
@@ -682,6 +754,19 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 						c.perProviderModelMarkLocked(provider, model).RateLimit.SuppressedCount++
 					case CooldownKindQuota:
 						c.perProviderModelMarkLocked(provider, model).Quota.SuppressedCount++
+					}
+					switch kind {
+					case CooldownKindRateLimit:
+						c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeModel).RateLimit.SuppressedCount++
+					case CooldownKindQuota:
+						c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeModel).Quota.SuppressedCount++
+					}
+				} else {
+					switch kind {
+					case CooldownKindRateLimit:
+						c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeKey).RateLimit.SuppressedCount++
+					case CooldownKindQuota:
+						c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeKey).Quota.SuppressedCount++
 					}
 				}
 				c.mu.Unlock()

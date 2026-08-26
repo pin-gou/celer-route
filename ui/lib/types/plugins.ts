@@ -337,6 +337,12 @@ export interface ByKindCounters {
 // ALL marks including unclassified ones; byKind / perProvider split
 // the SAME counters by CooldownKind (and by provider). Sum of byKind
 // {rate_limit, quota} ≤ markCount when some marks were unclassified.
+//
+// perProviderScopeKey / perProviderScopeModel further split perProvider
+// by mark scope, so a provider with mixed-scope rules no longer needs
+// to explain "为什么总 304 但按模型细分只有 300" — the missing 4 sits in
+// perProviderScopeKey. For every provider the two sub-buckets sum to
+// perProvider (modulo unclassified legacy marks).
 export interface CooldownStats {
 	markCount: number;
 	suppressedCount: number;
@@ -344,6 +350,8 @@ export interface CooldownStats {
 	byKind?: ByKindCounters;
 	perProvider?: Record<string, ProviderKindCounters>;
 	perProviderModel?: Record<string, Record<string, ProviderKindCounters>>;
+	perProviderScopeKey?: Record<string, ProviderKindCounters>;
+	perProviderScopeModel?: Record<string, ProviderKindCounters>;
 }
 
 export interface CooldownStateResponse {

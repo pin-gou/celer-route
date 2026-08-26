@@ -132,13 +132,15 @@ func (h *CooldownHandler) getState(ctx *fasthttp.RequestCtx) {
 // (provider, kind). The legacy fields are preserved verbatim so older
 // clients keep working without changes.
 type cooldownStatsResponse struct {
-	Plugin             string                              `json:"plugin"`
-	MarkCount          uint64                              `json:"mark_count"`
-	SuppressedCount    uint64                              `json:"suppressed_count"`
-	CurrentActiveCount int                                 `json:"current_active_count"`
+	Plugin               string                              `json:"plugin"`
+	MarkCount            uint64                              `json:"mark_count"`
+	SuppressedCount      uint64                              `json:"suppressed_count"`
+	CurrentActiveCount   int                                 `json:"current_active_count"`
 	ByKind             providercooldown.ByKindCounters      `json:"by_kind"`
 	PerProvider        map[string]providercooldown.ProviderKindCounters `json:"per_provider"`
 	PerProviderModel   map[string]map[string]providercooldown.ProviderKindCounters `json:"per_provider_model,omitempty"`
+	PerProviderScopeKey   map[string]providercooldown.ProviderKindCounters `json:"per_provider_scope_key,omitempty"`
+	PerProviderScopeModel map[string]providercooldown.ProviderKindCounters `json:"per_provider_scope_model,omitempty"`
 }
 
 func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
@@ -175,14 +177,24 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 		}
 		perProviderModel[provider][model] = counters
 	}
+	perProviderScopeKey := make(map[string]providercooldown.ProviderKindCounters, len(stats.PerProviderScopeKey))
+	for provider, counters := range stats.PerProviderScopeKey {
+		perProviderScopeKey[string(provider)] = counters
+	}
+	perProviderScopeModel := make(map[string]providercooldown.ProviderKindCounters, len(stats.PerProviderScopeModel))
+	for provider, counters := range stats.PerProviderScopeModel {
+		perProviderScopeModel[string(provider)] = counters
+	}
 	SendJSON(ctx, cooldownStatsResponse{
-		Plugin:             providercooldown.PluginName,
-		MarkCount:          stats.MarkCount,
-		SuppressedCount:    stats.SuppressedCount,
-		CurrentActiveCount: stats.CurrentActiveCount,
-		ByKind:             stats.ByKind,
-		PerProvider:        perProvider,
-		PerProviderModel:   perProviderModel,
+		Plugin:               providercooldown.PluginName,
+		MarkCount:            stats.MarkCount,
+		SuppressedCount:      stats.SuppressedCount,
+		CurrentActiveCount:   stats.CurrentActiveCount,
+		ByKind:               stats.ByKind,
+		PerProvider:          perProvider,
+		PerProviderModel:     perProviderModel,
+		PerProviderScopeKey:   perProviderScopeKey,
+		PerProviderScopeModel: perProviderScopeModel,
 	})
 }
 
