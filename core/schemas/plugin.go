@@ -298,10 +298,12 @@ type LLMPlugin interface {
 
 	// PreProviderHook runs once per attempt (primary + every fallback), after PreRequestHook
 	// has pinned req.Provider/Model and before PreLLMHook writes any pending side effects.
-	// The framework stamps ctx[BifrostContextKeyProviderKeys] with the full per-provider key
+	// The framework stamps ctx[BifrostContextKeyProviderKeys] with the current provider's key
 	// pool before calling this hook, so plugins can decide whether the targeted provider has
 	// any eligible keys (e.g. provider-cooldown short-circuiting on all-keys-cooled) without
-	// having to round-trip through the worker queue.
+	// having to round-trip through the worker queue. Only the provider being routed is
+	// present in the map — a plugin must read providerKeys[req.GetRequestFields() provider],
+	// not assume every configured provider is listed.
 	//
 	// Plugins MAY return a non-nil *LLMPluginShortCircuit to abort this attempt; the framework
 	// then runs PostLLMHook (so the PreLLMHook/PostLLMHook pairing contract still holds) and

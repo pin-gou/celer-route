@@ -504,39 +504,31 @@ func (bifrost *Bifrost) setModelCatalogOnContext(ctx *schemas.BifrostContext) {
 	ctx.SetValue(schemas.BifrostContextKeyModelCatalog, catalog)
 }
 
-// stampProviderKeysOnContext snapshots every configured provider's key pool into
-// ctx[BifrostContextKeyProviderKeys] so PreProviderHook can decide whether the
-// targeted provider has any eligible keys without round-tripping through the
-// worker queue. Scoped plugin contexts delegate Value lookups to the root, so
-// stamping the root once is enough for every plugin in the pipeline.
+// stampProviderKeysOnContext stamps the current provider's key pool into
+// ctx[BifrostContextKeyProviderKeys] so PreProviderHook can decide whether
+// the targeted provider has any eligible keys without round-tripping through
+// the worker queue. Scoped plugin contexts delegate Value lookups to the root,
+// so stamping the root once is enough for every plugin in the pipeline.
 //
-// Called once per attempt (handleRequest stamps it for the primary, tryRequest
-// re-stamps it before the fallback's PreProviderHook so cooldown sees the
-// fallback provider's key pool rather than the primary's). Errors are
-// swallowed — a missing entry means "no keys configured for this provider",
-// which is the correct signal for PreProviderHook to short-circuit.
-func (bifrost *Bifrost) stampProviderKeysOnContext(ctx *schemas.BifrostContext) {
-	if ctx == nil {
+// Only the current provider is stamped: the sole consumer (provider-cooldown's
+// PreProviderHook) reads providerKeys[provider] for the very provider being
+// routed, and the per-attempt cost of iterating every configured provider (an
+// RLock + map allocation per provider, scaling with the configured provider
+// count) was a measurable hot-path regression. Called once per attempt —
+// handleRequest stamps it for the primary, tryRequest re-stamps it before the
+// fallback's PreProviderHook so cooldown sees the fallback provider's key pool
+// rather than the primary's. Errors are swallowed — a missing entry means
+// "no keys configured for this provider", which is the correct signal for
+// PreProviderHook to short-circuit.
+func (bifrost *Bifrost) stampProviderKeysOnContext(ctx *schemas.BifrostContext, provider schemas.ModelProvider) {
+	if ctx == nil || provider == "" {
 		return
 	}
-	providers, err := bifrost.account.GetConfiguredProviders()
-	if err != nil || len(providers) == 0 {
+	keys, err := bifrost.account.GetKeysForProvider(ctx, provider)
+	if err != nil || len(keys) == 0 {
 		return
 	}
-	snapshot := make(map[schemas.ModelProvider][]schemas.Key, len(providers))
-	for _, p := range providers {
-		keys, err := bifrost.account.GetKeysForProvider(ctx, p)
-		if err != nil {
-			continue
-		}
-		if len(keys) > 0 {
-			snapshot[p] = keys
-		}
-	}
-	if len(snapshot) == 0 {
-		return
-	}
-	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, snapshot)
+	ctx.SetValue(schemas.BifrostContextKeyProviderKeys, map[schemas.ModelProvider][]schemas.Key{provider: keys})
 }
 
 // stampProviderCooldownPolicyOnContext writes the per-provider CooldownPolicy
@@ -4872,7 +4864,7 @@ func (bifrost *Bifrost) RunStreamPreHooks(ctx *schemas.BifrostContext, req *sche
 	// PreProviderHook short-circuits the WS bridge before any plugin writes pending state,
 	// mirroring tryStreamRequest/tryRequest. Silent=true lets presentation plugins skip
 	// log writes for system-policy rejections (e.g. provider-cooldown no_eligible_keys).
-	bifrost.stampProviderKeysOnContext(ctx)
+	bifrost.stampProviderKeysOnContext(ctx, reqProvider)
 	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
 	if providerSC != nil {
 		if providerSC.Silent {
@@ -5026,7 +5018,7 @@ func (bifrost *Bifrost) RunRealtimeTurnPreHooks(ctx *schemas.BifrostContext, req
 	// PreProviderHook: short-circuits the realtime turn before any plugin writes pending
 	// state, mirroring RunStreamPreHooks. Silent=true lets presentation plugins skip log
 	// writes for system-policy rejections (e.g. provider-cooldown no_eligible_keys).
-	bifrost.stampProviderKeysOnContext(ctx)
+	bifrost.stampProviderKeysOnContext(ctx, provider)
 	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
 	if providerSC != nil {
 		if providerSC.Silent {
@@ -5641,7 +5633,7 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 	// queue. A short-circuit here with Silent=true lets cooldown suppress the "spurious
 	// cancelled" log entry while still surfacing the synthetic 503 to the caller so the
 	// fallback chain can proceed.
-	bifrost.stampProviderKeysOnContext(ctx)
+	bifrost.stampProviderKeysOnContext(ctx, provider)
 	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
 	if providerSC != nil {
 		if providerSC.Silent {
@@ -5954,7 +5946,7 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 	// through the worker queue. A short-circuit here with Silent=true lets cooldown suppress
 	// the "spurious cancelled" log entry while still surfacing the synthetic 503 to the
 	// caller so the fallback chain can proceed.
-	bifrost.stampProviderKeysOnContext(ctx)
+	bifrost.stampProviderKeysOnContext(ctx, provider)
 	providerReq, providerSC, providerPreCount := pipeline.RunPreProviderHooks(ctx, req)
 	if providerSC != nil {
 		if providerSC.Silent {
