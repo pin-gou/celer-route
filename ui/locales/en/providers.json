@@ -463,7 +463,7 @@
 			"scope": {
 				"label": "Cooldown scope",
 				"key": "Per key",
-				"model": "Per model"
+				"model": "Per key + model"
 			},
 			"ttlLabel": "Cooldown TTL (seconds)",
 			"ttlDescription": "How long the matched key stays out of rotation; cooldown expires automatically.",

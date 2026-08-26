@@ -339,7 +339,7 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 							<FormLabel className="text-xs">{t("fragments.cooldownPolicy.matchModeLabel")}</FormLabel>
 							<FormControl>
 								<Select value={(field.value ?? "any") as string} onValueChange={field.onChange}>
-									<SelectTrigger data-testid={`provider-cooldown-${ruleKey}-match-mode-trigger`}>
+									<SelectTrigger className="w-full" data-testid={`provider-cooldown-${ruleKey}-match-mode-trigger`}>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -360,7 +360,7 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 							<FormLabel className="text-xs">{t("fragments.cooldownPolicy.scope.label")}</FormLabel>
 							<FormControl>
 								<Select value={field.value ?? "key"} onValueChange={field.onChange}>
-									<SelectTrigger data-testid={`provider-cooldown-${ruleKey}-scope-trigger`}>
+									<SelectTrigger className="w-full" data-testid={`provider-cooldown-${ruleKey}-scope-trigger`}>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
