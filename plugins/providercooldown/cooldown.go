@@ -163,6 +163,11 @@ type CooldownState struct {
 	// experienced at least one classified mark/suppressed event appear.
 	// Guarded by c.mu (RWMutex) for reads/writes.
 	perProvider map[schemas.ModelProvider]*ProviderKindCounters
+
+	// perProviderModel is keyed by "provider::model"; only (provider, model)
+	// pairs that have experienced at least one model-granularity (scope=model)
+	// classified mark/suppressed event appear. Guarded by c.mu (RWMutex).
+	perProviderModel map[string]*ProviderKindCounters
 }
 
 // NewCooldownState returns a CooldownState with the given default TTL.
@@ -172,10 +177,11 @@ func NewCooldownState(ttl time.Duration) *CooldownState {
 		ttl = DefaultCooldownTTL
 	}
 	return &CooldownState{
-		cooldowns:    make(map[string]CooldownRecord),
-		ttl:          ttl,
-		ttlOverrides: make(map[schemas.ModelProvider]time.Duration),
-		perProvider:  make(map[schemas.ModelProvider]*ProviderKindCounters),
+		cooldowns:         make(map[string]CooldownRecord),
+		ttl:               ttl,
+		ttlOverrides:      make(map[schemas.ModelProvider]time.Duration),
+		perProvider:       make(map[schemas.ModelProvider]*ProviderKindCounters),
+		perProviderModel:  make(map[string]*ProviderKindCounters),
 	}
 }
 
@@ -190,8 +196,51 @@ func (c *CooldownState) SetTTLOverride(provider schemas.ModelProvider, ttl time.
 	c.mu.Unlock()
 }
 
+// key builds the storage key for a key-granularity cooldown: a trailing "::"
+// and empty model distinguish it from a model-granularity entry when Snapshot
+// parses the map (last "::" split → model; first "::" in the head → provider
+// / keyID). The state is process-local and wiped on restart, so the format
+// carries no migration burden.
 func (c *CooldownState) key(provider schemas.ModelProvider, keyID string) string {
-	return string(provider) + "::" + keyID
+	return string(provider) + "::" + keyID + "::"
+}
+
+// keyModel builds the storage key for a model-granularity cooldown. Keyless
+// providers (schemas.IsKeylessProvider) have no keyID — their model-scoped
+// key collapses to "<provider>::<model>" per convention, keeping the empty
+// keyID sentinel unambiguous from the key-granularity "<provider>::".
+func (c *CooldownState) keyModel(provider schemas.ModelProvider, keyID string, model string) string {
+	if schemas.IsKeylessProvider(provider) {
+		return string(provider) + "::" + model
+	}
+	return string(provider) + "::" + keyID + "::" + model
+}
+
+// markKey resolves the storage key for a (provider, keyID, model) mark under
+// the given scope.
+func (c *CooldownState) markKey(provider schemas.ModelProvider, keyID string, model string, scope schemas.CooldownPolicyScope) string {
+	if scope.OrDefault() == schemas.CooldownScopeModel {
+		return c.keyModel(provider, keyID, model)
+	}
+	return c.key(provider, keyID)
+}
+
+// parseCooldownKey reverses markKey for Snapshot: splits "<provider>::<keyID>
+// ::<model>" on the LAST "::" to separate the model, then the FIRST "::" of
+// the head to separate provider from keyID. Keyless providers (whose keyID is
+// empty) produce a head with no separator — mapped to keyID="".
+func parseCooldownKey(k string) (provider string, keyID string, model string) {
+	last := strings.LastIndex(k, "::")
+	if last < 0 {
+		return "", "", ""
+	}
+	head, model := k[:last], k[last+2:]
+	first := strings.Index(head, "::")
+	if first < 0 {
+		// no provider::keyID separator → keyless provider entry
+		return head, "", model
+	}
+	return head[:first], head[first+2:], model
 }
 
 // effectiveTTL looks up an override; the caller MUST hold c.mu (read or
@@ -205,9 +254,18 @@ func (c *CooldownState) effectiveTTLLocked(provider schemas.ModelProvider) time.
 }
 
 // IsCoolingDown reports whether the given (provider, keyID) is currently
-// suppressed. Expired entries are pruned lazily on access.
+// suppressed at key granularity. Expired entries are pruned lazily on access.
+// For model-granularity queries use IsCoolingDownForModel.
 func (c *CooldownState) IsCoolingDown(provider schemas.ModelProvider, keyID string) bool {
-	_, _, ok := c.lookupCooldown(provider, keyID)
+	_, _, ok := c.lookupCooldown(provider, keyID, "", schemas.CooldownScopeKey)
+	return ok
+}
+
+// IsCoolingDownForModel reports whether the given (provider, keyID, model)
+// triple is currently suppressed at model granularity. Expired entries are
+// pruned lazily on access.
+func (c *CooldownState) IsCoolingDownForModel(provider schemas.ModelProvider, keyID string, model string) bool {
+	_, _, ok := c.lookupCooldown(provider, keyID, model, schemas.CooldownScopeModel)
 	return ok
 }
 
@@ -218,17 +276,28 @@ func (c *CooldownState) IsCoolingDown(provider schemas.ModelProvider, keyID stri
 // Expired entries are pruned lazily on access. Callers MUST treat the bool as
 // authoritative — the time/kind values are only meaningful when true.
 //
+// scope controls which storage key format to query: CooldownScopeKey checks
+// the "<provider>::<keyID>::" entry; CooldownScopeModel checks the
+// "<provider>::<keyID>::<model>" entry.
+//
 // For keyless providers (see schemas.IsKeylessProvider, e.g. bare `opencode`)
 // the empty keyID is a legal sentinel: bifrost's GetKeysForProvider returns a
 // single []schemas.Key{{}} for keyless providers and the retry loop routes
 // every attempt through that single sentinel key. Empty keyID on a non-keyless
 // provider is still treated as a no-op so a caller bug cannot silently mark
 // "the whole provider" by accident.
-func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID string) (time.Time, CooldownKind, bool) {
+//
+// A model-granularity query with an empty model returns false immediately
+// (the filter never consults the model granularity when the runtime model is
+// empty, so the lookup is trivially "not cooling").
+func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID string, model string, scope schemas.CooldownPolicyScope) (time.Time, CooldownKind, bool) {
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return time.Time{}, "", false
 	}
-	k := c.key(provider, keyID)
+	if scope.OrDefault() == schemas.CooldownScopeModel && model == "" {
+		return time.Time{}, "", false
+	}
+	k := c.markKey(provider, keyID, model, scope)
 	now := time.Now()
 	c.mu.RLock()
 	rec, ok := c.cooldowns[k]
@@ -248,24 +317,49 @@ func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID str
 	return rec.expiresAt, rec.kind, true
 }
 
+// lookupSuppressed checks both the key-granularity and (when the runtime
+// model is non-empty) the model-granularity entries for a key. A key is
+// suppressed if EITHER form has an active cooldown:
+//
+//   - scope=key marks match every request for that key across all models.
+//   - scope=model marks match only requests whose model equals the marked one.
+//
+// The key-granularity check runs first so its kind wins when both forms are
+// present (a key-level quota mark is broader than a model-level one and takes
+// precedence in the stats attribution).
+func (c *CooldownState) lookupSuppressed(provider schemas.ModelProvider, keyID string, model string) (time.Time, CooldownKind, schemas.CooldownPolicyScope, bool) {
+	if t, k, ok := c.lookupCooldown(provider, keyID, "", schemas.CooldownScopeKey); ok {
+		return t, k, schemas.CooldownScopeKey, true
+	}
+	if model == "" {
+		return time.Time{}, "", schemas.CooldownScopeKey, false
+	}
+	t, k, ok := c.lookupCooldown(provider, keyID, model, schemas.CooldownScopeModel)
+	if ok {
+		return t, k, schemas.CooldownScopeModel, true
+	}
+	return time.Time{}, "", schemas.CooldownScopeKey, false
+}
+
 // Mark records a cooldown for the given (provider, keyID) with no classified
-// kind. A no-op when keyID is empty AND the provider is not a known keyless
-// provider — for keyless providers (e.g. bare `opencode`), the empty keyID is
-// a legal sentinel representing the whole provider, so we mark at the
-// provider level there.
+// kind at key granularity. A no-op when keyID is empty AND the provider is not
+// a known keyless provider — for keyless providers (e.g. bare `opencode`), the
+// empty keyID is a legal sentinel representing the whole provider, so we mark
+// at the provider level there.
 //
 // Unclassified marks still bump the lifetime markCount counter for backward
 // compatibility with the original single-counter API, but do NOT contribute
 // to by_kind or per_provider stats. Callers that have a classified reason
-// (policy hit) should use MarkWithTTL(..., kind) instead.
+// (policy hit) should use MarkWithTTL(..., kind, scope) instead.
 func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
-	c.MarkWithTTL(provider, keyID, 0, "")
+	c.MarkWithTTL(provider, keyID, "", 0, "", schemas.CooldownScopeKey)
 }
 
-// MarkWithTTL records a cooldown for (provider, keyID) using ttl as the
+// MarkWithTTL records a cooldown for (provider, keyID, model) using ttl as the
 // cooldown duration, attributing the mark to the given kind (rate_limit or
-// quota). A ttl <= 0 falls back to the provider's effective TTL (the configured
-// default or per-provider override), preserving the behaviour of Mark.
+// quota) and scope ("key" or "model"). A ttl <= 0 falls back to the provider's
+// effective TTL (the configured default or per-provider override), preserving
+// the behaviour of Mark.
 //
 // For keyless providers (schemas.IsKeylessProvider, e.g. bare `opencode`),
 // an empty keyID is the legal sentinel key returned by bifrost's
@@ -275,8 +369,16 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 //
 // kind="rate_limit" / "quota" also bumps by_kind and per_provider counters.
 // kind="" only bumps the legacy markCount counter.
-func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string, ttl time.Duration, kind CooldownKind) {
+//
+// A model-granularity mark (scope="model") requires a non-empty model to key
+// on — without one an entry would be recorded that the filter can never match
+// (the filter only consults the model granularity when the runtime model is
+// non-empty), so the mark is skipped rather than recorded as a dead entry.
+func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string, model string, ttl time.Duration, kind CooldownKind, scope schemas.CooldownPolicyScope) {
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
+		return
+	}
+	if scope.OrDefault() == schemas.CooldownScopeModel && model == "" {
 		return
 	}
 	c.mu.Lock()
@@ -284,7 +386,7 @@ func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string
 	if effective <= 0 {
 		effective = c.effectiveTTLLocked(provider)
 	}
-	c.cooldowns[c.key(provider, keyID)] = CooldownRecord{
+	c.cooldowns[c.markKey(provider, keyID, model, scope)] = CooldownRecord{
 		expiresAt: time.Now().Add(effective),
 		kind:      kind,
 	}
@@ -294,6 +396,13 @@ func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string
 		c.perProviderMarkLocked(provider).RateLimit.MarkCount++
 	} else if kind == CooldownKindQuota {
 		c.perProviderMarkLocked(provider).Quota.MarkCount++
+	}
+	if scope.OrDefault() == schemas.CooldownScopeModel && model != "" && kind != "" {
+		if kind == CooldownKindRateLimit {
+			c.perProviderModelMarkLocked(provider, model).RateLimit.MarkCount++
+		} else if kind == CooldownKindQuota {
+			c.perProviderModelMarkLocked(provider, model).Quota.MarkCount++
+		}
 	}
 	c.mu.Unlock()
 	c.markCount.Add(1)
@@ -306,6 +415,20 @@ func (c *CooldownState) perProviderMarkLocked(provider schemas.ModelProvider) *P
 	if !ok {
 		pc = &ProviderKindCounters{}
 		c.perProvider[provider] = pc
+	}
+	return pc
+}
+
+// perProviderModelMarkLocked returns the per-(provider, model) counter struct
+// for the given (provider, model), creating it on demand. The caller MUST
+// hold c.mu (write). The model must be non-empty (caller is responsible for
+// checking — this is guaranteed by MarkWithTTL's scope=model guard).
+func (c *CooldownState) perProviderModelMarkLocked(provider schemas.ModelProvider, model string) *ProviderKindCounters {
+	key := string(provider) + "::" + model
+	pc, ok := c.perProviderModel[key]
+	if !ok {
+		pc = &ProviderKindCounters{}
+		c.perProviderModel[key] = pc
 	}
 	return pc
 }
@@ -337,6 +460,7 @@ func (c *CooldownState) Size() int {
 type CooldownEntry struct {
 	Provider  schemas.ModelProvider `json:"provider"`
 	KeyID     string                `json:"key_id"`
+	Model     string                `json:"model,omitempty"`
 	ExpiresAt time.Time             `json:"expires_at"`
 	Remaining time.Duration         `json:"remaining"`
 	Kind      CooldownKind          `json:"kind,omitempty"`
@@ -355,15 +479,14 @@ func (c *CooldownState) Snapshot() []CooldownEntry {
 		if !now.Before(rec.expiresAt) {
 			continue
 		}
-		// k is "provider::keyID". Find the first "::" (provider names
-		// never contain it; keyIDs come from provider configs).
-		i := strings.Index(k, "::")
-		if i < 0 {
+		prov, keyID, model := parseCooldownKey(k)
+		if prov == "" {
 			continue
 		}
 		out = append(out, CooldownEntry{
-			Provider:  schemas.ModelProvider(k[:i]),
-			KeyID:     k[i+2:],
+			Provider:  schemas.ModelProvider(prov),
+			KeyID:     keyID,
+			Model:     model,
 			ExpiresAt: rec.expiresAt,
 			Remaining: rec.expiresAt.Sub(now),
 			Kind:      rec.kind,
@@ -372,7 +495,8 @@ func (c *CooldownState) Snapshot() []CooldownEntry {
 	return out
 }
 
-// ClearKey removes any cooldown on the given (provider, keyID). Returns true
+// ClearKey removes any cooldown on the given (provider, keyID), or — when
+// model is non-empty — on the (provider, keyID, model) triple. Returns true
 // if an entry was removed. Calling on an unknown key or empty keyID is a
 // no-op (returns false). Useful when an operator manually un-cools a key
 // after fixing the underlying issue (e.g. topping up quota).
@@ -382,13 +506,16 @@ func (c *CooldownState) Snapshot() []CooldownEntry {
 // sentinel — if an operator wants to lift a provider-level cooldown they can
 // wait for it to expire. Mark/lookup on the same sentinel are intentionally
 // permitted (see MarkWithTTL) so the cooldown can actually take hold.
-func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string) bool {
+func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string, model string) bool {
 	if keyID == "" {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	k := c.key(provider, keyID)
+	if model != "" {
+		k = c.keyModel(provider, keyID, model)
+	}
 	if _, ok := c.cooldowns[k]; !ok {
 		return false
 	}
@@ -410,12 +537,17 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string) b
 //   - PerProvider is the same kind-bucketed counters broken down per
 //     provider. Only providers that have experienced at least one
 //     classified event appear.
+//   - PerProviderModel is the same counters broken down per (provider, model)
+//     for model-granularity (scope=model) events. Keyed by "provider::model".
+//     Only (provider, model) pairs that have experienced at least one
+//     model-granularity event appear.
 type CooldownStats struct {
 	MarkCount          uint64                                         `json:"mark_count"`
 	SuppressedCount    uint64                                         `json:"suppressed_count"`
 	CurrentActiveCount int                                            `json:"current_active_count"`
 	ByKind             ByKindCounters                                 `json:"by_kind"`
 	PerProvider        map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider"`
+	PerProviderModel   map[string]ProviderKindCounters                `json:"per_provider_model,omitempty"`
 }
 
 // Stats returns the lifetime counters and the current number of active
@@ -445,6 +577,10 @@ func (c *CooldownState) Stats() CooldownStats {
 	stats.PerProvider = make(map[schemas.ModelProvider]ProviderKindCounters, len(c.perProvider))
 	for p, pc := range c.perProvider {
 		stats.PerProvider[p] = *pc
+	}
+	stats.PerProviderModel = make(map[string]ProviderKindCounters, len(c.perProviderModel))
+	for mk, mc := range c.perProviderModel {
+		stats.PerProviderModel[mk] = *mc
 	}
 	c.mu.RUnlock()
 	return stats
@@ -518,7 +654,7 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 		}
 		out := make([]schemas.Key, 0, len(keys))
 		for _, k := range keys {
-			_, kind, suppressed := c.lookupCooldown(provider, k.ID)
+			_, kind, matchedScope, suppressed := c.lookupSuppressed(provider, k.ID, model)
 			if !suppressed {
 				out = append(out, k)
 				continue
@@ -537,6 +673,16 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 					c.perProviderMarkLocked(provider).RateLimit.SuppressedCount++
 				case CooldownKindQuota:
 					c.perProviderMarkLocked(provider).Quota.SuppressedCount++
+				}
+				// When the suppression came from a model-granularity match,
+				// also attribute it to the per-(provider, model) bucket.
+				if matchedScope == schemas.CooldownScopeModel && model != "" {
+					switch kind {
+					case CooldownKindRateLimit:
+						c.perProviderModelMarkLocked(provider, model).RateLimit.SuppressedCount++
+					case CooldownKindQuota:
+						c.perProviderModelMarkLocked(provider, model).Quota.SuppressedCount++
+					}
 				}
 				c.mu.Unlock()
 			}
@@ -593,13 +739,13 @@ func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMar
 		// matching against the per-provider CooldownPolicy. classify reads
 		// the policy from ctx[BifrostContextKeyCooldownPolicy] and falls
 		// back to DefaultCooldownPolicy(provider) when the stamp is absent.
-		ttl, _, _, kind, ok := classifyForMarker(ctx, provider, keyID, keyName, bifrostErr)
+		ttl, _, _, kind, scope, ok := classifyForMarker(ctx, provider, keyID, keyName, bifrostErr)
 		if !ok {
 			return
 		}
-		c.MarkWithTTL(provider, keyID, ttl, kind)
+		c.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
 		if logger != nil {
-			logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, kind=%s) from per-key-failure marker", provider, keyID, keyName, ttl, kind)
+			logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s) from per-key-failure marker", provider, keyID, keyName, model, ttl, kind, scope)
 		}
 	}
 }
@@ -756,13 +902,14 @@ func (p *CooldownPlugin) Snapshot() []CooldownEntry {
 	return p.State.Snapshot()
 }
 
-// ClearKey removes any cooldown on (provider, keyID) from the current State.
-// Returns false when the plugin has no state or no entry matched.
-func (p *CooldownPlugin) ClearKey(provider schemas.ModelProvider, keyID string) bool {
+// ClearKey removes any cooldown on (provider, keyID) — or (provider, keyID,
+// model) when model is non-empty — from the current State. Returns false when
+// the plugin has no state or no entry matched.
+func (p *CooldownPlugin) ClearKey(provider schemas.ModelProvider, keyID string, model string) bool {
 	if p.State == nil {
 		return false
 	}
-	return p.State.ClearKey(provider, keyID)
+	return p.State.ClearKey(provider, keyID, model)
 }
 
 // Stats returns lifetime counters and the current active cooldown count
@@ -914,19 +1061,20 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 // stamp is missing or nil (e.g. older builds without the stamp), the
 // function falls back to DefaultCooldownPolicy so every provider still gets
 // a sensible rule set.
-func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (ttl time.Duration, keyID string, keyName string, kind CooldownKind, ok bool) {
+func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (ttl time.Duration, keyID string, keyName string, model string, kind CooldownKind, scope schemas.CooldownPolicyScope, ok bool) {
 	if p.State == nil || bifrostErr == nil {
-		return 0, "", "", "", false
+		return 0, "", "", "", "", schemas.CooldownScopeKey, false
 	}
-	provider, keyID, keyName := lastAttemptProviderAndKey(ctx, bifrostErr)
+	provider, keyID, keyName, model := lastAttemptProviderAndKey(ctx, bifrostErr)
 	// lastAttemptProviderAndKey returns an empty keyID for non-keyless
 	// providers when no trail record carried a key; for keyless providers
 	// the empty sentinel is valid and we fall through to classifyForMarker
 	// so the policy lookup still runs.
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
-		return 0, "", "", "", false
+		return 0, "", "", "", "", schemas.CooldownScopeKey, false
 	}
-	return classifyForMarker(ctx, provider, keyID, keyName, bifrostErr)
+	ttl, keyID, keyName, kind, scope, ok = classifyForMarker(ctx, provider, keyID, keyName, bifrostErr)
+	return
 }
 
 // classifyForMarker is the marker-side counterpart of (*CooldownPlugin).classify:
@@ -943,16 +1091,16 @@ func (p *CooldownPlugin) classify(ctx *schemas.BifrostContext, bifrostErr *schem
 //
 // Quota-first precedence mirrors (*CooldownPlugin).classify — a single error
 // must never be attributed to both rate_limit and quota.
-func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvider, keyID string, keyName string, bifrostErr *schemas.BifrostError) (ttl time.Duration, rKeyID string, rKeyName string, kind CooldownKind, ok bool) {
+func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvider, keyID string, keyName string, bifrostErr *schemas.BifrostError) (ttl time.Duration, rKeyID string, rKeyName string, kind CooldownKind, scope schemas.CooldownPolicyScope, ok bool) {
 	if bifrostErr == nil {
-		return 0, "", "", "", false
+		return 0, "", "", "", schemas.CooldownScopeKey, false
 	}
 	// Empty keyID is the legal sentinel for keyless providers (see
 	// MarkWithTTL); for those we still want to classify and mark. For
 	// non-keyless providers an empty keyID means the caller could not
 	// identify the failing key — skip rather than guess.
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
-		return 0, "", "", "", false
+		return 0, "", "", "", schemas.CooldownScopeKey, false
 	}
 	var policy *schemas.CooldownPolicy
 	if ctx != nil {
@@ -964,12 +1112,12 @@ func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvid
 		policy = schemas.DefaultCooldownPolicy(provider)
 	}
 	if policy.Quota != nil && policy.Quota.MatchesRule(bifrostErr) {
-		return time.Duration(policy.Quota.TTLSeconds) * time.Second, keyID, keyName, CooldownKindQuota, true
+		return time.Duration(policy.Quota.TTLSeconds) * time.Second, keyID, keyName, CooldownKindQuota, policy.Quota.ScopeOrDefault(), true
 	}
 	if policy.RateLimit != nil && policy.RateLimit.MatchesRule(bifrostErr) {
-		return time.Duration(policy.RateLimit.TTLSeconds) * time.Second, keyID, keyName, CooldownKindRateLimit, true
+		return time.Duration(policy.RateLimit.TTLSeconds) * time.Second, keyID, keyName, CooldownKindRateLimit, policy.RateLimit.ScopeOrDefault(), true
 	}
-	return 0, keyID, keyName, "", false
+	return 0, keyID, keyName, "", schemas.CooldownScopeKey, false
 }
 
 func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
@@ -977,7 +1125,7 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 		return resp, bifrostErr, nil
 	}
 
-	ttl, keyID, keyName, kind, ok := p.classify(ctx, bifrostErr)
+	ttl, keyID, keyName, model, kind, scope, ok := p.classify(ctx, bifrostErr)
 	if !ok {
 		// Fallback for builds / providers without a per-provider policy stamp:
 		// preserve the original quota_patterns behaviour so legacy configs
@@ -986,7 +1134,7 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 		// markCount still increments for backward compatibility, but the
 		// per-kind breakdown stays faithful to CooldownPolicy-driven marks.
 		if p.isQuotaExhausted(bifrostErr) {
-			provider, fallbackKeyID, fallbackKeyName := lastAttemptProviderAndKey(ctx, bifrostErr)
+			provider, fallbackKeyID, fallbackKeyName, _ := lastAttemptProviderAndKey(ctx, bifrostErr)
 			// lastAttemptProviderAndKey already widens the "skip empty keyID"
 			// rule for keyless providers, so an empty fallbackKeyID only
 			// happens when the provider is non-keyless and the trail did not
@@ -1002,10 +1150,10 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 		return resp, bifrostErr, nil
 	}
 
-	provider, _, _ := lastAttemptProviderAndKey(ctx, bifrostErr)
-	p.State.MarkWithTTL(provider, keyID, ttl, kind)
+	provider, _, _, _ := lastAttemptProviderAndKey(ctx, bifrostErr)
+	p.State.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
 	if p.logger != nil {
-		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, kind=%s)", provider, keyID, keyName, ttl, kind)
+		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s)", provider, keyID, keyName, model, ttl, kind, scope)
 	}
 	return resp, bifrostErr, nil
 }
@@ -1095,7 +1243,8 @@ func matchesAnyErrorField(err *schemas.BifrostError, patterns []string) bool {
 }
 
 // lastAttemptProviderAndKey resolves the (provider, keyID, keyName) of the most
-// recent failed attempt. Preference order:
+// recent failed attempt, plus the model the failed attempt was routed on.
+// Preference order:
 //  1. BifrostError.ExtraFields.RoutingInfo.Provider (set by core right
 //     before invoking post-hooks; survives the round trip through plugins).
 //  2. BifrostError.ExtraFields.Provider (deprecated, but still populated).
@@ -1108,21 +1257,33 @@ func matchesAnyErrorField(err *schemas.BifrostError, patterns []string) bool {
 // and is returned as-is so PostLLMHook can mark at the provider level. The
 // keyName is only populated when resolved from a KeyAttemptRecord; otherwise
 // it is empty.
-func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (schemas.ModelProvider, string, string) {
+//
+// The model is read from RoutingInfo.Model (the model passed to the failed
+// attempt's key), falling back to the deprecated OriginalModelRequested when
+// RoutingInfo is empty. This matches the `model` argument the retry loop
+// hands the PerKeyFailureMarker, so PostLLMHook and the marker agree on the
+// model used to scope model-granularity marks.
+func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) (schemas.ModelProvider, string, string, string) {
 	var provider schemas.ModelProvider
+	model := ""
 	if bifrostErr != nil {
 		if bifrostErr.ExtraFields.RoutingInfo.Provider != "" {
 			provider = bifrostErr.ExtraFields.RoutingInfo.Provider
 		} else if bifrostErr.ExtraFields.Provider != "" {
 			provider = bifrostErr.ExtraFields.Provider
 		}
+		if bifrostErr.ExtraFields.RoutingInfo.Model != "" {
+			model = bifrostErr.ExtraFields.RoutingInfo.Model
+		} else {
+			model = bifrostErr.ExtraFields.OriginalModelRequested
+		}
 	}
 	if ctx == nil {
-		return provider, "", ""
+		return provider, "", "", model
 	}
 	trail, ok := ctx.Value(schemas.BifrostContextKeyAttemptTrail).([]schemas.KeyAttemptRecord)
 	if !ok {
-		return provider, "", ""
+		return provider, "", "", model
 	}
 	// Pick the last record. AttemptTrail is append-only and ordered, so
 	// iterating in reverse finds the most recent attempt. Empty keyID on the
@@ -1134,7 +1295,7 @@ func lastAttemptProviderAndKey(ctx *schemas.BifrostContext, bifrostErr *schemas.
 		if rec.KeyID == "" && !schemas.IsKeylessProvider(provider) {
 			continue
 		}
-		return provider, rec.KeyID, rec.KeyName
+		return provider, rec.KeyID, rec.KeyName, model
 	}
-	return provider, "", ""
+	return provider, "", "", model
 }

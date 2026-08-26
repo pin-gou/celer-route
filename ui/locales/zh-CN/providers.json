@@ -460,6 +460,11 @@
 			"matchModeLabel": "匹配模式",
 			"matchModeAny": "任一规则命中（any）",
 			"matchModeAll": "所有规则都命中（all）",
+			"scope": {
+				"label": "冷却粒度",
+				"key": "按 Key",
+				"model": "按模型"
+			},
 			"ttlLabel": "冷却时长（秒）",
 			"ttlDescription": "命中的 key 进入冷却的秒数；冷却期间不会被路由选中。",
 			"matchesLabel": "匹配项",

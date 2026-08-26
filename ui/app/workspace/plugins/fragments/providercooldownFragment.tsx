@@ -141,9 +141,9 @@ export function MonitoringPanel() {
 	};
 	const kindStats = readKindStats(stats);
 
-	const handleUnfreeze = async (provider: string, keyId: string) => {
+	const handleUnfreeze = async (provider: string, keyId: string, model?: string) => {
 		try {
-			await unfreeze({ provider, keyId }).unwrap();
+			await unfreeze({ provider, keyId, model }).unwrap();
 			toast.success(t("providerCooldown.unfreezeSuccessToast", { provider, keyId }));
 		} catch {
 			toast.error(t("providerCooldown.unfreezeFailedToast"));
@@ -218,7 +218,7 @@ function ActiveStateRow({
 	t: TFunction;
 	dateLocale: Locale;
 	unfreezeLoading: boolean;
-	onUnfreeze: (provider: string, keyId: string) => void;
+	onUnfreeze: (provider: string, keyId: string, model?: string) => void;
 }) {
 	const reasonKey =
 		entry.reason === "rate_limit" ? "providerCooldown.reasonRateLimit" : entry.reason === "quota" ? "providerCooldown.reasonQuota" : null;
@@ -234,6 +234,7 @@ function ActiveStateRow({
 					<span className="text-muted-foreground text-xs">
 						{entry.keyId === "" ? t("providerCooldown.keylessLabel") : entry.keyId}
 						{entry.keyName ? ` (${entry.keyName})` : ""}
+						{entry.model ? ` / ${entry.model}` : ""}
 					</span>
 					{reasonKey && (
 						<span data-testid={`providercooldown-state-row-${entry.keyId}-kind`} className="bg-muted rounded px-1.5 py-0.5 text-xs">
@@ -245,16 +246,18 @@ function ActiveStateRow({
 					<span>{formatExpires(t, entry.expireAt, dateLocale)}</span>
 				</div>
 			</div>
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				data-testid={`providercooldown-state-row-${entry.keyId}-unfreeze`}
-				onClick={() => onUnfreeze(entry.provider, entry.keyId)}
-				disabled={unfreezeLoading}
-			>
-				{t("providerCooldown.unfreeze")}
-			</Button>
+			{entry.keyId !== "" && (
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					data-testid={`providercooldown-state-row-${entry.keyId}-unfreeze`}
+					onClick={() => onUnfreeze(entry.provider, entry.keyId, entry.model)}
+					disabled={unfreezeLoading}
+				>
+					{t("providerCooldown.unfreeze")}
+				</Button>
+			)}
 		</div>
 	);
 }
@@ -289,7 +292,11 @@ export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
 
 function summarizeRule(rule: CooldownPolicyRule, t: TFunction): string {
 	const mode = rule.match_mode === "all" ? t("providerCooldown.matchModeAll") : t("providerCooldown.matchModeAny");
-	return t("providerCooldown.ruleSummary", { count: rule.match.length, mode, ttl: rule.ttl_seconds });
+	let summary = t("providerCooldown.ruleSummary", { count: rule.match.length, mode, ttl: rule.ttl_seconds });
+	if (rule.scope === "model") {
+		summary += ` · ${t("providerCooldown.scopeModel")}`;
+	}
+	return summary;
 }
 
 function summarizeMatch(
@@ -323,6 +330,7 @@ function PerProviderPolicyOverview() {
 	const withPolicy = providers.filter((p) => p.cooldown_policy !== undefined);
 	const usingDefault = providers.filter((p) => p.cooldown_policy === undefined);
 	const perProviderStats = statsData?.stats?.perProvider ?? {};
+	const perProviderModelStats = statsData?.stats?.perProviderModel ?? {};
 
 	const editPolicy = (providerName: string) => {
 		navigate({
@@ -393,6 +401,32 @@ function PerProviderPolicyOverview() {
 									)}
 								</div>
 							)}
+							{(() => {
+								const modelStats = perProviderModelStats[p.name];
+								if (!modelStats || Object.keys(modelStats).length === 0) return null;
+								return (
+									<div className="mt-2 border-t pt-2" data-testid={`providercooldown-policy-model-stats-${p.name}`}>
+										<div className="text-muted-foreground mb-1 text-xs font-medium">{t("providerCooldown.modelBreakdownTitle")}</div>
+										{Object.entries(modelStats).map(([model, ms]) => (
+											<div
+												key={model}
+												className="text-muted-foreground font-mono text-xs"
+												data-testid={`providercooldown-policy-model-stats-${p.name}-${model}`}
+											>
+												<span className="font-medium">{model}:</span> <span className="text-red-500">{ms.rate_limit?.markCount ?? 0}</span>/
+												<span className="text-blue-500">{ms.rate_limit?.suppressedCount ?? 0}</span>
+												<span className="text-border mx-1">·</span>
+												<span className="text-red-500">{ms.quota?.markCount ?? 0}</span>/
+												<span className="text-blue-500">{ms.quota?.suppressedCount ?? 0}</span>
+												<span className="ml-0.5">
+													（<span className="text-red-500">{t("providerCooldown.marked")}</span>/
+													<span className="text-blue-500">{t("providerCooldown.suppressed")}</span>）
+												</span>
+											</div>
+										))}
+									</div>
+								);
+							})()}
 						</div>
 					))}
 				</div>

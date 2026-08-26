@@ -214,7 +214,7 @@ func TestAsMarkerPrefersQuotaOverRateLimit(t *testing.T) {
 	if !s.IsCoolingDown(provider, "key-X") {
 		t.Fatal("expected key-X to be marked")
 	}
-	_, kind, ok := s.lookupCooldown(provider, "key-X")
+	_, kind, ok := s.lookupCooldown(provider, "key-X", "", schemas.CooldownScopeKey)
 	if !ok || kind != CooldownKindQuota {
 		t.Fatalf("expected kind=quota (precedence over rate_limit), got ok=%v kind=%q", ok, kind)
 	}
@@ -355,21 +355,21 @@ func TestStateClearKey(t *testing.T) {
 		t.Fatal("precondition: key should be cooling down")
 	}
 
-	if !s.ClearKey(schemas.OpenAI, "key-a") {
+	if !s.ClearKey(schemas.OpenAI, "key-a", "") {
 		t.Fatal("ClearKey should return true for an existing entry")
 	}
 	if s.IsCoolingDown(schemas.OpenAI, "key-a") {
 		t.Fatal("after ClearKey, the key must no longer be cooling down")
 	}
 	// Clearing again is a no-op returning false.
-	if s.ClearKey(schemas.OpenAI, "key-a") {
+	if s.ClearKey(schemas.OpenAI, "key-a", "") {
 		t.Fatal("ClearKey on a non-existent entry should return false")
 	}
 }
 
 func TestStateClearKeyEmptyKeyID(t *testing.T) {
 	s := NewCooldownState(time.Minute)
-	if s.ClearKey(schemas.OpenAI, "") {
+	if s.ClearKey(schemas.OpenAI, "", "") {
 		t.Fatal("ClearKey with empty keyID must return false")
 	}
 }
@@ -383,7 +383,7 @@ func TestPluginSnapshotAndClearKeyDelegates(t *testing.T) {
 	if len(entries) != 1 || entries[0].KeyID != "key-a" {
 		t.Fatalf("expected 1 entry for key-a, got %+v", entries)
 	}
-	if !p.ClearKey(schemas.OpenAI, "key-a") {
+	if !p.ClearKey(schemas.OpenAI, "key-a", "") {
 		t.Fatal("plugin ClearKey should delegate and return true")
 	}
 	if len(p.Snapshot()) != 0 {
@@ -398,7 +398,7 @@ func TestPluginSnapshotNilState(t *testing.T) {
 	if got := p.Snapshot(); got != nil {
 		t.Fatalf("Snapshot on nil-state plugin should return nil, got %+v", got)
 	}
-	if p.ClearKey(schemas.OpenAI, "k") {
+	if p.ClearKey(schemas.OpenAI, "k", "") {
 		t.Fatal("ClearKey on nil-state plugin should return false")
 	}
 }
@@ -1257,9 +1257,9 @@ func TestPreProviderHookPassesThroughWhenProviderUnknown(t *testing.T) {
 // legacy counter.
 func TestMarkWithKind_AttributesToByKind(t *testing.T) {
 	s := NewCooldownState(time.Minute)
-	s.MarkWithTTL(schemas.OpenAI, "k1", 60*time.Second, CooldownKindRateLimit)
-	s.MarkWithTTL(schemas.OpenAI, "k2", 60*time.Second, CooldownKindRateLimit)
-	s.MarkWithTTL(schemas.Anthropic, "k3", 60*time.Second, CooldownKindQuota)
+	s.MarkWithTTL(schemas.OpenAI, "k1", "", 60*time.Second, CooldownKindRateLimit, schemas.CooldownScopeKey)
+	s.MarkWithTTL(schemas.OpenAI, "k2", "", 60*time.Second, CooldownKindRateLimit, schemas.CooldownScopeKey)
+	s.MarkWithTTL(schemas.Anthropic, "k3", "", 60*time.Second, CooldownKindQuota, schemas.CooldownScopeKey)
 	s.Mark(schemas.Anthropic, "k4") // unclassified (legacy quota_patterns path)
 
 	stats := s.Stats()
@@ -1287,8 +1287,8 @@ func TestMarkWithKind_AttributesToByKind(t *testing.T) {
 // to a downstream observer.
 func TestAsFilter_AttributesSuppressionToKind(t *testing.T) {
 	s := NewCooldownState(time.Minute)
-	s.MarkWithTTL(schemas.OpenAI, "rl-hot", 60*time.Second, CooldownKindRateLimit)
-	s.MarkWithTTL(schemas.OpenAI, "q-hot", 60*time.Second, CooldownKindQuota)
+	s.MarkWithTTL(schemas.OpenAI, "rl-hot", "", 60*time.Second, CooldownKindRateLimit, schemas.CooldownScopeKey)
+	s.MarkWithTTL(schemas.OpenAI, "q-hot", "", 60*time.Second, CooldownKindQuota, schemas.CooldownScopeKey)
 	s.Mark(schemas.OpenAI, "u-hot") // unclassified
 
 	keys := []schemas.Key{{ID: "rl-hot"}, {ID: "q-hot"}, {ID: "u-hot"}, {ID: "cold"}}
@@ -1343,8 +1343,7 @@ func TestAsFilter_AttributesSuppressionToKind(t *testing.T) {
 // payload compact for the UI's per-provider listing.
 func TestStats_PerProviderOmitsUnseenProviders(t *testing.T) {
 	s := NewCooldownState(time.Minute)
-	s.MarkWithTTL(schemas.OpenAI, "k1", 60*time.Second, CooldownKindRateLimit)
-	// sensenova never gets a classified event.
+	s.MarkWithTTL(schemas.OpenAI, "k1", "", 60*time.Second, CooldownKindRateLimit, schemas.CooldownScopeKey)	// sensenova never gets a classified event.
 
 	stats := s.Stats()
 	if _, ok := stats.PerProvider[schemas.OpenAI]; !ok {
@@ -1360,8 +1359,8 @@ func TestStats_PerProviderOmitsUnseenProviders(t *testing.T) {
 // "速率限制" vs "配额耗尽" badges on each row.
 func TestSnapshot_IncludesKind(t *testing.T) {
 	s := NewCooldownState(time.Minute)
-	s.MarkWithTTL(schemas.OpenAI, "rl", 60*time.Second, CooldownKindRateLimit)
-	s.MarkWithTTL(schemas.OpenAI, "q", 60*time.Second, CooldownKindQuota)
+	s.MarkWithTTL(schemas.OpenAI, "rl", "", 60*time.Second, CooldownKindRateLimit, schemas.CooldownScopeKey)
+	s.MarkWithTTL(schemas.OpenAI, "q", "", 60*time.Second, CooldownKindQuota, schemas.CooldownScopeKey)
 	s.Mark(schemas.OpenAI, "u") // unclassified → Kind=""
 
 	entries := s.Snapshot()
@@ -1400,7 +1399,7 @@ func TestClassify_ReturnsKind(t *testing.T) {
 
 	// Quota rule wins on the "quota" message.
 	err := newErr(429, "", "", "quota exceeded")
-	_, _, _, kind, ok := plugin.classify(ctx, err)
+	_, _, _, _, kind, _, ok := plugin.classify(ctx, err)
 	if !ok {
 		t.Fatal("expected classify to fire on quota message")
 	}
@@ -1410,7 +1409,7 @@ func TestClassify_ReturnsKind(t *testing.T) {
 
 	// Rate-limit rule wins on a bare 429 with no quota signal.
 	err = newErr(429, "", "", "rate exceeded")
-	_, _, _, kind, ok = plugin.classify(ctx, err)
+	_, _, _, _, kind, _, ok = plugin.classify(ctx, err)
 	if !ok {
 		t.Fatal("expected classify to fire on rate-limit message")
 	}
@@ -1420,7 +1419,7 @@ func TestClassify_ReturnsKind(t *testing.T) {
 
 	// No match → kind is empty (unclassified), ok=false.
 	err = newErr(500, "", "", "server error")
-	_, _, _, kind, ok = plugin.classify(ctx, err)
+	_, _, _, _, kind, _, ok = plugin.classify(ctx, err)
 	if ok {
 		t.Fatal("expected classify to NOT fire on 500")
 	}
@@ -1604,7 +1603,7 @@ func TestClearKey_KeylessProvider_EmptyKeyIDNoOp(t *testing.T) {
 	// ClearKey intentionally rejects empty keyID even for keyless providers
 	// — there is no operator path that targets the synthetic sentinel; if
 	// an operator wants to lift the cooldown they wait for it to expire.
-	if s.ClearKey(schemas.Opencode, "") {
+	if s.ClearKey(schemas.Opencode, "", "") {
 		t.Fatal("ClearKey must NOT clear the keyless sentinel via empty keyID")
 	}
 	if !s.IsCoolingDown(schemas.Opencode, "") {
@@ -1653,7 +1652,7 @@ func TestPreProviderHook_KeylessProviderSynthesizesSentinelKey(t *testing.T) {
 	provider := schemas.Opencode
 	// Pre-condition: a quota mark already exists for the keyless sentinel
 	// (empty keyID is the legal sentinel for schemas.IsKeylessProvider).
-	p.State.MarkWithTTL(provider, "", time.Minute, CooldownKindQuota)
+	p.State.MarkWithTTL(provider, "", "", time.Minute, CooldownKindQuota, schemas.CooldownScopeKey)
 	if !p.State.IsCoolingDown(provider, "") {
 		t.Fatal("setup: expected keyless sentinel to be cooled")
 	}
@@ -1794,5 +1793,291 @@ func TestPreProviderHook_NonKeylessProviderEmptySnapshotStillPassesThrough(t *te
 	if post := p.State.Stats(); post.SuppressedCount != preStats.SuppressedCount {
 		t.Fatalf("suppressed_count must not advance for non-keyless empty snapshot, got %d (was %d)",
 			post.SuppressedCount, preStats.SuppressedCount)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Scope (model-granularity cooldown) tests
+// ---------------------------------------------------------------------------
+
+func TestScopeModel_MarkAndLookup(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	if !s.IsCoolingDownForModel(schemas.OpenAI, "key-a", "gpt-4o") {
+		t.Fatal("scope=model: key-a/gpt-4o should be cooling down")
+	}
+	// key-granularity must NOT be affected by a model-granularity mark.
+	if s.IsCoolingDown(schemas.OpenAI, "key-a") {
+		t.Fatal("scope=model: key-granularity must NOT be suppressed by a model-only mark")
+	}
+}
+
+func TestScopeModel_DifferentModelNotSuppressed(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	if s.IsCoolingDownForModel(schemas.OpenAI, "key-a", "claude-3") {
+		t.Fatal("scope=model: key-a/claude-3 must NOT be suppressed when only gpt-4o is marked")
+	}
+}
+
+func TestScopeModel_EmptyModelNotMarked(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	// scope=model with empty model must be a no-op.
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	if s.Size() != 0 {
+		t.Fatal("scope=model with empty model must not record an entry")
+	}
+}
+
+func TestScopeKey_SuppressesAllModels(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "", time.Minute, CooldownKindQuota, schemas.CooldownScopeKey)
+
+	if !s.IsCoolingDown(schemas.OpenAI, "key-a") {
+		t.Fatal("scope=key: key-a should be cooling down at key granularity")
+	}
+	// lookupSuppressed must also see it regardless of model.
+	_, _, _, suppressed := s.lookupSuppressed(schemas.OpenAI, "key-a", "gpt-4o")
+	if !suppressed {
+		t.Fatal("scope=key: lookupSuppressed must see key-granularity mark even with model")
+	}
+}
+
+func TestAsFilter_ScopeModelSuppressesMatchingModel(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	keys := []schemas.Key{{ID: "key-a"}}
+	filtered, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+	if len(filtered) != 0 {
+		t.Fatal("scope=model: key-a must be suppressed when requesting gpt-4o")
+	}
+}
+
+func TestAsFilter_ScopeModelSkipsDifferentModel(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	keys := []schemas.Key{{ID: "key-a"}}
+	filtered, err := s.AsFilter(nil)(nil, schemas.OpenAI, "claude-3", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+	if len(filtered) != 1 {
+		t.Fatal("scope=model: key-a must NOT be suppressed when requesting a different model")
+	}
+}
+
+func TestAsFilter_ScopeModelEmptyModelNotSuppressed(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	keys := []schemas.Key{{ID: "key-a"}}
+	// Empty model (ListModels etc.) must NOT be suppressed by model-granularity marks.
+	filtered, err := s.AsFilter(nil)(nil, schemas.OpenAI, "", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+	if len(filtered) != 1 {
+		t.Fatal("scope=model: key-a must NOT be suppressed when the runtime model is empty")
+	}
+}
+
+func TestAsFilter_ScopeKeySuppressesAllModels(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "", time.Minute, CooldownKindQuota, schemas.CooldownScopeKey)
+
+	keys := []schemas.Key{{ID: "key-a"}}
+	// key-granularity mark suppresses every model.
+	filtered, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+	if len(filtered) != 0 {
+		t.Fatal("scope=key: key-a must be suppressed even when a model is requested")
+	}
+}
+
+func TestClearKey_WithModel(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	if !s.IsCoolingDownForModel(schemas.OpenAI, "key-a", "gpt-4o") {
+		t.Fatal("precondition: key-a/gpt-4o should be cooling down")
+	}
+	// Clear with matching model.
+	if !s.ClearKey(schemas.OpenAI, "key-a", "gpt-4o") {
+		t.Fatal("ClearKey with model should return true")
+	}
+	if s.IsCoolingDownForModel(schemas.OpenAI, "key-a", "gpt-4o") {
+		t.Fatal("after ClearKey with model, entry must be removed")
+	}
+	// Clear with empty model should NOT affect the model-granularity entry.
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+	if s.ClearKey(schemas.OpenAI, "key-a", "") {
+		t.Fatal("ClearKey with empty model must NOT clear a model-granularity entry")
+	}
+	if !s.IsCoolingDownForModel(schemas.OpenAI, "key-a", "gpt-4o") {
+		t.Fatal("model-granularity entry must survive ClearKey with empty model")
+	}
+}
+
+func TestSnapshot_IncludesModel(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+	s.MarkWithTTL(schemas.OpenAI, "key-b", "", time.Minute, CooldownKindRateLimit, schemas.CooldownScopeKey)
+
+	snap := s.Snapshot()
+	var foundModel, foundKey bool
+	for _, e := range snap {
+		if e.KeyID == "key-a" && e.Model == "gpt-4o" {
+			foundModel = true
+		}
+		if e.KeyID == "key-b" && e.Model == "" {
+			foundKey = true
+		}
+	}
+	if !foundModel {
+		t.Fatal("Snapshot should include model for model-granularity entries")
+	}
+	if !foundKey {
+		t.Fatal("Snapshot should include empty model for key-granularity entries")
+	}
+}
+
+func TestKeylessProvider_ScopeModelAndLookup(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.Opencode, "", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	if !s.IsCoolingDownForModel(schemas.Opencode, "", "gpt-4o") {
+		t.Fatal("keyless scope=model: gpt-4o should be cooling down")
+	}
+	if s.IsCoolingDownForModel(schemas.Opencode, "", "claude-3") {
+		t.Fatal("keyless scope=model: claude-3 must NOT be cooled when only gpt-4o is marked")
+	}
+	// Key-granularity must not be affected.
+	if s.IsCoolingDown(schemas.Opencode, "") {
+		t.Fatal("keyless scope=model: key-granularity must NOT be suppressed")
+	}
+	// Snapshot should show empty keyID and the model.
+	snap := s.Snapshot()
+	var found bool
+	for _, e := range snap {
+		if e.Provider == schemas.Opencode && e.KeyID == "" && e.Model == "gpt-4o" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("keyless scope=model: Snapshot should include the model")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PerProviderModel stats tests
+// ---------------------------------------------------------------------------
+
+func TestPerProviderModel_ScopeModelMarkUpdatesModelCounters(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+	s.MarkWithTTL(schemas.OpenAI, "key-b", "gpt-4o", time.Minute, CooldownKindRateLimit, schemas.CooldownScopeModel)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "claude-3", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	stats := s.Stats()
+	if stats.PerProviderModel == nil {
+		t.Fatal("PerProviderModel should be non-nil after model-granularity marks")
+	}
+	// openai::gpt-4o: quota mark=1, rate_limit mark=1
+	gptKey := "openai::gpt-4o"
+	gpt, ok := stats.PerProviderModel[gptKey]
+	if !ok {
+		t.Fatalf("PerProviderModel should contain %q", gptKey)
+	}
+	if gpt.Quota.MarkCount != 1 {
+		t.Fatalf("%s quota.mark_count = %d, want 1", gptKey, gpt.Quota.MarkCount)
+	}
+	if gpt.RateLimit.MarkCount != 1 {
+		t.Fatalf("%s rate_limit.mark_count = %d, want 1", gptKey, gpt.RateLimit.MarkCount)
+	}
+	// openai::claude-3: quota mark=1 only
+	claudeKey := "openai::claude-3"
+	claude, ok := stats.PerProviderModel[claudeKey]
+	if !ok {
+		t.Fatalf("PerProviderModel should contain %q", claudeKey)
+	}
+	if claude.Quota.MarkCount != 1 {
+		t.Fatalf("%s quota.mark_count = %d, want 1", claudeKey, claude.Quota.MarkCount)
+	}
+	if claude.RateLimit.MarkCount != 0 {
+		t.Fatalf("%s rate_limit.mark_count = %d, want 0", claudeKey, claude.RateLimit.MarkCount)
+	}
+}
+
+func TestPerProviderModel_ScopeKeyMarkDoesNotUpdateModelCounters(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "", time.Minute, CooldownKindQuota, schemas.CooldownScopeKey)
+	s.MarkWithTTL(schemas.OpenAI, "key-b", "", time.Minute, CooldownKindRateLimit, schemas.CooldownScopeKey)
+
+	stats := s.Stats()
+	if stats.PerProviderModel != nil && len(stats.PerProviderModel) > 0 {
+		t.Fatal("PerProviderModel must be empty after key-granularity marks only")
+	}
+}
+
+func TestPerProviderModel_AsFilterModelSuppressionBumpsSuppressed(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, CooldownKindQuota, schemas.CooldownScopeModel)
+
+	// Suppress key-a on gpt-4o — model-granularity match.
+	keys := []schemas.Key{{ID: "key-a"}}
+	_, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+
+	stats := s.Stats()
+	gptKey := "openai::gpt-4o"
+	gpt, ok := stats.PerProviderModel[gptKey]
+	if !ok {
+		t.Fatalf("PerProviderModel should contain %q after model suppression", gptKey)
+	}
+	if gpt.Quota.SuppressedCount != 1 {
+		t.Fatalf("%s quota.suppressed_count = %d, want 1", gptKey, gpt.Quota.SuppressedCount)
+	}
+
+	// Suppress on a different model — must NOT bump suppressed for gpt-4o.
+	_, err = s.AsFilter(nil)(nil, schemas.OpenAI, "claude-3", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+
+	stats = s.Stats()
+	gpt = stats.PerProviderModel[gptKey]
+	if gpt.Quota.SuppressedCount != 1 {
+		t.Fatalf("different model suppression must NOT bump %s suppressed, got %d", gptKey, gpt.Quota.SuppressedCount)
+	}
+}
+
+func TestPerProviderModel_AsFilterKeyGranularityDoesNotBumpModel(t *testing.T) {
+	s := NewCooldownState(time.Minute)
+	// Key-granularity mark.
+	s.MarkWithTTL(schemas.OpenAI, "key-a", "", time.Minute, CooldownKindQuota, schemas.CooldownScopeKey)
+
+	keys := []schemas.Key{{ID: "key-a"}}
+	_, err := s.AsFilter(nil)(nil, schemas.OpenAI, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("AsFilter error: %v", err)
+	}
+
+	// PerProviderModel must remain empty — key-granularity suppression does
+	// NOT attribute to model buckets.
+	stats := s.Stats()
+	if stats.PerProviderModel != nil && len(stats.PerProviderModel) > 0 {
+		t.Fatal("PerProviderModel must be empty after key-granularity suppression only")
 	}
 }

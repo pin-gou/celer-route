@@ -584,15 +584,52 @@ type CooldownPolicyMatch struct {
 	Code            []string `json:"code,omitempty"`
 }
 
+// CooldownPolicyScope describes the granularity at which a cooldown mark is
+// recorded and looked up.
+//
+//   - CooldownScopeKey (default): a quota/rate-limit hit cools the whole
+//     (provider, key) pair regardless of which model triggered it — a hit on
+//     model A also suppresses model B on the same key.
+//   - CooldownScopeModel: a hit cools only the (provider, key, model) triple —
+//     model A and model B on the same key cool down independently. Use this
+//     when the provider enforces per-model quotas (e.g. per-model TPM/RPM
+//     limits) so one model's exhaustion does not block another.
+type CooldownPolicyScope string
+
+const (
+	CooldownScopeKey   CooldownPolicyScope = "key"   // default; backward compatible
+	CooldownScopeModel CooldownPolicyScope = "model" // also narrow by requested model
+)
+
+// OrDefault resolves an empty scope (not explicitly configured) to the
+// default CooldownScopeKey, keeping older configurations that predate the
+// scope field on the legacy (provider, key) granularity.
+func (s CooldownPolicyScope) OrDefault() CooldownPolicyScope {
+	if s == CooldownScopeModel {
+		return CooldownScopeModel
+	}
+	return CooldownScopeKey
+}
+
 // CooldownPolicyRule groups one or more matches and the TTL applied when the
 // matches fire. MatchMode controls whether ANY rule firing is enough
 // ("any", default) or ALL rules must fire ("all"). TTLSeconds is the
 // cooldown duration for keys marked under this rule.
 type CooldownPolicyRule struct {
 	Enabled    *bool                 `json:"enabled,omitempty"` // nil/default = enabled; false = disabled but retains Match data for re-enable
+	Scope      CooldownPolicyScope   `json:"scope,omitempty"`   // "key" (default) or "model"; empty resolves to CooldownScopeKey
 	Match      []CooldownPolicyMatch `json:"match"`
 	MatchMode  string                `json:"match_mode,omitempty"` // "any" | "all"; defaults to "any" when empty
 	TTLSeconds int                   `json:"ttl_seconds"`
+}
+
+// ScopeOrDefault returns the rule's effective scope, defaulting to
+// CooldownScopeKey when unset.
+func (r *CooldownPolicyRule) ScopeOrDefault() CooldownPolicyScope {
+	if r == nil {
+		return CooldownScopeKey
+	}
+	return r.Scope.OrDefault()
 }
 
 // CooldownPolicy attaches rate_limit and quota cooldown rules to a single

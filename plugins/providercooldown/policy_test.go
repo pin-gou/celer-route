@@ -71,7 +71,7 @@ func TestClassify_QuotaRule_FiresOnSensenovaWorkspaceQuota(t *testing.T) {
 		"Workspace allocated quota exceeded, please increase your quota limit.",
 		string(schemas.Sensenova))
 
-	ttl, keyID, _, _, ok := plugin.classify(ctx, err)
+	ttl, keyID, _, _, _, _, ok := plugin.classify(ctx, err)
 	if !ok {
 		t.Fatal("expected classify to return ok=true for sensenova quota error")
 	}
@@ -90,7 +90,7 @@ func TestClassify_RateLimitRule_FiresOnBare429(t *testing.T) {
 	// Bare 429 + rate_limit_error — no quota substring.
 	err := newErrOn(429, "rate_limit_error", "", "HTTP error 429: ", string(schemas.Sensenova))
 
-	ttl, _, _, _, ok := plugin.classify(ctx, err)
+	ttl, _, _, _, _, _, ok := plugin.classify(ctx, err)
 	if !ok {
 		t.Fatal("expected rate_limit policy to fire on bare 429 + rate_limit_error type")
 	}
@@ -114,7 +114,7 @@ func TestClassify_EnabledFalseDoesNotFire(t *testing.T) {
 	ctx := withTrail(t, policy)
 	err := newErr(429, "", "", "")
 
-	if _, _, _, _, ok := plugin.classify(ctx, err); ok {
+	if _, _, _, _, _, _, ok := plugin.classify(ctx, err); ok {
 		t.Fatal("rule with enabled=false must not fire even when a match fires")
 	}
 }
@@ -133,7 +133,7 @@ func TestClassify_EnabledTruePreservesNilDefault(t *testing.T) {
 	ctx := withTrail(t, policy)
 	err := newErr(429, "", "", "")
 
-	if _, _, _, _, ok := plugin.classify(ctx, err); !ok {
+	if _, _, _, _, _, _, ok := plugin.classify(ctx, err); !ok {
 		t.Fatal("rule with enabled=true must fire on a matching error")
 	}
 }
@@ -157,7 +157,7 @@ func TestClassify_QuotaCheckedBeforeRateLimit(t *testing.T) {
 	ctx := withTrail(t, policy)
 	err := newErr(429, "", "", "")
 
-	ttl, _, _, _, ok := plugin.classify(ctx, err)
+	ttl, _, _, _, _, _, ok := plugin.classify(ctx, err)
 	if !ok {
 		t.Fatal("expected classify to fire")
 	}
@@ -182,13 +182,13 @@ func TestClassify_AllModeRequiresEveryMatch(t *testing.T) {
 
 	// status_code 429 hits but code missing → must NOT fire under "all".
 	err := newErr(429, "rate_limit_error", "", "anything")
-	if _, _, _, _, ok := plugin.classify(ctx, err); ok {
+	if _, _, _, _, _, _, ok := plugin.classify(ctx, err); ok {
 		t.Fatal("\"all\" mode should not fire when only one of two matches succeeds")
 	}
 
 	// both predicates satisfied → fires.
 	err = newErr(429, "", "insufficient_quota", "")
-	if _, _, _, _, ok := plugin.classify(ctx, err); !ok {
+	if _, _, _, _, _, _, ok := plugin.classify(ctx, err); !ok {
 		t.Fatal("\"all\" mode should fire when every match succeeds")
 	}
 }
@@ -207,7 +207,7 @@ func TestClassify_MessageContainsIsCaseInsensitive(t *testing.T) {
 	ctx := withTrail(t, policy)
 	err := newErr(429, "", "", "workspace allocated quota exceeded")
 
-	_, _, _, _, ok := plugin.classify(ctx, err)
+	_, _, _, _, _, _, ok := plugin.classify(ctx, err)
 	if !ok {
 		t.Fatal("expected classify to fire on lower-case message containing upper-case pattern")
 	}
@@ -226,7 +226,7 @@ func TestClassify_FallsBackToDefaultPolicyWhenStampMissing(t *testing.T) {
 	})
 
 	err := newErr(429, "rate_limit_error", "", "")
-	ttl, _, _, _, ok := plugin.classify(ctx, err)
+	ttl, _, _, _, _, _, ok := plugin.classify(ctx, err)
 	if !ok {
 		t.Fatal("expected classify to fire using default policy fallback")
 	}
@@ -256,7 +256,7 @@ func TestClassify_NoMatchReturnsFalse(t *testing.T) {
 	})
 	err := newErr(500, "", "", "some server error")
 
-	if _, _, _, _, ok := plugin.classify(ctx, err); ok {
+	if _, _, _, _, _, _, ok := plugin.classify(ctx, err); ok {
 		t.Fatal("non-4xx error must not match a 4xx-only policy")
 	}
 }
@@ -339,7 +339,7 @@ func TestPostLLMHook_NoKeyIDDoesNotMark(t *testing.T) {
 
 func TestMarkWithTTL_OverridesEffectiveTTL(t *testing.T) {
 	s := NewCooldownState(300 * time.Second)
-	s.MarkWithTTL(schemas.OpenAI, "k", 60*time.Second, "")
+	s.MarkWithTTL(schemas.OpenAI, "k", "", 60*time.Second, "", schemas.CooldownScopeKey)
 	// Verify the key expires within ~60s, not 300s.
 	rec := s.cooldowns[s.key(schemas.OpenAI, "k")]
 	if rec.expiresAt.IsZero() {
@@ -353,7 +353,7 @@ func TestMarkWithTTL_OverridesEffectiveTTL(t *testing.T) {
 
 func TestMarkWithTTL_FallsBackToEffectiveTTLWhenZero(t *testing.T) {
 	s := NewCooldownState(300 * time.Second)
-	s.MarkWithTTL(schemas.OpenAI, "k", 0, "")
+	s.MarkWithTTL(schemas.OpenAI, "k", "", 0, "", schemas.CooldownScopeKey)
 	rec := s.cooldowns[s.key(schemas.OpenAI, "k")]
 	delta := time.Until(rec.expiresAt)
 	if delta < 299*time.Second || delta > 301*time.Second {
@@ -363,7 +363,7 @@ func TestMarkWithTTL_FallsBackToEffectiveTTLWhenZero(t *testing.T) {
 
 func TestMarkWithTTL_EmptyKeyIsNoOp(t *testing.T) {
 	s := NewCooldownState(300 * time.Second)
-	s.MarkWithTTL(schemas.OpenAI, "", 60*time.Second, "")
+	s.MarkWithTTL(schemas.OpenAI, "", "", 60*time.Second, "", schemas.CooldownScopeKey)
 	if s.Size() != 0 {
 		t.Fatalf("expected no entries when key is empty, got %d", s.Size())
 	}

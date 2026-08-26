@@ -3804,6 +3804,12 @@
           "default": true,
           "description": "Whether the rule is active. Set to false to keep the rule's match data for later re-enable while temporarily disabling the cooldown."
         },
+        "scope": {
+          "type": "string",
+          "enum": ["key", "model"],
+          "default": "key",
+          "description": "Cooldown granularity: \"key\" marks the (provider, key) pair regardless of model; \"model\" also narrows by the requested model, so a quota hit on one model does not suppress another model on the same key. Use \"model\" when the provider enforces per-model quotas (e.g. per-model TPM/RPM limits)."
+        },
         "match": {
           "type": "array",
           "items": { "$ref": "#/$defs/cooldown_policy_match" },

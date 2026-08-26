@@ -460,6 +460,11 @@
 			"matchModeLabel": "Match mode",
 			"matchModeAny": "Any single match fires (any)",
 			"matchModeAll": "Every match must fire (all)",
+			"scope": {
+				"label": "Cooldown scope",
+				"key": "Per key",
+				"model": "Per model"
+			},
 			"ttlLabel": "Cooldown TTL (seconds)",
 			"ttlDescription": "How long the matched key stays out of rotation; cooldown expires automatically.",
 			"matchesLabel": "Matches",

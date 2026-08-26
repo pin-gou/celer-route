@@ -426,6 +426,7 @@ export interface CooldownPolicyRule {
 	match_mode?: "any" | "all";
 	ttl_seconds: number;
 	enabled?: boolean;
+	scope?: "key" | "model";
 }
 
 // CooldownPolicy attaches rate_limit / quota rules to a single provider. quota

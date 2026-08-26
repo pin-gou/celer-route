@@ -3,6 +3,7 @@ package handlers
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pin-gou/pg-gateway/core/schemas"
 	"github.com/pin-gou/pg-gateway/plugins/providercooldown"
@@ -228,9 +229,9 @@ func TestGetStats_IncludesByKindAndPerProvider(t *testing.T) {
 	// Two rate_limit marks on openai + one quota mark on anthropic + one
 	// unclassified mark on openai. Plus one suppression of each (we get
 	// them by feeding the filter a 4-key list where 3 are cooled).
-	plugin.State.MarkWithTTL(schemas.OpenAI, "k-rl-1", 60_000_000_000, providercooldown.CooldownKindRateLimit)
-	plugin.State.MarkWithTTL(schemas.OpenAI, "k-rl-2", 60_000_000_000, providercooldown.CooldownKindRateLimit)
-	plugin.State.MarkWithTTL(schemas.Anthropic, "k-q-1", 60_000_000_000, providercooldown.CooldownKindQuota)
+	plugin.State.MarkWithTTL(schemas.OpenAI, "k-rl-1", "", 60_000_000_000, providercooldown.CooldownKindRateLimit, schemas.CooldownScopeKey)
+	plugin.State.MarkWithTTL(schemas.OpenAI, "k-rl-2", "", 60_000_000_000, providercooldown.CooldownKindRateLimit, schemas.CooldownScopeKey)
+	plugin.State.MarkWithTTL(schemas.Anthropic, "k-q-1", "", 60_000_000_000, providercooldown.CooldownKindQuota, schemas.CooldownScopeKey)
 	plugin.State.Mark(schemas.OpenAI, "k-unclass") // unclassified
 
 	// Run AsFilter once so suppressions are attributed.
@@ -300,8 +301,8 @@ func TestGetStats_IncludesByKindAndPerProvider(t *testing.T) {
 func TestGetState_IncludesReason(t *testing.T) {
 	plugin := providercooldown.NewPlugin(nil)
 	defer plugin.Cleanup()
-	plugin.State.MarkWithTTL(schemas.OpenAI, "rl-key", 60_000_000_000, providercooldown.CooldownKindRateLimit)
-	plugin.State.MarkWithTTL(schemas.Anthropic, "q-key", 60_000_000_000, providercooldown.CooldownKindQuota)
+	plugin.State.MarkWithTTL(schemas.OpenAI, "rl-key", "", 60_000_000_000, providercooldown.CooldownKindRateLimit, schemas.CooldownScopeKey)
+	plugin.State.MarkWithTTL(schemas.Anthropic, "q-key", "", 60_000_000_000, providercooldown.CooldownKindQuota, schemas.CooldownScopeKey)
 	plugin.State.Mark(schemas.OpenAI, "u-key") // unclassified → reason omitted
 
 	h := newCooldownHandlerWithPlugin(plugin)
@@ -348,5 +349,104 @@ func TestGetStats_PluginNotLoaded(t *testing.T) {
 	h.getStats(ctx)
 	if got := ctx.Response.StatusCode(); got != fasthttp.StatusBadRequest {
 		t.Fatalf("expected 400 when plugin not loaded, got %d", got)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Model field in state + ?model= query param for clearKey
+// -----------------------------------------------------------------------------
+
+func TestGetCooldownState_IncludesModelField(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	plugin.State.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, providercooldown.CooldownKindQuota, schemas.CooldownScopeModel)
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(nil)
+	h.getState(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	if !strings.Contains(body, `"model":"gpt-4o"`) {
+		t.Fatalf("expected model field in state response, got %s", body)
+	}
+	if !strings.Contains(body, `"key_id":"key-a"`) {
+		t.Fatalf("expected key_id in state response, got %s", body)
+	}
+}
+
+func TestClearCooldownKey_WithModelQuery(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	plugin.State.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, providercooldown.CooldownKindQuota, schemas.CooldownScopeModel)
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(map[string]string{"provider": "openai", "keyId": "key-a"})
+	ctx.URI().SetQueryString("model=gpt-4o")
+	h.clearKey(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	if !strings.Contains(body, `"model":"gpt-4o"`) {
+		t.Fatalf("expected model field in clear response, got %s", body)
+	}
+	if plugin.State.IsCoolingDownForModel(schemas.OpenAI, "key-a", "gpt-4o") {
+		t.Fatal("model-granularity entry must be cleared after ?model= delete")
+	}
+}
+
+func TestClearCooldownKey_WithoutModelLeavesModelEntry(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	plugin.State.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", time.Minute, providercooldown.CooldownKindQuota, schemas.CooldownScopeModel)
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	// No query param — must clear key-granularity only. Since the entry is
+	// model-granularity (key-a/gpt-4o), the clear must NOT affect it.
+	ctx := newCooldownCtx(map[string]string{"provider": "openai", "keyId": "key-a"})
+	h.clearKey(ctx)
+
+	// The model-granularity entry must survive.
+	if !plugin.State.IsCoolingDownForModel(schemas.OpenAI, "key-a", "gpt-4o") {
+		t.Fatal("model-granularity entry must survive a key-granularity clear")
+	}
+}
+
+// TestGetStats_IncludesPerProviderModel pins the per_provider_model nested
+// shape returned by GET stats for model-granularity (scope=model) events.
+func TestGetStats_IncludesPerProviderModel(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	plugin.State.MarkWithTTL(schemas.OpenAI, "key-a", "gpt-4o", 60_000_000_000, providercooldown.CooldownKindQuota, schemas.CooldownScopeModel)
+	plugin.State.MarkWithTTL(schemas.OpenAI, "key-b", "claude-3", 60_000_000_000, providercooldown.CooldownKindRateLimit, schemas.CooldownScopeModel)
+
+	// One model-granularity suppression on gpt-4o.
+	filter := plugin.State.AsFilter(nil)
+	_, err := filter(nil, schemas.OpenAI, "gpt-4o", []schemas.Key{{ID: "key-a"}})
+	if err != nil {
+		t.Fatalf("filter error: %v", err)
+	}
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(nil)
+	h.getStats(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	// Nested provider → model shape.
+	if !strings.Contains(body, `"per_provider_model":{"openai":{`) && !strings.Contains(body, `"per_provider_model": {"openai":{`) {
+		t.Fatalf("expected per_provider_model.openai nested shape, got %s", body)
+	}
+	if !strings.Contains(body, `"gpt-4o"`) {
+		t.Fatalf("expected gpt-4o model key in per_provider_model, got %s", body)
+	}
+	if !strings.Contains(body, `"claude-3"`) {
+		t.Fatalf("expected claude-3 model key in per_provider_model, got %s", body)
 	}
 }

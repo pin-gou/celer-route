@@ -301,6 +301,7 @@ export interface CooldownStateEntry {
 	provider: string;
 	keyId: string;
 	keyName?: string;
+	model?: string;
 	expireAt: string;
 	reason: string;
 }
@@ -342,6 +343,7 @@ export interface CooldownStats {
 	activeCount: number;
 	byKind?: ByKindCounters;
 	perProvider?: Record<string, ProviderKindCounters>;
+	perProviderModel?: Record<string, Record<string, ProviderKindCounters>>;
 }
 
 export interface CooldownStateResponse {
@@ -356,6 +358,7 @@ export interface UnfreezeCooldownResponse {
 	message: string;
 	provider: string;
 	keyId: string;
+	model?: string;
 }
 
 // Process-lifetime compression counters surfaced by GET

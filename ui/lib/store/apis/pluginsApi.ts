@@ -131,6 +131,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 							provider: e.provider,
 							keyId: e.key_id ?? e.keyId,
 							keyName: e.key_name ?? e.keyName,
+							model: e.model ?? e.model,
 							expireAt: e.expires_at ?? e.expireAt,
 							reason: e.reason || "",
 						})),
@@ -183,6 +184,27 @@ export const pluginsApi = baseApi.injectEndpoints({
 							};
 						}
 					}
+					let perProviderModel: CooldownStats["perProviderModel"];
+					if (response.per_provider_model && typeof response.per_provider_model === "object") {
+						perProviderModel = {};
+						for (const [provider, modelMap] of Object.entries(response.per_provider_model)) {
+							const models = modelMap as Record<string, any>;
+							perProviderModel[provider] = {};
+							for (const [model, counters] of Object.entries(models)) {
+								const c = counters as { rate_limit?: any; quota?: any };
+								perProviderModel[provider][model] = {
+									rate_limit: {
+										markCount: c.rate_limit?.mark_count ?? 0,
+										suppressedCount: c.rate_limit?.suppressed_count ?? 0,
+									},
+									quota: {
+										markCount: c.quota?.mark_count ?? 0,
+										suppressedCount: c.quota?.suppressed_count ?? 0,
+									},
+								};
+							}
+						}
+					}
 					return {
 						stats: {
 							markCount: response.mark_count,
@@ -190,6 +212,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 							activeCount: response.current_active_count,
 							byKind,
 							perProvider,
+							perProviderModel,
 						},
 					};
 				}
@@ -197,13 +220,16 @@ export const pluginsApi = baseApi.injectEndpoints({
 			},
 		}),
 
-		// DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} —
-		// manually un-cool a cooldown key. Backend returns { message, provider,
-		// key_id } — map key_id → keyId for the UI contract.
-		unfreezeCooldown: builder.mutation<UnfreezeCooldownResponse, { provider: string; keyId: string }>({
-			query: ({ provider, keyId }) => ({
+		// DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId}[?model=…]
+		// — manually un-cool a cooldown key. The optional `model` query param
+		// targets a model-granularity (provider, key, model) entry; omit it to
+		// clear the key-granularity entry. Backend returns { message, provider,
+		// key_id, model } — map key_id → keyId for the UI contract.
+		unfreezeCooldown: builder.mutation<UnfreezeCooldownResponse, { provider: string; keyId: string; model?: string }>({
+			query: ({ provider, keyId, model }) => ({
 				url: `/plugins/provider-cooldown/state/${provider}/${keyId}`,
 				method: "DELETE",
+				...(model ? { params: { model } } : {}),
 			}),
 			// Trigger an immediate refetch of the cooldown state/stats after a
 			// successful unfreeze so the Active Cooldown State list drops the

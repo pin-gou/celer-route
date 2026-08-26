@@ -678,6 +678,7 @@ export const cooldownPolicyRuleSchema = z.object({
 	match_mode: z.enum(["any", "all"]).default("any"),
 	ttl_seconds: z.number().int().min(1),
 	enabled: z.boolean().optional(),
+	scope: z.enum(["key", "model"]).optional(),
 });
 
 export const cooldownPolicySchema = z.object({

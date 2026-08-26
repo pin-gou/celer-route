@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -73,6 +74,7 @@ type cooldownStateEntryResponse struct {
 	Provider  string        `json:"provider"`
 	KeyID     string        `json:"key_id"`
 	KeyName   string        `json:"key_name,omitempty"`
+	Model     string        `json:"model,omitempty"`
 	ExpiresAt time.Time     `json:"expires_at"`
 	Remaining time.Duration `json:"remaining"`
 	Reason    string        `json:"reason,omitempty"`
@@ -105,6 +107,7 @@ func (h *CooldownHandler) getState(ctx *fasthttp.RequestCtx) {
 			Provider:  string(e.Provider),
 			KeyID:     e.KeyID,
 			KeyName:   keyName,
+			Model:     e.Model,
 			ExpiresAt: e.ExpiresAt,
 			Remaining: e.Remaining,
 			Reason:    string(e.Kind),
@@ -135,6 +138,7 @@ type cooldownStatsResponse struct {
 	CurrentActiveCount int                                 `json:"current_active_count"`
 	ByKind             providercooldown.ByKindCounters      `json:"by_kind"`
 	PerProvider        map[string]providercooldown.ProviderKindCounters `json:"per_provider"`
+	PerProviderModel   map[string]map[string]providercooldown.ProviderKindCounters `json:"per_provider_model,omitempty"`
 }
 
 func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
@@ -152,6 +156,25 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 	for provider, counters := range stats.PerProvider {
 		perProvider[string(provider)] = counters
 	}
+	// Flatten the "provider::model" keys from CooldownStats into a nested
+	// { <provider>: { <model>: {...} } } shape so the UI can address a
+	// provider's per-model stats directly. Split on the LAST "::" (mirrors
+	// providercooldown.parseCooldownKey) so model names containing "::" are
+	// handled; a missing separator falls back to the whole key as provider.
+	perProviderModel := make(map[string]map[string]providercooldown.ProviderKindCounters, len(stats.PerProviderModel))
+	for mk, counters := range stats.PerProviderModel {
+		provider, model := mk, ""
+		if ridx := strings.LastIndex(mk, "::"); ridx >= 0 {
+			provider, model = mk[:ridx], mk[ridx+2:]
+		}
+		if model == "" {
+			continue
+		}
+		if perProviderModel[provider] == nil {
+			perProviderModel[provider] = make(map[string]providercooldown.ProviderKindCounters)
+		}
+		perProviderModel[provider][model] = counters
+	}
 	SendJSON(ctx, cooldownStatsResponse{
 		Plugin:             providercooldown.PluginName,
 		MarkCount:          stats.MarkCount,
@@ -159,6 +182,7 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 		CurrentActiveCount: stats.CurrentActiveCount,
 		ByKind:             stats.ByKind,
 		PerProvider:        perProvider,
+		PerProviderModel:   perProviderModel,
 	})
 }
 
@@ -178,7 +202,8 @@ func (h *CooldownHandler) clearKey(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusBadRequest, "Invalid keyId")
 		return
 	}
-	if !plugin.ClearKey(schemas.ModelProvider(provider), keyID) {
+	model := string(ctx.QueryArgs().Peek("model"))
+	if !plugin.ClearKey(schemas.ModelProvider(provider), keyID, model) {
 		SendError(ctx, fasthttp.StatusNotFound, "No active cooldown for this (provider, key)")
 		return
 	}
@@ -186,5 +211,6 @@ func (h *CooldownHandler) clearKey(ctx *fasthttp.RequestCtx) {
 		"message":  "Cooldown cleared",
 		"provider": provider,
 		"key_id":   keyID,
+		"model":    model,
 	})
 }

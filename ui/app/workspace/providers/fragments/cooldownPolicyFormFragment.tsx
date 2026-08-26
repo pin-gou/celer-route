@@ -330,7 +330,7 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 
 	return (
 		<>
-			<div className="grid grid-cols-2 gap-3">
+			<div className="grid grid-cols-3 gap-3">
 				<FormField
 					control={control}
 					name={`${ruleKey}.match_mode`}
@@ -345,6 +345,27 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 									<SelectContent>
 										<SelectItem value="any">{t("fragments.cooldownPolicy.matchModeAny")}</SelectItem>
 										<SelectItem value="all">{t("fragments.cooldownPolicy.matchModeAll")}</SelectItem>
+									</SelectContent>
+								</Select>
+							</FormControl>
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={control}
+					name={`${ruleKey}.scope`}
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel className="text-xs">{t("fragments.cooldownPolicy.scope.label")}</FormLabel>
+							<FormControl>
+								<Select value={field.value ?? "key"} onValueChange={field.onChange}>
+									<SelectTrigger data-testid={`provider-cooldown-${ruleKey}-scope-trigger`}>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="key">{t("fragments.cooldownPolicy.scope.key")}</SelectItem>
+										<SelectItem value="model">{t("fragments.cooldownPolicy.scope.model")}</SelectItem>
 									</SelectContent>
 								</Select>
 							</FormControl>
