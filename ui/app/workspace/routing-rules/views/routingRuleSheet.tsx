@@ -1046,7 +1046,7 @@ function FallbackRow({ id, index, total, fallback, providerOptions, onUpdate, on
 	const { ref, isDragging, handleRef } = useSortable({ id, index });
 
 	const handleProviderChange = (newProvider: string) => {
-		onUpdate(`${newProvider}/${fbModel}`);
+		onUpdate(newProvider);
 	};
 
 	const handleModelChange = (newModel: string) => {

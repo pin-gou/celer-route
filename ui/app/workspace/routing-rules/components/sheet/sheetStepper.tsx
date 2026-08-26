@@ -85,7 +85,7 @@ export function SheetStepper({ current, done, onStepClick }: SheetStepperProps) 
 							aria-controls={`routing-rule-tabpanel-${step.id}`}
 							onClick={() => onStepClick(step.id)}
 							className={cn(
-								"flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+								"flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
 								isCurrent
 									? "bg-background text-foreground shadow-sm"
 									: "text-muted-foreground hover:bg-background/60 hover:text-foreground",
