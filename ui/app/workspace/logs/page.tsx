@@ -369,6 +369,7 @@ export default function LogsPage() {
 	} = useGetLogsStatsQuery(
 		{
 			filters,
+			rootsOnly: grouped,
 		},
 		{
 			pollingInterval: polling ? 10000 : 0,

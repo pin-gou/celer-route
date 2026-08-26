@@ -183,11 +183,16 @@ export const logsApi = baseApi.injectEndpoints({
 			LogStats,
 			{
 				filters: LogFilters;
+				/** Grouped view: collapse fallback chains into their root request */
+				rootsOnly?: boolean;
 			}
 		>({
-			query: ({ filters }) => ({
+			query: ({ filters, rootsOnly }) => ({
 				url: "/logs/stats",
-				params: buildFilterParams(filters),
+				params: {
+					...buildFilterParams(filters),
+					...(rootsOnly ? { roots_only: "true" } : {}),
+				},
 			}),
 			providesTags: ["Logs"],
 		}),
