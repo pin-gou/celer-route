@@ -1083,3 +1083,22 @@ func formatRoutingEngineLogs(logs []schemas.RoutingEngineLogEntry) string {
 	}
 	return sb.String()
 }
+
+// countRoutingEngineLogs returns the number of routing engine decision log
+// entries encoded in a formatted log string (see formatRoutingEngineLogs).
+// It must stay exactly consistent with the UI's
+// `routing_engine_logs.split("\n").filter(Boolean).length`: empty strings (and
+// strings of only newlines) count as 0, and a trailing newline does NOT add an
+// extra entry.
+func countRoutingEngineLogs(logs string) int {
+	if logs == "" {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(logs, "\n") {
+		if line != "" {
+			count++
+		}
+	}
+	return count
+}

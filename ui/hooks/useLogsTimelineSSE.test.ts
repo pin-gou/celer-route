@@ -391,6 +391,37 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		expect(entry.routing_rule_name).toBe("Tier → cheap");
 	});
 
+	it("should surface routing_decision_count from the active_logs handshake and preserve it across log_updated merges", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+
+		act(() => {
+			eventSource._dispatch("active_logs", [
+				{
+					...mockActiveLog,
+					routing_decision_count: 3,
+				},
+			]);
+		});
+
+		expect(result.current.activeLogs[0].routing_decision_count).toBe(3);
+
+		// Stream a chunk without routing_decision_count; the merge must keep it.
+		act(() => {
+			eventSource._dispatch("log_updated", {
+				id: "active-1",
+				status: "processing",
+				latency_ms: 250,
+			});
+		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
+
+		expect(result.current.activeLogs[0].routing_decision_count).toBe(3);
+	});
+
 	it("should preserve routing_rule and virtual_key when log_updated merges into an existing entry", () => {
 		const { result } = renderHook(() => useLogsTimelineSSE());
 

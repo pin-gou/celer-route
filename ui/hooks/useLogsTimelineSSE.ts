@@ -33,6 +33,7 @@ export interface ActiveLogEntry {
 	selected_key_id?: string;
 	routing_rule_id?: string;
 	routing_rule_name?: string;
+	routing_decision_count?: number;
 	number_of_retries?: number;
 	fallback_index?: number;
 	content_summary?: string;
@@ -73,6 +74,7 @@ function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
 		selected_key_id: update.selected_key_id,
 		routing_rule_id: update.routing_rule_id,
 		routing_rule_name: update.routing_rule_name,
+		routing_decision_count: update.routing_decision_count,
 		number_of_retries: update.number_of_retries ?? 0,
 		fallback_index: update.fallback_index ?? 0,
 		content_summary: update.content_summary,
@@ -132,6 +134,7 @@ function mergeActiveEntry(existing: ActiveLogEntry, fresh: ActiveLogEntry): Acti
 		selected_key_id: fresh.selected_key_id ?? existing.selected_key_id,
 		routing_rule_id: fresh.routing_rule_id ?? existing.routing_rule_id,
 		routing_rule_name: fresh.routing_rule_name ?? existing.routing_rule_name,
+		routing_decision_count: fresh.routing_decision_count ?? existing.routing_decision_count,
 		number_of_retries: fresh.number_of_retries ?? existing.number_of_retries,
 		fallback_index: fresh.fallback_index ?? existing.fallback_index,
 		content_summary: fresh.content_summary ?? existing.content_summary,

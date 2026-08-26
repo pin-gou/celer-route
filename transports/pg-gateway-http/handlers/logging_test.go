@@ -1634,3 +1634,23 @@ func TestLoggingHandler_RTKObservabilityInMetadata(t *testing.T) {
 		t.Errorf("metadata rtk_compressed_snapshot should not be persisted, got %v", got)
 	}
 }
+
+// TestBuildActiveLogEntryRoutingDecisionCount pins that the SSE wire shape
+// carries routing_decision_count so the live LLM Logs table can render it.
+func TestBuildActiveLogEntryRoutingDecisionCount(t *testing.T) {
+	entry := buildActiveLogEntry(&logstore.Log{
+		ID:                   "log-1",
+		Status:               "success",
+		RoutingDecisionCount: 3,
+	})
+	if entry.RoutingDecisionCount != 3 {
+		t.Fatalf("buildActiveLogEntry RoutingDecisionCount = %d, want 3", entry.RoutingDecisionCount)
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"routing_decision_count":3`) {
+		t.Fatalf("wire payload missing routing_decision_count, got %s", string(data))
+	}
+}

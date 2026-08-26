@@ -73,6 +73,7 @@ function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 		selected_key_id: a.selected_key_id,
 		routing_rule_id: a.routing_rule_id,
 		routing_rule_name: a.routing_rule_name,
+		routing_decision_count: a.routing_decision_count,
 		// Prefer the SSE `message` preview (last user prompt, computed by the
 		// backend's activeEntryMessage) over content_summary: on non-hybrid log
 		// stores content_summary is BuildContentSummary() — every message
@@ -799,6 +800,7 @@ export default function LogsPage() {
 			compressed_after: t("column_labels.compressed_after"),
 			virtual_key: t("column_labels.virtual_key"),
 			routing_rule: t("column_labels.routing_rule"),
+			routing_decision: t("column_labels.routing_decision"),
 			team: t("column_labels.team"),
 			customer: t("column_labels.customer"),
 			user: t("column_labels.user"),

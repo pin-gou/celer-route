@@ -79,6 +79,7 @@
 		"compressed_after": "压缩后",
 		"virtual_key": "API Keys",
 		"routing_rule": "路由规则",
+		"routing_decision": "路由决策",
 		"team": "团队",
 		"customer": "客户",
 		"user": "用户",

@@ -1257,6 +1257,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 	entry.MetadataParsed = pending.InitialData.Metadata
 	entry.MetadataParsed = mergeRealtimeMetadata(entry.MetadataParsed, ctx)
 	entry.RoutingEngineLogs = routingEngineLogs
+	entry.RoutingDecisionCount = countRoutingEngineLogs(routingEngineLogs)
 
 	// Branch based on response type to populate output-specific fields
 

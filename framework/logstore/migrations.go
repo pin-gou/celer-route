@@ -235,6 +235,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"logs_add_list_models_output_column"}, run: migrationAddListModelsOutputColumn},
 	{IDs: []string{"logs_add_rerank_output_column"}, run: migrationAddRerankOutputColumn},
 	{IDs: []string{"logs_add_routing_engine_logs_column"}, run: migrationAddRoutingEngineLogsColumn},
+	{IDs: []string{"logs_add_routing_decision_count_column"}, run: migrationAddRoutingDecisionCountColumn},
 	{IDs: []string{"async_jobs_init"}, run: migrationCreateAsyncJobsTable},
 	{IDs: []string{"logs_add_metadata_column"}, run: migrationAddMetadataColumn},
 	{IDs: []string{"mcp_tool_logs_add_metadata_column"}, run: migrationAddMetadataColumnToMCPToolLogs},
@@ -1560,6 +1561,39 @@ func migrationAddRoutingEngineLogsColumn(ctx context.Context, db *gorm.DB, logge
 	err := m.Migrate()
 	if err != nil {
 		return fmt.Errorf("error while adding routing engine logs column: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddRoutingDecisionCountColumn adds the routing_decision_count column to the logs table.
+// Historical rows are intentionally NOT backfilled: the value is denormalized at write time and only
+// newly-logged requests carry a real count.
+func migrationAddRoutingDecisionCountColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_add_routing_decision_count_column"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &Log{}, "routing_decision_count"); err != nil {
+				return err
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &Log{}, "routing_decision_count"); err != nil {
+				return err
+			}
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while adding routing decision count column: %s", err.Error())
 	}
 	return nil
 }

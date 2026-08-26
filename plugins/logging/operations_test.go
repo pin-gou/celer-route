@@ -2604,6 +2604,82 @@ func TestUpdateLogEntryNotifyCarriesRoutingRuleAndVirtualKey(t *testing.T) {
 	}
 }
 
+// TestUpdateLogEntryPersistsAndNotifiesRoutingDecisionCount pins the
+// routing_decision_count denormalized column: it must be written to the DB row
+// alongside routing_engine_logs and ride along on the terminal SSE log_updated
+// payload so both the list API and the live table can show it.
+func TestUpdateLogEntryPersistsAndNotifiesRoutingDecisionCount(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close(context.Background())
+	plugin := &LoggerPlugin{
+		store:                store,
+		logger:               testLogger{},
+		activeLogSubscribers: make(map[string]chan *logstore.Log),
+		pendingLogsEntries:   sync.Map{},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := plugin.SubscribeActiveLogStream(ctx)
+	if err != nil {
+		t.Fatalf("SubscribeActiveLogStream() error = %v", err)
+	}
+
+	requestID := "req-routing-decision-count"
+	now := time.Now().UTC()
+	initial := &InitialLogData{
+		Object:   string(schemas.ChatCompletionRequest),
+		Provider: string(schemas.OpenAI),
+		Model:    "gpt-4o-mini",
+	}
+	if err := plugin.insertInitialLogEntry(context.Background(), requestID, "", now, 0, nil, initial); err != nil {
+		t.Fatalf("insertInitialLogEntry() error = %v", err)
+	}
+
+	engineLogs := "[1700000000000] [governance] - provider=openai attempt=0\n" +
+		"[1700000000001] [routing-rule] - rule=tier-cheap\n" +
+		"[1700000000002] [routing-rule] - rule=tier-cheap\n"
+	wantCount := 3
+
+	update := &UpdateLogData{Status: "success"}
+	if err := plugin.updateLogEntry(context.Background(), requestID, "", "", 10,
+		"", "", "", "", 0, nil, engineLogs, update, false); err != nil {
+		t.Fatalf("updateLogEntry() error = %v", err)
+	}
+
+	// The terminal SSE payload must carry the count.
+	select {
+	case got := <-sub:
+		if got.ID != requestID {
+			t.Fatalf("notify id = %q, want %q", got.ID, requestID)
+		}
+		if got.RoutingDecisionCount != wantCount {
+			t.Fatalf("notify routing_decision_count = %d, want %d", got.RoutingDecisionCount, wantCount)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SSE update payload")
+	}
+
+	// The persisted row must carry the count too (list API source).
+	result, err := store.SearchLogs(context.Background(), logstore.SearchFilters{}, logstore.PaginationOptions{Limit: 100, SortBy: "timestamp", Order: "desc"})
+	if err != nil {
+		t.Fatalf("SearchLogs() error = %v", err)
+	}
+	found := false
+	for _, l := range result.Logs {
+		if l.ID == requestID {
+			found = true
+			if l.RoutingDecisionCount != wantCount {
+				t.Fatalf("persisted routing_decision_count = %d, want %d", l.RoutingDecisionCount, wantCount)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("log %q not found in store", requestID)
+	}
+}
+
 // TestUpdateLogEntryNotifyOmitsEmptyRoutingAndVirtualKey pins the empty
 // convention: when governance did not resolve a routing rule or virtual key,
 // the notify payload must not carry nil-but-distinct pointers that the UI

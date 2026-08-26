@@ -79,6 +79,7 @@
 		"compressed_after": "After Comp.",
 		"virtual_key": "API Key",
 		"routing_rule": "Routing Rule",
+		"routing_decision": "Routing Decision",
 		"team": "Team",
 		"customer": "Customer",
 		"user": "User",

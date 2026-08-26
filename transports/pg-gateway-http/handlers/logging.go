@@ -3103,29 +3103,30 @@ type activeLogEntry struct {
 	// Timestamp is the RFC3339Nano event time. Populated for log_updated events
 	// (which carry a moment in time); left empty on snapshot/recent rows, whose
 	// rows already render timestamps from the log store.
-	Timestamp       string                   `json:"timestamp,omitempty"`
-	ID              string                   `json:"id"`
-	Status          string                   `json:"status"`
-	Provider        string                   `json:"provider"`
-	Model           string                   `json:"model"`
-	Object          string                   `json:"object,omitempty"`
-	Stream          bool                     `json:"stream"`
-	LatencyMs       *float64                 `json:"latency_ms"`
-	TokenUsage      *schemas.BifrostLLMUsage `json:"token_usage,omitempty"`
-	App             *string                  `json:"app,omitempty"`
-	UserAgent       *string                  `json:"user_agent,omitempty"`
-	Cost            *float64                 `json:"cost,omitempty"`
-	VirtualKeyID    *string                  `json:"virtual_key_id,omitempty"`
-	VirtualKeyName  *string                  `json:"virtual_key_name,omitempty"`
-	SelectedKeyID   *string                  `json:"selected_key_id,omitempty"`
-	SelectedKeyName *string                  `json:"selected_key_name,omitempty"`
-	RoutingRuleID   *string                  `json:"routing_rule_id,omitempty"`
-	RoutingRuleName *string                  `json:"routing_rule_name,omitempty"`
-	NumberOfRetries int                      `json:"number_of_retries"`
-	FallbackIndex   int                      `json:"fallback_index"`
-	ContentSummary  string                   `json:"content_summary,omitempty"`
-	Message         string                   `json:"message,omitempty"`
-	Metadata        map[string]interface{}   `json:"metadata,omitempty"`
+	Timestamp            string                   `json:"timestamp,omitempty"`
+	ID                   string                   `json:"id"`
+	Status               string                   `json:"status"`
+	Provider             string                   `json:"provider"`
+	Model                string                   `json:"model"`
+	Object               string                   `json:"object,omitempty"`
+	Stream               bool                     `json:"stream"`
+	LatencyMs            *float64                 `json:"latency_ms"`
+	TokenUsage           *schemas.BifrostLLMUsage `json:"token_usage,omitempty"`
+	App                  *string                  `json:"app,omitempty"`
+	UserAgent            *string                  `json:"user_agent,omitempty"`
+	Cost                 *float64                 `json:"cost,omitempty"`
+	VirtualKeyID         *string                  `json:"virtual_key_id,omitempty"`
+	VirtualKeyName       *string                  `json:"virtual_key_name,omitempty"`
+	SelectedKeyID        *string                  `json:"selected_key_id,omitempty"`
+	SelectedKeyName      *string                  `json:"selected_key_name,omitempty"`
+	RoutingRuleID        *string                  `json:"routing_rule_id,omitempty"`
+	RoutingRuleName      *string                  `json:"routing_rule_name,omitempty"`
+	RoutingDecisionCount int                      `json:"routing_decision_count,omitempty"`
+	NumberOfRetries      int                      `json:"number_of_retries"`
+	FallbackIndex        int                      `json:"fallback_index"`
+	ContentSummary       string                   `json:"content_summary,omitempty"`
+	Message              string                   `json:"message,omitempty"`
+	Metadata             map[string]interface{}   `json:"metadata,omitempty"`
 }
 
 // activeEntryMessage extracts a short user-facing message preview for the log
@@ -3211,25 +3212,26 @@ func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
 		return activeLogEntry{}
 	}
 	entry := activeLogEntry{
-		ID:              l.ID,
-		Status:          l.Status,
-		Provider:        l.Provider,
-		Model:           l.Model,
-		Object:          l.Object,
-		Stream:          l.Stream,
-		LatencyMs:       l.Latency,
-		TokenUsage:      l.TokenUsageParsed,
-		App:             l.App,
-		UserAgent:       l.UserAgent,
-		Cost:            l.Cost,
-		VirtualKeyID:    l.VirtualKeyID,
-		VirtualKeyName:  l.VirtualKeyName,
-		RoutingRuleID:   l.RoutingRuleID,
-		RoutingRuleName: l.RoutingRuleName,
-		NumberOfRetries: l.NumberOfRetries,
-		FallbackIndex:   l.FallbackIndex,
-		ContentSummary:  l.ContentSummary,
-		Message:         activeEntryMessage(l),
+		ID:                   l.ID,
+		Status:               l.Status,
+		Provider:             l.Provider,
+		Model:                l.Model,
+		Object:               l.Object,
+		Stream:               l.Stream,
+		LatencyMs:            l.Latency,
+		TokenUsage:           l.TokenUsageParsed,
+		App:                  l.App,
+		UserAgent:            l.UserAgent,
+		Cost:                 l.Cost,
+		VirtualKeyID:         l.VirtualKeyID,
+		VirtualKeyName:       l.VirtualKeyName,
+		RoutingRuleID:        l.RoutingRuleID,
+		RoutingRuleName:      l.RoutingRuleName,
+		RoutingDecisionCount: l.RoutingDecisionCount,
+		NumberOfRetries:      l.NumberOfRetries,
+		FallbackIndex:        l.FallbackIndex,
+		ContentSummary:       l.ContentSummary,
+		Message:              activeEntryMessage(l),
 	}
 	// SelectedKeyID/Name are plain strings on the log row; only set the wire
 	// pointers when non-empty so empty values stay omitted from the payload.

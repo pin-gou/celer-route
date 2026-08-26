@@ -600,6 +600,18 @@ export const createColumns = (customAppIcons: Record<string, string> = {}, group
 			cell: ({ row }) => <AttributionCell name={row.original.routing_rule_name} id={row.original.routing_rule_id} />,
 		},
 		{
+			id: "routing_decision",
+			header: ({ column }) => {
+				const { t } = useTranslation("logs");
+				return t("column_labels.routing_decision");
+			},
+			size: 90,
+			cell: ({ row }) => {
+				const count = row.original.routing_decision_count ?? 0;
+				return <div className="font-mono text-xs tabular-nums">{count}</div>;
+			},
+		},
+		{
 			id: "team",
 			header: ({ column }) => {
 				const { t } = useTranslation("logs");

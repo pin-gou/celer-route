@@ -258,6 +258,7 @@ func (p *LoggerPlugin) updateLogEntry(
 	}
 	if routingEngineLogs != "" {
 		updates["routing_engine_logs"] = routingEngineLogs
+		updates["routing_decision_count"] = countRoutingEngineLogs(routingEngineLogs)
 	}
 	tempEntry := &logstore.Log{}
 	needsSerialization := false
@@ -412,6 +413,9 @@ func (p *LoggerPlugin) updateLogEntry(
 	}
 	if routingRuleName != "" {
 		updatePayload.RoutingRuleName = &routingRuleName
+	}
+	if routingEngineLogs != "" {
+		updatePayload.RoutingDecisionCount = countRoutingEngineLogs(routingEngineLogs)
 	}
 	if virtualKeyID != "" {
 		updatePayload.VirtualKeyID = &virtualKeyID
