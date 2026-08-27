@@ -504,10 +504,6 @@
 				"failedTitle": "No events recorded for this request.",
 				"failedHint": "A total of 0 means the request was aborted before reaching the logging layer (short-circuit / context cancel). Check the Messages or Raw tab for the underlying error."
 			},
-			"view": {
-				"list": "List",
-				"gantt": "Waterfall"
-			},
 			"gantt": {
 				"empty": "No spans yet — older logs only carry event markers. Try a request with measured upstream calls.",
 				"provider": "Provider",

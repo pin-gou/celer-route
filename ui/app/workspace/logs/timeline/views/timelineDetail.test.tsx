@@ -17,7 +17,7 @@
  */
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TimelineDetail } from "./timelineDetail";
 
 // ---------------------------------------------------------------------------
@@ -148,13 +148,6 @@ const populatedZeroDurationResponse: TimelineResponse = {
 };
 
 describe("TimelineDetail — detail panel events list", () => {
-	// List view is the legacy default assertion target; the component now
-	// defaults to the gantt view when localStorage is unset, so pin the list
-	// view here to keep the row-level assertions deterministic.
-	beforeEach(() => {
-		window.localStorage.setItem("pg-gateway.timeline.view", "list");
-	});
-
 	// -----------------------------------------------------------------------
 	// Header
 	// -----------------------------------------------------------------------
@@ -439,7 +432,7 @@ describe("TimelineDetail — detail panel events list", () => {
 	});
 });
 
-describe("TimelineDetail — gantt (waterfall) view", () => {
+describe("TimelineDetail — combined (waterfall + list) view", () => {
 	const sandboxResp: TimelineResponse = {
 		log_id: "gantt-sandbox",
 		total_duration_ms: 10000,
@@ -490,10 +483,6 @@ describe("TimelineDetail — gantt (waterfall) view", () => {
 			},
 		],
 	};
-
-	beforeEach(() => {
-		window.localStorage.setItem("pg-gateway.timeline.view", "gantt");
-	});
 
 	it("should render the waterfall track with lanes for each phase", () => {
 		render(<TimelineDetail data={sandboxResp} />);
@@ -576,28 +565,93 @@ describe("TimelineDetail — gantt (waterfall) view", () => {
 		expect(screen.getAllByTestId("timeline-gantt-marker").length).toBe(2);
 	});
 
-	it("should default to the gantt view when localStorage is unset", () => {
-		window.localStorage.removeItem("pg-gateway.timeline.view");
+	// -----------------------------------------------------------------------
+	// Merged layout + bidirectional hover highlight
+	// -----------------------------------------------------------------------
+
+	it("should render the waterfall block on top and the grouped list below", () => {
 		render(<TimelineDetail data={sandboxResp} />);
+		// Both views coexist without a toggle.
 		expect(screen.getByTestId("timeline-gantt")).toBeTruthy();
+		const groups = screen.getAllByTestId("timeline-phase-group");
+		expect(groups.length).toBeGreaterThanOrEqual(3); // pre_llm + upstream_call + post_llm
+		// Waterfall appears before the list groups in the DOM.
+		const ganttPos = document
+			.querySelector('[data-testid="timeline-gantt"]')
+			?.compareDocumentPosition(document.querySelector('[data-testid="timeline-groups"]') as Node);
+		expect(ganttPos === Node.DOCUMENT_POSITION_FOLLOWING).toBe(true);
 	});
 
-	it("should switch to the list view via the toggle", () => {
+	it("should not render a view toggle", () => {
 		render(<TimelineDetail data={sandboxResp} />);
-		const listBtn = screen.getByTestId("timeline-view-list");
-		fireEvent.click(listBtn);
-		expect(screen.queryByTestId("timeline-gantt")).toBeNull();
-		// list rows appear
-		expect(screen.getAllByTestId(/timeline-event-row/).length).toBeGreaterThan(0);
-		// preference persisted
-		expect(window.localStorage.getItem("pg-gateway.timeline.view")).toBe("list");
+		expect(screen.queryByTestId("timeline-view-toggle")).toBeNull();
+		expect(screen.queryByTestId("timeline-view-gantt")).toBeNull();
+		expect(screen.queryByTestId("timeline-view-list")).toBeNull();
 	});
 
-	it("should switch back to gantt via the toggle", () => {
+	it("should highlight the matching list row when hovering a waterfall bar", () => {
 		render(<TimelineDetail data={sandboxResp} />);
-		fireEvent.click(screen.getByTestId("timeline-view-list"));
-		fireEvent.click(screen.getByTestId("timeline-view-gantt"));
-		expect(screen.getByTestId("timeline-gantt")).toBeTruthy();
-		expect(window.localStorage.getItem("pg-gateway.timeline.view")).toBe("gantt");
+		const bars = screen.getAllByTestId("timeline-gantt-bar");
+		// Hover the failed upstream_call bar (_tlKey=1).
+		fireEvent.mouseEnter(bars[0] as HTMLElement);
+
+		const activeRows = screen.getAllByTestId(/timeline-event-row-/).filter((r) => r.getAttribute("data-active") === "true");
+		expect(activeRows.length).toBe(1);
+		expect(activeRows[0]?.textContent).toContain("upstream call failed");
+	});
+
+	it("should highlight the matching list row when hovering a marker", () => {
+		render(<TimelineDetail data={sandboxResp} />);
+		const markers = screen.getAllByTestId("timeline-gantt-marker");
+		// pre_llm marker is _tlKey=0.
+		fireEvent.mouseEnter(markers[0] as HTMLElement);
+
+		const activeRows = screen.getAllByTestId(/timeline-event-row-/).filter((r) => r.getAttribute("data-active") === "true");
+		expect(activeRows.length).toBe(1);
+		expect(activeRows[0]?.textContent).toContain("pre-llm hook executed");
+	});
+
+	it("should clear the row highlight on mouse leave from the bar", () => {
+		render(<TimelineDetail data={sandboxResp} />);
+		const bar = screen.getAllByTestId("timeline-gantt-bar")[0] as HTMLElement;
+		fireEvent.mouseEnter(bar);
+		expect(screen.getAllByTestId(/timeline-event-row-/).filter((r) => r.getAttribute("data-active") === "true").length).toBe(1);
+		fireEvent.mouseLeave(bar);
+		expect(screen.getAllByTestId(/timeline-event-row-/).filter((r) => r.getAttribute("data-active") === "true").length).toBe(0);
+	});
+
+	it("should highlight the matching waterfall bar when hovering a list row", () => {
+		render(<TimelineDetail data={sandboxResp} />);
+		const rows = screen.getAllByTestId(/timeline-event-row-/);
+		const successRow = rows.find((r) => r.textContent?.includes("upstream call completed"));
+		expect(successRow).toBeTruthy();
+		fireEvent.mouseEnter(successRow as HTMLElement);
+
+		const activeBars = screen.getAllByTestId("timeline-gantt-bar").filter((b) => b.getAttribute("data-active") === "true");
+		expect(activeBars.length).toBe(1);
+		// The active bar is the success span — offset 5500/10000 = 55%, width 4500/10000 = 45%.
+		expect(activeBars[0]?.getAttribute("style")).toMatch(/left: 55\.?0*%/);
+		expect(activeBars[0]?.getAttribute("style")).toContain("width: 45%");
+	});
+
+	it("should highlight the matching marker when hovering a list row (marker event)", () => {
+		render(<TimelineDetail data={sandboxResp} />);
+		const rows = screen.getAllByTestId(/timeline-event-row-/);
+		const postRow = rows.find((r) => r.textContent?.includes("post-llm hook executed"));
+		expect(postRow).toBeTruthy();
+		fireEvent.mouseEnter(postRow as HTMLElement);
+
+		const activeMarkers = screen.getAllByTestId("timeline-gantt-marker").filter((m) => m.getAttribute("data-active") === "true");
+		expect(activeMarkers.length).toBe(1);
+	});
+
+	it("should clear the bar highlight on row mouse leave", () => {
+		render(<TimelineDetail data={sandboxResp} />);
+		const rows = screen.getAllByTestId(/timeline-event-row-/);
+		const successRow = rows.find((r) => r.textContent?.includes("upstream call completed")) as HTMLElement;
+		fireEvent.mouseEnter(successRow);
+		expect(screen.getAllByTestId("timeline-gantt-bar").filter((b) => b.getAttribute("data-active") === "true").length).toBe(1);
+		fireEvent.mouseLeave(successRow);
+		expect(screen.getAllByTestId("timeline-gantt-bar").filter((b) => b.getAttribute("data-active") === "true").length).toBe(0);
 	});
 });

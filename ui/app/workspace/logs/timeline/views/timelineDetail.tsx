@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Copy, LayoutGrid, Loader2, RefreshCw, Rows3 } from "lucide-react";
+import { AlertCircle, Copy, Loader2, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getPhaseStyle } from "./timelinePhaseColors";
@@ -41,11 +41,6 @@ export interface TimelineDetailProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-// PgViewStorageKey is the localStorage key persisting the timeline detail
-// view-mode toggle ("list" | "gantt"). Default (missing key) = "gantt" to
-// surface the waterfall view for new visitors.
-const PgViewStorageKey = "pg-gateway.timeline.view";
 
 function formatMs(ms: number, decimals: number = 2): string {
 	return ms.toLocaleString("en-US", {
@@ -198,29 +193,22 @@ function TimelineSkeleton() {
 export function TimelineDetail({ data, isLoading, error, onRetry }: TimelineDetailProps) {
 	const { t } = useTranslation("logs");
 
-	// View mode toggle: "list" (existing grouped rows) or "gantt" (waterfall).
-	// Persisted in localStorage so a user's choice survives refresh. New
-	// visitors default to the gantt view to surface the waterfall feature.
-	const [view, setView] = useState<"list" | "gantt">(() => {
-		if (typeof window === "undefined") return "gantt";
-		const stored = window.localStorage.getItem(PgViewStorageKey);
-		return stored === "list" || stored === "gantt" ? stored : "gantt";
-	});
+	// Merged view: waterfall block on top + grouped list below, cross-linked by
+	// hover. The events carry a synthetic client-side `_tlKey` (array index)
+	// so a waterfall bar/marker and its list row correlate: hovering either
+	// highlights the other. The -_tlKey is assigned once here from the source
+	// order; both sub-views consume this same keyed array.
+	const [hoveredKey, setHoveredKey] = useState<number | null>(null);
 
-	const setViewAndPersist = (next: "list" | "gantt") => {
-		setView(next);
-		try {
-			window.localStorage.setItem(PgViewStorageKey, next);
-		} catch {
-			// localStorage may be unavailable (privacy mode); ignore.
-		}
-	};
+	const keyedEvents = useMemo(() => {
+		const base = (data?.events ?? []) as TimelineEvent[];
+		return base.map((ev, i) => ({ ...ev, _tlKey: i }));
+	}, [data]);
 
 	const grouped = useMemo(() => {
 		if (!data) return [] as Array<{ phase: string; events: TimelineEvent[] }>;
-		const events = (data.events ?? []) as TimelineEvent[];
 		const buckets = new Map<string, TimelineEvent[]>();
-		for (const ev of events) {
+		for (const ev of keyedEvents) {
 			const list = buckets.get(ev.phase) ?? [];
 			list.push(ev);
 			buckets.set(ev.phase, list);
@@ -236,7 +224,7 @@ export function TimelineDetail({ data, isLoading, error, onRetry }: TimelineDeta
 				const bMin = b.events[0]?.time_ms_offset ?? 0;
 				return aMin - bMin;
 			});
-	}, [data, t]);
+	}, [data, keyedEvents, t]);
 
 	if (isLoading) {
 		return (
@@ -285,7 +273,7 @@ export function TimelineDetail({ data, isLoading, error, onRetry }: TimelineDeta
 		);
 	}
 
-	const events = (data.events ?? []) as TimelineEvent[];
+	const events = keyedEvents;
 	const hasEvents = events.length > 0;
 
 	// Last event's trailing edge = max(offset + duration) across the trace.
@@ -293,56 +281,38 @@ export function TimelineDetail({ data, isLoading, error, onRetry }: TimelineDeta
 
 	return (
 		<div className="space-y-3" data-testid="timeline-detail">
-			<ViewToggle view={view} onChange={setViewAndPersist} t={t} />
-
 			<TimelineHeader logId={data.log_id} totalDurationMs={data.total_duration_ms} eventSpanMs={eventSpanMs} />
 
 			{!hasEvents ? (
 				<EmptyState totalDurationMs={data.total_duration_ms} t={t} />
-			) : view === "gantt" ? (
-				<TimelineGantt events={events} totalDurationMs={data.total_duration_ms} t={t} />
 			) : (
-				<div className="space-y-3" data-testid="timeline-groups">
-					{grouped.map((group) => (
-						<TimelineWaterfallGroup key={group.phase} phase={group.phase} events={group.events} t={t} />
-					))}
+				<div className="space-y-4">
+					{/* Waterfall block on top — shared time ruler + all phase lanes */}
+					<TimelineGantt
+						events={events}
+						totalDurationMs={data.total_duration_ms}
+						t={t}
+						activeKey={hoveredKey}
+						onHover={setHoveredKey}
+						onHoverEnd={() => setHoveredKey(null)}
+					/>
+
+					{/* Grouped list block below — cross-highlighted by hover */}
+					<div className="space-y-3" data-testid="timeline-groups">
+						{grouped.map((group) => (
+							<TimelineWaterfallGroup
+								key={group.phase}
+								phase={group.phase}
+								events={group.events}
+								t={t}
+								activeKey={hoveredKey}
+								onHover={setHoveredKey}
+								onHoverEnd={() => setHoveredKey(null)}
+							/>
+						))}
+					</div>
 				</div>
 			)}
-		</div>
-	);
-}
-
-function ViewToggle({ view, onChange, t }: { view: "list" | "gantt"; onChange: (v: "list" | "gantt") => void; t: (k: string) => string }) {
-	return (
-		<div className="border-border flex shrink-0 items-center rounded-md border bg-transparent p-0.5" data-testid="timeline-view-toggle">
-			<button
-				type="button"
-				onClick={() => onChange("gantt")}
-				title={t("timeline.detail.view.gantt")}
-				aria-pressed={view === "gantt"}
-				className={cn(
-					"flex items-center gap-1 rounded px-2 py-1 text-xs",
-					view === "gantt" ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground",
-				)}
-				data-testid="timeline-view-gantt"
-			>
-				<LayoutGrid className="h-3.5 w-3.5" />
-				{t("timeline.detail.view.gantt")}
-			</button>
-			<button
-				type="button"
-				onClick={() => onChange("list")}
-				title={t("timeline.detail.view.list")}
-				aria-pressed={view === "list"}
-				className={cn(
-					"flex items-center gap-1 rounded px-2 py-1 text-xs",
-					view === "list" ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground",
-				)}
-				data-testid="timeline-view-list"
-			>
-				<Rows3 className="h-3.5 w-3.5" />
-				{t("timeline.detail.view.list")}
-			</button>
 		</div>
 	);
 }

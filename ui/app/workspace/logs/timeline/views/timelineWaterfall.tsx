@@ -34,6 +34,11 @@ export interface TimelineEvent {
 	model?: string;
 	key_id?: string;
 	status?: string;
+	// Client-side correlation key: array index into the aggregated events list
+	// (data.events). The backend emits no stable id per timeline event, so the
+	// merged waterfall+list view links a bar/marker to its list row by this
+	// index. Never sent to the API.
+	_tlKey?: number;
 }
 
 function getLevelRowClass(level: string): string {
@@ -92,9 +97,15 @@ function formatMs(ms: number, decimals: number = 1): string {
 
 export interface TimelineWaterfallRowProps {
 	event: TimelineEvent;
+	/** True when the coordinating waterfall bar/marker for this event is hovered. */
+	active?: boolean;
+	/** Fired on mouse enter — uses event._tlKey to cross-highlight the other view. */
+	onHover?: (key: number) => void;
+	/** Fired on mouse leave — clears the cross-view highlight. */
+	onHoverEnd?: () => void;
 }
 
-export function TimelineWaterfallRow({ event }: TimelineWaterfallRowProps) {
+export function TimelineWaterfallRow({ event, active = false, onHover, onHoverEnd }: TimelineWaterfallRowProps) {
 	const { t } = useTranslation("logs");
 	const phaseStyle = getPhaseStyle(event.phase, t);
 	const { copy } = useCopyToClipboard({ successMessage: t("timeline.detail.copied") });
@@ -106,9 +117,13 @@ export function TimelineWaterfallRow({ event }: TimelineWaterfallRowProps) {
 		<div
 			data-testid={`timeline-event-row-${testIdLevel}`}
 			data-phase={event.phase}
+			data-active={active || undefined}
+			onMouseEnter={event._tlKey != null ? () => onHover?.(event._tlKey as number) : undefined}
+			onMouseLeave={onHoverEnd}
 			className={cn(
-				"hover:bg-muted/30 group flex items-center gap-3 rounded-sm px-3 py-1.5 text-xs transition-colors",
+				"hover:bg-muted/30 group flex cursor-default items-center gap-3 rounded-sm px-3 py-1.5 text-xs transition-colors",
 				getLevelRowClass(event.level),
+				active && "bg-accent/70 ring-1 ring-inset ring-accent-foreground/50 dark:bg-accent/60",
 			)}
 		>
 			{/* Time offset */}
@@ -166,9 +181,15 @@ export interface TimelineWaterfallGroupProps {
 	phase: string;
 	events: TimelineEvent[];
 	t: (key: string) => string;
+	/** Currently hovered _tlKey; rows with this key render as active. */
+	activeKey?: number | null;
+	/** Fired on row mouse enter (event._tlKey). */
+	onHover?: (key: number) => void;
+	/** Fired on row mouse leave. */
+	onHoverEnd?: () => void;
 }
 
-export function TimelineWaterfallGroup({ phase, events, t }: TimelineWaterfallGroupProps) {
+export function TimelineWaterfallGroup({ phase, events, t, activeKey, onHover, onHoverEnd }: TimelineWaterfallGroupProps) {
 	const phaseStyle = getPhaseStyle(phase, t);
 	return (
 		<section className="space-y-1" data-testid="timeline-phase-group" data-phase={phase}>
@@ -180,7 +201,13 @@ export function TimelineWaterfallGroup({ phase, events, t }: TimelineWaterfallGr
 			</header>
 			<div className="space-y-0.5">
 				{events.map((event, idx) => (
-					<TimelineWaterfallRow key={`${phase}-${idx}-${event.time_ms_offset}-${event.message}`} event={event} />
+					<TimelineWaterfallRow
+						key={event._tlKey ?? idx}
+						event={event}
+						active={event._tlKey != null && activeKey === event._tlKey}
+						onHover={onHover}
+						onHoverEnd={onHoverEnd}
+					/>
 				))}
 			</div>
 		</section>

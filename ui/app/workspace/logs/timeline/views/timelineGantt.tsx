@@ -35,6 +35,12 @@ export interface TimelineGanttProps {
 	events: TimelineEvent[];
 	totalDurationMs: number;
 	t: (key: string) => string;
+	/** Currently hovered _tlKey; bars/markers with this key render as active. */
+	activeKey?: number | null;
+	/** Fired on bar/marker mouse enter (event._tlKey). */
+	onHover?: (key: number) => void;
+	/** Fired on bar/marker mouse leave. */
+	onHoverEnd?: () => void;
 }
 
 // Lane height + bar height in px. Bars inset by 3px top/bottom so a lane
@@ -66,7 +72,7 @@ function pct(ms: number, total: number): number {
 	return Math.round(raw * 10000) / 10000;
 }
 
-export function TimelineGantt({ events, totalDurationMs, t }: TimelineGanttProps) {
+export function TimelineGantt({ events, totalDurationMs, t, activeKey, onHover, onHoverEnd }: TimelineGanttProps) {
 	// Rewrite the ruler labels in human terms: 0 → total_duration_ms.
 	const total = totalDurationMs > 0 ? totalDurationMs : 1;
 	const ticks = [0, 25, 50, 75, 100].map((p) => ({ pct: p, ms: (total * p) / 100 }));
@@ -107,7 +113,17 @@ export function TimelineGantt({ events, totalDurationMs, t }: TimelineGanttProps
 			) : (
 				<div className="space-y-0.5">
 					{lanes.map(([phase, evs]) => (
-						<GanttLane key={phase} phase={phase} events={evs} totalMs={total} hasAnySpan={hasAnySpan} t={t} />
+						<GanttLane
+							key={phase}
+							phase={phase}
+							events={evs}
+							totalMs={total}
+							hasAnySpan={hasAnySpan}
+							t={t}
+							activeKey={activeKey}
+							onHover={onHover}
+							onHoverEnd={onHoverEnd}
+						/>
 					))}
 				</div>
 			)}
@@ -121,12 +137,18 @@ function GanttLane({
 	totalMs,
 	hasAnySpan,
 	t,
+	activeKey,
+	onHover,
+	onHoverEnd,
 }: {
 	phase: string;
 	events: TimelineEvent[];
 	totalMs: number;
 	hasAnySpan: boolean;
 	t: (key: string) => string;
+	activeKey?: number | null;
+	onHover?: (key: number) => void;
+	onHoverEnd?: () => void;
 }) {
 	const style = getPhaseStyle(phase, t);
 	const sorted = [...events].sort((a, b) => a.time_ms_offset - b.time_ms_offset);
@@ -141,9 +163,25 @@ function GanttLane({
 				{!hasAnySpan && <div className="bg-border/40 absolute inset-x-0 top-1/2 h-px" data-testid="timeline-marker-empty-track" />}
 				{sorted.map((ev, i) =>
 					(ev.duration_ms ?? 0) > 0 ? (
-						<GanttBar key={`${ev.message}-${i}`} ev={ev} totalMs={totalMs} t={t} />
+						<GanttBar
+							key={ev._tlKey ?? `${ev.message}-${i}`}
+							ev={ev}
+							totalMs={totalMs}
+							t={t}
+							active={ev._tlKey != null && activeKey === ev._tlKey}
+							onHover={onHover}
+							onHoverEnd={onHoverEnd}
+						/>
 					) : (
-						<GanttMarker key={`${ev.message}-${i}`} ev={ev} totalMs={totalMs} t={t} />
+						<GanttMarker
+							key={ev._tlKey ?? `${ev.message}-${i}`}
+							ev={ev}
+							totalMs={totalMs}
+							t={t}
+							active={ev._tlKey != null && activeKey === ev._tlKey}
+							onHover={onHover}
+							onHoverEnd={onHoverEnd}
+						/>
 					),
 				)}
 			</div>
@@ -151,16 +189,37 @@ function GanttLane({
 	);
 }
 
-function GanttBar({ ev, totalMs, t }: { ev: TimelineEvent; totalMs: number; t: (k: string) => string }) {
+function GanttBar({
+	ev,
+	totalMs,
+	t,
+	active,
+	onHover,
+	onHoverEnd,
+}: {
+	ev: TimelineEvent;
+	totalMs: number;
+	t: (k: string) => string;
+	active?: boolean;
+	onHover?: (key: number) => void;
+	onHoverEnd?: () => void;
+}) {
 	const left = pct(ev.time_ms_offset ?? 0, totalMs);
 	const width = pct(ev.duration_ms ?? 0, totalMs);
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<div
-					className={cn("absolute z-10 cursor-default rounded-sm", colorFor(ev))}
-					style={{ left: `${left}%`, top: (LANE_H - BAR_H) / 2, width: `${Math.max(width, 0.4)}%`, height: BAR_H }}
+					className={cn(
+						"absolute z-10 cursor-default rounded-sm transition-shadow",
+						colorFor(ev),
+						active && "z-20 ring-2 ring-foreground/70 ring-offset-1 ring-offset-background",
+					)}
+					style={{ left: `${left}%`, top: (LANE_H - BAR_H) / 2, width: `${Math.max(width, active ? 1.2 : 0.4)}%`, height: BAR_H }}
 					data-testid="timeline-gantt-bar"
+					data-active={active || undefined}
+					onMouseEnter={ev._tlKey != null ? () => onHover?.(ev._tlKey as number) : undefined}
+					onMouseLeave={onHoverEnd}
 				/>
 			</TooltipTrigger>
 			<TooltipContent side="top">
@@ -170,18 +229,35 @@ function GanttBar({ ev, totalMs, t }: { ev: TimelineEvent; totalMs: number; t: (
 	);
 }
 
-function GanttMarker({ ev, totalMs, t }: { ev: TimelineEvent; totalMs: number; t: (k: string) => string }) {
+function GanttMarker({
+	ev,
+	totalMs,
+	t,
+	active,
+	onHover,
+	onHoverEnd,
+}: {
+	ev: TimelineEvent;
+	totalMs: number;
+	t: (k: string) => string;
+	active?: boolean;
+	onHover?: (key: number) => void;
+	onHoverEnd?: () => void;
+}) {
 	const left = pct(ev.time_ms_offset ?? 0, totalMs);
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<div
-					className="absolute z-10 -translate-x-1/2 cursor-default"
+					className={cn("absolute z-10 -translate-x-1/2 cursor-default transition-transform", active && "z-20 scale-125")}
 					style={{ left: `${left}%`, top: 4 }}
 					data-testid="timeline-gantt-marker"
+					data-active={active || undefined}
+					onMouseEnter={ev._tlKey != null ? () => onHover?.(ev._tlKey as number) : undefined}
+					onMouseLeave={onHoverEnd}
 				>
 					<svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true">
-						<path d="M5 0 L10 12 L0 12 Z" fill="currentColor" className="text-foreground/60" />
+						<path d="M5 0 L10 12 L0 12 Z" fill="currentColor" className={cn(active ? "text-foreground" : "text-foreground/60")} />
 					</svg>
 				</div>
 			</TooltipTrigger>
