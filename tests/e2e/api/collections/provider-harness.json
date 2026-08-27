@@ -50699,5 +50699,113 @@
       }
     ]
   }
-]
+,  {
+   "name": "52. Timeline Upstream Spans (waterfall bars)",
+   "description": "Pins the timeline waterfall data barrier: a request that flows through core must record per-attempt upstream_call spans in timeline_events (phase=upstream_call, source=provider, duration_ms>0, provider/model/status metadata). The waterfall view renders these as measured bars; without them it degrades to zero-width markers. The dbverify reporter asserts timeline_events rows for each x-request-id it sees with x-bf-expect-timeline-spans: true.",
+   "item": [
+    {
+     "name": "Chat completion records a measured upstream span (timeline waterfall)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// The timeline-span assertion is performed by the newman-reporter-dbverify",
+         "// reporter keyed on x-request-id + x-bf-expect-timeline-spans.",
+         "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+         "pm.test('timeline-span request accepted', function () {",
+         "  pm.expect(pm.response.code).to.be.below(400);",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "x-request-id",
+        "value": "tl-span-{{$guid}}"
+       },
+       {
+        "key": "x-bf-expect-timeline-spans",
+        "value": "true"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"model\": \"{{model}}\",\n  \"max_tokens\": 16,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Say hi in one word.\"\n    }\n  ]\n}"
+      },
+      "url": {
+       "raw": "{{baseUrl}}/v1/chat/completions",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "v1",
+        "chat",
+        "completions"
+       ]
+      }
+     }
+    },
+    {
+     "name": "Chat completion STREAM records a full-stream upstream span (timeline waterfall)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// The timeline-span assertion is performed by the newman-reporter-dbverify",
+         "// reporter keyed on x-request-id + x-bf-expect-timeline-spans.",
+         "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+         "pm.test('timeline-span request accepted', function () {",
+         "  pm.expect(pm.response.code).to.be.below(400);",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "x-request-id",
+        "value": "tl-span-{{$guid}}"
+       },
+       {
+        "key": "x-bf-expect-timeline-spans",
+        "value": "true"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"model\": \"{{model}}\",\n  \"max_tokens\": 16,\n  \"stream\": true,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Count from 1 to 3 slowly.\"\n    }\n  ]\n}"
+      },
+      "url": {
+       "raw": "{{baseUrl}}/v1/chat/completions",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "v1",
+        "chat",
+        "completions"
+       ]
+      }
+     }
+    }
+   ]
+  }
+  ]
 }

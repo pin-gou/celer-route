@@ -743,6 +743,87 @@ async function verifyCostingRequest(db, reqId, name, results, silent) {
 }
 
 /**
+ * Verify that a completed request recorded real upstream_call span rows in the
+ * timeline_events table. The timeline waterfall view renders these rows as
+ * measured bars (duration_ms > 0, source=provider, with provider/model/status);
+ * without them the waterfall would show only zero-width markers.
+ *
+ * We assert the `x-bf-expect-timeline-spans` barrier is satisfied:
+ *   - timeline_events has at least one row with phase='upstream_call' AND
+ *     source='provider' for this request_id;
+ *   - every such row carries a non-empty provider and duration_ms > 0
+ *     (a collapsed/zero width whose bar reads as empty is the exact
+ *     regression this pins);
+ *   - the aggregate contains at least one 'success' span (the request was
+ *     served by some upstream that ultimately answered).
+ *
+ * The logs row (and its child timeline_events) is written asynchronously by
+ * the logging plugin's PostLLMHook, so we poll with the same backoff as the
+ * costing check. Request id = x-request-id header, matching Log.ID ==
+ * BifrostContextKeyRequestID.
+ */
+async function verifyTimelineSpansRequest(db, reqId, name, results, silent) {
+  const delays = [300, 600, 1200, 2500]; // ~4.6s total — timeline_events persist in the same write cycle as the log row
+  let spans = null;
+  let lastErr = '';
+  for (let i = 0; i < delays.length; i++) {
+    await sleep(delays[i]);
+    try {
+      const { rows } = await db.query(
+        "SELECT phase, source, provider, model, key_id, status, duration_ms FROM timeline_events WHERE log_id = $1 AND phase = 'upstream_call' ORDER BY time_offset_ms",
+        [reqId],
+      );
+      if (rows && rows.length > 0) {
+        spans = rows;
+        break; // found at least one upstream span; no need to keep polling
+      }
+    } catch (e) {
+      // timeline_events table may not exist yet (pre-migration) or a transient
+      // connection error. Keep polling the window, surface only after exhaust.
+      spans = null;
+      lastErr = e.message;
+    }
+  }
+
+  if (spans === null) {
+    results.push({
+      name,
+      result: 'FAIL',
+      detail: `[TimelineSpans] no upstream_call rows found for request_id=${reqId}${lastErr ? ' (query error: ' + lastErr + ')' : ''}. Waterfall would be marker-only.`,
+    });
+    return;
+  }
+
+  // 1) Every span must carry real duration + provider metadata.
+  const badSpan = spans.find((s) => !(Number(s.duration_ms) > 0) || !s.provider);
+  if (badSpan) {
+    results.push({
+      name,
+      result: 'FAIL',
+      detail: `[TimelineSpans] span missing duration/provider: ${JSON.stringify(badSpan)}. duration_ms must be > 0 for a measured span.`,
+    });
+    return;
+  }
+
+  // 2) At least one span succeeded (the request ultimately got answered).
+  const hasSuccess = spans.some((s) => s.status === 'success');
+  if (!hasSuccess) {
+    results.push({
+      name,
+      result: 'FAIL',
+      detail: `[TimelineSpans] no status='success' span among ${spans.length} upstream_call rows for request_id=${reqId}.`,
+    });
+    return;
+  }
+
+  if (!silent) {
+    const outcomes = spans.map((s) => `${s.provider}/${s.model || '?'} ${s.status} ${Number(s.duration_ms).toFixed(0)}ms (key ${s.key_id || '?'})`).join(' | ');
+    console.log(`[dbverify] timeline-spans ${reqId}: PASS (${spans.length} spans) — ${outcomes}`);
+  }
+  results.push({ name, result: 'PASS', detail: `[TimelineSpans] ${spans.length} upstream_call spans with duration_ms>0 + metadata + ≥1 success` });
+}
+
+/**
  * Process a single request's DB verification (immediate or from queue).
  * Handles bulk DELETE, tracks promises, pushes results.
  */
@@ -884,6 +965,7 @@ module.exports = function (newman, options) {
   const earlyMainDbQueue  = [];
   const earlyLogsDbQueue  = [];
   const earlyCostingQueue = [];
+  const earlyTimelineSpansQueue = [];
   // DB connection chains; awaited in `done` before pendingVerifications so the
   // queue-draining .then() callbacks (which push deferred verifications) are
   // guaranteed to have run before we wait on them.
@@ -910,6 +992,15 @@ module.exports = function (newman, options) {
     while (earlyCostingQueue.length > 0) {
       const item = earlyCostingQueue.shift();
       pendingVerifications.push(verifyCostingRequest(activeLogsDb, item.reqId, item.name, results, silent));
+    }
+  }
+
+  // Timeline-spans verifications deferred while the logs DB connection was
+  // still resolving. Same rationale as drainCostingQueue.
+  function drainTimelineSpansQueue(activeLogsDb) {
+    while (earlyTimelineSpansQueue.length > 0) {
+      const item = earlyTimelineSpansQueue.shift();
+      pendingVerifications.push(verifyTimelineSpansRequest(activeLogsDb, item.reqId, item.name, results, silent));
     }
   }
 
@@ -943,6 +1034,7 @@ module.exports = function (newman, options) {
           if (logsDbReady && logsDb) {
             drainQueue(earlyLogsDbQueue, logsDb);
             drainCostingQueue(logsDb);
+            drainTimelineSpansQueue(logsDb);
           }
         })
         .catch((e) => {
@@ -952,6 +1044,8 @@ module.exports = function (newman, options) {
           earlyLogsDbQueue.length = 0;
           earlyCostingQueue.forEach((item) => results.push({ name: item.name, result: 'SKIP', detail: 'Logs DB not connected (costing check)' }));
           earlyCostingQueue.length = 0;
+          earlyTimelineSpansQueue.forEach((item) => results.push({ name: item.name, result: 'SKIP', detail: 'Logs DB not connected (timeline-spans check)' }));
+          earlyTimelineSpansQueue.length = 0;
         }));
     }
   });
@@ -986,6 +1080,30 @@ module.exports = function (newman, options) {
         return;
       }
       pendingVerifications.push(verifyCostingRequest(logsDb, reqId, name, results, silent));
+      return;
+    }
+
+    // Timeline-spans requests assert the waterfall has real measured upstream
+    // spans (duration_ms > 0, source=provider, provider/model/status metadata).
+    // Like costing, this must run before the 2xx-skip — though the assertion
+    // is against the timeline_events table for a 2xx (or procedurally-failed)
+    // inference call, the presence of spans is what matters, not the status.
+    const expectTimelineSpans = getHeader(request, 'x-bf-expect-timeline-spans');
+    if (expectTimelineSpans && /^(1|true|yes)$/i.test(String(expectTimelineSpans))) {
+      const reqId = getHeader(request, 'x-request-id');
+      if (!reqId) {
+        results.push({ name, result: 'FAIL', detail: 'x-bf-expect-timeline-spans set but no x-request-id header to locate the log row' });
+        return;
+      }
+      if (!logsDbReady || !logsDb) {
+        if (!logsDbUrl) {
+          results.push({ name, result: 'SKIP', detail: 'Logs DB not configured (timeline-spans check)' });
+          return;
+        }
+        earlyTimelineSpansQueue.push({ reqId, name });
+        return;
+      }
+      pendingVerifications.push(verifyTimelineSpansRequest(logsDb, reqId, name, results, silent));
       return;
     }
 
