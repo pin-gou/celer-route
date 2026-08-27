@@ -2963,6 +2963,16 @@ type timelineEvent struct {
 	Message      string  `json:"message"`
 	Level        string  `json:"level"`
 	PluginName   string  `json:"plugin_name"`
+	// Provider / Model / KeyID / Status carry per-attempt upstream HTTP
+	// metadata, populated from logstore.TimelineEvent columns added in
+	// migration timeline_events_v2_provider_meta. omitempty so legacy rows
+	// (pre_llm / post_llm / key_attempt) and older log rows render without
+	// the new fields; the timeline waterfall view degrades gracefully when
+	// they're absent.
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	KeyID    string `json:"key_id,omitempty"`
+	Status   string `json:"status,omitempty"`
 }
 
 // getLogTimeline handles GET /api/logs/{id}/timeline - Aggregates timeline_events,
@@ -3019,6 +3029,10 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 			Message:      te.Message,
 			Level:        te.Level,
 			PluginName:   te.PluginName,
+			Provider:     te.Provider,
+			Model:        te.Model,
+			KeyID:        te.KeyID,
+			Status:       te.Status,
 		})
 	}
 

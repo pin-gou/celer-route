@@ -1427,6 +1427,327 @@ func TestGetLogTimeline_InternalError(t *testing.T) {
 	}
 }
 
+// TestGetLogTimeline_UpstreamSpanHasDuration verifies that a timeline_events
+// row of phase=upstream_call/source=provider carries its provider/model/key_id
+// metadata and non-zero duration through the API response verbatim. These
+// fields power the timeline waterfall view; without them the waterfall would
+// render a zero-width bar for a call that actually took 4.5s.
+func TestGetLogTimeline_UpstreamSpanHasDuration(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-span-1",
+			Status:    "success",
+			Provider:  "openai",
+			Model:     "gpt-4o",
+			Latency:   ptrFloat64(4500),
+			Timestamp: now,
+		},
+		timelineEvents: []logstore.TimelineEvent{
+			{
+				ID:           "ep-has-dur",
+				LogID:        "log-span-1",
+				Phase:        "upstream_call",
+				Source:       "provider",
+				PluginName:   "",
+				Level:        "info",
+				Message:      "upstream call completed",
+				TimeOffsetMS: 12.5,
+				DurationMS:   4500.0,
+				Timestamp:    now.Add(12 * time.Millisecond),
+				Provider:     "openai",
+				Model:        "gpt-4o",
+				KeyID:        "key-abc",
+				Status:       "success",
+			},
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-span-1/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-span-1")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		LogID           string  `json:"log_id"`
+		TotalDurationMs float64 `json:"total_duration_ms"`
+		Events          []struct {
+			TimeOffsetMS float64 `json:"time_ms_offset"`
+			DurationMS   float64 `json:"duration_ms"`
+			Phase        string  `json:"phase"`
+			Source       string  `json:"source"`
+			Provider     string  `json:"provider"`
+			Model        string  `json:"model"`
+			KeyID        string  `json:"key_id"`
+			Status       string  `json:"status"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	found := false
+	for _, e := range response.Events {
+		if e.Source == "provider" {
+			found = true
+			if e.Phase != "upstream_call" {
+				t.Fatalf("phase=%q, want upstream_call", e.Phase)
+			}
+			if e.DurationMS != 4500.0 {
+				t.Fatalf("duration_ms=%v, want 4500", e.DurationMS)
+			}
+			if e.TimeOffsetMS != 12.5 {
+				t.Fatalf("time_ms_offset=%v, want 12.5", e.TimeOffsetMS)
+			}
+			if e.Provider != "openai" {
+				t.Fatalf("provider=%q, want openai", e.Provider)
+			}
+			if e.Model != "gpt-4o" {
+				t.Fatalf("model=%q, want gpt-4o", e.Model)
+			}
+			if e.KeyID != "key-abc" {
+				t.Fatalf("key_id=%q, want key-abc", e.KeyID)
+			}
+			if e.Status != "success" {
+				t.Fatalf("status=%q, want success", e.Status)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected at least one event with source=provider")
+	}
+}
+
+// TestGetLogTimeline_UpstreamSpanFailed verifies a failed upstream span carries
+// status=failed with a level marker suitable for the waterfall's red bar.
+func TestGetLogTimeline_UpstreamSpanFailed(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-span-fail",
+			Status:    "error",
+			Provider:  "sensenova",
+			Model:     "deepseek-v4-flash",
+			Latency:   ptrFloat64(4444),
+			Timestamp: now,
+		},
+		timelineEvents: []logstore.TimelineEvent{
+			{
+				ID:           "ep-fail",
+				LogID:        "log-span-fail",
+				Phase:        "upstream_call",
+				Source:       "provider",
+				PluginName:   "",
+				Level:        "error",
+				Message:      "upstream call failed: invalid_request_error HTTP 429",
+				TimeOffsetMS: 100.0,
+				DurationMS:   4444.0,
+				Timestamp:    now.Add(100 * time.Millisecond),
+				Provider:     "sensenova",
+				Model:        "deepseek-v4-flash",
+				KeyID:        "",
+				Status:       "failed",
+			},
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-span-fail/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-span-fail")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		Events []struct {
+			Phase    string `json:"phase"`
+			Source   string `json:"source"`
+			Status   string `json:"status"`
+			Level    string `json:"level"`
+			Message  string `json:"message"`
+			Duration float64 `json:"duration_ms"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	for _, e := range response.Events {
+		if e.Source == "provider" {
+			if e.Status != "failed" {
+				t.Fatalf("status=%q, want failed", e.Status)
+			}
+			if e.Level != "error" {
+				t.Fatalf("level=%q, want error", e.Level)
+			}
+			if e.Message == "" {
+				t.Fatal("message should carry the error summary")
+			}
+			if e.Duration != 4444.0 {
+				t.Fatalf("duration_ms=%v, want 4444", e.Duration)
+			}
+		}
+	}
+}
+
+// TestGetLogTimeline_LegacyRowsStillRender verifies that timeline_events rows
+// written before migration timeline_events_v2_provider_meta (i.e. without
+// provider/model/key_id/status columns) still serialize — omitempty drops the
+// new fields and the response shape is otherwise unchanged.
+func TestGetLogTimeline_LegacyRowsStillRender(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-legacy",
+			Status:    "success",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Latency:   ptrFloat64(500),
+			Timestamp: now,
+		},
+		// No Provider/Model/KeyID/Status on any row — legacy schema shape.
+		timelineEvents: []logstore.TimelineEvent{
+			{
+				ID:           "legacy-pre",
+				LogID:        "log-legacy",
+				Phase:        "pre_llm",
+				Source:       "plugin_logging",
+				PluginName:   "logging",
+				Level:        "info",
+				Message:      "pre-llm hook executed",
+				TimeOffsetMS: 0.0,
+				DurationMS:   0.0,
+				Timestamp:    now,
+				Provider:     "",
+				Model:        "",
+				KeyID:        "",
+				Status:       "",
+			},
+			{
+				ID:           "legacy-post",
+				LogID:        "log-legacy",
+				Phase:        "post_llm",
+				Source:       "plugin_logging",
+				PluginName:   "logging",
+				Level:        "info",
+				Message:      "post-llm hook executed",
+				TimeOffsetMS: 500.0,
+				DurationMS:   0.0,
+				Timestamp:    now.Add(500 * time.Millisecond),
+				Provider:     "",
+				Model:        "",
+				KeyID:        "",
+				Status:       "",
+			},
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-legacy/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-legacy")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+	body := string(ctx.Response.Body())
+	if strings.Contains(body, "\"provider\"") {
+		t.Fatalf("legacy rows should not serialize provider field: %s", body)
+	}
+	if strings.Contains(body, "\"status\"") {
+		t.Fatalf("legacy rows should not serialize status field: %s", body)
+	}
+	// pre_llm / post_llm rows still present.
+	for _, want := range []string{"pre-llm hook executed", "post-llm hook executed"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("response missing %q: %s", want, body)
+		}
+	}
+}
+
+// TestGetLogTimeline_UpstreamSpanOffsetMonotonic verifies that sequential
+// upstream spans (primary + retry1 + retry2) come back with strictly
+// increasing time_ms_offset — the waterfall needs a map from offset→column.
+func TestGetLogTimeline_UpstreamSpanOffsetMonotonic(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-mono",
+			Status:    "success",
+			Provider:  "sensenova",
+			Model:     "deepseek-v4-flash",
+			Latency:   ptrFloat64(15000),
+			Timestamp: now,
+		},
+		timelineEvents: []logstore.TimelineEvent{
+			{ID: "s1", LogID: "log-mono", Phase: "upstream_call", Source: "provider", DurationMS: 4444, TimeOffsetMS: 0, Timestamp: now, Status: "failed"},
+			{ID: "s2", LogID: "log-mono", Phase: "upstream_call", Source: "provider", DurationMS: 1715, TimeOffsetMS: 4444, Timestamp: now.Add(4444 * time.Millisecond), Status: "failed"},
+			{ID: "s3", LogID: "log-mono", Phase: "upstream_call", Source: "provider", DurationMS: 2032, TimeOffsetMS: 6159, Timestamp: now.Add(6159 * time.Millisecond), Status: "failed"},
+			{ID: "s4", LogID: "log-mono", Phase: "upstream_call", Source: "provider", DurationMS: 7617, TimeOffsetMS: 11794, Timestamp: now.Add(11794 * time.Millisecond), Status: "success"},
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-mono/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-mono")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		Events []struct {
+			TimeOffsetMS float64 `json:"time_ms_offset"`
+			Source       string  `json:"source"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	last := -1.0
+	for _, e := range response.Events {
+		if e.Source != "provider" {
+			continue
+		}
+		if e.TimeOffsetMS <= last {
+			t.Fatalf("offset %v not monotonic after %v", e.TimeOffsetMS, last)
+		}
+		last = e.TimeOffsetMS
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Task 6.2: GetActiveLogStream SSE handler tests
 // ---------------------------------------------------------------------------
