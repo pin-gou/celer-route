@@ -891,6 +891,8 @@ Systematically address unresolved PR review comments. Uses GraphQL to get unreso
 | Streaming accumulator | `framework/streaming/accumulator.go` |
 | HTTP inference handler | `transports/pg-gateway-http/handlers/inference.go` |
 | Governance handler | `transports/pg-gateway-http/handlers/governance.go` |
+| Timeline waterfall (span data source) | `core/upstreamspan.go` — measures per-ATTEMPT upstream HTTP spans, written to `BifrostContextKeyUpstreamSpans`; persisted by `plugins/logging/main.go:finalTimelineEvents` into the `timeline_events` table (columns `provider/model/key_id/status`) |
+| Timeline waterfall (frontend) | `ui/app/workspace/logs/timeline/views/timelineGantt.tsx` — List/Waterfall toggle defaults to **gantt** (`localStorage["pg-gateway.timeline.view"]`); durations>0 render as bars, duration 0 as markers |
 | Config schema (source of truth) | `transports/config.schema.json` |
 | Pool debug profiler | `transports/pg-gateway-http/handlers/devpprof.go` |
 | LLM test infrastructure | `core/internal/llmtests/` |
