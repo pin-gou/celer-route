@@ -7463,13 +7463,13 @@ func (bifrost *Bifrost) applyDefaultParameters(provider schemas.Provider, config
 		return
 	}
 	if defaults, ok := config.DefaultParameters[chatRequest.Model]; ok {
-		providerUtils.ApplyDefaultParameters(provider.GetProviderKey(), chatRequest, defaults)
+		providerUtils.ApplyDefaultParameters(provider.GetProviderKey(), chatRequest.Model, chatRequest, defaults)
 		return
 	}
 	lower := strings.ToLower(chatRequest.Model)
 	for model, defaults := range config.DefaultParameters {
 		if strings.EqualFold(model, lower) {
-			providerUtils.ApplyDefaultParameters(provider.GetProviderKey(), chatRequest, defaults)
+			providerUtils.ApplyDefaultParameters(provider.GetProviderKey(), chatRequest.Model, chatRequest, defaults)
 			return
 		}
 	}

@@ -57,3 +57,53 @@ func TestProviderSupportsDefaultParam(t *testing.T) {
 		t.Error("OpenAI has not registered reasoning_effort")
 	}
 }
+
+func TestModelMatchesDefaultParamPatterns(t *testing.T) {
+	patterns := []string{"deepseek-v4-flash", "glm-5.2"}
+	// Empty patterns match everything.
+	if !ModelMatchesDefaultParamPatterns("anything", nil) {
+		t.Error("empty patterns should match any model")
+	}
+	// Exact match.
+	if !ModelMatchesDefaultParamPatterns("deepseek-v4-flash", patterns) {
+		t.Error("exact deepseek-v4-flash should match")
+	}
+	// Substring match (provider-prefixed or versioned names).
+	if !ModelMatchesDefaultParamPatterns("sensenova/deepseek-v4-flash", patterns) {
+		t.Error("prefixed deepseek-v4-flash should match")
+	}
+	if !ModelMatchesDefaultParamPatterns("glm-5.2-20260401", patterns) {
+		t.Error("versioned glm-5.2 should match")
+	}
+	// Case-insensitive.
+	if !ModelMatchesDefaultParamPatterns("DeepSeek-V4-Flash", patterns) {
+		t.Error("case-insensitive match should hold")
+	}
+	// Unrelated model.
+	if ModelMatchesDefaultParamPatterns("deepseek-v3", patterns) {
+		t.Error("deepseek-v3 should NOT match reasoning patterns")
+	}
+	// Empty model never matches non-empty patterns.
+	if ModelMatchesDefaultParamPatterns("", patterns) {
+		t.Error("empty model should not match non-empty patterns")
+	}
+}
+
+func TestProviderModelSupportsDefaultParam(t *testing.T) {
+	if !ProviderModelSupportsDefaultParam(Sensenova, "deepseek-v4-flash", "reasoning_effort") {
+		t.Error("sensenova deepseek-v4-flash should support reasoning_effort")
+	}
+	if !ProviderModelSupportsDefaultParam(Sensenova, "glm-5.2", "reasoning_effort") {
+		t.Error("sensenova glm-5.2 should support reasoning_effort")
+	}
+	// A sensenova model that does NOT accept reasoning_effort must be gated out.
+	if ProviderModelSupportsDefaultParam(Sensenova, "sensenova-v6", "reasoning_effort") {
+		t.Error("unsupported sensenova model should NOT support reasoning_effort")
+	}
+	if ProviderModelSupportsDefaultParam(Sensenova, "deepseek-v4-flash", "temperature") {
+		t.Error("unregistered param should not be supported for any model")
+	}
+	if ProviderModelSupportsDefaultParam(OpenAI, "gpt-5", "reasoning_effort") {
+		t.Error("OpenAI has not registered reasoning_effort")
+	}
+}

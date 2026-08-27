@@ -70,6 +70,14 @@ export function ModelsSection() {
 	const models = data?.models ?? [];
 	const totalCount = data?.total ?? 0;
 
+	// Full provider config for the model being edited, so the AttributeSheet can
+	// show the per-model "Default Parameters" section where the provider has
+	// registered definitions (e.g. sensenova).
+	const editingProvider = useMemo(() => {
+		if (!editing || !providersData) return undefined;
+		return providersData.find((p) => String(p.name) === String(editing.provider));
+	}, [editing, providersData]);
+
 	useEffect(() => {
 		if (offset < totalCount) return;
 		setOffset(totalCount === 0 ? 0 : Math.floor((totalCount - 1) / limit) * limit);
@@ -99,7 +107,7 @@ export function ModelsSection() {
 
 	return (
 		<>
-			{editing && <AttributeSheet model={editing} onClose={() => setEditing(null)} />}
+			{editing && <AttributeSheet model={editing} provider={editingProvider} onClose={() => setEditing(null)} />}
 
 			<div className="flex min-h-0 w-full grow flex-col overflow-hidden">
 				<div className="mb-4 flex shrink-0 items-center justify-between">

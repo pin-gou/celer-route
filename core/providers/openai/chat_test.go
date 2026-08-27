@@ -120,7 +120,7 @@ func TestToOpenAIChatRequest_DefaultParametersInjectReasoningEffort(t *testing.T
 			},
 		},
 	}
-	providerUtils.ApplyDefaultParameters(schemas.Sensenova, req, map[string]interface{}{"reasoning_effort": "high"})
+	providerUtils.ApplyDefaultParameters(schemas.Sensenova, "deepseek-v4-flash", req, map[string]interface{}{"reasoning_effort": "high"})
 
 	out := ToOpenAIChatRequest(schemas.NewBifrostContext(nil, schemas.NoDeadline), req)
 	if out == nil {

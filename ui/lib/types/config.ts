@@ -460,6 +460,10 @@ export interface DefaultParamDefinition {
 	key: string;
 	label: string;
 	options: string[];
+	// Model name patterns (case-insensitive exact or substring) that accept this
+	// parameter. Empty means all models of the provider. Only models matching a
+	// pattern expose the editor and receive the injected default.
+	model_patterns?: string[];
 }
 
 // ProviderResponse matching Go's ProviderResponse

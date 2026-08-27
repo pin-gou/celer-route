@@ -6,6 +6,7 @@ import { useGetModelsQuery, useUpdateProviderMutation } from "@/lib/store/apis/p
 import { defaultParametersFormSchema, type DefaultParametersFormSchema } from "@/lib/types/schemas";
 import { useTranslation } from "react-i18next";
 import { type ModelProvider } from "@/lib/types/config";
+import { providerModelHasDefaultParams } from "@/lib/utils/defaultParameters";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useMemo } from "react";
@@ -52,17 +53,22 @@ export function DefaultParametersFormFragment({ provider, onCancel }: DefaultPar
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
 
-	// Fetch all models for this provider to populate the model dropdown.
+	// Supported default params for this provider, registered in the backend
+	// schema catalog. Empty means the module is hidden entirely (handled by
+	// the tab gating); here it just yields no param options.
+	const definitions = provider.default_parameters_definitions ?? [];
+
+	// Fetch all models for this provider, but only expose the ones that accept
+	// at least one registered default param (e.g. sensenova reasoning_effort
+	// applies only to deepseek-v4-flash / glm-5.2).
 	const { data: modelsData } = useGetModelsQuery({ provider: provider.name, unfiltered: true }, { skip: !provider.name });
 	const modelOptions = useMemo(() => {
 		if (!modelsData?.models) return [];
-		return modelsData.models.filter((m) => !m.is_deprecated).map((m) => ({ value: m.name, label: m.name }));
-	}, [modelsData]);
-
-	// Supported default params for this provider, registered in the backend
-	// schema catalog. Empty means the module is hidden entirely (handled by
-	// the tab/card gating); here it just yields no param options.
-	const definitions = provider.default_parameters_definitions ?? [];
+		return modelsData.models
+			.filter((m) => !m.is_deprecated)
+			.filter((m) => providerModelHasDefaultParams(definitions, m.name))
+			.map((m) => ({ value: m.name, label: m.name }));
+	}, [modelsData, definitions]);
 
 	const form = useForm<DefaultParametersFormSchema, any, DefaultParametersFormSchema>({
 		resolver: zodResolver(defaultParametersFormSchema) as Resolver<DefaultParametersFormSchema, any, DefaultParametersFormSchema>,

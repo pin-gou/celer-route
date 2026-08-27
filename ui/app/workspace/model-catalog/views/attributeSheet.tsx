@@ -1,15 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DottedSeparator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { RenderProviderIcon } from "@/lib/constants/icons";
 import { ProviderLabels, ProviderName } from "@/lib/constants/logs";
 import { getErrorMessage, ModelDetails, useGetCoreConfigQuery, useUpsertModelCatalogEntriesMutation } from "@/lib/store";
-import { KnownProvider } from "@/lib/types/config";
+import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
+import { KnownProvider, ModelProvider } from "@/lib/types/config";
 import { formatTokenPriceFull } from "@/lib/utils/numbers";
+import { definitionsForModel, providerModelHasDefaultParams } from "@/lib/utils/defaultParameters";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+import { buildProviderUpdatePayload } from "@/app/workspace/providers/views/utils";
 import { ExternalLink, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,6 +24,19 @@ const DEFAULT_PRICING_SOURCE_URL = "https://pin-gou.github.io/pg-gateway/datashe
 interface AttributeSheetProps {
 	model: ModelDetails;
 	onClose: () => void;
+	// Optional full provider config. When present and the provider has registered
+	// default-parameter definitions (e.g. sensenova), a "Default Parameters"
+	// section is shown for this model that writes back to the provider's
+	// default_parameters map. Omit (e.g. Model Catalog) to hide the section.
+	provider?: ModelProvider;
+}
+
+// Local row type for the default-parameters editor. Mirrors AttributeRow but
+// carries the param key + value for a single model.
+interface DefaultParamRow {
+	id: string;
+	param: string;
+	value: string;
 }
 
 // Local row type for the extra-attributes editor. We keep these outside any
@@ -59,13 +76,14 @@ function getPricingSourceUrl(configuredUrl: string | undefined, modelName: strin
 	return url.toString();
 }
 
-export default function AttributeSheet({ model, onClose }: AttributeSheetProps) {
+export default function AttributeSheet({ model, onClose, provider }: AttributeSheetProps) {
 	const { t } = useTranslation("model-catalog");
 	const [isOpen, setIsOpen] = useState(true);
 	const hasUpdateAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const { data: bifrostConfig } = useGetCoreConfigQuery({ fromDB: true });
 
 	const [upsertEntries, { isLoading }] = useUpsertModelCatalogEntriesMutation();
+	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
 
 	const initialDescription = model.additional_attributes?.description ?? "";
 	const [description, setDescription] = useState(initialDescription);
@@ -75,8 +93,37 @@ export default function AttributeSheet({ model, onClose }: AttributeSheetProps) 
 	const [initialRowsKey] = useState(() => JSON.stringify(stripIds(initialRows)));
 	const [extraRows, setExtraRows] = useState<AttributeRow[]>(initialRows);
 
+	// Default Parameters — only relevant when the provider has registered
+	// definitions, this sheet received the full provider config, AND the model
+	// being edited accepts at least one of those params (e.g. sensenova
+	// reasoning_effort applies only to deepseek-v4-flash / glm-5.2).
+	const definitions = provider?.default_parameters_definitions ?? [];
+	const modelDefinitions = useMemo(() => definitionsForModel(definitions, model.name), [definitions, model.name]);
+	const hasDefaultParams = providerModelHasDefaultParams(definitions, model.name);
+	const initialParamMap = useMemo(() => {
+		const configured = provider?.default_parameters?.[model.name];
+		if (!configured) return {} as Record<string, string>;
+		const supportedKeys = new Set(modelDefinitions.map((d) => d.key));
+		const map: Record<string, string> = {};
+		for (const [k, v] of Object.entries(configured)) {
+			if (supportedKeys.has(k)) map[k] = String(v);
+		}
+		return map;
+	}, [provider, model.name, modelDefinitions]);
+	const [paramRows, setParamRows] = useState<DefaultParamRow[]>(() =>
+		Object.entries(initialParamMap).map(([param, value]) => ({ id: newRowId(), param, value })),
+	);
+	const currentParamMap = useMemo(() => {
+		const map: Record<string, string> = {};
+		for (const r of paramRows) {
+			if (r.param && r.value) map[r.param] = r.value;
+		}
+		return map;
+	}, [paramRows]);
+
 	const rowsDirty = JSON.stringify(stripIds(extraRows)) !== initialRowsKey;
-	const isDirty = description !== initialDescription || rowsDirty;
+	const paramRowsDirty = JSON.stringify(currentParamMap) !== JSON.stringify(initialParamMap);
+	const isDirty = description !== initialDescription || rowsDirty || paramRowsDirty;
 	const pricingSourceUrl = getPricingSourceUrl(bifrostConfig?.framework_config?.pricing_url, model.name);
 	const canOpenPricingSource = isLinkableSource(pricingSourceUrl);
 
@@ -89,6 +136,15 @@ export default function AttributeSheet({ model, onClose }: AttributeSheetProps) 
 	const handleRowChange = (id: string, field: "key" | "value", val: string) =>
 		setExtraRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: val } : row)));
 	const handleRemoveRow = (id: string) => setExtraRows((prev) => prev.filter((row) => row.id !== id));
+
+	const handleAddParamRow = () =>
+		setParamRows((prev) => [
+			...prev,
+			{ id: newRowId(), param: modelDefinitions[0]?.key ?? "", value: modelDefinitions[0]?.options?.[0] ?? "" },
+		]);
+	const handleParamRowChange = (id: string, field: "param" | "value", val: string) =>
+		setParamRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: val } : row)));
+	const handleRemoveParamRow = (id: string) => setParamRows((prev) => prev.filter((row) => row.id !== id));
 
 	const handleSubmit = async () => {
 		if (!hasUpdateAccess) {
@@ -121,14 +177,48 @@ export default function AttributeSheet({ model, onClose }: AttributeSheetProps) 
 		if (desc !== "") attributes.description = desc;
 		for (const r of cleaned) attributes[r.key] = r.value;
 
+		// Merge this model's default parameters into the provider's map, so we
+		// only touch this model's entry and preserve every other model's defaults.
+		const nextDefaults: Record<string, Record<string, string | number | boolean>> = provider?.default_parameters
+			? { ...provider.default_parameters }
+			: {};
+		if (Object.keys(currentParamMap).length > 0) {
+			nextDefaults[model.name] = { ...currentParamMap };
+		} else {
+			delete nextDefaults[model.name];
+		}
+
+		// Decouple the two saves: only submit each mutation when its section is
+		// actually dirty. The attribute upsert requires an existing pricing row
+		// for (model, provider); default parameters live in the provider config
+		// and must not be blocked by a missing pricing row (e.g. glm-5.2).
+		const attributesDirty = description !== initialDescription || rowsDirty;
+		const paramsDirty = hasDefaultParams && paramRowsDirty;
+
+		const tasks: Promise<unknown>[] = [];
+		if (attributesDirty) {
+			tasks.push(
+				upsertEntries([
+					{
+						model: model.name,
+						provider: model.provider,
+						additional_attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+					},
+				]).unwrap(),
+			);
+		}
+		if (paramsDirty && provider) {
+			tasks.push(updateProvider(buildProviderUpdatePayload(provider, { default_parameters: nextDefaults })).unwrap());
+		}
+		// Defensive: the Save button is disabled when nothing is dirty, so this
+		// is not expected to be reachable.
+		if (tasks.length === 0) {
+			handleClose();
+			return;
+		}
+
 		try {
-			await upsertEntries([
-				{
-					model: model.name,
-					provider: model.provider,
-					additional_attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
-				},
-			]).unwrap();
+			await Promise.all(tasks);
 			toast.success(t("toast.attributeSaved"));
 			handleClose();
 		} catch (err) {
@@ -281,6 +371,81 @@ export default function AttributeSheet({ model, onClose }: AttributeSheetProps) 
 								</div>
 							)}
 						</div>
+
+						{hasDefaultParams && (
+							<>
+								<DottedSeparator />
+
+								{/* Default Parameters */}
+								<div className="space-y-3">
+									<div className="flex items-center justify-between">
+										<Label className="text-sm font-medium">{t("attributeSheet.defaultParameters")}</Label>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onClick={handleAddParamRow}
+											data-testid="model-catalog-add-default-param-row"
+										>
+											<Plus className="mr-1 h-3 w-3" />
+											{t("attributeSheet.addDefaultParam")}
+										</Button>
+									</div>
+									<p className="text-muted-foreground text-xs">{t("attributeSheet.defaultParametersDescription")}</p>
+									{paramRows.length === 0 ? (
+										<p className="text-muted-foreground text-xs">{t("attributeSheet.noDefaultParams")}</p>
+									) : (
+										<div className="space-y-2">
+											{paramRows.map((row, i) => (
+												<div key={row.id} className="flex items-start gap-2">
+													<Select
+														value={row.param}
+														onValueChange={(v) => handleParamRowChange(row.id, "param", v)}
+														disabled={!hasUpdateAccess}
+													>
+														<SelectTrigger className="w-full flex-1" data-testid={`model-catalog-default-param-${i}`}>
+															<SelectValue placeholder={t("attributeSheet.selectParam")} />
+														</SelectTrigger>
+														<SelectContent>
+															{modelDefinitions.map((d) => (
+																<SelectItem key={d.key} value={d.key}>
+																	{d.label}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+													<Select
+														value={row.value}
+														onValueChange={(v) => handleParamRowChange(row.id, "value", v)}
+														disabled={!hasUpdateAccess}
+													>
+														<SelectTrigger className="w-full flex-1" data-testid={`model-catalog-default-value-${i}`}>
+															<SelectValue placeholder={t("attributeSheet.selectValue")} />
+														</SelectTrigger>
+														<SelectContent>
+															{(modelDefinitions.find((d) => d.key === row.param)?.options ?? []).map((o) => (
+																<SelectItem key={o} value={o}>
+																	{o}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon"
+														onClick={() => handleRemoveParamRow(row.id)}
+														data-testid={`model-catalog-default-remove-${i}`}
+													>
+														<Trash2 className="h-4 w-4" />
+													</Button>
+												</div>
+											))}
+										</div>
+									)}
+								</div>
+							</>
+						)}
 					</div>
 
 					<div className="bg-card sticky bottom-0 shrink-0 border-t px-8 py-4">
@@ -292,10 +457,10 @@ export default function AttributeSheet({ model, onClose }: AttributeSheetProps) 
 							<Button
 								type="button"
 								onClick={handleSubmit}
-								disabled={isLoading || !isDirty || !hasUpdateAccess}
+								disabled={isLoading || isUpdatingProvider || !isDirty || !hasUpdateAccess}
 								data-testid="model-catalog-attribute-submit"
 							>
-								{isLoading ? t("attributeSheet.saving") : t("attributeSheet.saveChanges")}
+								{isLoading || isUpdatingProvider ? t("attributeSheet.saving") : t("attributeSheet.saveChanges")}
 							</Button>
 						</div>
 					</div>

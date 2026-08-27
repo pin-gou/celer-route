@@ -125,8 +125,6 @@
 			"betaHeaders": "Beta 头部",
 			"openaiConfig": "OpenAI 配置",
 			"cooldownPolicy": "冷却策略",
-			"defaultParameters": "默认参数",
-			"defaultParametersEmpty": "未配置按模型的默认请求参数。",
 			"cooldownPolicyUsingDefault": "使用内置默认冷却策略。可点击编辑进行自定义。",
 			"cooldownPolicyAllDisabled": "所有冷却规则已禁用。",
 			"cooldownPolicyOverride": "已覆盖内置默认值。",

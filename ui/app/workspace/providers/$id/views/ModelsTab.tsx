@@ -341,6 +341,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 						...editingModel,
 						additional_attributes: editingModel.additional_attributes ?? {},
 					}}
+					provider={provider}
 					onClose={() => {
 						setEditingModel(null);
 						refetch();

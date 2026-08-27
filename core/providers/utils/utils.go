@@ -3657,20 +3657,21 @@ func ModelMatchesDenylist(denylist []string, candidates ...string) bool {
 
 // ApplyDefaultParameters injects provider-level default request parameters into
 // a BifrostChatRequest, but only for parameters that the request does not already
-// set and only for parameters the provider has registered as supported (see
-// schemas.LookupProviderDefaultParams). Unregistered params are silently ignored.
+// set and only for parameters the (provider, model) pair supports (see
+// schemas.ProviderModelSupportsDefaultParam). Unregistered params and params a
+// specific model does not accept are silently ignored.
 //
 // Known params are mapped to typed fields on the request. Unknown params are
 // silently ignored (they could be added to ExtraParams in the future).
 //
 // The function mutates req in place. It is safe to call multiple times: once a
 // field is set, subsequent calls with the same key are no-ops.
-func ApplyDefaultParameters(provider schemas.ModelProvider, req *schemas.BifrostChatRequest, defaults map[string]interface{}) {
+func ApplyDefaultParameters(provider schemas.ModelProvider, model string, req *schemas.BifrostChatRequest, defaults map[string]interface{}) {
 	if req == nil || len(defaults) == 0 {
 		return
 	}
 	for key, val := range defaults {
-		if !schemas.ProviderSupportsDefaultParam(provider, key) {
+		if !schemas.ProviderModelSupportsDefaultParam(provider, model, key) {
 			continue
 		}
 		switch key {

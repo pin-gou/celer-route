@@ -125,8 +125,6 @@
 			"betaHeaders": "Beta Headers",
 			"openaiConfig": "OpenAI Config",
 			"cooldownPolicy": "Cooldown Policy",
-			"defaultParameters": "Default Parameters",
-			"defaultParametersEmpty": "No per-model default request parameters configured.",
 			"cooldownPolicyUsingDefault": "Using the built-in default cooldown policy. Click Edit to customize.",
 			"cooldownPolicyAllDisabled": "All cooldown rules are disabled.",
 			"cooldownPolicyOverride": "Custom cooldown policy is overriding the built-in default.",

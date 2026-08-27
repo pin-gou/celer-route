@@ -7,7 +7,6 @@ import { PerformanceFormFragment } from "@/app/workspace/providers/fragments/per
 import { BetaHeadersFormFragment } from "@/app/workspace/providers/fragments/betaHeadersFormFragment";
 import { OpenAIConfigFormFragment } from "@/app/workspace/providers/fragments/openaiConfigFormFragment";
 import { CooldownPolicyFormFragment } from "@/app/workspace/providers/fragments/cooldownPolicyFormFragment";
-import { DefaultParametersFormFragment } from "@/app/workspace/providers/fragments/defaultParametersFormFragment";
 import { GovernanceFormFragment } from "@/app/workspace/providers/fragments/governanceFormFragment";
 import { DebuggingFormFragment } from "@/app/workspace/providers/fragments/debuggingFormFragment";
 import { ApiStructureFormFragment } from "@/app/workspace/providers/fragments/apiStructureFormFragment";
@@ -28,7 +27,6 @@ type EditableSection =
 	| "beta-headers"
 	| "openai-config"
 	| "cooldown-policy"
-	| "default-parameters"
 	| "debugging"
 	| "api-structure"
 	| null;
@@ -191,24 +189,6 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 					</button>
 				</div>
 				<CooldownPolicyFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
-
-	if (editingSection === "default-parameters") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.defaultParameters")}</h3>
-					<button
-						data-testid="providers2-overview-default-parameters-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<DefaultParametersFormFragment provider={provider} onCancel={handleCancelEdit} />
 			</div>
 		);
 	}
@@ -409,32 +389,6 @@ export function OverviewTab({ provider }: OverviewTabProps) {
 				>
 					<CooldownPolicySummary provider={provider} />
 				</Section>
-
-				{(provider.default_parameters_definitions ?? []).length > 0 && (
-					<Section
-						testId="providers2-overview-default-parameters"
-						title={t("providers2.overview.defaultParameters")}
-						editTestId="providers2-overview-default-parameters-edit"
-						onEdit={() => setEditingSection("default-parameters")}
-					>
-						{provider.default_parameters && Object.keys(provider.default_parameters).length > 0 ? (
-							<div className="text-muted-foreground space-y-1 text-xs">
-								{Object.entries(provider.default_parameters).map(([model, params]) => (
-									<div key={model} className="flex justify-between gap-2">
-										<span className="font-mono">{model}</span>
-										<span className="font-mono">
-											{Object.entries(params)
-												.map(([k, v]) => `${k}=${String(v)}`)
-												.join(", ")}
-										</span>
-									</div>
-								))}
-							</div>
-						) : (
-							<p className="text-muted-foreground text-xs">{t("providers2.overview.defaultParametersEmpty")}</p>
-						)}
-					</Section>
-				)}
 
 				<Section
 					testId="providers2-overview-debugging"
