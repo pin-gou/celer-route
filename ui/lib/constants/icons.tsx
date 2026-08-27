@@ -1073,6 +1073,20 @@ export const ProviderIcons = {
 			/>
 		);
 	},
+
+	gmicloud: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/gmicloud-icon.png"
+				alt="GMI Cloud"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
 } as const;
 
 // Routing Engine Icons

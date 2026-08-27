@@ -37,6 +37,7 @@ import (
 	"github.com/pin-gou/pg-gateway/core/providers/elevenlabs"
 	"github.com/pin-gou/pg-gateway/core/providers/fireworks"
 	"github.com/pin-gou/pg-gateway/core/providers/gemini"
+	"github.com/pin-gou/pg-gateway/core/providers/gmicloud"
 	"github.com/pin-gou/pg-gateway/core/providers/groq"
 	"github.com/pin-gou/pg-gateway/core/providers/huggingface"
 	"github.com/pin-gou/pg-gateway/core/providers/iflytek"
@@ -4614,6 +4615,8 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return coze.NewCozeProvider(config, bifrost.logger)
 	case schemas.CozeCn:
 		return cozecn.NewCozeCnProvider(config, bifrost.logger)
+	case schemas.GMICloud:
+		return gmicloud.NewGMICloudProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

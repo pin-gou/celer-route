@@ -48,6 +48,7 @@ export const KnownProvidersNames = [
 	"modelscope",
 	"coze",
 	"coze_cn",
+	"gmicloud",
 ] as const;
 
 // Local Provider type derived from KNOWN_PROVIDERS constant
@@ -178,6 +179,7 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	modelscope: "魔搭 ModelScope",
 	coze: "Coze",
 	coze_cn: "Coze (国内版)",
+	gmicloud: "GMI Cloud",
 } as const;
 
 // Helper function to get provider label, supporting custom providers

@@ -100,10 +100,10 @@ reviews:
         Verify tests import fixtures from tests/e2e/core/fixtures/base.fixture and use data-testid selectors.
         Preserve E2E patterns: page objects extend BasePage, unique test data should avoid parallel collisions, created resources should be cleaned up, and API payload field order must remain intentional.
         Do not marshal API payloads through Records, maps, Object.fromEntries, or JSON round trips because field order matters.
-    - path: "docs/**"
+    - path: "website/docs/**"
       instructions: |
         Check docs for parity with code, config.schema.json, and provider behavior.
-        Verify new or renamed Mintlify pages are reflected in docs/docs.json where appropriate.
+        Verify new or renamed Docusaurus pages are reflected in website/sidebars.js where appropriate.
 
 knowledge_base:
   code_guidelines:

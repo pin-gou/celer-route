@@ -1,0 +1,65 @@
+---
+title: GMI Cloud (gmicloud)
+---
+
+# GMI Cloud (gmicloud)
+
+GMI Cloud 的 OpenAI 兼容 LLM 推理 API 接入。
+
+## 配置
+
+```json
+{
+  "providers": {
+    "gmicloud": {
+      "network_config": {
+        "base_url": "https://api.gmi-serving.com"
+      }
+    }
+  }
+}
+```
+
+> 多组织场景下，可在 `network_config.extra_headers` 中显式注入 `X-Organization-ID` 头：
+>
+> ```json
+> {
+>   "providers": {
+>     "gmicloud": {
+>       "network_config": {
+>         "base_url": "https://api.gmi-serving.com",
+>         "extra_headers": {
+>           "X-Organization-ID": "your_org_id"
+>         }
+>       }
+>     }
+>   }
+> }
+> ```
+
+## API Key
+
+在 [GMI Cloud 控制台](https://gmicloud.ai/) 创建 API Key。
+
+环境变量：`GMI_API_KEY`
+
+## 模型
+
+模型名采用 `组织/模型` 格式，如：
+
+- `deepseek-ai/DeepSeek-V4-Flash-0731`
+- `Qwen/Qwen3.8-Max`
+
+模型名中的 `/` 不会被剥离，请按原样使用。
+
+## 支持的请求类型
+
+- 聊天补全（Chat Completion）
+- 流式聊天补全（Chat Completion Streaming）
+- 模型列表（List Models）
+
+## 限制
+
+- 不支持文本补全（Text Completion）
+- 不支持 Embedding
+- 不支持图片生成

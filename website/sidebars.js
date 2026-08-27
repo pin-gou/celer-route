@@ -31,6 +31,7 @@ export default {
         'providers/supported-providers/stepfun',
         'providers/supported-providers/xiaomi_mimo',
         'providers/supported-providers/iflytek',
+        'providers/supported-providers/gmicloud',
       ],
     },
     {

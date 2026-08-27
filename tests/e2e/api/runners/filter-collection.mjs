@@ -77,6 +77,7 @@ const PROVIDER_KEYWORDS = {
   openrouter: ["openrouter"],
   opencode: ["opencode"],
   replicate: ["replicate", "/replicate", "flux", "black-forest-labs"],
+  gmicloud: ["gmicloud"],
 };
 
 // Haystack = item JSON + ancestor folder names. Folder names encode the harness

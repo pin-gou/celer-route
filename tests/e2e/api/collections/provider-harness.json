@@ -50613,5 +50613,91 @@
             }
           }
         }
-  ]
+  ,{
+    "name": "51. GMI Cloud (gmicloud) Chat Completion",
+    "description": "Smoke-test the new GMI Cloud provider (OpenAI-compatible, model names carry org/ prefix like deepseek-ai/DeepSeek-R1). Routing uses the provider/model prefix convention: gmicloud/<org>/<model>.",
+    "item": [
+      {
+        "name": "Chat completion: gmicloud/deepseek-ai/DeepSeek-V4-Flash-0731",
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+              ]
+            }
+          }
+        ],
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"model\": \"gmicloud/deepseek-ai/DeepSeek-V4-Flash-0731\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/v1/chat/completions",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "v1",
+              "chat",
+              "completions"
+            ]
+          }
+        }
+      },
+      {
+        "name": "Chat completion streaming: gmicloud/deepseek-ai/DeepSeek-V4-Flash-0731",
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                "if (pm.response.code < 400) { pm.test('streaming response is SSE', function () { var ct = pm.response.headers.get('content-type') || ''; pm.expect(ct, 'expected SSE, got ' + ct).to.include('event-stream'); }); }"
+              ]
+            }
+          }
+        ],
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"model\": \"gmicloud/deepseek-ai/DeepSeek-V4-Flash-0731\",\n  \"max_tokens\": 64,\n  \"stream\": true,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/v1/chat/completions",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "v1",
+              "chat",
+              "completions"
+            ]
+          }
+        }
+      }
+    ]
+  }
+]
 }

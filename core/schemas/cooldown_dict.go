@@ -591,6 +591,19 @@ var providerErrorCatalog = map[ModelProvider]ProviderErrorCatalog{
 			"token_quota_exceeded",    // docs
 		},
 	},
+	GMICloud: {
+		Types: []string{
+			"rate_limit_error",        // observed (GMI mirrors OpenAI; org-level TPM)
+			"insufficient_quota",      // docs
+			"invalid_request_error",   // docs
+			"authentication_error",    // docs
+			"server_error",            // docs
+		},
+		Codes: []string{
+			"rate_limit_exceeded",     // docs
+			"insufficient_quota",      // docs
+		},
+	},
 	Opencode: {
 		Types: []string{
 			"rate_limit_error",        // observed

@@ -44,7 +44,7 @@ coverage/
 .parcel-cache/
 
 # Documentation that's not needed for build
-docs/
+website/
 README.md
 *.md
 

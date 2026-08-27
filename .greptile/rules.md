@@ -12,7 +12,7 @@ When reviewing a PR, first identify which Bifrost area is touched:
 - `plugins/`: governance, logging, telemetry, semantic cache, compatibility plugins.
 - `ui/`: React workspace interface and shared components.
 - `tests/e2e/`: Playwright end-to-end tests.
-- `docs/`: Mintlify documentation.
+- `website/`: Docusaurus documentation (MDX under `website/docs/`).
 
 ## Repository Rules
 
@@ -88,4 +88,4 @@ For `ui/**`:
 For `docs/**`:
 
 - Check examples against actual config schema, handler names, provider support, and Make targets.
-- New docs pages should be included in `docs/docs.json` when they are intended to be navigable.
+- New docs pages should be included in `website/sidebars.js` when they are intended to be navigable.

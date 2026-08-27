@@ -109,6 +109,7 @@ var dynamicallyConfigurableProviders = []schemas.ModelProvider{
 	schemas.Zhipu,
 	schemas.Tencent,
 	schemas.Baidu,
+	schemas.GMICloud,
 }
 
 // isModelRequired returns true if the request type requires a model

@@ -61,6 +61,7 @@ export const FAMILY_MAP: Record<FamilyKey, string[]> = {
 		"opencode-zen",
 		"azure",
 		"bedrock_mantle",
+		"gmicloud",
 	],
 	other: ["elevenlabs", "runway", "runware"],
 };

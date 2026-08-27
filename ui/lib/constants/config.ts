@@ -84,6 +84,7 @@ export const ModelPlaceholders = {
 	modelscope: "e.g. Qwen/Qwen2.5-72B-Instruct",
 	coze: "e.g. claude-3-7-sonnet-20250514, gpt-4o",
 	coze_cn: "e.g. claude-3-7-sonnet-20250514, gpt-4o",
+	gmicloud: "e.g. deepseek-ai/DeepSeek-V4-Flash-0731, Qwen/Qwen3.8-Max",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
@@ -136,6 +137,7 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	modelscope: true,
 	coze: true,
 	coze_cn: true,
+	gmicloud: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
@@ -190,6 +192,7 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	modelscope: "https://modelscope.cn",
 	coze: "https://www.coze.com",
 	coze_cn: "https://www.coze.cn",
+	gmicloud: "https://gmicloud.ai",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
@@ -244,6 +247,7 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	modelscope: "https://modelscope.cn/my/myAccessKey",
 	coze: "https://www.coze.com/settings/api",
 	coze_cn: "https://www.coze.cn/settings/api",
+	gmicloud: "https://gmicloud.ai/",
 };
 
 export const DefaultNetworkConfig = {

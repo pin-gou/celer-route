@@ -228,8 +228,16 @@ pg-gateway/
 │   ├── cmd/                       # Test seed commands
 │   └── docker-compose.yml         # Test backing services
 │
-├── docs/                          # Documentation
-│   └── features/                  # Feature documentation (MDX)
+├── website/                       # Docusaurus documentation site
+│   ├── docs/                      # MDX source (intro, deployment, features, providers, reference)
+│   │   ├── intro.mdx
+│   │   ├── deployment/            # sqlite, postgres
+│   │   ├── features/              # dashboard-auth, i18n, provider-cooldown, data-storage
+│   │   ├── providers/supported-providers/   # per-provider .mdx
+│   │   └── reference/             # cooldown-logging
+│   ├── sidebars.js                # Docusaurus navigation (replaces Mintlify docs.json)
+│   ├── docusaurus.config.js       # Docusaurus site config
+│   └── static/                    # static assets (img/, etc.)
 │
 ├── examples/                      # Example configurations
 │   ├── configs/                   # Config examples
@@ -715,12 +723,13 @@ Only `framework/vectorstore` needs any of this. Every other framework package pa
 4. Register in `core/bifrost.go` — add import + case in provider init switch
 5. **UI integration** (all required):
    - `ui/lib/constants/config.ts` — model placeholder + key requirement
-   - `ui/lib/constants/icons.tsx` — provider icon
+   - `ui/lib/constants/icons.tsx` — provider icon (in `ui/public/provider-icons/`)
    - `ui/lib/constants/logs.ts` — provider display name (2 places)
-   - `docs/openapi/openapi.json` — OpenAPI spec update
    - `transports/config.schema.json` — config schema (2 locations)
 6. **CI/CD**: Add env vars to `.github/workflows/pr-tests.yml` and `release-pipeline.yml` (4 jobs)
-7. **Docs**: Create `docs/providers/supported-providers/<name>.mdx`
+7. **Docs**:
+   - Create `website/docs/providers/supported-providers/<name>.mdx`
+   - Register the page in `website/sidebars.js` under the "Provider 接入" category
 8. **Test**: `make test-core PROVIDER=<name>`
 
 ---
@@ -814,7 +823,7 @@ Run: `make run-e2e FLOW=<feature>`
 Four skills are available via `/skill-name`:
 
 ### `/docs-writer <feature-name>`
-Write, update, or review Mintlify MDX documentation. Researches UI code, Go handlers, and config schema. Validates `config.json` examples against `transports/config.schema.json`. Outputs docs with Web UI / API / config.json tabs.
+Write, update, or review Docusaurus MDX documentation under `website/docs/`. Researches UI code, Go handlers, and config schema. Validates `config.json` examples against `transports/config.schema.json`. Outputs docs with Web UI / API / config.json tabs.
 
 Variants: `/docs-writer update <doc-path>`, `/docs-writer review <doc-path>`
 
@@ -887,7 +896,7 @@ Systematically address unresolved PR review comments. Uses GraphQL to get unreso
 | LLM test infrastructure | `core/internal/llmtests/` |
 | MCP test infrastructure | `core/internal/mcptests/` |
 | E2E test infrastructure | `tests/e2e/core/` |
-| Docs navigation config | `docs/docs.json` |
+| Docs navigation config | `website/sidebars.js` |
 | CI/CD workflows | `.github/workflows/` |
 
 ---

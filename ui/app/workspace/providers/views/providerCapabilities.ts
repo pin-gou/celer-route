@@ -60,4 +60,5 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	modelscope: ["chat"],
 	coze: ["chat"],
 	coze_cn: ["chat"],
+	gmicloud: ["chat", "vision", "tools"],
 };

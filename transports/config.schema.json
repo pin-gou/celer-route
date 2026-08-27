@@ -560,6 +560,9 @@
         },
         "coze_cn": {
           "$ref": "#/$defs/provider"
+        },
+        "gmicloud": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -8110,7 +8113,8 @@
             "xiaomi_mimo",
             "modelscope",
             "coze",
-            "coze_cn"
+            "coze_cn",
+            "gmicloud"
           ],
           "description": "Base provider type to extend"
         },

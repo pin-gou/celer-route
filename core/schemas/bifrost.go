@@ -110,6 +110,7 @@ const (
 	Modelscope       ModelProvider = "modelscope"
 	Coze             ModelProvider = "coze"
 	CozeCn           ModelProvider = "coze_cn"
+	GMICloud         ModelProvider = "gmicloud"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
@@ -173,6 +174,7 @@ var StandardProviders = []ModelProvider{
 	Modelscope,
 	Coze,
 	CozeCn,
+	GMICloud,
 }
 
 // KeylessProviders is the set of built-in (non-custom) providers that never
