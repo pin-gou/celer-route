@@ -299,6 +299,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"mcp_tool_logs_add_endpoint_columns"}, run: migrationAddEndpointColumnsToMCPToolLogs},
 	{IDs: []string{"mcp_tool_logs_add_plugin_logs_column"}, run: migrationAddMCPPluginLogsColumn},
 	{IDs: []string{"timeline_events_init"}, run: migrationCreateTimelineEventsTable},
+	{IDs: []string{"timeline_events_v2_provider_meta"}, run: migrationAddTimelineEventsProviderMeta},
 	{IDs: []string{"dashboard_bucket_metrics_add_unique_index"}, run: migrationAddDashboardBucketMetricsUniqueIndex},
 }
 
@@ -1160,6 +1161,68 @@ func migrationCreateTimelineEventsTable(ctx context.Context, db *gorm.DB, logger
 	err := m.Migrate()
 	if err != nil {
 		return fmt.Errorf("error while creating timeline_events table: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddTimelineEventsProviderMeta adds per-attempt upstream HTTP metadata
+// columns to timeline_events. Each row is now optionally tagged with the
+// provider/model/key_id of the upstream call it represents plus a "success"/
+// "failed" status — the timeline waterfall view reads these to color bars and
+// surface provider-level detail in tooltips. All four columns are nullable so
+// legacy pre_llm / post_llm / key_attempt rows (and pre-upgrade logs) keep
+// rendering with omitempty in the API response. Idempotent via
+// migrator.HasColumn guards; SQLite ALTER TABLE ADD COLUMN and Postgres
+// ADD COLUMN (nullable) both run as catalog-only operations on existing data.
+func migrationAddTimelineEventsProviderMeta(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "timeline_events_v2_provider_meta"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			m := tx.Migrator()
+			if !m.HasColumn(&TimelineEvent{}, "provider") {
+				logger.Info("[logstore] %s: adding column provider", migrationName)
+				if err := m.AddColumn(&TimelineEvent{}, "provider"); err != nil {
+					return fmt.Errorf("add provider: %w", err)
+				}
+			}
+			if !m.HasColumn(&TimelineEvent{}, "model") {
+				logger.Info("[logstore] %s: adding column model", migrationName)
+				if err := m.AddColumn(&TimelineEvent{}, "model"); err != nil {
+					return fmt.Errorf("add model: %w", err)
+				}
+			}
+			if !m.HasColumn(&TimelineEvent{}, "key_id") {
+				logger.Info("[logstore] %s: adding column key_id", migrationName)
+				if err := m.AddColumn(&TimelineEvent{}, "key_id"); err != nil {
+					return fmt.Errorf("add key_id: %w", err)
+				}
+			}
+			if !m.HasColumn(&TimelineEvent{}, "status") {
+				logger.Info("[logstore] %s: adding column status", migrationName)
+				if err := m.AddColumn(&TimelineEvent{}, "status"); err != nil {
+					return fmt.Errorf("add status: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			for _, col := range []string{"status", "key_id", "model", "provider"} {
+				if err := dropColumnIfExists(tx, logger, &TimelineEvent{}, col); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while adding timeline_events provider meta: %s", err.Error())
 	}
 	return nil
 }

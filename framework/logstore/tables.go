@@ -1230,14 +1230,21 @@ func (l *MCPToolLog) DeserializeFields() error {
 type TimelineEvent struct {
 	ID           string    `gorm:"primaryKey;type:varchar(255)" json:"id"`                                                  // Event primary key
 	LogID        string    `gorm:"type:varchar(255);column:log_id;index:idx_timeline_events_log_id;not null" json:"log_id"` // Links to the Log row this event belongs to
-	Phase        string    `gorm:"type:varchar(50);index:idx_timeline_events_phase;not null" json:"phase"`                  // pre_llm / post_llm
-	Source       string    `gorm:"type:varchar(100)" json:"source"`                                                         // plugin_logging (this iteration)
+	Phase        string    `gorm:"type:varchar(50);index:idx_timeline_events_phase;not null" json:"phase"`                  // pre_llm / post_llm / upstream_call
+	Source       string    `gorm:"type:varchar(100)" json:"source"`                                                         // plugin_logging / provider
 	PluginName   string    `gorm:"type:varchar(255);column:plugin_name" json:"plugin_name"`                                 // Plugin name (source=plugin_log*)
 	Level        string    `gorm:"type:varchar(50)" json:"level"`                                                           // info / warn / error
 	Message      string    `gorm:"type:text" json:"message"`                                                                // Human-readable message
 	TimeOffsetMS float64   `gorm:"column:time_offset_ms" json:"time_offset_ms"`                                             // Offset from request start (ms)
 	DurationMS   float64   `gorm:"column:duration_ms" json:"duration_ms"`                                                   // Phase duration (ms); 0 for instant events
 	Timestamp    time.Time `gorm:"index;not null" json:"timestamp"`                                                         // Event occurrence time
+	// Provider / Model / KeyID / Status carry per-attempt upstream HTTP metadata.
+	// Nullable on legacy rows; the response serializer emits them with omitempty
+	// so list/waterfall views degrade gracefully for old log entries.
+	Provider string `gorm:"type:varchar(100);column:provider" json:"provider,omitempty"`
+	Model    string `gorm:"type:varchar(255);column:model" json:"model,omitempty"`
+	KeyID    string `gorm:"type:varchar(255);column:key_id" json:"key_id,omitempty"`
+	Status   string `gorm:"type:varchar(50);column:status" json:"status,omitempty"`
 }
 
 // TableName sets the table name for GORM
