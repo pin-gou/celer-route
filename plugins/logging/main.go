@@ -800,6 +800,15 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 
 	createdTimestamp := time.Now().UTC()
 
+	// Anchor the request start on the ctx so core/upstreamspan.go can compute
+	// time_offset_ms for per-attempt upstream HTTP spans. Logging plugin is
+	// the first writer of this key in the request lifecycle; if it's not set,
+	// recordUpstreamSpan degrades to offset=0 with a one-time warn (handled
+	// in core/upstreamspan.go).
+	if _, alreadySet := ctx.Value(schemas.BifrostContextKeyRequestStart).(time.Time); !alreadySet {
+		ctx.SetValue(schemas.BifrostContextKeyRequestStart, createdTimestamp)
+	}
+
 	p.logger.Debug("PreLLMHook: request %s type=%q", requestID, req.RequestType)
 
 	// If request type is streaming we create a stream accumulator via the tracer
@@ -997,6 +1006,10 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 		RoutingRuleName:    routingRuleName,
 		VirtualKeyID:       virtualKeyID,
 		VirtualKeyName:     virtualKeyName,
+		// Ctx captured here so PostLLMHook can merge per-attempt upstream
+		// spans (BifrostContextKeyUpstreamSpans) into the final timeline
+		// events batch without re-resolving the ctx from the request id.
+		Ctx: ctx,
 	}
 	// Build the pre_llm stage marker for the request timeline. It is kept in
 	// memory with the pending data and persisted together with the Log row when
@@ -1313,7 +1326,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		// completes. The post-write callback in makePostWriteCallback fires
 		// the same entry again — the frontend dedupes via mergeActiveEntry.
 		p.notifyActiveLogSubscribers(ctx, entry)
-		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
+		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID, bifrostErr)...)
 		p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 		return result, bifrostErr, nil
 	}
@@ -1414,7 +1427,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		// DB write completes. The post-write callback fires the same entry
 		// again — the frontend dedupes via mergeActiveEntry.
 		p.notifyActiveLogSubscribers(ctx, entry)
-		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
+		p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID, bifrostErr)...)
 		p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 		return result, bifrostErr, nil
 	}
@@ -1478,7 +1491,7 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		}
 	}
 	p.notifyActiveLogSubscribers(ctx, entry)
-	p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID)...)
+	p.storeOrEnqueueEntry(ctx, entry, p.makePostWriteCallback(nil), p.finalTimelineEvents(pending, entry.ID, bifrostErr)...)
 	p.scheduleDeferredUsageUpdate(ctx, requestID, entry.TokenUsageParsed != nil)
 	return result, bifrostErr, nil
 }
@@ -1645,18 +1658,48 @@ func timelineEventsForEntry(pending *pendingInjectEntries, i int) []*logstore.Ti
 }
 
 // finalTimelineEvents returns the full stage-event set for a request's final
-// log write: the pre_llm marker built by PreLLMHook (carried on pending) plus a
+// log write: the pre_llm marker built by PreLLMHook (carried on pending),
+// every upstream_call span core recorded via recordUpstreamSpan, plus a
 // freshly built post_llm marker stamped with the completion time and the
-// offset from the request start. The returned slice never mutates pending —
-// PostLLMHook may be called per streaming chunk and pending is only read here.
-// logID is the effective request id (fallback ids override the primary one).
-func (p *LoggerPlugin) finalTimelineEvents(pending *PendingLogData, logID string) []*logstore.TimelineEvent {
+// offset from the request start.
+//
+// bifrostErr is the PostLLMHook result/error (nil on success). When non-nil
+// we override every upstream span's Status to "failed" — the per-attempt
+// wrapper wrote "success" optimistically because the stream wrapper can't
+// see the final request outcome, so this is the single chokepoint that
+// reconciles the per-attempt status with the request-level outcome.
+//
+// The returned slice never mutates pending — PostLLMHook may be called per
+// streaming chunk and pending is only read here. logID is the effective
+// request id (fallback ids override the primary one).
+func (p *LoggerPlugin) finalTimelineEvents(pending *PendingLogData, logID string, bifrostErr *schemas.BifrostError) []*logstore.TimelineEvent {
 	if pending == nil {
 		return nil
 	}
 	now := time.Now().UTC()
 	events := make([]*logstore.TimelineEvent, 0, len(pending.TimelineEvents)+1)
 	events = append(events, pending.TimelineEvents...)
+
+	// Merge per-attempt upstream spans written by core/upstreamspan.go into
+	// the pending event list. They ride the same write cycle so they land in
+	// the same DB batch as the pre/post_llm markers.
+	if pending.Ctx != nil {
+		if spans, ok := pending.Ctx.Value(schemas.BifrostContextKeyUpstreamSpans).([]schemas.TimelineEvent); ok {
+			for i := range spans {
+				if bifrostErr != nil {
+					spans[i].Status = "failed"
+				}
+				spans[i].LogID = logID
+				// Convert from the in-process schemas.TimelineEvent (used by
+				// core/upstreamspan.go to avoid an import cycle) into the GORM-
+				// tagged logstore.TimelineEvent used by the persistence layer.
+				// Field set is identical; this is a value copy.
+				ev := logstore.TimelineEvent(spans[i])
+				events = append(events, &ev)
+			}
+		}
+	}
+
 	events = append(events, &logstore.TimelineEvent{
 		ID:           uuid.NewString(),
 		LogID:        logID,

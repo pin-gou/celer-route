@@ -51,6 +51,12 @@ type PendingLogData struct {
 	// queue entry as the Log row itself, so a timeline marker is never written
 	// without its parent log (and vice versa).
 	TimelineEvents []*logstore.TimelineEvent
+	// Ctx is the request-scoped BifrostContext captured at PreLLMHook time.
+	// PostLLMHook uses it to merge per-attempt upstream spans (written by
+	// core/upstreamspan.go onto BifrostContextKeyUpstreamSpans) into the final
+	// timeline_events batch — same write cycle as pre/post_llm markers, so
+	// span persistence never outlives (or drops) its parent log.
+	Ctx *schemas.BifrostContext
 	// LastActivity is the unix-nano timestamp of the most recent PostLLMHook
 	// activity (e.g. each streaming chunk). cleanupStalePendingLogs evicts on
 	// idle time using this value, so long-running streams that keep producing

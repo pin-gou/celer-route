@@ -7329,6 +7329,7 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					})
 				}
 				lastAttemptFinalizer = postHookSpanFinalizer
+				callStartedAt := time.Now()
 				streamCh, streamErr := bifrost.handleProviderStreamRequest(provider, config, req, k, postHookRunner, postHookSpanFinalizer)
 				// If stream setup failed before any provider goroutine started,
 				// no deferred finalizer will run — release the pipeline directly
@@ -7337,6 +7338,32 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					finalizerOnce.Do(func() {
 						bifrost.releasePluginPipeline(pipeline)
 					})
+				}
+				// Record the upstream span for this attempt. Status is conservative
+				// "success" here because the wrapper can't see the final result;
+				// PostLLMHook in the logging plugin overwrites all spans to
+				// "failed" when the overall request errors (see
+				// plugins/logging/main.go:finalTimelineEvents).
+				//
+				// Stream span timing is full-stream by design: duration_ms covers
+				// from handleProviderStreamRequest entry to channel close. We wrap
+				// the returned channel with a goroutine that fires when the
+				// upstream channel drains — this is also the moment the provider
+				// goroutine releases its pool resources.
+				if streamErr != nil {
+					// Hard error before any chunk streamed: emit a span with the
+					// already-known duration (call setup failure).
+					recordUpstreamSpan(req.Context, provider.GetProviderKey(), resolvedModel, k.ID, callStartedAt, time.Now(), "failed", routingErrorSummary(streamErr))
+				} else if streamCh != nil {
+					wrapped := make(chan *schemas.BifrostStreamChunk)
+					go func() {
+						defer close(wrapped)
+						defer recordUpstreamSpan(req.Context, provider.GetProviderKey(), resolvedModel, k.ID, callStartedAt, time.Now(), "success", "")
+						for chunk := range streamCh {
+							wrapped <- chunk
+						}
+					}()
+					streamCh = wrapped
 				}
 				return streamCh, streamErr
 			}, keyProvider, perKeyFailureMarker, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
@@ -7351,7 +7378,19 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 				}
 				req.SetModel(resolvedModel)
 				attemptRoutingInfo = schemas.BuildRoutingInfo(req.Context, provider.GetProviderKey(), originalModelRequested, k)
-				return bifrost.handleProviderRequest(provider, config, req, k, keys)
+				// Record the upstream span for this attempt. handleProviderRequest
+				// is the single chokepoint that funnels every unary provider.X
+				// call (chat, embeddings, speech, transcription, image, video,
+				// files, batches, containers, passthrough, etc.), so timing it
+				// here covers all unary request types without per-case edits.
+				callStartedAt := time.Now()
+				resp, err := bifrost.handleProviderRequest(provider, config, req, k, keys)
+				if err != nil {
+					recordUpstreamSpan(req.Context, provider.GetProviderKey(), resolvedModel, k.ID, callStartedAt, time.Now(), "failed", routingErrorSummary(err))
+				} else {
+					recordUpstreamSpan(req.Context, provider.GetProviderKey(), resolvedModel, k.ID, callStartedAt, time.Now(), "success", "")
+				}
+				return resp, err
 			}, keyProvider, perKeyFailureMarker, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
 		}
 
