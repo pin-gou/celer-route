@@ -471,7 +471,11 @@
 			"noEvents": "此请求未记录事件。",
 			"info": "信息",
 			"warn": "警告",
-			"error": "错误",
+			"error": {
+				"title": "加载时间线失败",
+				"networkTitle": "网络错误，加载时间线失败",
+				"retry": "重试"
+			},
 			"ms": "毫秒",
 			"requestLatency": "请求耗时：",
 			"eventSpan": "事件跨度：",
@@ -500,10 +504,18 @@
 				"failedTitle": "此请求未记录事件。",
 				"failedHint": "总耗时为 0 表示请求在到达日志层之前已被中止（例如 short-circuit / 上下文取消）。查看「消息」或「Raw」tab 获取错误详情。"
 			},
-			"error": {
-				"title": "加载时间线失败",
-				"networkTitle": "网络错误，加载时间线失败",
-				"retry": "重试"
+			"view": {
+				"list": "列表",
+				"gantt": "瀑布流"
+			},
+			"gantt": {
+				"empty": "暂无跨度条 — 旧日志只含事件标记。尝试一个有实测上游调用的请求。",
+				"provider": "提供商",
+				"model": "模型",
+				"key": "密钥 ID",
+				"status": "状态",
+				"duration": "耗时",
+				"offset": "偏移"
 			}
 		},
 		"statCards": {
@@ -941,17 +953,14 @@
 		"noResponses": "无可用响应消息",
 		"base64EncodedData": "[Base64 编码数据]",
 		"inputText": "输入文本",
-		"inputImage": "输入图像",
 		"inputFile": "输入文件",
 		"inputAudio": "输入音频",
 		"outputText": "输出文本",
 		"reasoningText": "推理文本",
-		"logProbabilities": "对数概率",
 		"summary": "摘要",
 		"summaryIndex": "摘要 #{{count}}",
 		"encryptedReasoningContent": "加密推理内容",
 		"toolDetails": "工具详情",
-		"output": "输出",
 		"additionalFields": "附加字段",
 		"functionCall": "函数调用：{{name}}",
 		"functionCallOutput": "函数调用输出",

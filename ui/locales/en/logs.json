@@ -471,7 +471,11 @@
 			"noEvents": "No events recorded for this request.",
 			"info": "info",
 			"warn": "warn",
-			"error": "error",
+			"error": {
+				"title": "Failed to load timeline",
+				"networkTitle": "Network error — failed to load timeline",
+				"retry": "Retry"
+			},
 			"ms": "ms",
 			"requestLatency": "Request latency:",
 			"eventSpan": "Event span:",
@@ -500,10 +504,18 @@
 				"failedTitle": "No events recorded for this request.",
 				"failedHint": "A total of 0 means the request was aborted before reaching the logging layer (short-circuit / context cancel). Check the Messages or Raw tab for the underlying error."
 			},
-			"error": {
-				"title": "Failed to load timeline",
-				"networkTitle": "Network error — failed to load timeline",
-				"retry": "Retry"
+			"view": {
+				"list": "List",
+				"gantt": "Waterfall"
+			},
+			"gantt": {
+				"empty": "No spans yet — older logs only carry event markers. Try a request with measured upstream calls.",
+				"provider": "Provider",
+				"model": "Model",
+				"key": "Key ID",
+				"status": "Status",
+				"duration": "Duration",
+				"offset": "Offset"
 			}
 		},
 		"statCards": {
@@ -884,12 +896,12 @@
 		"avgLogProb": "Avg LogProb: {{value}}",
 		"noSpeech": "No Speech: {{value}}%",
 		"temp": "Temp: {{value}}",
-		"logProbabilities": "LOG PROBABILITIES",
+		"logProbabilities": "Log Probabilities",
 		"input": "Input",
 		"output": "Output",
 		"prompt": "PROMPT",
 		"inputImages": "INPUT IMAGES",
-		"inputImage": "INPUT IMAGE",
+		"inputImage": "Input Image",
 		"revisedPrompt": "REVISED PROMPT",
 		"previousImage": "Previous image",
 		"nextImage": "Next image",
@@ -941,17 +953,14 @@
 		"noResponses": "No responses messages available",
 		"base64EncodedData": "[Base64 encoded data]",
 		"inputText": "Input Text",
-		"inputImage": "Input Image",
 		"inputFile": "Input File",
 		"inputAudio": "Input Audio",
 		"outputText": "Output Text",
 		"reasoningText": "Reasoning Text",
-		"logProbabilities": "Log Probabilities",
 		"summary": "Summary",
 		"summaryIndex": "Summary #{{count}}",
 		"encryptedReasoningContent": "Encrypted Reasoning Content",
 		"toolDetails": "Tool Details",
-		"output": "Output",
 		"additionalFields": "Additional Fields",
 		"functionCall": "Function Call: {{name}}",
 		"functionCallOutput": "Function Call Output",

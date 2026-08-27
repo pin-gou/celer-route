@@ -14,10 +14,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Copy, Loader2, RefreshCw } from "lucide-react";
-import { useMemo } from "react";
+import { AlertCircle, Copy, LayoutGrid, Loader2, RefreshCw, Rows3 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getPhaseStyle } from "./timelinePhaseColors";
+import { TimelineGantt } from "./timelineGantt";
 import { TimelineWaterfallGroup, type TimelineEvent } from "./timelineWaterfall";
 
 // Re-export so existing consumers that import TimelineEvent / TimelineResponse
@@ -40,6 +41,11 @@ export interface TimelineDetailProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// PgViewStorageKey is the localStorage key persisting the timeline detail
+// view-mode toggle ("list" | "gantt"). Default (missing key) = "gantt" to
+// surface the waterfall view for new visitors.
+const PgViewStorageKey = "pg-gateway.timeline.view";
 
 function formatMs(ms: number, decimals: number = 2): string {
 	return ms.toLocaleString("en-US", {
@@ -192,6 +198,24 @@ function TimelineSkeleton() {
 export function TimelineDetail({ data, isLoading, error, onRetry }: TimelineDetailProps) {
 	const { t } = useTranslation("logs");
 
+	// View mode toggle: "list" (existing grouped rows) or "gantt" (waterfall).
+	// Persisted in localStorage so a user's choice survives refresh. New
+	// visitors default to the gantt view to surface the waterfall feature.
+	const [view, setView] = useState<"list" | "gantt">(() => {
+		if (typeof window === "undefined") return "gantt";
+		const stored = window.localStorage.getItem(PgViewStorageKey);
+		return stored === "list" || stored === "gantt" ? stored : "gantt";
+	});
+
+	const setViewAndPersist = (next: "list" | "gantt") => {
+		setView(next);
+		try {
+			window.localStorage.setItem(PgViewStorageKey, next);
+		} catch {
+			// localStorage may be unavailable (privacy mode); ignore.
+		}
+	};
+
 	const grouped = useMemo(() => {
 		if (!data) return [] as Array<{ phase: string; events: TimelineEvent[] }>;
 		const events = (data.events ?? []) as TimelineEvent[];
@@ -269,10 +293,14 @@ export function TimelineDetail({ data, isLoading, error, onRetry }: TimelineDeta
 
 	return (
 		<div className="space-y-3" data-testid="timeline-detail">
+			<ViewToggle view={view} onChange={setViewAndPersist} t={t} />
+
 			<TimelineHeader logId={data.log_id} totalDurationMs={data.total_duration_ms} eventSpanMs={eventSpanMs} />
 
 			{!hasEvents ? (
 				<EmptyState totalDurationMs={data.total_duration_ms} t={t} />
+			) : view === "gantt" ? (
+				<TimelineGantt events={events} totalDurationMs={data.total_duration_ms} t={t} />
 			) : (
 				<div className="space-y-3" data-testid="timeline-groups">
 					{grouped.map((group) => (
@@ -280,6 +308,41 @@ export function TimelineDetail({ data, isLoading, error, onRetry }: TimelineDeta
 					))}
 				</div>
 			)}
+		</div>
+	);
+}
+
+function ViewToggle({ view, onChange, t }: { view: "list" | "gantt"; onChange: (v: "list" | "gantt") => void; t: (k: string) => string }) {
+	return (
+		<div className="border-border flex shrink-0 items-center rounded-md border bg-transparent p-0.5" data-testid="timeline-view-toggle">
+			<button
+				type="button"
+				onClick={() => onChange("gantt")}
+				title={t("timeline.detail.view.gantt")}
+				aria-pressed={view === "gantt"}
+				className={cn(
+					"flex items-center gap-1 rounded px-2 py-1 text-xs",
+					view === "gantt" ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground",
+				)}
+				data-testid="timeline-view-gantt"
+			>
+				<LayoutGrid className="h-3.5 w-3.5" />
+				{t("timeline.detail.view.gantt")}
+			</button>
+			<button
+				type="button"
+				onClick={() => onChange("list")}
+				title={t("timeline.detail.view.list")}
+				aria-pressed={view === "list"}
+				className={cn(
+					"flex items-center gap-1 rounded px-2 py-1 text-xs",
+					view === "list" ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground",
+				)}
+				data-testid="timeline-view-list"
+			>
+				<Rows3 className="h-3.5 w-3.5" />
+				{t("timeline.detail.view.list")}
+			</button>
 		</div>
 	);
 }

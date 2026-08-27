@@ -1416,6 +1416,12 @@ export interface TimelineEvent {
 	message: string;
 	level: string;
 	plugin_name: string;
+	// Per-attempt upstream HTTP metadata (timeline waterfall). Optional so
+	// legacy rows / pre_llm / post_llm / key_attempt events render without it.
+	provider?: string;
+	model?: string;
+	key_id?: string;
+	status?: string;
 }
 
 export interface TimelineResponse {

@@ -27,6 +27,13 @@ export interface TimelineEvent {
 	message: string;
 	level: string;
 	plugin_name: string;
+	// Per-attempt upstream HTTP metadata (added by the timeline waterfall
+	// feature — backend migration timeline_events_v2_provider_meta). Omitted
+	// on legacy / non-upstream rows.
+	provider?: string;
+	model?: string;
+	key_id?: string;
+	status?: string;
 }
 
 function getLevelRowClass(level: string): string {
