@@ -2994,6 +2994,16 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 
 	events := make([]timelineEvent, 0)
 
+	// Anchor every relative offset to the earliest known event so offsets are
+	// never negative. logStartMS is the log row's own start time (PreLLMHook),
+	// but RoutingEngineLogEntry/PluginLogEntry timestamps can come from
+	// PreRequestHook (governance plugin) which runs BEFORE PreLLMHook sets
+	// log.Timestamp — using logStartMS alone would clamp those entries to 0 and
+	// lose inter-decision ordering. Anchoring to min(logStart, earliestEntry)
+	// preserves the visual sequence without leaking absolute Unix times.
+	logStartMS := log.Timestamp.UnixMilli()
+	earliestEntryMS := logStartMS
+
 	// 1. Timeline events from the timeline_events table
 	timelineEvents, err := h.logManager.ListTimelineEventsByLogID(ctx, id)
 	if err != nil {
@@ -3012,23 +3022,32 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 		})
 	}
 
-	// 2. RoutingEngineLogs — try JSON array first, fall back to formatted text
+	// 2. RoutingEngineLogs — try JSON array first, fall back to formatted text.
+	// Stored format is the human-readable form `[ts] [engine] - message` produced
+	// by plugins/logging/utils.go:formatRoutingEngineLogs, so a JSON-only parse
+	// would silently drop every decision the routing engines made.
 	if log.RoutingEngineLogs != "" {
+		var routingEntries []schemas.RoutingEngineLogEntry
 		if entries, ok := tryParseRoutingEngineLogsJSON(log.RoutingEngineLogs); ok {
-			for _, entry := range entries {
-				events = append(events, timelineEvent{
-					TimeOffsetMS: float64(entry.Timestamp) / 1000, // ms offset from routing engine log timestamp
-					DurationMS:   0,
-					Phase:        "upstream_call",
-					Source:       "routing_engine",
-					Message:      entry.Message,
-					Level:        string(entry.Level),
-					PluginName:   entry.Engine,
-				})
-			}
+			routingEntries = entries
+		} else if entries := tryParseRoutingEngineLogsText(log.RoutingEngineLogs); len(entries) > 0 {
+			routingEntries = entries
 		} else {
-			// Fallback for formatted text: skip for now, not enough structure
-			logger.Warn("unable to parse routing engine logs as JSON for log %s", id)
+			logger.Warn("unable to parse routing engine logs for log %s (neither JSON nor text)", id)
+		}
+		for _, entry := range routingEntries {
+			if entry.Timestamp < earliestEntryMS {
+				earliestEntryMS = entry.Timestamp
+			}
+			events = append(events, timelineEvent{
+				TimeOffsetMS: float64(entry.Timestamp - logStartMS),
+				DurationMS:   0,
+				Phase:        "upstream_call",
+				Source:       "routing_engine",
+				Message:      entry.Message,
+				Level:        string(entry.Level),
+				PluginName:   entry.Engine,
+			})
 		}
 	}
 
@@ -3037,8 +3056,11 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 		pluginLogs := tryParsePluginLogsJSON(log.PluginLogs)
 		for pluginName, entries := range pluginLogs {
 			for _, entry := range entries {
+				if entry.Timestamp < earliestEntryMS {
+					earliestEntryMS = entry.Timestamp
+				}
 				events = append(events, timelineEvent{
-					TimeOffsetMS: float64(entry.Timestamp) / 1000, // ms offset from plugin log timestamp
+					TimeOffsetMS: float64(entry.Timestamp - logStartMS),
 					DurationMS:   0,
 					Phase:        "plugin_log",
 					Source:       "plugin_logs",
@@ -3071,19 +3093,43 @@ func (h *LoggingHandler) getLogTimeline(ctx *fasthttp.RequestCtx) {
 		})
 	}
 
-	// Sort events by time_ms_offset
+	// Fill relative offsets for routing_engine / plugin_logs events now that we
+	// know the earliest anchor. (Pre/post_llm events already carry their own
+	// absolute-relative offsets — their stored TimeOffsetMS is independent of
+	// log.Timestamp.)
+	for i := range events {
+		switch events[i].Source {
+		case "routing_engine", "plugin_logs":
+			// We need the raw entry.Timestamp to recompute. Easiest is to
+			// re-parse from the log fields, but doing so is wasteful. Instead,
+			// the offset stored above (entry.Timestamp - logStartMS) is the
+			// correct shape; just shift it by (logStartMS - earliestEntryMS)
+			// to anchor at earliestEntryMS instead of logStartMS.
+			events[i].TimeOffsetMS += float64(logStartMS - earliestEntryMS)
+		}
+	}
+
+	// Sort by offset so the last event in the slice is the trailing-edge one we
+	// use below to size the waterfall track.
 	sort.SliceStable(events, func(i, j int) bool {
 		return events[i].TimeOffsetMS < events[j].TimeOffsetMS
 	})
 
-	// Calculate total_duration_ms from the log's latency or from the event span
+	// Calculate total_duration_ms from the log's latency or the event span.
+	// We take the max of the two so the waterfall track matches the last
+	// event (e.g. post_llm) — log.Latency measures the upstream round-trip only
+	// and can be a couple of milliseconds shorter than the post-llm marker,
+	// which would otherwise leave the final event visually clipped past the
+	// track's right edge.
 	totalDurationMs := 0.0
 	if log.Latency != nil {
 		totalDurationMs = *log.Latency
-	} else if len(events) > 0 {
-		// Fall back to the span between the earliest and latest event
+	}
+	if len(events) > 0 {
 		lastEvent := events[len(events)-1]
-		totalDurationMs = lastEvent.TimeOffsetMS + lastEvent.DurationMS
+		if span := lastEvent.TimeOffsetMS + lastEvent.DurationMS; span > totalDurationMs {
+			totalDurationMs = span
+		}
 	}
 
 	SendJSON(ctx, map[string]interface{}{
@@ -3364,6 +3410,59 @@ func tryParseRoutingEngineLogsJSON(raw string) ([]schemas.RoutingEngineLogEntry,
 		return nil, false
 	}
 	return entries, true
+}
+
+// tryParseRoutingEngineLogsText parses the human-readable form produced by
+// plugins/logging/utils.go:formatRoutingEngineLogs:
+//
+//	[timestamp] [engine] - message
+//
+// where `timestamp` is a Unix-millisecond integer and the prefix pair is
+// always present. Trailing newlines and empty lines are tolerated. Lines that
+// do not match the shape are skipped, not failed, so a single malformed entry
+// does not blank the whole trace.
+func tryParseRoutingEngineLogsText(raw string) []schemas.RoutingEngineLogEntry {
+	var entries []schemas.RoutingEngineLogEntry
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "[") {
+			continue
+		}
+		// First [...] is the timestamp.
+		close := strings.Index(line, "]")
+		if close <= 1 {
+			continue
+		}
+		tsStr := line[1:close]
+		ts, err := strconv.ParseInt(tsStr, 10, 64)
+		if err != nil {
+			continue
+		}
+		rest := strings.TrimSpace(line[close+1:])
+		// Next [engine] block.
+		if !strings.HasPrefix(rest, "[") {
+			continue
+		}
+		engineClose := strings.Index(rest, "]")
+		if engineClose <= 1 {
+			continue
+		}
+		engine := rest[1:engineClose]
+		// Everything after " - " is the message.
+		message := strings.TrimSpace(rest[engineClose+1:])
+		message = strings.TrimPrefix(message, "-")
+		message = strings.TrimSpace(message)
+		entries = append(entries, schemas.RoutingEngineLogEntry{
+			Engine:    engine,
+			Level:     schemas.LogLevelInfo,
+			Message:   message,
+			Timestamp: ts,
+		})
+	}
+	return entries
 }
 
 // tryParsePluginLogsJSON attempts to parse plugin logs as a JSON map.

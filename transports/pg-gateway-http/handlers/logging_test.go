@@ -934,6 +934,388 @@ func TestGetLogTimeline_LogFound(t *testing.T) {
 	}
 }
 
+// TestGetLogTimeline_RelativeOffsets verifies that events sourced from
+// RoutingEngineLogs and PluginLogs are emitted with TimeOffsetMS computed as
+// the difference between the entry's absolute Unix-millisecond timestamp and
+// the log's start timestamp — NOT as the raw entry timestamp divided by 1000
+// (which is what an earlier bug did, producing offsets in the billions of ms
+// and clipping every event off the waterfall).
+//
+// Regression: prior code wrote `float64(entry.Timestamp) / 1000` and labeled it
+// "ms offset from request start"; for a request near 2026-01-01 (~1.767e12 ms)
+// that yields ~1.767e9 ms — a billion-second offset, drawn far outside the
+// visible track. The fix subtracts log.Timestamp (Unix ms) before emitting.
+func TestGetLogTimeline_RelativeOffsets(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	logStart := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	// Simulate one routing-engine log emitted 50ms after request start, and
+	// one plugin log emitted 1234ms after request start.
+	routingAt := logStart.Add(50 * time.Millisecond)
+	pluginAt := logStart.Add(1234 * time.Millisecond)
+
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-offset-1",
+			Status:    "success",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Latency:   ptrFloat64(2270),
+			Timestamp: logStart,
+			RoutingEngineLogs: fmt.Sprintf(
+				`[{"engine":"governance","level":"info","message":"provider=openai attempt=0","timestamp":%d}]`,
+				routingAt.UnixMilli(),
+			),
+			PluginLogs: fmt.Sprintf(
+				`{"governance":[{"plugin_name":"governance","level":"info","message":"budget warning","timestamp":%d}]}`,
+				pluginAt.UnixMilli(),
+			),
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-offset-1/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-offset-1")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		Events []struct {
+			TimeOffsetMS float64 `json:"time_ms_offset"`
+			Phase        string  `json:"phase"`
+			Source       string  `json:"source"`
+			Message      string  `json:"message"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	var foundRouting, foundPlugin bool
+	for _, e := range response.Events {
+		// Sanity: every offset must be finite and inside the request's plausible
+		// window (≤ totalDurationMs = 2270ms with a small grace). The old bug
+		// would emit ~1.767e9 here.
+		if e.TimeOffsetMS < 0 || e.TimeOffsetMS > 60_000 {
+			t.Errorf("event %q (%s) has out-of-range time_ms_offset=%.3f — likely absolute-timestamp leak",
+				e.Message, e.Source, e.TimeOffsetMS)
+		}
+		switch {
+		case e.Source == "routing_engine" && e.Message == "provider=openai attempt=0":
+			foundRouting = true
+			if got, want := e.TimeOffsetMS, 50.0; got != want {
+				t.Errorf("routing_engine offset = %.3f, want %.3f", got, want)
+			}
+		case e.Source == "plugin_logs" && e.Message == "budget warning":
+			foundPlugin = true
+			if got, want := e.TimeOffsetMS, 1234.0; got != want {
+				t.Errorf("plugin_log offset = %.3f, want %.3f", got, want)
+			}
+		}
+	}
+	if !foundRouting {
+		t.Error("expected a routing_engine event with the 50ms offset")
+	}
+	if !foundPlugin {
+		t.Error("expected a plugin_log event with the 1234ms offset")
+	}
+}
+
+// TestGetLogTimeline_RoutingEngineTextFormat reproduces the regression where
+// `routing_engine_logs` is stored in the human-readable `[ts] [engine] - msg`
+// form (plugins/logging/utils.go:formatRoutingEngineLogs) but the timeline
+// handler used to JSON-only parse it, silently dropping every routing decision
+// from the timeline. The fix adds a text-format fallback so these events render
+// as `upstream_call` rows.
+func TestGetLogTimeline_RoutingEngineTextFormat(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	logStart := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	ts1 := logStart.Add(50 * time.Millisecond).UnixMilli()
+	ts2 := logStart.Add(150 * time.Millisecond).UnixMilli()
+	textLog := fmt.Sprintf("[%d] [routing-rule] - Evaluating routing rules for model=foo\n"+
+		"[%d] [model-catalog] - No provider specified\n", ts1, ts2)
+
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:                "log-text-rel-1",
+			Status:            "success",
+			Provider:          "openai",
+			Model:             "gpt-4",
+			Latency:           ptrFloat64(2000),
+			Timestamp:         logStart,
+			RoutingEngineLogs: textLog,
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-text-rel-1/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-text-rel-1")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		Events []struct {
+			TimeOffsetMS float64 `json:"time_ms_offset"`
+			Phase        string  `json:"phase"`
+			Source       string  `json:"source"`
+			Message      string  `json:"message"`
+			PluginName   string  `json:"plugin_name"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	var routingEvents int
+	for _, e := range response.Events {
+		if e.Source != "routing_engine" {
+			continue
+		}
+		routingEvents++
+		if e.Phase != "upstream_call" {
+			t.Errorf("routing_engine event phase = %q, want upstream_call", e.Phase)
+		}
+		// Text format timestamps are Unix milliseconds; the offset is the diff
+		// from logStart. Sanity-check that they are within the request window
+		// (well under 60s) and not the old buggy value of ~1.787e9 / 1000 ms.
+		if e.TimeOffsetMS < 0 || e.TimeOffsetMS > 60_000 {
+			t.Errorf("routing_engine event %q has out-of-range offset %.3f", e.Message, e.TimeOffsetMS)
+		}
+	}
+	if routingEvents != 2 {
+		t.Errorf("expected 2 routing_engine events from text-format fallback, got %d", routingEvents)
+		for _, e := range response.Events {
+			t.Logf("  event: %+v", e)
+		}
+	}
+}
+
+// TestGetLogTimeline_RoutingEventsAnchoredAtEarliest reproduces the case where
+// routing-engine log timestamps fall BEFORE log.Timestamp (because the
+// governance plugin's PreRequestHook emits them before PreLLMHook stamps
+// log.Timestamp). Anchoring to logStartMS alone would clamp these events to
+// offset=0 and lose inter-decision ordering on the timeline; the fix anchors
+// to min(logStart, earliestEntry) so the earliest event sits at offset 0 and
+// the rest fan out monotonically.
+func TestGetLogTimeline_RoutingEventsAnchoredAtEarliest(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	logStart := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	// Three routing events: 5ms and 8ms BEFORE logStart, then 4ms AFTER it.
+	// Without the anchor shift, the first two would clamp to offset=0 and
+	// overwrite each other on the waterfall.
+	ts1 := logStart.Add(-5 * time.Millisecond).UnixMilli()
+	ts2 := logStart.Add(-8 * time.Millisecond).UnixMilli()
+	ts3 := logStart.Add(4 * time.Millisecond).UnixMilli()
+
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-anchor-1",
+			Status:    "success",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Latency:   ptrFloat64(2000),
+			Timestamp: logStart,
+			RoutingEngineLogs: fmt.Sprintf(
+				"[%d] [a] - first\n[%d] [a] - second\n[%d] [a] - third\n",
+				ts1, ts2, ts3,
+			),
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-anchor-1/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-anchor-1")
+
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		Events []struct {
+			TimeOffsetMS float64 `json:"time_ms_offset"`
+			Message      string  `json:"message"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	// Collect offsets keyed by message; verify monotonic ordering and a
+	// non-negative earliest offset.
+	var first, second, third float64
+	var foundFirst, foundSecond, foundThird bool
+	for _, e := range response.Events {
+		switch e.Message {
+		case "first":
+			first = e.TimeOffsetMS
+			foundFirst = true
+		case "second":
+			second = e.TimeOffsetMS
+			foundSecond = true
+		case "third":
+			third = e.TimeOffsetMS
+			foundThird = true
+		}
+	}
+	if !foundFirst || !foundSecond || !foundThird {
+		t.Fatalf("missing expected events: %+v", response.Events)
+	}
+	if second < 0 || first < 0 {
+		t.Errorf("offsets must be non-negative; got first=%.3f second=%.3f", first, second)
+	}
+	if !(second < first && first < third) {
+		t.Errorf("expected second < first < third in time order; got second=%.3f first=%.3f third=%.3f",
+			second, first, third)
+	}
+}
+
+// TestGetLogTimeline_TotalDurationIncludesPostLLM reproduces the case where
+// the post-llm marker fires ~milliseconds after log.Latency (which only
+// measures the upstream round-trip). The timeline's total_duration_ms must
+// track the last event so the post-llm bar lands at the right edge of the
+// waterfall instead of being clipped past it; otherwise the header advertises
+// a span shorter than the events it shows.
+func TestGetLogTimeline_TotalDurationIncludesPostLLM(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-postllm-1",
+			Status:    "success",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Latency:   ptrFloat64(8992), // upstream latency, as on log row
+			Timestamp: now,
+		},
+		timelineEvents: []logstore.TimelineEvent{
+			{
+				ID:           "event-pre",
+				LogID:        "log-postllm-1",
+				Phase:        "pre_llm",
+				Source:       "plugin_logging",
+				PluginName:   "logging",
+				Level:        "info",
+				Message:      "pre-llm hook executed",
+				TimeOffsetMS: 0,
+				DurationMS:   0,
+				Timestamp:    now,
+			},
+			{
+				ID:           "event-post",
+				LogID:        "log-postllm-1",
+				Phase:        "post_llm",
+				Source:       "plugin_logging",
+				PluginName:   "logging",
+				Level:        "info",
+				Message:      "post-llm hook executed",
+				TimeOffsetMS: 8994, // PostLLMHook fires 2ms after upstream finishes
+				DurationMS:   0,
+				Timestamp:    now.Add(8994 * time.Millisecond),
+			},
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-postllm-1/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-postllm-1")
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		TotalDurationMs float64 `json:"total_duration_ms"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got, want := response.TotalDurationMs, 8994.0; got != want {
+		t.Errorf("total_duration_ms = %.3f, want %.3f (last event's trailing edge)", got, want)
+	}
+}
+
+// TestGetLogTimeline_TotalDurationPrefersLatency covers the case where
+// log.Latency is the largest signal (e.g. when only post-llm events exist
+// and they sit inside the upstream window). The handler must NOT shrink the
+// waterfall to the smaller of the two values.
+func TestGetLogTimeline_TotalDurationPrefersLatency(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		log: &logstore.Log{
+			ID:        "log-latency-wins",
+			Status:    "success",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Latency:   ptrFloat64(1500),
+			Timestamp: now,
+		},
+		timelineEvents: []logstore.TimelineEvent{
+			{
+				ID:           "event-post",
+				LogID:        "log-latency-wins",
+				Phase:        "post_llm",
+				Source:       "plugin_logging",
+				PluginName:   "logging",
+				Level:        "info",
+				Message:      "post-llm hook executed",
+				TimeOffsetMS: 1490, // post-llm fired before upstream timer was stamped
+				DurationMS:   0,
+				Timestamp:    now.Add(1490 * time.Millisecond),
+			},
+		},
+	}
+	h := &LoggingHandler{logManager: mgr}
+
+	var req fasthttp.Request
+	req.SetRequestURI("/api/logs/log-latency-wins/timeline")
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&req, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345}, nil)
+	ctx.SetUserValue("id", "log-latency-wins")
+	h.getLogTimeline(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", got, string(ctx.Response.Body()))
+	}
+
+	var response struct {
+		TotalDurationMs float64 `json:"total_duration_ms"`
+	}
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got, want := response.TotalDurationMs, 1500.0; got != want {
+		t.Errorf("total_duration_ms = %.3f, want %.3f (must use max(Latency, eventSpan))", got, want)
+	}
+}
+
 // TestGetLogTimeline_LogNotFound verifies that GetLogTimeline returns 404
 // with error code "log_not_found" when the log does not exist.
 func TestGetLogTimeline_LogNotFound(t *testing.T) {
