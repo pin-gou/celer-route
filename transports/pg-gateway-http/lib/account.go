@@ -104,5 +104,8 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelPr
 	if config.CooldownPolicy != nil {
 		providerConfig.CooldownPolicy = config.CooldownPolicy
 	}
+	if len(config.DefaultParameters) > 0 {
+		providerConfig.DefaultParameters = config.DefaultParameters
+	}
 	return providerConfig, nil
 }

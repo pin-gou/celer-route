@@ -96,20 +96,21 @@ const (
 
 // ProviderResponse represents the response for provider operations
 type ProviderResponse struct {
-	Name                     schemas.ModelProvider            `json:"name"`
-	NetworkConfig            schemas.NetworkConfig            `json:"network_config"`                   // Network-related settings
-	ConcurrencyAndBufferSize schemas.ConcurrencyAndBufferSize `json:"concurrency_and_buffer_size"`      // Concurrency settings
-	ProxyConfig              *schemas.ProxyConfig             `json:"proxy_config"`                     // Proxy configuration
-	SendBackRawRequest       bool                             `json:"send_back_raw_request"`            // Include raw request in BifrostResponse
-	SendBackRawResponse      bool                             `json:"send_back_raw_response"`           // Include raw response in BifrostResponse
-	StoreRawRequestResponse  bool                             `json:"store_raw_request_response"`       // Capture raw request/response for internal logging only
-	CustomProviderConfig     *schemas.CustomProviderConfig    `json:"custom_provider_config,omitempty"` // Custom provider configuration
-	OpenAIConfig             *schemas.OpenAIConfig            `json:"openai_config,omitempty"`          // OpenAI-specific configuration
-	CooldownPolicy           *schemas.CooldownPolicy          `json:"cooldown_policy,omitempty"`        // Per-provider cooldown policy
-	ProviderStatus           ProviderStatus                   `json:"provider_status"`                  // Health/initialization status of the provider
-	Status                   string                           `json:"status,omitempty"`                 // Operational status (e.g., list_models_failed)
-	Description              string                           `json:"description,omitempty"`            // Error/status description
-	ConfigHash               string                           `json:"config_hash,omitempty"`            // Hash of config.json version, used for change detection
+	Name                     schemas.ModelProvider             `json:"name"`
+	NetworkConfig            schemas.NetworkConfig             `json:"network_config"`                   // Network-related settings
+	ConcurrencyAndBufferSize schemas.ConcurrencyAndBufferSize  `json:"concurrency_and_buffer_size"`      // Concurrency settings
+	ProxyConfig              *schemas.ProxyConfig              `json:"proxy_config"`                     // Proxy configuration
+	SendBackRawRequest       bool                              `json:"send_back_raw_request"`            // Include raw request in BifrostResponse
+	SendBackRawResponse      bool                              `json:"send_back_raw_response"`           // Include raw response in BifrostResponse
+	StoreRawRequestResponse  bool                              `json:"store_raw_request_response"`       // Capture raw request/response for internal logging only
+	CustomProviderConfig     *schemas.CustomProviderConfig     `json:"custom_provider_config,omitempty"` // Custom provider configuration
+	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`          // OpenAI-specific configuration
+	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`        // Per-provider cooldown policy
+	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`     // Per-model default request parameters (model → param → value)
+	ProviderStatus           ProviderStatus                    `json:"provider_status"`                  // Health/initialization status of the provider
+	Status                   string                            `json:"status,omitempty"`                 // Operational status (e.g., list_models_failed)
+	Description              string                            `json:"description,omitempty"`            // Error/status description
+	ConfigHash               string                            `json:"config_hash,omitempty"`            // Hash of config.json version, used for change detection
 	// IsKeyLess is true when the provider is inherently keyless (no API key
 	// needed). Set by the server for built-in keyless providers (opencode)
 	// and custom providers with CustomProviderConfig.IsKeyLess=true.
@@ -125,6 +126,10 @@ type ProviderResponse struct {
 	LastErrorAt      string  `json:"last_error_at,omitempty"`      // Last error time (RFC3339)
 	Uptime           float64 `json:"uptime,omitempty"`             // 24h health ratio (0-1)
 	AvgLatencyMs     int     `json:"avg_latency_ms,omitempty"`     // 24h average latency in ms
+	// DefaultParametersDefinitions is the per-provider registry of supported
+	// default request parameters. Populated from the static schema catalog;
+	// empty for providers that have not registered any default-param support.
+	DefaultParametersDefinitions []schemas.DefaultParamDefinition `json:"default_parameters_definitions,omitempty"`
 }
 
 // ProviderStats holds the computed aggregation values for a single provider.
@@ -171,20 +176,22 @@ type providerCreatePayload struct {
 	SendBackRawResponse      *bool                             `json:"send_back_raw_response,omitempty"`
 	StoreRawRequestResponse  *bool                             `json:"store_raw_request_response,omitempty"`
 	CustomProviderConfig     *schemas.CustomProviderConfig     `json:"custom_provider_config,omitempty"`
-	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`          // OpenAI-specific configuration
-	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`        // Per-provider cooldown policy (rate_limit / quota)
+	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`   // OpenAI-specific configuration
+	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"` // Per-provider cooldown policy (rate_limit / quota)
+	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`
 }
 
 type providerUpdatePayload struct {
-	NetworkConfig            schemas.NetworkConfig            `json:"network_config"`
-	ConcurrencyAndBufferSize schemas.ConcurrencyAndBufferSize `json:"concurrency_and_buffer_size"`
-	ProxyConfig              *schemas.ProxyConfig             `json:"proxy_config,omitempty"`
-	SendBackRawRequest       *bool                            `json:"send_back_raw_request,omitempty"`
-	SendBackRawResponse      *bool                            `json:"send_back_raw_response,omitempty"`
-	StoreRawRequestResponse  *bool                            `json:"store_raw_request_response,omitempty"`
-	CustomProviderConfig     *schemas.CustomProviderConfig    `json:"custom_provider_config,omitempty"`
-	OpenAIConfig             *schemas.OpenAIConfig            `json:"openai_config,omitempty"` // OpenAI-specific configuration
-	CooldownPolicy           *schemas.CooldownPolicy          `json:"cooldown_policy,omitempty"` // Per-provider cooldown policy; nil clears the override and falls back to the built-in default
+	NetworkConfig            schemas.NetworkConfig             `json:"network_config"`
+	ConcurrencyAndBufferSize schemas.ConcurrencyAndBufferSize  `json:"concurrency_and_buffer_size"`
+	ProxyConfig              *schemas.ProxyConfig              `json:"proxy_config,omitempty"`
+	SendBackRawRequest       *bool                             `json:"send_back_raw_request,omitempty"`
+	SendBackRawResponse      *bool                             `json:"send_back_raw_response,omitempty"`
+	StoreRawRequestResponse  *bool                             `json:"store_raw_request_response,omitempty"`
+	CustomProviderConfig     *schemas.CustomProviderConfig     `json:"custom_provider_config,omitempty"`
+	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`   // OpenAI-specific configuration
+	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"` // Per-provider cooldown policy; nil clears the override and falls back to the built-in default
+	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`
 }
 
 // RegisterRoutes registers all provider management routes
@@ -406,6 +413,7 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 		CustomProviderConfig:     payload.CustomProviderConfig,
 		OpenAIConfig:             payload.OpenAIConfig,
 		CooldownPolicy:           payload.CooldownPolicy,
+		DefaultParameters:        payload.DefaultParameters,
 	}
 	// Validate custom provider configuration before persisting
 	if err := lib.ValidateCustomProvider(config, payload.Provider); err != nil {
@@ -606,6 +614,9 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 	// override so the built-in default policy takes over. This matches how
 	// CustomProviderConfig / OpenAIConfig behave on this endpoint.
 	config.CooldownPolicy = payload.CooldownPolicy
+	// default_parameters is a full-replace map like OpenAIConfig: the payload
+	// carries the complete map (empty object clears it).
+	config.DefaultParameters = payload.DefaultParameters
 	if payload.SendBackRawRequest != nil {
 		config.SendBackRawRequest = *payload.SendBackRawRequest
 	}
@@ -1327,21 +1338,23 @@ func (h *ProviderHandler) getProviderResponseFromConfig(provider schemas.ModelPr
 		(config.CustomProviderConfig != nil && config.CustomProviderConfig.IsKeyLess)
 
 	return ProviderResponse{
-		Name:                     provider,
-		NetworkConfig:            *config.NetworkConfig,
-		ConcurrencyAndBufferSize: *config.ConcurrencyAndBufferSize,
-		ProxyConfig:              config.ProxyConfig,
-		SendBackRawRequest:       config.SendBackRawRequest,
-		SendBackRawResponse:      config.SendBackRawResponse,
-		StoreRawRequestResponse:  config.StoreRawRequestResponse,
-		CustomProviderConfig:     config.CustomProviderConfig,
-		OpenAIConfig:             config.OpenAIConfig,
-		CooldownPolicy:           config.CooldownPolicy,
-		IsKeyLess:                keyless,
-		ProviderStatus:           status,
-		Status:                   config.Status,
-		Description:              config.Description,
-		ConfigHash:               config.ConfigHash,
+		Name:                         provider,
+		NetworkConfig:                *config.NetworkConfig,
+		ConcurrencyAndBufferSize:     *config.ConcurrencyAndBufferSize,
+		ProxyConfig:                  config.ProxyConfig,
+		SendBackRawRequest:           config.SendBackRawRequest,
+		SendBackRawResponse:          config.SendBackRawResponse,
+		StoreRawRequestResponse:      config.StoreRawRequestResponse,
+		CustomProviderConfig:         config.CustomProviderConfig,
+		OpenAIConfig:                 config.OpenAIConfig,
+		CooldownPolicy:               config.CooldownPolicy,
+		DefaultParameters:            config.DefaultParameters,
+		IsKeyLess:                    keyless,
+		ProviderStatus:               status,
+		Status:                       config.Status,
+		Description:                  config.Description,
+		ConfigHash:                   config.ConfigHash,
+		DefaultParametersDefinitions: schemas.LookupProviderDefaultParams(provider),
 	}
 }
 

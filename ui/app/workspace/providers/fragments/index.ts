@@ -6,6 +6,7 @@ export { CooldownPolicyFormFragment } from "./cooldownPolicyFormFragment";
 export { DebuggingFormFragment } from "./debuggingFormFragment";
 export { GovernanceFormFragment } from "./governanceFormFragment";
 export { OpenAIConfigFormFragment } from "./openaiConfigFormFragment";
+export { DefaultParametersFormFragment } from "./defaultParametersFormFragment";
 export { NetworkFormFragment } from "./networkFormFragment";
 export { PerformanceFormFragment } from "./performanceFormFragment";
 export { PerformanceFormFragment as PerformanceTab } from "./performanceFormFragment";

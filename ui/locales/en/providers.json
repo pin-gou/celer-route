@@ -125,6 +125,8 @@
 			"betaHeaders": "Beta Headers",
 			"openaiConfig": "OpenAI Config",
 			"cooldownPolicy": "Cooldown Policy",
+			"defaultParameters": "Default Parameters",
+			"defaultParametersEmpty": "No per-model default request parameters configured.",
 			"cooldownPolicyUsingDefault": "Using the built-in default cooldown policy. Click Edit to customize.",
 			"cooldownPolicyAllDisabled": "All cooldown rules are disabled.",
 			"cooldownPolicyOverride": "Custom cooldown policy is overriding the built-in default.",
@@ -446,6 +448,23 @@
 			"toast": {
 				"updated": "OpenAI configuration updated successfully",
 				"failedToUpdate": "Failed to update OpenAI configuration"
+			}
+		},
+		"defaultParameters": {
+			"description": "Per-model default request parameters, injected only when the request omits them. Only models listed here receive a default.",
+			"model": "Model",
+			"param": "Parameter",
+			"value": "Value",
+			"selectModel": "Select model",
+			"selectParam": "Select parameter",
+			"selectValue": "Select value",
+			"addRow": "Add model",
+			"noRows": "No default parameters configured.",
+			"cancel": "Cancel",
+			"save": "Save Default Parameters",
+			"toast": {
+				"updated": "Default parameters updated successfully",
+				"failedToUpdate": "Failed to update default parameters"
 			}
 		},
 		"cooldownPolicy": {

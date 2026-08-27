@@ -106,10 +106,38 @@ func TestToOpenAIChatRequest_PreservesN(t *testing.T) {
 	}
 }
 
+func TestToOpenAIChatRequest_DefaultParametersInjectReasoningEffort(t *testing.T) {
+	// Reproduces the sensenova default_parameters flow: a request that omits
+	// reasoning_effort gets the configured default injected by the dispatch
+	// layer, and the serialized OpenAI payload must then contain reasoning_effort.
+	req := &schemas.BifrostChatRequest{
+		Provider: schemas.Sensenova,
+		Model:    "deepseek-v4-flash",
+		Input: []schemas.ChatMessage{
+			{
+				Role:    schemas.ChatMessageRoleUser,
+				Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("hi")},
+			},
+		},
+	}
+	providerUtils.ApplyDefaultParameters(schemas.Sensenova, req, map[string]interface{}{"reasoning_effort": "high"})
+
+	out := ToOpenAIChatRequest(schemas.NewBifrostContext(nil, schemas.NoDeadline), req)
+	if out == nil {
+		t.Fatal("expected OpenAI chat request")
+	}
+	body, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+	if !strings.Contains(string(body), `"reasoning_effort":"high"`) {
+		t.Fatalf("expected injected reasoning_effort in payload, got %s", string(body))
+	}
+}
+
 func TestToOpenAIChatRequest_NormalizesReasoningEffort(t *testing.T) {
 	// DeepSeek is configured as a custom OpenAI-compatible provider, which registers
-	// itself so ParseModelString can strip its prefix from "deepseek/deepseek-v4-pro".
-	schemas.RegisterKnownProvider(schemas.ModelProvider("deepseek"))
+	// itself so ParseModelString can strip its prefix from "deepseek/deepseek-v4-pro".	schemas.RegisterKnownProvider(schemas.ModelProvider("deepseek"))
 	defer schemas.UnregisterKnownProvider(schemas.ModelProvider("deepseek"))
 	// GLM-5.2 (Z.ai) is also a custom OpenAI-compatible provider.
 	schemas.RegisterKnownProvider(schemas.ModelProvider("zai"))

@@ -1163,6 +1163,9 @@
               "openai_config": {
                 "$ref": "#/$defs/openai_config"
               },
+              "default_parameters": {
+                "$ref": "#/$defs/default_parameters"
+              },
               "cooldown_policy": {
                 "$ref": "#/$defs/cooldown_policy"
               }
@@ -4907,6 +4910,21 @@
         }
       },
       "additionalProperties": false
+    },
+    "default_parameters": {
+      "type": "object",
+      "description": "Per-model default request parameters (model → param → value). Provider-agnostic: any provider/model may use it. The parameter is injected only when the request omits it.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Default parameters for a specific model",
+        "additionalProperties": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "boolean" }
+          ]
+        }
+      }
     },
     "concurrency_and_buffer_size": {
       "type": "object",

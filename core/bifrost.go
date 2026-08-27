@@ -7326,7 +7326,7 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					})
 				}
 				lastAttemptFinalizer = postHookSpanFinalizer
-				streamCh, streamErr := bifrost.handleProviderStreamRequest(provider, req, k, postHookRunner, postHookSpanFinalizer)
+				streamCh, streamErr := bifrost.handleProviderStreamRequest(provider, config, req, k, postHookRunner, postHookSpanFinalizer)
 				// If stream setup failed before any provider goroutine started,
 				// no deferred finalizer will run — release the pipeline directly
 				// so a retry doesn't inherit a leaked pool entry.
@@ -7453,6 +7453,28 @@ func (bifrost *Bifrost) billAbandonedTerminal(req *ChannelMessage, result *schem
 	drainAndAttachPluginLogs(req.Context)
 }
 
+// applyDefaultParameters injects the provider's per-model default request
+// parameters (model → param → value) into a chat request, using a case-insensitive
+// model lookup. It is a no-op when the provider has no defaults for the model or
+// the request already sets the param. Called per provider attempt so retries and
+// fallbacks each get the selected provider's defaults.
+func (bifrost *Bifrost) applyDefaultParameters(provider schemas.Provider, config *schemas.ProviderConfig, chatRequest *schemas.BifrostChatRequest) {
+	if config == nil || chatRequest == nil || len(config.DefaultParameters) == 0 {
+		return
+	}
+	if defaults, ok := config.DefaultParameters[chatRequest.Model]; ok {
+		providerUtils.ApplyDefaultParameters(provider.GetProviderKey(), chatRequest, defaults)
+		return
+	}
+	lower := strings.ToLower(chatRequest.Model)
+	for model, defaults := range config.DefaultParameters {
+		if strings.EqualFold(model, lower) {
+			providerUtils.ApplyDefaultParameters(provider.GetProviderKey(), chatRequest, defaults)
+			return
+		}
+	}
+}
+
 // handleProviderRequest handles the request to the provider based on the request type
 // key is used for single-key operations, keys is used for batch/file operations that need multiple keys
 func (bifrost *Bifrost) handleProviderRequest(provider schemas.Provider, config *schemas.ProviderConfig, req *ChannelMessage, key schemas.Key, keys []schemas.Key) (*schemas.BifrostResponse, *schemas.BifrostError) {
@@ -7468,6 +7490,7 @@ func (bifrost *Bifrost) handleProviderRequest(provider schemas.Provider, config 
 		if changeType, ok := req.Context.Value(schemas.BifrostContextKeyChangeRequestType).(schemas.RequestType); ok && changeType == schemas.ChatCompletionRequest {
 			chatRequest := req.BifrostRequest.TextCompletionRequest.ToBifrostChatRequest()
 			if chatRequest != nil {
+				bifrost.applyDefaultParameters(provider, config, chatRequest)
 				chatCompletionResponse, bifrostError := provider.ChatCompletion(req.Context, key, chatRequest)
 				if bifrostError != nil {
 					return nil, bifrostError
@@ -7493,6 +7516,7 @@ func (bifrost *Bifrost) handleProviderRequest(provider schemas.Provider, config 
 				break
 			}
 		}
+		bifrost.applyDefaultParameters(provider, config, req.BifrostRequest.ChatRequest)
 		chatCompletionResponse, bifrostError := provider.ChatCompletion(req.Context, key, req.BifrostRequest.ChatRequest)
 		if bifrostError != nil {
 			return nil, bifrostError
@@ -7837,12 +7861,13 @@ func (bifrost *Bifrost) handleProviderRequest(provider schemas.Provider, config 
 }
 
 // handleProviderStreamRequest handles the stream request to the provider based on the request type
-func (bifrost *Bifrost) handleProviderStreamRequest(provider schemas.Provider, req *ChannelMessage, key schemas.Key, postHookRunner schemas.PostHookRunner, postHookSpanFinalizer func(context.Context)) (chan *schemas.BifrostStreamChunk, *schemas.BifrostError) {
+func (bifrost *Bifrost) handleProviderStreamRequest(provider schemas.Provider, config *schemas.ProviderConfig, req *ChannelMessage, key schemas.Key, postHookRunner schemas.PostHookRunner, postHookSpanFinalizer func(context.Context)) (chan *schemas.BifrostStreamChunk, *schemas.BifrostError) {
 	switch req.RequestType {
 	case schemas.TextCompletionStreamRequest:
 		if changeType, ok := req.Context.Value(schemas.BifrostContextKeyChangeRequestType).(schemas.RequestType); ok && changeType == schemas.ChatCompletionRequest {
 			chatRequest := req.BifrostRequest.TextCompletionRequest.ToBifrostChatRequest()
 			if chatRequest != nil {
+				bifrost.applyDefaultParameters(provider, config, chatRequest)
 				return provider.ChatCompletionStream(req.Context, wrapConvertedStreamPostHookRunner(postHookRunner, schemas.ChatCompletionRequest), postHookSpanFinalizer, key, chatRequest)
 			}
 		}
@@ -7854,6 +7879,7 @@ func (bifrost *Bifrost) handleProviderStreamRequest(provider schemas.Provider, r
 				return provider.ResponsesStream(req.Context, wrapConvertedStreamPostHookRunner(postHookRunner, schemas.ResponsesRequest), postHookSpanFinalizer, key, responsesRequest)
 			}
 		}
+		bifrost.applyDefaultParameters(provider, config, req.BifrostRequest.ChatRequest)
 		return provider.ChatCompletionStream(req.Context, postHookRunner, postHookSpanFinalizer, key, req.BifrostRequest.ChatRequest)
 	case schemas.ResponsesStreamRequest:
 		return provider.ResponsesStream(req.Context, postHookRunner, postHookSpanFinalizer, key, req.BifrostRequest.ResponsesRequest)

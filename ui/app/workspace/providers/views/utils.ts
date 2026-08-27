@@ -14,6 +14,7 @@ export const buildProviderUpdatePayload = (provider: ModelProvider, updates: Par
 		store_raw_request_response: updates.store_raw_request_response ?? provider.store_raw_request_response,
 		custom_provider_config: updates.custom_provider_config ?? provider.custom_provider_config,
 		openai_config: updates.openai_config ?? provider.openai_config,
+		default_parameters: updates.default_parameters ?? provider.default_parameters,
 		// cooldown_policy 需要显式处理 null（清除），不能用 ?? 短路
 		cooldown_policy: "cooldown_policy" in updates ? updates.cooldown_policy : provider.cooldown_policy,
 	};

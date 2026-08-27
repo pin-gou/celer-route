@@ -468,7 +468,8 @@ type ProviderConfig struct {
 	StoreRawRequestResponse  bool                              `json:"store_raw_request_response"`            // Capture raw request/response for internal logging only; strip from API responses returned to clients
 	CustomProviderConfig     *schemas.CustomProviderConfig     `json:"custom_provider_config,omitempty"`      // Custom provider configuration
 	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`               // OpenAI-specific configuration
-	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`              // Per-provider cooldown policy (rate_limit / quota rules)
+	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`             // Per-provider cooldown policy (rate_limit / quota rules)
+	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`          // Per-model default request parameters (model → param → value); provider-agnostic
 	ConfigHash               string                            `json:"config_hash,omitempty"`                 // Hash of config.json version, used for change detection
 	Status                   string                            `json:"status,omitempty"`                      // Model discovery status for keyless providers
 	Description              string                            `json:"description,omitempty"`                 // Model discovery error message for keyless providers
@@ -490,6 +491,7 @@ func (p *ProviderConfig) Redacted() *ProviderConfig {
 		CustomProviderConfig:     p.CustomProviderConfig,
 		OpenAIConfig:             p.OpenAIConfig,
 		CooldownPolicy:           p.CooldownPolicy,
+		DefaultParameters:        p.DefaultParameters,
 		ConfigHash:               p.ConfigHash,
 		Status:                   p.Status,
 		Description:              p.Description,
@@ -736,6 +738,15 @@ func (p *ProviderConfig) GenerateConfigHash(providerName string) (string, error)
 	// Hash CooldownPolicy (per-provider rate_limit / quota rules).
 	if p.CooldownPolicy != nil {
 		data, err := sonic.Marshal(p.CooldownPolicy)
+		if err != nil {
+			return "", err
+		}
+		hash.Write(data)
+	}
+
+	// Hash DefaultParameters (per-model default request parameters).
+	if len(p.DefaultParameters) > 0 {
+		data, err := sonic.Marshal(p.DefaultParameters)
 		if err != nil {
 			return "", err
 		}

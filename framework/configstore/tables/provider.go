@@ -23,6 +23,7 @@ type TableProvider struct {
 	CustomProviderConfigJSON string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CustomProviderConfig
 	OpenAIConfigJSON         string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.OpenAIConfig
 	CooldownPolicyJSON       string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CooldownPolicy (rate_limit / quota rules)
+	DefaultParametersJSON    string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ProviderConfig.DefaultParameters (model → param → value)
 	SendBackRawRequest       bool      `json:"send_back_raw_request"`
 	SendBackRawResponse      bool      `json:"send_back_raw_response"`
 	StoreRawRequestResponse  bool      `json:"store_raw_request_response"`
@@ -44,6 +45,10 @@ type TableProvider struct {
 	// Per-provider cooldown policy (rate_limit / quota rules). Optional — when nil,
 	// the runtime falls back to schemas.DefaultCooldownPolicy(provider).
 	CooldownPolicy *schemas.CooldownPolicy `gorm:"-" json:"cooldown_policy,omitempty"`
+
+	// Per-model default request parameters (model → param → value). Provider-agnostic:
+	// injected only when the request omits the param. Optional — nil means no defaults.
+	DefaultParameters map[string]map[string]interface{} `gorm:"-" json:"default_parameters,omitempty"`
 
 	// Foreign keys
 	Models []TableModel `gorm:"foreignKey:ProviderID;constraint:OnDelete:CASCADE" json:"models"`
@@ -122,6 +127,15 @@ func (p *TableProvider) BeforeSave(tx *gorm.DB) error {
 		p.CooldownPolicyJSON = string(data)
 	} else {
 		p.CooldownPolicyJSON = ""
+	}
+	if p.DefaultParameters != nil {
+		data, err := json.Marshal(p.DefaultParameters)
+		if err != nil {
+			return err
+		}
+		p.DefaultParametersJSON = string(data)
+	} else {
+		p.DefaultParametersJSON = ""
 	}
 	// Validate governance fields
 	if p.BudgetID != nil && strings.TrimSpace(*p.BudgetID) == "" {
@@ -202,6 +216,13 @@ func (p *TableProvider) AfterFind(tx *gorm.DB) error {
 		p.CooldownPolicy = &cooldownPolicy
 	}
 
+	if p.DefaultParametersJSON != "" {
+		var defaultParameters map[string]map[string]interface{}
+		if err := json.Unmarshal([]byte(p.DefaultParametersJSON), &defaultParameters); err != nil {
+			return err
+		}
+		p.DefaultParameters = defaultParameters
+	}
+
 	return nil
 }
-

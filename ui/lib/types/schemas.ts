@@ -654,6 +654,23 @@ export const openaiConfigFormSchema = z.object({
 
 export type OpenAIConfigFormSchema = z.infer<typeof openaiConfigFormSchema>;
 
+// Default Parameters tab — generic per-model request parameter defaults
+// (model → param → value). Rows are converted to a nested map on save; the map
+// is flattened back to rows on load. Known params are driven by a registry that
+// also dictates the value editor (currently only "reasoning_effort").
+export const defaultParameterRowSchema = z.object({
+	model: z.string().min(1, { message: t("validation.required") }),
+	param: z.string().min(1, { message: t("validation.required") }),
+	value: z.string().min(1, { message: t("validation.required") }),
+});
+
+export const defaultParametersFormSchema = z.object({
+	rows: z.array(defaultParameterRowSchema),
+});
+
+export type DefaultParameterRowSchema = z.infer<typeof defaultParameterRowSchema>;
+export type DefaultParametersFormSchema = z.infer<typeof defaultParametersFormSchema>;
+
 // Cooldown policy schemas — mirror backend's CooldownPolicy / CooldownPolicyRule
 // / CooldownPolicyMatch. Each match must have at least one predicate set;
 // backend rejects fully empty matches as no-ops. ttl_seconds is required.

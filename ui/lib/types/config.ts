@@ -448,8 +448,18 @@ export interface ModelProviderConfig {
 	custom_provider_config?: CustomProviderConfig;
 	openai_config?: OpenAIConfig;
 	cooldown_policy?: CooldownPolicy;
+	default_parameters?: Record<string, Record<string, string | number | boolean>>;
 	status?: "unknown" | "success" | "list_models_failed";
 	description?: string;
+}
+
+// DefaultParamDefinition mirrors the Go schemas.DefaultParamDefinition.
+// It describes one request parameter a provider supports configuring as a
+// per-model default. Defined by the static per-provider schema catalog.
+export interface DefaultParamDefinition {
+	key: string;
+	label: string;
+	options: string[];
 }
 
 // ProviderResponse matching Go's ProviderResponse
@@ -474,6 +484,11 @@ export interface ModelProvider extends ModelProviderConfig {
 	last_error_at?: string;
 	uptime?: number;
 	avg_latency_ms?: number;
+
+	// Per-provider registry of supported default request parameters.
+	// Populated from the static schema catalog; empty for providers that
+	// have not registered any default-param support.
+	default_parameters_definitions?: DefaultParamDefinition[];
 }
 
 // ListProvidersResponse matching Go's ListProvidersResponse
@@ -493,6 +508,7 @@ export interface AddProviderRequest {
 	store_raw_request_response?: boolean;
 	custom_provider_config?: CustomProviderConfig;
 	openai_config?: OpenAIConfig;
+	default_parameters?: Record<string, Record<string, string | number | boolean>>;
 }
 
 // UpdateProviderRequest matching Go's UpdateProviderRequest
@@ -505,6 +521,7 @@ export interface UpdateProviderRequest {
 	store_raw_request_response?: boolean;
 	custom_provider_config?: CustomProviderConfig;
 	openai_config?: OpenAIConfig;
+	default_parameters?: Record<string, Record<string, string | number | boolean>>;
 	// Per-provider cooldown policy. Sent explicitly so the user can clear an
 	// override (by submitting null) — undefined means "leave as-is".
 	cooldown_policy?: CooldownPolicy | null;

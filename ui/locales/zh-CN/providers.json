@@ -125,6 +125,8 @@
 			"betaHeaders": "Beta 头部",
 			"openaiConfig": "OpenAI 配置",
 			"cooldownPolicy": "冷却策略",
+			"defaultParameters": "默认参数",
+			"defaultParametersEmpty": "未配置按模型的默认请求参数。",
 			"cooldownPolicyUsingDefault": "使用内置默认冷却策略。可点击编辑进行自定义。",
 			"cooldownPolicyAllDisabled": "所有冷却规则已禁用。",
 			"cooldownPolicyOverride": "已覆盖内置默认值。",
@@ -446,6 +448,23 @@
 			"toast": {
 				"updated": "OpenAI 配置更新成功",
 				"failedToUpdate": "OpenAI 配置更新失败"
+			}
+		},
+		"defaultParameters": {
+			"description": "按模型配置默认请求参数，仅当请求未携带该参数时注入。只有此处列出的模型才会获得默认值。",
+			"model": "模型",
+			"param": "参数",
+			"value": "值",
+			"selectModel": "选择模型",
+			"selectParam": "选择参数",
+			"selectValue": "选择值",
+			"addRow": "添加模型",
+			"noRows": "未配置默认请求参数。",
+			"cancel": "取消",
+			"save": "保存默认参数",
+			"toast": {
+				"updated": "默认参数更新成功",
+				"failedToUpdate": "默认参数更新失败"
 			}
 		},
 		"cooldownPolicy": {

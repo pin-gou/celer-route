@@ -8,6 +8,7 @@ import {
 	ApiStructureFormFragment,
 	BetaHeadersFormFragment,
 	CooldownPolicyFormFragment,
+	DefaultParametersFormFragment,
 	GovernanceFormFragment,
 	OpenAIConfigFormFragment,
 	ProxyFormFragment,
@@ -24,7 +25,13 @@ interface Props {
 
 const ANTHROPIC_FAMILY_PROVIDERS = ["anthropic", "vertex", "bedrock", "bedrock_mantle", "azure"];
 
-const availableTabs = (hasCustomProviderConfig: boolean, hasGovernanceAccess: boolean, isOpenAI: boolean, isAnthropicFamily: boolean) => {
+const availableTabs = (
+	hasCustomProviderConfig: boolean,
+	hasGovernanceAccess: boolean,
+	isOpenAI: boolean,
+	isAnthropicFamily: boolean,
+	hasDefaultParamDefinitions: boolean,
+) => {
 	const tabs = [];
 	if (hasCustomProviderConfig) {
 		tabs.push({
@@ -70,6 +77,12 @@ const availableTabs = (hasCustomProviderConfig: boolean, hasGovernanceAccess: bo
 		id: "cooldown-policy",
 		label: "Cooldown Policy",
 	});
+	if (hasDefaultParamDefinitions) {
+		tabs.push({
+			id: "default-parameters",
+			label: "Default Parameters",
+		});
+	}
 	return tabs;
 };
 
@@ -79,10 +92,11 @@ export default function ProviderConfigSheet({ show, onCancel, provider }: Props)
 	const hasCustomProviderConfig = !!provider.custom_provider_config;
 	const isOpenAI = provider.name === "openai";
 	const isAnthropicFamily = ANTHROPIC_FAMILY_PROVIDERS.includes(provider.name.toLowerCase());
+	const hasDefaultParamDefinitions = (provider.default_parameters_definitions ?? []).length > 0;
 
 	const tabs = useMemo(() => {
-		return availableTabs(hasCustomProviderConfig, hasGovernanceAccess, isOpenAI, isAnthropicFamily);
-	}, [hasCustomProviderConfig, hasGovernanceAccess, isOpenAI, isAnthropicFamily]);
+		return availableTabs(hasCustomProviderConfig, hasGovernanceAccess, isOpenAI, isAnthropicFamily, hasDefaultParamDefinitions);
+	}, [hasCustomProviderConfig, hasGovernanceAccess, isOpenAI, isAnthropicFamily, hasDefaultParamDefinitions]);
 
 	useEffect(() => {
 		setSelectedTab((previousTab) => {
@@ -137,6 +151,9 @@ export default function ProviderConfigSheet({ show, onCancel, provider }: Props)
 							</TabsContent>
 							<TabsContent value="cooldown-policy">
 								<CooldownPolicyFormFragment provider={provider} />
+							</TabsContent>
+							<TabsContent value="default-parameters">
+								<DefaultParametersFormFragment provider={provider} />
 							</TabsContent>
 							<TabsContent value="network">
 								<NetworkFormFragment provider={provider} />

@@ -482,6 +482,30 @@ func TestUpdateProvidersConfig_CreateNew(t *testing.T) {
 	assert.Equal(t, "openai-primary", result["openai"].Keys[0].Name)
 }
 
+func TestProviderConfig_DefaultParametersRoundTrip(t *testing.T) {
+	store := setupRDBTestStore(t)
+	ctx := context.Background()
+
+	defaults := map[string]map[string]interface{}{
+		"deepseek-v4-flash": {"reasoning_effort": "high"},
+	}
+	providers := map[schemas.ModelProvider]ProviderConfig{
+		"openai": {DefaultParameters: defaults},
+	}
+
+	err := store.UpdateProvidersConfig(ctx, providers)
+	require.NoError(t, err)
+
+	// Both bulk read and single read must preserve DefaultParameters.
+	result, err := store.GetProvidersConfig(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, defaults, result["openai"].DefaultParameters)
+
+	single, err := store.GetProviderConfig(ctx, "openai")
+	require.NoError(t, err)
+	assert.Equal(t, defaults, single.DefaultParameters)
+}
+
 func TestUpdateProvidersConfig_UpdateExistingByKeyID(t *testing.T) {
 	store := setupRDBTestStore(t)
 	ctx := context.Background()
@@ -3648,12 +3672,12 @@ func TestProviderConfig_CooldownPolicyRoundTrip(t *testing.T) {
 			Match: []schemas.CooldownPolicyMatch{
 				{StatusCode: schemas.Ptr(429), Type: []string{"rate_limit_error"}, Code: []string{"insufficient_quota"}},
 			},
-			MatchMode: "any",
+			MatchMode:  "any",
 			TTLSeconds: 600,
 		},
 		Quota: &schemas.CooldownPolicyRule{
-			Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
-			MatchMode: "any",
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+			MatchMode:  "any",
 			TTLSeconds: 1800,
 		},
 	}
@@ -3676,8 +3700,8 @@ func TestProviderConfig_CooldownPolicyRoundTrip(t *testing.T) {
 	// UpdateProvider should also persist the field (replace, not append).
 	updated := &schemas.CooldownPolicy{
 		RateLimit: &schemas.CooldownPolicyRule{
-			Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
-			MatchMode: "any",
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+			MatchMode:  "any",
 			TTLSeconds: 60,
 		},
 		Quota: nil, // cleared
@@ -3710,8 +3734,8 @@ func TestProviderConfig_CooldownPolicyRoundTrip(t *testing.T) {
 func TestTableProvider_CooldownPolicyJSON(t *testing.T) {
 	policy := &schemas.CooldownPolicy{
 		RateLimit: &schemas.CooldownPolicyRule{
-			Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
-			MatchMode: "any",
+			Match:      []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+			MatchMode:  "any",
 			TTLSeconds: 60,
 		},
 	}
