@@ -1178,6 +1178,7 @@ export function LogDetailView({
 		data: timelineData,
 		isLoading: timelineLoading,
 		error: timelineError,
+		refetch: timelineRefetch,
 	} = useGetLogTimelineQuery(log.id, {
 		skip: !log?.id,
 	});
@@ -2965,6 +2966,9 @@ export function LogDetailView({
 						data={timelineData ?? null}
 						isLoading={timelineLoading}
 						error={timelineError ? i18n.t("logs:toast.timelineDataFailed") : null}
+						onRetry={() => {
+							void timelineRefetch();
+						}}
 					/>
 				</TabsContent>
 			</Tabs>

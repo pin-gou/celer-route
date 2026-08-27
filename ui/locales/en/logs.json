@@ -472,7 +472,39 @@
 			"info": "info",
 			"warn": "warn",
 			"error": "error",
-			"ms": "ms"
+			"ms": "ms",
+			"requestLatency": "Request latency:",
+			"eventSpan": "Event span:",
+			"diffHint": {
+				"request": "Request latency = upstream provider round-trip time, measured by core/provider.",
+				"span": "Event span = trailing edge of the last event (offset + duration). May include logging / plugin hook execution, so it can be slightly larger than request latency."
+			},
+			"copyMessage": "Copy message",
+			"copyLogId": "Copy log ID",
+			"copied": "Copied",
+			"eventCount": {
+				"one": "event",
+				"other": "events"
+			},
+			"phase": {
+				"pre": "Pre-LLM",
+				"upstream": "Upstream",
+				"plugin": "Plugin",
+				"post": "Post-LLM",
+				"keyAttempt": "Key Attempt",
+				"unknown": "Unknown phase"
+			},
+			"empty": {
+				"title": "No events recorded for this request.",
+				"hint": "Possible causes: the log is a passthrough, the logging plugin is disabled, or PreLLMHook was short-circuited. Check the Messages or Raw tab for details.",
+				"failedTitle": "No events recorded for this request.",
+				"failedHint": "A total of 0 means the request was aborted before reaching the logging layer (short-circuit / context cancel). Check the Messages or Raw tab for the underlying error."
+			},
+			"error": {
+				"title": "Failed to load timeline",
+				"networkTitle": "Network error — failed to load timeline",
+				"retry": "Retry"
+			}
 		},
 		"statCards": {
 			"totalRequests": "Total Requests",

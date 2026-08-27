@@ -472,7 +472,39 @@
 			"info": "信息",
 			"warn": "警告",
 			"error": "错误",
-			"ms": "毫秒"
+			"ms": "毫秒",
+			"requestLatency": "请求耗时：",
+			"eventSpan": "事件跨度：",
+			"diffHint": {
+				"request": "请求耗时 = 上游 provider round-trip 时间，由 core/provider 测量。",
+				"span": "事件跨度 = 最后一个事件的时间偏移 + duration，可能包含 logging / plugin hook 的执行时间，因此可能略大于请求耗时。"
+			},
+			"copyMessage": "复制消息",
+			"copyLogId": "复制日志 ID",
+			"copied": "已复制",
+			"eventCount": {
+				"one": "个事件",
+				"other": "个事件"
+			},
+			"phase": {
+				"pre": "Pre-LLM",
+				"upstream": "Upstream",
+				"plugin": "Plugin",
+				"post": "Post-LLM",
+				"keyAttempt": "Key Attempt",
+				"unknown": "未知阶段"
+			},
+			"empty": {
+				"title": "此请求未记录事件。",
+				"hint": "可能原因：日志为 passthrough 透传、logging 插件未启用，或 PreLLMHook 被 short-circuit。查看「消息」或「Raw」tab 获取详情。",
+				"failedTitle": "此请求未记录事件。",
+				"failedHint": "总耗时为 0 表示请求在到达日志层之前已被中止（例如 short-circuit / 上下文取消）。查看「消息」或「Raw」tab 获取错误详情。"
+			},
+			"error": {
+				"title": "加载时间线失败",
+				"networkTitle": "网络错误，加载时间线失败",
+				"retry": "重试"
+			}
 		},
 		"statCards": {
 			"totalRequests": "请求总数",
