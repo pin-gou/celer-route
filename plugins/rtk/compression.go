@@ -14,6 +14,11 @@ type ProcessStats struct {
 	Techniques        []string               `json:"techniques"`
 	FilterMatched     string                 `json:"filterMatched,omitempty"`
 	RawOutputPointers []*RtkRawOutputPointer `json:"rawOutputPointers,omitempty"`
+	// Truncated signals that the result actually dropped content (smartTruncate
+	// or charlimit fired). Set by the per-text pipeline so the caller can decide
+	// whether to append a raw-output pointer hint to the tool_result. Distinct
+	// from "compressed" — a text can be deduped/grouped without being truncated.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // applyRtkCompression is the top-level entry point for the RTK compression
@@ -587,10 +592,13 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		if config.MaxCharsPerResult > 0 && len(result) > config.MaxCharsPerResult {
 			result = truncateToCharLimit(result, config.MaxCharsPerResult)
 			result += "\n[rtk:truncated by chars]\n"
+			stats.Truncated = true
 			stats.Techniques = append(stats.Techniques, "charlimit")
 		}
 		stats.CompressedTokens = estimateTokens(result)
 		maybePersistRawOutput(stats, text, config, loader, cmd)
+		result = appendRawOutputHint(result, stats)
+		stats.CompressedTokens = estimateTokens(result)
 		return result, stats
 	}
 
@@ -662,9 +670,12 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		eff.MaxLines = effectiveMaxLines(config.MaxLinesPerResult, config.Intensity)
 		effectiveFilter = &eff
 	}
-	truncated, _ := applySmartTruncate(grouped, effectiveFilter)
+	truncated, dropped := applySmartTruncate(grouped, effectiveFilter)
 	if truncated != grouped && truncated != "" {
 		stats.Techniques = append(stats.Techniques, "smarttruncate")
+		if dropped > 0 {
+			stats.Truncated = true
+		}
 	}
 
 	// 10. Apply the char hard limit from config.
@@ -672,11 +683,17 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 	if config.MaxCharsPerResult > 0 && len(result) > config.MaxCharsPerResult {
 		result = truncateToCharLimit(result, config.MaxCharsPerResult)
 		result += "\n[rtk:truncated by chars]\n"
+		stats.Truncated = true
 		stats.Techniques = append(stats.Techniques, "charlimit")
 	}
 
 	stats.CompressedTokens = estimateTokens(result)
 	maybePersistRawOutput(stats, text, config, loader, cmd)
+	result = appendRawOutputHint(result, stats)
+	// Recompute CompressedTokens so it reflects the size of the result the
+	// LLM actually sees — including the optional raw-output pointer hint.
+	// Tests and the logging layer rely on CompressedTokens being the wire size.
+	stats.CompressedTokens = estimateTokens(result)
 	return result, stats
 }
 
@@ -761,6 +778,30 @@ func scaleFilterForIntensity(f *Filter, intensity string) *Filter {
 		}
 	}
 	return &c
+}
+
+// appendRawOutputHint appends a single-line pointer to the LLM-visible
+// truncated result so the LLM can recover the original via the
+// /api/context/rtk/raw-output/{id} endpoint. Only fires when:
+//   - stats.Truncated is true (something actually dropped)
+//   - len(stats.RawOutputPointers) > 0 (retention kept an on-disk copy)
+//
+// The hint format is a single line so it doesn't get re-truncated by downstream
+// heuristics, and uses the same bracket style as the existing
+// [rtk:truncated ...] markers so the LLM treats them as a uniform family.
+// The TTL value is hard-coded to "24h" to match the config default; operators
+// who tune raw_output_ttl_hours can ignore the value because the LLM should
+// not reason about precise retention windows — it just needs to know recovery
+// is bounded.
+func appendRawOutputHint(result string, stats *ProcessStats) string {
+	if stats == nil || !stats.Truncated {
+		return result
+	}
+	if len(stats.RawOutputPointers) == 0 {
+		return result
+	}
+	ptr := stats.RawOutputPointers[0]
+	return result + "\n\n[rtk:raw_output_id=" + ptr.ID + "; ttl=24h; redacted=true]\n"
 }
 
 // truncateToCharLimit truncates the text to stay within the character limit,
