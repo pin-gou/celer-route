@@ -1,0 +1,208 @@
+schema_version: 1
+change_id: home-free-tier-recommendation
+defined_at: "2026-08-28T08:55:00Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  个人用户接入 LLM 网关后首要痛点是省钱。当前 /workspace/home 展示的是运维级视图
+  (endpoint/systemHealth/setupStatus/providerTopology) + 通用 onboarding 步骤，
+  没有引导用户发现并接入当下可用的免费 LLM provider；用户需要自己搜素、申请、配 provider key。
+
+solution: >-
+  就地重做 /workspace/home：保留 endpoint/systemHealth/setupStatus 三个运维 card，
+  把 quickStartCard 替换为「免费 provider 推荐」卡片，按运营推送的 bundle JSON
+  (按语种分片，URL 模板 {base}/bundles/{lang}.json) 渲染场景化套餐（coding /
+  content_creation / ...），每个 provider 卡片显示申请链接外链 + 一键填 key
+  弹窗（POST /api/providers + POST /api/providers/{provider}/keys 串行）。
+  套餐卡片底部展示「最近 100 条日志用过的路由规则」(来自 logs-db 聚合)，
+  点击跳转到 /workspace/routing-rules/$id，不在本流程自动创建路由规则。
+  数据由后端代理 + ETag 协商缓存 (周期刷新 + If-None-Match) 暴露为
+  /api/catalog/bundles，拉取失败/解析失败/空 bundle 时卡片渲染空状态 + 重试按钮。
+
+boundary:
+  in_scope:
+    - 后端代理：新增 remote_catalog 配置段 + ETag 缓存 + /api/catalog/bundles 端点
+    - UI 重做：/workspace/home 5 个 card 中替换 quickStartCard 为 FreeTierRecommendationCard
+    - 申请链接外链 + 一键填 key 弹窗 (POST providers + POST provider keys)
+    - 「最近 100 条日志用过的路由规则」聚合查询端点 + UI 展示 + 跳转
+    - i18n：URL 模板 {base}/bundles/{lang}.json，按浏览器语言选语种
+    - 降级：拉取失败/解析失败/空 bundle → 隐藏卡片 + 重试按钮
+    - E2E：MSW mock JSON 走完整路径（订阅→填 key→看到「最近路由」展示）
+  out_of_scope:
+    - 自动创建路由规则（仅展示用户最近用过的路由作为引导，不自动写 routing_rules）
+    - 多租户隔离的 bundle 推送（暂只支持全局运营 JSON）
+    - 后端跨副本一致性（进程内定时刷新即可，多副本各自拉取）
+    - bundle JSON 的版本号 / 灰度发布机制
+    - 运营 JSON 的鉴权 (HMAC / API key)
+    - 已有 4 个 home card (endpoint/systemHealth/setupStatus/providerTopology) 的字段重写
+
+verification_needs:
+  - id: V-transports-1
+    track_id: transports
+    name: 后端代理拉取 bundle JSON + ETag 缓存 + 透传端点
+    what: >-
+      启动后端，按 remote_catalog.url_template 在进程内周期刷新拉取
+      {base}/bundles/{lang}.json，缓存 ETag；GET /api/catalog/bundles?lang=zh-CN
+      返回内存快照并带 ETag 响应头。客户端带 If-None-Match 时返回 304。
+    requires_capabilities:
+      - capability: rest_api_endpoint
+        min_quantity: 1
+        description: 1 个 celer-route-api HTTP 端点用于暴露 /api/catalog/bundles
+      - capability: vite_dev_server
+        min_quantity: 1
+        description: 用 Vite dev server 同进程端口起本地 mock HTTP 模拟运营 JSON 来源
+    downgrade_when_missing: >-
+      缺本地 mock HTTP 来源 → prepare_env 阶段在 vite_dev_server 同机用
+      python -m http.server 起 mock 服务，返回静态文件 + ETag 头；scenario 标 degraded 但仍可验证。
+    post_discussion_status: degraded
+    env_resource_refs: []
+
+  - id: V-transports-2
+    track_id: transports
+    name: 最近 100 条日志用过的路由规则聚合端点
+    what: >-
+      GET /api/logs/recent-routing-rules?limit=100 返回最近 N 条日志中
+      routing_rule_id 去重后的 (id, name, last_used_at) 列表，按 last_used_at
+      倒序。无规则时返回空数组。
+    requires_capabilities:
+      - capability: rest_api_endpoint
+        min_quantity: 1
+        description: 同 V-transports-1
+      - capability: sqlite_logs_db
+        min_quantity: 1
+        description: logs-db 至少 1 张日志表，含 routing_rule_id / routing_rule_name 字段
+    downgrade_when_missing: >-
+      日志表缺 routing_rule_id 字段 → 后端用 NULL 占位返回空数组，scenario @skip。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=celer-route-api]}"
+      - "{env.data_resources[name=logs-db]}"
+
+  - id: V-transports-3
+    track_id: transports
+    name: 拉取失败/解析失败/空 bundle 时的端点降级
+    what: >-
+      远程 URL 404/500 或 JSON 解析失败或 bundles 数组为空时，
+      GET /api/catalog/bundles 返回 200 + { bundles: [], updated_at: null }，
+      不返回 5xx。
+    requires_capabilities:
+      - capability: rest_api_endpoint
+        min_quantity: 1
+    downgrade_when_missing: >-
+      缺 mock server 注入 → scenario 用纯单元测试覆盖空路径。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=celer-route-api]}"
+
+  - id: V-ui-1
+    track_id: ui
+    name: home 页推荐卡渲染 + 弹窗填 key 流程
+    what: >-
+      登录后 /workspace/home 展示 FreeTierRecommendationCard：每个 bundle 一个
+      子卡，含 provider 列表、模型列表、申请链接（外链 target="_blank"）、
+      「一键配置」按钮弹出弹窗 → 输入 key → 后端 POST /api/providers +
+      POST /api/providers/{provider}/keys 串行 → 成功后刷新 providerTopologyCard。
+      keyless provider (opencode 等) 自动跳过 POST keys。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+      - capability: react_spa
+        min_quantity: 1
+      - capability: rest_api_endpoint
+        min_quantity: 1
+      - capability: sample_dataset
+        min_quantity: 1
+        description: fixture-providers 用于测试「POST /api/providers 已存在时的 409 提示」
+    downgrade_when_missing: >-
+      vite_dev_server 不可用 → scenario 标 @skip，纯单测覆盖 reducer。
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+      - "{env.business_systems[name=celer-route-api]}"
+      - "{env.data_resources[name=fixture-providers]}"
+
+  - id: V-ui-2
+    track_id: ui
+    name: 套餐卡片底部展示「最近路由规则」+ 跳转
+    what: >-
+      每个 bundle 卡片底部展示来自 GET /api/logs/recent-routing-rules 的列表
+      (限 3 条)，点击路由名跳到 /workspace/routing-rules/$id。空列表时隐藏该段。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+      - capability: react_spa
+        min_quantity: 1
+      - capability: rest_api_endpoint
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+      - "{env.business_systems[name=celer-route-api]}"
+
+  - id: V-ui-3
+    track_id: ui
+    name: i18n 按浏览器语言选语种拉取 bundle
+    what: >-
+      UI 初始化时读取 i18n 当前语种 (zh-CN / en)，拼 URL {base}/bundles/{lang}.json
+      直接 GET 拉取。无匹配语种时回退 en。无 base 配置时整个推荐模块隐藏。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+      - capability: i18n_runtime_switch
+        min_quantity: 1
+    downgrade_when_missing: >-
+      缺本地 mock server → scenario 标 @skip，i18n 切语种逻辑走单测。
+    post_discussion_status: degraded
+    env_resource_refs: []
+
+  - id: V-ui-4
+    track_id: ui
+    name: 拉取失败/空 bundle 时隐藏卡片 + 重试按钮
+    what: >-
+      后端返回 bundles: [] 或网络错误时，FreeTierRecommendationCard 渲染
+      「暂无推荐」空状态 + 「重试」按钮，点击重新调 GET /api/catalog/bundles。
+      home 页其他 4 个 card 不受影响。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+      - capability: react_spa
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=ui-dev]}"
+
+  - id: V-ui-5
+    track_id: ui
+    name: E2E 走完整路径（mock JSON + 填 key + 看到「最近路由」）
+    what: >-
+      Playwright + MSW mock {base}/bundles/zh-CN.json 返回含 coding_bundle 的
+      静态文件 → 打开 home 页 → 看到 coding bundle 卡片 → 点「一键配置」填
+      fake key → 看到 POST /api/providers + POST /api/providers/{provider}/keys
+      调用 → 卡片底部展示「最近路由」(fixture-routing-rules 已有数据)。
+    requires_capabilities:
+      - capability: vite_dev_server
+        min_quantity: 1
+      - capability: react_spa
+        min_quantity: 1
+      - capability: rest_api_endpoint
+        min_quantity: 1
+      - capability: sample_dataset
+        min_quantity: 1
+        description: fixture-routing-rules 提供「最近路由」展示数据
+    downgrade_when_missing: >-
+      vite_dev_server 不可用 → scenario 标 @skip。
+    post_discussion_status: degraded
+    env_resource_refs: []
+
+risks:
+  - bundle JSON 体积较大时 (含大量 provider) 后端进程内存占用上升 → 需在 config.json 暴露 max_bundles / max_bundle_size
+  - remote_catalog.url_template 误指向内网地址会触发 SSRF → 复用 network.SSRFSafeDialContext
+  - 已有 4 个 home card (endpoint/systemHealth/setupStatus/providerTopology) 字段不动，但 quickStartCard 被移除会破坏依赖其 data-testid 的现有 E2E（grep 已确认 tests/e2e/features/ 无 home 引用，但需再 grep 一次防御）
+  - 运营 JSON 错配 base URL 时整个推荐模块静默消失，用户无感 → 在 SystemHealthCard 加一条「运营推荐:不可用」指示
+  - POST /api/providers 已存在时返回 409，弹窗需把 409 翻译成「该 provider 已配置，请直接使用」
+
+open_questions:
+  - bundle JSON 内 provider 的 model 列表是否需要做运行时可达性过滤 [实测 ping] 还是只展示运营标注
+  - 最近 N 条日志的 N 默认值: 100 还是按时间窗 [过去 7 天], 建议在 config.json 暴露 recent_routing_rules_limit
+  - 是否需要在每个 provider 卡片显示已被 X 个虚拟 key 引用的提示, v1 暂不做

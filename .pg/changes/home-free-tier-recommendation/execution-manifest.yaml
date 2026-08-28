@@ -1,0 +1,65 @@
+schema_version: '2026-06-30'
+change: home-free-tier-recommendation
+stages:
+- name: dev
+  environment: local
+  tracks:
+  - id: transports
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 1. dev.transports:test - dev 测试先行
+      dev:
+        tasks_md_section: 2. dev.transports:dev - 实现开发
+      review:
+        tasks_md_section: 3. dev.transports:review - 静态代码审查
+      verify:
+        tasks_md_section: 4. dev.transports:verify - dev 集成验证
+      gate:
+        tasks_md_section: 5. dev.transports:gate - dev 门控审查
+  - id: ui
+    type: standard
+    enabled: true
+    reason: 常驻 track（无 on_conditions），LLM 决策启用
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      test:
+        tasks_md_section: 6. dev.ui:test - dev 测试先行
+      dev:
+        tasks_md_section: 7. dev.ui:dev - 实现开发
+      review:
+        tasks_md_section: 8. dev.ui:review - 静态代码审查
+      verify:
+        tasks_md_section: 9. dev.ui:verify - dev 集成验证
+      gate:
+        tasks_md_section: 10. dev.ui:gate - dev 门控审查
+- name: int
+  environment: local
+  tracks:
+  - id: scr
+    type: scenario
+    enabled: true
+    reason: 跨 ui-dev + celer-route-api + logs-db 三 role 联调；新增 2 个 REST 端点（GET /api/catalog/bundles,
+      GET /api/logs/recent-routing-rules）需端到端冒烟；home 页重做为跨模块联调场景。
+    on_conditions_eval:
+      matched_rules: []
+      unmatched_rules: []
+      path_hit_count: 0
+      semantic_hit_count: 0
+    phase_prompts:
+      scenario-execute:
+        tasks_md_section: 11. int.scr:scenario-execute - 真机场景执行
+    scenario_yaml: scenario-scr.yaml
+final_gate:
+  tasks_md_section: 12. final-gate - 最终门控审查

@@ -1,0 +1,292 @@
+scenarios:
+- scenario_id: S-recommendation-card-shows-coding-bundle
+  critical: true
+  description: home 页加载后，FreeTierRecommendationCard 渲染 coding bundle 子卡，含 provider
+    列表、申请链接外链、一键配置按钮
+  covers:
+  - V-ui-1
+  given:
+  - '# pg-gateway-api 服务已启动，环境为 local'
+  - '数据源: {env.data_resources[name=fixture-providers]} 已 seeded'
+  - '运营 mock JSON server: {env.runtime_environment[name=localhost]} 起 python -m http.server
+    模拟 {base}/bundles/zh-CN.json，含 coding_bundle'
+  - '浏览器访问入口: {env.business_systems[name=ui-dev].endpoints[name=dev].url}'
+  - 'REST API 端点: {env.business_systems[name=celer-route-api].endpoints[name=api].url}'
+  when:
+  - name: 浏览器访问 home 页
+    type: browser
+    action: navigate
+    url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/workspace/home'
+  - name: 等待 FreeTierRecommendationCard 渲染
+    type: browser
+    action: wait
+    selector: data-testid=home-free-tier-card
+    timeout_seconds: 10
+  then:
+  - status_code == 200
+  - response.bundles[0].id == 'coding'
+  - response.bundles[0].providers[0].provider == 'openai'
+  - response.bundles[0].providers[0].is_keyless == false
+  - data-testid=home-free-tier-bundle-coding 在 DOM 中可见
+  - data-testid=apply-link-openai 的 href == 'https://platform.openai.com/signup'
+  evidence:
+  - 2-build/<report_seq>-S-recommendation-card-shows-coding-bundle-screenshot.png
+  - 2-build/<report_seq>-S-recommendation-card-shows-coding-bundle-evidence.json
+- scenario_id: S-onekey-provider-creation-and-key-success
+  critical: true
+  description: 点一键配置填 fake key → POST providers 200 → POST provider keys 200 → providerTopologyCard
+    出现新 provider
+  covers:
+  - V-ui-1
+  given:
+  - '# 同 S-recommendation-card 的 given'
+  - pg-gateway-api 已启动，fixture-providers 中无 openai provider
+  - 当前 UI locale = zh-CN
+  when:
+  - name: 点 coding bundle 中 openai 的「一键配置」按钮
+    type: browser
+    action: click
+    selector: data-testid=configure-button-openai
+  - name: 等待弹窗出现
+    type: browser
+    action: wait
+    selector: data-testid=home-free-tier-config-dialog
+  - name: 输入 fake API key
+    type: browser
+    action: fill
+    selector: data-testid=api-key-input
+    value: sk-fake-test-key-1234567890
+  - name: 提交
+    type: browser
+    action: click
+    selector: data-testid=submit-button
+  - name: 等待成功 toast
+    type: browser
+    action: wait
+    selector: data-testid=config-success-toast
+    timeout_seconds: 15
+  then:
+  - status_code == 200
+  - method == 'POST'
+  - url == '/api/providers'
+  - data-testid=provider-topology-row-openai 在 ProviderTopologyCard 中可见
+  - POST /api/providers/openai/keys 被调且返回 200
+  and:
+  - name: 清理（删除 openai provider 与其 key）
+    type: api
+    method: DELETE
+    url: /api/providers/openai/keys/{key_id}
+  - name: 清理（删除 provider）
+    type: api
+    method: DELETE
+    url: /api/providers/openai
+  evidence:
+  - 2-build/<report_seq>-S-onekey-provider-creation-and-key-success-screenshot.png
+  - 2-build/<report_seq>-S-onekey-provider-creation-and-key-success-evidence.json
+- scenario_id: S-onekey-409-already-exists
+  critical: true
+  description: POST /api/providers 返回 409 时，弹窗翻译为「已配置」并继续 POST keys，UI 不报错
+  covers:
+  - V-ui-1
+  given:
+  - pg-gateway-api 已启动，fixture-providers 中已有 openai provider
+  - UI locale = zh-CN
+  when:
+  - name: 点 coding bundle 中 openai 的「一键配置」按钮
+    type: browser
+    action: click
+    selector: data-testid=configure-button-openai
+  - name: 等待弹窗出现
+    type: browser
+    action: wait
+    selector: data-testid=home-free-tier-config-dialog
+  - name: 输入 fake API key
+    type: browser
+    action: fill
+    selector: data-testid=api-key-input
+    value: sk-fake-test-key-1234567890
+  - name: 提交
+    type: browser
+    action: click
+    selector: data-testid=submit-button
+  - name: 等待「已配置」提示 toast
+    type: browser
+    action: wait
+    selector: data-testid=already-configured-toast
+    timeout_seconds: 15
+  then:
+  - status_code == 200
+  - method == 'POST'
+  - url == '/api/providers'
+  - response.code == 409
+  - data-testid=already-configured-toast 出现且文案含「该 provider 已配置」
+  - POST /api/providers/openai/keys 仍被调且返回 200
+  and:
+  - name: 清理新增的 key
+    type: api
+    method: DELETE
+    url: /api/providers/openai/keys/{key_id}
+  evidence:
+  - 2-build/<report_seq>-S-onekey-409-already-exists-screenshot.png
+  - 2-build/<report_seq>-S-onekey-409-already-exists-evidence.json
+- scenario_id: S-recent-routing-rules-footer-display
+  critical: false
+  description: bundle 卡片底部展示 fixture-routing-rules 中前 3 条路由，点击跳转到 /workspace/routing-rules/$id
+  covers:
+  - V-ui-2
+  - V-transports-2
+  given:
+  - pg-gateway-api 已启动，fixture-routing-rules 已 seeded (5 条)
+  - 运营 mock JSON server 已起，coding bundle JSON 正常返回
+  - UI locale = zh-CN
+  when:
+  - name: 浏览器访问 home 页
+    type: browser
+    action: navigate
+    url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/workspace/home'
+  - name: 等待 coding bundle 卡片渲染
+    type: browser
+    action: wait
+    selector: data-testid=home-free-tier-bundle-coding
+  - name: 等待最近路由 footer 渲染
+    type: browser
+    action: wait
+    selector: data-testid=recent-routing-rules-footer
+    timeout_seconds: 5
+  - name: 点击第一条最近路由
+    type: browser
+    action: click
+    selector: data-testid=recent-routing-rule-link-0
+  - name: 等待路由规则详情页加载
+    type: browser
+    action: wait_for_url
+    pattern: /workspace/routing-rules/
+    timeout_seconds: 10
+  then:
+  - status_code == 200
+  - method == 'GET'
+  - url == '/api/logs/recent-routing-rules?limit=100'
+  - response.rules.length >= 3
+  - data-testid=recent-routing-rule-link-0 至 -2 在 DOM 中可见
+  - 页面 URL 跳转到 /workspace/routing-rules/{id}
+  evidence:
+  - 2-build/<report_seq>-S-recent-routing-rules-footer-display-screenshot.png
+  - 2-build/<report_seq>-S-recent-routing-rules-footer-display-evidence.json
+- scenario_id: S-empty-bundle-shows-empty-state
+  critical: false
+  description: mock 返回空 bundles 时，FreeTierRecommendationCard 渲染空状态卡 + 重试按钮
+  covers:
+  - V-ui-4
+  - V-transports-3
+  given:
+  - pg-gateway-api 已启动
+  - '运营 mock JSON server 起，但 /bundles/zh-CN.json 返回 {bundles: [], updated_at: null,
+    version: null}'
+  - UI locale = zh-CN
+  when:
+  - name: 浏览器访问 home 页
+    type: browser
+    action: navigate
+    url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/workspace/home'
+  - name: 等待空状态卡渲染
+    type: browser
+    action: wait
+    selector: data-testid=free-tier-empty-state
+    timeout_seconds: 10
+  - name: 点重试按钮
+    type: browser
+    action: click
+    selector: data-testid=free-tier-retry-button
+  - name: 等待重新拉取完成
+    type: browser
+    action: wait
+    selector: data-testid=free-tier-empty-state
+    timeout_seconds: 5
+  then:
+  - status_code == 200
+  - method == 'GET'
+  - url == '/api/catalog/bundles?lang=zh-CN'
+  - response.bundles == []
+  - data-testid=free-tier-empty-state 可见且文案含「暂无推荐」
+  - data-testid=free-tier-retry-button 可见且可点
+  - 其他 4 个 home card 仍正常渲染（EndpointCard / SystemHealthCard / SetupStatusBar / ProviderTopologyCard）
+  evidence:
+  - 2-build/<report_seq>-S-empty-bundle-shows-empty-state-screenshot.png
+  - 2-build/<report_seq>-S-empty-bundle-shows-empty-state-evidence.json
+- scenario_id: S-i18n-en-locale-fetches-en-bundles
+  critical: false
+  description: 切 UI locale 到 en 时，UI 直接拉取 /bundles/en.json 而非 zh-CN.json；URL 命中对应语种
+  covers:
+  - V-ui-3
+  given:
+  - '# pg-gateway-api 已启动'
+  - 运营 mock JSON server 提供 /bundles/zh-CN.json 与 /bundles/en.json 两份不同文件
+  - UI locale 初始为 zh-CN
+  when:
+  - name: 切 UI locale 到 en
+    type: browser
+    action: click
+    selector: data-testid=locale-switcher-en
+  - name: 刷新 home 页
+    type: browser
+    action: reload
+  - name: 等待 bundle 卡片渲染
+    type: browser
+    action: wait
+    selector: data-testid=home-free-tier-card
+    timeout_seconds: 10
+  - name: 捕获网络请求 URL
+    type: browser
+    action: wait_for_request
+    method: GET
+    url_pattern: .*bundles/en\.json.*
+  then:
+  - status_code == 200
+  - method == 'GET'
+  - url matches '.*bundles/en\.json.*'
+  - home 页文案为英文（验证 lang=en 生效）
+  - bundle 标题为 en.json 中的 title 字段（非 zh-CN 的中文字符）
+  evidence:
+  - 2-build/<report_seq>-S-i18n-en-locale-fetches-en-bundles-screenshot.png
+  - 2-build/<report_seq>-S-i18n-en-locale-fetches-en-bundles-evidence.json
+- scenario_id: S-upstream-failure-degrade-gracefully
+  critical: false
+  description: mock 返回 500 时，/api/catalog/bundles 仍返回 200 + 空 bundles（不返 5xx），前端降级到空状态
+  covers:
+  - V-transports-3
+  - V-ui-4
+  given:
+  - pg-gateway-api 已启动
+  - 运营 mock JSON server 已停或返回 HTTP 500
+  - UI locale = zh-CN
+  when:
+  - name: 直接调后端 catalog 端点
+    type: api
+    method: GET
+    url: /api/catalog/bundles?lang=zh-CN
+    expect_status: 200
+  - name: 浏览器访问 home 页
+    type: browser
+    action: navigate
+    url: '{env.business_systems[name=ui-dev].endpoints[name=dev].url}/workspace/home'
+  - name: 等待空状态卡渲染
+    type: browser
+    action: wait
+    selector: data-testid=free-tier-empty-state
+    timeout_seconds: 10
+  then:
+  - status_code == 200
+  - response.bundles == []
+  - response.updated_at == null
+  - GET /api/catalog/bundles 永返 200 不返 5xx（即使上游失败）
+  - home 页其他 card 不受影响
+  evidence:
+  - 2-build/<report_seq>-S-upstream-failure-degrade-gracefully-screenshot.png
+  - 2-build/<report_seq>-S-upstream-failure-degrade-gracefully-evidence.json
+_meta:
+  _comment: scenario-scr.yaml 由 LLM 完整填充，覆盖 V-ui-1 / V-ui-2 / V-ui-4 / V-transports-2
+    / V-transports-3。V-transports-1 / V-ui-3 / V-ui-5 为 degraded，在 prepare_env 阶段若
+    mock server 不可用则标 @skip。
+  change: home-free-tier-recommendation
+  track_id: scr
+  schema_version: v3.10
