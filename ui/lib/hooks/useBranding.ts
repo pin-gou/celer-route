@@ -3,10 +3,10 @@ import { getApiBaseUrl } from "@/lib/utils/port";
 
 /** Bundled celer-route assets. These are the OSS values and the fallback for every
  * slot an enterprise deployment has not overridden. */
-const DEFAULT_LOGO_LIGHT = "/celer-route-logo-dark.webp";
-const DEFAULT_LOGO_DARK = "/celer-route-logo.webp";
-const DEFAULT_ICON_LIGHT = "/celer-route-icon-dark.webp";
-const DEFAULT_ICON_DARK = "/celer-route-icon.webp";
+const DEFAULT_LOGO_LIGHT = "/celer-route-logo-light.svg";
+const DEFAULT_LOGO_DARK = "/celer-route-logo-dark.svg";
+const DEFAULT_ICON_LIGHT = "/celer-route-icon-light.svg";
+const DEFAULT_ICON_DARK = "/celer-route-icon-dark.svg";
 
 /**
  * Resolves a branding asset URL returned by the API against the current API

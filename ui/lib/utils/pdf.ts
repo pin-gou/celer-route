@@ -20,7 +20,7 @@ export interface PdfSection {
 }
 
 export interface PdfBranding {
-	/** Path to logo image (relative to public dir, e.g. "/celer-route-logo.webp") */
+	/** Path to logo image (relative to public dir, e.g. "/celer-route-logo-light.svg") */
 	logoSrc: string;
 	/** Text shown next to the logo */
 	text?: string;

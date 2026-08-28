@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 256" width="1320" height="256" role="img" aria-label="celer-route">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E8EAF6"/>
+      <stop offset="100%" stop-color="#D9CFEA"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(16,16)">
+    <rect x="0" y="0" width="224" height="224" rx="48" ry="48" fill="url(#bg)"/>
+    <g transform="translate(112,112) scale(0.4375) translate(-256,-256)">
+      <path d="M 110 380
+               L 110 160
+               Q 110 130 138 130
+               Q 160 130 172 148
+               L 256 274
+               L 340 148
+               Q 352 130 374 130
+               Q 402 130 402 160
+               L 402 380
+               Q 402 400 380 400
+               Q 358 400 358 380
+               L 358 220
+               L 290 316
+               Q 276 336 256 336
+               Q 236 336 222 316
+               L 154 220
+               L 154 380
+               Q 154 400 132 400
+               Q 110 400 110 380 Z"
+            fill="#2D2F92"
+            stroke="#2D2F92"
+            stroke-width="10"
+            stroke-linejoin="round"
+            stroke-linecap="round"/>
+    </g>
+  </g>
+  <text x="296" y="178"
+        font-family="'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="160"
+        font-weight="700"
+        letter-spacing="-4"
+        fill="#18181B">celer-route</text>
+</svg>
