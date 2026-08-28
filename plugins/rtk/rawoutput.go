@@ -7,6 +7,7 @@
 package rtk
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,10 +15,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // RtkRawOutputRetention controls when raw tool outputs are persisted to disk.
@@ -48,6 +52,12 @@ type PersistOptions struct {
 	MaxBytes  int                   // default 1048576, minimum 1024
 	Failure   *bool                 // explicit override of IsLikelyFailureOutput
 	AppDir    string                // root directory for <appDir>/rtk/raw-output/
+	// Dir overrides the on-disk root entirely. When non-empty, takes priority
+	// over AppDir (which is otherwise appended with /rtk/raw-output/). Operators
+	// use this to point persistence at a separate volume or sandboxed tmpfs.
+	// Callers MUST pass an absolute path; PersistRtkRawOutput creates the
+	// directory if it does not exist.
+	Dir string
 }
 
 // rawOutputPaths is a package-level registry mapping pointer ID → absolute path,
@@ -164,8 +174,12 @@ func MaybePersistRtkRawOutput(raw string, opts PersistOptions) *RtkRawOutputPoin
 	// Timestamp in milliseconds.
 	ts := time.Now().UnixMilli()
 
-	// Ensure the output directory exists.
-	dir := filepath.Join(opts.AppDir, "rtk", "raw-output")
+	// Ensure the output directory exists. Dir takes priority; AppDir is the
+	// historical fallback so existing callers stay source-compatible.
+	dir := opts.Dir
+	if dir == "" {
+		dir = filepath.Join(opts.AppDir, "rtk", "raw-output")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		// Best-effort: return nil, no panic.
 		return nil
@@ -265,11 +279,27 @@ func IsValidRawOutputID(id string) bool {
 // same as ReadRtkRawOutput. Returns (data, found): when found is false the
 // data is empty and callers should surface a 404 to the client.
 func ReadRtkRawOutputByID(pointerID, appDir string) (string, bool) {
+	return ReadRtkRawOutputByIDInDir(pointerID, appDir, "")
+}
+
+// ReadRtkRawOutputByIDInDir is ReadRtkRawOutputByID with an explicit dir override.
+// When dir is non-empty it short-circuits the in-memory registry and the
+// <appDir>/rtk/raw-output fallback and searches `<dir>/*-<id>.log` directly.
+// This is the path used by the HTTP handler once the plugin's resolved
+// RawOutputDir (config.RawOutputDir || <appDir>/rtk/raw-output) is known.
+func ReadRtkRawOutputByIDInDir(pointerID, appDir, dir string) (string, bool) {
 	if !IsValidRawOutputID(pointerID) {
 		return "", false
 	}
 
-	// 1. Try the in-memory registry (most recent persist call sites it directly).
+	// 1. Explicit dir wins (used by handler once it knows the operator-configured path).
+	if dir != "" {
+		if data, ok := readFirstMatch(filepath.Join(dir, "*-"+pointerID+".log")); ok {
+			return data, true
+		}
+	}
+
+	// 2. Try the in-memory registry (most recent persist call sites it directly).
 	if v, ok := rawOutputPaths.Load(pointerID); ok {
 		path, _ := v.(string)
 		if data, err := os.ReadFile(path); err == nil {
@@ -277,15 +307,17 @@ func ReadRtkRawOutputByID(pointerID, appDir string) (string, bool) {
 		}
 	}
 
-	// 2. Try under the provided appDir (production path — handler passes p.AppDir()).
+	// 3. Try under the provided appDir (production path — handler passes p.AppDir()).
 	if appDir != "" {
-		dir := filepath.Join(appDir, "rtk", "raw-output")
-		if data, ok := readFirstMatch(filepath.Join(dir, "*-"+pointerID+".log")); ok {
-			return data, true
+		appRoot := filepath.Join(appDir, "rtk", "raw-output")
+		if dir == "" || appRoot != dir {
+			if data, ok := readFirstMatch(filepath.Join(appRoot, "*-"+pointerID+".log")); ok {
+				return data, true
+			}
 		}
 	}
 
-	// 3. Fallback: glob under the current working directory.
+	// 4. Fallback: glob under the current working directory.
 	if cwd, err := os.Getwd(); err == nil {
 		pattern := filepath.Join(cwd, "rtk", "raw-output", "*-"+pointerID+".log")
 		if data, ok := readFirstMatch(pattern); ok {
@@ -345,4 +377,148 @@ func commandSlug(command string) string {
 		slug = "unknown-command"
 	}
 	return slug
+}
+
+// RtkRawOutputJanitor is a best-effort TTL reaper for persisted raw-output
+// files. It walks <dir> on a fixed interval (default 30 min) and deletes any
+// file whose filename-encoded mtime is older than ttl. An empty ttl disables
+// the janitor entirely — the Start method becomes a no-op so plugin.Close can
+// stay symmetric.
+//
+// Filenames encode the persist timestamp as the leading `<unix-ms>-` prefix,
+// so the janitor can parse expiry without stat'ing the filesystem (cheaper on
+// large directories) and without trusting the OS mtime (which can be touched
+// by operator tooling).
+type RtkRawOutputJanitor struct {
+	dir      string
+	ttl      time.Duration
+	interval time.Duration
+	logger   schemas.Logger
+
+	done chan struct{}
+	once sync.Once
+}
+
+// NewRtkRawOutputJanitor wires a janitor with the given directory and TTL.
+// A ttl <= 0 returns nil so callers can simply check `if janitor != nil` to
+// decide whether to start one. interval <= 0 falls back to 30 minutes — the
+// granularity discussed in design (we don't want TTL precision to mask
+// accidental misconfiguration toward 0).
+func NewRtkRawOutputJanitor(dir string, ttl time.Duration, logger schemas.Logger) *RtkRawOutputJanitor {
+	if ttl <= 0 {
+		return nil
+	}
+	return &RtkRawOutputJanitor{
+		dir:      dir,
+		ttl:      ttl,
+		interval: 30 * time.Minute,
+		logger:   logger,
+		done:     make(chan struct{}),
+	}
+}
+
+// Start spawns the janitor loop. It is safe to call exactly once; further
+// calls are ignored thanks to sync.Once. ctx cancellation triggers a final
+// sweep on the way out so files that aged out during shutdown still get
+// reaped before the process exits.
+func (j *RtkRawOutputJanitor) Start(ctx context.Context) {
+	if j == nil {
+		return
+	}
+	j.once.Do(func() {
+		go j.loop(ctx)
+	})
+}
+
+// Stop signals the loop to exit and blocks until it returns. After Stop the
+// janitor cannot be restarted.
+func (j *RtkRawOutputJanitor) Stop() {
+	if j == nil {
+		return
+	}
+	close(j.done)
+}
+
+// loop runs reapOnce on a ticker until ctx cancels or Stop is called.
+func (j *RtkRawOutputJanitor) loop(ctx context.Context) {
+	ticker := time.NewTicker(j.interval)
+	defer ticker.Stop()
+	// Run once immediately so a server restart doesn't carry stale files from
+	// the previous process.
+	j.reapOnce()
+	for {
+		select {
+		case <-ctx.Done():
+			j.reapOnce()
+			return
+		case <-j.done:
+			return
+		case <-ticker.C:
+			j.reapOnce()
+		}
+	}
+}
+
+// reapOnce deletes every *.log file under j.dir whose encoded timestamp is
+// older than (now - j.ttl). Companion *.meta.json files are removed when their
+// .log sibling is removed. Errors are logged at WARN and skipped — best-effort
+// behaviour is the contract.
+func (j *RtkRawOutputJanitor) reapOnce() {
+	if j == nil || j.dir == "" {
+		return
+	}
+	entries, err := os.ReadDir(j.dir)
+	if err != nil {
+		if j.logger != nil {
+			j.logger.Warn("rtk.janitor", "read dir failed: %v", err)
+		}
+		return
+	}
+	cutoff := time.Now().Add(-j.ttl).UnixMilli()
+	removed := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".log") {
+			continue
+		}
+		ts, ok := rawOutputFilenameTimestamp(name)
+		if !ok {
+			continue
+		}
+		if ts > cutoff {
+			continue
+		}
+		logPath := filepath.Join(j.dir, name)
+		metaPath := logPath[:len(logPath)-len(".log")] + ".meta.json"
+		if rmErr := os.Remove(logPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			if j.logger != nil {
+				j.logger.Warn("rtk.janitor", "remove %s: %v", logPath, rmErr)
+			}
+			continue
+		}
+		_ = os.Remove(metaPath) // best-effort, ignore missing
+		removed++
+	}
+	if removed > 0 && j.logger != nil {
+		j.logger.Info("rtk.janitor", "reaped %d expired raw-output file(s) under %s", removed, j.dir)
+	}
+}
+
+// rawOutputFilenameTimestamp extracts the leading unix-ms timestamp from a
+// raw-output filename of the form `<unix-ms>-<slug>-<id>.log`. Returns false
+// when the name does not match the expected shape — non-matching files are
+// skipped by the janitor so unrelated files in the directory are safe.
+func rawOutputFilenameTimestamp(name string) (int64, bool) {
+	firstDash := strings.IndexByte(name, '-')
+	if firstDash <= 0 {
+		return 0, false
+	}
+	ts, err := strconv.ParseInt(name[:firstDash], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return ts, true
 }
