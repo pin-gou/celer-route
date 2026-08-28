@@ -1,0 +1,79 @@
+{
+  "version": "2026-08-28",
+  "updated_at": "2026-08-28T08:00:00Z",
+  "bundles": [
+    {
+      "id": "coding",
+      "title": "Coding & Development",
+      "description": "Code completion and debugging essentials",
+      "providers": [
+        {
+          "provider": "openai",
+          "models": [
+            "gpt-4o-mini",
+            "gpt-4.1"
+          ],
+          "apply_url": "https://platform.openai.com/signup",
+          "apply_steps": [
+            "Sign up for an account",
+            "Create an API key"
+          ],
+          "is_keyless": false,
+          "notes": "$5 free credit for new users"
+        },
+        {
+          "provider": "opencode",
+          "models": [
+            "default"
+          ],
+          "apply_url": "",
+          "apply_steps": [],
+          "is_keyless": true,
+          "notes": "No key required, add directly"
+        }
+      ]
+    },
+    {
+      "id": "data-science",
+      "title": "Data Science",
+      "description": "Data analysis and visualization",
+      "providers": [
+        {
+          "provider": "deepseek",
+          "models": [
+            "deepseek-chat",
+            "deepseek-reasoner"
+          ],
+          "apply_url": "https://platform.deepseek.com",
+          "apply_steps": [
+            "Sign up for an account",
+            "Create an API key"
+          ],
+          "is_keyless": false,
+          "notes": "New user discount available"
+        }
+      ]
+    },
+    {
+      "id": "image-generation",
+      "title": "Image Generation",
+      "description": "Generate images from text prompts",
+      "providers": [
+        {
+          "provider": "runware",
+          "models": [
+            "flux-schnell",
+            "flux-dev"
+          ],
+          "apply_url": "https://runware.ai",
+          "apply_steps": [
+            "Sign up for an account",
+            "Create an API key"
+          ],
+          "is_keyless": false,
+          "notes": "Free tier includes monthly credits"
+        }
+      ]
+    }
+  ]
+}
