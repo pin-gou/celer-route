@@ -1,14 +1,13 @@
 ---
 title: 使用 pg-skills 完成一次真实变更
-description: 在 celer-route 的 pg-skills-starting-point 分支中完成 define、propose、build 和结果验证
-sidebar_label: celer-route 实战
+description: 在真实 celer-route 项目中完成 pg-skills 的安装、定界、提案、构建和结果验证
+sidebar_label: pg-skills 实战
 ---
 
 # celer-route 真实项目逐步教程
 
-本教程使用真实的 [pin-gou/celer-route](https://github.com/pin-gou/celer-route) 仓库，带你完成一次可复现的 pg-skills 标准工作流。你会从一个干净的 Fork 开始，接入 pg-skills，校正项目配置，然后依次执行 `define → propose → build`，最后用 Git、测试命令和 Pipeline 产物判断结果是否真的成功。
+本教程使用真实的 [pin-gou/celer-route](https://github.com/pin-gou/celer-route) 项目，带你完成一次可复现的 pg-skills 标准工作流。你会获取练习代码、安装 pg-skills、校正项目配置，然后依次执行 `define → propose → build`，最后用 Git、测试命令和 Pipeline 产物判断结果是否真的成功。
 
-> **Demo 基线：** 本文针对官方 `pg-skills-starting-point` 分支编写，当前基准提交为 `b4de093181c8e0eaf352453ae661d4b8cec2ebcd`。该分支已经清理历史 pg-skills 产物，保留 celer-route 业务源码，适合从零演示安装、初始化和完整工作流。健康检查位于 `transports/celer-route-http/handlers/health.go`，注册 `GET /health`，但没有独立的 `health_test.go`。
 
 ## 你将完成什么
 
@@ -19,7 +18,7 @@ sidebar_label: celer-route 实战
 3. 发现并修正自动扫描结果中的目录、测试和环境假设。
 4. 用 define 调查真实代码，而不是让 AI 猜测需求位置。
 5. 审查 proposal、design、tasks 和 execution manifest。
-6. 在允许自动 Git 操作的隔离分支中执行 build。
+6. 在理解自动 Git 操作的前提下安全执行 build。
 7. 根据测试、Git 历史和 `2-build/` 产物判断成功或失败。
 
 本教程预计需要 45 到 90 分钟，不包括首次下载 Go 和 Node.js 依赖的时间。
@@ -51,14 +50,13 @@ transports/celer-route-http/handlers/health_test.go
 
 ## 1. 准备环境
 
-本文以 Windows PowerShell 和 DeepSeek Harness 为主路径。需要：
+本文以 Windows PowerShell 和 OpenCode 为主路径。需要：
 
 - Git。
 - Python 3。
-- Go。教程基线的 `core/go.mod`、`framework/go.mod` 和 `transports/go.mod` 声明 Go `1.26.5`。
+- Go。当前项目的 `core/go.mod`、`framework/go.mod` 和 `transports/go.mod` 声明 Go `1.26.5`。
 - Node.js。仓库 `.nvmrc` 声明 `22.12.0`。
-- 官方 DeepSeek Harness CLI `dsh`，并已配置可用 Provider。
-- 一个你有写权限的 celer-route Fork。
+- 已安装并能够正常使用的 OpenCode。
 
 先检查：
 
@@ -67,60 +65,46 @@ git --version
 python --version
 go version
 node --version
-dsh --help
+opencode --version
 ```
 
-本练习只运行 Go handler 测试，不要求构建 UI。Node.js 主要用于 DSH；如果你计划运行 celer-route 的完整构建，还需要满足仓库 Makefile 中的其他依赖。
+本练习只运行 Go handler 测试，不要求构建 UI。OpenCode 使用的模型和 Provider 应提前配置完成。如果你计划运行 celer-route 的完整构建，还需要满足仓库 Makefile 中的其他依赖。
 
 > celer-route 的 Makefile 明确使用 Bash。Windows 下运行 `make build` 或 `make dev` 时，应使用 Git Bash、WSL 或其他兼容 Bash 的环境。本文的聚焦测试直接调用 `go test`，不依赖 Makefile。
 
-## 2. Fork 并检出 Demo 分支
+## 2. 获取练习项目
 
-先在 GitHub Fork [pin-gou/celer-route](https://github.com/pin-gou/celer-route)，然后克隆自己的 Fork。不要直接在官方仓库中运行本教程，因为标准 `pg-build` 的成功链路可能推送功能分支，并把结果合并到 `.pg/project.yaml` 配置的默认分支。
-
-```powershell
-git clone https://github.com/<你的账号>/celer-route.git
-cd celer-route
-git remote add upstream https://github.com/pin-gou/celer-route.git
-git fetch upstream pg-skills-starting-point
-git switch -c pg-skills-starting-point --track upstream/pg-skills-starting-point
-git remote -v
-```
-
-你应该看到：
-
-```text
-origin    https://github.com/<你的账号>/celer-route.git
-upstream  https://github.com/pin-gou/celer-route.git
-```
-
-将 Demo 基线同步到自己的 Fork：
+直接克隆 celer-route 为 pg-skills 实践准备的起点分支：
 
 ```powershell
-git push -u origin pg-skills-starting-point
+git clone --branch pg-skills-starting-point --single-branch https://github.com/pin-gou/celer-route.git celer-route-pg-skills
+cd celer-route-pg-skills
 ```
 
-如果你的 Fork 已经存在同名分支，可以先执行 `git fetch origin`，再使用 `git switch pg-skills-starting-point`。不要重置或覆盖该分支中尚未保存的个人改动。
-
-## 3. 确认 Demo 基线
-
-确认当前分支和提交：
+确认当前分支：
 
 ```powershell
 git branch --show-current
-git rev-parse HEAD
-git status --short
 ```
 
-首次开始教程时，预期分别为：
+预期输出：
 
 ```text
 pg-skills-starting-point
-b4de093181c8e0eaf352453ae661d4b8cec2ebcd
-工作树无输出
 ```
 
-该分支的目的就是作为 pg-skills Demo 起点，因此无需再检出旧提交或创建另一条教程基线分支。后续初始化文件、提案产物和最终实现都在你 Fork 的 `pg-skills-starting-point` 上完成。
+此时可以直接完成项目调查、pg-skills 安装、初始化、define 和 propose。标准 build 会修改并推送 Git 分支，因此教程将在真正执行 build 前单独说明如何准备可写远端。
+
+## 3. 确认项目状态
+
+先确认项目处于干净状态，并且练习目标尚未实现：
+
+```powershell
+git status --short
+Test-Path transports\celer-route-http\handlers\health_test.go
+```
+
+预期第一条命令没有输出，第二条命令返回 `False`。如果测试文件已经存在，说明你使用的不是本文对应的练习起点，应先检查当前分支，不要继续重复实现同一功能。
 
 ## 4. 先认识真实仓库
 
@@ -133,7 +117,7 @@ Get-Content transports\go.mod -TotalCount 8
 Select-String -Path transports\celer-route-http\handlers\health.go -Pattern 'RegisterRoutes|/health|DisableDBPingsInHealth'
 ```
 
-在教程基线中，主要边界包括：
+当前项目的主要边界包括：
 
 | 目录 | 作用 | 主要技术 |
 |---|---|---|
@@ -155,7 +139,7 @@ server/server.go
 
 先记住这些事实。后面如果 AI 把任务分配给 `core` 或 `ui`，你就有依据判断它的范围可能错了。
 
-## 5. 验证代码基线能编译
+## 5. 验证项目能够编译
 
 先只编译 handler 测试包，不运行测试：
 
@@ -167,19 +151,17 @@ Pop-Location
 
 预期命令退出码为 0。首次执行可能下载 Go 依赖。
 
-如果此时失败，先处理 Go 版本、网络、私有模块或仓库基线问题。不要把“原项目无法编译”带入 pg-skills 工作流，否则后面无法区分是适配问题还是项目环境问题。
+如果此时失败，先处理 Go 版本、网络、私有模块或项目自身问题。不要把“原项目无法编译”带入 pg-skills 工作流，否则后面无法区分是适配问题还是项目环境问题。
 
 ## 6. 安装 pg-skills
 
-将 pg-skills 作为 Git subtree 安装到当前项目的 `.pg/skills/`。本教程使用包含 DeepSeek Harness 适配器的演示分支：
+通过 Git subtree 将 pg-skills 安装到当前项目的 `.pg/skills/`：
 
 ```powershell
-git remote add pg-skills https://github.com/zhiyuanliu135-afk/pg-skills.git
-git fetch pg-skills feature/deepseek-harness-adapter
-git subtree add --prefix=.pg/skills pg-skills feature/deepseek-harness-adapter --squash
+git subtree add --prefix=.pg/skills https://github.com/pin-gou/pg-skills.git v0.9.2 --squash
 ```
 
-如果 `pg-skills` remote 已存在，先用 `git remote -v` 检查，不要重复添加。DeepSeek Harness 适配器合入并发布后，应把上面的来源替换为官方仓库中的固定 tag 或 commit，避免长期依赖演示分支。
+教程固定使用版本 `v0.9.2`，避免上游变化导致同一套步骤在不同时间产生不同结果。需要使用更新版本时，应先阅读对应版本的变更说明，再替换 tag。
 
 安装后确认：
 
@@ -190,62 +172,63 @@ Test-Path .pg\skills\src\runtime\bin\pg
 
 `Test-Path` 应返回 `True`。安装、升级和卸载的通用说明见 [pg-skills 安装指南](https://github.com/pin-gou/pg-skills/blob/main/docs/installation.md)。
 
-## 7. 生成 DeepSeek Harness 适配目录
+## 7. 生成 OpenCode 适配目录
 
 在 celer-route 根目录执行：
 
 ```powershell
-python .pg\skills\src\runtime\bin\pg init --tool deepseek-harness
+python .pg\skills\src\runtime\bin\pg init --tool opencode
 ```
-
-这一步生成公共项目骨架和 DSH 适配层，但不会替你正确理解 celer-route 的所有模块和运行环境。
 
 检查生成结果：
 
 ```powershell
-Get-ChildItem .dsh
-Get-ChildItem .dsh\commands
-Get-ChildItem .dsh\skills
+Get-ChildItem .opencode\commands
+Get-ChildItem .opencode\skills
+Get-ChildItem .opencode\agents
 ```
 
-当前适配器应把 DSH 文件统一放在一个目录：
+预期结构：
 
 ```text
-.dsh/
+.opencode/
 ├── commands/
-├── agents/
 ├── skills/
-├── bridge/
-├── cordis.patch.yml
-├── start-web.cmd
-├── run-task.cmd
-├── run.cmd
-└── README.md
+├── agents/
+└── .pg-adapter-manifest.json
 ```
 
-- `start-web.cmd` 启动交互式 Web 页面。
-- `run-task.cmd "任务"` 执行一次 Headless 任务并在终端返回结果。
-- `run.cmd` 只显示两种入口的说明，不启动 DSH。
+其中：
 
-如果没有 `.dsh/`，先执行：
+- `commands/` 提供 `/pg-1-define`、`/pg-2-propose`、`/pg-3-build` 等命令。
+- `skills/` 保存 OpenCode 能够直接加载的 pg-skills 工作流。
+- `agents/` 保存测试、开发、审查和验证等角色。
+- `.pg-adapter-manifest.json` 记录适配器管理的生成文件。
+
+如果没有生成 `.opencode/`，检查当前目录和工具列表：
 
 ```powershell
 Get-Location
-Test-Path .pg\skills\src\integrations\deepseek_harness\adapter.py
 python .pg\skills\src\runtime\bin\pg init --list-tools
 ```
 
-最常见原因是终端不在 celer-route 根目录，或 `.pg/skills/` 并不是包含 DSH 适配器的版本。
+## 8. 用 OpenCode 初始化项目配置
 
-## 8. 启动 DSH 并初始化项目配置
-
-启动交互式 Web 模式：
+从 celer-route 项目根目录启动 OpenCode：
 
 ```powershell
-.dsh\start-web.cmd
+opencode
 ```
 
-在 Web 页面确认当前工作区是 celer-route，然后发送：
+如果 OpenCode 已经打开该项目，请在生成 `.opencode/` 后重新加载项目。先在命令列表中确认存在：
+
+```text
+/pg-1-define
+/pg-2-propose
+/pg-3-build
+```
+
+然后在 OpenCode 对话框发送：
 
 ```text
 请加载 pg-init-project skill，扫描当前 celer-route 仓库并初始化 pg-skills 项目配置。
@@ -270,8 +253,10 @@ python .pg\skills\src\runtime\bin\pg init --list-tools
 
 | 动作 | 负责什么 |
 |---|---|
-| 终端中的 `pg init --tool deepseek-harness` | 建立 `.pg/` 骨架并渲染 `.dsh/` 适配文件 |
-| DSH 对话中的 `pg-init-project` Skill | 阅读真实仓库并生成项目级 modules、environments、tracks 和 stages |
+| 终端中的 `pg init --tool opencode` | 建立 `.pg/` 骨架并渲染 `.opencode/` 适配文件 |
+| OpenCode 对话中的 `pg-init-project` Skill | 阅读真实仓库并生成项目级 modules、environments、tracks 和 stages |
+
+> 生成的 Agent 默认使用 `pg-router/pg-associate`、`pg-router/pg-expert` 和 `pg-router/pg-master`。项目中的 `opencode.json` 已声明这些路由名称，但你的 OpenCode 环境仍需能够把它们解析到实际模型；否则应先完成 Provider 或路由插件配置。
 
 ## 9. 人工审查 `.pg/project.yaml`
 
@@ -279,7 +264,7 @@ python .pg\skills\src\runtime\bin\pg init --list-tools
 
 ### 9.1 模块边界
 
-本教程基线至少应识别 `core`、`framework`、`transports`、`plugins` 和 `ui`。本次练习只属于 `transports`。
+项目配置至少应识别 `core`、`framework`、`transports`、`plugins` 和 `ui`。本次练习只属于 `transports`。
 
 ### 9.2 命令工作目录
 
@@ -337,49 +322,55 @@ python .pg\skills\src\runtime\bin\pg doctor
 
 `pg doctor` 通过只说明结构和引用基本有效，不代表每条项目命令已经在本机成功执行。
 
-## 10. 提交并推送教程基线
+## 10. 保存初始化结果
 
-build 要求可追踪的 Git 基线。先审查初始化产生的文件：
+先审查初始化产生的文件：
 
 ```powershell
 git status --short
-git diff -- .pg\project.yaml .pg\hooks .pg\code-review .dsh
+git diff -- .pg\project.yaml .pg\hooks .pg\code-review .opencode
 ```
 
 特别检查：
 
 - 没有 API 密钥、Token 或个人凭据。
-- `.dsh/cordis.patch.yml` 的三级模型配置符合你的环境。
-- patch 中的 bridge URI 指向当前项目。
-- `.pg/project.yaml` 的默认分支是 `pg-skills-starting-point`。
+- `.pg/project.yaml` 中的模块、命令和默认分支符合当前项目。
 - Hooks 中没有未经验证的生产地址。
+- `.opencode/` 中只有 pg-skills 生成文件和项目需要的自定义内容。
 
-确认后提交并推送到你的 Fork：
+确认后先提交本地初始化结果：
 
 ```powershell
-git add .pg .dsh pg-run pg-run.cmd
-git commit -m "chore: add pg-skills tutorial baseline"
+git add .pg .opencode pg-run pg-run.cmd
+git commit -m "chore: initialize pg-skills"
+```
+
+到这里为止，用户不需要 Fork，也不需要向远端推送。你可以继续完成 define 和 propose。
+
+### 执行完整 build 前准备可写远端
+
+标准 `pg-build` 成功后会自动推送功能分支，并把结果合并、推送到 `.pg/project.yaml` 配置的默认分支。只有准备继续执行完整 build 时，才需要一个自己有写权限的远端仓库。
+
+先在 GitHub Fork celer-route，然后把当前只读的官方远端改名为 `upstream`，并将自己的 Fork 设置为 `origin`：
+
+```powershell
+git remote rename origin upstream
+git remote add origin https://github.com/<你的账号>/celer-route.git
 git push -u origin pg-skills-starting-point
 ```
 
-不要手工创建练习功能分支。后面的 define 和 propose 都在 `pg-skills-starting-point` 上进行；启动 build 时，Runner 会自动创建固定名称的功能分支：
-
-```text
-feat/pg/test-health-handler-contract
-```
-
-先确认仍在教程基线分支，并且工作树干净：
+检查：
 
 ```powershell
-git branch --show-current
-git status --short
+git remote -v
+git branch -vv
 ```
 
-预期当前分支是 `pg-skills-starting-point`，最后一条命令没有输出。
+此时 `origin` 应指向你的 Fork，当前分支应跟踪 `origin/pg-skills-starting-point`。如果你只想学习 define 和 propose，可以暂时跳过这部分，但不要在没有可写远端的情况下执行标准 build。
 
 ## 11. 用 define 调查真实代码
 
-回到 DSH Web 页面，输入：
+回到 OpenCode 对话框，输入：
 
 ```text
 /pg-1-define
@@ -430,7 +421,7 @@ Get-Content .pg\changes\test-health-handler-contract\0-define\define-summary.yam
 
 ## 12. 用 propose 生成执行方案
 
-在 DSH Web 页面输入：
+在 OpenCode 对话框输入：
 
 ```text
 /pg-2-propose test-health-handler-contract
@@ -512,7 +503,7 @@ Select-String -Path .pg\project.yaml -Pattern 'default_branch'
 工作树                 无未提交修改
 当前分支               pg-skills-starting-point
 origin                 你的 Fork
-教程基线 tracking      origin/pg-skills-starting-point
+当前分支 tracking      origin/pg-skills-starting-point
 git.default_branch     pg-skills-starting-point
 ```
 
@@ -522,7 +513,7 @@ build 启动后，Runner 才会从当前默认分支创建 `feat/pg/test-health-
 
 ## 14. 执行 build
 
-在 DSH Web 页面输入：
+在 OpenCode 对话框输入：
 
 ```text
 /pg-3-build test-health-handler-contract
@@ -530,7 +521,7 @@ build 启动后，Runner 才会从当前默认分支创建 `feat/pg/test-health-
 
 运行过程中，pg-build 会根据 manifest 派送任务，并把事件和 snapshot 写入该 change 的 `2-build/`。不要在中途删除这个目录，也不要手工修改 Pipeline 状态来“制造成功”。
 
-如果 DSH 要求批准文件修改、测试或 Git 操作，请根据刚才审查的范围决定。超出 `health_test.go`、聚焦测试和教程分支 Git 操作的请求，应先询问原因。
+如果 OpenCode 要求批准文件修改、测试或 Git 操作，请根据刚才审查的范围决定。超出 `health_test.go`、聚焦测试和教程分支 Git 操作的请求，应先询问原因。
 
 ## 15. 用证据判断是否成功
 
@@ -624,37 +615,31 @@ Pipeline 状态           done，或有明确可解释的失败记录
 
 ## 17. 常见失败及处理
 
-### `.dsh/` 没生成
+### `.opencode/` 没生成
 
 确认当前目录、pg-skills 版本和工具列表：
 
 ```powershell
 Get-Location
-Test-Path .pg\skills\src\integrations\deepseek_harness\adapter.py
+Test-Path .pg\skills\src\integrations\opencode\adapter.py
 python .pg\skills\src\runtime\bin\pg init --list-tools
 ```
 
-### `start-web.cmd` 不存在
-
-这通常说明 `.dsh/` 来自旧适配器。升级 `.pg/skills/` 后重新运行：
-
-```powershell
-python .pg\skills\src\runtime\bin\pg init --tool deepseek-harness
-```
-
-如果适配器提示保留了用户修改文件，阅读 warning，并核对 `.dsh/.pg-adapter-manifest.json`。
-
-### DSH 页面里命令无法识别
+### OpenCode 中没有 pg 命令
 
 检查：
 
 ```powershell
-Test-Path .dsh\bridge\index.ts
-Test-Path .dsh\commands\pg-1-define.md
-Get-Content .dsh\cordis.patch.yml
+Test-Path .opencode\commands\pg-1-define.md
+Test-Path .opencode\skills\pg-define\SKILL.md
+Test-Path .opencode\agents\pg-manager.md
 ```
 
-项目移动后，patch 中指向 bridge 的绝对 URI 可能失效。重新初始化，并从项目根目录使用 `.dsh\start-web.cmd` 启动。
+确认文件存在后，从项目根目录重新启动或重新加载 OpenCode。目录存在只证明文件已生成，命令能出现在 OpenCode 中才证明宿主已经加载。
+
+### Agent 模型无法解析
+
+检查 `opencode.json` 和当前 OpenCode Provider 配置，确认 `pg-router/pg-associate`、`pg-router/pg-expert`、`pg-router/pg-master` 都能映射到真实模型。模型路由属于 OpenCode 配置，不应写进 `.pg/project.yaml`。
 
 ### `pg doctor` 报 schema 错误
 
@@ -662,7 +647,7 @@ Get-Content .dsh\cordis.patch.yml
 
 ### Go 测试在 define 前就失败
 
-这是项目基线或本机环境问题，不是本次健康测试变更造成的。记录完整命令和错误，先修复 Go 版本、依赖下载或仓库状态，再重新开始练习。
+这是项目自身或本机环境问题，不是本次健康测试变更造成的。记录完整命令和错误，先修复 Go 版本、依赖下载或仓库状态，再重新开始练习。
 
 ### build 报工作树不干净
 
@@ -699,7 +684,7 @@ Select-String -Path .pg\project.yaml -Pattern 'default_branch'
 .pg/changes/test-health-handler-contract/2-build/pipeline.snapshot.json
 ```
 
-修复明确问题后，在 DSH Web 页面再次输入：
+修复明确问题后，在 OpenCode 对话框再次输入：
 
 ```text
 /pg-3-build test-health-handler-contract
@@ -724,8 +709,8 @@ Runner 会依据现有事件和 snapshot 判断是否能继续。不要新建同
 
 ## 下一步
 
-- 把相同方法用于一个小型生产缺陷，但仍先固定基线和验收证据。
+- 把相同方法用于一个小型生产缺陷，但仍先确认项目状态和验收证据。
 - 阅读 [pg-skills 在现有项目中的使用指南](https://github.com/pin-gou/pg-skills/blob/main/docs/existing-projects.md)，处理更复杂的 Monorepo 边界。
 - 阅读 [pg-skills 项目目录与产物](https://github.com/pin-gou/pg-skills/blob/main/docs/project-structure.md)，理解 change、archive 和 `2-build/`。
-- 阅读 [DeepSeek Harness 完整教程](https://github.com/pin-gou/pg-skills/blob/main/docs/tutorials/deepseek-harness.md)，验证 Commands、Skills、Sub-agent 和三级模型路由。
+- 阅读 [OpenCode 完整教程](https://github.com/pin-gou/pg-skills/blob/main/docs/tutorials/opencode.md)，进一步了解 Commands、Skills、Agents 和三级模型路由。
 - 阅读 [pg-skills 故障排查](https://github.com/pin-gou/pg-skills/blob/main/docs/troubleshooting.md)，按现象定位初始化、适配、测试和恢复问题。

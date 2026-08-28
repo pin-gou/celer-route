@@ -13,7 +13,7 @@ export default {
     },
     {
       type: 'category',
-      label: 'pg-skills Demo',
+      label: 'pg-skills 实践',
       items: ['tutorials/celer-route'],
     },
     {
