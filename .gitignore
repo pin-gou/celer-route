@@ -177,6 +177,8 @@ examples/mcps/oauth-demo-server/oauth-demo-server
 # binaries
 tests/cmd/e2eseed/e2eseed
 tests/cmd/seedvks/seedvks
+/celer-route-http
+/pg-gateway
 
 # routing harness ledgers (local run journals, never committed)
 tests/e2e/api/routing/ledger-*
