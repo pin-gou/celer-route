@@ -3769,10 +3769,48 @@
     },
     "feature_flags": {
       "$ref": "#/$defs/feature_flags_config"
+    },
+    "remote_catalog": {
+      "$ref": "#/$defs/remote_catalog_config"
     }
   },
   "additionalProperties": false,
   "$defs": {
+    "remote_catalog_config": {
+      "type": "object",
+      "description": "Remote free-tier bundle catalog settings. When url_template is set, the transport periodically fetches bundle catalogs from the configured template (the {lang} placeholder is replaced with the requested language code, defaulting to en) and serves them at GET /api/catalog/bundles with ETag negotiation. When absent/empty, the catalog module is hidden and the endpoint returns an empty bundle list.",
+      "properties": {
+        "url_template": {
+          "type": "string",
+          "description": "URL template for fetching bundle catalogs. May contain a single {lang} placeholder substituted with the requested language (e.g. https://cdn.example.com/bundles/{lang}.json). Fetches are SSRF-guarded."
+        },
+        "refresh_interval_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "default": 3600,
+          "description": "How often the background refresh goroutine re-fetches the catalog in seconds. Values below 60 are treated as 60. The goroutine stops after 3 consecutive failed refresh cycles."
+        },
+        "max_bundles": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100,
+          "description": "Maximum number of bundles kept in the in-memory snapshot per language."
+        },
+        "max_bundle_size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1048576,
+          "description": "Maximum accepted upstream payload size per language in bytes."
+        },
+        "max_provider_models": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 50,
+          "description": "Maximum number of models retained per bundle provider entry."
+        }
+      },
+      "additionalProperties": false
+    },
     "cooldown_policy_match": {
       "type": "object",
       "description": "Single predicate contributing to a cooldown rule. All non-zero fields must hold against the BifrostError for the match to fire; matching across multiple MessageContains values is OR. A match with no fields set is a no-op.",

@@ -3,8 +3,8 @@ import { Navigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import EndpointCard from "../components/endpointCard";
+import FreeTierRecommendationCard from "../components/freeTierRecommendationCard";
 import ProviderTopologyCard from "../components/providerTopologyCard";
-import QuickStartCard from "../components/quickStartCard";
 import SetupStatusBar from "../components/setupStatusBar";
 import SystemHealthCard from "../components/systemHealthCard";
 
@@ -37,7 +37,7 @@ export default function HomePage() {
 			<EndpointCard endpointUrl={endpoint} />
 			<SystemHealthCard />
 			<SetupStatusBar />
-			<QuickStartCard />
+			<FreeTierRecommendationCard />
 			<ProviderTopologyCard />
 		</div>
 	);

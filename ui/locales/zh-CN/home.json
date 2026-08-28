@@ -1,0 +1,27 @@
+{
+	"freeTier": {
+		"title": "免费套餐推荐",
+		"subtitle": "运营精选的免费 LLM 提供商与模型，助你快速上手。",
+		"updatedAt": "更新于 {{at}}",
+		"applyNow": "去申请",
+		"configureNow": "一键配置",
+		"submit": "添加提供商",
+		"cancel": "取消",
+		"keyInputLabel": "API 密钥",
+		"apiKeyPlaceholder": "在此粘贴 API 密钥",
+		"keylessNote": "免 Key，直接添加",
+		"noBundles": "暂无可用免费套餐，请稍后重试。",
+		"retry": "重试",
+		"loading": "正在加载推荐套餐…",
+		"recentRoutingRules": "最近使用的路由规则",
+		"noRecentRules": "暂无路由规则使用记录",
+		"configSuccess": "提供商配置成功",
+		"configFailed": "提供商配置失败",
+		"alreadyConfigured": "提供商已配置，已添加密钥",
+		"models": "模型",
+		"note": "说明",
+		"applySteps": "申请步骤",
+		"useCount": "使用 {{count}} 次",
+		"lastUsed": "最近使用 {{at}}"
+	}
+}

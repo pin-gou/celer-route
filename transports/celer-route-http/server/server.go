@@ -2296,6 +2296,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	// Chaining all middlewares
 	// lib.ChainMiddlewares chains multiple middlewares together
 	healthHandler := handlers.NewHealthHandler(s.Config)
+	catalogHandler := handlers.NewCatalogHandler(s.Config)
 	providerHandler := handlers.NewProviderHandler(callbacks, s.Config, s.Client)
 	oauthHandler := handlers.NewOAuthHandler(s.Config.OAuthProvider, s.Client, s.Config)
 	mcpHandler := handlers.NewMCPHandler(callbacks, callbacks, s.Client, s.Config, oauthHandler, callbacks)
@@ -2319,6 +2320,11 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	oauth2SessionsHandler.RegisterRoutes(s.Router, middlewares...)
 	oauth2ConsentHandler.RegisterRoutes(s.Router, middlewares...)
 	healthHandler.RegisterRoutes(s.Router, middlewares...)
+	// Remote catalog proxy (free-tier recommendations). The refresher
+	// goroutine is only spawned when remote_catalog.url_template is set
+	// (StartCatalogRefresher no-ops otherwise).
+	catalogHandler.RegisterRoutes(s.Router, middlewares...)
+	catalogHandler.StartCatalogRefresher(ctx)
 	providerHandler.RegisterRoutes(s.Router, middlewares...)
 	mcpHandler.RegisterRoutes(s.Router, middlewares...)
 	mcpPerUserHeadersHandler.RegisterRoutes(s.Router, middlewares...)
@@ -2362,6 +2368,13 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		governanceHandler.RegisterRoutesWithOverrides(s.Router, overrides, middlewares...)
 	}
 	if loggingHandler != nil {
+		// Back GET /api/logs/recent-routing-rules with the logs database
+		// when it exposes a gorm handle (sqlite/postgres RDBLogStore).
+		// ClickHouse-backed stores (no gorm handle) leave the store nil and
+		// the endpoint degrades to LOGS_QUERY_FAILED.
+		if dbProvider, ok := s.Config.LogsStore.(interface{ DB() *gorm.DB }); ok && dbProvider.DB() != nil {
+			loggingHandler.SetRecentRoutingRulesStore(handlers.NewRecentRoutingRulesGormStore(dbProvider.DB()))
+		}
 		loggingHandler.RegisterRoutes(s.Router, middlewares...)
 	}
 	if s.WebSocketHandler != nil {

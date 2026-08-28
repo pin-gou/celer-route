@@ -1,0 +1,27 @@
+{
+	"freeTier": {
+		"title": "Free provider recommendations",
+		"subtitle": "Hand-picked free LLM providers and models to get you started.",
+		"updatedAt": "Updated {{at}}",
+		"applyNow": "Apply",
+		"configureNow": "Configure",
+		"submit": "Add provider",
+		"cancel": "Cancel",
+		"keyInputLabel": "API key",
+		"apiKeyPlaceholder": "Paste your API key here",
+		"keylessNote": "No API key required",
+		"noBundles": "No free bundles available right now. Please try again later.",
+		"retry": "Retry",
+		"loading": "Loading recommendations…",
+		"recentRoutingRules": "Recently used routing rules",
+		"noRecentRules": "No routing rules used yet",
+		"configSuccess": "Provider configured successfully",
+		"configFailed": "Failed to configure provider",
+		"alreadyConfigured": "Provider already configured — key added",
+		"models": "Models",
+		"note": "Note",
+		"applySteps": "Steps to apply",
+		"useCount": "{{count}} uses",
+		"lastUsed": "Last used {{at}}"
+	}
+}

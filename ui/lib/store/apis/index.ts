@@ -3,6 +3,11 @@ export { baseApi, clearAuthStorage, getErrorMessage, setAuthToken } from "./base
 
 // API slices and hooks
 export * from "./brandingApi";
+// catalogApi's mutations share RTK hook names with providersApi
+// (useCreateProviderMutation / useCreateProviderKeyMutation), so it is
+// re-exported selectively — the mutation hooks remain importable from
+// "@/lib/store/apis/catalogApi" directly.
+export { catalogApi, useGetBundlesQuery, useGetRecentRoutingRulesQuery } from "./catalogApi";
 export * from "./configApi";
 export * from "./featureFlagsApi";
 export * from "./devApi";

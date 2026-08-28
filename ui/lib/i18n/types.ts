@@ -21,6 +21,7 @@ import type webhooks from "@/locales/en/webhooks.json";
 import type oauthGrants from "@/locales/en/oauth-grants.json";
 import type modelCatalog from "@/locales/en/model-catalog.json";
 import type onboarding from "@/locales/en/onboarding.json";
+import type home from "@/locales/en/home.json";
 
 export interface Resources {
 	common: typeof common;
@@ -39,6 +40,7 @@ export interface Resources {
 	"oauth-grants": typeof oauthGrants;
 	"model-catalog": typeof modelCatalog;
 	onboarding: typeof onboarding;
+	home: typeof home;
 }
 
 export type KeysWithNamespace = {

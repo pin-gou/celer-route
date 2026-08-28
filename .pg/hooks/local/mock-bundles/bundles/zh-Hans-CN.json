@@ -1,0 +1,57 @@
+{
+  "version": "2026-08-28",
+  "updated_at": "2026-08-28T08:00:00Z",
+  "bundles": [
+    {
+      "id": "coding",
+      "title": "编程开发",
+      "description": "代码补全与调试首选",
+      "providers": [
+        {
+          "provider": "openai",
+          "models": [
+            "gpt-4o-mini",
+            "gpt-4.1"
+          ],
+          "apply_url": "https://platform.openai.com/signup",
+          "apply_steps": [
+            "注册账号",
+            "申请 API Key"
+          ],
+          "is_keyless": false,
+          "notes": "新用户首月 $5 免费额度"
+        },
+        {
+          "provider": "opencode",
+          "models": [
+            "default"
+          ],
+          "apply_url": "",
+          "apply_steps": [],
+          "is_keyless": true,
+          "notes": "免 Key, 直接添加"
+        }
+      ]
+    },
+    {
+      "id": "data-science",
+      "title": "数据科学",
+      "description": "数据分析与可视化",
+      "providers": [
+        {
+          "provider": "deepseek",
+          "models": [
+            "deepseek-chat"
+          ],
+          "apply_url": "https://platform.deepseek.com",
+          "apply_steps": [
+            "注册账号",
+            "申请 API Key"
+          ],
+          "is_keyless": false,
+          "notes": "新用户优惠"
+        }
+      ]
+    }
+  ]
+}

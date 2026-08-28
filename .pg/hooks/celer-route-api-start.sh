@@ -80,8 +80,15 @@ if check_port "$PORT"; then
     sleep 1
 fi
 
+# Inject bootstrap setup token (G-2 fix: enable first-admin creation so /workspace/home
+# is reachable by Playwright instead of being redirected to /workspace/onboarding).
+# When BIFROST_SETUP_TOKEN is unset we fall back to a dev-only token so prepare_env
+# data + admin account can still be created; production deployments must override
+# this via the environment.
+export BIFROST_SETUP_TOKEN="${BIFROST_SETUP_TOKEN:-dev-setup-token-pg-build}"
+
 if ! pid=$(pg_start_bg "$LOG_DIR/celer-route-api.log" "$PID_DIR/celer-route-api.pid" \
-        "BIFROST_PORT=$PORT" "BIFROST_UI_DEV=true" "PATH=$PATH" -- \
+        "BIFROST_PORT=$PORT" "BIFROST_UI_DEV=true" "BIFROST_SETUP_TOKEN=$BIFROST_SETUP_TOKEN" "PATH=$PATH" -- \
         "$BIFROST_BIN" -app-dir "$DATA_DIR" -port "$PORT" -host "$HOST" -log-level info -log-style pretty); then
     pg_fail --category=service_start_failure --code=PG-E-0800 \
         --message="启动 celer-route-api 失败" \

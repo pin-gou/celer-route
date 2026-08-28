@@ -47,6 +47,12 @@ type LoggingHandler struct {
 	// in which case the recalculate-cost endpoints return 503.
 	sidekiqRunner *sidekiq.Runner
 	sidekiqStore  SidekiqJobStore
+
+	// recentRoutingRulesStore serves GET /api/logs/recent-routing-rules. It is
+	// nil until SetRecentRoutingRulesStore wires a store (see
+	// recentRoutingRulesGormStore); the endpoint answers LOGS_QUERY_FAILED
+	// while it stays nil.
+	recentRoutingRulesStore RecentRoutingRulesStore
 }
 
 // SidekiqJobStore is the narrow read surface the recalculate-cost endpoints need
@@ -369,6 +375,9 @@ func (h *LoggingHandler) shouldHideDeletedVirtualKeysInFilters() bool {
 func (h *LoggingHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	// LLM Log retrieval with filtering, search, and pagination
 	r.GET("/api/logs", lib.ChainMiddlewares(h.getLogs, middlewares...))
+	// Deliberately registered ahead of /api/logs/{id} so the static segment
+	// wins for this exact path (same convention as /api/logs/active/stream).
+	r.GET("/api/logs/recent-routing-rules", lib.ChainMiddlewares(h.recentRoutingRules, middlewares...))
 	r.GET("/api/logs/sessions/{session_id}/summary", lib.ChainMiddlewares(h.getLogSessionSummaryByID, middlewares...))
 	r.GET("/api/logs/sessions/{session_id}", lib.ChainMiddlewares(h.getLogSessionByID, middlewares...))
 	r.GET("/api/logs/user-agent-mappings", lib.ChainMiddlewares(h.listUserAgentMappings, middlewares...))
@@ -415,6 +424,182 @@ func (h *LoggingHandler) RegisterRoutes(r *router.Router, middlewares ...schemas
 	r.GET("/api/mcp-logs/histogram/top-tools", lib.ChainMiddlewares(h.getMCPTopTools, middlewares...))
 	r.GET("/api/mcp-logs/{id}", lib.ChainMiddlewares(h.getMCPLogByID, middlewares...))
 	r.DELETE("/api/mcp-logs", lib.ChainMiddlewares(h.deleteMCPLogs, middlewares...))
+}
+
+// RecentRoutingRule is one deduplicated routing rule aggregated from the log
+// table for GET /api/logs/recent-routing-rules.
+type RecentRoutingRule struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	LastUsedAt time.Time `json:"last_used_at"`
+	UseCount   int64     `json:"use_count"`
+}
+
+// RecentRoutingRulesStore is the narrow read surface behind
+// GET /api/logs/recent-routing-rules. It must implement the design's single
+// SQL aggregation: group logs with a non-null routing_rule_id by that id,
+// return MAX(timestamp) as last_used_at and COUNT(*) as use_count, ordered by
+// last_used_at DESC, limited to limit rows.
+type RecentRoutingRulesStore interface {
+	RecentRoutingRules(ctx context.Context, limit int) ([]RecentRoutingRule, error)
+}
+
+// SetRecentRoutingRulesStore wires the store backing
+// GET /api/logs/recent-routing-rules.
+func (h *LoggingHandler) SetRecentRoutingRulesStore(store RecentRoutingRulesStore) {
+	h.recentRoutingRulesStore = store
+}
+
+// recentRoutingRulesLimitMin/Max bound the limit query param (design: [1, 1000]).
+const (
+	recentRoutingRulesLimitMin     = 1
+	recentRoutingRulesLimitMax     = 1000
+	recentRoutingRulesLimitDefault = 100
+)
+
+// recentRoutingRules handles GET /api/logs/recent-routing-rules.
+//   - limit (optional int, [1, 1000], default 100); out-of-range or
+//     unparseable values yield 400 + INVALID_LIMIT and the store is never
+//     queried.
+//   - Store failures yield 500 + LOGS_QUERY_FAILED so the UI can distinguish
+//     them from the 200 empty-list degradation.
+func (h *LoggingHandler) recentRoutingRules(ctx *fasthttp.RequestCtx) {
+	limit := recentRoutingRulesLimitDefault
+	if raw := ctx.QueryArgs().Peek("limit"); len(raw) > 0 {
+		v, err := strconv.Atoi(string(raw))
+		if err != nil || v < recentRoutingRulesLimitMin || v > recentRoutingRulesLimitMax {
+			sendCodeError(ctx, fasthttp.StatusBadRequest, "INVALID_LIMIT", "limit must be between 1 and 1000")
+			return
+		}
+		limit = v
+	}
+
+	store := h.recentRoutingRulesStore
+	if store == nil {
+		logger.Warn("recent routing rules store not configured")
+		sendCodeError(ctx, fasthttp.StatusInternalServerError, "LOGS_QUERY_FAILED", lib.ClientSafeInternalErrorMessage)
+		return
+	}
+
+	rules, err := store.RecentRoutingRules(ctx, limit)
+	if err != nil {
+		logger.Warn("recent routing rules query failed: %v", err)
+		sendCodeError(ctx, fasthttp.StatusInternalServerError, "LOGS_QUERY_FAILED", lib.ClientSafeInternalErrorMessage)
+		return
+	}
+	if rules == nil {
+		rules = []RecentRoutingRule{}
+	}
+	SendJSON(ctx, map[string]any{"rules": rules})
+}
+
+// sendCodeError writes a BifrostError JSON payload with an explicit error code.
+func sendCodeError(ctx *fasthttp.RequestCtx, statusCode int, code, message string) {
+	SendBifrostError(ctx, &schemas.BifrostError{
+		IsBifrostError: false,
+		StatusCode:     ptrInt(statusCode),
+		Error: &schemas.ErrorField{
+			Code:    ptrString(code),
+			Message: message,
+		},
+	})
+}
+
+// recentRoutingRulesGormStore implements RecentRoutingRulesStore with the
+// design's single SQL aggregation against the logs table via gorm. It is
+// wired in the server for sqlite/postgres-backed log stores (RDBLogStore);
+// stores that do not expose a gorm handle leave the handler's store nil and
+// the endpoint degrades to LOGS_QUERY_FAILED.
+type recentRoutingRulesGormStore struct {
+	db *gorm.DB
+}
+
+// NewRecentRoutingRulesGormStore creates a RecentRoutingRulesStore backed by
+// the logs database handle.
+func NewRecentRoutingRulesGormStore(db *gorm.DB) RecentRoutingRulesStore {
+	return &recentRoutingRulesGormStore{db: db}
+}
+
+// recentRoutingRuleTime scans a single MAX(timestamp) aggregate into a
+// time.Time across the log store dialects. sqlite stores Log.Timestamp as ISO
+// text, so MAX() comes back as a string that a plain time.Time field cannot
+// scan (Scan error on column "last_used_at"); postgres/clickhouse return a
+// native time.Time instead. This mirrors the parseAggregateTimestamp pattern
+// in framework/logstore/errorpatterns.go.
+type recentRoutingRuleTime time.Time
+
+func (t *recentRoutingRuleTime) Scan(v any) error {
+	switch src := v.(type) {
+	case nil:
+		*t = recentRoutingRuleTime{}
+		return nil
+	case time.Time:
+		*t = recentRoutingRuleTime(src)
+		return nil
+	case []byte:
+		return t.scanString(string(src))
+	case string:
+		return t.scanString(src)
+	default:
+		return fmt.Errorf("unsupported last_used_at scan type %T", v)
+	}
+}
+
+func (t *recentRoutingRuleTime) scanString(s string) error {
+	// sqlite's gorm driver stores Log.Timestamp as ISO text (RFC3339Nano) and
+	// MAX(timestamp) comes back with a space separator and a numeric offset
+	// (e.g. "2026-08-28 08:50:00.125456789+00:00"); postgres/clickhouse deliver
+	// a native time.Time and never reach this path. Cover the layouts the
+	// driver actually emits plus the RFC3339 family.
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, s); err == nil {
+			*t = recentRoutingRuleTime(parsed.UTC())
+			return nil
+		}
+	}
+	return fmt.Errorf("parse last_used_at %q: no matching layout", s)
+}
+
+// recentRoutingRulesRow mirrors one aggregated output row of the SQL below.
+type recentRoutingRulesRow struct {
+	RoutingRuleID   string               `gorm:"column:routing_rule_id"`
+	RoutingRuleName string               `gorm:"column:routing_rule_name"`
+	LastUsedAt      recentRoutingRuleTime `gorm:"column:last_used_at"`
+	UseCount        int64                `gorm:"column:use_count"`
+}
+
+// RecentRoutingRules runs the single SQL aggregation against the logs table.
+// `?` placeholders are translated per dialect by gorm (sqlite/postgres).
+func (s *recentRoutingRulesGormStore) RecentRoutingRules(ctx context.Context, limit int) ([]RecentRoutingRule, error) {
+	const q = `SELECT routing_rule_id, routing_rule_name, MAX(timestamp) AS last_used_at, COUNT(*) AS use_count
+FROM logs
+WHERE routing_rule_id IS NOT NULL AND routing_rule_id != ''
+GROUP BY routing_rule_id
+ORDER BY last_used_at DESC
+LIMIT ?`
+	var rows []recentRoutingRulesRow
+	if err := s.db.WithContext(ctx).Raw(q, limit).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]RecentRoutingRule, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, RecentRoutingRule{
+			ID:         r.RoutingRuleID,
+			Name:       r.RoutingRuleName,
+			LastUsedAt: time.Time(r.LastUsedAt),
+			UseCount:   r.UseCount,
+		})
+	}
+	return out, nil
 }
 
 func (h *LoggingHandler) listUserAgentMappings(ctx *fasthttp.RequestCtx) {

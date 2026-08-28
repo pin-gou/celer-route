@@ -202,6 +202,43 @@ type ConfigData struct {
 	presentSections           map[string]bool
 	presentGovernanceSections map[string]bool
 	SkillsRegistry            *SkillsRegistryConfig `json:"skills_registry,omitempty"`
+	RemoteCatalog             *RemoteCatalogConfig  `json:"remote_catalog,omitempty"`
+}
+
+// RemoteCatalogConfig configures the remote free-tier bundle catalog. When
+// URLTemplate is set, the transport periodically fetches bundle catalogs from
+// the configured template (the {lang} placeholder is replaced with the
+// requested language code, defaulting to en) and serves them at
+// GET /api/catalog/bundles with ETag negotiation. When empty, the catalog
+// module is hidden and the endpoint returns an empty bundle list.
+type RemoteCatalogConfig struct {
+	URLTemplate        string `json:"url_template,omitempty"`
+	RefreshIntervalSec int    `json:"refresh_interval_seconds,omitempty"`
+	MaxBundles         int    `json:"max_bundles,omitempty"`
+	MaxBundleSizeBytes int    `json:"max_bundle_size_bytes,omitempty"`
+	MaxProviderModels  int    `json:"max_provider_models,omitempty"`
+}
+
+// CheckAndSetDefaults fills in default values for RemoteCatalogConfig.
+func (rc *RemoteCatalogConfig) CheckAndSetDefaults() {
+	if rc == nil {
+		return
+	}
+	if rc.RefreshIntervalSec <= 0 {
+		rc.RefreshIntervalSec = 3600
+	}
+	if rc.RefreshIntervalSec < 60 {
+		rc.RefreshIntervalSec = 60
+	}
+	if rc.MaxBundles <= 0 {
+		rc.MaxBundles = 100
+	}
+	if rc.MaxBundleSizeBytes <= 0 {
+		rc.MaxBundleSizeBytes = 1048576 // 1 MB
+	}
+	if rc.MaxProviderModels <= 0 {
+		rc.MaxProviderModels = 50
+	}
 }
 
 // SkillsRegistryConfig defines declarative skill definitions in config.json.
@@ -457,6 +494,7 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 		WebSocket         *schemas.WebSocketConfig              `json:"websocket,omitempty"`
 		FeatureFlags      *FeatureFlagsFileConfig               `json:"feature_flags,omitempty"`
 		SkillsRegistry    *SkillsRegistryConfig                 `json:"skills_registry,omitempty"`
+		RemoteCatalog     *RemoteCatalogConfig                  `json:"remote_catalog,omitempty"`
 	}
 
 	var temp TempConfigData
@@ -491,6 +529,7 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 		}
 	}
 	cd.SkillsRegistry = temp.SkillsRegistry
+	cd.RemoteCatalog = temp.RemoteCatalog
 	// Initialize providers map if nil
 	if cd.Providers == nil {
 		cd.Providers = make(map[string]configstore.ProviderConfig)
@@ -578,6 +617,11 @@ type Config struct {
 	GovernanceConfig *configstore.GovernanceConfig
 	FrameworkConfig  *framework.FrameworkConfig
 	ProxyConfig      *configstoreTables.GlobalProxyConfig
+
+	// RemoteCatalog configures the remote free-tier bundle catalog. Nil or an
+	// empty URLTemplate disables the catalog module (endpoint returns empty
+	// bundles). Defaults are applied by RemoteCatalogConfig.CheckAndSetDefaults.
+	RemoteCatalog *RemoteCatalogConfig
 
 	// SetupToken is the resolved operator-provisioned bootstrap secret (see
 	// ConfigData.SetupToken / resolveSetupToken). Empty when the operator hasn't
@@ -1015,6 +1059,16 @@ func LoadConfig(ctx context.Context, configDirPath string) (*Config, error) {
 		config.ServerConfig = &ServerConfig{
 			ReadBufferSize: 1024 * 64,
 		}
+	}
+	// 17. Remote catalog config (free-tier bundle catalog). Defaults apply
+	// even when the section is absent so the handler can always read a
+	// non-nil config with sane bounds.
+	if configData.RemoteCatalog != nil {
+		configData.RemoteCatalog.CheckAndSetDefaults()
+		config.RemoteCatalog = configData.RemoteCatalog
+	} else {
+		config.RemoteCatalog = &RemoteCatalogConfig{}
+		config.RemoteCatalog.CheckAndSetDefaults()
 	}
 	return config, nil
 }
