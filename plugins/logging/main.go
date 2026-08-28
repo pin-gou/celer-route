@@ -1683,20 +1683,29 @@ func (p *LoggerPlugin) finalTimelineEvents(pending *PendingLogData, logID string
 	// Merge per-attempt upstream spans written by core/upstreamspan.go into
 	// the pending event list. They ride the same write cycle so they land in
 	// the same DB batch as the pre/post_llm markers.
+	//
+	// IMPORTANT: the span slice lives on the shared BifrostContext, which
+	// spans multiple fallback attempts of the same request (each PreLLMHook
+	// fires once per attempt). Mutating spans[i].LogID in place here would
+	// (a) steal the span from later attempts and (b) re-insert the same
+	// span id under a different log_id on the next attempt, producing
+	// "duplicate key value violates unique constraint timeline_events_pkey"
+	// at persist time. Take a value copy before stamping logID/status, and
+	// clear the context key so this attempt's spans don't bleed into the
+	// next attempt's batch.
 	if pending.Ctx != nil {
-		if spans, ok := pending.Ctx.Value(schemas.BifrostContextKeyUpstreamSpans).([]schemas.TimelineEvent); ok {
+		if spans, ok := pending.Ctx.Value(schemas.BifrostContextKeyUpstreamSpans).([]schemas.TimelineEvent); ok && len(spans) > 0 {
 			for i := range spans {
-				if bifrostErr != nil {
-					spans[i].Status = "failed"
-				}
-				spans[i].LogID = logID
-				// Convert from the in-process schemas.TimelineEvent (used by
-				// core/upstreamspan.go to avoid an import cycle) into the GORM-
-				// tagged logstore.TimelineEvent used by the persistence layer.
-				// Field set is identical; this is a value copy.
+				// Value copy first — neither this loop nor anything
+				// downstream may touch spans[i].ID or spans[i].LogID.
 				ev := logstore.TimelineEvent(spans[i])
+				if bifrostErr != nil {
+					ev.Status = "failed"
+				}
+				ev.LogID = logID
 				events = append(events, &ev)
 			}
+			pending.Ctx.SetValue(schemas.BifrostContextKeyUpstreamSpans, []schemas.TimelineEvent{})
 		}
 	}
 

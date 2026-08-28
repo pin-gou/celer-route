@@ -2,9 +2,12 @@ package logging
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/pin-gou/celer-route/framework/logstore"
 )
@@ -313,5 +316,120 @@ func TestTimelineEventInsertFailureDegradesToWarn(t *testing.T) {
 	}
 	if len(events) != 0 {
 		t.Fatalf("expected 0 timeline events (insert was rejected), got %d", len(events))
+	}
+}
+
+// TestFinalTimelineEventsFallbackUsesStableSpanIDs verifies that when a request
+// chains PreLLMHook → PostLLMHook across multiple fallback attempts (each
+// attempt has its own LogID), the per-attempt upstream spans recorded by
+// core/upstreamspan.go are persisted exactly once — each tied to the LogID of
+// the attempt that produced them.
+//
+// The historical bug: finalTimelineEvents mutated `spans[i].LogID = logID` on
+// the slice stored on BifrostContextKeyUpstreamSpans (a slice shared across
+// all fallback attempts of the same request). The first attempt stamped the
+// span's LogID to fb-1 and persisted it; the second attempt then re-stamped the
+// same span to fb-2 and tried to persist it again. SQLite/Postgres both
+// rejected the second attempt with "UNIQUE constraint failed: timeline_events.id"
+// / "duplicate key value violates unique constraint timeline_events_pkey" —
+// the row already exists, just under a different log_id, and the WARN
+// "failed to insert timeline event" surfaced per duplicate.
+//
+// The fix replaces the in-place mutation with a value copy before adjusting
+// LogID/Status, and clears the context key so each attempt claims its spans
+// instead of stealing them from later attempts.
+func TestFinalTimelineEventsFallbackUsesStableSpanIDs(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close(context.Background())
+
+	clog := &captureLogger{}
+	plugin, err := Init(context.Background(), &Config{}, clog, store, nil, nil)
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plugin.Cleanup(); cleanupErr != nil {
+			t.Errorf("Cleanup() error = %v", cleanupErr)
+		}
+	})
+
+	// Simulate the upstream spans core/upstreamspan.go writes. They share a
+	// backing slice via BifrostContext (each AppendToContextList appends to
+	// the same slice). Each span has a fresh UUID and an initial LogID
+	// stamped at the time the attempt ran.
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, "primary-id")
+	spanID1 := uuid.NewString()
+	spanID2 := uuid.NewString()
+	spans := []schemas.TimelineEvent{
+		{ID: spanID1, Phase: "upstream_call", Source: "provider", Status: "success", LogID: "fb-1"},
+		{ID: spanID2, Phase: "upstream_call", Source: "provider", Status: "failed", LogID: "fb-2"},
+	}
+	ctx.SetValue(schemas.BifrostContextKeyUpstreamSpans, spans)
+
+	// Fallback attempt 1: pending.RequestID = fb-1.
+	fb1Pending := &PendingLogData{
+		RequestID: "fb-1",
+		Timestamp: time.Now().Add(-1 * time.Second),
+		InitialData: &InitialLogData{
+			Object: string(schemas.ChatCompletionRequest),
+		},
+		TimelineEvents: []*logstore.TimelineEvent{
+			{ID: uuid.NewString(), LogID: "fb-1", Phase: "pre_llm"},
+		},
+		Ctx: ctx,
+	}
+
+	// Fallback attempt 2: pending.RequestID = fb-2. Same ctx, same spans
+	// slice (with both span IDs already set). A new pre_llm marker.
+	fb2Pending := &PendingLogData{
+		RequestID: "fb-2",
+		Timestamp: time.Now().Add(-1 * time.Second),
+		InitialData: &InitialLogData{
+			Object: string(schemas.ChatCompletionRequest),
+		},
+		TimelineEvents: []*logstore.TimelineEvent{
+			{ID: uuid.NewString(), LogID: "fb-2", Phase: "pre_llm"},
+		},
+		Ctx: ctx,
+	}
+
+	enqueue := func(p *LoggerPlugin, pending *PendingLogData) {
+		// Materialize a real Log row first (BatchUpsert is the parent
+		// log write, and CreateTimelineEvent tolerates orphan rows but
+		// having the parent present matches the production flow).
+		entry := &logstore.Log{
+			ID:        pending.RequestID,
+			Provider:  "openai",
+			Object:    string(schemas.ChatCompletionRequest),
+			Status:    "error",
+			Timestamp: time.Now(),
+			CreatedAt: time.Now(),
+		}
+		if err := store.BatchUpsert(context.Background(), []*logstore.Log{entry}); err != nil {
+			t.Fatalf("BatchUpsert log %s: %v", entry.ID, err)
+		}
+		bifrostErr := &schemas.BifrostError{
+			Error:          &schemas.ErrorField{Message: "synthesized 429"},
+			IsBifrostError: true,
+		}
+		events := p.finalTimelineEvents(pending, entry.ID, bifrostErr)
+		p.enqueueLogEntry(entry, nil, events...)
+	}
+
+	enqueue(plugin, fb1Pending)
+	enqueue(plugin, fb2Pending)
+
+	if err := plugin.Cleanup(); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	// No duplicate-PK warnings should have been logged by processBatch.
+	for _, msg := range clog.warns {
+		if strings.Contains(msg, "duplicate key") ||
+			strings.Contains(msg, "timeline_events_pkey") ||
+			strings.Contains(msg, "failed to insert timeline event") {
+			t.Errorf("unexpected duplicate-key warning from processBatch: %s", msg)
+		}
 	}
 }
