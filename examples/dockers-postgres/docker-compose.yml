@@ -3,9 +3,9 @@ services:
     image: postgres:${POSTGRES_IMAGE_TAG:-16-alpine}
     container_name: celer-route-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-pg_gateway}
+      POSTGRES_USER: ${POSTGRES_USER:-celer_route}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      POSTGRES_DB: ${POSTGRES_DB:-pg_gateway}
+      POSTGRES_DB: ${POSTGRES_DB:-celer_route}
     volumes:
       - pg-data:/var/lib/postgresql/data
     healthcheck:
@@ -19,7 +19,7 @@ services:
       - celer-route-net
 
   celer-route:
-    image: ghcr.io/pin-gou/celer-route:${PG_GATEWAY_IMAGE_TAG:-latest}
+    image: ghcr.io/pin-gou/celer-route:${CELER_ROUTE_IMAGE_TAG:-latest}
     container_name: celer-route
     depends_on:
       postgres:
