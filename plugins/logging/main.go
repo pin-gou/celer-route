@@ -1657,6 +1657,23 @@ func timelineEventsForEntry(pending *pendingInjectEntries, i int) []*logstore.Ti
 	return pending.timelineEvents[i]
 }
 
+// hasUpstreamCallFromCtx reports whether the request already has a per-attempt
+// upstream_call span written onto the BifrostContext by core/upstreamspan.go.
+// Used to dedupe the stream-path synthetic span we emit in finalTimelineEvents
+// against the synchronous non-stream path.
+func hasUpstreamCallFromCtx(ctx *schemas.BifrostContext) bool {
+	spans, ok := ctx.Value(schemas.BifrostContextKeyUpstreamSpans).([]schemas.TimelineEvent)
+	if !ok || len(spans) == 0 {
+		return false
+	}
+	for _, s := range spans {
+		if s.Phase == "upstream_call" {
+			return true
+		}
+	}
+	return false
+}
+
 // finalTimelineEvents returns the full stage-event set for a request's final
 // log write: the pre_llm marker built by PreLLMHook (carried on pending),
 // every upstream_call span core recorded via recordUpstreamSpan, plus a
@@ -1706,6 +1723,83 @@ func (p *LoggerPlugin) finalTimelineEvents(pending *PendingLogData, logID string
 				events = append(events, &ev)
 			}
 			pending.Ctx.SetValue(schemas.BifrostContextKeyUpstreamSpans, []schemas.TimelineEvent{})
+		}
+	}
+
+	// Stream upstream-span fallback. The non-stream path emits an
+	// upstream_call span via core/recordUpstreamSpan inside
+	// handleProviderRequest — synchronously, before RunPostLLMHooks runs,
+	// so the spans land on the ctx before logging reads them. The streaming
+	// path has no equivalent synchronous chokepoint: the provider goroutine
+	// that closes the upstream channel is owned by the provider, not bifrost,
+	// and any recordUpstreamSpan call from that goroutine fires AFTER this
+	// finalTimelineEvents runs (the HTTP handler has already triggered the
+	// terminal PostLLMHook by the time the provider goroutine exits). To
+	// still surface a per-stream upstream_call in the same write cycle, read
+	// BifrostContextKeyStreamStartTime (set by bifrost before the streaming
+	// call) and synthesize the span here using the request's now-known
+	// end-to-end duration. This is the only chokepoint where "stream is
+	// done" and "logging is about to persist" are guaranteed to coincide.
+	//
+	// Gating: skip when the non-stream path already populated spans (avoids
+	// duplicate upstream_call rows for unary requests) and skip when no
+	// stream-start anchor exists (the attempt never actually streamed, e.g.
+	// it was a synthetic short-circuit).
+	if pending.Ctx != nil && !hasUpstreamCallFromCtx(pending.Ctx) {
+		provider := ""
+		model := ""
+		if pending.InitialData != nil {
+			provider = pending.InitialData.Provider
+			model = pending.InitialData.Model
+		}
+		if startedAt, ok := pending.Ctx.Value(schemas.BifrostContextKeyStreamStartTime).(time.Time); ok && !startedAt.IsZero() && provider != "" {
+			durationMs := float64(now.Sub(startedAt).Milliseconds())
+			if durationMs < 0 {
+				durationMs = 0
+			}
+			// Anchor offset: prefer the request start written by PreLLMHook,
+			// fall back to 0 so the bar still lines up in the waterfall.
+			var timeOffsetMs float64
+			if reqStart, ok := pending.Ctx.Value(schemas.BifrostContextKeyRequestStart).(time.Time); ok && !reqStart.IsZero() {
+				timeOffsetMs = float64(startedAt.Sub(reqStart).Milliseconds())
+				if timeOffsetMs < 0 {
+					timeOffsetMs = 0
+				}
+			}
+			status := "success"
+			level := "info"
+			message := "upstream call completed"
+			if bifrostErr != nil {
+				status = "failed"
+				level = "error"
+				message = "upstream call failed"
+				if bifrostErr.Error != nil && bifrostErr.Error.Message != "" {
+					message = "upstream call failed: " + bifrostErr.Error.Message
+				}
+			}
+			// KeyID is best-effort. BifrostContextKeySelectedKeyID is reserved
+			// for governance (see schemas/bifrost.go) and silently dropped
+			// from public SetValue writes, so the value here may be empty.
+			var keyID string
+			if pending.Ctx.Value(schemas.BifrostContextKeySelectedKeyID) != nil {
+				keyID, _ = pending.Ctx.Value(schemas.BifrostContextKeySelectedKeyID).(string)
+			}
+			ev := &logstore.TimelineEvent{
+				ID:           uuid.NewString(),
+				LogID:        logID,
+				Phase:        "upstream_call",
+				Source:       "provider",
+				Level:        level,
+				Message:      message,
+				TimeOffsetMS: timeOffsetMs,
+				DurationMS:   durationMs,
+				Timestamp:    startedAt.UTC(),
+				Provider:     provider,
+				Model:        model,
+				KeyID:        keyID,
+				Status:       status,
+			}
+			events = append(events, ev)
 		}
 	}
 

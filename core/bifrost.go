@@ -7317,10 +7317,10 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					}
 					return resp, nil
 				}
-				// Store a finalizer callback to create aggregated post-hook spans at stream end.
-				// Wrapped in sync.Once so the normal end-of-stream invocation and a deferred
-				// safety-net invocation (e.g. from a provider goroutine's panic path) cannot
-				// double-release the pipeline.
+// Store a finalizer callback to create aggregated post-hook spans at stream end.
+// Wrapped in sync.Once so the normal end-of-stream invocation and a deferred
+// safety-net invocation (e.g. from a provider goroutine's panic path) cannot
+// double-release the pipeline.
 				var finalizerOnce sync.Once
 				postHookSpanFinalizer := func(ctx context.Context) {
 					finalizerOnce.Do(func() {
@@ -7329,7 +7329,6 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					})
 				}
 				lastAttemptFinalizer = postHookSpanFinalizer
-				callStartedAt := time.Now()
 				streamCh, streamErr := bifrost.handleProviderStreamRequest(provider, config, req, k, postHookRunner, postHookSpanFinalizer)
 				// If stream setup failed before any provider goroutine started,
 				// no deferred finalizer will run — release the pipeline directly
@@ -7338,32 +7337,6 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					finalizerOnce.Do(func() {
 						bifrost.releasePluginPipeline(pipeline)
 					})
-				}
-				// Record the upstream span for this attempt. Status is conservative
-				// "success" here because the wrapper can't see the final result;
-				// PostLLMHook in the logging plugin overwrites all spans to
-				// "failed" when the overall request errors (see
-				// plugins/logging/main.go:finalTimelineEvents).
-				//
-				// Stream span timing is full-stream by design: duration_ms covers
-				// from handleProviderStreamRequest entry to channel close. We wrap
-				// the returned channel with a goroutine that fires when the
-				// upstream channel drains — this is also the moment the provider
-				// goroutine releases its pool resources.
-				if streamErr != nil {
-					// Hard error before any chunk streamed: emit a span with the
-					// already-known duration (call setup failure).
-					recordUpstreamSpan(req.Context, provider.GetProviderKey(), resolvedModel, k.ID, callStartedAt, time.Now(), "failed", routingErrorSummary(streamErr))
-				} else if streamCh != nil {
-					wrapped := make(chan *schemas.BifrostStreamChunk)
-					go func() {
-						defer close(wrapped)
-						defer recordUpstreamSpan(req.Context, provider.GetProviderKey(), resolvedModel, k.ID, callStartedAt, time.Now(), "success", "")
-						for chunk := range streamCh {
-							wrapped <- chunk
-						}
-					}()
-					streamCh = wrapped
 				}
 				return streamCh, streamErr
 			}, keyProvider, perKeyFailureMarker, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
