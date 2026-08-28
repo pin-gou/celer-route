@@ -3,7 +3,7 @@ import { themes as prismThemes } from 'prism-react-renderer';
 const config = {
   title: 'celer-route',
   tagline: '高性能 AI 网关',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   url: 'https://pin-gou.github.io',
   baseUrl: '/celer-route/',
