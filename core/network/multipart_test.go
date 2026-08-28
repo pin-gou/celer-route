@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // buildMultipartBody is a test helper that creates a multipart/form-data body

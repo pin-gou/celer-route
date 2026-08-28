@@ -1,9 +1,9 @@
-// Command pg-gateway-admin manages the dashboard admin account directly
+// Command celer-route-admin manages the dashboard admin account directly
 // against the config store, bypassing the HTTP setup_token bootstrap flow.
 //
 // Typical Docker usage:
 //
-//	docker exec -it pg-gateway pg-gateway-admin admin reset --app-dir /app/data
+//	docker exec -it celer-route celer-route-admin admin reset --app-dir /app/data
 //
 // The command does not listen on any port. It reads the config store (from
 // config.json's config_store block, or a default SQLite DB at app-dir/config.db),
@@ -20,16 +20,16 @@ import (
 	"os"
 )
 
-const usage = `pg-gateway-admin — direct admin account management for pg-gateway.
+const usage = `celer-route-admin — direct admin account management for celer-route.
 
 Subcommands:
   reset    Create the initial admin account or reset the password of an existing one.
 
 Examples:
-  pg-gateway-admin admin reset --config /path/to/config.json
-  pg-gateway-admin admin reset --app-dir /app/data
+  celer-route-admin admin reset --config /path/to/config.json
+  celer-route-admin admin reset --app-dir /app/data
 
-Run 'pg-gateway-admin <subcommand> --help' for subcommand-specific flags.
+Run 'celer-route-admin <subcommand> --help' for subcommand-specific flags.
 `
 
 func main() {
@@ -65,14 +65,14 @@ func main() {
 	}
 }
 
-const resetUsage = `pg-gateway-admin admin reset — create the first admin account or reset
+const resetUsage = `celer-route-admin admin reset — create the first admin account or reset
 the password of an existing one, writing directly to the config store.
 
 Usage:
-  pg-gateway-admin admin reset [flags]
+  celer-route-admin admin reset [flags]
 
 Flags:
-  --config PATH    Path to the pg-gateway config.json file. When omitted, the
+  --config PATH    Path to the celer-route config.json file. When omitted, the
                    CLI uses a default SQLite database at <app-dir>/config.db.
   --app-dir PATH   Application data directory (default: current directory).
                    Used only when --config is not provided.
@@ -87,8 +87,8 @@ Flags:
                    --password-stdin is the way to script the command.
 
 Examples:
-  docker exec -it pg-gateway pg-gateway-admin admin reset --app-dir /app/data
-  docker exec -it pg-gateway pg-gateway-admin admin reset --config /app/data/config.json
+  docker exec -it celer-route celer-route-admin admin reset --app-dir /app/data
+  docker exec -it celer-route celer-route-admin admin reset --config /app/data/config.json
 
 After the write, dashboard auth is enabled (auth_config.is_enabled=true). The
 BIFROST_SETUP_TOKEN / setup_token path is not required — this command bypasses
@@ -98,7 +98,7 @@ it entirely.
 func runAdminReset(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("admin reset", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "", "path to pg-gateway config.json (optional — defaults to <app-dir>/config.db)")
+	configPath := fs.String("config", "", "path to celer-route config.json (optional — defaults to <app-dir>/config.db)")
 	appDir := fs.String("app-dir", "", "application data directory (default: current directory, used when --config omitted)")
 	username := fs.String("username", "", "admin username (skips the prompt)")
 	passwordStdin := fs.Bool("password-stdin", false, "read password (and confirmation) from stdin")
@@ -114,7 +114,7 @@ func runAdminReset(ctx context.Context, args []string) int {
 		AssumeYes:     *assumeYes,
 	}
 	if err := runReset(ctx, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "pg-gateway-admin: %v\n", err)
+		fmt.Fprintf(os.Stderr, "celer-route-admin: %v\n", err)
 		return 1
 	}
 	return 0

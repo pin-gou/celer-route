@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/network"
+	"github.com/pin-gou/celer-route/core/network"
 	"github.com/valyala/fasthttp"
 )
 

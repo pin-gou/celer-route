@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToNebiusImageGenerationRequest converts a bifrost image generation request to nebius format.

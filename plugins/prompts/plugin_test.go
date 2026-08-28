@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	tables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/core/schemas"
+	tables "github.com/pin-gou/celer-route/framework/configstore/tables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

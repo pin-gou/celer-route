@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // SnapshotEntry is one tool-message snapshot captured by the RTK pipeline

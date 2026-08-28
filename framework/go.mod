@@ -1,4 +1,4 @@
-module github.com/pin-gou/pg-gateway/framework
+module github.com/pin-gou/celer-route/framework
 
 go 1.26.5
 
@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/pin-gou/pg-gateway/core v1.7.7
+	github.com/pin-gou/celer-route/core v1.7.7
 	github.com/pinecone-io/go-pinecone/v5 v5.3.0
 	github.com/qdrant/go-client v1.16.2
 	github.com/redis/go-redis/v9 v9.17.2
@@ -174,4 +174,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pin-gou/pg-gateway/core => ../core
+replace github.com/pin-gou/celer-route/core => ../core

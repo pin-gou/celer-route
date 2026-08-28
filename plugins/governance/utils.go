@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 	"github.com/valyala/fasthttp"
 )
 

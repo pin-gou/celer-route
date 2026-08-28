@@ -19,7 +19,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-const DEFAULT_PRICING_SOURCE_URL = "https://pin-gou.github.io/pg-gateway/datasheet";
+const DEFAULT_PRICING_SOURCE_URL = "https://pin-gou.github.io/celer-route/datasheet";
 
 interface AttributeSheetProps {
 	model: ModelDetails;

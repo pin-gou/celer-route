@@ -3,8 +3,8 @@ package anthropic
 import (
 	"fmt"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

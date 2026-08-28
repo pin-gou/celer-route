@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/routing"
-	"github.com/pin-gou/pg-gateway/plugins/governance/complexity"
+	"github.com/pin-gou/celer-route/core/schemas"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/routing"
+	"github.com/pin-gou/celer-route/plugins/governance/complexity"
 )
 
 // DefaultRoutingChainMaxDepth is the default maximum depth for routing rule chain evaluation.

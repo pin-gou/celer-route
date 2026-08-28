@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/framework/logstore"
+	"github.com/pin-gou/celer-route/framework/logstore"
 )
 
 // recordingStore wraps a LogStore and records every log ID that reaches

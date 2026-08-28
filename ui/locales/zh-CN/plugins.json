@@ -20,7 +20,7 @@
 		"disabled": "已禁用"
 	},
 	"emptyState": {
-		"title": "自定义插件可扩展 pg-gateway，添加您自己的业务逻辑",
+		"title": "自定义插件可扩展 celer-route，添加您自己的业务逻辑",
 		"description": "构建和部署插件，用于自定义集成、工作流自动化和 AI 治理。",
 		"installAriaLabel": "创建您的第一个插件",
 		"installNewPlugin": "安装新插件"
@@ -86,7 +86,7 @@
 	},
 	"form": {
 		"infoEdit": "更新您的插件配置。插件名称和路径为只读。",
-		"infoInstall": "通过提供 pg-gateway 部署可访问的绝对文件路径或 HTTP URL 来安装自定义插件（.so）。",
+		"infoInstall": "通过提供 celer-route 部署可访问的绝对文件路径或 HTTP URL 来安装自定义插件（.so）。",
 		"nameLabel": "插件名称 *",
 		"namePlaceholder": "例如：my-custom-plugin",
 		"pathLabel": "插件路径/URL *",
@@ -99,7 +99,7 @@
 		"title": "编辑插件执行顺序",
 		"description": "将插件拖到内置插件块的上方或下方，以控制执行顺序。",
 		"builtinPlugins": "内置插件",
-		"alert": "如果您的 config.json 中配置了插件执行顺序，重新启动 pg-gateway 后它将优先于在界面上配置的顺序。",
+		"alert": "如果您的 config.json 中配置了插件执行顺序，重新启动 celer-route 后它将优先于在界面上配置的顺序。",
 		"cancel": "取消",
 		"save": "保存执行顺序",
 		"savedToast": "插件执行顺序已更新"
@@ -392,7 +392,7 @@
 			"effectTitle": "冷却期间的影响",
 			"effectBody": "触发失败的 (provider, key) 会在配置的 TTL（默认 300 秒）内暂时移出密钥池。选钥阶段跳过该冷却中的密钥，请求自动落到同一提供商的其他健康密钥，再按顺序回退到其他提供商。如果所有可用密钥都被抑制，请求会返回合成的 503 no_eligible_keys 错误。",
 			"recoveryTitle": "恢复机制",
-			"recoveryBody": "TTL 到期后密钥会自动重新启用。冷却状态保存在进程内存中，重启 pg-gateway 会清空所有冷却记录。"
+			"recoveryBody": "TTL 到期后密钥会自动重新启用。冷却状态保存在进程内存中，重启 celer-route 会清空所有冷却记录。"
 		}
 	},
 	"pluginNames": {

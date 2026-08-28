@@ -1,7 +1,7 @@
 package vertex
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToVertexEmbeddingRequest converts a Bifrost embedding request to Vertex AI format

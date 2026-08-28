@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // tokenExchangeResolver handles MCPAuthTypeTokenExchange — the caller's

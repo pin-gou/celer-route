@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToBifrostImageGenerationRequest converts a Gemini generation request to a Bifrost image generation request

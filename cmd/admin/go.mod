@@ -1,15 +1,15 @@
-module github.com/pin-gou/pg-gateway/cmd/admin
+module github.com/pin-gou/celer-route/cmd/admin
 
 go 1.26.5
 
 replace (
-	github.com/pin-gou/pg-gateway/core => ../../core
-	github.com/pin-gou/pg-gateway/framework => ../../framework
+	github.com/pin-gou/celer-route/core => ../../core
+	github.com/pin-gou/celer-route/framework => ../../framework
 )
 
 require (
-	github.com/pin-gou/pg-gateway/core v1.7.7
-	github.com/pin-gou/pg-gateway/framework v1.3.16
+	github.com/pin-gou/celer-route/core v1.7.7
+	github.com/pin-gou/celer-route/framework v1.3.16
 	golang.org/x/term v0.44.0
 )
 

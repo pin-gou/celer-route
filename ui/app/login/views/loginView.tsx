@@ -128,7 +128,7 @@ export default function LoginView() {
 					{/* Footer icons — mirrors the main sidebar footer (home + GitHub + theme + language) */}
 					<div className="flex items-center justify-center gap-4 pt-4">
 						<a
-							href="https://pin-gou.github.io/pg-gateway/"
+							href="https://pin-gou.github.io/celer-route/"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="text-muted-foreground hover:text-primary transition-colors"
@@ -137,7 +137,7 @@ export default function LoginView() {
 							<Globe className="h-5 w-5" />
 						</a>
 						<a
-							href="https://github.com/pin-gou/pg-gateway"
+							href="https://github.com/pin-gou/celer-route"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="text-muted-foreground hover:text-primary transition-colors"

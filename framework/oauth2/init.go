@@ -1,6 +1,6 @@
 package oauth2
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 var logger schemas.Logger
 

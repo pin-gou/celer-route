@@ -1,5 +1,5 @@
 {
-    "$schema": "https://pin-gou.github.io/pg-gateway/schema",
+    "$schema": "https://pin-gou.github.io/celer-route/schema",
     "encryption_key": "<REPLACE_WITH_BASE64_KEY>",
     "config_store": {
         "enabled": true,

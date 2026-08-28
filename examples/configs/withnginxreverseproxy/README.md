@@ -1,12 +1,12 @@
-# pg-gateway behind NGINX (Docker Compose)
+# celer-route behind NGINX (Docker Compose)
 
-This example runs 3 pg-gateway containers behind an NGINX reverse proxy.
+This example runs 3 celer-route containers behind an NGINX reverse proxy.
 
 ## Files
 
-- `docker-compose.yml` - Starts NGINX and 3 pg-gateway nodes
+- `docker-compose.yml` - Starts NGINX and 3 celer-route nodes
 - `nginx.conf` - Reverse proxy and load balancing config
-- `config.json` - Shared pg-gateway config for all nodes
+- `config.json` - Shared celer-route config for all nodes
 - `.env.example` - Required environment variables
 - `k8s-ingress.yaml` - Standalone ingress manifest for Kubernetes
 
@@ -22,7 +22,7 @@ docker compose up -d
 docker compose ps
 ```
 
-NGINX exposes pg-gateway on `http://localhost:8080`.
+NGINX exposes celer-route on `http://localhost:8080`.
 
 ## Verify
 

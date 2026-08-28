@@ -29,7 +29,7 @@
 		"throughput": "Throughput",
 		"cacheRate": "of input tokens cached by provider",
 		"cacheRateInfo": "More information about external cache hit rate",
-		"cacheRateTooltip": "This reflects provider-level caching, not pg-gateway semantic cache hits.",
+		"cacheRateTooltip": "This reflects provider-level caching, not celer-route semantic cache hits.",
 		"cached": "Cached",
 		"input": "Input",
 		"requestVolume": "Request Volume",

@@ -1,21 +1,21 @@
-# AGENTS.md — pg-gateway AI Gateway
+# AGENTS.md — celer-route AI Gateway
 
 > Context for AI agents (Claude Code, Copilot, Cursor, etc.) working on this codebase. Read this fully before making changes.
 
-> This project is a fork of the Bifrost AI Gateway, rebranded to **pg-gateway**. Go identifiers and filenames that reference the upstream brand (`BifrostContext`, `bifrost.Bifrost`, `core/bifrost.go`, etc.) are internal code symbols and are kept as-is.
+> This project is a fork of the Bifrost AI Gateway, rebranded to **celer-route**. Go identifiers and filenames that reference the upstream brand (`BifrostContext`, `bifrost.Bifrost`, `core/bifrost.go`, etc.) are internal code symbols and are kept as-is.
 
-## What is pg-gateway?
+## What is celer-route?
 
-pg-gateway is a high-performance AI gateway that unifies 20+ LLM providers behind a single OpenAI-compatible API with ~11µs overhead at 5,000 RPS. It also serves as an MCP (Model Context Protocol) gateway, turning static chat models into tool-calling agents.
+celer-route is a high-performance AI gateway that unifies 20+ LLM providers behind a single OpenAI-compatible API with ~11µs overhead at 5,000 RPS. It also serves as an MCP (Model Context Protocol) gateway, turning static chat models into tool-calling agents.
 
-GitHub: `pin-gou/pg-gateway`
+GitHub: `pin-gou/celer-route`
 
 ---
 
 ## Repository Layout
 
 ```
-pg-gateway/
+celer-route/
 ├── core/                           # Go core library — the engine
 │   ├── bifrost.go                  # Main struct, request queuing, provider lifecycle
 │   ├── inference.go                # Inference routing, fallbacks, streaming dispatch
@@ -117,7 +117,7 @@ pg-gateway/
 │
 ├── transports/
 │   ├── config.schema.json         # JSON Schema — THE source of truth for config.json
-│   └── pg-gateway-http/            # HTTP gateway transport
+│   └── celer-route-http/            # HTTP gateway transport
 │       ├── main.go                # Entry point
 │       ├── handlers/              # 92 HTTP endpoint handlers
 │       │   ├── inference.go       # Chat/text completions, responses API
@@ -267,13 +267,13 @@ pg-gateway/
 
 ## Go Workspace
 
-pg-gateway is a **multi-module Go workspace**. Each module has its own `go.mod`:
+celer-route is a **multi-module Go workspace**. Each module has its own `go.mod`:
 
 ```
 go.work
-├── core/go.mod              # github.com/pin-gou/pg-gateway/core
-├── framework/go.mod         # github.com/pin-gou/pg-gateway/framework
-├── transports/go.mod        # github.com/pin-gou/pg-gateway/transports
+├── core/go.mod              # github.com/pin-gou/celer-route/core
+├── framework/go.mod         # github.com/pin-gou/celer-route/framework
+├── transports/go.mod        # github.com/pin-gou/celer-route/transports
 └── plugins/*/go.mod         # 9 plugin modules (governance, telemetry, logging, etc.)
 ```
 
@@ -289,7 +289,7 @@ go.work
 ```bash
 # Development
 make dev                                 # Full local dev (UI + API with hot reload via air)
-make build                               # Build pg-gateway-http binary
+make build                               # Build celer-route-http binary
 
 # Core tests (provider integration tests — hit live APIs)
 make test-core                           # All providers
@@ -326,38 +326,38 @@ make fmt                                 # Format code
 
 ### Environment Lifecycle (local dev)
 
-本地环境的 `pg-gateway-api` 服务生命周期由 **hooks 协议**管理，通过 `pg-invoke-hook.py` 调用（详见 [.pg/context/agent-protocol.md](.pg/context/agent-protocol.md) §2）。
+本地环境的 `celer-route-api` 服务生命周期由 **hooks 协议**管理，通过 `pg-invoke-hook.py` 调用（详见 [.pg/context/agent-protocol.md](.pg/context/agent-protocol.md) §2）。
 
 ```bash
 # 生成一次任务会话 ID（整个任务期间复用）
 PG_AGENT_SESSION="$(date -u +%Y-%m-%d)-$(echo $RANDOM | md5sum | head -c 8)"
 
-# 停止 pg-gateway-api
+# 停止 celer-route-api
 python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
   --caller pg-agent \
   --session "$PG_AGENT_SESSION" \
   --env local \
-  --role pg-gateway-api \
+  --role celer-route-api \
   --action stop \
-  --instance pg-gateway-api-1
+  --instance celer-route-api-1
 
 # 构建（含 UI 同步）→ 启动 → 等待健康检查（120s 超时）
 python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
   --caller pg-agent \
   --session "$PG_AGENT_SESSION" \
   --env local \
-  --role pg-gateway-api \
+  --role celer-route-api \
   --action start \
-  --instance pg-gateway-api-1
+  --instance celer-route-api-1
 
 # 健康检查
 python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
   --caller pg-agent \
   --session "$PG_AGENT_SESSION" \
   --env local \
-  --role pg-gateway-api \
+  --role celer-route-api \
   --action health_check \
-  --instance pg-gateway-api-1
+  --instance celer-route-api-1
 ```
 
 **注意**：
@@ -375,7 +375,7 @@ python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
 ```
 Client HTTP Request
   → FastHTTP Transport (parsing, validation ~2µs)
-    → SDK Integration Layer (OpenAI/Anthropic/Bedrock format → pg-gateway format)
+    → SDK Integration Layer (OpenAI/Anthropic/Bedrock format → celer-route format)
       → Middleware Chain (lib.ChainMiddlewares, applied per-route)
         → HTTPTransportPreHook (HTTP-level plugins, can short-circuit)
           → PreLLMHook Pipeline (auth, rate-limit, cache check — registration order)
@@ -410,7 +410,7 @@ ctx.SetValue(key, value)     // Thread-safe, uses RWMutex
 ctx.WithValue(key, value)    // Chainable variant
 ```
 
-**Reserved context keys** (set by pg-gateway internals — DO NOT set manually):
+**Reserved context keys** (set by celer-route internals — DO NOT set manually):
 - `BifrostContextKeySelectedKeyID/Name` — Set by governance plugin
 - `BifrostContextKeyGovernance*` — Set by governance plugin
 - `BifrostContextKeyNumberOfRetries`, `BifrostContextKeyFallbackIndex` — Set by retry/fallback logic
@@ -467,7 +467,7 @@ core/providers/<name>/
 ```
 
 **Converter function naming convention:**
-- `To<ProviderName><Feature>Request()` — pg-gateway schema → Provider API format
+- `To<ProviderName><Feature>Request()` — celer-route schema → Provider API format
 - `ToBifrost<Feature>Response()` — Provider API format → Bifrost schema
 - These must be **pure transformation functions** — no HTTP calls, no logging, no side effects
 
@@ -576,7 +576,7 @@ type CompletionHandler struct {
 
 **Route registration:** Each handler implements `RegisterRoutes(router, middlewares...)` — routes get middleware chains applied per-route via `lib.ChainMiddlewares()`.
 
-**SDK integration layers** (`transports/pg-gateway-http/integrations/`) provide request/response converters between provider-native SDK formats and pg-gateway's internal format. This enables drop-in replacement of OpenAI SDK, Anthropic SDK, AWS Bedrock SDK, Google GenAI SDK, LangChain, and LiteLLM.
+**SDK integration layers** (`transports/celer-route-http/integrations/`) provide request/response converters between provider-native SDK formats and celer-route's internal format. This enables drop-in replacement of OpenAI SDK, Anthropic SDK, AWS Bedrock SDK, Google GenAI SDK, LangChain, and LiteLLM.
 
 ---
 
@@ -627,7 +627,7 @@ Adding a new operation type requires changes across the entire codebase:
 2. Implement in **all** 20+ providers (most return "not supported")
 3. Add `RequestType` constant in `core/schemas/bifrost.go`
 4. Add to `AllowedRequests` struct and `IsOperationAllowed()` switch
-5. Add handler endpoint in `transports/pg-gateway-http/handlers/`
+5. Add handler endpoint in `transports/celer-route-http/handlers/`
 6. Wire up in `core/bifrost.go` and `core/inference.go`
 
 ### 6. OpenAI Provider Changes Cascade to 9+ Providers
@@ -656,7 +656,7 @@ When `BlockRestrictedWrites()` is active, writes to reserved keys (governance ID
 
 ### 12. `fasthttp`, Not `net/http`
 
-pg-gateway uses `github.com/valyala/fasthttp` for provider HTTP calls. The API is different from `net/http`:
+celer-route uses `github.com/valyala/fasthttp` for provider HTTP calls. The API is different from `net/http`:
 - Use `fasthttp.AcquireRequest()`/`fasthttp.ReleaseRequest()` for lifecycle
 - `fasthttp.Client` pools connections per-host (`NetworkConfig.MaxConnsPerHost`, default 5000, 30s idle)
 - Request/response bodies accessed via `resp.Body()` (returns `[]byte`, not `io.Reader`)
@@ -670,7 +670,7 @@ For reading or writing a **single field** (or a handful) inside a larger raw JSO
 
 ### 14. Atomic Pointer for Hot Config Reload
 
-`pg-gateway` uses `atomic.Pointer` for providers and plugins lists. On updates: create new slice → atomically swap pointer. **Never mutate the slice in place** — concurrent readers would see partial state.
+`celer-route` uses `atomic.Pointer` for providers and plugins lists. On updates: create new slice → atomically swap pointer. **Never mutate the slice in place** — concurrent readers would see partial state.
 
 ### 15. MCP Tool Filtering is 4 Levels Deep
 
@@ -836,7 +836,7 @@ Variants:
 - `/e2e-test audit` — Scan specs for incorrect/weak assertions (P0-P6 severity scale)
 
 ### `/investigate-issue <issue-id>`
-Investigate a GitHub issue from `pin-gou/pg-gateway`. Fetches issue details, classifies by type/area, searches codebase, traces dependencies, analyzes side effects, suggests tests (LLM/MCP/E2E), and presents an implementation plan with per-change approval gates.
+Investigate a GitHub issue from `pin-gou/celer-route`. Fetches issue details, classifies by type/area, searches codebase, traces dependencies, analyzes side effects, suggests tests (LLM/MCP/E2E), and presents an implementation plan with per-change approval gates.
 
 ### `/resolve-pr-comments <pr-number>`
 Systematically address unresolved PR review comments. Uses GraphQL to get unresolved threads, presents each with FIX/REPLY/SKIP options, collects fixes locally, and only posts replies **after code is pushed** to remote.
@@ -862,7 +862,7 @@ Systematically address unresolved PR review comments. Uses GraphQL to get unreso
 1. Create `plugins/<name>/` with its own `go.mod`
 2. Implement `LLMPlugin`, `MCPPlugin`, or `HTTPTransportPlugin` interface
 3. Add to `go.work`
-4. Register in transport layer or pg-gateway config
+4. Register in transport layer or celer-route config
 5. Add test targets to `Makefile`
 
 ### Modify a UI feature
@@ -889,12 +889,12 @@ Systematically address unresolved PR review comments. Uses GraphQL to get unreso
 | Object pool (prod + debug) | `core/pool/pool_prod.go`, `pool_debug.go` |
 | Shared provider utils & SSE parsing | `core/providers/utils/utils.go` |
 | Streaming accumulator | `framework/streaming/accumulator.go` |
-| HTTP inference handler | `transports/pg-gateway-http/handlers/inference.go` |
-| Governance handler | `transports/pg-gateway-http/handlers/governance.go` |
+| HTTP inference handler | `transports/celer-route-http/handlers/inference.go` |
+| Governance handler | `transports/celer-route-http/handlers/governance.go` |
 | Timeline waterfall (span data source) | `core/upstreamspan.go` — measures per-ATTEMPT upstream HTTP spans, written to `BifrostContextKeyUpstreamSpans`; persisted by `plugins/logging/main.go:finalTimelineEvents` into the `timeline_events` table (columns `provider/model/key_id/status`) |
 | Timeline waterfall (frontend) | `ui/app/workspace/logs/timeline/views/timelineGantt.tsx` — merged single view (waterfall block on top, grouped list below) with **bidirectional hover highlight**: hovering a bar/marker highlights its list row and vice versa, cross-linked via a client-side `_tlKey` (array index). durations>0 render as bars, duration 0 as markers |
 | Config schema (source of truth) | `transports/config.schema.json` |
-| Pool debug profiler | `transports/pg-gateway-http/handlers/devpprof.go` |
+| Pool debug profiler | `transports/celer-route-http/handlers/devpprof.go` |
 | LLM test infrastructure | `core/internal/llmtests/` |
 | MCP test infrastructure | `core/internal/mcptests/` |
 | E2E test infrastructure | `tests/e2e/core/` |
@@ -1081,7 +1081,7 @@ Available today: `virtualKeySelector`, `teamSelector`, `customerSelector` (OSS);
 
 Do not edit `entitySelector.tsx` to accommodate one surface. It only carries behaviour identical across every entity; per-entity differences belong in the wrapper, per-surface differences in props (`trigger`, `triggerClassName`, `excludeIds`, `noPortal`, `className`).
 
-**OSS ↔ enterprise placement.** `entitySelector.tsx` and any selector whose API is OSS live in `ui/components/entitySelectors/`. A selector for an enterprise-only API lives in `pg-gateway-enterprise/enterprise-ui/app/components/entitySelectors/` and OSS must never import it directly — OSS reaches it through a runtime registry (`ui/lib/registries/userPicker.tsx`, `ui/lib/registries/modelLimitScopes.tsx`), with an empty fallback under `ui/app/_fallbacks/enterprise/` so OSS-only builds simply hide the option. Keep single mode prop-compatible with the registry contract (`{ value, onChange, disabled, fallbackOption }`) so the selector can be registered as-is.
+**OSS ↔ enterprise placement.** `entitySelector.tsx` and any selector whose API is OSS live in `ui/components/entitySelectors/`. A selector for an enterprise-only API lives in `celer-route-enterprise/enterprise-ui/app/components/entitySelectors/` and OSS must never import it directly — OSS reaches it through a runtime registry (`ui/lib/registries/userPicker.tsx`, `ui/lib/registries/modelLimitScopes.tsx`), with an empty fallback under `ui/app/_fallbacks/enterprise/` so OSS-only builds simply hide the option. Keep single mode prop-compatible with the registry contract (`{ value, onChange, disabled, fallbackOption }`) so the selector can be registered as-is.
 
 ---
 

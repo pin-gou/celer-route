@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // StoreType identifies the object storage backend.

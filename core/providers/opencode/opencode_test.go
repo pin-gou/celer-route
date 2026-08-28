@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Compile-time check that opencodeProvider satisfies the full Provider interface.

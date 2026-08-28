@@ -1,6 +1,6 @@
 package perplexity
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 // PerplexityChatRequest represents a Perplexity chat completion request
 type PerplexityChatRequest struct {

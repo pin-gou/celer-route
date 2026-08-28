@@ -70,7 +70,7 @@ export const configApi = baseApi.injectEndpoints({
 		getLatestRelease: builder.query<LatestReleaseResponse, void>({
 			queryFn: async (_arg, { signal }) => {
 				try {
-					const response = await axios.get("https://api.github.com/repos/pin-gou/pg-gateway/releases/latest", {
+					const response = await axios.get("https://api.github.com/repos/pin-gou/celer-route/releases/latest", {
 						timeout: 3000, // 3 second timeout
 						signal,
 						headers: {

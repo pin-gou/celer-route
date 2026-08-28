@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 )
 
 // IsValid validates the shared override contract before persistence or runtime use.

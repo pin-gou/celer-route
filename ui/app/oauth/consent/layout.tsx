@@ -8,7 +8,7 @@ import OAuth2ConsentPage from "./page";
 
 // Public OAuth2 consent page — renders outside the dashboard chrome so
 // external users who arrive via `claude mcp add` can pick their identity
-// without needing a pg-gateway dashboard account.
+// without needing a celer-route dashboard account.
 //
 // tempTokenScoped: ClientLayout renders MinimalShell and skips the protected
 // config fetch when this flag is set. TempTokenScope extracts the `#t=…`

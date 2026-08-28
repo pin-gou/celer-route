@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/queryscope"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/queryscope"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

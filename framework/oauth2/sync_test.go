@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
 	"gorm.io/gorm"
 )
 

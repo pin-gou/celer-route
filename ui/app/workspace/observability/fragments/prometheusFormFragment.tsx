@@ -340,7 +340,7 @@ export function PrometheusFormFragment({
 						<Alert variant="info">
 							<AlertTriangle className="" />
 							<AlertDescription className="text-xs">
-								If you are running multiple pg-gateway nodes, use push gateway for accurate metrics. Pull-based /metrics scraping may miss
+								If you are running multiple celer-route nodes, use push gateway for accurate metrics. Pull-based /metrics scraping may miss
 								nodes behind a load balancer.
 							</AlertDescription>
 						</Alert>
@@ -420,7 +420,7 @@ export function PrometheusFormFragment({
 													</TooltipTrigger>
 													<TooltipContent>
 														<p className="max-w-xs text-xs">
-															Used to identify this pg-gateway instance in metrics. If not set, hostname is used automatically.
+															Used to identify this celer-route instance in metrics. If not set, hostname is used automatically.
 														</p>
 													</TooltipContent>
 												</Tooltip>

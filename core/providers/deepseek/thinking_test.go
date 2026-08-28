@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/internal/llmtests"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 func newOpenAIChatResponse() string {

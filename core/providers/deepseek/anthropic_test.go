@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
-	deepseek "github.com/pin-gou/pg-gateway/core/providers/deepseek"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/internal/llmtests"
+	deepseek "github.com/pin-gou/celer-route/core/providers/deepseek"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 type testLogger struct{}

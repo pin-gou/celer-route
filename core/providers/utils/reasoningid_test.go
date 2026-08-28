@@ -3,7 +3,7 @@ package utils
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func TestEmbedAndExtractReasoningItemID_RoundTrip(t *testing.T) {

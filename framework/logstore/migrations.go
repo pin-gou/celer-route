@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/migrator"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/migrator"
 	"gorm.io/gorm"
 )
 

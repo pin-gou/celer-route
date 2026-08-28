@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
-	"github.com/pin-gou/pg-gateway/core/providers/gemini"
-	"github.com/pin-gou/pg-gateway/core/providers/openai"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/providers/anthropic"
+	"github.com/pin-gou/celer-route/core/providers/gemini"
+	"github.com/pin-gou/celer-route/core/providers/openai"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // passthroughChatReq holds the provider-native path and JSON body for a

@@ -1,6 +1,6 @@
 {
 	"app": {
-		"name": "pg-gateway",
+		"name": "celer-route",
 		"tagline": "AI 网关"
 	},
 	"nav": {
@@ -262,7 +262,7 @@
 		"restartRequired": "需要重启",
 		"restartReason": "配置变更需要重启服务器才能生效。",
 		"setupIncomplete": "设置清单未完成",
-		"setupStepsLeft": "还剩 {{n}} 步设置未完成。不完成这些步骤将使您的 pg-gateway 设置存在风险。",
+		"setupStepsLeft": "还剩 {{n}} 步设置未完成。不完成这些步骤将使您的 celer-route 设置存在风险。",
 		"resumeSetup": "继续设置",
 		"viewReleaseNotes": "查看发布说明",
 		"releaseAvailable": "{{name}} 现已可用。"
@@ -330,9 +330,9 @@
 		},
 		"quickStart": {
 			"title": "快速上手",
-			"subtitle": "4 步即可用好 pg-gateway。",
+			"subtitle": "4 步即可用好 celer-route。",
 			"step1Title": "1. 配置提供商",
-			"step1Desc": "添加上游提供商 key（OpenAI、Anthropic、Google 等），让 pg-gateway 有东西可路由。",
+			"step1Desc": "添加上游提供商 key（OpenAI、Anthropic、Google 等），让 celer-route 有东西可路由。",
 			"step2Title": "2. 配置路由",
 			"step2Desc": "为请求配置路由规则，决定每个请求落到哪个提供商、模型或 key。支持回退、权重或自定义表达式。",
 			"step3Title": "3. 测试接口调用",

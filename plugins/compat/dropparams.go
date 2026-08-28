@@ -3,7 +3,7 @@ package compat
 import (
 	"fmt"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // dropUnsupportedParams removes unsupported model parameters from a request in place.

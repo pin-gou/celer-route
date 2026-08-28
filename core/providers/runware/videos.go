@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToRunwareVideoGenerationRequest converts a Bifrost video generation request to a Runware

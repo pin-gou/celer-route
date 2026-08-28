@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/logstore"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/logstore"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

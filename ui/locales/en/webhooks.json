@@ -21,7 +21,7 @@
 	},
 	"emptyState": {
 		"title": "Webhooks notify you when async jobs finish",
-		"description": "Register webhook endpoints and pg-gateway will send a signed notification whenever an async inference job completes or fails, so you don't have to poll for results."
+		"description": "Register webhook endpoints and celer-route will send a signed notification whenever an async inference job completes or fails, so you don't have to poll for results."
 	},
 	"permissionDenied": "You don't have permission to access webhooks",
 	"toast": {

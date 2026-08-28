@@ -5,7 +5,7 @@
 package modelcatalog
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // UpsertLive caches one (provider, keyID, unfiltered) list-models response.

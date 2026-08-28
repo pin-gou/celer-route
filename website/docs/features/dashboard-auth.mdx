@@ -1,11 +1,11 @@
 ---
 title: "Dashboard Password Protection"
-description: "Two ways to enable password protection on the pg-gateway admin dashboard: the bootstrap setup-token flow or the operator-side CLI."
+description: "Two ways to enable password protection on the celer-route admin dashboard: the bootstrap setup-token flow or the operator-side CLI."
 ---
 
 # Dashboard Password Protection
 
-The pg-gateway admin dashboard at `http://<host>:8080` can be locked behind
+The celer-route admin dashboard at `http://<host>:8080` can be locked behind
 a username/password. Once enabled, every management API under `/api/*`
 requires HTTP Basic auth with the configured admin credentials, and the UI
 shows the login page instead of the workspace.
@@ -15,14 +15,14 @@ Two paths can create or update the admin account:
 | Path | When to use | What it requires |
 |------|-------------|------------------|
 | **`PUT /api/config`** with `setup_token` | Network-driven, GUI workflow. | `BIFROST_SETUP_TOKEN` env var (or `setup_token` in config.json) configured **before first boot**. |
-| **`pg-gateway-admin admin reset`** CLI | Container-driven, operator workflow. | Shell access to the host or `docker exec` into the running container. |
+| **`celer-route-admin admin reset`** CLI | Container-driven, operator workflow. | Shell access to the host or `docker exec` into the running container. |
 
 This page focuses on the **CLI**, which is the recommended approach for
 Docker deployments because it does not require a pre-configured setup token.
 
 ## Why a separate CLI?
 
-When a fresh pg-gateway instance starts without an admin account, the HTTP
+When a fresh celer-route instance starts without an admin account, the HTTP
 endpoint that *creates* the first admin (`PUT /api/config`) is reachable
 without authentication — otherwise nobody could ever create the first
 admin. To close that window, the HTTP bootstrap requires a one-time
@@ -41,8 +41,8 @@ as the network-layer guard for non-Docker deployments.
 docker compose up -d
 
 # 2. From the host, exec into the container and run the CLI
-docker exec -it pg-gateway \
-  pg-gateway-admin admin reset
+docker exec -it celer-route \
+  celer-route-admin admin reset
 ```
 
 The CLI prints what it is about to do (CREATE the first admin, or RESET
@@ -56,7 +56,7 @@ Confirm password:
 Done.
   Admin username: admin
   Auth enabled:   true
-  Next step:      log in to the pg-gateway dashboard.
+  Next step:      log in to the celer-route dashboard.
   Note:           BIFROST_SETUP_TOKEN / setup_token is no longer required for this node.
 ```
 
@@ -67,8 +67,8 @@ Open `http://localhost:8080` and log in with the credentials you just set.
 Two flags let you drive the CLI from a pipeline:
 
 ```bash
-docker exec -i pg-gateway \
-  pg-gateway-admin admin reset \
+docker exec -i celer-route \
+  celer-route-admin admin reset \
   --username admin \
   --password-stdin \
   --yes \
@@ -86,10 +86,10 @@ so the password cannot leak to a process listing or a CI log.
 ## CLI reference
 
 ```
-pg-gateway-admin admin reset [flags]
+celer-route-admin admin reset [flags]
 
 Flags:
-  --config PATH        Path to the pg-gateway config.json file. When omitted,
+  --config PATH        Path to the celer-route config.json file. When omitted,
                        the CLI uses a default SQLite database at <app-dir>/config.db.
   --app-dir PATH       Application data directory (default: $APP_DIR env var,
                        or current directory). Used only when --config is not provided.

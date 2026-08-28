@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/mcp"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/mcp"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // StarlarkCodeMode implements the CodeMode interface using a Starlark interpreter.

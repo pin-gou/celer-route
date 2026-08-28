@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // authTestLogger is a minimal no-op logger for provider construction in tests.

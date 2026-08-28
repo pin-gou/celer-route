@@ -3,7 +3,7 @@ package cohere
 import (
 	"encoding/json"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/tidwall/sjson"
 )
 

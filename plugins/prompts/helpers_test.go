@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	tables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/core/schemas"
+	tables "github.com/pin-gou/celer-route/framework/configstore/tables"
 )
 
 // ============================================================

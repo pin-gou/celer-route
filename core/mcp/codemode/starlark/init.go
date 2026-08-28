@@ -2,7 +2,7 @@
 
 package starlark
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 // noopLogger is a no-op implementation of schemas.Logger used as a fallback
 // when no logger is provided.

@@ -12,11 +12,11 @@ import (
 	"slices"
 	"strings"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	bifrost "github.com/pin-gou/celer-route/core"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 	"github.com/tidwall/gjson"
 )
 

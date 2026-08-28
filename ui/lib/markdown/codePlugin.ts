@@ -1,7 +1,7 @@
 import { createHighlighterCore, type HighlighterCore, type TokensResult } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
-// Languages we actually want to highlight in the pg-gateway UI.
+// Languages we actually want to highlight in the celer-route UI.
 // Adding a new language requires only adding the dynamic import below.
 const langLoaders = {
 	typescript: () => import("shiki/langs/typescript.mjs"),
@@ -159,7 +159,7 @@ export function createCodePlugin(options: CodePluginOptions = {}): CodeHighlight
 					}
 				})
 				.catch((err) => {
-					console.error("[pg-gateway Code Highlighter] Failed to highlight:", err);
+					console.error("[celer-route Code Highlighter] Failed to highlight:", err);
 					pendingCallbacks.delete(key);
 				})
 				.finally(() => {

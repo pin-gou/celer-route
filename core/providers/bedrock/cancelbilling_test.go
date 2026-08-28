@@ -3,7 +3,7 @@ package bedrock
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // normalizeCachedUsage must fold cached read/write tokens into PromptTokens only.

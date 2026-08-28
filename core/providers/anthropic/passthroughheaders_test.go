@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

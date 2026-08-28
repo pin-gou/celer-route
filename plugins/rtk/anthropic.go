@@ -1,6 +1,6 @@
 package rtk
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 // ToolCallLookupEntry holds the metadata for a tool call extracted from an
 // assistant message's tool_calls array.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"plugin"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // DynamicPlugin is a generic dynamic plugin that can implement any combination of plugin interfaces

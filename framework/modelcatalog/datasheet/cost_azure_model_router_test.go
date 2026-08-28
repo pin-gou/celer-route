@@ -3,8 +3,8 @@ package datasheet
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/core/schemas"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 	"github.com/stretchr/testify/assert"
 )
 

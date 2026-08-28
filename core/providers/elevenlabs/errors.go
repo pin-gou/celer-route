@@ -5,8 +5,8 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 func parseElevenlabsError(resp *fasthttp.Response) *schemas.BifrostError {

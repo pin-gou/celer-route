@@ -6,7 +6,7 @@ sidebar_position: 2
 
 # 部署：PostgreSQL
 
-PostgreSQL 模式适合**生产部署、跨节点 HA、高写入量场景**。pg-gateway 会启用
+PostgreSQL 模式适合**生产部署、跨节点 HA、高写入量场景**。celer-route 会启用
 SQLite 不具备的能力：物化视图、GIN 索引、advisory lock 跨节点串行化等。
 
 ## 适用场景
@@ -19,7 +19,7 @@ SQLite 不具备的能力：物化视图、GIN 索引、advisory lock 跨节点�
 ## 前置要求
 
 :::caution 版本要求
-pg-gateway 要求 **PostgreSQL 16 或更高版本**。启动时会硬性检查
+celer-route 要求 **PostgreSQL 16 或更高版本**。启动时会硬性检查
 `server_version_num >= 160000`，低于此版本将拒绝启动。
 :::
 
@@ -31,10 +31,10 @@ psql -h <host> -U <user> -c "SELECT current_setting('server_version_num');"
 
 **还需准备**：
 
-- 一个可用的数据库（pg-gateway 会自动建表，但**不会创建数据库本身**）
+- 一个可用的数据库（celer-route 会自动建表，但**不会创建数据库本身**）
 - 数据库用户至少需要 `CREATE TABLE` / `CREATE INDEX` / `SELECT` / `INSERT` /
   `UPDATE` / `DELETE` 权限
-- 推荐：在迁移期间给用户临时 `CREATE EXTENSION` 权限（pg-gateway 会尝试启用
+- 推荐：在迁移期间给用户临时 `CREATE EXTENSION` 权限（celer-route 会尝试启用
   `pg_trgm`）
 
 ## 快速启动
@@ -45,8 +45,8 @@ import TabItem from '@theme/TabItem';
 <Tabs>
 <TabItem value="docker" label="Docker Compose（推荐）" default>
 
-仓库根目录 [`examples/dockers-postgres/`](https://github.com/pin-gou/pg-gateway/tree/master/examples/dockers-postgres)
-提供了 pg-gateway + PostgreSQL 一体化编排示例：
+仓库根目录 [`examples/dockers-postgres/`](https://github.com/pin-gou/celer-route/tree/master/examples/dockers-postgres)
+提供了 celer-route + PostgreSQL 一体化编排示例：
 
 ```bash
 cd examples/dockers-postgres
@@ -56,7 +56,7 @@ cp example.env .env
 docker compose up -d
 ```
 
-启动后会创建两个容器：`postgres` 与 `pg-gateway`，后者通过 Docker 网络服务名
+启动后会创建两个容器：`postgres` 与 `celer-route`，后者通过 Docker 网络服务名
 `postgres` 连接到前者。
 
 </TabItem>
@@ -64,7 +64,7 @@ docker compose up -d
 
 :::warning 即将推出
 Kubernetes Helm Chart 与详细示例将在后续 PR 中提供。在此之前请参考
-[examples/dockers-postgres/](https://github.com/pin-gou/pg-gateway/tree/master/examples/dockers-postgres)
+[examples/dockers-postgres/](https://github.com/pin-gou/celer-route/tree/master/examples/dockers-postgres)
 自行编排。
 :::
 
@@ -150,7 +150,7 @@ Kubernetes Helm Chart 与详细示例将在后续 PR 中提供。在此之前请
 {
   "host": "...",
   "user": "...",
-  "password_command": "vault read -field=password secret/pg-gateway",
+  "password_command": "vault read -field=password secret/celer-route",
   "db_name": "..."
 }
 ```
@@ -167,19 +167,19 @@ pg_restore -h <host> -U pg_gateway -d pg_gateway \
   --clean --if-exists pg_gateway_20240101.dump
 ```
 
-## 升级 pg-gateway
+## 升级 celer-route
 
-pg-gateway 的 PostgreSQL 实现采用**两池生命周期**以避免 pgx 缓存计划错误：
+celer-route 的 PostgreSQL 实现采用**两池生命周期**以避免 pgx 缓存计划错误：
 
 1. **启动时**：打开一个临时池跑 schema migration（DDL），完成后立即关闭
 2. **运行时**：再打开一个全新的池用于查询流量
 
-这意味着 pg-gateway 升级**不需要手动跑 migration**——只要新版本的代码包含必要的
+这意味着 celer-route 升级**不需要手动跑 migration**——只要新版本的代码包含必要的
 migration，启动时会自动应用。建议在升级前备份数据库以防万一。
 
 ## 监控
 
-pg-gateway 会记录以下 PostgreSQL 相关指标（接入 Prometheus 插件后可见）：
+celer-route 会记录以下 PostgreSQL 相关指标（接入 Prometheus 插件后可见）：
 
 - 连接池使用率（`max_idle_conns` / `max_open_conns`）
 - 物化视图刷新耗时

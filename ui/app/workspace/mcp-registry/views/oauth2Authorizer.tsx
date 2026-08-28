@@ -246,7 +246,7 @@ export const OAuth2Authorizer: React.FC<OAuth2AuthorizerProps> = ({
 
 	const subtitles: Record<Status, string> = {
 		confirm: isPerUserReauth
-			? "Sign in again to renew pg-gateway's own discovery credential."
+			? "Sign in again to renew celer-route's own discovery credential."
 			: "Sign in to verify the OAuth setup and discover available tools.",
 		polling: "Complete sign-in in the popup window to continue.",
 		blocked: "Allow popups for this site, then try again.",
@@ -295,8 +295,8 @@ export const OAuth2Authorizer: React.FC<OAuth2AuthorizerProps> = ({
 								</p>
 								<p className="text-muted-foreground/80 text-xs">
 									{isPerUserReauth
-										? "This only affects pg-gateway's own sign-in used for periodic tool discovery. Each end user's OAuth session is separate and unaffected; you only need to do this if the admin credential badge shows it's expired, but re-running it any time is safe."
-										: "pg-gateway keeps this sign-in on file to periodically refresh the available tool list. Each user still authenticates individually when they use this server; this credential is never used for their requests."}
+										? "This only affects celer-route's own sign-in used for periodic tool discovery. Each end user's OAuth session is separate and unaffected; you only need to do this if the admin credential badge shows it's expired, but re-running it any time is safe."
+										: "celer-route keeps this sign-in on file to periodically refresh the available tool list. Each user still authenticates individually when they use this server; this credential is never used for their requests."}
 								</p>
 							</InfoBox>
 							<div className="flex justify-end gap-2">

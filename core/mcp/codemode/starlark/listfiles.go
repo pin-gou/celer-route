@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	codemcp "github.com/pin-gou/pg-gateway/core/mcp"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	codemcp "github.com/pin-gou/celer-route/core/mcp"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // createListToolFilesTool creates the listToolFiles tool definition for code mode.

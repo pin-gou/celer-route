@@ -1,7 +1,7 @@
 package compat
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // applyParameterConversion rewrites request fields in place for provider compatibility.

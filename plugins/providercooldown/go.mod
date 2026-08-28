@@ -1,8 +1,8 @@
-module github.com/pin-gou/pg-gateway/plugins/providercooldown
+module github.com/pin-gou/celer-route/plugins/providercooldown
 
 go 1.26.5
 
-require github.com/pin-gou/pg-gateway/core v1.7.8
+require github.com/pin-gou/celer-route/core v1.7.8
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
@@ -35,6 +35,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pin-gou/pg-gateway/core => ../../core
+replace github.com/pin-gou/celer-route/core => ../../core
 
-replace github.com/pin-gou/pg-gateway/framework => ../../framework
+replace github.com/pin-gou/celer-route/framework => ../../framework

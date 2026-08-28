@@ -113,13 +113,13 @@ export function MCPLibrarySettingsSheet({ open, onClose }: MCPLibrarySettingsShe
 							<div className="space-y-0.5">
 								<Label htmlFor="mcp-library-url">Library Sync URL</Label>
 								<p className="text-muted-foreground text-sm">
-									URL to a custom MCP server catalog. Leave empty to use the default pg-gateway catalog.
+									URL to a custom MCP server catalog. Leave empty to use the default celer-route catalog.
 								</p>
 							</div>
 							<Input
 								id="mcp-library-url"
 								type="text"
-								placeholder="https://pin-gou.github.io/pg-gateway/mcp-library"
+								placeholder="https://pin-gou.github.io/celer-route/mcp-library"
 								data-testid="mcp-library-url-input"
 								{...register("mcp_library_url")}
 								className={errors.mcp_library_url ? "border-destructive" : ""}

@@ -29,7 +29,7 @@ function RouteComponent() {
 // Split out so it can call useBranding, which needs the Redux store. The
 // pending state previously rendered without ReduxProvider; it is now wrapped
 // below so this brief screen shows the customer's logo too rather than
-// flashing the pg-gateway one on the way to the login form.
+// flashing the celer-route one on the way to the login form.
 function PendingCard() {
 	const { resolvedTheme } = useTheme();
 	const { t } = useTranslation("login");

@@ -19,11 +19,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/temptoken"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/temptoken"
 )
 
 // SubmissionFlowTTL caps how long a pending headers submission flow row
@@ -57,7 +57,7 @@ type Provider struct {
 }
 
 // NewProvider constructs a configstore-backed MCPHeadersProvider. Mirrors
-// oauth2.NewOAuth2Provider so the wiring in transports/pg-gateway-http stays
+// oauth2.NewOAuth2Provider so the wiring in transports/celer-route-http stays
 // symmetric between the two per-user auth surfaces.
 func NewProvider(configStore configstore.ConfigStore, logger schemas.Logger) *Provider {
 	if logger == nil {

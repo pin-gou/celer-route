@@ -1,8 +1,8 @@
-module github.com/pin-gou/pg-gateway/examples/plugins/hello-world
+module github.com/pin-gou/celer-route/examples/plugins/hello-world
 
 go 1.26.5
 
-require github.com/pin-gou/pg-gateway/core v1.7.7
+require github.com/pin-gou/celer-route/core v1.7.7
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect

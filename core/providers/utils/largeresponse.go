@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

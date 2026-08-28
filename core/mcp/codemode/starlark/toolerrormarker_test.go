@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	codemcp "github.com/pin-gou/pg-gateway/core/mcp"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	codemcp "github.com/pin-gou/celer-route/core/mcp"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestCreateToolResponseMessageMarksError pins the CodeMode copy of the tool

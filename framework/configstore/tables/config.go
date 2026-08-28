@@ -1,6 +1,6 @@
 package tables
 
-import "github.com/pin-gou/pg-gateway/core/network"
+import "github.com/pin-gou/celer-route/core/network"
 
 const (
 	ConfigAdminUsernameKey = "admin_username"

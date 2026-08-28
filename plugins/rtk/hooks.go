@@ -1,7 +1,7 @@
 package rtk
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // estimateRequestTokens estimates the total token count across all messages

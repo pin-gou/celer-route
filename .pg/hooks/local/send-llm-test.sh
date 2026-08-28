@@ -200,7 +200,7 @@ go_test_output = """=== RUN   TestParseConfig
 --- PASS: TestModelFallback (0.01s)
 === RUN   TestResponseFormat
 --- PASS: TestResponseFormat (0.00s)
-ok  	github.com/pin-gou/pg-gateway/core/router	0.452s"""
+ok  	github.com/pin-gou/celer-route/core/router	0.452s"""
 
 scenarios.append({
     "category": "test-go-test",
@@ -561,13 +561,13 @@ stacktrace_output = """panic: runtime error: invalid memory address or nil point
 [signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x4a1b2c]
 
 goroutine 42 [running]:
-github.com/pin-gou/pg-gateway/core/router.(*Router).selectProvider(0x0, 0xc0001a2000)
+github.com/pin-gou/celer-route/core/router.(*Router).selectProvider(0x0, 0xc0001a2000)
     /workspace/core/router/router.go:158 +0x2a4
-github.com/pin-gou/pg-gateway/core/router.(*Router).Route(0xc0001a2000, {0x7f1a2b3c, 0xc0001a4000}, 0xc0001a6000)
+github.com/pin-gou/celer-route/core/router.(*Router).Route(0xc0001a2000, {0x7f1a2b3c, 0xc0001a4000}, 0xc0001a6000)
     /workspace/core/router/router.go:92 +0x1b8
-github.com/pin-gou/pg-gateway/core/bifrost.(*Bifrost).HandleRequest(0xc0001a8000, {0x7f1a2b3c, 0xc0001a4000}, 0xc0001a6000)
+github.com/pin-gou/celer-route/core/bifrost.(*Bifrost).HandleRequest(0xc0001a8000, {0x7f1a2b3c, 0xc0001a4000}, 0xc0001a6000)
     /workspace/core/bifrost/bifrost.go:245 +0x3c4
-github.com/pin-gou/pg-gateway/transports/http.(*Handler).ServeHTTP(0xc0001aa000, {0x7f1a2b3c, 0xc0001a4000}, 0xc0001ac000)
+github.com/pin-gou/celer-route/transports/http.(*Handler).ServeHTTP(0xc0001aa000, {0x7f1a2b3c, 0xc0001a4000}, 0xc0001ac000)
     /workspace/transports/http/handler.go:78 +0x2e8
 net/http.(*ServeMux).ServeHTTP(0xc0001ae000, {0x7f1a2b3c, 0xc0001a4000}, 0xc0001ac000)
     /usr/local/go/src/net/http/server.go:2568 +0x1b4

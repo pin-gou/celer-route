@@ -1,7 +1,7 @@
 package anthropic
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToBifrostCountTokensResponse converts an Anthropic count tokens response to Bifrost format

@@ -642,7 +642,7 @@ export interface RestartRequiredConfig {
 	reason?: string;
 }
 
-// pg-gateway Config
+// celer-route Config
 export type PluginSpanFilterMode = "include" | "exclude";
 
 export interface PluginSpanFilter {
@@ -657,7 +657,7 @@ export interface BifrostConfig {
 	/** Present only while no admin account exists yet. True when the operator
 	 *  configured a bootstrap setup_token (config.json / BIFROST_SETUP_TOKEN) that
 	 *  the first PUT /api/config must include; false means the HTTP path cannot
-	 *  create the first admin and the operator should use the pg-gateway-admin
+	 *  create the first admin and the operator should use the celer-route-admin
 	 *  CLI instead. */
 	setup_token_configured?: boolean;
 	proxy_config?: GlobalProxyConfig;
@@ -679,7 +679,7 @@ export interface CompatConfig {
 	should_convert_params: boolean;
 }
 
-// Core pg-gateway configuration types
+// Core celer-route configuration types
 export interface CoreConfig {
 	drop_excess_requests: boolean;
 	initial_pool_size: number;

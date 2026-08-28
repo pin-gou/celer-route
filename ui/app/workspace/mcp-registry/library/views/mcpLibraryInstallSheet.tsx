@@ -123,7 +123,7 @@ function authLabel(authType?: MCPAuthType | string): string {
 function authHelpText(authType?: MCPAuthType | string): string {
 	switch (authType) {
 		case "headers":
-			return "Add the request headers pg-gateway should send with each tool call.";
+			return "Add the request headers celer-route should send with each tool call.";
 		case "oauth":
 			return "Create the MCP client, then complete the OAuth authorization flow.";
 		case "per_user_oauth":
@@ -394,7 +394,7 @@ export function MCPLibraryInstallSheet({ server, open, onClose, onInstalled }: M
 			<SheetContent className="flex w-full flex-col overflow-x-hidden p-0 pt-4 sm:max-w-2xl">
 				<SheetHeader className="flex flex-col items-start px-0 py-4" headerClassName="mb-0 sticky px-8 -top-4 bg-card z-10">
 					<SheetTitle>Install MCP server</SheetTitle>
-					<SheetDescription>Confirm the catalog configuration before adding this server to pg-gateway.</SheetDescription>
+					<SheetDescription>Confirm the catalog configuration before adding this server to celer-route.</SheetDescription>
 				</SheetHeader>
 
 				<Form {...form}>
@@ -440,7 +440,7 @@ export function MCPLibraryInstallSheet({ server, open, onClose, onInstalled }: M
 							<section className="space-y-4">
 								<div className="space-y-1">
 									<h3 className="text-sm font-medium">Client details</h3>
-									<p className="text-muted-foreground text-sm">pg-gateway uses this name internally when routing MCP tool calls.</p>
+									<p className="text-muted-foreground text-sm">celer-route uses this name internally when routing MCP tool calls.</p>
 								</div>
 
 								<FormField
@@ -484,12 +484,12 @@ export function MCPLibraryInstallSheet({ server, open, onClose, onInstalled }: M
 														<Info className="text-muted-foreground h-4 w-4 cursor-help" />
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs">
-														<p>Leave a value blank to read it from the environment where pg-gateway runs.</p>
+														<p>Leave a value blank to read it from the environment where celer-route runs.</p>
 													</TooltipContent>
 												</Tooltip>
 											</TooltipProvider>
 										</div>
-										<p className="text-muted-foreground text-sm">Values used when pg-gateway starts this stdio MCP server.</p>
+										<p className="text-muted-foreground text-sm">Values used when celer-route starts this stdio MCP server.</p>
 									</div>
 									<HeadersTable
 										value={envVars}

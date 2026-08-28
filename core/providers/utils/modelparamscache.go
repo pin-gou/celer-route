@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 const DefaultModelParamsCacheSize = 2048

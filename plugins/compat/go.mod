@@ -1,11 +1,11 @@
-module github.com/pin-gou/pg-gateway/plugins/compat
+module github.com/pin-gou/celer-route/plugins/compat
 
 go 1.26.5
 
 require (
 	github.com/bytedance/sonic v1.15.1
-	github.com/pin-gou/pg-gateway/core v1.7.7
-	github.com/pin-gou/pg-gateway/framework v1.5.7
+	github.com/pin-gou/celer-route/core v1.7.7
+	github.com/pin-gou/celer-route/framework v1.5.7
 )
 
 require (
@@ -171,6 +171,6 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 )
 
-replace github.com/pin-gou/pg-gateway/core => ../../core
+replace github.com/pin-gou/celer-route/core => ../../core
 
-replace github.com/pin-gou/pg-gateway/framework => ../../framework
+replace github.com/pin-gou/celer-route/framework => ../../framework

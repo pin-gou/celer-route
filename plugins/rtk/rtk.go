@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // PluginName is the canonical name for the RTK compression plugin.

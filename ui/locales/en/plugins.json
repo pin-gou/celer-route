@@ -20,7 +20,7 @@
 		"disabled": "Disabled"
 	},
 	"emptyState": {
-		"title": "Custom plugins extend pg-gateway with your own business logic",
+		"title": "Custom plugins extend celer-route with your own business logic",
 		"description": "Build and deploy plugins for custom integrations, workflow automation, and AI governance.",
 		"installAriaLabel": "Create your first plugin",
 		"installNewPlugin": "Install New Plugin"
@@ -86,7 +86,7 @@
 	},
 	"form": {
 		"infoEdit": "Update your plugin configuration. Plugin name and path are read-only.",
-		"infoInstall": "Install a custom plugin by providing an absolute file path or HTTP URL accessible to pg-gateway deployment (.so).",
+		"infoInstall": "Install a custom plugin by providing an absolute file path or HTTP URL accessible to celer-route deployment (.so).",
 		"nameLabel": "Plugin Name *",
 		"namePlaceholder": "e.g., my-custom-plugin",
 		"pathLabel": "Plugin Path/URL *",
@@ -99,7 +99,7 @@
 		"title": "Edit Plugin Sequence",
 		"description": "Drag plugins above or below the built-in plugins block to control execution order.",
 		"builtinPlugins": "Built-in Plugins",
-		"alert": "If your config.json file has plugin sequence configured, it will take precedence over the sequence configured in the UI after restarting pg-gateway.",
+		"alert": "If your config.json file has plugin sequence configured, it will take precedence over the sequence configured in the UI after restarting celer-route.",
 		"cancel": "Cancel",
 		"save": "Save Sequence",
 		"savedToast": "Plugin sequence updated"
@@ -392,7 +392,7 @@
 			"effectTitle": "What happens while a key is cooling down",
 			"effectBody": "The failing (provider, key) pair is temporarily removed from the key pool for the configured TTL (default 300 seconds). At key selection the cooled key is skipped, so requests fall through to other healthy keys of the same provider, then to fallback providers. If every eligible key is suppressed, the request fails with a synthetic 503 no_eligible_keys error.",
 			"recoveryTitle": "Recovery",
-			"recoveryBody": "The key is automatically re-enabled when its TTL expires. Cooldown state lives in process memory, so restarting pg-gateway clears all cooldowns."
+			"recoveryBody": "The key is automatically re-enabled when its TTL expires. Cooldown state lives in process memory, so restarting celer-route clears all cooldowns."
 		}
 	},
 	"pluginNames": {

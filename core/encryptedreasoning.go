@@ -3,7 +3,7 @@ package bifrost
 import (
 	"strings"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )

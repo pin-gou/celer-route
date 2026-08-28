@@ -1,6 +1,6 @@
 package rtk
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 // getOpenAICommand extracts the command associated with a tool message by
 // looking up its ToolCallID in the provided lookup map. Returns the command

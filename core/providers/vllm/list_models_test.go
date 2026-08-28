@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 

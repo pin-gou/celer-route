@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/logstore"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/logstore"
 )
 
 // eventEnvelope is the JSON body of every delivery request.

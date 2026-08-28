@@ -1,0 +1,257 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/bytedance/sonic"
+	"github.com/pin-gou/celer-route/core/schemas"
+)
+
+// GetDefaultConfigDir returns the OS-specific default configuration directory for Bifrost.
+// This follows standard conventions:
+// - Linux/macOS: ~/.config/bifrost
+// - Windows: %APPDATA%\bifrost
+// - If appDir is provided (non-empty), it returns that instead
+func GetDefaultConfigDir(appDir string) string {
+	// If appDir is provided, use it directly
+	if appDir != "" {
+		return appDir
+	}
+
+	// Get OS-specific config directory
+	var configDir string
+	switch runtime.GOOS {
+	case "windows":
+		// Windows: %APPDATA%\bifrost
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			configDir = filepath.Join(appData, "bifrost")
+		} else {
+			// Fallback to user home directory
+			if homeDir, err := os.UserHomeDir(); err == nil {
+				configDir = filepath.Join(homeDir, "AppData", "Roaming", "bifrost")
+			}
+		}
+	default:
+		// Linux, macOS and other Unix-like systems: ~/.config/bifrost
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			configDir = filepath.Join(homeDir, ".config", "bifrost")
+		}
+	}
+
+	// If we couldn't determine the config directory, fall back to current directory
+	if configDir == "" {
+		configDir = "./bifrost-data"
+	}
+
+	return configDir
+}
+
+// registerPluginWithStatus instantiates, registers, and updates status for a plugin (used by builtin plugins)
+func (s *BifrostHTTPServer) registerPluginWithStatus(ctx context.Context, name string, path *string, config any, failOnError bool) error {
+	plugin, err := InstantiatePlugin(ctx, name, path, config, s.Config)
+	if err != nil {
+		logger.Error("failed to initialize %s plugin: %v", name, err)
+		// Use name since plugin may be nil when InstantiatePlugin returns an error
+		s.Config.UpdatePluginOverallStatus(name, name, schemas.PluginStatusError,
+			[]string{fmt.Sprintf("error initializing %s plugin: %v", name, err)}, []schemas.PluginType{})
+		if failOnError {
+			return err
+		}
+		return nil
+	}
+
+	// Ensure plugin is not nil before using it (defensive check)
+	if plugin == nil {
+		logger.Error("plugin %s instantiated but returned nil", name)
+		s.Config.UpdatePluginOverallStatus(name, name, schemas.PluginStatusError,
+			[]string{fmt.Sprintf("plugin %s instantiated but returned nil", name)}, []schemas.PluginType{})
+		if failOnError {
+			return fmt.Errorf("plugin %s instantiated but returned nil", name)
+		}
+		return nil
+	}
+
+	s.Config.ReloadPlugin(plugin)
+	s.Config.UpdatePluginOverallStatus(name, name, schemas.PluginStatusActive,
+		[]string{fmt.Sprintf("%s plugin initialized successfully", name)}, InferPluginTypes(plugin))
+	return nil
+}
+
+// CollectObservabilityPlugins gathers all loaded plugins that implement ObservabilityPlugin interface
+func (s *BifrostHTTPServer) CollectObservabilityPlugins() []schemas.ObservabilityPlugin {
+	var observabilityPlugins []schemas.ObservabilityPlugin
+
+	// Check LLM plugins
+	for _, plugin := range s.Config.GetLoadedLLMPlugins() {
+		if observabilityPlugin, ok := plugin.(schemas.ObservabilityPlugin); ok {
+			observabilityPlugins = append(observabilityPlugins, observabilityPlugin)
+		}
+	}
+
+	// Check MCP plugins
+	for _, plugin := range s.Config.GetLoadedMCPPlugins() {
+		if observabilityPlugin, ok := plugin.(schemas.ObservabilityPlugin); ok {
+			observabilityPlugins = append(observabilityPlugins, observabilityPlugin)
+		}
+	}
+
+	return observabilityPlugins
+}
+
+// MarshalPluginConfig marshals the plugin configuration
+func MarshalPluginConfig[T any](source any) (*T, error) {
+	// If source is nil, return an empty config (zero value)
+	if source == nil {
+		return new(T), nil
+	}
+	// If its a *T, then we will confirm
+	if config, ok := source.(*T); ok {
+		return config, nil
+	}
+	// Initialize a new instance for unmarshaling
+	config := new(T)
+	// If its a map[string]any, then we will JSON parse and confirm
+	if configMap, ok := source.(map[string]any); ok {
+		configString, err := sonic.Marshal(configMap)
+		if err != nil {
+			return nil, err
+		}
+		if err := sonic.Unmarshal([]byte(configString), config); err != nil {
+			return nil, err
+		}
+		return config, nil
+	}
+	// If its a string, then we will JSON parse and confirm
+	if configStr, ok := source.(string); ok {
+		if err := sonic.Unmarshal([]byte(configStr), config); err != nil {
+			return nil, err
+		}
+		return config, nil
+	}
+	return nil, fmt.Errorf("invalid config type")
+}
+
+// currentKeyStatus returns the status and description currently held in memory
+// for the target of a KeyStatus update, and whether that target was found.
+//
+// A keyless provider is addressed by ks.KeyID == "" and carries its status on
+// the provider config; a keyed provider carries it on the matching key. found
+// is false when the provider is absent, when the key is absent, or when a
+// provider-level update arrives for a keyed provider — in every one of those
+// cases the caller has nothing to compare against and must not skip the write.
+func (s *BifrostHTTPServer) currentKeyStatus(ks schemas.KeyStatus) (status string, description string, found bool) {
+	s.Config.Mu.RLock()
+	defer s.Config.Mu.RUnlock()
+
+	providerConfig, exists := s.Config.Providers[ks.Provider]
+	if !exists {
+		return "", "", false
+	}
+
+	if ks.KeyID == "" {
+		if providerConfig.CustomProviderConfig == nil || !providerConfig.CustomProviderConfig.IsKeyLess {
+			return "", "", false
+		}
+		return providerConfig.Status, providerConfig.Description, true
+	}
+
+	for i := range providerConfig.Keys {
+		if providerConfig.Keys[i].ID == ks.KeyID {
+			return string(providerConfig.Keys[i].Status), providerConfig.Keys[i].Description, true
+		}
+	}
+	return "", "", false
+}
+
+// updateKeyStatus updates the model discovery status for keys or providers based on key statuses.
+// For keyed providers: updates individual key status
+// For keyless providers: updates provider-level status
+//
+// Statuses that match what is already stored are dropped before the write.
+// ConfigStore.UpdateStatus is an unconditional SQL UPDATE, and list-models runs
+// on a background interval on every node, so writing unconditionally would put
+// a steady keys x nodes x interval stream of no-op UPDATEs on the keys table
+// for rows whose values almost never change.
+func (s *BifrostHTTPServer) updateKeyStatus(
+	ctx context.Context,
+	keyStatuses []schemas.KeyStatus,
+) {
+	if s.Config == nil || s.Config.ConfigStore == nil || len(keyStatuses) == 0 {
+		return
+	}
+
+	// Update each key/provider status individually
+	for _, ks := range keyStatuses {
+		errorMsg := ""
+		if ks.Error != nil && ks.Error.Error != nil {
+			errorMsg = ks.Error.Error.Message
+		}
+
+		// Compared before the DB write, not after: a status that has not moved
+		// needs neither the UPDATE nor the in-memory rewrite below.
+		if currentStatus, currentDesc, found := s.currentKeyStatus(ks); found &&
+			currentStatus == string(ks.Status) && currentDesc == errorMsg {
+			continue
+		}
+
+		if err := s.Config.ConfigStore.UpdateStatus(ctx, ks.Provider, ks.KeyID, string(ks.Status), errorMsg); err != nil {
+			target := ks.KeyID
+			if target == "" {
+				target = string(ks.Provider)
+			}
+			logger.Error("failed to update model discovery status for %s: %v", target, err)
+			continue // Skip in-memory update if DB update failed
+		}
+
+		s.Config.Mu.Lock()
+
+		providerConfig, exists := s.Config.Providers[ks.Provider]
+		if !exists {
+			s.Config.Mu.Unlock()
+			logger.Warn("provider %s not found in memory during status update", ks.Provider)
+			continue
+		}
+
+		isKeylessProvider := providerConfig.CustomProviderConfig != nil && providerConfig.CustomProviderConfig.IsKeyLess
+
+		if ks.KeyID == "" {
+			if !isKeylessProvider {
+				logger.Warn("received provider-level status update for keyed provider %s; skipping in-memory update", ks.Provider)
+				s.Config.Mu.Unlock()
+				continue
+			}
+			providerConfig.Status = string(ks.Status)
+			providerConfig.Description = errorMsg
+			s.Config.Providers[ks.Provider] = providerConfig
+			logger.Debug("updated in-memory status for keyless provider %s", ks.Provider)
+			s.Config.Mu.Unlock()
+			continue
+		}
+
+		// Find and update the specific key in the Keys slice
+		updated := false
+		for i := range providerConfig.Keys {
+			if providerConfig.Keys[i].ID == ks.KeyID {
+				// Update Status and Description fields
+				providerConfig.Keys[i].Status = ks.Status
+				providerConfig.Keys[i].Description = errorMsg
+				updated = true
+				break
+			}
+		}
+
+		if updated {
+			// Write the modified config back to the map
+			s.Config.Providers[ks.Provider] = providerConfig
+			logger.Debug("updated in-memory status for key %s of provider %s", ks.KeyID, ks.Provider)
+		} else {
+			logger.Warn("key %s not found in provider %s during in-memory update", ks.KeyID, ks.Provider)
+		}
+
+		s.Config.Mu.Unlock()
+	}
+}

@@ -1,8 +1,8 @@
-module github.com/pin-gou/pg-gateway/plugins/jsonparser
+module github.com/pin-gou/celer-route/plugins/jsonparser
 
 go 1.26.5
 
-require github.com/pin-gou/pg-gateway/core v1.7.7
+require github.com/pin-gou/celer-route/core v1.7.7
 
 require (
 	cloud.google.com/go v0.123.0 // indirect
@@ -72,4 +72,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pin-gou/pg-gateway/core => ../../core
+replace github.com/pin-gou/celer-route/core => ../../core

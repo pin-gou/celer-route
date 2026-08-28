@@ -2,7 +2,7 @@ package vllm
 
 import (
 	"github.com/bytedance/sonic"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // parseVLLMTranscriptionStreamChunk parses vLLM's transcription stream JSON and returns

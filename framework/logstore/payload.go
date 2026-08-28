@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 const maxMCPToolInputPreviewRunes = 200
@@ -535,12 +535,12 @@ func (l *Log) BuildInputContentSummary() string {
 // It prefers ContentStr; falls back to the FIRST non-empty text ContentBlock.
 //
 // First-not-last matters because some providers (notably Anthropic on the
-// pg-gateway wire shape) inline mid-conversation system messages as a
+// celer-route wire shape) inline mid-conversation system messages as a
 // trailing text block on the user turn. The last text block of the last
 // user message then carries a "<system-reminder>..." envelope, and the row
 // preview would surface the reminder instead of the user's actual prompt.
 // The matching Go path used by the SSE /active/stream `message` field
-// (chatMessageContentText in transports/pg-gateway-http/handlers/logging.go)
+// (chatMessageContentText in transports/celer-route-http/handlers/logging.go)
 // already returns the first non-empty text block; this helper must agree.
 func extractChatMessageText(msg *schemas.ChatMessage) string {
 	if msg.Content == nil {

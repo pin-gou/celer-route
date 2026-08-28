@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // probeCatalog is a schemas.ModelInfoProvider returning known values, so a hook

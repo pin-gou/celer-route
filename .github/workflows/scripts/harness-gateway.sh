@@ -24,7 +24,7 @@ harness_build_gateway() {
 
   echo "🔨 Building bifrost-http binary..."
   mkdir -p "$REPO_ROOT/tmp"
-  (cd "$REPO_ROOT/transports/pg-gateway-http" && go build -o "$HARNESS_BINARY" .)
+  (cd "$REPO_ROOT/transports/celer-route-http" && go build -o "$HARNESS_BINARY" .)
 }
 
 # harness_seed_app_dir <app_dir>

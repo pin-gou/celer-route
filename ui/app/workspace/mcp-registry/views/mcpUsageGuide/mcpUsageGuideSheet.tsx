@@ -134,7 +134,7 @@ export function MCPUsageGuideSheet() {
 					<SheetHeader className="flex flex-col items-start px-0 py-4" headerClassName="mb-0 sticky px-8 -top-4 bg-card z-10">
 						<div className="flex items-center gap-2">
 							<div>
-								<SheetTitle>Install pg-gateway MCP</SheetTitle>
+								<SheetTitle>Install celer-route MCP</SheetTitle>
 								<SheetDescription>Build a copy-ready command or config for your agent harness.</SheetDescription>
 							</div>
 						</div>

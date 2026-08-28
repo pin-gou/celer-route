@@ -1,5 +1,5 @@
 {
-	"title": "Welcome to pg-gateway",
+	"title": "Welcome to celer-route",
 	"subtitle": "Let's get you set up in 5 quick steps.",
 	"skipWizard": "Skip wizard entirely",
 	"skip": "Skip",
@@ -31,7 +31,7 @@
 		"addOpenCode": "Add OpenCode Free",
 		"addedOpenCode": "OpenCode Free added"
 	},
-	"welcomeDesc": "pg-gateway is a high-performance AI gateway that unifies 20+ LLM providers behind a single OpenAI-compatible API.",
+	"welcomeDesc": "celer-route is a high-performance AI gateway that unifies 20+ LLM providers behind a single OpenAI-compatible API.",
 	"feature": {
 		"unified": "Unified API",
 		"unifiedDesc": "20+ providers, one OpenAI-compatible endpoint",
@@ -42,11 +42,11 @@
 		"observability": "Observability",
 		"observabilityDesc": "Logs, cost tracking, distributed tracing"
 	},
-	"adminDesc": "Protect your dashboard with an admin account. You can skip this if pg-gateway runs only on your local machine.",
-	"adminSkipHint": "You can leave auth disabled if pg-gateway is only accessible from your own computer and not exposed to the network.",
+	"adminDesc": "Protect your dashboard with an admin account. You can skip this if celer-route runs only on your local machine.",
+	"adminSkipHint": "You can leave auth disabled if celer-route is only accessible from your own computer and not exposed to the network.",
 	"setupTokenCliTitle": "Use the CLI to create the first admin account",
 	"setupTokenCliDesc": "This instance doesn't have an admin account yet. Create one with the bundled CLI — you only need shell access to the container. After it's created, refresh this page to manage auth normally.",
-	"setupTokenCliCommand": "docker exec -it <container> pg-gateway-admin admin reset",
+	"setupTokenCliCommand": "docker exec -it <container> celer-route-admin admin reset",
 	"adminUsername": "Admin username",
 	"adminPassword": "Admin password",
 	"adminUsernamePlaceholder": "admin",
@@ -91,7 +91,7 @@
 		"node": "Node.js",
 		"go": "Go"
 	},
-	"alreadySetUpNotice": "Your pg-gateway is already configured. You can re-run this wizard any time.",
+	"alreadySetUpNotice": "Your celer-route is already configured. You can re-run this wizard any time.",
 	"section": {
 		"security": "Security",
 		"providerSetup": "Provider Setup",
@@ -106,7 +106,7 @@
 		"skip": "Skip",
 		"skipped": "Skipped",
 		"remindLater": "Remind me later",
-		"warning": "Not completing these steps keeps your pg-gateway setup vulnerable.",
+		"warning": "Not completing these steps keeps your celer-route setup vulnerable.",
 		"tomorrow": "Tomorrow",
 		"inAWeek": "In a week",
 		"pickDate": "Pick a date…",

@@ -49,7 +49,7 @@ fi
 # Detect host architecture for native build detection
 HOST_ARCH=$(uname -m)
 
-MODULE_PATH="$PROJECT_ROOT/transports/pg-gateway-http"
+MODULE_PATH="$PROJECT_ROOT/transports/celer-route-http"
 
 
 for platform in "${platforms[@]}"; do

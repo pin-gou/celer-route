@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/providers/anthropic"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/tidwall/gjson"
 )
 

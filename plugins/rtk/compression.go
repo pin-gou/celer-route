@@ -3,8 +3,8 @@ package rtk
 import (
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/plugins/rtk/renderers"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/plugins/rtk/renderers"
 )
 
 // ProcessStats holds token statistics for a single text compression pass.

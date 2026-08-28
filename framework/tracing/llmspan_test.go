@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func assertJSONAttr(t *testing.T, attrs map[string]any, key string) map[string]any {

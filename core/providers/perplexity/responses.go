@@ -3,7 +3,7 @@ package perplexity
 import (
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // isPerplexityResponsesSupported reports whether the model should use /v1/responses vs /chat/completions.

@@ -3,8 +3,8 @@ package openai
 import (
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // CustomResponseHandler is a function that produces a Bifrost response from a Bifrost request.

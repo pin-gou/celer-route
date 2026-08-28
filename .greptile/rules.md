@@ -66,7 +66,7 @@ For `framework/streaming/**`:
 - Watch for aliasing bugs where chunks or response fields can be mutated after being published.
 - Preserve the pattern where streaming chunks are accumulated into a full response for post-hooks without changing already-published chunks.
 
-For `transports/pg-gateway-http/handlers/**`:
+For `transports/celer-route-http/handlers/**`:
 
 - Verify handler changes keep SDK integration behavior compatible with OpenAI, Anthropic, Bedrock, Google GenAI, LangChain, LiteLLM, and PydanticAI where relevant.
 - Check request parsing, error status codes, and middleware ordering.

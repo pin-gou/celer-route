@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/logstore"
-	"github.com/pin-gou/pg-gateway/framework/objectstore"
-	"github.com/pin-gou/pg-gateway/framework/vectorstore"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/logstore"
+	"github.com/pin-gou/celer-route/framework/objectstore"
+	"github.com/pin-gou/celer-route/framework/vectorstore"
 	"gorm.io/gorm"
 )
 

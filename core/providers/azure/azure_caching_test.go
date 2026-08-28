@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/providers/openai"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/providers/openai"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestAzure_OpenAIModel_CachingDeterminism verifies that Azure's delegation to

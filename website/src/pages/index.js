@@ -129,7 +129,7 @@ function ArchSvg() {
       <rect x="40" y="138" width="620" height="110" rx="10" stroke="url(#g2)" strokeWidth="2" fill="none" />
       <text x="60" y="168" fontSize="14" fontWeight="700" fill="currentColor">L2 · 网关引擎层</text>
       <text x="60" y="190" fontSize="12" fill="#64748b">
-        pg-gateway Core · 请求排队 · 推理路由 · 故障转移 · 中间件管道
+        celer-route Core · 请求排队 · 推理路由 · 故障转移 · 中间件管道
       </text>
       <rect x="60" y="205" width="96" height="28" rx="6" fill="url(#g2)" opacity="0.25" />
       <text x="72" y="224" fontSize="11" fontWeight="600" fill="currentColor">插件系统</text>
@@ -195,12 +195,12 @@ export default function Home() {
   return (
     <Layout
       title="高性能 AI 网关"
-      description="pg-gateway 是一个高性能的个人 LLM 接口网关，将 20+ 主流 LLM 提供商统一为 OpenAI 兼容 API"
+      description="celer-route 是一个高性能的个人 LLM 接口网关，将 20+ 主流 LLM 提供商统一为 OpenAI 兼容 API"
     >
       <div className="pg-home">
         {/* Hero */}
         <header className="pg-hero">
-          <h1>pg-gateway</h1>
+          <h1>celer-route</h1>
           <p className="tagline">高性能个人 LLM 网关 · 一套 API 串联 30+ 模型</p>
           <div className="cta">
             <a className="pg-btn pg-btn-primary" href={useBaseUrl('deployment/sqlite')}>
@@ -208,7 +208,7 @@ export default function Home() {
             </a>
             <a
               className="pg-btn pg-btn-secondary"
-              href="https://github.com/pin-gou/pg-gateway"
+              href="https://github.com/pin-gou/celer-route"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -220,7 +220,7 @@ export default function Home() {
         {/* Section 1: 这是什么 */}
         <Section id="sec1" title="1. 这是什么">
           <p>
-            pg-gateway 是一个高性能的个人 LLM 接口网关，将 20+ 主流 LLM 提供商统一为 OpenAI
+            celer-route 是一个高性能的个人 LLM 接口网关，将 20+ 主流 LLM 提供商统一为 OpenAI
             兼容 API。你只需学会一套 API，就能在 30+ 模型间自由切换、组合、路由。
           </p>
           <div className="pg-feature-grid">
@@ -266,8 +266,8 @@ export default function Home() {
           <StepCard num="1" title="获取代码">
             <pre>
               <code>
-                git clone https://github.com/pin-gou/pg-gateway.git{'\n'}
-                cd pg-gateway
+                git clone https://github.com/pin-gou/celer-route.git{'\n'}
+                cd celer-route
               </code>
             </pre>
           </StepCard>
@@ -281,14 +281,14 @@ export default function Home() {
             </div>
             <pre>
               <code>
-                docker pull ghcr.io/pin-gou/pg-gateway:latest{'\n'}
+                docker pull ghcr.io/pin-gou/celer-route:latest{'\n'}
                 docker run -d \{'\n'}
-                {'  '}--name pg-gateway \{'\n'}
+                {'  '}--name celer-route \{'\n'}
                 {'  '}--restart unless-stopped \{'\n'}
                 {'  '}--user 0:0 \{'\n'}
                 {'  '}-p 8080:8080 \{'\n'}
-                {'  '}-v ~/pg-gateway-data:/app/data \{'\n'}
-                {'  '}ghcr.io/pin-gou/pg-gateway:latest
+                {'  '}-v ~/celer-route-data:/app/data \{'\n'}
+                {'  '}ghcr.io/pin-gou/celer-route:latest
               </code>
             </pre>
             <div className="pg-info-card">
@@ -403,7 +403,7 @@ export default function Home() {
             <tbody>
               <tr>
                 <td><code>make build</code></td>
-                <td>构建 pg-gateway-http 二进制</td>
+                <td>构建 celer-route-http 二进制</td>
               </tr>
               <tr>
                 <td><code>make dev</code></td>
@@ -466,7 +466,7 @@ export default function Home() {
         {/* Footer */}
         <div className="pg-footer">
           <p>
-            Apache 2.0 · pg-gateway · 基于{' '}
+            Apache 2.0 · celer-route · 基于{' '}
             <a href="https://github.com/maximhq/bifrost" target="_blank" rel="noopener noreferrer">
               Bifrost
             </a>{' '}

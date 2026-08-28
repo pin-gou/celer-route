@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/pin-gou/pg-gateway/core/mcp/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/mcp/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // perUserOAuthResolver handles MCPAuthTypePerUserOauth — each caller's

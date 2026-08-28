@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	"github.com/pin-gou/pg-gateway/framework/encrypt"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/encrypt"
 )
 
-// writeTempConfig writes a minimal pg-gateway config.json pointing at a
+// writeTempConfig writes a minimal celer-route config.json pointing at a
 // SQLite database under t.TempDir(). Returns the path to the config file.
 func writeTempConfig(t *testing.T) string {
 	t.Helper()

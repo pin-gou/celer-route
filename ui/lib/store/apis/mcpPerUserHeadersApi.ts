@@ -1,5 +1,5 @@
 // RTK Query endpoints for the MCP per-user headers credential flow.
-// Mirrors the backend handler in transports/pg-gateway-http/handlers/mcp_per_user_headers.go.
+// Mirrors the backend handler in transports/celer-route-http/handlers/mcp_per_user_headers.go.
 
 import { MCPHeadersFlowDetail, MCPPerUserHeadersSubmitRequest, MCPPerUserHeadersSubmitResponse } from "@/lib/types/mcpPerUserHeaders";
 import { baseApi } from "./baseApi";

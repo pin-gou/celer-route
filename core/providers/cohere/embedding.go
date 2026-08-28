@@ -1,7 +1,7 @@
 package cohere
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToCohereEmbeddingRequest converts a Bifrost embedding request to Cohere format

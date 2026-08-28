@@ -2,7 +2,7 @@
 package plugins
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // PluginConfig is the generic configuration for any plugin type

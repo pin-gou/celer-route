@@ -35,11 +35,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/encrypt"
+	"github.com/pin-gou/celer-route/core/schemas"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/encrypt"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
+	bifrost "github.com/pin-gou/celer-route/core"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"

@@ -9,8 +9,8 @@ import (
 	"os"
 	"testing"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // RunImageVariationTest executes the end-to-end image variation test (non-streaming)

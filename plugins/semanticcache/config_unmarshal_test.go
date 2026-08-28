@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
+	bifrost "github.com/pin-gou/celer-route/core"
 )
 
 func TestUnmarshalJSON_DefaultCacheKey(t *testing.T) {

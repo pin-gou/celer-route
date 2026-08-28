@@ -48,7 +48,7 @@ export default function SecurityView() {
 	const [passwordError, setPasswordError] = useState("");
 	// No admin account has ever been created on this instance yet. The HTTP API
 	// cannot create the first admin without a setup_token, so we guide the
-	// operator to the pg-gateway-admin CLI instead.
+	// operator to the celer-route-admin CLI instead.
 	const isFirstTimeSetup = !bifrostConfig?.auth_config;
 
 	useEffect(() => {
@@ -197,7 +197,7 @@ export default function SecurityView() {
 
 			// When no admin exists yet, the HTTP API cannot create one without a
 			// setup_token, so skip auth_config entirely — the operator must use the
-			// pg-gateway-admin CLI. Once the admin is created via CLI and the page
+			// celer-route-admin CLI. Once the admin is created via CLI and the page
 			// is refreshed, auth_config will be present and the normal management
 			// path (including the save button) becomes available.
 			await updateCoreConfig({

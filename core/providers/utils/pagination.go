@@ -1,7 +1,7 @@
 package utils
 
 import (
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // SerialListHelper manages serial key pagination for list operations.

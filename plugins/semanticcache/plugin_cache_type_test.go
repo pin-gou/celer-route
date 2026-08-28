@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/vectorstore"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/vectorstore"
 )
 
 // TestCacheTypeDirectOnly tests that CacheTypeKey set to "direct" only performs direct hash matching

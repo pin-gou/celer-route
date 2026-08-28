@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

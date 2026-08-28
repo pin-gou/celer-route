@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	bifrost "github.com/pin-gou/celer-route/core"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/modelcatalog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"

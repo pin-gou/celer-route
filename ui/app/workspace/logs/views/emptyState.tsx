@@ -97,7 +97,7 @@ export function EmptyState({ error }: EmptyStateProps) {
 
 client = openai.OpenAI(
     base_url="${baseUrl}/openai",
-    api_key="dummy-api-key" # Handled by pg-gateway
+    api_key="dummy-api-key" # Handled by celer-route
 )
 
 response = client.chat.completions.create(
@@ -108,7 +108,7 @@ response = client.chat.completions.create(
 
 const openai = new OpenAI({
   baseURL: "${baseUrl}/openai",
-  apiKey: "dummy-api-key", // Handled by pg-gateway
+  apiKey: "dummy-api-key", // Handled by celer-route
 });
 
 const response = await openai.chat.completions.create({
@@ -121,7 +121,7 @@ const response = await openai.chat.completions.create({
 
 client = anthropic.Anthropic(
     base_url="${baseUrl}/anthropic",
-    api_key="dummy-api-key" # Handled by pg-gateway
+    api_key="dummy-api-key" # Handled by celer-route
 )
 
 response = client.messages.create(
@@ -133,7 +133,7 @@ response = client.messages.create(
 
 const anthropic = new Anthropic({
   baseURL: "${baseUrl}/anthropic",
-  apiKey: "dummy-api-key", // Handled by pg-gateway
+  apiKey: "dummy-api-key", // Handled by celer-route
 });
 
 const response = await anthropic.messages.create({
@@ -147,7 +147,7 @@ const response = await anthropic.messages.create({
 from google.genai.types import HttpOptions
 
 client = genai.Client(
-    api_key="dummy-api-key", # Handled by pg-gateway
+    api_key="dummy-api-key", # Handled by celer-route
     http_options=HttpOptions(base_url="${baseUrl}/genai")
 )
 
@@ -157,7 +157,7 @@ response = client.models.generate_content(
 )`,
 					typescript: `import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI("dummy-api-key", { // Handled by pg-gateway
+const genAI = new GoogleGenerativeAI("dummy-api-key", { // Handled by celer-route
   baseUrl: "${baseUrl}/genai",
 });
 
@@ -187,10 +187,10 @@ from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-# Initialize ChatOpenAI with pg-gateway
+# Initialize ChatOpenAI with celer-route
 llm = ChatOpenAI(
     model="gpt-4o-mini",
-    api_key="dummy-api-key",  # Handled by pg-gateway
+    api_key="dummy-api-key",  # Handled by celer-route
     base_url="${baseUrl}/langchain",
     max_tokens=100,
 )
@@ -212,10 +212,10 @@ import { HumanMessage } from "@langchain/core/messages";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 
-// Initialize ChatOpenAI with pg-gateway
+// Initialize ChatOpenAI with celer-route
 const llm = new ChatOpenAI({
   model: "gpt-4o-mini",
-  openAIApiKey: "dummy-api-key", // Handled by pg-gateway
+  openAIApiKey: "dummy-api-key", // Handled by celer-route
   clientOptions: {
     baseURL: "${baseUrl}/langchain",
   },

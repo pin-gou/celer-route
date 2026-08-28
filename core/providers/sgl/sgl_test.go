@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
+	"github.com/pin-gou/celer-route/core/internal/llmtests"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func TestSGL(t *testing.T) {

@@ -60,7 +60,7 @@ while IFS= read -r plugin_line; do
     echo "   📦 $plugin_name: $current_version (from transport go.mod)"
     PLUGIN_VERSIONS["$plugin_name"]="$current_version"
   fi
-done < <(grep "github.com/pin-gou/pg-gateway/plugins/" go.mod)
+done < <(grep "github.com/pin-gou/celer-route/plugins/" go.mod)
 cd ..
 
 echo "🔧 Using versions:"
@@ -85,20 +85,20 @@ for plugin_name in "${!PLUGIN_VERSIONS[@]}"; do
   plugin_version="${PLUGIN_VERSIONS[$plugin_name]}"
 
   # Check if transport depends on this plugin
-  if grep -q "github.com/pin-gou/pg-gateway/plugins/$plugin_name" go.mod; then
+  if grep -q "github.com/pin-gou/celer-route/plugins/$plugin_name" go.mod; then
     echo "  📦 Using $plugin_name plugin $plugin_version"
     # Textual require bump — skips loading the currently-declared version's go.mod
-    go mod edit -require="github.com/pin-gou/pg-gateway/plugins/$plugin_name@$plugin_version"
+    go mod edit -require="github.com/pin-gou/celer-route/plugins/$plugin_name@$plugin_version"
   fi
 done
 
 # Also ensure core and framework are up to date
 
 echo "  🔧 Updating core to $CORE_VERSION"
-go mod edit -require="github.com/pin-gou/pg-gateway/core@$CORE_VERSION"
+go mod edit -require="github.com/pin-gou/celer-route/core@$CORE_VERSION"
 
 echo "  📦 Updating framework to $FRAMEWORK_VERSION"
-go mod edit -require="github.com/pin-gou/pg-gateway/framework@$FRAMEWORK_VERSION"
+go mod edit -require="github.com/pin-gou/celer-route/framework@$FRAMEWORK_VERSION"
 
 # Re-normalize before tidy in case any edit reintroduced a toolchain line
 go mod edit -go=1.26.4 -toolchain=none

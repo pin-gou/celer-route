@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
-	"github.com/pin-gou/pg-gateway/framework/routing"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/modelcatalog"
+	"github.com/pin-gou/celer-route/framework/routing"
 	"gorm.io/gorm"
 )
 

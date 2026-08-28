@@ -1,7 +1,7 @@
 package sarvam
 
 import (
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToSarvamTranscriptionRequest maps a Bifrost transcription request onto Sarvam's speech-to-text fields.

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Test schema with nullable enum and multi-type fields (the problematic cases that were fixed)

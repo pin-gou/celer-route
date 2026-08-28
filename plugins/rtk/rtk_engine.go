@@ -3,7 +3,7 @@ package rtk
 import (
 	"encoding/json"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // rtkEngine implements CompressionEngine by wrapping the existing RTK

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 

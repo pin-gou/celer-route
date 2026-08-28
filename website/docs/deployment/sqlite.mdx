@@ -10,7 +10,7 @@ SQLite 模式适合**单机部署、试用、PoC**。零外部依赖，启动即
 
 ## 适用场景
 
-- 单节点 pg-gateway 实例
+- 单节点 celer-route 实例
 - 试用 / Demo / PoC
 - 低写入量场景（日志 < 1000 QPS）
 - 不想引入 PostgreSQL 的运维负担
@@ -23,7 +23,7 @@ import TabItem from '@theme/TabItem';
 <Tabs>
 <TabItem value="docker" label="Docker Compose（推荐）" default>
 
-仓库根目录 [`examples/dockers/`](https://github.com/pin-gou/pg-gateway/tree/master/examples/dockers) 提供了完整示例：
+仓库根目录 [`examples/dockers/`](https://github.com/pin-gou/celer-route/tree/master/examples/dockers) 提供了完整示例：
 
 ```bash
 cd examples/dockers
@@ -38,15 +38,15 @@ docker compose up -d
 ```bash
 # 1. 下载镜像中的二进制（或 make build）
 make build
-# 产物在 transports/pg-gateway-http/
+# 产物在 transports/celer-route-http/
 
 # 2. 准备数据目录
-mkdir -p ~/pg-gateway-data
+mkdir -p ~/celer-route-data
 
 # 3. 准备 config.json（见下方配置示例）
 
 # 4. 启动
-./main -app-dir ~/pg-gateway-data -port 8080
+./main -app-dir ~/celer-route-data -port 8080
 ```
 
 </TabItem>
@@ -112,7 +112,7 @@ sqlite3 /app/data/config.db ".backup '/backup/config.db.$(date +%Y%m%d)'"
 sqlite3 /app/data/logs.db   ".backup '/backup/logs.db.$(date +%Y%m%d)'"
 
 # 容器场景
-docker exec pg-gateway sqlite3 /app/data/config.db \
+docker exec celer-route sqlite3 /app/data/config.db \
   ".backup '/backup/config.db.$(date +%Y%m%d)'"
 ```
 
@@ -129,9 +129,9 @@ docker exec pg-gateway sqlite3 /app/data/config.db \
 
 当单机部署无法满足需求时，可以平滑切换到 PostgreSQL：
 
-1. 停止当前 pg-gateway 容器
+1. 停止当前 celer-route 容器
 2. 修改 `config.json` 中两个 store 的 `type` 为 `"postgres"` 并填写连接参数
-3. 启动新后端，pg-gateway 会自动在新数据库中创建表结构
+3. 启动新后端，celer-route 会自动在新数据库中创建表结构
 4. （如有需要）从 SQLite 备份恢复历史日志数据
 
 详见 [数据存储后端 — PostgreSQL](../features/data-storage#postgresql)。

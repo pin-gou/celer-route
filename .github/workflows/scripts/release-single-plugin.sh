@@ -65,8 +65,8 @@ cd "$PLUGIN_DIR"
 
 # Update core dependency
 if [ -f "go.mod" ]; then
-  go_get_with_backoff "github.com/pin-gou/pg-gateway/core@${CORE_VERSION}"
-  go_get_with_backoff "github.com/pin-gou/pg-gateway/framework@${FRAMEWORK_VERSION}"
+  go_get_with_backoff "github.com/pin-gou/celer-route/core@${CORE_VERSION}"
+  go_get_with_backoff "github.com/pin-gou/celer-route/framework@${FRAMEWORK_VERSION}"
   go mod tidy
   git add go.mod go.sum || true
 
@@ -162,7 +162,7 @@ $CHANGELOG_BODY
 
 \`\`\`bash
 # Update your go.mod to use the new plugin version
-go get github.com/pin-gou/pg-gateway/plugins/$PLUGIN_NAME@v$PLUGIN_VERSION
+go get github.com/pin-gou/celer-route/plugins/$PLUGIN_NAME@v$PLUGIN_VERSION
 \`\`\`
 
 ---

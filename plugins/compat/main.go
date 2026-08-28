@@ -8,8 +8,8 @@ import (
 	"slices"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/modelcatalog"
 )
 
 const PluginName = "compat"

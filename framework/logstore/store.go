@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/objectstore"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/objectstore"
 )
 
 // LogStoreType represents the type of log store.

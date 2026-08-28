@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestChatCompletion_ExtraParamsForwardedAutomatically verifies that provider-specific

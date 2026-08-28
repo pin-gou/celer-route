@@ -6,10 +6,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog/datasheet"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog/keyconfig"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog/live"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/modelcatalog/datasheet"
+	"github.com/pin-gou/celer-route/framework/modelcatalog/keyconfig"
+	"github.com/pin-gou/celer-route/framework/modelcatalog/live"
 )
 
 func modelInfoCatalog(t *testing.T) *ModelCatalog {

@@ -5,8 +5,8 @@ import (
 	"mime/multipart"
 	"sort"
 
-	"github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToBifrostTranscriptionRequest converts an OpenAI transcription request to Bifrost format

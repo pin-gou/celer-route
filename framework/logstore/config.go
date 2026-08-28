@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pin-gou/pg-gateway/framework/objectstore"
+	"github.com/pin-gou/celer-route/framework/objectstore"
 )
 
 // Config represents the configuration for the logs store.

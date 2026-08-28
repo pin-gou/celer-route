@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToRunwayImageGenerationRequest converts a Bifrost image generation request to Runway's text_to_image format.

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func TestConvertResponsesTextFormatToCohere_CompositeObjectSchema(t *testing.T) {

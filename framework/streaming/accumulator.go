@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/modelcatalog"
 )
 
 // getAccumulatorID extracts the ID for accumulator lookup from context.

@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 
@@ -377,7 +377,7 @@ func (provider *ElevenlabsProvider) SpeechStream(ctx *schemas.BifrostContext, po
 		// Request failed before the first response byte (server closed an idle/pooled connection,
 		// broken pipe, connection refused, DNS failure, etc.). Surface as a retriable upstream
 		// connection error (502) so executeRequestWithRetries honors max_retries, matching the
-		// non-streaming path - see https://github.com/pin-gou/pg-gateway/issues/4496.
+		// non-streaming path - see https://github.com/pin-gou/celer-route/issues/4496.
 		return nil, providerUtils.EnrichError(ctx, providerUtils.NewBifrostUpstreamConnectionError(schemas.ErrProviderDoRequest, err), jsonBody, nil, provider.sendBackRawRequest, provider.sendBackRawResponse, latency)
 	}
 

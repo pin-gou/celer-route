@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
+	"github.com/pin-gou/celer-route/core/schemas"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/modelcatalog"
 )
 
 // Decision represents the result of governance evaluation

@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
-	"github.com/pin-gou/pg-gateway/core/providers/gemini"
+	"github.com/pin-gou/celer-route/core/internal/llmtests"
+	"github.com/pin-gou/celer-route/core/providers/gemini"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func TestGemini(t *testing.T) {
@@ -3982,7 +3982,7 @@ func TestGenAIFinishReasonMaxTokens_PersistsThroughBifrostRoundTrip(t *testing.T
 // responseId must survive Gemini/Vertex → Bifrost → Gemini on the GenAI generateContent
 // path. These fields have no home in Bifrost's OpenAI-shaped Responses schema, so they
 // must be preserved via ProviderExtraFields rather than silently dropped.
-// See https://github.com/pin-gou/pg-gateway/issues/5843
+// See https://github.com/pin-gou/celer-route/issues/5843
 func TestGenAISafetyRatingsAvgLogprobsResponseID_PersistThroughBifrostRoundTrip(t *testing.T) {
 	geminiResp := &gemini.GenerateContentResponse{
 		ResponseID:   "abcd1234",

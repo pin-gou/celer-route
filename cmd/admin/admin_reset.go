@@ -13,11 +13,11 @@ import (
 
 	"golang.org/x/term"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/auth"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	"github.com/pin-gou/pg-gateway/framework/encrypt"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/auth"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/encrypt"
 )
 
 // resetOptions carries parsed CLI flags for the admin reset subcommand.
@@ -34,7 +34,7 @@ type resetOptions struct {
 // returns a default SQLite store at <appDir>/config.db (the same default the
 // server uses when no config.json exists). When appDir is also empty, the
 // APP_DIR environment variable is checked before falling back to the current
-// working directory — this makes `pg-gateway-admin admin reset` work inside
+// working directory — this makes `celer-route-admin admin reset` work inside
 // the Docker container without any flags.
 func loadConfigStoreConfig(configPath, appDir string) (*configstore.Config, string, error) {
 	if configPath != "" {
@@ -65,9 +65,9 @@ func defaultSQLiteConfig(dir string) (*configstore.Config, error) {
 	}, nil
 }
 
-// minimalConfigRoot is the subset of pg-gateway config.json that the admin
+// minimalConfigRoot is the subset of celer-route config.json that the admin
 // CLI needs to find and connect to the config store. Parsing the whole
-// transports/pg-gateway-http/lib ConfigData would drag in plugins,
+// transports/celer-route-http/lib ConfigData would drag in plugins,
 // providers, and other server-startup surfaces that a single-operator CLI
 // has no business loading.
 type minimalConfigRoot struct {
@@ -89,14 +89,14 @@ func loadConfigStoreConfigFromFile(path string) (*configstore.Config, error) {
 		return nil, fmt.Errorf("parse config file %q: %w", path, err)
 	}
 	if len(root.ConfigStore) == 0 || string(root.ConfigStore) == "null" {
-		return nil, errors.New("config file does not define a config_store; pg-gateway cannot persist admin accounts without one — add a config_store block to config.json or omit --config to use the default SQLite DB")
+		return nil, errors.New("config file does not define a config_store; celer-route cannot persist admin accounts without one — add a config_store block to config.json or omit --config to use the default SQLite DB")
 	}
 	var cfg configstore.Config
 	if err := json.Unmarshal(root.ConfigStore, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config_store block: %w", err)
 	}
 	if !cfg.Enabled {
-		return nil, errors.New("config_store.enabled is false; enable it to use pg-gateway-admin")
+		return nil, errors.New("config_store.enabled is false; enable it to use celer-route-admin")
 	}
 	if err := initEncryption(root.EncryptionKey); err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func loadConfigStoreConfigFromFile(path string) (*configstore.Config, error) {
 	return &cfg, nil
 }
 
-// initEncryptionFromEnv mirrors transports/pg-gateway-http/lib.initEncryption
+// initEncryptionFromEnv mirrors transports/celer-route-http/lib.initEncryption
 // for the no-config.json path: it honours the BIFROST_ENCRYPTION_KEY env var.
 func initEncryptionFromEnv() error {
 	if env := os.Getenv("BIFROST_ENCRYPTION_KEY"); env != "" {
@@ -113,7 +113,7 @@ func initEncryptionFromEnv() error {
 	return nil
 }
 
-// initEncryption mirrors transports/pg-gateway-http/lib.initEncryption: it
+// initEncryption mirrors transports/celer-route-http/lib.initEncryption: it
 // honours an explicit encryption_key from config.json and falls back to the
 // BIFROST_ENCRYPTION_KEY env var. Without this initialisation the config
 // store's BeforeSave hooks will refuse to write encrypted rows (or, worse,
@@ -229,7 +229,7 @@ func runReset(ctx context.Context, opts resetOptions) error {
 	fmt.Fprintf(os.Stderr, "  Admin username: %s\n", username)
 	fmt.Fprintln(os.Stderr, "  Auth enabled:   true")
 	if existingUsername == "" {
-		fmt.Fprintln(os.Stderr, "  Next step:      log in to the pg-gateway dashboard.")
+		fmt.Fprintln(os.Stderr, "  Next step:      log in to the celer-route dashboard.")
 	} else {
 		fmt.Fprintln(os.Stderr, "  Next step:      log in with the new password.")
 	}

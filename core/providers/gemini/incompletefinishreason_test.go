@@ -3,7 +3,7 @@ package gemini
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Issue #5978: the IncompleteDetails fallback in ToGeminiResponsesResponse

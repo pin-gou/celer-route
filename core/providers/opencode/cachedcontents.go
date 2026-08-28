@@ -1,8 +1,8 @@
 package opencode
 
 import (
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // CachedContentCreate is not supported by Opencode.

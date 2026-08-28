@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/framework/logstore"
+	"github.com/pin-gou/celer-route/framework/logstore"
 )
 
 func TestConfig_UnmarshalJSON_Defaults(t *testing.T) {

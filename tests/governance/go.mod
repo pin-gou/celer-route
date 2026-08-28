@@ -1,3 +1,3 @@
-module github.com/pin-gou/pg-gateway/tests/governance
+module github.com/pin-gou/celer-route/tests/governance
 
 go 1.26.5

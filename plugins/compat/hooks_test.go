@@ -6,10 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog/datasheet"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/modelcatalog"
+	"github.com/pin-gou/celer-route/framework/modelcatalog/datasheet"
 )
 
 // newTestPlugin builds a drop-params-enabled plugin backed by an in-memory

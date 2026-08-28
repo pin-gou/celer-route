@@ -1,10 +1,10 @@
-module github.com/pin-gou/pg-gateway/tests/scripts/1millogs
+module github.com/pin-gou/celer-route/tests/scripts/1millogs
 
 go 1.26.5
 
 require (
-	github.com/pin-gou/pg-gateway/core v1.7.7
-	github.com/pin-gou/pg-gateway/framework v0.0.0
+	github.com/pin-gou/celer-route/core v1.7.7
+	github.com/pin-gou/celer-route/framework v0.0.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -137,6 +137,6 @@ require (
 	gorm.io/driver/clickhouse v0.7.0 // indirect
 )
 
-replace github.com/pin-gou/pg-gateway/core => ../../../core
+replace github.com/pin-gou/celer-route/core => ../../../core
 
-replace github.com/pin-gou/pg-gateway/framework => ../../../framework
+replace github.com/pin-gou/celer-route/framework => ../../../framework

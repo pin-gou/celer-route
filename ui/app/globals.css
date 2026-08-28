@@ -313,7 +313,7 @@ div.content-container:has(.no-border-parent) #trial-notification-banner {
 	border: 1px solid transparent;
 }
 
-/* ReactFlow Controls — follow pg-gateway colour schema */
+/* ReactFlow Controls — follow celer-route colour schema */
 
 .react-flow__controls {
 	background-color: var(--card);

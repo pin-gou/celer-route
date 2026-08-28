@@ -1,6 +1,6 @@
 package main
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 // ============================================================================
 // Input/Output Structs

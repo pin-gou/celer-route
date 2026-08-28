@@ -3,7 +3,7 @@ package openai
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestBuildPassthroughURLWithUpstreamOverride verifies host-backed passthrough

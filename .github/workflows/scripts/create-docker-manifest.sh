@@ -10,7 +10,7 @@ fi
 VERSION="$1"
 REGISTRY="ghcr.io"
 ACCOUNT="pin-gou"
-IMAGE_NAME="pg-gateway"
+IMAGE_NAME="celer-route"
 IMAGE="${REGISTRY}/${ACCOUNT}/${IMAGE_NAME}"
 
 # Get the actual image digests from the platform-specific builds.

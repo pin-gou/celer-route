@@ -15,7 +15,7 @@ import (
 //
 // Production shape:
 //
-//	transports/pg-gateway-http/lib/ctx.go:199
+//	transports/celer-route-http/lib/ctx.go:199
 //	    parent := context.Context(ctx)            // ctx is *fasthttp.RequestCtx
 //	    bifrostCtx, _ = NewBifrostContextWithCancel(parent)
 //	    ctx.VisitUserValuesAll(...)               // every user value is COPIED in

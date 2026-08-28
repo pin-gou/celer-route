@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // noopTestLogger is a minimal schemas.Logger implementation for tests that

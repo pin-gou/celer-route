@@ -1,6 +1,6 @@
 package utils
 
-import schemas "github.com/pin-gou/pg-gateway/core/schemas"
+import schemas "github.com/pin-gou/celer-route/core/schemas"
 
 // BodySigner signs the final request body bytes after the handler has marshaled them and
 // returns auth headers to set on the outgoing request. Handlers invoke it immediately after

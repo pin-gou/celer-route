@@ -249,7 +249,7 @@
 		"action": "操作",
 		"edge": "边",
 		"node": "节点",
-		"pageTitle": "路由树 | pg-gateway",
+		"pageTitle": "路由树 | celer-route",
 		"pageDescription": "路由规则的只读决策树可视化",
 		"back": "返回",
 		"searchPlaceholder": "搜索条件或规则…",

@@ -1,10 +1,10 @@
-module github.com/pin-gou/pg-gateway/plugins/prompts
+module github.com/pin-gou/celer-route/plugins/prompts
 
 go 1.26.5
 
 require (
-	github.com/pin-gou/pg-gateway/core v1.7.7
-	github.com/pin-gou/pg-gateway/framework v1.5.7
+	github.com/pin-gou/celer-route/core v1.7.7
+	github.com/pin-gou/celer-route/framework v1.5.7
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -81,6 +81,6 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 )
 
-replace github.com/pin-gou/pg-gateway/core => ../../core
+replace github.com/pin-gou/celer-route/core => ../../core
 
-replace github.com/pin-gou/pg-gateway/framework => ../../framework
+replace github.com/pin-gou/celer-route/framework => ../../framework

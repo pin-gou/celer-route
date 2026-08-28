@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/encrypt"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/encrypt"
 	"gorm.io/gorm"
 )
 

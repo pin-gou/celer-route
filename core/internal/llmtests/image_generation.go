@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // RunImageGenerationTest executes the end-to-end image generation test (non-streaming)

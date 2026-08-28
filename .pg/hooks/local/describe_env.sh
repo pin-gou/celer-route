@@ -30,10 +30,10 @@ described_for:
 environments:
   local:
     business_systems:
-      - name: pg-gateway-api
+      - name: celer-route-api
         type: rest-api
         category: upstream
-        description: "pg-gateway AI 网关 HTTP API。prepare_env 阶段启动后通过 fixture 数据种子化，然后关闭。数据持久化在 data 目录"
+        description: "celer-route AI 网关 HTTP API。prepare_env 阶段启动后通过 fixture 数据种子化，然后关闭。数据持久化在 data 目录"
         endpoints:
           - name: health
             url: "http://localhost:9080/health"
@@ -61,7 +61,7 @@ environments:
       - name: ui-dev
         type: web-app
         category: upstream
-        description: "Vite + React 前端开发服务器（NPM run dev，端口 3008）。支持中英文 i18n 运行时切换与 localStorage 持久化（pg-gateway.locale）。本服务用于前端 i18n 改造验证、Chrome DevTools MCP 采证。"
+        description: "Vite + React 前端开发服务器（NPM run dev，端口 3008）。支持中英文 i18n 运行时切换与 localStorage 持久化（celer-route.locale）。本服务用于前端 i18n 改造验证、Chrome DevTools MCP 采证。"
         endpoints:
           - name: dev
             url: "http://localhost:3008"
@@ -86,7 +86,7 @@ environments:
     data_resources:
       - name: config-db
         type: db-table
-        owner: pg-gateway-api
+        owner: celer-route-api
         description: "SQLite 配置数据库，包含 providers、keys、routing_rules、model_configs、plugins 等表"
         state:
           status: seeded
@@ -101,7 +101,7 @@ environments:
 
       - name: logs-db
         type: db-table
-        owner: pg-gateway-api
+        owner: celer-route-api
         description: "SQLite 日志数据库，存储请求/响应日志"
         state:
           status: empty
@@ -213,9 +213,9 @@ environments:
 
       - name: bifrost-binary
         type: file
-        location: tmp/pg-gateway-http
+        location: tmp/celer-route-http
         scope: environment
-        description: "编译后的 pg-gateway-http 二进制文件"
+        description: "编译后的 celer-route-http 二进制文件"
         lifecycle: persistent
         tags:
           - binary
@@ -230,8 +230,8 @@ environments:
           host: localhost
           ports:
             - port: 9080
-              role: pg-gateway-api
-              description: "pg-gateway HTTP API 端口（prepare_env 阶段使用后关闭）"
+              role: celer-route-api
+              description: "celer-route HTTP API 端口（prepare_env 阶段使用后关闭）"
             - port: 3008
               role: ui-dev
               description: "Vite 开发服务器端口（由 stage 的 role start 启动）"
@@ -243,16 +243,16 @@ environments:
 
     relations:
       - from: config-db
-        to: pg-gateway-api
+        to: celer-route-api
         type: owns
         criticality: required
-        description: "pg-gateway 读取 config.db 获取配置"
+        description: "celer-route 读取 config.db 获取配置"
 
       - from: logs-db
-        to: pg-gateway-api
+        to: celer-route-api
         type: owns
         criticality: required
-        description: "pg-gateway 写入 logs.db 存储日志"
+        description: "celer-route 写入 logs.db 存储日志"
 
       - from: fixture-providers
         to: config-db
@@ -303,10 +303,10 @@ environments:
         description: "ui-dev 通过 localhost:3008 暴露 Vite 开发服务器"
 
       - from: ui-dev
-        to: pg-gateway-api
+        to: celer-route-api
         type: consumes
         criticality: required
-        description: "ui-dev 通过 http://localhost:9080 调 pg-gateway REST API 加载数据"
+        description: "ui-dev 通过 http://localhost:9080 调 celer-route REST API 加载数据"
 YAML
 
 pg_exit --status=pass --duration=0 \

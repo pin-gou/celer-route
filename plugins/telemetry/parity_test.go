@@ -3,7 +3,7 @@ package telemetry
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestPrometheusLabelsMatchEnrichmentRegistry keeps the Prometheus bifrost label

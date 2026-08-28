@@ -3,8 +3,8 @@ package replicate
 import (
 	"strings"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToBifrostListModelsResponse converts Replicate deployments to a Bifrost list models response.

@@ -1,4 +1,4 @@
-module github.com/pin-gou/pg-gateway/tools/schema-sync
+module github.com/pin-gou/celer-route/tools/schema-sync
 
 go 1.26.5
 

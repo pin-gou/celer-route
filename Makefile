@@ -23,7 +23,7 @@ COMPAT ?=
 
 # Docker image build settings
 PLATFORMS ?=
-DOCKER_BUILDER ?= pg-gateway-builder
+DOCKER_BUILDER ?= celer-route-builder
 DOCKER_MULTIARCH_PLATFORMS ?= linux/amd64,linux/arm64
 
 # Colors for output
@@ -101,7 +101,7 @@ help: ## Show this help message
 	@$(ECHO) "  LOCAL             Use local go.work for builds (e.g., make build LOCAL=1)"
 	@$(ECHO) "  DEBUG             Enable delve debugger on port 2345 (e.g., make dev DEBUG=1, make test-core DEBUG=1, make test-governance DEBUG=1)"
 	@$(ECHO) "  PLATFORMS         Comma-separated platforms for docker-image multi-arch build (e.g., make docker-image PLATFORMS=linux/amd64,linux/arm64)"
-	@$(ECHO) "  DOCKER_BUILDER    buildx builder name for docker-image (default: pg-gateway-builder)"
+	@$(ECHO) "  DOCKER_BUILDER    buildx builder name for docker-image (default: celer-route-builder)"
 	@$(ECHO) ""
 	@$(ECHO) "$(YELLOW)Test Configuration:$(NC)"
 	@$(ECHO) "  TEST_REPORTS_DIR  Directory for HTML test reports (default: test-reports)"
@@ -225,10 +225,10 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)  3. Debugger (delve) listening on port 2345$(NC)"; \
 	fi; \
-	if [ ! -d "transports/pg-gateway-http/ui" ]; then \
-		$(ECHO) "$(YELLOW)Creating transports/pg-gateway-http/ui directory...$(NC)"; \
-		mkdir -p transports/pg-gateway-http/ui; \
-		touch transports/pg-gateway-http/ui/.tmp; \
+	if [ ! -d "transports/celer-route-http/ui" ]; then \
+		$(ECHO) "$(YELLOW)Creating transports/celer-route-http/ui directory...$(NC)"; \
+		mkdir -p transports/celer-route-http/ui; \
+		touch transports/celer-route-http/ui/.tmp; \
 	fi; \
 	$(ECHO) ""; \
 	$(ECHO) "$(YELLOW)Starting UI development server...$(NC)"; \
@@ -246,7 +246,7 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)Starting with air + delve debugger on port 2345...$(NC)"; \
 		$(ECHO) "$(YELLOW)Attach your debugger to localhost:2345$(NC)"; \
-		(cd transports/pg-gateway-http && BIFROST_UI_DEV=true air -c .air.debug.toml -- \
+		(cd transports/celer-route-http && BIFROST_UI_DEV=true air -c .air.debug.toml -- \
 			-host "$(HOST)" \
 			-port "$(PORT)" \
 			-log-style "$(LOG_STYLE)" \
@@ -254,7 +254,7 @@ dev: install-ui install-air setup-workspace $(if $(DEBUG),install-delve) ## Star
 			$(if $(PROMETHEUS_LABELS),-prometheus-labels "$(PROMETHEUS_LABELS)") \
 			$(if $(APP_DIR),-app-dir "$(abspath $(APP_DIR))")) & \
 	else \
-		(cd transports/pg-gateway-http && BIFROST_UI_DEV=true air -c .air.toml -- \
+		(cd transports/celer-route-http && BIFROST_UI_DEV=true air -c .air.toml -- \
 			-host "$(HOST)" \
 			-port "$(PORT)" \
 			-log-style "$(LOG_STYLE)" \
@@ -311,10 +311,10 @@ dev-pulse: install-ui install-pulse setup-workspace $(if $(DEBUG),install-delve)
 	if [ -n "$(DEBUG)" ]; then \
 		$(ECHO) "$(CYAN)  3. Debugger (delve) listening on port 2345$(NC)"; \
 	fi; \
-	if [ ! -d "transports/pg-gateway-http/ui" ]; then \
-		$(ECHO) "$(YELLOW)Creating transports/pg-gateway-http/ui directory...$(NC)"; \
-		mkdir -p transports/pg-gateway-http/ui; \
-		touch transports/pg-gateway-http/ui/.tmp; \
+	if [ ! -d "transports/celer-route-http/ui" ]; then \
+		$(ECHO) "$(YELLOW)Creating transports/celer-route-http/ui directory...$(NC)"; \
+		mkdir -p transports/celer-route-http/ui; \
+		touch transports/celer-route-http/ui/.tmp; \
 	fi; \
 	$(ECHO) ""; \
 	$(ECHO) "$(YELLOW)Starting UI development server...$(NC)"; \
@@ -350,14 +350,14 @@ build-ui: install-ui ## Build ui
 	@rm -rf ui/.next
 	@$(USE_NODE); cd ui && npm run build && npm run copy-build
 
-build: build-ui ## Build pg-gateway-http binary
+build: build-ui ## Build celer-route-http binary
 	@if [ -n "$(LOCAL)" ]; then \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════════════╗$(NC)"; \
-		$(ECHO) "$(GREEN)║  Building pg-gateway-http with local go.work...  ║$(NC)"; \
+		$(ECHO) "$(GREEN)║  Building celer-route-http with local go.work...  ║$(NC)"; \
 		$(ECHO) "$(GREEN)╚═══════════════════════════════════════════════╝$(NC)"; \
 	else \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════╗$(NC)"; \
-		$(ECHO) "$(GREEN)║  Building pg-gateway-http...             ║$(NC)"; \
+		$(ECHO) "$(GREEN)║  Building celer-route-http...             ║$(NC)"; \
 		$(ECHO) "$(GREEN)╚═══════════════════════════════════════╝$(NC)"; \
 	fi
 	@if [ -n "$(DYNAMIC)" ]; then \
@@ -382,30 +382,30 @@ build: build-ui ## Build pg-gateway-http binary
 	if [ "$$TARGET_OS" = "linux" ] && [ "$$HOST_OS" = "linux" ]; then \
 		if [ -n "$(DYNAMIC)" ]; then \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with dynamic linking...$(NC)"; \
-			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+			cd transports/celer-route-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 				-ldflags="-w -s -X main.Version=v$(VERSION_ARG)" \
 				-a -trimpath \
-				-o ../../tmp/pg-gateway-http \
+				-o ../../tmp/celer-route-http \
 				.; \
 		else \
 			$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH with static linking...$(NC)"; \
-			cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+			cd transports/celer-route-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 				-ldflags="-w -s -extldflags "-static" -X main.Version=v$(VERSION_ARG)" \
 				-a -trimpath \
 				-tags "sqlite_static" \
-				-o ../../tmp/pg-gateway-http \
+				-o ../../tmp/celer-route-http \
 				.; \
 		fi; \
-		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/celer-route-http (version: v$(VERSION))$(NC)"; \
 	elif [ "$$TARGET_OS" = "$$HOST_OS" ] && [ "$$TARGET_ARCH" = "$$HOST_ARCH" ]; then \
 		$(ECHO) "$(CYAN)Building for $$TARGET_OS/$$TARGET_ARCH (native build with CGO)...$(NC)"; \
-		cd transports/pg-gateway-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
+		cd transports/celer-route-http && CGO_ENABLED=1 GOOS=$$TARGET_OS GOARCH=$$TARGET_ARCH $(if $(LOCAL),,GOWORK=off) go build \
 			-ldflags="-w -s -X main.Version=v$(VERSION_ARG)" \
 			-a -trimpath \
 			-tags "sqlite_static" \
-			-o ../../tmp/pg-gateway-http \
+			-o ../../tmp/celer-route-http \
 			.; \
-		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http (version: v$(VERSION_ARG))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/celer-route-http (version: v$(VERSION_ARG))$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Cross-compilation detected: $$HOST_OS/$$HOST_ARCH -> $$TARGET_OS/$$TARGET_ARCH$(NC)"; \
 		$(ECHO) "$(CYAN)Using Docker for cross-compilation...$(NC)"; \
@@ -422,7 +422,7 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 			docker run --rm \
 				--platform linux/$(TARGET_ARCH) \
 				-v "$(shell pwd):/workspace" \
-				-w /workspace/transports/pg-gateway-http \
+				-w /workspace/transports/celer-route-http \
 				-e CGO_ENABLED=1 \
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
@@ -432,14 +432,14 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 				go build \
 					-ldflags='-w -s -X main.Version=v$(VERSION_ARG)' \
 					-a -trimpath \
-					-o ../../tmp/pg-gateway-http \
+					-o ../../tmp/celer-route-http \
 					."; \
 		else \
 			$(ECHO) "$(CYAN)Building for $(TARGET_OS)/$(TARGET_ARCH) in Docker container...$(NC)"; \
 			docker run --rm \
 				--platform linux/$(TARGET_ARCH) \
 				-v "$(shell pwd):/workspace" \
-				-w /workspace/transports/pg-gateway-http \
+				-w /workspace/transports/celer-route-http \
 				-e CGO_ENABLED=1 \
 				-e GOOS=$(TARGET_OS) \
 				-e GOARCH=$(TARGET_ARCH) \
@@ -450,17 +450,17 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 					-ldflags='-w -s -extldflags "-static" -X main.Version=v$(VERSION_ARG)' \
 					-a -trimpath \
 					-tags sqlite_static \
-					-o ../../tmp/pg-gateway-http \
+					-o ../../tmp/celer-route-http \
 					."; \
 		fi; \
-		$(ECHO) "$(GREEN)Built: tmp/pg-gateway-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION_ARG))$(NC)"; \
+		$(ECHO) "$(GREEN)Built: tmp/celer-route-http ($(TARGET_OS)/$(TARGET_ARCH), version: v$(VERSION_ARG))$(NC)"; \
 	else \
 		$(ECHO) "$(RED)Error: Docker cross-compilation only supports Linux targets$(NC)"; \
 		$(ECHO) "$(YELLOW)For $(TARGET_OS), please build on a native $(TARGET_OS) machine$(NC)"; \
 		exit 1; \
 	fi
 
-DOCKER_IMAGE ?= ghcr.io/pin-gou/pg-gateway
+DOCKER_IMAGE ?= ghcr.io/pin-gou/celer-route
 
 _docker-image-setup-builder: # Internal: ensure a named buildx builder exists (idempotent)
 	@docker buildx inspect $(DOCKER_BUILDER) >/dev/null 2>&1 || \
@@ -559,9 +559,9 @@ docker-run: ## Run Docker container (Usage: make docker-run [CONFIG=path/to/conf
 	fi; \
 	docker run -e APP_PORT=$(PORT) -e APP_HOST=0.0.0.0 -p $(PORT):$(PORT) -e LOG_LEVEL=$(LOG_LEVEL) -e LOG_STYLE=$(LOG_STYLE) -v $(shell pwd):/app/data $$CONFIG_MOUNT $(DOCKER_IMAGE)
 
-run: build ## Build and run pg-gateway-http (no hot reload)
-	@$(ECHO) "$(GREEN)Running pg-gateway-http...$(NC)"
-	@./tmp/pg-gateway-http \
+run: build ## Build and run celer-route-http (no hot reload)
+	@$(ECHO) "$(GREEN)Running celer-route-http...$(NC)"
+	@./tmp/celer-route-http \
 		-host "$(HOST)" \
 		-port "$(PORT)" \
 		-log-style "$(LOG_STYLE)" \
@@ -574,8 +574,8 @@ run: build ## Build and run pg-gateway-http (no hot reload)
 clean: ## Clean build artifacts and temporary files
 	@$(ECHO) "$(YELLOW)Cleaning build artifacts...$(NC)"
 	@rm -rf tmp/
-	@rm -f transports/pg-gateway-http/build-errors.log
-	@rm -rf transports/pg-gateway-http/tmp/
+	@rm -f transports/celer-route-http/build-errors.log
+	@rm -rf transports/celer-route-http/tmp/
 	@rm -rf $(TEST_REPORTS_DIR)/
 	@$(ECHO) "$(GREEN)Clean complete$(NC)"
 
@@ -606,32 +606,32 @@ generate-html-reports: ## Convert existing XML reports to HTML
 	@$(ECHO) "$(CYAN)View reports:$(NC)"
 	@ls -1 $(TEST_REPORTS_DIR)/*.html 2>/dev/null | sed 's|$(TEST_REPORTS_DIR)/|  open $(TEST_REPORTS_DIR)/|' || true
 
-test: install-gotestsum ## Run tests for pg-gateway-http
-	@$(ECHO) "$(GREEN)Running pg-gateway-http tests...$(NC)"
+test: install-gotestsum ## Run tests for celer-route-http
+	@$(ECHO) "$(GREEN)Running celer-route-http tests...$(NC)"
 	@mkdir -p $(TEST_REPORTS_DIR)
-	@cd transports/pg-gateway-http && GOWORK=off gotestsum \
+	@cd transports/celer-route-http && GOWORK=off gotestsum \
 		--format=$(GOTESTSUM_FORMAT) \
-		--junitfile=../../$(TEST_REPORTS_DIR)/pg-gateway-http.xml \
+		--junitfile=../../$(TEST_REPORTS_DIR)/celer-route-http.xml \
 		-- -v ./...
 	@if [ -z "$$CI" ] && [ -z "$$GITHUB_ACTIONS" ] && [ -z "$$GITLAB_CI" ] && [ -z "$$CIRCLECI" ] && [ -z "$$JENKINS_HOME" ]; then \
 		if which junit-viewer > /dev/null 2>&1; then \
 			$(ECHO) "$(YELLOW)Generating HTML report...$(NC)"; \
-			if junit-viewer --results=$(TEST_REPORTS_DIR)/pg-gateway-http.xml --save=$(TEST_REPORTS_DIR)/pg-gateway-http.html 2>/dev/null; then \
+			if junit-viewer --results=$(TEST_REPORTS_DIR)/celer-route-http.xml --save=$(TEST_REPORTS_DIR)/celer-route-http.html 2>/dev/null; then \
 				$(ECHO) ""; \
-				$(ECHO) "$(CYAN)HTML report: $(TEST_REPORTS_DIR)/pg-gateway-http.html$(NC)"; \
-				$(ECHO) "$(CYAN)Open with: open $(TEST_REPORTS_DIR)/pg-gateway-http.html$(NC)"; \
+				$(ECHO) "$(CYAN)HTML report: $(TEST_REPORTS_DIR)/celer-route-http.html$(NC)"; \
+				$(ECHO) "$(CYAN)Open with: open $(TEST_REPORTS_DIR)/celer-route-http.html$(NC)"; \
 			else \
 				$(ECHO) "$(YELLOW)HTML generation failed. JUnit XML report available.$(NC)"; \
-				$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
+				$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/celer-route-http.xml$(NC)"; \
 			fi; \
 		else \
 			$(ECHO) ""; \
 			$(ECHO) "$(YELLOW)junit-viewer not installed. Install with: make install-junit-viewer$(NC)"; \
-			$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
+			$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/celer-route-http.xml$(NC)"; \
 		fi; \
 	else \
 		$(ECHO) ""; \
-		$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/pg-gateway-http.xml$(NC)"; \
+		$(ECHO) "$(CYAN)JUnit XML report: $(TEST_REPORTS_DIR)/celer-route-http.xml$(NC)"; \
 	fi
 
 test-core: install-gotestsum $(if $(DEBUG),install-delve) ## Run core tests (Usage: make test-core PROVIDER=openai TESTCASE=TestName or PATTERN=substring, DEBUG=1 for debugger)
@@ -977,7 +977,7 @@ test-http-transport: install-gotestsum ## Run HTTP transport tests
 	@$(EXPOSE_ENV); \
 	$(ECHO) "$(GREEN)Running HTTP transport tests...$(NC)"; \
 	mkdir -p $(TEST_REPORTS_DIR); \
-	cd transports/pg-gateway-http && find . -name "*.go" -path "*/tests/*" -o -name "*_test.go" | head -1 > /dev/null && \
+	cd transports/celer-route-http && find . -name "*.go" -path "*/tests/*" -o -name "*_test.go" | head -1 > /dev/null && \
 		for dir in $$(find . -name "*_test.go" -exec dirname {} \; | sort -u); do \
 			pkg_name=$$(echo $$dir | sed 's|^\./||' | sed 's|/|-|g'); \
 			$(ECHO) "Testing $$dir..."; \
@@ -1424,7 +1424,7 @@ test-integrations-py: ## Run Python integration tests (Usage: make test-integrat
 		$(ECHO) "$(GREEN)✓ Bifrost is already running$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Bifrost not running, starting it...$(NC)"; \
-		./tmp/pg-gateway-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/python > /tmp/bifrost-test.log 2>&1 & \
+		./tmp/celer-route-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/python > /tmp/bifrost-test.log 2>&1 & \
 		BIFROST_PID=$$!; \
 		BIFROST_STARTED=1; \
 		$(ECHO) "$(YELLOW)Waiting for Bifrost to be ready...$(NC)"; \
@@ -1560,7 +1560,7 @@ test-integrations-ts: ## Run TypeScript integration tests (Usage: make test-inte
 		$(ECHO) "$(GREEN)✓ Bifrost is already running$(NC)"; \
 	else \
 		$(ECHO) "$(YELLOW)Bifrost not running, starting it...$(NC)"; \
-		./tmp/pg-gateway-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/typescript > /tmp/bifrost-test.log 2>&1 & \
+		./tmp/celer-route-http -host "$$TEST_HOST" -port "$$TEST_PORT" -log-style "$(LOG_STYLE)" -log-level "$(LOG_LEVEL)" -app-dir tests/integrations/typescript > /tmp/bifrost-test.log 2>&1 & \
 		BIFROST_PID=$$!; \
 		BIFROST_STARTED=1; \
 		$(ECHO) "$(YELLOW)Waiting for Bifrost to be ready...$(NC)"; \
@@ -1659,14 +1659,14 @@ build-test-plugin: ## Build test plugin for E2E tests (copies to tmp/bifrost-tes
 	@cp examples/plugins/hello-world/build/hello-world.so tmp/bifrost-test-plugin.so
 	@$(ECHO) "$(GREEN)✓ Test plugin ready at tmp/bifrost-test-plugin.so$(NC)"
 
-build-admin: ## Build the pg-gateway-admin CLI (output: tmp/pg-gateway-admin)
-	@$(ECHO) "$(GREEN)Building pg-gateway-admin CLI...$(NC)"
+build-admin: ## Build the celer-route-admin CLI (output: tmp/celer-route-admin)
+	@$(ECHO) "$(GREEN)Building celer-route-admin CLI...$(NC)"
 	@mkdir -p tmp
-	@cd cmd/admin && CGO_ENABLED=1 go build $(if $(LOCAL),,-trimpath) -o ../../tmp/pg-gateway-admin .
-	@$(ECHO) "$(GREEN)✓ pg-gateway-admin ready at tmp/pg-gateway-admin$(NC)"
+	@cd cmd/admin && CGO_ENABLED=1 go build $(if $(LOCAL),,-trimpath) -o ../../tmp/celer-route-admin .
+	@$(ECHO) "$(GREEN)✓ celer-route-admin ready at tmp/celer-route-admin$(NC)"
 
-test-admin: ## Run pg-gateway-admin CLI tests
-	@$(ECHO) "$(GREEN)Running pg-gateway-admin tests...$(NC)"
+test-admin: ## Run celer-route-admin CLI tests
+	@$(ECHO) "$(GREEN)Running celer-route-admin tests...$(NC)"
 	@cd cmd/admin && go test $(if $(TESTCASE),-run $(TESTCASE),./...)
 
 run-e2e: install-playwright ## Run E2E tests (Usage: make run-e2e [FLOW=providers|virtual-keys|config])

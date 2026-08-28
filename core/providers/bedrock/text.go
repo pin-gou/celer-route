@@ -3,8 +3,8 @@ package bedrock
 import (
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/providers/anthropic"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToBedrockTextCompletionRequest converts a Bifrost text completion request to Bedrock format

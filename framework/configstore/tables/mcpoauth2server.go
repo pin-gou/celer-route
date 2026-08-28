@@ -3,8 +3,8 @@ package tables
 import (
 	"fmt"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/encrypt"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/encrypt"
 )
 
 // MCPServerAuthMode controls how Bifrost's /mcp endpoint authenticates inbound

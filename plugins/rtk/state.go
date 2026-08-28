@@ -1,6 +1,6 @@
 package rtk
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 // CompressionState holds per-request compression state, stored in the Plugin's
 // sync.Map keyed by request ID. Populated by PreLLMHook and consumed by PostLLMHook.

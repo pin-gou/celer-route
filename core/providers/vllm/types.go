@@ -1,7 +1,7 @@
 package vllm
 
 import (
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // vLLMTranscriptionStreamChunk represents a single transcription streaming chunk from vLLM.

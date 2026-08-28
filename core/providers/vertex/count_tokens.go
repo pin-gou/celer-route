@@ -1,8 +1,8 @@
 package vertex
 
 import (
-	"github.com/pin-gou/pg-gateway/core/providers/gemini"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/providers/gemini"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func (resp *VertexCountTokensResponse) ToBifrostCountTokensResponse(model string) *schemas.BifrostCountTokensResponse {

@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
-	"github.com/pin-gou/pg-gateway/core/providers/wafer"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/internal/llmtests"
+	"github.com/pin-gou/celer-route/core/providers/wafer"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func TestWafer(t *testing.T) {

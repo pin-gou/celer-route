@@ -7,7 +7,7 @@ import (
 
 	"testing"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 
 	"github.com/bytedance/sonic"
 	"github.com/tidwall/gjson"

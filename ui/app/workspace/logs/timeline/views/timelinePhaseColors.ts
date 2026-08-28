@@ -2,7 +2,7 @@
  * @file Phase color/label registry for the per-log timeline detail view.
  *
  * Maps the timeline `phase` field produced by the backend aggregator
- * (transports/pg-gateway-http/handlers/logging.go:2957-3072) to a stable
+ * (transports/celer-route-http/handlers/logging.go:2957-3072) to a stable
  * display label and color pair. The five phases below are the only ones the
  * backend currently emits; anything else falls back to a neutral style and a
  * humanized version of the raw phase string so unknown phases still render.

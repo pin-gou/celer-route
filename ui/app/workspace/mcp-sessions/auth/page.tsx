@@ -175,8 +175,8 @@ function OAuthAuthView() {
 					</>
 				) : (
 					<>
-						You'll be redirected to the provider to sign in and grant access. pg-gateway stores the resulting credential against the binding
-						below so this request and future ones can proceed automatically.
+						You'll be redirected to the provider to sign in and grant access. celer-route stores the resulting credential against the
+						binding below so this request and future ones can proceed automatically.
 					</>
 				)}
 			</p>
@@ -228,7 +228,7 @@ function HeadersAuthView({ flowId }: { flowId: string }) {
 				</div>
 				<h1 className="text-xl font-semibold tracking-tight">Headers saved</h1>
 				<p className="text-muted-foreground mt-2 text-sm">
-					pg-gateway verified the connection and stored your credentials. You can close this tab and retry the original action.
+					celer-route verified the connection and stored your credentials. You can close this tab and retry the original action.
 				</p>
 				<div className="mt-6 flex gap-3">
 					<SessionsTabLink />

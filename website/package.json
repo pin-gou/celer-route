@@ -1,8 +1,8 @@
 {
-  "name": "pg-gateway-website",
+  "name": "celer-route-website",
   "version": "0.1.0",
   "private": true,
-  "description": "Docusaurus site for pg-gateway documentation",
+  "description": "Docusaurus site for celer-route documentation",
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",

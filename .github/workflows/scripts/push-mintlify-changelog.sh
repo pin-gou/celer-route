@@ -35,8 +35,8 @@ description: \"$VERSION changelog - $CURRENT_DATE\"
   </Tab>
   <Tab title=\"Docker\">
     \`\`\`bash
-    docker pull ghcr.io/pin-gou/pg-gateway:$VERSION
-    docker run -p 8080:8080 ghcr.io/pin-gou/pg-gateway:$VERSION
+    docker pull ghcr.io/pin-gou/celer-route:$VERSION
+    docker run -p 8080:8080 ghcr.io/pin-gou/celer-route:$VERSION
     \`\`\`
   </Tab>
 </Tabs>

@@ -24,22 +24,22 @@ fi
 echo "🔍 Verifying bifrost-http release v${VERSION}..."
 
 # Check if the git tag exists
-if ! git rev-parse "transports/pg-gateway-http/v${VERSION}" >/dev/null 2>&1; then
-    echo "⚠️  Git tag transports/pg-gateway-http/v${VERSION} not found"
+if ! git rev-parse "transports/celer-route-http/v${VERSION}" >/dev/null 2>&1; then
+    echo "⚠️  Git tag transports/celer-route-http/v${VERSION} not found"
     echo "   Bifrost-http release did not complete successfully"
     echo "   Skipping Docker image build..."
     exit 78  # Exit code 78 will be used to skip the job
 fi
 
-echo "✅ Git tag found: transports/pg-gateway-http/v${VERSION}"
+echo "✅ Git tag found: transports/celer-route-http/v${VERSION}"
 
 # Check if the GitHub release exists
 if [ -n "$GH_TOKEN" ]; then
     echo "🔍 Checking GitHub release..."
-    if gh release view "transports/pg-gateway-http/v${VERSION}" >/dev/null 2>&1; then
-        echo "✅ GitHub release found for transports/pg-gateway-http/v${VERSION}"
+    if gh release view "transports/celer-route-http/v${VERSION}" >/dev/null 2>&1; then
+        echo "✅ GitHub release found for transports/celer-route-http/v${VERSION}"
     else
-        echo "⚠️  GitHub release for transports/pg-gateway-http/v${VERSION} not found"
+        echo "⚠️  GitHub release for transports/celer-route-http/v${VERSION} not found"
         echo "   Bifrost-http release did not complete successfully"
         echo "   Skipping Docker image build..."
         exit 78  # Exit code 78 will be used to skip the job

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/postgresconn"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/postgresconn"
 	"gorm.io/gorm"
 )
 

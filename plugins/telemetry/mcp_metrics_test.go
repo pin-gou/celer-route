@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	bifrost "github.com/pin-gou/celer-route/core"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

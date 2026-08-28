@@ -3,8 +3,8 @@ package governance
 import (
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/plugins/governance/complexity"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/plugins/governance/complexity"
 )
 
 // buildComplexityInput extracts text from normalized BifrostRequest values for

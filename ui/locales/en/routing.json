@@ -249,7 +249,7 @@
 		"action": "Action",
 		"edge": "Edge",
 		"node": "Node",
-		"pageTitle": "Routing Tree | pg-gateway",
+		"pageTitle": "Routing Tree | celer-route",
 		"pageDescription": "Read-only decision tree visualization of routing rules",
 		"back": "Back",
 		"searchPlaceholder": "Search conditions or rules\u2026",

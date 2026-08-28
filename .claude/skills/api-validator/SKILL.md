@@ -48,11 +48,11 @@ Scan these files/directories as the controller source of truth:
 
 | Area | Source | Notes |
 |---|---|---|
-| Server route wiring | `transports/pg-gateway-http/server/server.go` | `RegisterAPIRoutes`, `RegisterInferenceRoutes`, `RegisterUIRoutes`, direct `/metrics`, middleware lists |
-| HTTP handlers/controllers | `transports/pg-gateway-http/handlers/*.go` | `RegisterRoutes` methods contain direct route registrations |
-| SDK/provider integrations | `transports/pg-gateway-http/integrations/*.go` | `RouteConfig` factories and `GenericRouter.RegisterRoutes` register OpenAI/Anthropic/GenAI/Bedrock/Cohere/LiteLLM/LangChain/PydanticAI/Cursor/Passthrough routes |
-| Auth middleware | `transports/pg-gateway-http/handlers/middlewares.go` | `APIMiddleware`, `InferenceMiddleware`, whitelists, realtime auth skips |
-| Context auth extraction | `transports/pg-gateway-http/lib/ctx.go` | Virtual key and API key header extraction |
+| Server route wiring | `transports/celer-route-http/server/server.go` | `RegisterAPIRoutes`, `RegisterInferenceRoutes`, `RegisterUIRoutes`, direct `/metrics`, middleware lists |
+| HTTP handlers/controllers | `transports/celer-route-http/handlers/*.go` | `RegisterRoutes` methods contain direct route registrations |
+| SDK/provider integrations | `transports/celer-route-http/integrations/*.go` | `RouteConfig` factories and `GenericRouter.RegisterRoutes` register OpenAI/Anthropic/GenAI/Bedrock/Cohere/LiteLLM/LangChain/PydanticAI/Cursor/Passthrough routes |
+| Auth middleware | `transports/celer-route-http/handlers/middlewares.go` | `APIMiddleware`, `InferenceMiddleware`, whitelists, realtime auth skips |
+| Context auth extraction | `transports/celer-route-http/lib/ctx.go` | Virtual key and API key header extraction |
 | Governance VK parser | `plugins/governance/utils.go` | Accepted virtual key headers for VK self-service endpoints |
 
 ### OpenAPI documentation sources
@@ -99,9 +99,9 @@ Identify the scope:
 
 ```bash
 # Route registration entry points
-grep -R "func (.*RegisterRoutes" -n transports/pg-gateway-http/handlers transports/pg-gateway-http/integrations --include='*.go'
+grep -R "func (.*RegisterRoutes" -n transports/celer-route-http/handlers transports/celer-route-http/integrations --include='*.go'
 
-grep -n "func (s \*BifrostHTTPServer) RegisterAPIRoutes\|func (s \*BifrostHTTPServer) RegisterInferenceRoutes\|RegisterUIRoutes" transports/pg-gateway-http/server/server.go
+grep -n "func (s \*BifrostHTTPServer) RegisterAPIRoutes\|func (s \*BifrostHTTPServer) RegisterInferenceRoutes\|RegisterUIRoutes" transports/celer-route-http/server/server.go
 ```
 
 If the user asked for `--fix`, still audit first and present a fix plan before editing.
@@ -122,13 +122,13 @@ Scan all handler route registration methods:
 
 ```bash
 grep -R "\.GET\|\.POST\|\.PUT\|\.DELETE\|\.PATCH\|\.HEAD\|\.OPTIONS\|r.Handle" \
-  -n transports/pg-gateway-http/handlers --include='*.go'
+  -n transports/celer-route-http/handlers --include='*.go'
 ```
 
 For a cleaner first pass:
 
 ```bash
-for f in transports/pg-gateway-http/handlers/*.go; do
+for f in transports/celer-route-http/handlers/*.go; do
   if grep -q "RegisterRoutes" "$f"; then
     echo "--- $f"
     grep -nE 'func \(h .*RegisterRoutes|\.(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\(|r\.Handle\(' "$f"
@@ -149,7 +149,7 @@ Record:
 Read `RegisterAPIRoutes`, `RegisterInferenceRoutes`, and the middleware-assembly block carefully. Locate them by symbol so the ranges don't drift as the file grows:
 
 ```bash
-SERVER=transports/pg-gateway-http/server/server.go
+SERVER=transports/celer-route-http/server/server.go
 
 # RegisterInferenceRoutes — inference route registrations.
 # Window is generous (+60) so newly added integration handlers don't fall outside it.
@@ -189,7 +189,7 @@ Scan integration route config factories:
 
 ```bash
 grep -R "func Create.*RouteConfigs\|func OpenAI.*Paths\|RouteConfig{" \
-  -n transports/pg-gateway-http/integrations --include='*.go'
+  -n transports/celer-route-http/integrations --include='*.go'
 ```
 
 Key factories/routers:
@@ -235,8 +235,8 @@ Auth correctness is part of this skill. Always inspect actual middleware wiring 
 Read the auth and middleware setup. Locate the blocks by symbol so the ranges don't drift as the files grow — auth derivation for every route depends on these functions being read correctly, so a stale range would poison the whole audit:
 
 ```bash
-SERVER=transports/pg-gateway-http/server/server.go
-MW_FILE=transports/pg-gateway-http/handlers/middlewares.go
+SERVER=transports/celer-route-http/server/server.go
+MW_FILE=transports/celer-route-http/handlers/middlewares.go
 
 # Middleware-assembly block in server.go — where apiMiddlewares / inferenceMiddlewares
 # get AuthMiddleware.APIMiddleware()/InferenceMiddleware() / Tracing /
@@ -309,12 +309,12 @@ For virtual-key behavior, inspect:
 ```bash
 # Context auth extraction (virtual key + provider/API key headers)
 sed -n '1,90p' plugins/governance/utils.go
-grep -n "x-bf-vk\|x-goog-api-key\|sk-bf-\|VirtualKey\|ExtractVirtualKey" transports/pg-gateway-http/lib/ctx.go
+grep -n "x-bf-vk\|x-goog-api-key\|sk-bf-\|VirtualKey\|ExtractVirtualKey" transports/celer-route-http/lib/ctx.go
 
 # VK quota handler (locate by symbol so line numbers don't drift)
-LINE=$(grep -n "func.*getVirtualKeyQuota" transports/pg-gateway-http/handlers/governance.go | head -1 | cut -d: -f1)
+LINE=$(grep -n "func.*getVirtualKeyQuota" transports/celer-route-http/handlers/governance.go | head -1 | cut -d: -f1)
 if [ -n "$LINE" ]; then
-  sed -n "$((LINE)),$((LINE+45))p" transports/pg-gateway-http/handlers/governance.go
+  sed -n "$((LINE)),$((LINE+45))p" transports/celer-route-http/handlers/governance.go
 fi
 ```
 
@@ -462,8 +462,8 @@ For routes with request bodies:
 Useful searches:
 
 ```bash
-grep -n "type .*Request struct" transports/pg-gateway-http/handlers/<handler>.go
-grep -n "json.Unmarshal\|sonic.Unmarshal\|parse.*Multipart\|ContentType" transports/pg-gateway-http/handlers/<handler>.go transports/pg-gateway-http/integrations/*.go
+grep -n "type .*Request struct" transports/celer-route-http/handlers/<handler>.go
+grep -n "json.Unmarshal\|sonic.Unmarshal\|parse.*Multipart\|ContentType" transports/celer-route-http/handlers/<handler>.go transports/celer-route-http/integrations/*.go
 ```
 
 ### 5e. Response/status mismatches
@@ -471,7 +471,7 @@ grep -n "json.Unmarshal\|sonic.Unmarshal\|parse.*Multipart\|ContentType" transpo
 Inspect handler responses:
 
 ```bash
-grep -n "SendJSON\|SendError\|SendBifrostError\|SetStatusCode\|Status" transports/pg-gateway-http/handlers/<handler>.go
+grep -n "SendJSON\|SendError\|SendBifrostError\|SetStatusCode\|Status" transports/celer-route-http/handlers/<handler>.go
 ```
 
 Compare with OpenAPI responses:

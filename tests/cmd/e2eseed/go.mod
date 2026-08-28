@@ -1,14 +1,14 @@
-module github.com/pin-gou/pg-gateway/tests/cmd/e2eseed
+module github.com/pin-gou/celer-route/tests/cmd/e2eseed
 
 go 1.26.5
 
 replace (
-	github.com/pin-gou/pg-gateway/core => ../../../core
-	github.com/pin-gou/pg-gateway/framework => ../../../framework
-	github.com/pin-gou/pg-gateway/tests/cmd/seed => ../seed
+	github.com/pin-gou/celer-route/core => ../../../core
+	github.com/pin-gou/celer-route/framework => ../../../framework
+	github.com/pin-gou/celer-route/tests/cmd/seed => ../seed
 )
 
-require github.com/pin-gou/pg-gateway/tests/cmd/seed v0.0.0-00010101000000-000000000000
+require github.com/pin-gou/celer-route/tests/cmd/seed v0.0.0-00010101000000-000000000000
 
 require (
 	cel.dev/expr v0.25.1 // indirect
@@ -88,8 +88,8 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
-	github.com/pin-gou/pg-gateway/core v1.7.7 // indirect
-	github.com/pin-gou/pg-gateway/framework v1.3.16 // indirect
+	github.com/pin-gou/celer-route/core v1.7.7 // indirect
+	github.com/pin-gou/celer-route/framework v1.3.16 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect

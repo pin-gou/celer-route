@@ -1,7 +1,7 @@
 package gemini
 
 import (
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToGeminiEmbeddingRequest converts a BifrostRequest with embedding input to Gemini's batch embedding request format

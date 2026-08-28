@@ -136,7 +136,7 @@ function ConsentView({ flowId }: { flowId: string }) {
 					<ShieldCheck className="text-primary size-7" />
 				</div>
 				<h1 className="text-xl font-semibold tracking-tight">{clientName} wants to connect</h1>
-				<p className="text-muted-foreground mt-1.5 text-sm">Choose how you'd like to identify yourself to pg-gateway</p>
+				<p className="text-muted-foreground mt-1.5 text-sm">Choose how you'd like to identify yourself to celer-route</p>
 			</div>
 
 			<div className="space-y-3">
@@ -187,7 +187,7 @@ function ConsentView({ flowId }: { flowId: string }) {
 							</div>
 							<div>
 								<p className="text-sm font-medium">Sign in with your account</p>
-								<p className="text-muted-foreground text-xs">Requires a pg-gateway dashboard account</p>
+								<p className="text-muted-foreground text-xs">Requires a celer-route dashboard account</p>
 							</div>
 						</div>
 						<Button asChild variant="outline" className="mt-4 w-full">
@@ -218,7 +218,7 @@ function ConsentView({ flowId }: { flowId: string }) {
 							</div>
 							<div>
 								<p className="text-sm font-medium">Virtual Key</p>
-								<p className="text-muted-foreground text-xs">Use a Virtual Key from your pg-gateway workspace</p>
+								<p className="text-muted-foreground text-xs">Use a Virtual Key from your celer-route workspace</p>
 							</div>
 						</div>
 						<Input

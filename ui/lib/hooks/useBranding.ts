@@ -1,12 +1,12 @@
 import { useGetBrandingQuery } from "@/lib/store/apis/brandingApi";
 import { getApiBaseUrl } from "@/lib/utils/port";
 
-/** Bundled pg-gateway assets. These are the OSS values and the fallback for every
+/** Bundled celer-route assets. These are the OSS values and the fallback for every
  * slot an enterprise deployment has not overridden. */
-const DEFAULT_LOGO_LIGHT = "/pg-gateway-logo-dark.webp";
-const DEFAULT_LOGO_DARK = "/pg-gateway-logo.webp";
-const DEFAULT_ICON_LIGHT = "/pg-gateway-icon-dark.webp";
-const DEFAULT_ICON_DARK = "/pg-gateway-icon.webp";
+const DEFAULT_LOGO_LIGHT = "/celer-route-logo-dark.webp";
+const DEFAULT_LOGO_DARK = "/celer-route-logo.webp";
+const DEFAULT_ICON_LIGHT = "/celer-route-icon-dark.webp";
+const DEFAULT_ICON_DARK = "/celer-route-icon.webp";
 
 /**
  * Resolves a branding asset URL returned by the API against the current API
@@ -26,10 +26,10 @@ export interface BrandingAssets {
 	/** Square mark for the collapsed sidebar. */
 	iconSrc: string;
 	/** True when a custom logo or icon is in use. Surfaces that hardcode
-	 * "pg-gateway" as alt text or a product name should fall back to a neutral
+	 * "celer-route" as alt text or a product name should fall back to a neutral
 	 * label when this is set. */
 	isCustom: boolean;
-	/** Alt text: the customer's logo is not the pg-gateway logo, and labelling it
+	/** Alt text: the customer's logo is not the celer-route logo, and labelling it
 	 * as such would be wrong on a custom branding deployment. */
 	logoAlt: string;
 }
@@ -38,13 +38,13 @@ export interface BrandingAssets {
  * Resolves which logo and icon to render.
  *
  * Each slot falls back independently: a deployment that uploaded only a logo
- * keeps the default pg-gateway icon. Custom assets are theme-agnostic — a single
+ * keeps the default celer-route icon. Custom assets are theme-agnostic — a single
  * upload serves both light and dark — so `isDark` only selects between the two
  * bundled defaults.
  *
  * While the query is in flight the defaults are returned rather than nothing,
  * so the logo never renders as a blank gap. On a branded deployment that means
- * a brief flash of the pg-gateway logo on first paint; the pre-hydration shell is
+ * a brief flash of the celer-route logo on first paint; the pre-hydration shell is
  * rewritten server-side to avoid it on the initial document load, and the
  * response is cached for subsequent navigations.
  */
@@ -63,6 +63,6 @@ export function useBranding(isDark: boolean): BrandingAssets {
 		logoSrc: hasLogo ? resolveBrandingAssetUrl(data!.logo_url) : isDark ? DEFAULT_LOGO_DARK : DEFAULT_LOGO_LIGHT,
 		iconSrc: hasIcon ? resolveBrandingAssetUrl(data!.icon_url) : isDark ? DEFAULT_ICON_DARK : DEFAULT_ICON_LIGHT,
 		isCustom: Boolean(data?.enabled),
-		logoAlt: data?.enabled ? "" : "pg-gateway",
+		logoAlt: data?.enabled ? "" : "celer-route",
 	};
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestApplyRtkCompression verifies the core compression pipeline end-to-end.

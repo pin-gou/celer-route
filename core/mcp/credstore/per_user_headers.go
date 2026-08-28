@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/pin-gou/pg-gateway/core/mcp/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/mcp/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // perUserHeadersResolver handles MCPAuthTypePerUserHeaders — each caller's
@@ -77,7 +77,7 @@ func (r *perUserHeadersResolver) ForceRefresh(_ *schemas.BifrostContext, _ *sche
 }
 
 // AdminConnectionHeaders resolves the retained admin header credential (see
-// verifyMCPClientHeaders' persistence call in transports/pg-gateway-http/handlers/mcp.go)
+// verifyMCPClientHeaders' persistence call in transports/celer-route-http/handlers/mcp.go)
 // for periodic tool-discovery refresh. Reuses missingRequiredHeaderKeys and
 // buildPerUserHeaderValues below — same schema-drift and value-filtering
 // logic ConnectionHeaders applies for a real caller's credential.

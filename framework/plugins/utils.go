@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/network"
+	"github.com/pin-gou/celer-route/core/network"
 )
 
 var (

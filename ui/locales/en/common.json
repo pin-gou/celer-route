@@ -1,6 +1,6 @@
 {
 	"app": {
-		"name": "pg-gateway",
+		"name": "celer-route",
 		"tagline": "AI Gateway"
 	},
 	"nav": {
@@ -262,7 +262,7 @@
 		"restartRequired": "Restart Required",
 		"restartReason": "Configuration changes require a server restart to take effect.",
 		"setupIncomplete": "Setup checklist incomplete",
-		"setupStepsLeft": "{{n}} setup step(s) left. Not completing these steps keeps your pg-gateway setup vulnerable.",
+		"setupStepsLeft": "{{n}} setup step(s) left. Not completing these steps keeps your celer-route setup vulnerable.",
 		"resumeSetup": "Resume setup",
 		"viewReleaseNotes": "View release notes",
 		"releaseAvailable": "{{name}} is now available."
@@ -330,9 +330,9 @@
 		},
 		"quickStart": {
 			"title": "Quick Start",
-			"subtitle": "Get the most out of pg-gateway in 4 short steps.",
+			"subtitle": "Get the most out of celer-route in 4 short steps.",
 			"step1Title": "1. Configure providers",
-			"step1Desc": "Add upstream provider keys (OpenAI, Anthropic, Google, etc.) so pg-gateway has something to route to.",
+			"step1Desc": "Add upstream provider keys (OpenAI, Anthropic, Google, etc.) so celer-route has something to route to.",
 			"step2Title": "2. Configure routing",
 			"step2Desc": "Define routing rules that decide which provider, model, or key each request lands on. Use fallbacks, weights, or custom expressions.",
 			"step3Title": "3. Test the API call",

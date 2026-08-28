@@ -3,7 +3,7 @@ package semanticcache
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestCacheNoStoreBasicFunctionality tests that CacheNoStoreKey prevents caching

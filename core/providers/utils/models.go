@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

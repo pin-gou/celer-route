@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // testLogger is a minimal no-op logger implementation for testing.
@@ -31,7 +31,7 @@ func (l *testLogger) LogHTTPRequest(level schemas.LogLevel, msg string) schemas.
 }
 
 // TestTranscription_DiarizedJSON_StringSegmentID reproduces
-// https://github.com/pin-gou/pg-gateway/issues/5002: OpenAI's
+// https://github.com/pin-gou/celer-route/issues/5002: OpenAI's
 // response_format=diarized_json (used by gpt-4o-transcribe-diarize) returns
 // segments with a string id (e.g. "seg_154") and speaker/type fields, which
 // don't fit TranscriptionSegment's int id. Previously this crashed the whole

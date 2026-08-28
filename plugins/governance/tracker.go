@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 )
 
 // UsageUpdate contains data for VK-level usage tracking

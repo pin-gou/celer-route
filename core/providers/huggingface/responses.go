@@ -3,7 +3,7 @@ package huggingface
 import (
 	"fmt"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToHuggingFaceResponsesRequest converts a Bifrost Responses request into the Hugging Face

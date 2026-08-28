@@ -212,8 +212,8 @@
 	},
 	"clientSettings": {
 		"title": "客户端设置",
-		"description": "这里调整 pg-gateway 自身的行为——流量控制、健康检查和请求头转发。LLM 行为相关设置在「兼容性」里。",
-		"pageDescription": "pg-gateway 实例的行为开关",
+		"description": "这里调整 celer-route 自身的行为——流量控制、健康检查和请求头转发。LLM 行为相关设置在「兼容性」里。",
+		"pageDescription": "celer-route 实例的行为开关",
 		"tabs": {
 			"common": "常用",
 			"headerForwarding": "请求头转发",
@@ -248,7 +248,7 @@
 		"connectionPool": "连接池",
 		"noConfig": "未配置客户端设置",
 		"dropExcessRequests": "丢弃超额请求",
-		"dropExcessRequestsDesc": "启用后，pg-gateway 将丢弃超过池容量的请求。",
+		"dropExcessRequestsDesc": "启用后，celer-route 将丢弃超过池容量的请求。",
 		"droppedRequests": "自上次重启以来已丢弃 <1>{{count}} 个请求</1>。",
 		"disableDbPings": "健康检查中禁用数据库 Ping",
 		"disableDbPingsDesc": "启用后，/health 端点将跳过数据库连接检查并立即返回 OK。",
@@ -406,7 +406,7 @@
 		"loggingHeadersPlaceholder": "X-Tenant-ID, X-Request-Source, x-custom-*",
 		"saving": "保存中...",
 		"saveChanges": "保存更改",
-		"restartWarning": "需要重启 pg-gateway 才能使更改生效。"
+		"restartWarning": "需要重启 celer-route 才能使更改生效。"
 	},
 	"mcpGateway": {
 		"title": "MCP 网关",
@@ -476,7 +476,7 @@
 		"passwordPolicyError": "密码必须包含 {{failures}}。",
 		"setupTokenCliTitle": "使用 CLI 创建第一个管理员账户",
 		"setupTokenCliDesc": "当前实例尚未设置管理员账户。请使用内置 CLI 创建——只需对容器有 shell 访问权限即可。创建完成后刷新本页面即可正常管理认证。",
-		"setupTokenCliCommand": "docker exec -it <container> pg-gateway-admin admin reset",
+		"setupTokenCliCommand": "docker exec -it <container> celer-route-admin admin reset",
 		"enforceVirtualKeys": "强制推理使用 API Keys",
 		"enforceVirtualKeysDesc": "要求每个 API 请求都携带有效 API Keys。开启后可阻止未授权调用者使用你的模型——生产环境推荐开启。",
 		"documentation": "文档",
@@ -499,7 +499,7 @@
 		"whitelistedRoutesPlaceholder": "/api/webhook",
 		"whitelistedRoutesExample": "示例：/api/custom-webhook、/api/public-endpoint",
 		"invalidOrigins": "无效的来源：{{origins}}。每项必须是完整 URL（如 https://example.com）、通配符（如 https://*.example.com），或 * 以允许所有来源。",
-		"restartWarning": "需要重启 pg-gateway 才能使更改生效。",
+		"restartWarning": "需要重启 celer-route 才能使更改生效。",
 		"close": "关闭",
 		"viewDocs": "查看文档",
 		"toast": {
@@ -570,7 +570,7 @@
 		"inferenceDesc": "使用代理向模型提供商发送 LLM 推理请求。",
 		"api": "API",
 		"apiDesc": "使用代理进行外部 API 调用和 Webhook。",
-		"scimEnterprise": "SCIM 代理支持在 pg-gateway Enterprise 中可用。",
+		"scimEnterprise": "SCIM 代理支持在 celer-route Enterprise 中可用。",
 		"noPermission": "您没有权限更新设置",
 		"enterprise": "企业版"
 	},
@@ -636,8 +636,8 @@
 		"loadFailed": "加载功能开关失败"
 	},
 	"restart": {
-		"description": "这些设置需要重启 pg-gateway 服务才能生效。当前连接将继续使用现有设置直到重启。",
-		"warning": "需要重启 pg-gateway 才能使更改生效。"
+		"description": "这些设置需要重启 celer-route 服务才能生效。当前连接将继续使用现有设置直到重启。",
+		"warning": "需要重启 celer-route 才能使更改生效。"
 	},
 	"toast": {
 		"settingsSaved": "设置保存成功",

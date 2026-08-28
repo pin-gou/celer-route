@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/framework/encrypt"
+	"github.com/pin-gou/celer-route/framework/encrypt"
 	"gorm.io/gorm"
 )
 

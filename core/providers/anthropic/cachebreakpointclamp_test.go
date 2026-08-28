@@ -3,7 +3,7 @@ package anthropic
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Anthropic, Bedrock, and Vertex all reject a request carrying more than 4 blocks with

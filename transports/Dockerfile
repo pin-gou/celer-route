@@ -1,4 +1,4 @@
-# transports/Dockerfile - single source of truth for all pg-gateway container builds.
+# transports/Dockerfile - single source of truth for all celer-route container builds.
 #
 # Build-args:
 #   USE_LOCAL_MODULES=1   use go.work + local source tree (pre-release CI, local dev)
@@ -111,7 +111,7 @@ COPY plugins/ ./plugins/
 COPY cmd/admin/ ./cmd/admin/
 COPY transports/ ./transports/
 
-COPY --from=ui-builder /app/out ./transports/pg-gateway-http/ui
+COPY --from=ui-builder /app/out ./transports/celer-route-http/ui
 
 ARG VERSION=unknown
 RUN cd /build/transports && \
@@ -123,10 +123,10 @@ RUN cd /build/transports && \
       -trimpath \
       -tags "sqlite_static" \
       -o /app/main \
-      ./pg-gateway-http
+      ./celer-route-http
 RUN test -f /app/main || (echo "Build failed" && exit 1)
 
-# --- pg-gateway-admin CLI (operator-side admin account management) ---
+# --- celer-route-admin CLI (operator-side admin account management) ---
 # Built with the same cross-toolchain + static-linking flags so the binary
 # matches the main server: fully static, glibc-free, runs on the Alpine
 # runtime stage. The CLI writes admin credentials straight to the config
@@ -140,8 +140,8 @@ RUN cd /build/cmd/admin && \
       -ldflags="-w -s -extldflags '-static'" \
       -trimpath \
       -tags "sqlite_static" \
-      -o /app/pg-gateway-admin .
-RUN test -f /app/pg-gateway-admin || (echo "pg-gateway-admin build failed" && exit 1)
+      -o /app/celer-route-admin .
+RUN test -f /app/celer-route-admin || (echo "celer-route-admin build failed" && exit 1)
 
 # --- Runtime Stage: Alpine ---
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
@@ -170,7 +170,7 @@ RUN apk upgrade --no-cache && \
     apk add --no-cache musl libgcc ca-certificates zlib=1.3.2-r0
 
 COPY --from=builder /app/main .
-COPY --from=builder /app/pg-gateway-admin .
+COPY --from=builder /app/celer-route-admin .
 COPY --from=builder /build/transports/docker-entrypoint.sh .
 
 # adduser -D (no -u) on this alpine base assigns the first free UID, which is

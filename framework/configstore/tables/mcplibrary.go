@@ -3,7 +3,7 @@ package tables
 import (
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TableMCPLibrary represents a single discoverable MCP server in the MCP

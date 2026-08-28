@@ -17,8 +17,8 @@ import (
 
 	"github.com/bytedance/sonic"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 
@@ -520,7 +520,7 @@ func HandleOpenAITextCompletionStreaming(
 		// connection error (502, IsBifrostError=false) rather than NewBifrostOperationError
 		// (500, IsBifrostError=true). The latter caused the retry loop in executeRequestWithRetries
 		// to break early on IsBifrostError, so max_retries never applied to streaming connection
-		// failures - see https://github.com/pin-gou/pg-gateway/issues/4496.
+		// failures - see https://github.com/pin-gou/celer-route/issues/4496.
 		return nil, providerUtils.EnrichError(ctx, providerUtils.NewBifrostUpstreamConnectionError(schemas.ErrProviderDoRequest, err), jsonBody, nil, sendBackRawRequest, sendBackRawResponse, latency)
 	}
 
@@ -1117,7 +1117,7 @@ func HandleOpenAIChatCompletionStreaming(
 		// connection error (502, IsBifrostError=false) rather than NewBifrostOperationError
 		// (500, IsBifrostError=true). The latter caused the retry loop in executeRequestWithRetries
 		// to break early on IsBifrostError, so max_retries never applied to streaming connection
-		// failures - see https://github.com/pin-gou/pg-gateway/issues/4496.
+		// failures - see https://github.com/pin-gou/celer-route/issues/4496.
 		return nil, providerUtils.EnrichError(ctx, providerUtils.NewBifrostUpstreamConnectionError(schemas.ErrProviderDoRequest, err), jsonBody, nil, sendBackRawRequest, sendBackRawResponse, latency)
 	}
 
@@ -1831,7 +1831,7 @@ func HandleOpenAIResponsesStreaming(
 		// connection error (502, IsBifrostError=false) rather than NewBifrostOperationError
 		// (500, IsBifrostError=true). The latter caused the retry loop in executeRequestWithRetries
 		// to break early on IsBifrostError, so max_retries never applied to streaming connection
-		// failures - see https://github.com/pin-gou/pg-gateway/issues/4496.
+		// failures - see https://github.com/pin-gou/celer-route/issues/4496.
 		return nil, providerUtils.EnrichError(ctx, providerUtils.NewBifrostUpstreamConnectionError(schemas.ErrProviderDoRequest, err), jsonBody, nil, sendBackRawRequest, sendBackRawResponse, latency)
 	}
 
@@ -2477,7 +2477,7 @@ func HandleOpenAISpeechStreamRequest(
 		// connection error (502, IsBifrostError=false) rather than NewBifrostOperationError
 		// (500, IsBifrostError=true). The latter caused the retry loop in executeRequestWithRetries
 		// to break early on IsBifrostError, so max_retries never applied to streaming connection
-		// failures - see https://github.com/pin-gou/pg-gateway/issues/4496.
+		// failures - see https://github.com/pin-gou/celer-route/issues/4496.
 		return nil, providerUtils.EnrichError(ctx, providerUtils.NewBifrostUpstreamConnectionError(schemas.ErrProviderDoRequest, err), jsonBody, nil, sendBackRawRequest, sendBackRawResponse, latency)
 	}
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // modelInputImageFieldMap maps model identifiers to their input image field names.

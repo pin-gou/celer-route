@@ -7,8 +7,8 @@ import (
 	"plugin"
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/network"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/network"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // SharedObjectPluginLoader is the loader for shared object plugins. The zero value is a

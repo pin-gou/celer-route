@@ -1,4 +1,4 @@
-module github.com/pin-gou/pg-gateway/scripts/realtime-test
+module github.com/pin-gou/celer-route/scripts/realtime-test
 
 go 1.26.5
 

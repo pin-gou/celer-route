@@ -70,7 +70,7 @@ export function ExportPopover({ getData, activeTab, onPreloadData, onPdfExport, 
 
 				await generatePdf(sections, fileName(scope), {
 					branding: {
-						logoSrc: "/pg-gateway-logo.webp",
+						logoSrc: "/celer-route-logo.webp",
 						text: t("export.poweredBy"),
 					},
 				});

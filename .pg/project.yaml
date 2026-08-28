@@ -27,7 +27,7 @@ modules:
     build: go build ./...
     lint: cd transports && go vet ./...
     test:
-      unit: cd transports/pg-gateway-http && go test ./... -short -count=1
+      unit: cd transports/celer-route-http && go test ./... -short -count=1
       integration: make test
   plugins:
     root: plugins
@@ -50,11 +50,11 @@ modules:
       e2e: make run-e2e
 environments:
   local:
-    description: '本地开发环境：pg-gateway-http API 服务器 + UI 开发服务器。TBD: 确认端口配置'
+    description: '本地开发环境：celer-route-http API 服务器 + UI 开发服务器。TBD: 确认端口配置'
     prepare_env:
       host: localhost
       script: .pg/hooks/local/prepare.sh
-      description: 启动 pg-gateway 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
+      description: 启动 celer-route 实例，用 fixture 数据初始化 provider/key/routing-rule 等配置，完成后关闭实例
     clean_env:
       script: .pg/hooks/local/clean_env.sh
       timeout_seconds: 60
@@ -64,22 +64,22 @@ environments:
       timeout_seconds: 30
       description: 探测 local 环境各角色健康状态与端口可用性，输出 env-description.yaml
     roles:
-    - name: pg-gateway-api
+    - name: celer-route-api
       instances:
-      - name: pg-gateway-api-1
+      - name: celer-route-api-1
         host: localhost
         port: 9080
-        description: pg-gateway 实例端口
+        description: celer-route 实例端口
       actions:
         start:
           host: localhost
-          script: .pg/hooks/pg-gateway-api-start.sh
+          script: .pg/hooks/celer-route-api-start.sh
         stop:
           host: localhost
-          script: .pg/hooks/pg-gateway-api-stop.sh
+          script: .pg/hooks/celer-route-api-stop.sh
         health_check:
           host: localhost
-          script: .pg/hooks/pg-gateway-api-health-check.sh
+          script: .pg/hooks/celer-route-api-health-check.sh
     - name: ui-dev
       instances:
       - name: ui-dev-1

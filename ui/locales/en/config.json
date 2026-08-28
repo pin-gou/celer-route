@@ -212,8 +212,8 @@
 	},
 	"clientSettings": {
 		"title": "Client Settings",
-		"description": "Tune how the pg-gateway instance behaves — traffic control, health checks, and header forwarding. Settings that change LLM behavior live in Compatibility.",
-		"pageDescription": "Behaviour switches for the pg-gateway instance",
+		"description": "Tune how the celer-route instance behaves — traffic control, health checks, and header forwarding. Settings that change LLM behavior live in Compatibility.",
+		"pageDescription": "Behaviour switches for the celer-route instance",
 		"tabs": {
 			"common": "Common",
 			"headerForwarding": "Header Forwarding",
@@ -248,7 +248,7 @@
 		"connectionPool": "Connection Pool",
 		"noConfig": "No client settings configured",
 		"dropExcessRequests": "Drop Excess Requests",
-		"dropExcessRequestsDesc": "If enabled, pg-gateway will drop requests that exceed pool capacity.",
+		"dropExcessRequestsDesc": "If enabled, celer-route will drop requests that exceed pool capacity.",
 		"droppedRequests": "Have dropped <1>{{count}} requests</1> since last restart.",
 		"disableDbPings": "Disable DB Pings in Health Check",
 		"disableDbPingsDesc": "If enabled, the /health endpoint will skip database connectivity checks and return OK immediately.",
@@ -406,7 +406,7 @@
 		"loggingHeadersPlaceholder": "X-Tenant-ID, X-Request-Source, x-custom-*",
 		"saving": "Saving...",
 		"saveChanges": "Save Changes",
-		"restartWarning": "Need to restart pg-gateway to apply changes."
+		"restartWarning": "Need to restart celer-route to apply changes."
 	},
 	"mcpGateway": {
 		"title": "MCP Gateway",
@@ -476,7 +476,7 @@
 		"passwordPolicyError": "Password must include {{failures}}.",
 		"setupTokenCliTitle": "Use the CLI to create the first admin account",
 		"setupTokenCliDesc": "This instance doesn't have an admin account yet. Create one with the bundled CLI — you only need shell access to the container. After it's created, refresh this page to manage auth normally.",
-		"setupTokenCliCommand": "docker exec -it <container> pg-gateway-admin admin reset",
+		"setupTokenCliCommand": "docker exec -it <container> celer-route-admin admin reset",
 		"enforceVirtualKeys": "Enforce API Keys on Inference",
 		"enforceVirtualKeysDesc": "Require every API request to include a valid virtual key. Turn this on to block unauthorized callers from using your models — recommended for production.",
 		"documentation": "documentation",
@@ -499,7 +499,7 @@
 		"whitelistedRoutesPlaceholder": "/api/webhook",
 		"whitelistedRoutesExample": "Example: /api/custom-webhook, /api/public-endpoint",
 		"invalidOrigins": "Invalid origin(s): {{origins}}. Each entry must be a full URL like https://example.com, a wildcard like https://*.example.com, or * to allow all.",
-		"restartWarning": "Need to restart pg-gateway to apply changes.",
+		"restartWarning": "Need to restart celer-route to apply changes.",
 		"close": "Close",
 		"viewDocs": "View docs",
 		"toast": {
@@ -570,7 +570,7 @@
 		"inferenceDesc": "Use proxy for LLM inference requests to model providers.",
 		"api": "API",
 		"apiDesc": "Use proxy for external API calls and webhooks.",
-		"scimEnterprise": "SCIM proxy support is available in pg-gateway Enterprise.",
+		"scimEnterprise": "SCIM proxy support is available in celer-route Enterprise.",
 		"noPermission": "You don't have permission to update settings",
 		"enterprise": "Enterprise"
 	},
@@ -636,8 +636,8 @@
 		"loadFailed": "Failed to load feature flags"
 	},
 	"restart": {
-		"description": "These settings require a pg-gateway service restart to take effect. Current connections will continue with existing settings until restart.",
-		"warning": "Need to restart pg-gateway to apply changes."
+		"description": "These settings require a celer-route service restart to take effect. Current connections will continue with existing settings until restart.",
+		"warning": "Need to restart celer-route to apply changes."
 	},
 	"toast": {
 		"settingsSaved": "Settings saved successfully",

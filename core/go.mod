@@ -1,4 +1,4 @@
-module github.com/pin-gou/pg-gateway/core
+module github.com/pin-gou/celer-route/core
 
 go 1.26.5
 

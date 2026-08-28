@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestWithMantleProject verifies the project header is added only when a project ID is present,

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestEnableRenderers_DefaultDisabled verifies the default (EnableRenderers=false)

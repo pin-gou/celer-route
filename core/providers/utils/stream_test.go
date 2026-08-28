@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 func TestCheckFirstStreamChunk_ErrorInFirstChunk(t *testing.T) {

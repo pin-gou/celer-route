@@ -3,8 +3,8 @@ package vertex
 import (
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/providers/gemini"
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/providers/gemini"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
 )
 
 // Vertex AI Embedding API types

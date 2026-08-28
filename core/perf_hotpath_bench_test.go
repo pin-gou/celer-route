@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Benchmark helper: builds a Bifrost backed by a MockAccount with nProviders

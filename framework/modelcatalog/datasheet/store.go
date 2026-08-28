@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 )
 
 // Defaults for sync configuration and timeouts. Exposed so the composer can

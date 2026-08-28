@@ -1,4 +1,4 @@
-// Package auth provides shared authentication primitives for pg-gateway,
+// Package auth provides shared authentication primitives for celer-route,
 // including the dashboard admin password policy. Centralising the rule here
 // keeps the HTTP handler, the CLI reset tool, and any future admin-facing
 // surface in lockstep — changing the policy in one place updates them all.

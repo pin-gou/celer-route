@@ -1,4 +1,4 @@
-module github.com/pin-gou/pg-gateway/examples/mcps/parallel-test-server
+module github.com/pin-gou/celer-route/examples/mcps/parallel-test-server
 
 go 1.26.5
 

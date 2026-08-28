@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/lrucache"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/lrucache"
 )
 
 // defaultUserTokenCacheCapacity bounds the per-user token cache. Session-mode

@@ -32,7 +32,7 @@ make build-ui
 # Build bifrost-http binary
 echo "🔨 Building bifrost-http binary..."
 mkdir -p tmp
-cd transports/pg-gateway-http
+cd transports/celer-route-http
 go build -o ../../tmp/bifrost-http .
 cd ../..
 

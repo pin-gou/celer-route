@@ -14,14 +14,14 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/mcp"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
-	"github.com/pin-gou/pg-gateway/framework/logstore"
-	"github.com/pin-gou/pg-gateway/framework/mcpcatalog"
-	"github.com/pin-gou/pg-gateway/framework/modelcatalog"
-	"github.com/pin-gou/pg-gateway/framework/streaming"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/mcp"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/logstore"
+	"github.com/pin-gou/celer-route/framework/mcpcatalog"
+	"github.com/pin-gou/celer-route/framework/modelcatalog"
+	"github.com/pin-gou/celer-route/framework/streaming"
 )
 
 const (

@@ -6,8 +6,8 @@ import (
 	"mime/multipart"
 	"net/http"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToOpenAIVideoGenerationRequest converts a Bifrost Video Request to OpenAI format

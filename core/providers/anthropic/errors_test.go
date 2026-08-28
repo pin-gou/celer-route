@@ -3,7 +3,7 @@ package anthropic
 import (
 	"testing"
 
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 )
 
 func TestToAnthropicChatCompletionError(t *testing.T) {

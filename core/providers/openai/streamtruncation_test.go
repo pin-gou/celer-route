@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // An upstream that dies mid-SSE closes its connection on a chunk boundary, which
@@ -16,7 +16,7 @@ import (
 // the impossible transport-level check: without a terminal marker
 // ([DONE] / finish_reason / a terminal Responses event), the stream is truncated
 // and must surface as an error instead of a synthetic clean completion.
-// See https://github.com/pin-gou/pg-gateway/issues/5546.
+// See https://github.com/pin-gou/celer-route/issues/5546.
 
 // truncatingSSEServer serves one streaming response that writes prelude (already
 // SSE-framed) and then kills the connection without the terminating chunk.

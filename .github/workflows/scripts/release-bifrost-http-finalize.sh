@@ -43,7 +43,7 @@ while IFS= read -r plugin_line; do
     PLUGIN_VERSIONS["$plugin_name"]="$plugin_version"
     PLUGINS_USED+=("$plugin_name:$plugin_version")
   fi
-done < <(grep "github.com/pin-gou/pg-gateway/plugins/" transports/go.mod)
+done < <(grep "github.com/pin-gou/celer-route/plugins/" transports/go.mod)
 
 echo "🔧 Versions:"
 echo "   Core: $CORE_VERSION"
@@ -140,7 +140,7 @@ $CHANGELOG_BODY
 
 #### Docker
 \`\`\`bash
-docker run -p 8080:8080 ghcr.io/pin-gou/pg-gateway:v$VERSION
+docker run -p 8080:8080 ghcr.io/pin-gou/celer-route:v$VERSION
 \`\`\`
 
 #### Binary Download
@@ -149,8 +149,8 @@ npx @maximhq/bifrost --transport-version v$VERSION
 \`\`\`
 
 ### Docker Images
-- **\`ghcr.io/pin-gou/pg-gateway:v$VERSION\`** - This specific version
-- **\`ghcr.io/pin-gou/pg-gateway:latest\`** - Latest version (updated with this release)
+- **\`ghcr.io/pin-gou/celer-route:v$VERSION\`** - This specific version
+- **\`ghcr.io/pin-gou/celer-route:latest\`** - Latest version (updated with this release)
 
 ---
 _This release was automatically created with dependencies: core \`$CORE_VERSION\`, framework \`$FRAMEWORK_VERSION\`. All plugins have been validated and updated._"

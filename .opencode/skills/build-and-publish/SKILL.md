@@ -200,7 +200,7 @@ gh release create "$version" --title "$version" --notes-file /tmp/changelog-${ve
 **工作流：** build-and-publish
 
 ### 构建产物
-- **Docker 镜像：** ghcr.io/pin-gou/pg-gateway:{{version}}（multi-arch: linux/amd64, linux/arm64）
+- **Docker 镜像：** ghcr.io/pin-gou/celer-route:{{version}}（multi-arch: linux/amd64, linux/arm64）
 - **GitHub Release：** https://github.com/{{owner}}/{{repo}}/releases/tag/{{version}}
 
 ### CHANGELOG 摘要
@@ -208,7 +208,7 @@ gh release create "$version" --title "$version" --notes-file /tmp/changelog-${ve
 （此处展示生成的 CHANGELOG 内容）
 
 ### 下一步
-- 验证 Docker 镜像已推送：`docker pull ghcr.io/pin-gou/pg-gateway:{{version}}`
+- 验证 Docker 镜像已推送：`docker pull ghcr.io/pin-gou/celer-route:{{version}}`
 - 验证 Release 已创建：`gh release view {{version}}`
 ```
 

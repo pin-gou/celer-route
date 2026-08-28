@@ -3,7 +3,7 @@ package wafer
 import (
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Wafer File API Types

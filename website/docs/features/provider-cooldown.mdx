@@ -5,7 +5,7 @@ description: "Automatically cool down provider keys that return quota/billing er
 
 # Provider Cooldown
 
-The **Provider Cooldown** plugin is a built-in pg-gateway plugin that automatically
+The **Provider Cooldown** plugin is a built-in celer-route plugin that automatically
 suppresses provider API keys returning quota, billing, or rate-limit errors.
 When a key triggers a cooldown, it is temporarily removed from the key pool so
 subsequent requests are routed to healthy keys. After the configured TTL

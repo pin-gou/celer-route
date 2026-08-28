@@ -46,7 +46,7 @@ func safetyRatingsStreamChunks() []*GenerateContentResponse {
 // streamGenerateContent passthrough loop -- Gemini stream -> Bifrost Responses stream ->
 // Gemini stream -- and asserts candidates[0].safetyRatings, avgLogprobs, and the native
 // responseId survive, matching the non-streaming fix for
-// https://github.com/pin-gou/pg-gateway/issues/5843.
+// https://github.com/pin-gou/celer-route/issues/5843.
 func TestGeminiSafetyRatingsAvgLogprobsResponseIDStreamRoundTrip(t *testing.T) {
 	forward := &GeminiResponsesStreamState{}
 	forward.flush()

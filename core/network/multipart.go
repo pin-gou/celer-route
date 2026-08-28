@@ -8,7 +8,7 @@ import (
 	"mime/multipart"
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ParseMultipartFormFields extracts text form fields from a multipart/form-data body,

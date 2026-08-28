@@ -3,7 +3,7 @@ package openai
 import (
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // SupportsWebSocketMode returns true since OpenAI natively supports the Responses API WebSocket Mode.

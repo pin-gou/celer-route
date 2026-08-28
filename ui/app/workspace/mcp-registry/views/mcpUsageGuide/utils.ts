@@ -3,11 +3,11 @@ import type { VirtualKey } from "@/lib/types/governance";
 import type { MCPClient } from "@/lib/types/mcp";
 import type { HarnessPlatform, ServerScope } from "./types";
 
-/** Default port pg-gateway serves on; used when guessing the gateway URL in local dev. */
+/** Default port celer-route serves on; used when guessing the gateway URL in local dev. */
 const DEFAULT_BIFROST_PORT = "8080";
 
 /**
- * Resolve the externally reachable pg-gateway base URL used in generated commands/configs.
+ * Resolve the externally reachable celer-route base URL used in generated commands/configs.
  *
  * Order of preference:
  *  1. The admin-configured `mcp_external_client_url`. When sourced from an env var the

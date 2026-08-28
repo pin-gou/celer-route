@@ -3,8 +3,8 @@ package mcp_headers
 import (
 	"context"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/lrucache"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/lrucache"
 )
 
 // defaultCredentialCacheCapacity bounds the per-user header credential cache.

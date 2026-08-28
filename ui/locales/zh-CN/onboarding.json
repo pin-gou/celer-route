@@ -1,5 +1,5 @@
 {
-	"title": "欢迎使用 pg-gateway",
+	"title": "欢迎使用 celer-route",
 	"subtitle": "5 个快速步骤即可完成首次配置。",
 	"skipWizard": "跳过整个引导",
 	"skip": "跳过",
@@ -32,7 +32,7 @@
 		"addedOpenCode": "已添加 OpenCode Free",
 		"addProvider": "添加提供商"
 	},
-	"welcomeDesc": "pg-gateway 是一个高性能 AI 网关，统一 20+ LLM 提供商，对外暴露 OpenAI 兼容的单一 API。",
+	"welcomeDesc": "celer-route 是一个高性能 AI 网关，统一 20+ LLM 提供商，对外暴露 OpenAI 兼容的单一 API。",
 	"feature": {
 		"unified": "统一 API",
 		"unifiedDesc": "20+ 提供商，一个 OpenAI 兼容端点",
@@ -44,10 +44,10 @@
 		"observabilityDesc": "日志、成本追踪、分布式链路追踪"
 	},
 	"adminDesc": "为 dashboard 设置管理员账号，保护后台安全。如果仅本地个人使用，可以跳过此步。",
-	"adminSkipHint": "如果 pg-gateway 仅在本地运行且不对外暴露网络访问，可以暂时不开启登录认证。",
+	"adminSkipHint": "如果 celer-route 仅在本地运行且不对外暴露网络访问，可以暂时不开启登录认证。",
 	"setupTokenCliTitle": "使用 CLI 创建第一个管理员账户",
 	"setupTokenCliDesc": "当前实例尚未设置管理员账户。请使用内置 CLI 创建——只需对容器有 shell 访问权限即可。创建完成后刷新本页面即可正常管理认证。",
-	"setupTokenCliCommand": "docker exec -it <container> pg-gateway-admin admin reset",
+	"setupTokenCliCommand": "docker exec -it <container> celer-route-admin admin reset",
 	"adminUsername": "管理员账号",
 	"adminPassword": "管理员密码",
 	"adminUsernamePlaceholder": "admin",
@@ -92,7 +92,7 @@
 		"node": "Node.js",
 		"go": "Go"
 	},
-	"alreadySetUpNotice": "你的 pg-gateway 已经配置完成。可以随时重新运行此向导。",
+	"alreadySetUpNotice": "你的 celer-route 已经配置完成。可以随时重新运行此向导。",
 	"section": {
 		"security": "安全",
 		"providerSetup": "提供商设置",
@@ -107,7 +107,7 @@
 		"skip": "跳过",
 		"skipped": "已跳过",
 		"remindLater": "稍后提醒我",
-		"warning": "不完成这些步骤会使你的 pg-gateway 设置存在风险。",
+		"warning": "不完成这些步骤会使你的 celer-route 设置存在风险。",
 		"tomorrow": "明天",
 		"inAWeek": "一周后",
 		"pickDate": "选择日期…",

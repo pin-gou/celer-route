@@ -13,8 +13,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/pin-gou/pg-gateway/core/mcp/credstore"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/mcp/credstore"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ClientManager interface for accessing MCP clients and tools

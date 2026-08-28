@@ -85,7 +85,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 	const [isLoading, setIsLoading] = useState(false);
 	const [argsText, setArgsText] = useState("");
 	// STDIO env vars as a name→value map. Empty value = pass the bare name so the
-	// stdio process reads it from pg-gateway's host environment.
+	// stdio process reads it from celer-route's host environment.
 	const [envVars, setEnvVars] = useState<Record<string, string>>({});
 	const [scopesText, setScopesText] = useState("");
 	const [tokenExchangeScopesText, setTokenExchangeScopesText] = useState("");
@@ -279,7 +279,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 							command: data.stdio_config?.command || "",
 							args: parseArrayFromText(argsText),
 							// Each row becomes KEY=value, or a bare KEY when no value is given
-							// (read from pg-gateway's host environment). Rows without a name are skipped.
+							// (read from celer-route's host environment). Rows without a name are skipped.
 							envs: Object.entries(envVars)
 								.filter(([name]) => name.trim() !== "")
 								.map(([name, value]) => {
@@ -512,7 +512,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 							<div className="space-y-4">
 								<SectionHeader
 									title="Connection & Authentication"
-									description="Choose how pg-gateway connects to this server and, for network transports, how requests are authenticated."
+									description="Choose how celer-route connects to this server and, for network transports, how requests are authenticated."
 								/>
 								<div className="space-y-4 rounded-md border p-4">
 									<FormField
@@ -839,7 +839,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 														clientIdLabel="OAuth Client ID (optional)"
 														clientIdPlaceholder="your-client-id (auto-generated if empty)"
 														clientIdHelperText="Will be auto-generated via dynamic registration if left empty and provider supports it"
-														clientIdTooltip="Leave empty to use Dynamic Client Registration (RFC 7591). pg-gateway will automatically register with the OAuth provider if supported."
+														clientIdTooltip="Leave empty to use Dynamic Client Registration (RFC 7591). celer-route will automatically register with the OAuth provider if supported."
 														clientIdTestId="mcp-oauth-client-id"
 														clientSecretLabel="OAuth Client Secret (optional for PKCE)"
 														clientSecretPlaceholder="your-client-secret"
@@ -882,7 +882,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 											<div className="flex-1">
 												<p className="text-xs font-medium text-amber-900">Docker Notice</p>
 												<p className="mt-0.5 text-xs text-amber-800">
-													If not using the official pg-gateway Docker image, STDIO connections may not work if required commands (npx,
+													If not using the official celer-route Docker image, STDIO connections may not work if required commands (npx,
 													python, etc.) aren't installed. You can safely ignore this if running locally or using a custom image with the
 													necessary dependencies.
 												</p>
@@ -937,7 +937,8 @@ const ClientForm: React.FC<ClientFormProps> = ({ open, onClose, onSaved }) => {
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs">
 														<p>
-															Add a value for each variable, or leave it blank to read the value from the environment where pg-gateway runs.
+															Add a value for each variable, or leave it blank to read the value from the environment where celer-route
+															runs.
 														</p>
 													</TooltipContent>
 												</Tooltip>

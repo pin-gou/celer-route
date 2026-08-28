@@ -1,6 +1,6 @@
 // Package rtk — admin endpoints support.
 //
-// This file holds the admin-time entry points used by transports/pg-gateway-http/handlers/rtk.go:
+// This file holds the admin-time entry points used by transports/celer-route-http/handlers/rtk.go:
 //   - GetFilterCatalog:    exposes the loader's filters + diagnostics for /api/context/rtk/filters
 //   - RunTest:             runs a compression trial against a payload for /api/context/rtk/test
 //   - PreviewCompression:  previews compression against a payload without mutating runtime config

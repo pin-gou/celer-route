@@ -5,7 +5,7 @@ import (
 	"sort"
 
 	"github.com/bytedance/sonic"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToOpenAIRerankRequest converts a Bifrost rerank request to OpenAI-compatible format

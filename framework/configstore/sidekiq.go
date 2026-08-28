@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
 	"gorm.io/gorm"
 )
 

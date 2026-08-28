@@ -40,7 +40,7 @@
 	},
 	"empty": {
 		"title": "未配置提供商",
-		"description": "添加您的第一个提供商，开始通过 pg-gateway 路由 AI 模型请求。"
+		"description": "添加您的第一个提供商，开始通过 celer-route 路由 AI 模型请求。"
 	},
 	"toast": {
 		"providerAdded": "提供商添加成功",
@@ -368,7 +368,7 @@
 			"modelFamilyPlaceholder": "选择模型系列",
 			"modelFamilyNone": "无",
 			"description": "描述",
-			"descriptionHint": "用户备注。pg-gateway 不使用。",
+			"descriptionHint": "用户备注。celer-route 不使用。",
 			"descriptionPlaceholder": "此部署用于什么？",
 			"useKeySetting": "使用密钥设置",
 			"on": "开启",
@@ -777,7 +777,7 @@
 			"useAnthropicEndpointsDescription": "将聊天补全和响应请求路由到 Anthropic 兼容的端点。",
 			"vpcEndpoints": {
 				"title": "VPC 端点（可选）",
-				"description": "使用 PrivateLink VPC 端点 DNS 名称覆盖默认的公共 AWS Bedrock 端点。pg-gateway 通过其对应的 VPC 端点拨号每个服务。",
+				"description": "使用 PrivateLink VPC 端点 DNS 名称覆盖默认的公共 AWS Bedrock 端点。celer-route 通过其对应的 VPC 端点拨号每个服务。",
 				"services": {
 					"runtime": {
 						"label": "运行时",

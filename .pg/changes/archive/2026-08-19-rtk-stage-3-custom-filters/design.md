@@ -3,7 +3,7 @@
 
 ### 模块归属
 - **Track**：`plugins` (`.pg/project.yaml` tracks.plugins, type=standard, modules=[plugins])
-- **目标模块**：`plugins/rtk/`（独立 go module `github.com/pin-gou/pg-gateway/plugins/rtk`）
+- **目标模块**：`plugins/rtk/`（独立 go module `github.com/pin-gou/celer-route/plugins/rtk`）
 - **不涉及**：core / framework / transports / ui
 
 ### 数据流

@@ -1,4 +1,4 @@
-# pg-gateway
+# celer-route
 
 > 基于 Bifrost 裁剪的个人 LLM 接口网关，统一 20+ LLM 提供商为 OpenAI 兼容 API。
 
@@ -17,12 +17,12 @@
 ```bash
 # 启动服务（即将支持）
 docker run  -d \
-  --name pg-gateway \
+  --name celer-route \
   --restart unless-stopped \
   --user 0:0 \
   -p 8080:8080 \
-  -v ~/pg-gateway-data:/app/data \
-  ghcr.io/pin-gou/pg-gateway:latest
+  -v ~/celer-route-data:/app/data \
+  ghcr.io/pin-gou/celer-route:latest
 
 # 打开 Web 界面
 open http://localhost:8080
@@ -39,7 +39,7 @@ curl http://localhost:8080/v1/chat/completions \
 ## 仓库结构
 
 ```
-pg-gateway/
+celer-route/
 ├── core/           # 核心引擎与提供商实现
 ├── framework/      # 数据持久化与流式处理
 ├── transports/     # HTTP 网关

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 )
 
 const resetBenchmarkVirtualKeys = 5000

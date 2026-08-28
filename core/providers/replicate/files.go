@@ -3,7 +3,7 @@ package replicate
 import (
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Replicate File API Converters

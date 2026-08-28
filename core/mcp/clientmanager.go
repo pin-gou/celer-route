@@ -17,8 +17,8 @@ import (
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/pin-gou/pg-gateway/core/mcp/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/mcp/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // AcquireClientConn returns a live upstream MCP client connection for the

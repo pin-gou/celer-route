@@ -28,7 +28,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # go.work file it writes at ${REPO_ROOT} is then auto-discovered by `go build`.
 ( cd "${REPO_ROOT}" && source "${SCRIPT_DIR}/setup-go-workspace.sh" )
 
-BIFROST_HTTP_DIR="${REPO_ROOT}/transports/pg-gateway-http"
+BIFROST_HTTP_DIR="${REPO_ROOT}/transports/celer-route-http"
 TRANSPORTS_DIR="${REPO_ROOT}/transports"
 WORK_DIR="${SCRIPT_DIR}"
 BENCHMARK_DIR="${BENCHMARK_DIR:-${REPO_ROOT}/../bifrost-benchmarking}"
@@ -279,7 +279,7 @@ setup_mocker() {
   else
     log_info "Cloning bifrost-benchmarking repository..."
     mkdir -p "$(dirname "${BENCHMARK_DIR}")"
-    git clone --depth 1 https://github.com/pin-gou/pg-gateway-benchmarking.git "${BENCHMARK_DIR}"
+    git clone --depth 1 https://github.com/pin-gou/celer-route-benchmarking.git "${BENCHMARK_DIR}"
     cd "${WORK_DIR}"
   fi
 
@@ -344,7 +344,7 @@ create_config() {
 
   cat > "${WORK_DIR}/config.json" << 'EOF'
 {
-  "$schema": "https://pin-gou.github.io/pg-gateway/schema",
+  "$schema": "https://pin-gou.github.io/celer-route/schema",
   "client": {
     "enable_logging": false,
     "disable_content_logging": true,

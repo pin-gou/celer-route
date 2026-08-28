@@ -3,7 +3,7 @@ package azure
 import (
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestExtractAzurePassthroughUsage verifies Azure dispatches usage extraction by upstream model:

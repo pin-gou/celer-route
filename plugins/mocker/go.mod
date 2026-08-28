@@ -1,10 +1,10 @@
-module github.com/pin-gou/pg-gateway/plugins/mocker
+module github.com/pin-gou/celer-route/plugins/mocker
 
 go 1.26.5
 
 require (
 	github.com/jaswdr/faker/v2 v2.8.0
-	github.com/pin-gou/pg-gateway/core v1.7.7
+	github.com/pin-gou/celer-route/core v1.7.7
 )
 
 require (
@@ -75,4 +75,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pin-gou/pg-gateway/core => ../../core
+replace github.com/pin-gou/celer-route/core => ../../core

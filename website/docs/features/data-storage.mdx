@@ -6,13 +6,13 @@ sidebar_position: 1
 
 # 数据存储后端
 
-pg-gateway 通过 `config.json` 中的 `config_store` 与 `logs_store` 段配置持久化后端。
+celer-route 通过 `config.json` 中的 `config_store` 与 `logs_store` 段配置持久化后端。
 **同一 Docker 镜像同时包含 SQLite 与 PostgreSQL 驱动**，部署时无需更换镜像，仅需修改
 `config.json` 中的 `type` 字段。
 
 ## 默认行为
 
-- 若 `config.json` 不含 `config_store` 段，pg-gateway **默认启用 SQLite**，数据库文件
+- 若 `config.json` 不含 `config_store` 段，celer-route **默认启用 SQLite**，数据库文件
   落在 `${app-dir}/config.db`
 - 若 `config.json` 不含 `logs_store` 段，**默认启用 SQLite**，数据库文件落在
   `${app-dir}/logs.db`
@@ -58,8 +58,8 @@ pg-gateway 通过 `config.json` 中的 `config_store` 与 `logs_store` 段配置
 
 ### 前置要求
 
-- **PostgreSQL 16 或更高版本**（pg-gateway 启动时硬性检查 `server_version_num >= 160000`）
-- 一个可用的数据库（pg-gateway 会自动建表，但不会创建数据库本身）
+- **PostgreSQL 16 或更高版本**（celer-route 启动时硬性检查 `server_version_num >= 160000`）
+- 一个可用的数据库（celer-route 会自动建表，但不会创建数据库本身）
 
 ### 配置示例
 
@@ -93,7 +93,7 @@ pg-gateway 通过 `config.json` 中的 `config_store` 与 `logs_store` 段配置
 
 ### PostgreSQL 独有优势
 
-切换到 PostgreSQL 后，pg-gateway 会启用若干 SQLite 不具备的能力：
+切换到 PostgreSQL 后，celer-route 会启用若干 SQLite 不具备的能力：
 
 - **物化视图（matview）** — 仪表盘与统计接口走 matview 加速
 - **GIN 索引** — 元数据 JSONB 上的高效过滤

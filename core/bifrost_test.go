@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	mistralprovider "github.com/pin-gou/pg-gateway/core/providers/mistral"
-	schemas "github.com/pin-gou/pg-gateway/core/schemas"
+	mistralprovider "github.com/pin-gou/celer-route/core/providers/mistral"
+	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

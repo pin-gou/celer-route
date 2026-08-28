@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/configstore"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/configstore"
 )
 
 // providersWithPartialListModels enumerates providers whose /v1/models response

@@ -1,6 +1,6 @@
-# pg-gateway Docker 部署示例（SQLite 单机版）
+# celer-route Docker 部署示例（SQLite 单机版）
 
-零外部依赖的单机部署：pg-gateway 使用内置 SQLite 文件作为 `config_store` 和 `logs_store`。
+零外部依赖的单机部署：celer-route 使用内置 SQLite 文件作为 `config_store` 和 `logs_store`。
 适合本地试用、单机小规模部署、CI 测试场景。
 
 ## 前置条件
@@ -12,9 +12,9 @@
 
 ```
 .
-├── docker-compose.yml   # pg-gateway 服务编排
+├── docker-compose.yml   # celer-route 服务编排
 ├── data/
-│   └── config.json      # pg-gateway 配置（SQLite 模式）
+│   └── config.json      # celer-route 配置（SQLite 模式）
 └── README.md
 ```
 
@@ -28,7 +28,7 @@ docker compose up -d
 docker compose ps
 
 # 实时查看日志
-docker compose logs -f pg-gateway
+docker compose logs -f celer-route
 ```
 
 启动成功后访问：
@@ -44,25 +44,25 @@ docker compose logs -f pg-gateway
 
 - `config.db` — config_store SQLite 文件
 - `logs.db` — logs_store SQLite 文件
-- `config.json` — pg-gateway 配置
+- `config.json` — celer-route 配置
 
 **备份**：
 
 ```bash
 # 停止服务后再备份，避免写入期间复制损坏
 docker compose stop
-tar czf pg-gateway-backup-$(date +%Y%m%d).tar.gz data/
+tar czf celer-route-backup-$(date +%Y%m%d).tar.gz data/
 docker compose start
 ```
 
 或者使用 SQLite 在线备份（无需停服）：
 
 ```bash
-docker compose exec pg-gateway \
+docker compose exec celer-route \
   sqlite3 /app/data/config.db ".backup '/app/data/config.db.bak'"
 ```
 
-## 升级 pg-gateway
+## 升级 celer-route
 
 ```bash
 docker compose pull
@@ -76,7 +76,7 @@ docker compose up -d
 本示例使用 SQLite，**不适用于生产级高并发或多节点部署**。
 
 如需切换到 PostgreSQL，请使用 [`examples/dockers-postgres/`](../dockers-postgres/) 示例。
-注意：pg-gateway 目前**未提供自动的 SQLite → PostgreSQL 数据迁移工具**。
+注意：celer-route 目前**未提供自动的 SQLite → PostgreSQL 数据迁移工具**。
 切换后需要在新 PostgreSQL 库中重新初始化数据（通过管理界面或 API 重新配置）。
 
 ## 常见问题
@@ -87,7 +87,7 @@ docker compose up -d
 
 ### 容器内用户权限
 
-pg-gateway 容器默认使用非 root 用户运行。如挂载目录存在权限问题：
+celer-route 容器默认使用非 root 用户运行。如挂载目录存在权限问题：
 
 ```bash
 # 让当前目录归运行用户所有（UID 1000）
@@ -106,10 +106,10 @@ docker compose up -d
 
 ```bash
 # 查看容器日志
-docker compose logs pg-gateway
+docker compose logs celer-route
 
 # 进入容器调试
-docker compose exec pg-gateway sh
+docker compose exec celer-route sh
 ```
 
 ## 配置说明

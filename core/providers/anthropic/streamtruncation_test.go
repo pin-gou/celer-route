@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // Anthropic's Messages stream carries no [DONE] sentinel: message_stop is the
@@ -15,7 +15,7 @@ import (
 // which fasthttp reports as a plain io.EOF — the same read result as a healthy
 // close — so a stream cut short before message_stop must be surfaced rather
 // than finished off with a synthesized final chunk.
-// See https://github.com/pin-gou/pg-gateway/issues/5546.
+// See https://github.com/pin-gou/celer-route/issues/5546.
 
 type truncationTestLogger struct{}
 

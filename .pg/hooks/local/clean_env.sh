@@ -6,7 +6,7 @@
 # clean.sh（交互式入口）委托调用。输出必须简洁，非交互。
 #
 # 清理内容：
-#   1. 停止本地服务（pg-gateway-http / vite / air），释放 9080/3008/9082 端口
+#   1. 停止本地服务（celer-route-http / vite / air），释放 9080/3008/9082 端口
 #   2. 清除 .pg/ 下运行时会话目录（logs / pids）
 #   3. 清除 .pg/changes/ 构建产物（2-build、日志），保留提案文档与 archive
 #   4. 清除 local 环境数据（.pg/hooks/local/data/）
@@ -65,11 +65,11 @@ kill_port() {
 
 # === 1. 停止本地服务 ===
 stop_services() {
-    pkill -f 'pg-gateway-http' 2>/dev/null || true
+    pkill -f 'celer-route-http' 2>/dev/null || true
     pkill -f 'air -c' 2>/dev/null || true
     pkill -f 'vite --port' 2>/dev/null || true
 
-    kill_port 9080 "pg-gateway-api"
+    kill_port 9080 "celer-route-api"
     kill_port 3008 "ui-dev"
     kill_port 9082 "agent"
 
@@ -108,11 +108,11 @@ clean_local_data() {
 clean_build_artifacts() {
     rm -rf "$PROJECT_ROOT/tmp"
     rm -rf "$PROJECT_ROOT/ui/out"
-    rm -rf "$PROJECT_ROOT/transports/pg-gateway-http/ui"
-    rm -rf "$PROJECT_ROOT/transports/pg-gateway-http/lib/ui"
-    rm -rf "$PROJECT_ROOT/transports/pg-gateway-http/tmp"
-    rm -rf "$PROJECT_ROOT/transports/pg-gateway-http/logs"
-    rm -f "$PROJECT_ROOT/transports/pg-gateway-http/build-errors.log"
+    rm -rf "$PROJECT_ROOT/transports/celer-route-http/ui"
+    rm -rf "$PROJECT_ROOT/transports/celer-route-http/lib/ui"
+    rm -rf "$PROJECT_ROOT/transports/celer-route-http/tmp"
+    rm -rf "$PROJECT_ROOT/transports/celer-route-http/logs"
+    rm -f "$PROJECT_ROOT/transports/celer-route-http/build-errors.log"
     rm -rf "$PROJECT_ROOT/test-reports"
     rm -rf "$PROJECT_ROOT/tests/e2e/api/newman-reports"
 }

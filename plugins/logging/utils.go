@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	"github.com/pin-gou/pg-gateway/core/schemas"
-	"github.com/pin-gou/pg-gateway/framework/logstore"
-	"github.com/pin-gou/pg-gateway/framework/streaming"
+	bifrost "github.com/pin-gou/celer-route/core"
+	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/logstore"
+	"github.com/pin-gou/celer-route/framework/streaming"
 )
 
 // KeyPair represents an ID-Name pair for keys

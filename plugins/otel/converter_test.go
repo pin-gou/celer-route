@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 func makeSpan(id, parentID, name string, kind schemas.SpanKind) *schemas.Span {

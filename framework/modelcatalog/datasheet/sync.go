@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
-	bifrost "github.com/pin-gou/pg-gateway/core"
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	configstoreTables "github.com/pin-gou/pg-gateway/framework/configstore/tables"
+	bifrost "github.com/pin-gou/celer-route/core"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 )
 
 const (

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	codemcp "github.com/pin-gou/pg-gateway/core/mcp"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	codemcp "github.com/pin-gou/celer-route/core/mcp"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // createReadToolFileTool creates the readToolFile tool definition for code mode.

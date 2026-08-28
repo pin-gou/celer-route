@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpproxy"
 )
@@ -296,7 +296,7 @@ func (f *HTTPClientFactory) createFasthttpClient(purpose ClientPurpose) *fasthtt
 // pooled connection. With FIFO pooling, the oldest connection is tried first, and when
 // the upstream has a short keep-alive (e.g. vLLM's default 5s) several pooled connections
 // can be dead at once - so a single retry can hit a second stale connection and still fail
-// (see https://github.com/pin-gou/pg-gateway/issues/4496). A small bound lets the request walk
+// (see https://github.com/pin-gou/celer-route/issues/4496). A small bound lets the request walk
 // past a few dead connections to a live one while staying well under fasthttp's internal
 // attempt cap. Retrying is safe here because the failure occurs before the server processes
 // the request (during dial / response-header parsing).

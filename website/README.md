@@ -1,13 +1,13 @@
-# pg-gateway 文档站
+# celer-route 文档站
 
 本站基于 [Docusaurus 3](https://docusaurus.io/) 构建，部署到 GitHub Pages：
-<https://pin-gou.github.io/pg-gateway/>
+<https://pin-gou.github.io/celer-route/>
 
 ## 本地开发
 
 ```bash
 npm install
-npm run start    # http://localhost:3000/pg-gateway/
+npm run start    # http://localhost:3000/celer-route/
 ```
 
 ## 构建

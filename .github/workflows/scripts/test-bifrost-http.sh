@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Test pg-gateway-http component
+# Test celer-route-http component
 # Usage: ./test-bifrost-http.sh
 
 # Get the absolute path of the script directory
@@ -14,7 +14,7 @@ fi
 # Setup Go workspace for CI
 source "$(dirname "$0")/setup-go-workspace.sh"
 
-echo "🧪 Running pg-gateway-http tests..."
+echo "🧪 Running celer-route-http tests..."
 
 # Cleanup function to ensure Docker services are stopped
 cleanup_docker() {

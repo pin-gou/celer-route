@@ -1,6 +1,6 @@
 // RTK admin API types.
 //
-// These types mirror the Go handler at transports/pg-gateway-http/handlers/rtk.go
+// These types mirror the Go handler at transports/celer-route-http/handlers/rtk.go
 // and the plugin admin methods at plugins/rtk/admin.go. They are kept in a
 // dedicated file so the RTK config form (plugins.ts) and the RTK admin UI
 // (ui/app/workspace/plugins/rtk/) can both reference them without creating

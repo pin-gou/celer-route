@@ -539,7 +539,7 @@ export interface LogEntry {
 	alias_model_family?: string; // Model family configured on the resolved alias, when set
 	// Model that actually produced the response when the provider swapped models inside a
 	// single call (Anthropic server-side fallback). Distinct from fallback_index, which
-	// counts pg-gateway's own cross-provider failover attempts.
+	// counts celer-route's own cross-provider failover attempts.
 	server_side_fallback_model?: string;
 	number_of_retries: number;
 	fallback_index: number;

@@ -1,8 +1,8 @@
-module github.com/pin-gou/pg-gateway/examples/plugins/hello-world-wasm
+module github.com/pin-gou/celer-route/examples/plugins/hello-world-wasm
 
 go 1.26.5
 
-require github.com/pin-gou/pg-gateway/core v1.4.17
+require github.com/pin-gou/celer-route/core v1.4.17
 
 
 require (

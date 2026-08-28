@@ -12,8 +12,8 @@ import (
 	"github.com/tidwall/sjson"
 	"github.com/valyala/fasthttp"
 
-	providerUtils "github.com/pin-gou/pg-gateway/core/providers/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // geminiCachedContent mirrors the Gemini API CachedContent resource shape

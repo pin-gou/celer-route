@@ -1,7 +1,7 @@
 # Provider Cooldown × Logging：时序关系与日志细分方案
 
 > **状态**：待定稿（draft）。作者先把分析记录下来，待日后想清楚了再启动实现。
-> **适用范围**：pg-gateway 已实现 `provider-cooldown` plugin 之后，运维观察到的一个看似"虚假"的日志现象。
+> **适用范围**：celer-route 已实现 `provider-cooldown` plugin 之后，运维观察到的一个看似"虚假"的日志现象。
 
 ---
 
@@ -168,7 +168,7 @@ R 行 + R' 行 + R'' 行 … 由 `parent_request_id` 链成一棵树。
 
 ### 4.2 选 C 的理由
 
-1. **Plugin 契约不变**：`RunPreLLMHooks` → `RunPostLLMHooks` 的对称设计是 pg-gateway 性能与正确性的基石。
+1. **Plugin 契约不变**：`RunPreLLMHooks` → `RunPostLLMHooks` 的对称设计是 celer-route 性能与正确性的基石。
 2. **细节不丢**：MCP agent 多轮 trace、cache hit/fail、retry attempt trail 都依赖 attempt 级日志。
 3. **"假 cancelled" 只是 UI 体验问题**：底层语义（"我们没真打 minimax"）已经在 `error.type = no_eligible_keys` 和 `routing_engine_log` 里了。
 

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pin-gou/pg-gateway/core/internal/llmtests"
-	"github.com/pin-gou/pg-gateway/core/providers/anthropic"
-	"github.com/pin-gou/pg-gateway/core/providers/bedrock"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/internal/llmtests"
+	"github.com/pin-gou/celer-route/core/providers/anthropic"
+	"github.com/pin-gou/celer-route/core/providers/bedrock"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -329,7 +329,7 @@ func TestBedrock(t *testing.T) {
 			}
 
 			// Convert via the SAME entry point the HTTP integration uses
-			// (transports/pg-gateway-http/integrations/anthropic.go RequestConverter
+			// (transports/celer-route-http/integrations/anthropic.go RequestConverter
 			// at lines 92-100 calls anthropicReq.ToBifrostResponsesRequest(ctx)).
 			reqCtx := schemas.NewBifrostContext(ctx, schemas.NoDeadline)
 			bifrostReq := anthropicReq.ToBifrostResponsesRequest(reqCtx)
@@ -6271,7 +6271,7 @@ func TestBedrockToBifrostResponsesResponse_StructuredOutput_MixedWithRealTools(t
 }
 
 // TestBedrockSearchResultToolResultRoundTrip is the regression gate for
-// https://github.com/pin-gou/pg-gateway/issues/3537 — a Bedrock-native passthrough
+// https://github.com/pin-gou/celer-route/issues/3537 — a Bedrock-native passthrough
 // request containing toolResult.content[].searchResult must survive
 // ToBifrostResponsesRequest → ToBedrockResponsesRequest with all fields intact.
 // Pre-fix, the SearchResult field is dropped during JSON unmarshal and the

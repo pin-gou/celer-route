@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/pin-gou/pg-gateway/core/mcp/utils"
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/mcp/utils"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // resolver is the internal interface each auth-type-specific resolver

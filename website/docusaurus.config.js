@@ -1,14 +1,14 @@
 import { themes as prismThemes } from 'prism-react-renderer';
 
 const config = {
-  title: 'pg-gateway',
+  title: 'celer-route',
   tagline: '高性能 AI 网关',
   favicon: 'img/favicon.ico',
 
   url: 'https://pin-gou.github.io',
-  baseUrl: '/pg-gateway/',
+  baseUrl: '/celer-route/',
   organizationName: 'pin-gou',
-  projectName: 'pg-gateway',
+  projectName: 'celer-route',
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
@@ -54,8 +54,8 @@ const config = {
     },
     image: 'img/social-card.png',
     navbar: {
-      title: 'pg-gateway',
-      logo: { alt: 'pg-gateway', src: 'img/logo.svg' },
+      title: 'celer-route',
+      logo: { alt: 'celer-route', src: 'img/logo.svg' },
       items: [
         {
           type: 'docSidebar',
@@ -64,7 +64,7 @@ const config = {
           label: '文档',
         },
         {
-          href: 'https://github.com/pin-gou/pg-gateway',
+          href: 'https://github.com/pin-gou/celer-route',
           label: 'GitHub',
           position: 'right',
         },
@@ -83,12 +83,12 @@ const config = {
         {
           title: '社区',
           items: [
-            { label: 'GitHub', href: 'https://github.com/pin-gou/pg-gateway' },
-            { label: 'Issues', href: 'https://github.com/pin-gou/pg-gateway/issues' },
+            { label: 'GitHub', href: 'https://github.com/pin-gou/celer-route' },
+            { label: 'Issues', href: 'https://github.com/pin-gou/celer-route/issues' },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} pg-gateway`,
+      copyright: `Copyright © ${new Date().getFullYear()} celer-route`,
     },
     prism: {
       theme: prismThemes.github,

@@ -95,12 +95,12 @@ const MCPIcon = ({ className }: { className?: string }) => (
 const externalLinks = [
 	{
 		title: "sidebar.documentation",
-		url: "https://pin-gou.github.io/pg-gateway/",
+		url: "https://pin-gou.github.io/celer-route/",
 		icon: Globe,
 	},
 	{
 		title: "sidebar.githubRepo",
-		url: "https://github.com/pin-gou/pg-gateway",
+		url: "https://github.com/pin-gou/celer-route",
 		icon: GithubLogoIcon,
 	},
 ];
@@ -745,7 +745,7 @@ export default function AppSidebar() {
 				title: t("nav.settings"),
 				url: "/workspace/config",
 				icon: Settings2Icon,
-				description: "pg-gateway settings",
+				description: "celer-route settings",
 				hasAccess: hasSettingsAccess,
 				subItems: [
 					{
@@ -1072,7 +1072,7 @@ export default function AppSidebar() {
 				title: t("sidebar.releaseAvailable", { name: latestRelease.name }),
 				description: (
 					<div className="flex h-full flex-col gap-2">
-						<img src={newReleaseImage} alt="pg-gateway" className="h-[95px] rounded-md object-cover" />
+						<img src={newReleaseImage} alt="celer-route" className="h-[95px] rounded-md object-cover" />
 						<a
 							href={latestRelease.changelogUrl}
 							target="_blank"

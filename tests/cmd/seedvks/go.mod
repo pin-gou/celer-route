@@ -1,16 +1,16 @@
-module github.com/pin-gou/pg-gateway/tests/cmd/seedvks
+module github.com/pin-gou/celer-route/tests/cmd/seedvks
 
 go 1.26.5
 
 replace (
-	github.com/pin-gou/pg-gateway/core => ../../../core
-	github.com/pin-gou/pg-gateway/framework => ../../../framework
+	github.com/pin-gou/celer-route/core => ../../../core
+	github.com/pin-gou/celer-route/framework => ../../../framework
 )
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/pin-gou/pg-gateway/core v1.7.7
-	github.com/pin-gou/pg-gateway/framework v1.3.16
+	github.com/pin-gou/celer-route/core v1.7.7
+	github.com/pin-gou/celer-route/framework v1.3.16
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )

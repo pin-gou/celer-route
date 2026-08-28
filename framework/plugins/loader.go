@@ -1,6 +1,6 @@
 package plugins
 
-import "github.com/pin-gou/pg-gateway/core/schemas"
+import "github.com/pin-gou/celer-route/core/schemas"
 
 // PluginLoader is the contract for a plugin loader
 type PluginLoader interface {

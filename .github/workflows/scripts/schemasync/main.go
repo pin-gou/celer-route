@@ -2,7 +2,7 @@
 // transports/config.schema.json.
 //
 // Starting from a configured entry-point type (default: ConfigData in
-// transports/pg-gateway-http/lib), it recursively walks every nested struct
+// transports/celer-route-http/lib), it recursively walks every nested struct
 // field via go/types. For each field it verifies:
 //
 //  1. The json:"X" tag has a corresponding property in config.schema.json at
@@ -36,7 +36,7 @@ type entrypoint struct {
 
 var entrypoints = []entrypoint{
 	{
-		pkg:        "github.com/pin-gou/pg-gateway/transports/pg-gateway-http/lib",
+		pkg:        "github.com/pin-gou/celer-route/transports/celer-route-http/lib",
 		typeName:   "ConfigData",
 		schemaPath: "", // root schema node — collectProperties will find .properties
 		moduleDir:  "transports",
@@ -125,7 +125,7 @@ var ignoreGoFieldNames = map[string]string{
 // should be treated as leaves. The walker does NOT recurse into their fields,
 // and they are collected for downstream checks.
 var opaqueLeafTypes = map[string]string{
-	"github.com/pin-gou/pg-gateway/core/schemas.SecretVar": "env-aware string; custom JSON",
+	"github.com/pin-gou/celer-route/core/schemas.SecretVar": "env-aware string; custom JSON",
 }
 
 // secretVarLocation records where an SecretVar-typed field appears in config.json
@@ -605,7 +605,7 @@ func (c *checker) walkType(t types.Type, schemaPath, goPath string) {
 		key := named.Obj().Pkg().Path() + "." + named.Obj().Name()
 		// Treat opaque types (like schemas.SecretVar) as leaves.
 		if _, isOpaque := opaqueLeafTypes[key]; isOpaque {
-			if key == "github.com/pin-gou/pg-gateway/core/schemas.SecretVar" {
+			if key == "github.com/pin-gou/celer-route/core/schemas.SecretVar" {
 				c.secretVarFields = append(c.secretVarFields, secretVarLocation{schemaPath, goPath})
 			}
 			return
@@ -710,7 +710,7 @@ func (c *checker) walkField(t types.Type, schemaNode map[string]any, schemaPath,
 	if named, ok := t.(*types.Named); ok {
 		key := named.Obj().Pkg().Path() + "." + named.Obj().Name()
 		if _, isOpaque := opaqueLeafTypes[key]; isOpaque {
-			if key == "github.com/pin-gou/pg-gateway/core/schemas.SecretVar" {
+			if key == "github.com/pin-gou/celer-route/core/schemas.SecretVar" {
 				c.secretVarFields = append(c.secretVarFields, secretVarLocation{schemaPath, goPath})
 			}
 			return // do not recurse into opaque types

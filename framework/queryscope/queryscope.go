@@ -8,7 +8,7 @@ package queryscope
 import (
 	"context"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 	"gorm.io/gorm"
 )
 

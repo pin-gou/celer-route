@@ -3,7 +3,7 @@ package anthropic
 import (
 	"time"
 
-	"github.com/pin-gou/pg-gateway/core/schemas"
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // ToAnthropicFileUploadResponse converts a Bifrost file upload response to Anthropic format.
