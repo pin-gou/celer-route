@@ -1,9 +1,0 @@
-{
-  "status": "pass",
-  "exit_code": 0,
-  "duration_seconds": 0,
-  "metadata": {
-    data_dir="/home/ubuntu/workspace/my-gateway/.pg/hooks/local/data" port="9080",
-    "timestamp": "2026-08-13T12:36:03Z"
-  }
-}

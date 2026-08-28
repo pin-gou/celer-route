@@ -1,8 +1,0 @@
-{
-  "summary": "[dev.ui:review] completed — review_score: 100, p0_failures: []. Cycle-1 re-review: fix-review cycle 1 fixed R-1 design_alignment (3 routing-rules scope omissions) + R-5 test_contract (21.4 + 21.1). All design.md contracts PASS: _fallbacks/enterprise deleted, rbac.ts created, sidebar cleaned, RoutingRuleScope=global/virtual_key. 6/6 checks 115/115=100 >= 85. gate_score: 100, p0_failures: []",
-  "outputs": [],
-  "tasks_updated": [],
-  "status": "completed",
-  "evidence_paths": [],
-  "report_path": "/home/ubuntu/workspace/my-gateway/.pg/changes/strip-enterprise-features/2-build/029-dev.ui-review.md"
-}

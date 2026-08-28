@@ -1,6 +1,0 @@
-# Build artifacts within change sessions
-**/2-build/*.png
-**/2-build/*.txt
-**/*.log
-**/2-build
-**/2-propose
