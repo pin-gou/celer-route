@@ -13,6 +13,11 @@ export default {
     },
     {
       type: 'category',
+      label: 'pg-skills Demo',
+      items: ['tutorials/celer-route'],
+    },
+    {
+      type: 'category',
       label: '功能',
       items: [
         'features/dashboard-auth',
