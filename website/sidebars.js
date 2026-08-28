@@ -13,8 +13,24 @@ export default {
     },
     {
       type: 'category',
-      label: 'pg-skills 实践',
-      items: ['tutorials/celer-route'],
+      label: 'pg-skills',
+      collapsed: false,
+      items: [
+        'tutorials/celer-route',
+        {
+          type: 'category',
+          label: '相关参考',
+          items: [
+            'pg-skills/configuration',
+            'pg-skills/project-structure',
+            'pg-skills/existing-projects',
+            'pg-skills/how-commands-work',
+            'pg-skills/model-routing',
+            'pg-skills/tutorials/opencode',
+            'pg-skills/troubleshooting',
+          ],
+        },
+      ],
     },
     {
       type: 'category',

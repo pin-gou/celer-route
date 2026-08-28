@@ -1,21 +1,21 @@
 ---
 title: 使用 pg-skills 完成一次真实变更
-description: 在真实 celer-route 项目中完成 pg-skills 的安装、定界、提案、构建和结果验证
+description: 在已经接入 pg-skills 的 celer-route 项目中完成定界、提案、构建和结果验证
 sidebar_label: pg-skills 实战
 ---
 
 # celer-route 真实项目逐步教程
 
-本教程使用真实的 [pin-gou/celer-route](https://github.com/pin-gou/celer-route) 项目，带你完成一次可复现的 pg-skills 标准工作流。你会获取练习代码、安装 pg-skills、校正项目配置，然后依次执行 `define → propose → build`，最后用 Git、测试命令和 Pipeline 产物判断结果是否真的成功。
+本教程使用真实的 [pin-gou/celer-route](https://github.com/pin-gou/celer-route) 项目，带你完成一次可复现的 pg-skills 标准工作流。你会检查项目中已有的 pg-skills 配置，理解任务边界，然后依次执行 `define → propose → build`，最后用 Git、测试命令和 Pipeline 产物判断结果是否真的成功。
 
 
 ## 你将完成什么
 
 完成本教程后，你应该能够独立完成以下事情：
 
-1. 把 pg-skills 接入一个真实的多模块仓库。
-2. 分清 `pg init` 与 `pg-init-project` 的职责。
-3. 发现并修正自动扫描结果中的目录、测试和环境假设。
+1. 确认真实项目中的 pg-skills、OpenCode 命令和项目配置已经就绪。
+2. 根据现有模块、测试和环境配置判断任务应该落在哪个 Track。
+3. 在执行前发现范围、测试命令和环境假设中的问题。
 4. 用 define 调查真实代码，而不是让 AI 猜测需求位置。
 5. 审查 proposal、design、tasks 和 execution manifest。
 6. 在理解自动 Git 操作的前提下安全执行 build。
@@ -68,47 +68,68 @@ node --version
 opencode --version
 ```
 
-本练习只运行 Go handler 测试，不要求构建 UI。OpenCode 使用的模型和 Provider 应提前配置完成。如果你计划运行 celer-route 的完整构建，还需要满足仓库 Makefile 中的其他依赖。
+第 5 步的手工预检只编译 Go handler 测试，不要求构建 UI；但第 14 步的 pg-build 会遵守项目现有 Stage 配置。当前 `dev.environment.required` 为 `true`，因此 Runner 会准备 `local` 环境，相关 Hook 可能安装 UI 依赖、构建 UI 嵌入资源和 celer-route HTTP 服务。要完成端到端 build，Git Bash、Go、Node.js、npm 和项目依赖都必须可用。OpenCode 使用的模型和 Provider 也应提前配置完成。
 
 > celer-route 的 Makefile 明确使用 Bash。Windows 下运行 `make build` 或 `make dev` 时，应使用 Git Bash、WSL 或其他兼容 Bash 的环境。本文的聚焦测试直接调用 `go test`，不依赖 Makefile。
 
-## 2. 获取练习项目
+## 2. 获取项目代码
 
-直接克隆 celer-route 为 pg-skills 实践准备的起点分支：
-
-```powershell
-git clone --branch pg-skills-starting-point --single-branch https://github.com/pin-gou/celer-route.git celer-route-pg-skills
-cd celer-route-pg-skills
-```
-
-确认当前分支：
+如果本机还没有 celer-route，可以直接克隆项目：
 
 ```powershell
-git branch --show-current
+git clone https://github.com/pin-gou/celer-route.git
+cd celer-route
 ```
 
-预期输出：
+本教程假设你使用的是已经接入 pg-skills 的项目版本。此时不需要再安装 pg-skills，也不需要重新生成 OpenCode 适配目录。后续步骤会先检查这些文件是否齐全。
 
-```text
-pg-skills-starting-point
-```
-
-此时可以直接完成项目调查、pg-skills 安装、初始化、define 和 propose。标准 build 会修改并推送 Git 分支，因此教程将在真正执行 build 前单独说明如何准备可写远端。
-
-## 3. 确认项目状态
-
-先确认项目处于干净状态，并且练习目标尚未实现：
+如果你已经有 celer-route 工作目录，直接进入项目根目录即可，但应先确认没有未完成的个人修改：
 
 ```powershell
 git status --short
+```
+
+## 3. 确认 pg-skills 已经就绪
+
+在项目根目录执行：
+
+```powershell
+Test-Path .pg\skills\src\runtime\bin\pg
+Test-Path .pg\project.yaml
+Test-Path .opencode\commands\pg-1-define.md
+Test-Path .opencode\skills\pg-define\SKILL.md
+Test-Path .opencode\agents\pg-manager.md
+Get-Content .pg\tool-integration.json
+```
+
+前五项都应返回 `True`，工具记录应显示：
+
+```json
+{
+  "schema_version": 1,
+  "tool": "opencode"
+}
+```
+
+再运行结构检查：
+
+```powershell
+python .pg\skills\src\runtime\bin\pg doctor
+```
+
+如果上述文件缺失，不要按本文重新安装或初始化。先确认自己是否位于 celer-route 项目根目录、是否使用包含 pg-skills 的项目版本，并查看[故障排查](../pg-skills/troubleshooting.md)。
+
+最后确认本次练习目标尚未实现：
+
+```powershell
 Test-Path transports\celer-route-http\handlers\health_test.go
 ```
 
-预期第一条命令没有输出，第二条命令返回 `False`。如果测试文件已经存在，说明你使用的不是本文对应的练习起点，应先检查当前分支，不要继续重复实现同一功能。
+预期返回 `False`。如果已经存在该文件，请不要重复练习同一个任务。
 
 ## 4. 先认识真实仓库
 
-在接入 pg-skills 前，先查看仓库事实：
+开始工作流前，先查看仓库事实：
 
 ```powershell
 Get-ChildItem -Directory
@@ -153,74 +174,69 @@ Pop-Location
 
 如果此时失败，先处理 Go 版本、网络、私有模块或项目自身问题。不要把“原项目无法编译”带入 pg-skills 工作流，否则后面无法区分是适配问题还是项目环境问题。
 
-## 6. 安装 pg-skills
+## 6. 认识现有 pg-skills 配置
 
-通过 Git subtree 将 pg-skills 安装到当前项目的 `.pg/skills/`：
-
-```powershell
-git subtree add --prefix=.pg/skills https://github.com/pin-gou/pg-skills.git v0.9.2 --squash
-```
-
-教程固定使用版本 `v0.9.2`，避免上游变化导致同一套步骤在不同时间产生不同结果。需要使用更新版本时，应先阅读对应版本的变更说明，再替换 tag。
-
-安装后确认：
-
-```powershell
-Get-Content .pg\skills\VERSION
-Test-Path .pg\skills\src\runtime\bin\pg
-```
-
-`Test-Path` 应返回 `True`。安装、升级和卸载的通用说明见 [pg-skills 安装指南](https://github.com/pin-gou/pg-skills/blob/main/docs/installation.md)。
-
-## 7. 生成 OpenCode 适配目录
-
-在 celer-route 根目录执行：
-
-```powershell
-python .pg\skills\src\runtime\bin\pg init --tool opencode
-```
-
-检查生成结果：
-
-```powershell
-Get-ChildItem .opencode\commands
-Get-ChildItem .opencode\skills
-Get-ChildItem .opencode\agents
-```
-
-预期结构：
+celer-route 已经提交了以下内容：
 
 ```text
+.pg/
+├── skills/                 pg-skills 源码
+├── project.yaml            项目模块、环境、Track 和 Stage 配置
+├── hooks/                  本地环境生命周期脚本
+├── code-review/            代码审查规则
+└── changes/                变更产物和归档记录
+
 .opencode/
-├── commands/
-├── skills/
-├── agents/
+├── commands/               OpenCode Slash Commands
+├── skills/                 OpenCode 可加载的 Skills
+├── agents/                 测试、开发、审查和验证角色
 └── .pg-adapter-manifest.json
 ```
 
-其中：
+这些文件是项目的一部分，不需要每位用户重复生成。你在本教程中主要使用：
 
-- `commands/` 提供 `/pg-1-define`、`/pg-2-propose`、`/pg-3-build` 等命令。
-- `skills/` 保存 OpenCode 能够直接加载的 pg-skills 工作流。
-- `agents/` 保存测试、开发、审查和验证等角色。
-- `.pg-adapter-manifest.json` 记录适配器管理的生成文件。
+- `.pg/project.yaml`：确认本次任务属于 `transports`。
+- `.opencode/commands/`：调用 define、propose 和 build。
+- `.pg/changes/<change-id>/`：查看需求、方案和运行证据。
+- `.pg/skills/`：提供工作流脚本和运行时。
 
-如果没有生成 `.opencode/`，检查当前目录和工具列表：
+完整目录说明见[项目目录与产物](../pg-skills/project-structure.md)。
+
+## 7. 检查 OpenCode 命令和模型路由
+
+查看项目已经提供的命令：
 
 ```powershell
-Get-Location
-python .pg\skills\src\runtime\bin\pg init --list-tools
+Get-ChildItem .opencode\commands
 ```
 
-## 8. 用 OpenCode 初始化项目配置
+至少应包含：
 
-从 celer-route 项目根目录启动 OpenCode：
+```text
+pg-1-define.md
+pg-2-propose.md
+pg-3-build.md
+```
+
+生成的 Agent 使用以下三级路由：
+
+```text
+pg-router/pg-associate
+pg-router/pg-expert
+pg-router/pg-master
+```
+
+项目中的 `opencode.json` 已声明这些名称，但你的 OpenCode 环境仍需能够把它们解析到实际模型。开始工作流前先确认 Provider 或路由插件可用，具体机制见[模型路由指南](../pg-skills/model-routing.md)。
+
+## 8. 启动 OpenCode
+
+从 celer-route 项目根目录启动：
 
 ```powershell
 opencode
 ```
 
-如果 OpenCode 已经打开该项目，请在生成 `.opencode/` 后重新加载项目。先在命令列表中确认存在：
+在命令列表中确认存在：
 
 ```text
 /pg-1-define
@@ -228,145 +244,55 @@ opencode
 /pg-3-build
 ```
 
-然后在 OpenCode 对话框发送：
+如果命令文件存在但界面中没有显示，请确认 OpenCode 打开的是当前项目根目录，然后重新加载项目。不要再次运行安装流程。命令加载原理见[命令如何工作](../pg-skills/how-commands-work.md)。
+
+## 9. 阅读现有项目配置
+
+打开 `.pg/project.yaml`，先理解项目已经定义的执行边界，不要为了本次练习随意重写配置。
+
+### 9.1 模块
+
+项目包含 `core`、`framework`、`transports`、`plugins` 和 `ui`。本次健康检查测试属于 `transports`，不应修改其他模块。
+
+### 9.2 测试命令
+
+`transports.test.unit` 对应：
 
 ```text
-请加载 pg-init-project skill，扫描当前 celer-route 仓库并初始化 pg-skills 项目配置。
-
-要求：
-1. 识别真实的 Go modules、UI 和插件边界。
-2. 所有 build、lint、test 命令都说明从哪个目录执行。
-3. 不凭空编造端口、数据库和外部服务。
-4. 完成后列出 modules、environments、tracks、stages、regression suite，以及仍需人工确认的项目。
+cd transports/celer-route-http && go test ./... -short -count=1
 ```
 
-这一步会生成或更新：
+本教程还会手工运行更聚焦的 handlers 测试，用来证明新增用例确实执行。
+
+### 9.3 环境与 Stage
+
+现有配置包含 `dev` 和 `int` Stage，以及 local 环境生命周期 Hooks。当前两个 Stage 的 `environment.required` 都是 `true`。对于本次只影响 `transports` 的变更，manifest 应启用 `dev.transports`，并禁用不相关的 Track；即便如此，Runner 仍会为启用的 `dev` Stage 准备 `local` 环境。执行前应阅读配置和 Hook 脚本，确认 Git Bash、Go、Node.js 和 npm 可用，不要把环境准备失败误判为测试代码失败。
+
+### 9.4 Git
+
+正常项目配置的默认分支是 `main`。不要为了教程改成内部练习分支：
+
+```powershell
+Select-String -Path .pg\project.yaml -Pattern 'default_branch'
+```
+
+预期看到 `default_branch: main`。配置字段的详细说明见[配置指南](../pg-skills/configuration.md)。
+
+## 10. 做一次只读加载验证
+
+在 OpenCode 对话框发送：
 
 ```text
-.pg/project.yaml
-.pg/hooks/
-.pg/context/
-.pg/code-review/
+请加载 pg-define skill，只读取当前项目并回答：
+1. 项目名称；
+2. 主要语言；
+3. .pg/project.yaml 中定义了哪些 modules；
+4. 本次健康检查测试应属于哪个 module。
+
+不要修改任何文件。
 ```
 
-`pg init` 与 `pg-init-project` 不相同：
-
-| 动作 | 负责什么 |
-|---|---|
-| 终端中的 `pg init --tool opencode` | 建立 `.pg/` 骨架并渲染 `.opencode/` 适配文件 |
-| OpenCode 对话中的 `pg-init-project` Skill | 阅读真实仓库并生成项目级 modules、environments、tracks 和 stages |
-
-> 生成的 Agent 默认使用 `pg-router/pg-associate`、`pg-router/pg-expert` 和 `pg-router/pg-master`。项目中的 `opencode.json` 已声明这些路由名称，但你的 OpenCode 环境仍需能够把它们解析到实际模型；否则应先完成 Provider 或路由插件配置。
-
-## 9. 人工审查 `.pg/project.yaml`
-
-不要因为 YAML 已生成就直接运行 build。打开 `.pg/project.yaml`，先检查以下内容。
-
-### 9.1 模块边界
-
-项目配置至少应识别 `core`、`framework`、`transports`、`plugins` 和 `ui`。本次练习只属于 `transports`。
-
-### 9.2 命令工作目录
-
-Runner 从项目上下文执行 module 命令。命令必须能准确进入对应 module，不能假设仓库根目录存在 `go.mod` 或 `package.json`。
-
-可在终端逐条验证聚焦命令：
-
-```powershell
-Push-Location core
-go test ./... -short -count=1
-Pop-Location
-
-Push-Location framework
-go test ./... -short -count=1
-Pop-Location
-
-Push-Location transports\celer-route-http
-go test ./handlers -run '^$' -count=1
-Pop-Location
-```
-
-对本次练习，`transports` 的测试配置至少要能够表达等价于下面的命令：
-
-```text
-cd transports/celer-route-http && go test ./handlers -count=1
-```
-
-如果自动生成的 `core.build` 是仓库根目录执行的 `go build ./...`，或 `ui.build` 是仓库根目录执行的 `npm run build`，应先修正。celer-route 根目录没有统一的 `go.mod` 或 `package.json`。
-
-### 9.3 环境要求
-
-本练习只测试 `fasthttp.RequestCtx` 和内存中的 `lib.Config`，不需要启动 API、UI 或数据库。因此负责单元测试的 Stage 应允许：
-
-```yaml
-environment:
-  required: false
-```
-
-不要为了让教程“看起来完整”而编造端口。celer-route Makefile 的默认 API 和 UI 端口分别是 `8080` 和 `3000`，但真实运行时可以被环境变量覆盖。只有实际启动命令和团队配置才能决定 `.pg/hooks/` 应使用什么端口。
-
-### 9.4 Git 默认分支
-
-本教程故意不向 `main` 合并。把配置改为：
-
-```yaml
-git:
-  default_branch: pg-skills-starting-point
-```
-
-然后运行结构检查：
-
-```powershell
-python .pg\skills\src\runtime\bin\pg doctor
-```
-
-`pg doctor` 通过只说明结构和引用基本有效，不代表每条项目命令已经在本机成功执行。
-
-## 10. 保存初始化结果
-
-先审查初始化产生的文件：
-
-```powershell
-git status --short
-git diff -- .pg\project.yaml .pg\hooks .pg\code-review .opencode
-```
-
-特别检查：
-
-- 没有 API 密钥、Token 或个人凭据。
-- `.pg/project.yaml` 中的模块、命令和默认分支符合当前项目。
-- Hooks 中没有未经验证的生产地址。
-- `.opencode/` 中只有 pg-skills 生成文件和项目需要的自定义内容。
-
-确认后先提交本地初始化结果：
-
-```powershell
-git add .pg .opencode pg-run pg-run.cmd
-git commit -m "chore: initialize pg-skills"
-```
-
-到这里为止，用户不需要 Fork，也不需要向远端推送。你可以继续完成 define 和 propose。
-
-### 执行完整 build 前准备可写远端
-
-标准 `pg-build` 成功后会自动推送功能分支，并把结果合并、推送到 `.pg/project.yaml` 配置的默认分支。只有准备继续执行完整 build 时，才需要一个自己有写权限的远端仓库。
-
-先在 GitHub Fork celer-route，然后把当前只读的官方远端改名为 `upstream`，并将自己的 Fork 设置为 `origin`：
-
-```powershell
-git remote rename origin upstream
-git remote add origin https://github.com/<你的账号>/celer-route.git
-git push -u origin pg-skills-starting-point
-```
-
-检查：
-
-```powershell
-git remote -v
-git branch -vv
-```
-
-此时 `origin` 应指向你的 Fork，当前分支应跟踪 `origin/pg-skills-starting-point`。如果你只想学习 define 和 propose，可以暂时跳过这部分，但不要在没有可写远端的情况下执行标准 build。
+回答应识别 celer-route、Go/TypeScript、多模块结构，并把任务归入 `transports`。这一步通过只说明 Skill 能被加载，不代表完整工作流已经成功。
 
 ## 11. 用 define 调查真实代码
 
@@ -403,7 +329,7 @@ change-id 使用 test-health-handler-contract。
 - `getHealth` 是同 package 的未导出方法，测试可以沿用 handlers 包的现有风格。
 - `SendJSON` 负责设置 JSON Content-Type。
 - 本次变更不需要 `core`、`framework`、`plugins` 或 `ui`。
-- 本次验证不需要运行环境。
+- 新测试自身不依赖数据库或在线服务；但当前项目的 Pipeline 配置仍会在 build 时准备 `local` 环境。
 
 如果 define 建议新增生产接口、启动数据库或修改 UI，先追问其代码证据，不要继续 propose。
 
@@ -468,26 +394,38 @@ Get-Content .pg\changes\test-health-handler-contract\execution-manifest.yaml
 - 选择的 Track 应只覆盖 `transports`。
 - 不应派发 `core`、`framework`、`plugins` 或 `ui` 的开发任务。
 - 测试命令应进入 `transports/celer-route-http`。
-- 单元测试 Stage 不应要求 local API/UI 环境。
+- `dev.transports` 应启用并选择项目已有的 `local` 环境，因为当前配置明确要求环境准备。
+- `dev` 下的 `core`、`framework`、`plugins`、`ui` Track 应禁用；`int.scr` 也应禁用，因为本次没有跨模块场景变更。
+- 新增测试仍应是纯单元测试；Runner 准备 local 环境是项目级编排要求，不代表测试可以依赖该服务。
 - Review profile 应适用于 Go。
 
 发现错误时，要求 AI 修订 proposal 产物；不要靠 build 阶段“自动猜对”。
 
-## 13. 提交方案并通过 build 安全闸
+## 13. 执行 build 前的安全检查
 
-define 和 propose 会在默认分支工作区生成 change 产物，但 `pg-build` 的分支守卫要求从干净的默认分支启动。先只审查并提交本次 change：
+标准 build 成功后会自动提交、推送功能分支，并把结果合并、推送到 `.pg/project.yaml` 指定的 `main`。因此，完整执行 build 前必须使用自己有写权限的 celer-route Fork。
+
+如果当前 `origin` 指向官方仓库，先在 GitHub 创建 Fork，然后执行：
+
+```powershell
+git remote rename origin upstream
+git remote add origin https://github.com/<你的账号>/celer-route.git
+git push -u origin main
+```
+
+如果一开始克隆的就是自己的 Fork，只需确认 `origin` 正确。
+
+提交 define 和 propose 产生的变更资料：
 
 ```powershell
 git status --short
 git diff -- .pg/changes/test-health-handler-contract
 git add .pg/changes/test-health-handler-contract
-git commit -m "docs(pg): add health handler contract test proposal"
-git push origin pg-skills-starting-point
+git commit -m "docs(pg): define health handler contract tests"
+git push origin main
 ```
 
-如果 `git status --short` 还显示 change 目录之外的修改，不要把它们顺手加入这次提交。先判断来源并单独处理。
-
-标准 build 可能自动 commit、push、rebase，并把功能分支 squash merge 到配置的默认分支。执行前逐条确认：
+然后逐项检查：
 
 ```powershell
 git status --short
@@ -501,15 +439,13 @@ Select-String -Path .pg\project.yaml -Pattern 'default_branch'
 
 ```text
 工作树                 无未提交修改
-当前分支               pg-skills-starting-point
+当前分支               main
 origin                 你的 Fork
-当前分支 tracking      origin/pg-skills-starting-point
-git.default_branch     pg-skills-starting-point
+main tracking          origin/main
+git.default_branch     main
 ```
 
-任一项不符合就先停下。尤其不要在 `origin` 指向官方仓库或默认分支仍为 `main` 时继续。
-
-build 启动后，Runner 才会从当前默认分支创建 `feat/pg/test-health-handler-contract`，并自动提交 Pipeline 初始化和后续阶段产物。不要提前创建其他名称的功能分支，否则分支守卫会拒绝启动。
+任一项不符合都先停止。不要手工创建功能分支；Runner 会从 `main` 创建 `feat/pg/test-health-handler-contract`。
 
 ## 14. 执行 build
 
@@ -521,11 +457,11 @@ build 启动后，Runner 才会从当前默认分支创建 `feat/pg/test-health-
 
 运行过程中，pg-build 会根据 manifest 派送任务，并把事件和 snapshot 写入该 change 的 `2-build/`。不要在中途删除这个目录，也不要手工修改 Pipeline 状态来“制造成功”。
 
-如果 OpenCode 要求批准文件修改、测试或 Git 操作，请根据刚才审查的范围决定。超出 `health_test.go`、聚焦测试和教程分支 Git 操作的请求，应先询问原因。
+如果 OpenCode 要求批准文件修改、测试或 Git 操作，请根据刚才审查的范围决定。超出 `health_test.go`、聚焦测试和本次变更所需 Git 操作的请求，应先询问原因。
 
 ## 15. 用证据判断是否成功
 
-不要只看 Web 页面中的“完成”两个字。按下面四组证据检查。
+不要只看 OpenCode 回复中的“完成”两个字。按下面四组证据检查。
 
 ### 15.1 代码证据
 
@@ -572,10 +508,10 @@ git status --short
 本教程预期当前分支是：
 
 ```text
-pg-skills-starting-point
+main
 ```
 
-并且 `origin/pg-skills-starting-point` 包含本次 squash merge。若 build 在合并前失败，工作区可能保留在失败现场，这是诊断证据，不要擅自切分支后宣称成功。
+并且 `origin/main` 包含本次 squash merge。若 build 在合并前失败，工作区可能保留在失败现场，这是诊断证据，不要擅自切分支后宣称成功。
 
 ### 15.4 Pipeline 证据
 
@@ -604,10 +540,11 @@ Get-ChildItem .pg\changes -Recurse -Filter pipeline.events
 业务行为               GET /health 语义不变
 主要代码变化           新增 health_test.go
 受影响模块             transports
-外部环境               不需要
+测试外部依赖           不需要数据库或在线服务
+Pipeline 环境          当前配置会准备 local 环境
 聚焦测试               通过且确实执行了 TestHealth*
 handlers 包测试         通过
-合并目标               你的 Fork 中 pg-skills-starting-point
+合并目标               你的 Fork 中 main
 Pipeline 状态           done，或有明确可解释的失败记录
 ```
 
@@ -615,15 +552,17 @@ Pipeline 状态           done，或有明确可解释的失败记录
 
 ## 17. 常见失败及处理
 
-### `.opencode/` 没生成
+### pg-skills 文件不存在
 
-确认当前目录、pg-skills 版本和工具列表：
+如果 `.pg/skills/`、`.pg/project.yaml` 或 `.opencode/` 不存在，先检查：
 
 ```powershell
 Get-Location
-Test-Path .pg\skills\src\integrations\opencode\adapter.py
-python .pg\skills\src\runtime\bin\pg init --list-tools
+git branch --show-current
+git status --short
 ```
+
+本文面向已经接入 pg-skills 的 celer-route 项目版本，不包含重新安装步骤。请切换到正确项目版本或恢复被误删的受管文件，再继续操作。
 
 ### OpenCode 中没有 pg 命令
 
@@ -635,7 +574,7 @@ Test-Path .opencode\skills\pg-define\SKILL.md
 Test-Path .opencode\agents\pg-manager.md
 ```
 
-确认文件存在后，从项目根目录重新启动或重新加载 OpenCode。目录存在只证明文件已生成，命令能出现在 OpenCode 中才证明宿主已经加载。
+确认文件存在后，从项目根目录重新启动或重新加载 OpenCode。目录存在只证明项目已经提供适配文件，命令能出现在 OpenCode 中才证明宿主已经加载。
 
 ### Agent 模型无法解析
 
@@ -643,7 +582,7 @@ Test-Path .opencode\agents\pg-manager.md
 
 ### `pg doctor` 报 schema 错误
 
-不要长期使用 `pg init` 创建的 placeholder。先运行 `pg-init-project` Skill，再检查 `.pg/project.yaml` 的五个必需部分：`modules`、`environments`、`tracks`、`stages` 和 `schema`。
+celer-route 已经提交了完整的 `.pg/project.yaml`，不要通过重新初始化来掩盖错误。先阅读 `pg doctor` 的具体报错，再用 `git diff -- .pg/project.yaml` 检查文件是否被误改；如果文件与仓库版本一致，则根据报错核对 pg-skills 版本、Schema 引用和项目文件是否完整。
 
 ### Go 测试在 define 前就失败
 
@@ -657,7 +596,7 @@ Test-Path .opencode\agents\pg-manager.md
 git status --short
 ```
 
-不要盲目 `git add -A`。启动 build 前应位于 `pg-skills-starting-point`，并已提交、推送 define/propose 产物。逐项判断剩余内容是本次 change、用户自己的修改还是临时文件；只提交确认应该进入仓库的内容。
+不要盲目 `git add -A`。启动 build 前应位于 `main`，并已提交、推送 define/propose 产物。逐项判断剩余内容是本次 change、用户自己的修改还是临时文件；只提交确认应该进入仓库的内容。
 
 ### build 在 push 阶段失败
 
@@ -696,13 +635,13 @@ Runner 会依据现有事件和 snapshot 判断是否能继续。不要新建同
 
 请不要只问“代码写出来了吗”。用下面的问题复盘：
 
-1. `pg init` 和 `pg-init-project` 分别生成了什么？
-2. 自动项目扫描中有哪些内容必须由人确认？
+1. celer-route 已经提交了哪些 pg-skills 和 OpenCode 文件，它们分别由谁读取？
+2. 为什么本次任务属于 `transports`，而不是 `core` 或 `ui`？
 3. define 找到了哪些真实文件和调用关系？
 4. propose 为什么只选择 `transports`？
 5. execution manifest 实际运行了哪条测试命令？
 6. Review 和 Verify 的证据分别在哪里？
-7. 为什么本教程使用独立 default branch，而不是 `main`？
+7. 为什么完整 build 前必须把 `origin` 指向自己有写权限的 Fork？
 8. 如果运行中断，哪些文件保证可以诊断或恢复？
 
 能够根据实际文件回答这些问题，才说明你学会了 pg-skills 的工作方式，而不只是照着输入了三条 Slash Command。
@@ -710,7 +649,7 @@ Runner 会依据现有事件和 snapshot 判断是否能继续。不要新建同
 ## 下一步
 
 - 把相同方法用于一个小型生产缺陷，但仍先确认项目状态和验收证据。
-- 阅读 [pg-skills 在现有项目中的使用指南](https://github.com/pin-gou/pg-skills/blob/main/docs/existing-projects.md)，处理更复杂的 Monorepo 边界。
-- 阅读 [pg-skills 项目目录与产物](https://github.com/pin-gou/pg-skills/blob/main/docs/project-structure.md)，理解 change、archive 和 `2-build/`。
-- 阅读 [OpenCode 完整教程](https://github.com/pin-gou/pg-skills/blob/main/docs/tutorials/opencode.md)，进一步了解 Commands、Skills、Agents 和三级模型路由。
-- 阅读 [pg-skills 故障排查](https://github.com/pin-gou/pg-skills/blob/main/docs/troubleshooting.md)，按现象定位初始化、适配、测试和恢复问题。
+- 阅读 [pg-skills 在现有项目中的使用指南](../pg-skills/existing-projects.md)，处理更复杂的 Monorepo 边界。
+- 阅读 [pg-skills 项目目录与产物](../pg-skills/project-structure.md)，理解 change、archive 和 `2-build/`。
+- 阅读 [OpenCode 完整教程](../pg-skills/tutorials/opencode.md)，进一步了解 Commands、Skills、Agents 和三级模型路由。
+- 阅读 [pg-skills 故障排查](../pg-skills/troubleshooting.md)，按现象定位初始化、适配、测试和恢复问题。
