@@ -14,5 +14,28 @@
     "plan": {
       "model": "pg-router/pg-expert"
     }
+  },
+  "provider": {
+    "pg-test": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "test-router",
+      "options": {
+        "baseURL": "http://localhost:9080/v1"
+      },
+      "models": {
+        "pg-test": {
+          "name": "pg-test",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          }
+        }
+      }
+    }
   }
 }
