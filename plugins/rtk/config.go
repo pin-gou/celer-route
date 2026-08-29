@@ -138,7 +138,19 @@ type Config struct {
 // Validate checks the config for valid values and returns an error if any field
 // is out of range or invalid. This is called during Init to fail fast on
 // misconfiguration, protecting against malicious or accidental bad config.
+//
+// Validate also applies the documented zero-value defaults (the same ones
+// Init() applies via applyConfigDefaults). This is required so the reload
+// path — handlers/rtk.go putConfig calls Validate() and then json.Marshal
+// the resulting struct to persist — preserves the default *true for
+// pointer-typed fields like InjectFetchTool. Without the default
+// application here, an operator who PUTs {"enabled":true} without an
+// explicit inject_fetch_tool would round-trip nil→dropped→GET nil,
+// silently regressing the plugin into the no-tool-inject state.
 func (c *Config) Validate() error {
+	if c == nil {
+		return fmt.Errorf("rtk: config is nil")
+	}
 	validIntensities := map[string]bool{"minimal": true, "standard": true, "aggressive": true}
 	if c.Intensity != "" && !validIntensities[c.Intensity] {
 		return fmt.Errorf("rtk: invalid intensity %q: must be one of minimal, standard, aggressive", c.Intensity)
@@ -203,6 +215,14 @@ func (c *Config) Validate() error {
 	if c.SnapshotMaxBytes < 0 {
 		return fmt.Errorf("rtk: snapshot_max_bytes must be >= 0, got %d", c.SnapshotMaxBytes)
 	}
+	// The raw input passed every fail-fast check. Now apply the documented
+	// zero-value defaults so the caller can marshal/persist the fully
+	// populated struct — the reload path (handlers/rtk.go putConfig) relies
+	// on Validate() to fill InjectFetchTool=&true (and the other defaults)
+	// before the config is json.Marshal'ed into the config store. An
+	// explicit value (e.g. InjectFetchTool=&false) is zero-aware and
+	// survives untouched.
+	applyConfigDefaults(c)
 	return nil
 }
 

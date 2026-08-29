@@ -1,6 +1,7 @@
 package rtk
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -659,6 +660,72 @@ func TestApplyConfigDefaults_ZeroConfigEnables(t *testing.T) {
 		}
 		if cfg.MaxLinesPerResult != 120 {
 			t.Errorf("MaxLinesPerResult = %d, want 120", cfg.MaxLinesPerResult)
+		}
+	})
+}
+
+// ============================================================================
+// Reload-path defaults (V-9.3.3 regression, fix-cycle 2)
+// The PUT /api/context/rtk/config reload path calls Config.Validate() and
+// then json.Marshal(req.Config) to persist. Verify found that when
+// inject_fetch_tool is omitted, the reload round-trip dropped it to nil
+// instead of defaulting to true. The fix makes Validate() apply the same
+// defaults as Init() (applyConfigDefaults), so the marshaled+persisted
+// config carries inject_fetch_tool=true.
+// ============================================================================
+
+// TestConfigValidate_AppliesDefaultsForReload pins the reload-path fix: a
+// config that omits inject_fetch_tool must come out of Validate() with the
+// documented default (*true), so the putConfig handler persists true rather
+// than nil. An explicit false must survive the round-trip.
+func TestConfigValidate_AppliesDefaultsForReload(t *testing.T) {
+	t.Run("omitted inject_fetch_tool defaults to true after Validate", func(t *testing.T) {
+		cfg := &Config{Enabled: true}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() unexpected error: %v", err)
+		}
+		if cfg.InjectFetchTool == nil {
+			t.Fatal("Validate() must apply default InjectFetchTool=true, got nil")
+		}
+		if !*cfg.InjectFetchTool {
+			t.Fatal("Validate() must apply default InjectFetchTool=true, got false")
+		}
+	})
+
+	t.Run("explicit inject_fetch_tool=false survives Validate", func(t *testing.T) {
+		f := false
+		cfg := &Config{Enabled: true, InjectFetchTool: &f}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() unexpected error: %v", err)
+		}
+		if cfg.InjectFetchTool == nil || *cfg.InjectFetchTool {
+			t.Fatal("Validate() must preserve explicit InjectFetchTool=false")
+		}
+	})
+
+	t.Run("reload JSON round-trip carries inject_fetch_tool=true", func(t *testing.T) {
+		// Mirrors handlers/rtk.go putConfig: Validate → json.Marshal → map.
+		// Before the fix, the omitempty field was dropped and the stored map
+		// had no inject_fetch_tool key (GET returned nil). After the fix it
+		// must be present and true.
+		cfg := &Config{Enabled: true}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() unexpected error: %v", err)
+		}
+		raw, err := json.Marshal(cfg)
+		if err != nil {
+			t.Fatalf("json.Marshal failed: %v", err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("json.Unmarshal failed: %v", err)
+		}
+		v, ok := m["inject_fetch_tool"]
+		if !ok {
+			t.Fatalf("reload round-trip dropped inject_fetch_tool; stored map = %v", m)
+		}
+		if b, ok := v.(bool); !ok || !b {
+			t.Fatalf("reload round-trip inject_fetch_tool = %v, want true", v)
 		}
 	})
 }
