@@ -148,18 +148,18 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 12.1 新建 `plugins/rtk/tool_schema.go`，定义 `rtkFetchRawOutputToolName` 常量、`rtkFetchRawOutputToolDescription` 字符串拼接、`RtkFetchRawOutputTool schemas.ChatTool` 变量（按 design.md §"Tool Schema" 完整实现）
-- [ ] 12.2 在 `plugins/rtk/rawoutput.go` 末尾追加 `RawOutputReadHandler(ctx, args) (string, error)` Go 函数（按 design.md §"MCP Tool 形态"）
-- [ ] 12.3 在 `plugins/rtk/config.go` 的 `Config` struct 增 `InjectFetchTool *bool` 字段（JSON tag `inject_fetch_tool,omitempty`）
-- [ ] 12.4 在 `plugins/rtk/config.go` 的 `applyConfigDefaults` 函数末尾追加：`if c.InjectFetchTool == nil { t := true; c.InjectFetchTool = &t }`
-- [ ] 12.5 在 `plugins/rtk/rtk.go` 的 `Plugin` struct 增 `bifrost *schemas.Bifrost` 字段（持有引用，用于 GetMCPManager）
-- [ ] 12.6 在 `plugins/rtk/rtk.go` 的 `NewPlugin` 函数签名追加 `bifrost *schemas.Bifrost` 参数；赋值给 `p.bifrost`；构造时检测 `config.Enabled && IsTruePtr(config.InjectFetchTool)` → 调 `bifrost.GetMCPManager().RegisterTool(...)` 注册
-- [ ] 12.7 在 `plugins/rtk/rtk.go` 新增 `rawOutputReadHandlerMCPTool(args any) (string, error)` 适配器（`MCPToolFunction[any]` 形态）
-- [ ] 12.8 在 `plugins/rtk/hooks.go` 的 `PreLLMHook` 末尾（既有 hint 注入后、return 前）追加：检测 `p.config.Enabled && IsTruePtr(p.config.InjectFetchTool) && p.bifrost != nil` → 调 `injectFetchToolSchemaIfAvailable(req)` 函数
-- [ ] 12.9 在 `plugins/rtk/hooks.go` 新增 `MCPManagerLike` interface（`GetToolPerClient(ctx) map[string][]schemas.ChatTool`）和 `mcpManagerHasFetchTool(mgr) bool` / `injectFetchToolSchemaIfAvailable(req) bool` / `hasTool(tools, name) bool` 私有函数
-- [ ] 12.10 改写 `plugins/rtk/hint.go` 的 `rtkRecoveryHintText` 常量（按 design.md §"Hint 文本改写"完整内容）
-- [ ] 12.11 跑 `cd plugins/rtk && go build ./...` 确认编译通过
-- [ ] 12.12 跑 `cd plugins/rtk && go test ./...` 确认所有 RTK 单测绿（含 §11 新增）
+- [x] 12.1 新建 `plugins/rtk/tool_schema.go`，定义 `rtkFetchRawOutputToolName` 常量、`rtkFetchRawOutputToolDescription` 字符串拼接、`RtkFetchRawOutputTool schemas.ChatTool` 变量（按 design.md §"Tool Schema" 完整实现）
+- [x] 12.2 在 `plugins/rtk/rawoutput.go` 末尾追加 `RawOutputReadHandler(ctx, args) (string, error)` Go 函数（按 design.md §"MCP Tool 形态"）
+- [x] 12.3 在 `plugins/rtk/config.go` 的 `Config` struct 增 `InjectFetchTool *bool` 字段（JSON tag `inject_fetch_tool,omitempty`）
+- [x] 12.4 在 `plugins/rtk/config.go` 的 `applyConfigDefaults` 函数末尾追加：`if c.InjectFetchTool == nil { t := true; c.InjectFetchTool = &t }`
+- [x] 12.5 在 `plugins/rtk/rtk.go` 的 `Plugin` struct 增 `bifrost *schemas.Bifrost` 字段（持有引用，用于 GetMCPManager）
+- [x] 12.6 在 `plugins/rtk/rtk.go` 的 `NewPlugin` 函数签名追加 `bifrost *schemas.Bifrost` 参数；赋值给 `p.bifrost`；构造时检测 `config.Enabled && IsTruePtr(config.InjectFetchTool)` → 调 `bifrost.GetMCPManager().RegisterTool(...)` 注册
+- [x] 12.7 在 `plugins/rtk/rtk.go` 新增 `rawOutputReadHandlerMCPTool(args any) (string, error)` 适配器（`MCPToolFunction[any]` 形态）
+- [x] 12.8 在 `plugins/rtk/hooks.go` 的 `PreLLMHook` 末尾（既有 hint 注入后、return 前）追加：检测 `p.config.Enabled && IsTruePtr(p.config.InjectFetchTool) && p.bifrost != nil` → 调 `injectFetchToolSchemaIfAvailable(req)` 函数
+- [x] 12.9 在 `plugins/rtk/hooks.go` 新增 `MCPManagerLike` interface（`GetToolPerClient(ctx) map[string][]schemas.ChatTool`）和 `mcpManagerHasFetchTool(mgr) bool` / `injectFetchToolSchemaIfAvailable(req) bool` / `hasTool(tools, name) bool` 私有函数
+- [x] 12.10 改写 `plugins/rtk/hint.go` 的 `rtkRecoveryHintText` 常量（按 design.md §"Hint 文本改写"完整内容）
+- [x] 12.11 跑 `cd plugins/rtk && go build ./...` 确认编译通过
+- [x] 12.12 跑 `cd plugins/rtk && go test ./...` 确认所有 RTK 单测绿（含 §11 新增）
 
 ## 13. dev.plugins:review - 静态代码审查
 
