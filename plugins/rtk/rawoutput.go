@@ -440,12 +440,19 @@ func (j *RtkRawOutputJanitor) Stop() {
 }
 
 // loop runs reapOnce on a ticker until ctx cancels or Stop is called.
+// A nil ctx disables cancellation entirely — the loop is then only bounded
+// by Stop() and the lifetime of the process. This is the behaviour the
+// plugin's tests rely on (they pass nil to Init to avoid a t.Context()).
 func (j *RtkRawOutputJanitor) loop(ctx context.Context) {
 	ticker := time.NewTicker(j.interval)
 	defer ticker.Stop()
 	// Run once immediately so a server restart doesn't carry stale files from
 	// the previous process.
 	j.reapOnce()
+	if ctx == nil {
+		<-j.done
+		return
+	}
 	for {
 		select {
 		case <-ctx.Done():

@@ -723,6 +723,7 @@ func maybePersistRawOutput(stats *ProcessStats, text string, config *Config, loa
 		Command:   cmd,
 		MaxBytes:  config.RawOutputMaxBytes,
 		AppDir:    appDir,
+		Dir:       config.RawOutputDir,
 	})
 	if ptr != nil {
 		stats.RawOutputPointers = append(stats.RawOutputPointers, ptr)
