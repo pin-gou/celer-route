@@ -108,10 +108,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 9.1 执行 lint
-- [ ] 9.2 执行 `go test ./server/...`
-- [ ] 9.3 启动 gateway（如 verify agent 决定需要）；用 `curl PUT /api/context/rtk/config` 写入带 `inject_fetch_tool: false` 的 config，验证落库；再用 `inject_fetch_tool: true` / 缺省值重写，验证 default 行为
-- [ ] 9.4 验证 V-plugins-3 / V-plugins-4：来自 design.md Verification Criteria（schema 字段生效）
+- [x] 9.1 执行 lint
+- [x] 9.2 执行 `go test ./server/...`
+- [x] 9.3 启动 gateway（如 verify agent 决定需要）；用 `curl PUT /api/context/rtk/config` 写入带 `inject_fetch_tool: false` 的 config，验证落库；再用 `inject_fetch_tool: true` / 缺省值重写，验证 default 行为
+- [x] 9.4 验证 V-plugins-3 / V-plugins-4：来自 design.md Verification Criteria（schema 字段生效）
 
 ## 10. dev.transports:gate - dev 门控审查
 
