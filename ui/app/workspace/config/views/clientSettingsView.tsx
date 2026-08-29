@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
 import UserAgentMappingsView from "./userAgentMappingsView";
+import { SecretVarInput } from "@/components/ui/secretVarInput";
 
 // Security headers that cannot be configured in allowlist/denylist
 // These headers are always blocked for security reasons regardless of configuration
@@ -432,6 +433,31 @@ export default function ClientSettingsView() {
 									onChange={(e) => handleConfigChange("async_job_result_ttl", parseInt(e.target.value) || 0)}
 									disabled={!hasSettingsUpdateAccess}
 									data-testid="client-settings-async-job-result-ttl-input"
+								/>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-base">{t("clientSettings.sections.gatewayPublicUrl")}</CardTitle>
+							<CardDescription>{t("clientSettings.sections.gatewayPublicUrlDesc")}</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-3">
+							<div className="space-y-1.5">
+								<div className="flex items-center gap-1.5">
+									<Label htmlFor="celer-route-base-url" className="text-sm font-medium">
+										{t("clientSettings.celerRouteBaseUrl")}
+									</Label>
+									<InfoTooltip description={t("clientSettings.celerRouteBaseUrlDesc")} />
+								</div>
+								<SecretVarInput
+									id="celer-route-base-url"
+									data-testid="celer-route-base-url-input"
+									placeholder="https://celer-route.example.com or env.CELER_ROUTE_BASE_URL"
+									value={localConfig.celer_route_base_url}
+									onChange={(value) => setLocalConfig((prev) => ({ ...prev, celer_route_base_url: value }))}
+									disabled={!hasSettingsUpdateAccess}
 								/>
 							</div>
 						</CardContent>

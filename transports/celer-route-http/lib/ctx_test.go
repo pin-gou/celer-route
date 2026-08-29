@@ -32,6 +32,7 @@ func (s testHandlerStore) ShouldAllowPerRequestRawOverride() bool     { return f
 func (s testHandlerStore) ShouldAllowDirectKeys() bool                { return s.allowDirectKeys }
 func (s testHandlerStore) GetMCPExternalServerURL() string            { return "" }
 func (s testHandlerStore) GetMCPExternalClientURL() string            { return "" }
+func (s testHandlerStore) GetCelerRouteBaseURL() string               { return "" }
 
 func TestParseSessionIDFromBaggage(t *testing.T) {
 	tests := []struct {

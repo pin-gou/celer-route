@@ -385,6 +385,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"convert_mcp_client_tool_sync_interval_minutes_to_seconds"}, run: migrationConvertMCPClientToolSyncIntervalMinutesToSeconds},
 	{IDs: []string{"add_mcp_external_base_url_column"}, run: migrationAddMCPExternalBaseURLColumn},
 	{IDs: []string{"split_mcp_external_base_url_into_server_client"}, run: migrationSplitMCPExternalBaseURL},
+	{IDs: []string{"add_celer_route_base_url_column"}, run: migrationAddCelerRouteBaseURLColumn},
 	{IDs: []string{"make_oauth_token_expiry_nullable"}, run: migrationMakeOAuthTokenExpiryNullable},
 	{IDs: []string{"add_allow_per_request_content_storage_override_column"}, run: migrationAddAllowPerRequestContentStorageOverrideColumn},
 	{IDs: []string{"add_retain_content_in_object_storage_column"}, run: migrationAddRetainContentInObjectStorageColumn},
@@ -8809,6 +8810,39 @@ func migrationSplitMCPExternalBaseURL(ctx context.Context, db *gorm.DB, logger s
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running split_mcp_external_base_url_into_server_client migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddCelerRouteBaseURLColumn adds the celer_route_base_url column to the
+// config_client table. Stores the public base URL the RTK plugin embeds into
+// truncated tool_result recovery hints. When empty, the gateway falls back to
+// the request Host header (see lib.BuildBaseURL). Supports env-var references
+// in the form "env.MY_VAR" so the value can be sourced from the environment
+// without committing the URL to the DB.
+func migrationAddCelerRouteBaseURLColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_celer_route_base_url_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableClientConfig{}, "celer_route_base_url"); err != nil {
+				return fmt.Errorf("failed to add celer_route_base_url column: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &tables.TableClientConfig{}, "celer_route_base_url"); err != nil {
+				return fmt.Errorf("failed to drop celer_route_base_url column: %w", err)
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running %s migration: %s", migrationName, err.Error())
 	}
 	return nil
 }

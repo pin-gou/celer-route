@@ -207,7 +207,7 @@
 		"rawOutputSection": "Debug: Raw Output",
 		"rawOutputRetentionLabel": "Raw Output Retention",
 		"rawOutputRetentionPlaceholder": "Select retention mode",
-		"rawOutputRetentionDescription": "Controls when raw tool outputs are persisted to disk",
+		"rawOutputRetentionDescription": "Controls when raw tool outputs are persisted to disk. When non-Never, the gateway embeds a capability URL (no Authorization header required) in the tool_result so the LLM can recover the original via GET. The 24-character hex id is itself the capability (96 bits of entropy) and expires after Raw Output TTL; anyone with the id can read until then.",
 		"rawOutputRetentionWhen": "Keep \"Never\" for day-to-day to save disk; switch to \"On Failures\" or \"Always\" while debugging, then read the de-redacted text from the Raw Output viewer.",
 		"rawOutputRetentionNever": "Never",
 		"rawOutputRetentionFailures": "On Failures",

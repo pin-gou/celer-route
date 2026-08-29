@@ -90,15 +90,28 @@ func NewRtkHandler(cs RtkConfigStore, resolver RtkPluginResolver) *RtkHandler {
 	}
 }
 
-// RegisterRoutes installs the six routes on r, applying the supplied
+// RegisterRoutes installs the eight routes on r, applying the supplied
 // middleware chain to each handler (matches the pattern used by every other
 // admin handler in this package).
+//
+// Exception: the GET /api/context/rtk/raw-output/{id} endpoint is intentionally
+// installed WITHOUT middlewares, so the LLM can recover a truncated tool_result
+// by issuing a plain GET to the URL embedded in the [rtk:raw_output_id=...;
+// fetch=GET <url>] marker (no Authorization header required). The id itself
+// (24 lowercase hex chars, ~96 bits of entropy) is the capability — anyone
+// holding it can read the persisted raw output. This is a deliberate
+// capability-URL design: the alternative (requiring the chat-completion
+// bearer) would mean the LLM would have to read the operator's API key from
+// disk to recover the original output, which is far more dangerous than
+// exposing 96-bit random ids that expire after raw_output_ttl_hours. The id
+// is also recorded in log metadata, so logging access is a stricter boundary
+// than this endpoint's access by design.
 func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	r.GET("/api/context/rtk/config", lib.ChainMiddlewares(h.getConfig, middlewares...))
 	r.PUT("/api/context/rtk/config", lib.ChainMiddlewares(h.putConfig, middlewares...))
 	r.GET("/api/context/rtk/filters", lib.ChainMiddlewares(h.getFilters, middlewares...))
 	r.POST("/api/context/rtk/test", lib.ChainMiddlewares(h.postTest, middlewares...))
-	r.GET("/api/context/rtk/raw-output/{id}", lib.ChainMiddlewares(h.getRawOutput, middlewares...))
+	r.GET("/api/context/rtk/raw-output/{id}", h.getRawOutput)
 	r.GET("/api/context/rtk/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
 	r.GET("/api/context/rtk/stats/histogram", lib.ChainMiddlewares(h.getStatsHistogram, middlewares...))
 	r.POST("/api/compression/preview", lib.ChainMiddlewares(h.postPreview, middlewares...))

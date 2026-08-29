@@ -1,6 +1,7 @@
 package rtk
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pin-gou/celer-route/core/schemas"
@@ -14,6 +15,13 @@ type ProcessStats struct {
 	Techniques        []string               `json:"techniques"`
 	FilterMatched     string                 `json:"filterMatched,omitempty"`
 	RawOutputPointers []*RtkRawOutputPointer `json:"rawOutputPointers,omitempty"`
+	// OriginalBytes is the UTF-8 byte count of the input text before compression.
+	// Embedded in the [rtk:raw_output_id=...] marker so the LLM can tell at a
+	// glance how much was dropped and decide whether recovery is worth the
+	// round-trip. Distinct from OriginalTokens (which is an estimate) and from
+	// len(persistedBytes) (which is what the recovery endpoint will actually
+	// return — may differ when redaction or RawOutputMaxBytes kicks in).
+	OriginalBytes int `json:"originalBytes,omitempty"`
 	// Truncated signals that the result actually dropped content (smartTruncate
 	// or charlimit fired). Set by the per-text pipeline so the caller can decide
 	// whether to append a raw-output pointer hint to the tool_result. Distinct
@@ -39,6 +47,18 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 
 	if req.ChatRequest == nil || len(req.ChatRequest.Input) == 0 {
 		return state
+	}
+
+	// Forward the gateway's public base URL (already resolved at request time in
+	// lib.ConvertToBifrostContext) into the engine config so the raw-output
+	// recovery hint can embed a complete fetch URL. Empty when the gateway is
+	// reached over a channel where Host is not set (e.g. Go SDK); in that case
+	// the hint falls back to the relative path form, which the system-level
+	// recovery instruction already documents.
+	if ctx != nil {
+		if v, ok := ctx.Value(schemas.BifrostContextKeyGatewayBaseURL).(string); ok {
+			defaultCfg.RecoveryBaseURL = v
+		}
 	}
 
 	originalTotal := 0
@@ -329,6 +349,15 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		return state
 	}
 
+	// Forward the gateway's public base URL (resolved at request time) into the
+	// engine config so the raw-output recovery hint can embed a complete fetch
+	// URL. See applyRtkCompression for the full rationale.
+	if ctx != nil {
+		if v, ok := ctx.Value(schemas.BifrostContextKeyGatewayBaseURL).(string); ok {
+			defaultCfg.RecoveryBaseURL = v
+		}
+	}
+
 	input := req.ResponsesRequest.Input
 
 	originalTotal := 0
@@ -498,16 +527,17 @@ func applyResponsesToolOutput(out *schemas.ResponsesToolMessageOutputStruct, con
 // detects the command, applies the matched filter, deduplicates, and
 // truncates. Used by tests directly.
 func processRtkText(input string, config *Config) (string, *ProcessStats) {
-	return processRtkTextWithCommand(input, config, nil, "")
+	return processRtkTextWithCommand(input, config, nil, "", "")
 }
 
 // processRtkTextWithCommand is the internal pipeline that accepts an optional
 // command hint from the tool call lookup. When commandHint is empty, content
 // detection is used. When loader is nil, a throwaway builtin-only loader is
 // created (for backward-compat test paths).
-func processRtkTextWithCommand(input string, config *Config, loader *FilterLoader, commandHint string) (string, *ProcessStats) {
+func processRtkTextWithCommand(input string, config *Config, loader *FilterLoader, commandHint string, recoveryBaseURL string) (string, *ProcessStats) {
 	stats := &ProcessStats{
 		OriginalTokens: estimateTokens(input),
+		OriginalBytes:  len(input),
 		Techniques:     make([]string, 0),
 	}
 
@@ -597,7 +627,7 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		}
 		stats.CompressedTokens = estimateTokens(result)
 		maybePersistRawOutput(stats, text, config, loader, cmd)
-		result = appendRawOutputHint(result, stats)
+		result = appendRawOutputHint(result, stats, recoveryBaseURL)
 		stats.CompressedTokens = estimateTokens(result)
 		return result, stats
 	}
@@ -630,7 +660,7 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		stats.Techniques = append(stats.Techniques, "matchOutput")
 		stats.Truncated = stats.CompressedTokens < stats.OriginalTokens
 		maybePersistRawOutput(stats, text, config, loader, cmd)
-		result := appendRawOutputHint(replaced, stats)
+		result := appendRawOutputHint(replaced, stats, recoveryBaseURL)
 		stats.CompressedTokens = estimateTokens(result)
 		return result, stats
 	}
@@ -705,7 +735,7 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 
 	stats.CompressedTokens = estimateTokens(result)
 	maybePersistRawOutput(stats, text, config, loader, cmd)
-	result = appendRawOutputHint(result, stats)
+	result = appendRawOutputHint(result, stats, recoveryBaseURL)
 	// Recompute CompressedTokens so it reflects the size of the result the
 	// LLM actually sees — including the optional raw-output pointer hint.
 	// Tests and the logging layer rely on CompressedTokens being the wire size.
@@ -810,7 +840,14 @@ func scaleFilterForIntensity(f *Filter, intensity string) *Filter {
 // who tune raw_output_ttl_hours can ignore the value because the LLM should
 // not reason about precise retention windows — it just needs to know recovery
 // is bounded.
-func appendRawOutputHint(result string, stats *ProcessStats) string {
+//
+// recoveryBaseURL is the gateway's public base URL, already resolved at request
+// time (config override → Host header). When non-empty the marker embeds a
+// complete, copy-pasteable fetch URL; when empty (Go SDK, anonymous transport)
+// the marker falls back to the relative path form and the LLM is expected to
+// not attempt recovery (the system-level recovery instruction makes that
+// explicit).
+func appendRawOutputHint(result string, stats *ProcessStats, recoveryBaseURL string) string {
 	if stats == nil || !stats.Truncated {
 		return result
 	}
@@ -818,7 +855,47 @@ func appendRawOutputHint(result string, stats *ProcessStats) string {
 		return result
 	}
 	ptr := stats.RawOutputPointers[0]
-	return result + "\n\n[rtk:raw_output_id=" + ptr.ID + "; ttl=24h; redacted=true]\n"
+	var b strings.Builder
+	b.Grow(len(result) + 128)
+	b.WriteString(result)
+	b.WriteString("\n\n[rtk:raw_output_id=")
+	b.WriteString(ptr.ID)
+	b.WriteString("; orig=")
+	b.WriteString(formatByteSize(stats.OriginalBytes))
+	b.WriteString("; ttl=24h; redacted=true")
+	if recoveryBaseURL != "" {
+		b.WriteString("; fetch=GET ")
+		b.WriteString(strings.TrimRight(recoveryBaseURL, "/"))
+		b.WriteString("/api/context/rtk/raw-output/")
+		b.WriteString(ptr.ID)
+	}
+	b.WriteString("]\n")
+	return b.String()
+}
+
+// formatByteSize renders a byte count in a human-readable form for the
+// raw_output_id marker (e.g. 48231 → "48.2KB", 1048576 → "1.0MB"). Stays below
+// the marker's single-line invariant. Uses 1024-based units (KiB) and one
+// decimal of precision, matching the convention used in the RTK admin UI.
+func formatByteSize(n int) string {
+	if n < 0 {
+		n = 0
+	}
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case n >= gb:
+		return fmt.Sprintf("%.1fGB", float64(n)/float64(gb))
+	case n >= mb:
+		return fmt.Sprintf("%.1fMB", float64(n)/float64(mb))
+	case n >= kb:
+		return fmt.Sprintf("%.1fKB", float64(n)/float64(kb))
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
 }
 
 // truncateToCharLimit truncates the text to stay within the character limit,

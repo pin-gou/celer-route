@@ -415,7 +415,7 @@ func TestDocumentReadNotTruncated(t *testing.T) {
 		MaxCharsPerResult: 50000,
 	}
 
-	result, _ := processRtkTextWithCommand(input, cfg, NewFilterLoader(cfg), "")
+	result, _ := processRtkTextWithCommand(input, cfg, NewFilterLoader(cfg), "", "")
 	// The result should contain the full text (no truncation markers)
 	if strings.Contains(result, "[rtk:truncated") {
 		t.Errorf("document-like read should not contain truncation marker, got:\n...%s...", result[len(result)-200:])
@@ -449,7 +449,7 @@ ValueError: invalid input
 	}
 
 	cfg := DefaultConfig()
-	result, _ := processRtkTextWithCommand(input, cfg, NewFilterLoader(cfg), "")
+	result, _ := processRtkTextWithCommand(input, cfg, NewFilterLoader(cfg), "", "")
 	// The result should go through the full pipeline (filter + smartTruncate + char limit)
 	// and may be truncated, but should NOT be treated as document-like
 	if !strings.Contains(result, "Traceback") {
@@ -516,7 +516,7 @@ func TestCharTruncateMarker(t *testing.T) {
 		DedupThreshold:    3,
 	}
 
-	result, _ := processRtkTextWithCommand(input, cfg, NewFilterLoader(cfg), "")
+	result, _ := processRtkTextWithCommand(input, cfg, NewFilterLoader(cfg), "", "")
 	// The result should contain the char truncation marker
 	if !strings.Contains(result, "[rtk:truncated by chars]") {
 		t.Errorf("expected [rtk:truncated by chars] marker in result:\n%q", result)

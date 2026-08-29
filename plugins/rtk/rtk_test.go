@@ -317,7 +317,7 @@ D	src/old_file.go
 				Intensity: "minimal",
 			},
 			wantCompressed: true,
-			minReduction:   0.1, // minimal mode preserves more
+			minReduction:   0.05, // minimal mode preserves more; appendRawOutputHint's orig=<size> marker costs a few tokens on top of the compressed body
 			keyPhrases:     []string{"abc1234", "add new feature", "src/new_file.go", "src/old_file.go"},
 		},
 		{
@@ -1370,7 +1370,7 @@ func TestCompressionTriggersRawOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status")
+		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status", "")
 		if stats.CompressedTokens >= stats.OriginalTokens {
 			t.Fatalf("fixture must actually compress for this test: original=%d compressed=%d",
 				stats.OriginalTokens, stats.CompressedTokens)
@@ -1401,7 +1401,7 @@ func TestCompressionTriggersRawOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status")
+		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status", "")
 		if len(stats.RawOutputPointers) != 0 {
 			t.Errorf("expected 0 raw output pointers with retention=never, got %d",
 				len(stats.RawOutputPointers))

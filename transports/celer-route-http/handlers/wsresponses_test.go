@@ -49,6 +49,7 @@ func (s testWSHandlerStore) ShouldAllowPerRequestRawOverride() bool     { return
 func (s testWSHandlerStore) ShouldAllowDirectKeys() bool                { return false }
 func (s testWSHandlerStore) GetMCPExternalServerURL() string            { return "" }
 func (s testWSHandlerStore) GetMCPExternalClientURL() string            { return "" }
+func (s testWSHandlerStore) GetCelerRouteBaseURL() string               { return "" }
 
 type timeoutNetError struct{}
 

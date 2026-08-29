@@ -229,6 +229,8 @@
 			"denylist": "Denylist",
 			"denylistDesc": "Headers that are always blocked from forwarding, regardless of allowlist settings.",
 			"securityNote": "Security note",
+			"gatewayPublicUrl": "Gateway Public URL",
+			"gatewayPublicUrlDesc": "Public base URL of this celer-route gateway, used to build self-referential URLs embedded in tool output recovery hints (for example, the RTK raw-output fetch URL).",
 			"securityNoteDesc": "The following headers are permanently reserved for security and cannot be allowed via either list:"
 		},
 		"help": {
@@ -253,6 +255,8 @@
 		"disableDbPings": "Disable DB Pings in Health Check",
 		"disableDbPingsDesc": "If enabled, the /health endpoint will skip database connectivity checks and return OK immediately.",
 		"dumpErrors": "Dump Errors in Console Logs",
+		"celerRouteBaseUrl": "Celer-Route Base URL",
+		"celerRouteBaseUrlDesc": "Override the public base URL of this gateway when it runs behind a reverse proxy. Leave blank to derive the URL from the incoming Host header. Supports env var syntax (e.g. env.CELER_ROUTE_BASE_URL).",
 		"dumpErrorsDesc": "If enabled, full error details are written to the server console logs. Useful for debugging, but may be noisy in production.",
 		"asyncJobResultTtl": "Async Job Result TTL (seconds)",
 		"asyncJobResultTtlDesc": "Default time-to-live for async job results in seconds. Results are automatically cleaned up after expiry.",

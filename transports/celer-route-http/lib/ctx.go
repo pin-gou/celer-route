@@ -669,6 +669,26 @@ func ConvertToBifrostContext(ctx *fasthttp.RequestCtx, store HandlerStore) (*sch
 		bifrostCtx.SetValue(schemas.BifrostContextKeyMCPCallbackBaseURL, baseURL)
 	}
 
+	// Resolve the gateway's own public base URL (client-settings override first,
+	// then Host header). Plugins such as RTK read this to build self-referential
+	// URLs embedded in tool output recovery hints (e.g. the raw-output fetch URL).
+	// Set as a separate key so plugin code does not have to re-derive it and so
+	// changing MCP-specific URL semantics in the future does not silently affect
+	// every other consumer.
+	var gatewayBaseURL string
+	if store != nil {
+		gatewayBaseURL = store.GetCelerRouteBaseURL()
+	}
+	if gatewayBaseURL != "" {
+		if resolved := BuildBaseURL(ctx, gatewayBaseURL); resolved != "" {
+			bifrostCtx.SetValue(schemas.BifrostContextKeyGatewayBaseURL, resolved)
+		}
+	} else {
+		if resolved := BuildBaseURL(ctx, ""); resolved != "" {
+			bifrostCtx.SetValue(schemas.BifrostContextKeyGatewayBaseURL, resolved)
+		}
+	}
+
 	bifrostCtx.SetValue(schemas.BifrostContextKeyAllowPerRequestStorageOverride, allowPerRequestStorageOverride)
 	bifrostCtx.SetValue(schemas.BifrostContextKeyAllowPerRequestRawOverride, allowPerRequestRawOverride)
 

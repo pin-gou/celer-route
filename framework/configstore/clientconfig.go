@@ -100,6 +100,7 @@ type ClientConfig struct {
 	HideDeletedVirtualKeysInFilters       bool                                  `json:"hide_deleted_virtual_keys_in_filters"`        // Hide deleted virtual keys from logs/MCP filter data
 	RoutingChainMaxDepth                  int                                   `json:"routing_chain_max_depth"`                     // Maximum depth for routing rule chain evaluation (default: 10)
 	MCPExternalClientURL                  *schemas.SecretVar                    `json:"mcp_external_client_url,omitempty"`           // Public base URL used as redirect_uri when Bifrost acts as an OAuth client to upstream MCP servers. Supports env var syntax ("env.MY_VAR")
+	CelerRouteBaseURL                     *schemas.SecretVar                    `json:"celer_route_base_url,omitempty"`              // Public base URL of the celer-route gateway, used to build self-referential URLs embedded in tool output recovery hints (e.g. the RTK raw-output fetch URL). Empty falls back to dynamic Host-header-derived URL. Supports env var syntax ("env.MY_VAR")
 	MCPServerAuthMode                     tables.MCPServerAuthMode              `json:"mcp_server_auth_mode,omitempty"`              // How /mcp authenticates inbound clients: headers (default), both, or oauth.
 	OAuth2ServerConfig                    *tables.OAuth2ServerConfig            `json:"oauth2_server_config,omitempty"`              // OAuth2 AS-specific settings (IssuerURL, token TTLs). Only relevant when MCPServerAuthMode is both or oauth.
 	ConfigHash                            string                                `json:"-"`                                           // Config hash for reconciliation (not serialized)
@@ -403,6 +404,14 @@ func (c *ClientConfig) GenerateClientConfigHash() (string, error) {
 		}
 	}
 
+	if c.CelerRouteBaseURL.IsSet() {
+		if c.CelerRouteBaseURL.IsFromSecret() {
+			hash.Write([]byte("celerRouteBaseURL:ref:" + c.CelerRouteBaseURL.GetRawRef()))
+		} else {
+			hash.Write([]byte("celerRouteBaseURL:val:" + c.CelerRouteBaseURL.GetValue()))
+		}
+	}
+
 	// Only hash non-default values to avoid legacy config hash churn on upgrade —
 	// existing configs carry an empty auth mode and a nil OAuth2 server config.
 	if c.MCPServerAuthMode != "" {
@@ -452,6 +461,9 @@ func (c *ClientConfig) Redacted() ClientConfig {
 	out := *c
 	if c.MCPExternalClientURL != nil && c.MCPExternalClientURL.IsFromSecret() {
 		out.MCPExternalClientURL = c.MCPExternalClientURL.Redacted()
+	}
+	if c.CelerRouteBaseURL != nil && c.CelerRouteBaseURL.IsFromSecret() {
+		out.CelerRouteBaseURL = c.CelerRouteBaseURL.Redacted()
 	}
 	return out
 }
