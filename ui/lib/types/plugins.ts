@@ -108,6 +108,14 @@ export const rtkConfigSchema = z.object({
 	// RawOutputMaxBytes caps the persisted raw output size.
 	raw_output_max_bytes: z.number().int().min(0).optional(),
 
+	// RawOutputDir overrides the on-disk root for raw-output persistence.
+	// Empty string = use <appDir>/rtk/raw-output/ (server-side default).
+	raw_output_dir: z.string().optional(),
+
+	// RawOutputTTLHours controls how long raw-output files live on disk before
+	// the janitor reaps them. 0 disables the janitor. Default 24, range [0, 168].
+	raw_output_ttl_hours: z.number().int().min(0).max(168).optional(),
+
 	// Pipeline defines the ordered list of compression engines to run.
 	pipeline: z
 		.array(
