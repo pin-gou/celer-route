@@ -4300,6 +4300,25 @@ func (bifrost *Bifrost) RemoveMCPClient(id string) error {
 	return bifrost.MCPManager.RemoveClient(id)
 }
 
+// GetMCPManager returns the MCP manager used by this Bifrost instance.
+// Plugins can use this to register internal tools (e.g. the RTK raw-output
+// fetch tool) or to register client-provided MCP servers.
+//
+// The field is assigned once during NewBifrost/SetMCPManager and treated as
+// read-only afterwards, so no lock is needed. Returns nil when the Bifrost
+// was constructed without an MCP manager (rare — e.g. unit tests that bypass
+// MCP entirely) or when the configured manager is not the concrete
+// *mcp.MCPManager (e.g. a mock implementing MCPManagerInterface).
+func (bifrost *Bifrost) GetMCPManager() *mcp.MCPManager {
+	if bifrost == nil || bifrost.MCPManager == nil {
+		return nil
+	}
+	if mgr, ok := bifrost.MCPManager.(*mcp.MCPManager); ok {
+		return mgr
+	}
+	return nil
+}
+
 // SetMCPManager sets the MCP manager for this Bifrost instance.
 // This allows injecting a custom MCP manager implementation.
 // If the provided manager is a concrete *mcp.MCPManager, Bifrost's plugin pipeline is injected

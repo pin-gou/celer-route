@@ -17,9 +17,9 @@
      track=core (常驻, 无 on_conditions)
 -->
 
-- [ ] 2.1 在 `core/bifrost.go` 的 `*Bifrost` receiver 上新增导出方法 `GetMCPManager() *mcp.MCPManager`，直接返回 `bifrost.MCPManager`（无需锁 — 字段在 NewBifrost 期间赋值后只读）
-- [ ] 2.2 跑 `cd core && go build ./...` 确认编译通过
-- [ ] 2.3 跑 `cd core && go test ./... -run TestGetMCPManager` 确认绿
+- [x] 2.1 在 `core/bifrost.go` 的 `*Bifrost` receiver 上新增导出方法 `GetMCPManager() *mcp.MCPManager`，直接返回 `bifrost.MCPManager`（无需锁 — 字段在 NewBifrost 期间赋值后只读）
+- [x] 2.2 跑 `cd core && go build ./...` 确认编译通过
+- [x] 2.3 跑 `cd core && go test ./... -run TestGetMCPManager` 确认绿
 
 ## 3. dev.core:review - 静态代码审查
 
