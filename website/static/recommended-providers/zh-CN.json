@@ -1,6 +1,6 @@
 {
-  "version": "2026-08-28",
-  "updated_at": "2026-08-28T08:00:00Z",
+  "version": "2026-08-29",
+  "updated_at": "2026-08-29T08:00:00Z",
   "bundles": [
     {
       "id": "coding",
@@ -30,6 +30,38 @@
           "apply_steps": [],
           "is_keyless": true,
           "notes": "免 Key，直接添加"
+        },
+        {
+          "provider": "together",
+          "models": [
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+            "Qwen/Qwen2.5-Coder-32B-Instruct"
+          ],
+          "apply_url": "https://api.together.ai/",
+          "apply_steps": [
+            "注册账号",
+            "申请 API Key"
+          ],
+          "is_keyless": false,
+          "notes": "开源模型免费额度",
+          "base_provider": "openai",
+          "base_url": "https://api.together.xyz/v1"
+        },
+        {
+          "provider": "sambanova",
+          "models": [
+            "Llama-4-Scout-17B-16E-Instruct",
+            "DeepSeek-R1-Distill-Llama-70B"
+          ],
+          "apply_url": "https://cloud.sambanova.ai/",
+          "apply_steps": [
+            "注册账号",
+            "申请 API Key"
+          ],
+          "is_keyless": false,
+          "notes": "开源模型完全免费",
+          "base_provider": "openai",
+          "base_url": "https://api.sambanova.ai/v1"
         }
       ]
     },
@@ -51,6 +83,20 @@
           ],
           "is_keyless": false,
           "notes": "新用户优惠"
+        },
+        {
+          "provider": "pollinations",
+          "models": [
+            "openai",
+            "mistral",
+            "llama"
+          ],
+          "apply_url": "",
+          "apply_steps": [],
+          "is_keyless": true,
+          "notes": "免 Key，直接添加",
+          "base_provider": "openai",
+          "base_url": "https://text.pollinations.ai/openai"
         }
       ]
     },
