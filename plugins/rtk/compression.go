@@ -619,6 +619,22 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		stats.Techniques = append(stats.Techniques, "linefilter")
 	}
 
+	// 7a. MatchOutput rules — content-level pattern match that collapses the
+	// entire input into a single message line when a recognizable success
+	// (or single-line failure) signature is detected. Runs after line filter
+	// so the rule's regex sees the post-line-filter text. When a rule hits,
+	// the filter pipeline terminates early — no renderers, dedup, grouping,
+	// or truncate steps run on the collapsed text.
+	if replaced, hit := applyMatchOutputRules(stripped, filter); hit {
+		stats.CompressedTokens = estimateTokens(replaced)
+		stats.Techniques = append(stats.Techniques, "matchOutput")
+		stats.Truncated = stats.CompressedTokens < stats.OriginalTokens
+		maybePersistRawOutput(stats, text, config, loader, cmd)
+		result := appendRawOutputHint(replaced, stats)
+		stats.CompressedTokens = estimateTokens(result)
+		return result, stats
+	}
+
 	// 7b. Semantic renderers — opt-in via EnableRenderers, fail-open.
 	// Aligned with OmniRoute's processRtkText step 5: a renderer applies
 	// AFTER line filtering (so the input to the renderer is already

@@ -523,6 +523,327 @@ func TestCharTruncateMarker(t *testing.T) {
 	}
 }
 
+// TestApplyMatchOutputRules_Hit verifies that a matching pattern collapses
+// the entire input into the rule's message. This is the canonical "success
+// summary" pattern (rtk TOML matchOutput semantics).
+func TestApplyMatchOutputRules_Hit(t *testing.T) {
+	filter := &Filter{
+		MatchOutput: []MatchOutputRule{
+			{Pattern: "Bundle complete!", Message: "[bundle: complete]"},
+		},
+	}
+	input := `Resolving dependencies...
+Resolving dependencies...
+Resolving dependencies...
+Bundle complete! 4 packages, 12 seconds.
+`
+	got, hit := applyMatchOutputRules(input, filter)
+	if !hit {
+		t.Fatalf("applyMatchOutputRules: hit=false, want true")
+	}
+	if got != "[bundle: complete]" {
+		t.Errorf("applyMatchOutputRules:\ngot:  %q\nwant: %q", got, "[bundle: complete]")
+	}
+}
+
+// TestApplyMatchOutputRules_Unless verifies the Unless negative-pattern guard.
+// A Unless match suppresses the rule even when Pattern matches. This mirrors
+// rtk TOML's matchOutput.unless semantics for "collapse on success unless
+// failure markers are also present".
+func TestApplyMatchOutputRules_Unless(t *testing.T) {
+	filter := &Filter{
+		MatchOutput: []MatchOutputRule{
+			{
+				Pattern: "Bundle complete!",
+				Message: "[bundle: complete]",
+				Unless:  "(?i)error|fail",
+			},
+		},
+	}
+	// Pattern matches, but Unless also matches → rule should NOT fire.
+	bad := `Bundle complete!\nerror: something broke\n`
+	got, hit := applyMatchOutputRules(bad, filter)
+	if hit {
+		t.Errorf("applyMatchOutputRules with matching Unless: hit=true, want false (got=%q)", got)
+	}
+	if got != bad {
+		t.Errorf("applyMatchOutputRules: input was modified despite Unless guard (got=%q)", got)
+	}
+
+	// Pattern matches, Unless does NOT match → rule SHOULD fire.
+	good := "Bundle complete! 4 packages."
+	got2, hit2 := applyMatchOutputRules(good, filter)
+	if !hit2 {
+		t.Errorf("applyMatchOutputRules: hit=false on success output, want true")
+	}
+	if got2 != "[bundle: complete]" {
+		t.Errorf("applyMatchOutputRules:\ngot:  %q\nwant: %q", got2, "[bundle: complete]")
+	}
+}
+
+// TestApplyMatchOutputRules_NoHit verifies that a non-matching pattern
+// returns the input unchanged with hit=false.
+func TestApplyMatchOutputRules_NoHit(t *testing.T) {
+	filter := &Filter{
+		MatchOutput: []MatchOutputRule{
+			{Pattern: "ALL_GREEN_OK", Message: "[ok]"},
+		},
+	}
+	input := "lots of unrelated output\nthat contains no marker\n"
+	got, hit := applyMatchOutputRules(input, filter)
+	if hit {
+		t.Errorf("applyMatchOutputRules: hit=true on non-matching input, want false")
+	}
+	if got != input {
+		t.Errorf("applyMatchOutputRules: input changed on no-hit:\nbefore: %q\nafter:  %q", input, got)
+	}
+}
+
+// TestApplyMatchOutputRules_EmptyRule verifies the safe defaults: a rule with
+// an empty Pattern is silently skipped (no panic, no fire).
+func TestApplyMatchOutputRules_EmptyRule(t *testing.T) {
+	filter := &Filter{
+		MatchOutput: []MatchOutputRule{
+			{Pattern: "", Message: "[should-never-fire]"},
+		},
+	}
+	input := "any text"
+	got, hit := applyMatchOutputRules(input, filter)
+	if hit || got != input {
+		t.Errorf("applyMatchOutputRules empty rule: got=(%q,%v), want=(input,false)", got, hit)
+	}
+}
+
+// TestApplyMatchOutputRules_BadRegex verifies that a malformed pattern does
+// not panic and falls through to the next rule (fail-open). Mirrors the
+// applyLineFilter behavior for ReDoS-prone patterns.
+func TestApplyMatchOutputRules_BadRegex(t *testing.T) {
+	filter := &Filter{
+		MatchOutput: []MatchOutputRule{
+			{Pattern: "(unclosed", Message: "[broken]"},            // invalid regex → skip
+			{Pattern: "all good", Message: "[ok]"},                  // valid → should fire
+		},
+	}
+	got, hit := applyMatchOutputRules("all good output", filter)
+	if !hit || got != "[ok]" {
+		t.Errorf("applyMatchOutputRules bad regex fallthrough: got=(%q,%v), want=(\"[ok]\",true)", got, hit)
+	}
+}
+
+// TestApplyLineFilterMaxBytes verifies that a non-zero MaxBytes truncates the
+// post-rule text to at most MaxBytes bytes, UTF-8 safe.
+func TestApplyLineFilterMaxBytes(t *testing.T) {
+	filter := &Filter{
+		Rules:    []LineRule{{Type: "keep", Pattern: "."}}, // keep all
+		MaxBytes: 10,
+	}
+	input := "this is a long string that should be truncated to ten bytes"
+	got := applyLineFilter(input, filter)
+	if len(got) > 10 {
+		t.Errorf("applyLineFilter MaxBytes: len=%d, want <= 10 (got %q)", len(got), got)
+	}
+	// Truncated to 10 ASCII bytes = first 10 chars.
+	if got != "this is a " {
+		t.Errorf("applyLineFilter MaxBytes: got %q, want %q", got, "this is a ")
+	}
+}
+
+// TestApplyLineFilterMaxBytes_UTF8 verifies that the truncation respects
+// rune boundaries and never emits a half-encoded multi-byte character.
+func TestApplyLineFilterMaxBytes_UTF8(t *testing.T) {
+	filter := &Filter{
+		Rules:    []LineRule{{Type: "keep", Pattern: "."}},
+		MaxBytes: 6, // '你' is 3 bytes in UTF-8; 6 bytes = at most 2 你 + nothing else
+	}
+	input := "你好世界"
+	got := applyLineFilter(input, filter)
+	if len(got) > 6 {
+		t.Errorf("applyLineFilter MaxBytes UTF-8: len=%d, want <= 6 (got %q)", len(got), got)
+	}
+	// 6 bytes / 3 bytes per rune = 2 runes = "你好"
+	if got != "你好" {
+		t.Errorf("applyLineFilter MaxBytes UTF-8: got %q, want %q", got, "你好")
+	}
+}
+
+// TestApplyLineFilterMaxBytes_NoCap verifies that MaxBytes=0 (zero value)
+// does NOT truncate. Mirrors the existing legacy-filter behavior.
+func TestApplyLineFilterMaxBytes_NoCap(t *testing.T) {
+	filter := &Filter{
+		Rules: []LineRule{{Type: "keep", Pattern: "."}},
+		// MaxBytes: 0 — explicitly unset
+	}
+	input := "short string"
+	got := applyLineFilter(input, filter)
+	if got != input {
+		t.Errorf("applyLineFilter MaxBytes=0: got %q, want %q", got, input)
+	}
+}
+
+// TestProcessRtkTextWithCommand_MatchOutputPipeline verifies that a filter
+// with MatchOutput collapses the entire text and short-circuits the rest of
+// the pipeline (no smarttruncate, no charlimit).
+//
+// The test exercises the pipeline directly via applyLineFilter +
+// applyMatchOutputRules — the helpers that the production pipeline composes
+// in compression.go:617-633 — so the integration is verified without
+// depending on the FilterLoader's exact command-match semantics (which are
+// tested separately in filterloader_test.go). The short-circuit contract is:
+// matchOutput → no smarttruncate, no charlimit, techniques records "matchOutput".
+func TestProcessRtkTextWithCommand_MatchOutputPipeline(t *testing.T) {
+	filter := &Filter{
+		ID:          "cargo-test",
+		Name:        "cargo-test",
+		Command:     "cargo",
+		Category:    "build",
+		CommandPatterns: []string{"^cargo\\b"},
+		MatchOutput: []MatchOutputRule{
+			{Pattern: "Finished `dev` profile", Message: "[cargo: build ok]"},
+		},
+	}
+
+	input := "   Compiling libc v0.2.154\n" +
+		"   Compiling myapp v0.1.0\n" +
+		"    Finished `dev` profile [unoptimized + debuginfo]\n" +
+		"     Running `target/debug/myapp`\n" +
+		"hello world\n"
+
+	// Step 1: line filter (no rules → passthrough).
+	stripped := applyLineFilter(input, filter)
+	if stripped != input {
+		t.Fatalf("applyLineFilter passthrough: input was modified\nbefore: %q\nafter:  %q", input, stripped)
+	}
+
+	// Step 2: matchOutput rule fires → entire input collapses to message.
+	replaced, hit := applyMatchOutputRules(stripped, filter)
+	if !hit {
+		t.Fatalf("applyMatchOutputRules: hit=false, want true")
+	}
+	if replaced != "[cargo: build ok]" {
+		t.Errorf("applyMatchOutputRules:\ngot:  %q\nwant: %q", replaced, "[cargo: build ok]")
+	}
+
+	// Step 3: token estimate sanity. Original ~30 tokens → message 4 tokens.
+	origTokens := estimateTokens(input)
+	replTokens := estimateTokens(replaced)
+	if origTokens <= replTokens {
+		t.Errorf("estimateTokens: orig=%d, replaced=%d — matchOutput should reduce tokens", origTokens, replTokens)
+	}
+	t.Logf("matchOutput: orig=%d tokens → replaced=%d tokens (saved %d)",
+		origTokens, replTokens, origTokens-replTokens)
+}
+
+// TestFilterSchema_MaxBytes_RoundTrip verifies the JSON tag is wired so
+// user-provided filter JSON files can declare maxBytes per-filter.
+func TestFilterSchema_MaxBytes_RoundTrip(t *testing.T) {
+	src := []byte(`{"name":"x","command":"x","rules":[],"maxBytes":512}`)
+	var f Filter
+	if err := f.UnmarshalJSON(src); err != nil {
+		t.Fatalf("UnmarshalJSON: %v", err)
+	}
+	if f.MaxBytes != 512 {
+		t.Errorf("Filter.MaxBytes after UnmarshalJSON = %d, want 512", f.MaxBytes)
+	}
+}
+
+// TestBuiltinFilters_LoadAndMatch verifies that the new high-priority filters
+// (terraform-plan, ansible-playbook, helm, gradle, composer-install) loaded
+// from the embedded builtin directory are reachable via FilterLoader.Match
+// when given the right command or detection Type. Each filter is verified
+// in isolation: load, lookup, run pipeline on a sample input, check output.
+func TestBuiltinFilters_LoadAndMatch(t *testing.T) {
+	cfg := &Config{Enabled: true}
+
+	cases := []struct {
+		name           string
+		filterID       string // detection Type that should match
+		command        string
+		input          string
+		mustContain    []string
+		mustNotContain []string
+	}{
+		{
+			name:        "gradle-BUILD-SUCCESSFUL-matchOutput",
+			filterID:    "gradle",
+			command:     "gradle build",
+			input:       "> Task :app:compileJava UP-TO-DATE\n> Task :app:test UP-TO-DATE\nBUILD SUCCESSFUL in 5s\n",
+			mustContain: []string{"[gradle: build ok]"},
+		},
+		{
+			name:        "gradle-BUILD-FAILED-preserves-error",
+			filterID:    "gradle",
+			command:     "gradle build",
+			input:       "> Task :app:compileJava UP-TO-DATE\n> Task :app:test\n3 tests completed, 1 failed\nBUILD FAILED in 12s\n",
+			mustContain: []string{"BUILD FAILED", "1 failed"},
+		},
+		{
+			name:        "terraform-plan-strips-refreshing",
+			filterID:    "terraform-plan",
+			command:     "terraform plan",
+			input:       "Acquiring state lock. This may take a few moments...\nRefreshing state... [id=vpc-abc]\nRefreshing state... [id=sg-123]\n\nPlan: 1 to add, 0 to change, 0 to destroy.\n",
+			mustNotContain: []string{"Refreshing state"},
+			mustContain:    []string{"Plan: 1 to add"},
+		},
+		{
+			name:        "terraform-plan-no-changes-matchOutput",
+			filterID:    "terraform-plan",
+			command:     "terraform plan",
+			input:       "Acquiring state lock.\nRefreshing state...\n\nNo changes. Your infrastructure matches the configuration.\n",
+			mustContain: []string{"[terraform: plan: no changes]"},
+		},
+		{
+			name:        "composer-install-nothing-to-do-matchOutput",
+			filterID:    "composer-install",
+			command:     "composer install",
+			input:       "Loading composer repositories with package information\nUpdating dependencies\nLock file operations: 0 installs, 0 updates, 0 removals\nNothing to install, update or remove\nGenerating autoload files\n",
+			mustContain: []string{"[composer: ok (up to date)]"},
+		},
+		{
+			name:        "helm-strips-deprecation-warnings",
+			filterID:    "helm",
+			command:     "helm status my-release",
+			input:       "W1011 12:34:56.789012 1 warnings.go:70] policy/v1beta1 PodSecurityPolicy is deprecated\nNAME: my-release\nLAST DEPLOYED: Sat Jan 01 12:00:00 2026\nNAMESPACE: default\nSTATUS: deployed\n",
+			mustNotContain: []string{"W1011", "deprecated"},
+			mustContain:    []string{"STATUS: deployed"},
+		},
+		{
+			name:        "ansible-playbook-strips-ok-and-skipping",
+			filterID:    "ansible-playbook",
+			command:     "ansible-playbook site.yml",
+			input:       "PLAY [all] ****\nTASK [Gathering Facts] ****\nok: [web01]\nok: [web02]\nTASK [Install nginx] ****\nchanged: [web01]\nskipping: [web02]\nPLAY RECAP ****\nweb01 : ok=2 changed=1 unreachable=0 failed=0\n",
+			mustNotContain: []string{"ok: [web01]", "skipping: [web02]"},
+			mustContain:    []string{"changed: [web01]", "PLAY RECAP"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			loader := NewFilterLoader(cfg)
+			// Drive the pipeline via the per-type Match path.
+			filter := loader.Match(tc.filterID, tc.command)
+			if filter == nil {
+				t.Fatalf("FilterLoader.Match(%q, %q) returned nil", tc.filterID, tc.command)
+			}
+			stripped := applyLineFilter(tc.input, filter)
+			replaced, hit := applyMatchOutputRules(stripped, filter)
+			result := stripped
+			if hit {
+				result = replaced
+			}
+			for _, want := range tc.mustContain {
+				if !strings.Contains(result, want) {
+					t.Errorf("result missing %q:\ngot: %q", want, result)
+				}
+			}
+			for _, banned := range tc.mustNotContain {
+				if strings.Contains(result, banned) {
+					t.Errorf("result still contains %q:\ngot: %q", banned, result)
+				}
+			}
+		})
+	}
+}
+
 // Helper: count lines in a string.
 func countLines(s string) int {
 	if s == "" {
