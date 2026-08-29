@@ -597,3 +597,106 @@ func TestRTKInit_InvalidConfigRejected(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// rtk-fetch-tool: InjectFetchTool config plumbing (tasks.md §6.1)
+// ============================================================================
+//
+// These tests pin the transports-side contract for the new rtk.Config
+// `inject_fetch_tool` field (design.md §4 / §5). The field is declared as
+// *bool (JSON tag `inject_fetch_tool,omitempty`) so that "unset" is
+// distinguishable from "explicit false". The semantics the transports host
+// must honour, across the three operator cases, are:
+//
+//   - absent         → nil at deserialization, defaulted to *true at Init
+//   - explicit true  → non-nil *true
+//   - explicit false → non-nil *false (opt-out survives)
+//
+// Red phase: rtk.Config.InjectFetchTool does not exist yet, so this file will
+// not compile until plugins/rtk/config.go adds the field (task 12.3) and
+// applyConfigDefaults fills the default (task 12.4). Compilation failure is
+// the expected TDD red result.
+
+// rtkInjectBoolPtr returns a pointer to b for building expected values.
+func rtkInjectBoolPtr(b bool) *bool { return &b }
+
+// assertInjectFetchTool compares two *bool values nil-aware.
+func assertInjectFetchTool(t *testing.T, got, want *bool) {
+	t.Helper()
+	switch {
+	case got == nil && want == nil:
+		return
+	case got == nil || want == nil:
+		t.Fatalf("InjectFetchTool = %v, want %v", got, want)
+	default:
+		if *got != *want {
+			t.Fatalf("InjectFetchTool = %v, want %v", *got, *want)
+		}
+	}
+}
+
+// TestRTKConfig_InjectFetchTool_MarshalPluginConfig verifies that the
+// transports deserialization step — MarshalPluginConfig[rtk.Config], the exact
+// call loadBuiltinPlugin makes for the rtk plugin (plugins.go) — maps the
+// inject_fetch_tool JSON field onto the *bool pointer correctly in all three
+// operator cases. In particular the "absent → nil" case is what lets
+// applyConfigDefaults (in the plugin, task 12.4) distinguish "unset" from an
+// explicit opt-out.
+func TestRTKConfig_InjectFetchTool_MarshalPluginConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		config map[string]any
+		want   *bool
+	}{
+		{
+			name:   "absent → nil (unset; default true applied by applyConfigDefaults at Init)",
+			config: map[string]any{"enabled": true},
+			want:   nil,
+		},
+		{
+			name:   "explicit true",
+			config: map[string]any{"enabled": true, "inject_fetch_tool": true},
+			want:   rtkInjectBoolPtr(true),
+		},
+		{
+			name:   "explicit false",
+			config: map[string]any{"enabled": true, "inject_fetch_tool": false},
+			want:   rtkInjectBoolPtr(false),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := MarshalPluginConfig[rtk.Config](tt.config)
+			if err != nil {
+				t.Fatalf("MarshalPluginConfig[rtk.Config] failed: %v", err)
+			}
+			// cfg.InjectFetchTool references the *bool field from design.md
+			// §4 — it does not exist yet, so this file fails to compile (red
+			// phase) until the dev phase adds it.
+			assertInjectFetchTool(t, cfg.InjectFetchTool, tt.want)
+		})
+	}
+}
+
+// TestRTKConfig_InjectFetchTool_DefaultsTrue verifies that an operator who does
+// NOT write inject_fetch_tool still gets the new behaviour (default true).
+// rtk.Init runs applyConfigDefaults in-place on the passed config — the same
+// mutation the transports host triggers through InstantiatePlugin → rtk.Init —
+// so the absent field must resolve to *true, not stay nil. The full
+// InstantiatePlugin path cannot be used here because *rtk.Plugin exposes no
+// config getter; rtk.Init is the shared mutation point.
+func TestRTKConfig_InjectFetchTool_DefaultsTrue(t *testing.T) {
+	cfg := &rtk.Config{Enabled: true}
+	// nil ctx → no janitor goroutine (the raw-output janitor only starts when
+	// the TTL is non-zero AND ctx is non-nil).
+	if _, err := rtk.Init(nil, cfg, noopTestLogger{}, t.TempDir()); err != nil {
+		t.Fatalf("rtk.Init failed: %v", err)
+	}
+	if cfg.InjectFetchTool == nil {
+		t.Fatal("absent inject_fetch_tool must default to true, got nil")
+	}
+	if !*cfg.InjectFetchTool {
+		t.Fatal("absent inject_fetch_tool must default to true, got false")
+	}
+}
