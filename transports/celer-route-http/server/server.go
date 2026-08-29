@@ -2077,7 +2077,12 @@ func (a *rtkAccessor) PreviewCompression(req rtk.PreviewRequest) rtk.PreviewResp
 	return a.p.PreviewCompression(req)
 }
 func (a *rtkAccessor) ReadRawOutput(id string) (string, bool) {
-	return rtk.ReadRtkRawOutputByID(id, a.p.GetAppDir())
+	// Prefer the operator-configured raw_output_dir when set; fall back to
+	// the appDir-derived default. ReadRtkRawOutputByIDInDir will additionally
+	// try the in-memory registry and a CWD glob as last-ditch fallbacks, so
+	// a misconfigured handler can still serve files persisted before the
+	// reload.
+	return rtk.ReadRtkRawOutputByIDInDir(id, a.p.GetAppDir(), a.p.RawOutputDir())
 }
 func (a *rtkAccessor) Stats() rtk.MetricsSnapshot { return a.p.Stats() }
 func (a *rtkAccessor) Histogram(start, end, bucketSize int64) []rtk.RtkHistogramBucket {
@@ -3056,6 +3061,20 @@ func (s *BifrostHTTPServer) Start() error {
 			if s.wsPool != nil {
 				logger.Info("closing websocket connection pool...")
 				s.wsPool.Close()
+			}
+			// Stop RTK's background workers (currently just the raw-output
+			// janitor) so they do not outlive the HTTP server. The plugin's
+			// own Cleanup drains its per-request state store at the same
+			// time, so doing this before Config.Close keeps the shutdown
+			// trace compact.
+			s.rtkPluginMu.Lock()
+			rp := s.rtkPlugin
+			s.rtkPlugin = nil
+			s.rtkPluginMu.Unlock()
+			if rp != nil {
+				if err := rp.Cleanup(); err != nil {
+					logger.Warn("rtk: plugin cleanup returned error: %v", err)
+				}
 			}
 			// Cleanup Config and all its background components
 			if s.Config != nil {

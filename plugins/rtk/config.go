@@ -1,6 +1,9 @@
 package rtk
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+)
 
 // Config holds the configuration for the RTK (Rule-based Tool-output Kompression) plugin.
 // It controls which tool outputs are compressed and how aggressively.
@@ -68,6 +71,18 @@ type Config struct {
 	// RawOutputMaxBytes caps the persisted raw output size in UTF-8 bytes
 	// (default 1048576, minimum 1024).
 	RawOutputMaxBytes int `json:"raw_output_max_bytes"`
+
+	// RawOutputDir overrides the on-disk root for raw-output persistence.
+	// Empty string = use <appDir>/rtk/raw-output/. Must be an absolute path
+	// when set. The directory is created lazily on first persist call.
+	RawOutputDir string `json:"raw_output_dir,omitempty"`
+
+	// RawOutputTTLHours controls how long raw-output files live on disk before
+	// the janitor reaps them. 0 disables the janitor (files live forever).
+	// Default 24, range [0, 168] (max 7 days). Only enforced when janitor is
+	// running; the file mtime + filename `<unix-ts>-<id>.log` is the source of
+	// truth.
+	RawOutputTTLHours int `json:"raw_output_ttl_hours,omitempty"`
 
 	// Pipeline defines the ordered list of compression engines to run.
 	// When nil or empty, applyConfigDefaults fills it with [{id:"rtk"}].
@@ -145,6 +160,21 @@ func (c *Config) Validate() error {
 	}
 	if c.RawOutputMaxBytes > 0 && c.RawOutputMaxBytes < 1024 {
 		return fmt.Errorf("rtk: raw_output_max_bytes must be >= 1024 when set, got %d", c.RawOutputMaxBytes)
+	}
+	// RawOutputDir validation: when non-empty, must be an absolute path. This
+	// protects against operators pointing persistence at a relative working
+	// directory that moves under the plugin's feet (and against accidentally
+	// resolving against CWD inside a relocated container).
+	if c.RawOutputDir != "" && !filepath.IsAbs(c.RawOutputDir) {
+		return fmt.Errorf("rtk: raw_output_dir must be an absolute path, got %q", c.RawOutputDir)
+	}
+	// RawOutputTTLHours validation: 0 disables the janitor; positive values
+	// are clamped to a 7-day ceiling to prevent unbounded retention.
+	if c.RawOutputTTLHours < 0 {
+		return fmt.Errorf("rtk: raw_output_ttl_hours must be >= 0, got %d", c.RawOutputTTLHours)
+	}
+	if c.RawOutputTTLHours > 168 {
+		return fmt.Errorf("rtk: raw_output_ttl_hours must be <= 168 (7 days), got %d", c.RawOutputTTLHours)
 	}
 	// MinTokensToCompress validation: negative is invalid.
 	if c.MinTokensToCompress < 0 {
@@ -240,14 +270,26 @@ func applyConfigDefaults(c *Config) {
 	// enabled". We deliberately do NOT force the field here so an explicit
 	// custom_filters_enabled=false in config.json survives to the loader.
 
-	// RawOutputRetention defaults to "never".
+	// RawOutputRetention defaults to "always". The plain-bool zero value cannot
+// distinguish "explicit never" from "unset", so on first load we enable
+// persistence; an operator who wants the old behaviour can set the field
+// to "never" explicitly. The retention-default flip pairs with the LLM
+// raw-output recovery hint: with persistence always on, every truncated
+// tool result lands on disk and the LLM can recover the original via the
+// /api/context/rtk/raw-output/{id} endpoint.
 	if c.RawOutputRetention == "" {
-		c.RawOutputRetention = "never"
+		c.RawOutputRetention = "always"
 	}
 
 	// RawOutputMaxBytes defaults to 1048576.
 	if c.RawOutputMaxBytes == 0 {
 		c.RawOutputMaxBytes = 1048576
+	}
+
+	// RawOutputTTLHours defaults to 24. The janitor runs every 30 minutes
+	// regardless of TTL — a value of 0 simply means "do not reap".
+	if c.RawOutputTTLHours == 0 {
+		c.RawOutputTTLHours = 24
 	}
 
 	// Pipeline defaults: nil or empty → [{id:"rtk"}]

@@ -6,7 +6,9 @@ package rtk
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pin-gou/celer-route/core/schemas"
 )
@@ -16,13 +18,15 @@ const PluginName = "rtk"
 
 // Plugin implements schemas.LLMPlugin for rule-based tool output compression.
 type Plugin struct {
-	name       string
-	config     *Config
-	logger     schemas.Logger
-	stateStore sync.Map // map[string]*CompressionState, keyed by requestID
-	loader     *FilterLoader
-	appDir     string
-	metrics    *CompressionMetrics
+	name         string
+	config       *Config
+	logger       schemas.Logger
+	stateStore   sync.Map // map[string]*CompressionState, keyed by requestID
+	loader       *FilterLoader
+	appDir       string
+	metrics      *CompressionMetrics
+	rawOutputDir string               // resolved on-disk root for raw-output persistence
+	janitor      *RtkRawOutputJanitor // TTL reaper for persisted raw outputs (nil when TTL=0)
 }
 
 // Init creates a new RTK plugin instance with the given configuration.
@@ -41,19 +45,44 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, appDir str
 	// Apply defaults for zero-value fields so the compression pipeline has
 	// sane limits even when the config omits them.
 	applyConfigDefaults(config)
+	// Resolve the on-disk root for raw-output persistence. Dir takes
+	// priority; AppDir is the historical fallback so existing callers
+	// stay source-compatible.
+	rawDir := config.RawOutputDir
+	if rawDir == "" {
+		rawDir = filepath.Join(appDir, "rtk", "raw-output")
+	}
 	p := &Plugin{
-		name:       PluginName,
-		config:     config,
-		logger:     logger,
-		stateStore: sync.Map{},
-		loader:     NewFilterLoader(config),
-		appDir:     appDir,
-		metrics:    &CompressionMetrics{},
+		name:         PluginName,
+		config:       config,
+		logger:       logger,
+		stateStore:   sync.Map{},
+		loader:       NewFilterLoader(config),
+		appDir:       appDir,
+		metrics:      &CompressionMetrics{},
+		rawOutputDir: rawDir,
 	}
 	// Load custom filters — fail-open: warn on error, continue with builtins.
 	if err := p.loader.Load(appDir); err != nil {
 		if logger != nil {
 			logger.Warn("rtk", "filter loader warning: %v", err)
+		}
+	}
+
+	// Start the raw-output janitor if a non-zero TTL is configured. The
+	// janitor is a background goroutine that reaps files older than
+	// TTL on a 30-minute tick. It is intentionally separate from the
+	// compression hot path so a misbehaving filesystem cannot stall
+	// the pipeline.
+	//
+	// A nil ctx (some legacy test callers pass nil to Init) is treated as
+	// "no janitor wanted" — the goroutine has no cancellation source
+	// other than Stop(), and tests rarely call Cleanup(). Production
+	// paths always pass a real context.
+	if ctx != nil {
+		if ttl := time.Duration(config.RawOutputTTLHours) * time.Hour; ttl > 0 {
+			p.janitor = NewRtkRawOutputJanitor(rawDir, ttl, logger)
+			p.janitor.Start(ctx)
 		}
 	}
 
@@ -104,6 +133,18 @@ func (p *Plugin) GetAppDir() string {
 	return p.appDir
 }
 
+// RawOutputDir returns the on-disk root used for raw-output persistence.
+// It is the explicit config.RawOutputDir when set, otherwise the
+// derived <appDir>/rtk/raw-output. The handler uses this when serving
+// GET /api/context/rtk/raw-output/{id} so the read path matches where
+// the janitor is reaping.
+func (p *Plugin) RawOutputDir() string {
+	if p == nil {
+		return ""
+	}
+	return p.rawOutputDir
+}
+
 // Metrics returns the cross-request compression metrics so the admin HTTP
 // handler can surface a Monitoring panel. Returns nil for an uninitialised
 // plugin (e.g. during tests that bypass Init) — callers must guard.
@@ -144,8 +185,15 @@ func (p *Plugin) Loader() *FilterLoader {
 	return p.loader
 }
 
-// Cleanup performs plugin cleanup — drains the state store.
+// Cleanup performs plugin cleanup — drains the state store and stops
+// the raw-output janitor. The bifrost client may call this on graceful
+// shutdown; the reload path skips Cleanup because ReloadPlugin constructs
+// a fresh Plugin (the new instance gets its own janitor).
 func (p *Plugin) Cleanup() error {
+	if p.janitor != nil {
+		p.janitor.Stop()
+		p.janitor = nil
+	}
 	p.stateStore.Range(func(k, _ interface{}) bool {
 		p.stateStore.Delete(k)
 		return true

@@ -238,6 +238,11 @@ func TestPreviewCompressionRtkReturnsRatio(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
+	// Long enough that smartTruncate head/tail + the appended raw-output
+	// pointer hint still leave the result noticeably smaller than the input.
+	// Earlier revisions of this test used ~10 lines, which after the
+	// ~14-token hint made CompressionRatio <= 0 — the assertion is supposed
+	// to verify compression actually happened, not pin a specific threshold.
 	lines := []string{
 		"On branch main",
 		"Your branch is up to date with 'origin/main'.",
@@ -247,6 +252,29 @@ func TestPreviewCompressionRtkReturnsRatio(t *testing.T) {
 		"  modified:   bar.go",
 		"  modified:   baz.go",
 		"  modified:   qux.go",
+		"  modified:   src/api/handler.go",
+		"  modified:   src/api/middleware.go",
+		"  modified:   src/api/router.go",
+		"  modified:   src/api/server.go",
+		"  modified:   src/auth/oauth.go",
+		"  modified:   src/auth/jwt.go",
+		"  modified:   src/config/database.go",
+		"  modified:   src/config/redis.go",
+		"  modified:   src/utils/logger.go",
+		"  modified:   src/utils/metrics.go",
+		"  modified:   src/utils/tracing.go",
+		"  modified:   tests/integration/api_test.go",
+		"  modified:   tests/integration/auth_test.go",
+		"  modified:   tests/integration/db_test.go",
+		"  modified:   tests/unit/handler_test.go",
+		"  modified:   tests/unit/middleware_test.go",
+		"  modified:   tests/unit/router_test.go",
+		"  modified:   go.mod",
+		"  modified:   go.sum",
+		"  modified:   Dockerfile",
+		"  modified:   docker-compose.yml",
+		"  modified:   README.md",
+		"  modified:   CHANGELOG.md",
 		"",
 		"no changes added to commit",
 	}

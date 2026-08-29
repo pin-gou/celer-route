@@ -98,6 +98,8 @@ function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
 			disabled_filters: [],
 			raw_output_retention: "never",
 			raw_output_max_bytes: 1048576,
+			raw_output_dir: "",
+			raw_output_ttl_hours: 24,
 			pipeline: [{ id: "rtk" }],
 			min_tokens_to_compress: 0,
 			enable_renderers: true,
@@ -153,6 +155,70 @@ describe("RtkFragment — EnabledSwitch mirrors provider-cooldown UX", () => {
 				name: "rtk",
 				data: { enabled: false },
 			});
+		});
+	});
+});
+describe("RtkFragment — raw_output_dir / raw_output_ttl_hours fields", () => {
+	// The new fields live inside the "Debug / raw output" AccordionItem, which
+	// is collapsed by default. The helper expands it so getByTestId can find
+	// the inputs the same way the operator would after clicking the section.
+	function expandRawOutputSection() {
+		fireEvent.click(screen.getByTestId("rtk-section-raw-output-trigger"));
+	}
+
+	it("renders the new fields with default empty dir and TTL=24", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		expandRawOutputSection();
+
+		const dirInput = screen.getByTestId("rtk-field-raw-output-dir") as HTMLInputElement;
+		expect(dirInput.type).toBe("text");
+		expect(dirInput.value).toBe("");
+
+		const ttlInput = screen.getByTestId("rtk-field-raw-output-ttl-hours") as HTMLInputElement;
+		expect(ttlInput.type).toBe("number");
+		expect(ttlInput.value).toBe("24");
+	});
+
+	it("reflects the persisted values when the plugin config carries them", () => {
+		render(
+			<RtkFragment
+				plugin={makePlugin({
+					config: {
+						raw_output_dir: "/var/log/celer-route-raw",
+						raw_output_ttl_hours: 6,
+					} as any,
+				})}
+			/>,
+		);
+		expandRawOutputSection();
+
+		const dirInput = screen.getByTestId("rtk-field-raw-output-dir") as HTMLInputElement;
+		expect(dirInput.value).toBe("/var/log/celer-route-raw");
+
+		const ttlInput = screen.getByTestId("rtk-field-raw-output-ttl-hours") as HTMLInputElement;
+		expect(ttlInput.value).toBe("6");
+	});
+
+	it("persists both values on save (PUT /api/plugins/rtk)", async () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		expandRawOutputSection();
+
+		fireEvent.change(screen.getByTestId("rtk-field-raw-output-dir"), {
+			target: { value: "/srv/celer-route/raw" },
+		});
+		fireEvent.change(screen.getByTestId("rtk-field-raw-output-ttl-hours"), {
+			target: { value: "12" },
+		});
+		fireEvent.click(screen.getByTestId("rtk-save-btn"));
+
+		await waitFor(() => {
+			const call = mocks.updatePlugin.mock.calls.find(
+				(c: any) => c[0]?.name === "rtk" && (c[0]?.data?.config as any)?.raw_output_dir === "/srv/celer-route/raw",
+			);
+			expect(call).toBeDefined();
+			const cfg = (call as any)[0].data.config as any;
+			expect(cfg.raw_output_dir).toBe("/srv/celer-route/raw");
+			expect(cfg.raw_output_ttl_hours).toBe(12);
 		});
 	});
 });

@@ -1,0 +1,171 @@
+package rtk
+
+// Tests for the LLM-facing recovery surface:
+//   - TestRecoveryHint_AlwaysPrepended            (V-rtk-8)
+//   - TestRecoveryHint_Idempotent                (V-rtk-9)
+//   - TestRecoveryHint_ContainsRecoveryEndpoint  (V-rtk-10)
+//   - TestRecoveryHint_OnResponsesPath           (V-rtk-11)
+//   - TestRecoveryHint_NotInjectedWhenDisabled   (V-rtk-12)
+//   - TestRawOutputHint_AppendedOnTruncate       (V-rtk-13)
+//   - TestRawOutputHint_NotAppendedWhenNoPointer (V-rtk-14)
+//
+// These complement the existing compression tests; they specifically
+// exercise the system-message prepend (cache-friendly literal constant)
+// and the in-result pointer id format.
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/pin-gou/celer-route/core/schemas"
+)
+
+const chatCompletion = schemas.ChatCompletionRequest
+
+func makeChatRequest() *schemas.BifrostRequest {
+	return &schemas.BifrostRequest{
+		RequestType: chatCompletion,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{Role: schemas.ChatMessageRoleUser, Content: chatContent("hi")},
+			},
+		},
+	}
+}
+
+func newBareCtx() *schemas.BifrostContext {
+	return schemas.NewBifrostContext(context.Background(), time.Time{})
+}
+
+func chatContent(text string) *schemas.ChatMessageContent {
+	return &schemas.ChatMessageContent{ContentStr: &text}
+}
+
+func TestRecoveryHint_AlwaysPrepended(t *testing.T) {
+	ctx := newBareCtx()
+	req := makeChatRequest()
+
+	injectRtkRecoveryHint(ctx, req)
+
+	if got := req.ChatRequest.Input[0].Role; got != schemas.ChatMessageRoleSystem {
+		t.Fatalf("Input[0].Role = %q, want system", got)
+	}
+	if got := req.ChatRequest.Input[0].Content.ContentStr; got == nil {
+		t.Fatal("system hint content is nil")
+	} else if *got != rtkRecoveryHintText {
+		t.Errorf("system hint text mismatch: got %d bytes, want %d bytes", len(*got), len(rtkRecoveryHintText))
+	}
+}
+
+func TestRecoveryHint_Idempotent(t *testing.T) {
+	ctx := newBareCtx()
+	req := makeChatRequest()
+
+	injectRtkRecoveryHint(ctx, req)
+	injectRtkRecoveryHint(ctx, req)
+	injectRtkRecoveryHint(ctx, req)
+
+	// Three prepended calls with the same ctx must result in exactly one
+	// hint at the head of Input.
+	hintCount := 0
+	for _, m := range req.ChatRequest.Input {
+		if m.Role == schemas.ChatMessageRoleSystem && m.Content != nil && m.Content.ContentStr != nil && *m.Content.ContentStr == rtkRecoveryHintText {
+			hintCount++
+		}
+	}
+	if hintCount != 1 {
+		t.Errorf("expected 1 system hint after 3 inject calls, got %d", hintCount)
+	}
+}
+
+func TestRecoveryHint_ContainsRecoveryEndpoint(t *testing.T) {
+	ctx := newBareCtx()
+	req := makeChatRequest()
+	injectRtkRecoveryHint(ctx, req)
+
+	hint := *req.ChatRequest.Input[0].Content.ContentStr
+	// Three signals the LLM needs to act on the marker:
+	//   - the marker format itself
+	//   - the URL it should call
+	//   - the 24-hour retention cue
+	//   - the auth-header cue (re-use the same bearer)
+	for _, want := range []string{
+		"[rtk:raw_output_id=<24hex>]",
+		"/api/context/rtk/raw-output/",
+		"24h",
+		"Authorization header",
+	} {
+		if !strings.Contains(hint, want) {
+			t.Errorf("hint missing required phrase %q", want)
+		}
+	}
+}
+
+func TestRecoveryHint_OnResponsesPath(t *testing.T) {
+	ctx := newBareCtx()
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ResponsesRequest,
+		ResponsesRequest: &schemas.BifrostResponsesRequest{
+			Input: []schemas.ResponsesMessage{
+				{Type: ptrResponsesMessageType(schemas.ResponsesMessageTypeMessage),
+					Role:    ptrResponsesMessageRole(schemas.ResponsesInputMessageRoleUser),
+					Content: &schemas.ResponsesMessageContent{ContentStr: ptrResponsesString("hi")}},
+			},
+		},
+	}
+	injectRtkRecoveryHint(ctx, req)
+
+	if got := *req.ResponsesRequest.Input[0].Role; got != schemas.ResponsesInputMessageRoleSystem {
+		t.Errorf("Input[0].Role = %q, want system", got)
+	}
+	if got := req.ResponsesRequest.Input[0].Content; got == nil || got.ContentStr == nil || *got.ContentStr != rtkRecoveryHintText {
+		t.Errorf("system hint not prepended to Responses input")
+	}
+}
+
+// ptrResponsesString is a local helper (the rtk package already exports
+// ptrResponsesMessageType / ptrResponsesMessageRole, but not a string
+// ptr).
+func ptrResponsesString(s string) *string { return &s }
+
+func TestRawOutputHint_AppendedOnTruncate(t *testing.T) {
+	// Simulate the post-pipeline state: truncated + a raw-output pointer.
+	stats := &ProcessStats{
+		Truncated: true,
+		RawOutputPointers: []*RtkRawOutputPointer{
+			{ID: "0123456789abcdef01234567", Path: "/tmp/x.log", Bytes: 42, SHA256: "deadbeef", Redacted: false},
+		},
+	}
+	got := appendRawOutputHint("truncated output...", stats)
+	if !strings.Contains(got, "[rtk:raw_output_id=0123456789abcdef01234567; ttl=24h; redacted=true]") {
+		t.Errorf("expected pointer hint in result, got %q", got)
+	}
+}
+
+func TestRawOutputHint_NotAppendedWhenNotTruncated(t *testing.T) {
+	stats := &ProcessStats{
+		Truncated: false,
+		RawOutputPointers: []*RtkRawOutputPointer{
+			{ID: "0123456789abcdef01234567", Path: "/tmp/x.log", Bytes: 42, SHA256: "deadbeef", Redacted: false},
+		},
+	}
+	original := "no truncation happened"
+	got := appendRawOutputHint(original, stats)
+	if got != original {
+		t.Errorf("hint must not be appended when not truncated; got %q", got)
+	}
+}
+
+func TestRawOutputHint_NotAppendedWhenNoPointer(t *testing.T) {
+	// Edge case: text was truncated but retention is "never" so no
+	// pointer is on disk. The hint would be useless (nothing to fetch),
+	// so we must skip it to avoid dangling references.
+	stats := &ProcessStats{Truncated: true}
+	original := "truncated but no retention"
+	got := appendRawOutputHint(original, stats)
+	if got != original {
+		t.Errorf("hint must not be appended when no pointer exists; got %q", got)
+	}
+}
