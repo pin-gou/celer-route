@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
+	bifrost "github.com/pin-gou/celer-route/core"
 	"github.com/pin-gou/celer-route/core/network"
 	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/pin-gou/celer-route/transports/celer-route-http/lib"
@@ -85,6 +86,17 @@ type bundleProviderEntry struct {
 	ApplySteps []string `json:"apply_steps"`
 	IsKeyless  bool     `json:"is_keyless"`
 	Notes      string   `json:"notes"`
+	// BaseProvider and BaseURL describe the custom-provider fallback for
+	// providers that are not built into this gateway build: the UI creates
+	// them with custom_provider_config.base_provider_type = BaseProvider and
+	// network_config.base_url = BaseURL. BaseProvider must be one of
+	// bifrost.SupportedBaseProviders for the fallback to be honored.
+	BaseProvider string `json:"base_provider,omitempty"`
+	BaseURL      string `json:"base_url,omitempty"`
+	// Supported is server-annotated (never read from upstream): whether this
+	// gateway build can configure the provider, either as a built-in provider
+	// or through a valid custom-provider fallback.
+	Supported bool `json:"supported"`
 }
 
 // bundleCatalogResponse is the wire shape of GET /api/catalog/bundles.
@@ -417,9 +429,43 @@ func (h *CatalogHandler) fetchAndStore(ctx context.Context, lang string) (err er
 		snap.Bundles = snap.Bundles[:maxBundles]
 	}
 
+	// Annotate each provider entry with whether this gateway build can
+	// configure it. This is the single source of truth for version drift:
+	// the remote catalog (GitHub Pages) is always "latest", while the running
+	// binary may be older and lack some built-in providers.
+	annotateProviderSupport(&snap)
+
 	etag := catalogDeriveETag(body)
 	h.catalog.store(lang, &snap, etag)
 	return nil
+}
+
+// annotateProviderSupport marks each provider entry's Supported flag and
+// sanitizes its custom-provider fallback fields. Built-in providers are always
+// supported (their fallback fields are cleared — the built-in path wins).
+// Unknown providers are supported only when the catalog supplies a valid
+// fallback: a supported base protocol plus an externally-valid base URL.
+// Everything else is flagged unsupported with its fallback fields cleared so
+// clients cannot submit a broken custom-provider payload.
+func annotateProviderSupport(snap *bundleSnapshot) {
+	for _, b := range snap.Bundles {
+		for _, p := range b.Providers {
+			if bifrost.IsStandardProvider(schemas.ModelProvider(p.Provider)) {
+				p.Supported = true
+				p.BaseProvider = ""
+				p.BaseURL = ""
+				continue
+			}
+			if bifrost.IsSupportedBaseProvider(schemas.ModelProvider(p.BaseProvider)) &&
+				bifrost.ValidateExternalURL(p.BaseURL, false) == nil {
+				p.Supported = true
+				continue
+			}
+			p.Supported = false
+			p.BaseProvider = ""
+			p.BaseURL = ""
+		}
+	}
 }
 
 // catalogDeriveETag derives a quoted HTTP ETag from the raw snapshot bytes.

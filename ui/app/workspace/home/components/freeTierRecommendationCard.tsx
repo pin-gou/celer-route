@@ -56,8 +56,10 @@ export default function FreeTierRecommendationCard() {
 
 	// Providers already configured on this instance — their bundle rows get a
 	// "configured" marker, become direct links to the provider detail page and
-	// are sorted to the end of each bundle.
-	const configuredProviders = new Set((providers ?? []).map((p) => p.name.toLowerCase()));
+	// are sorted to the end of each bundle. The runtime object is passed down
+	// so configured rows can show the same health dot as the topology card.
+	const providersByName = new Map((providers ?? []).map((p) => [p.name.toLowerCase(), p]));
+	const configuredProviders = new Set(providersByName.keys());
 
 	// Single shared dialog so a click in any bundle opens it at the top level.
 	const [dialogState, setDialogState] = useState<{ open: boolean; bundleId: string | null; provider: BundleProviderEntry | null }>({
@@ -116,6 +118,7 @@ export default function FreeTierRecommendationCard() {
 										bundleId={bundle.id}
 										provider={p}
 										configured={configuredProviders.has(p.provider.toLowerCase())}
+										runtime={providersByName.get(p.provider.toLowerCase())}
 										onConfigure={(provider) => openDialog(bundle.id, provider)}
 									/>
 								))}

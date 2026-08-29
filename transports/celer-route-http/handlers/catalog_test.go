@@ -37,12 +37,15 @@ type catalogBundlesResponse struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
 		Providers   []struct {
-			Provider   string   `json:"provider"`
-			Models     []string `json:"models"`
-			ApplyURL   string   `json:"apply_url"`
-			ApplySteps []string `json:"apply_steps"`
-			IsKeyless  bool     `json:"is_keyless"`
-			Notes      string   `json:"notes"`
+			Provider     string   `json:"provider"`
+			Models       []string `json:"models"`
+			ApplyURL     string   `json:"apply_url"`
+			ApplySteps   []string `json:"apply_steps"`
+			IsKeyless    bool     `json:"is_keyless"`
+			Notes        string   `json:"notes"`
+			BaseProvider string   `json:"base_provider"`
+			BaseURL      string   `json:"base_url"`
+			Supported    bool     `json:"supported"`
 		} `json:"providers"`
 	} `json:"bundles"`
 	UpdatedAt *string `json:"updated_at"`
@@ -302,5 +305,68 @@ func TestCatalogBundlesETagNegotiation(t *testing.T) {
 		t.Fatalf("304 response must still carry the ETag header, want %q", etag)
 	} else if got != etag {
 		t.Fatalf("304 ETag = %q, want %q (must match the client's If-None-Match)", got, etag)
+	}
+}
+
+// TestCatalogBundlesSupportedAnnotation covers the server-side "supported"
+// annotation that protects against catalog/binary version drift: the remote
+// catalog is always "latest" while the running binary may lack some built-in
+// providers. Three shapes:
+//   - built-in provider            → supported=true, fallback fields cleared
+//   - unknown + valid fallback     → supported=true (custom-provider route),
+//     base_provider/base_url preserved
+//   - unknown + missing/invalid    → supported=false, fallback fields cleared
+//     so clients cannot submit a broken custom-provider payload
+func TestCatalogBundlesSupportedAnnotation(t *testing.T) {
+	SetLogger(&mockLogger{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/bundles/en.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"version":"2026-08-29","updated_at":"2026-08-29T08:00:00Z","bundles":[
+			{"id":"coding","title":"Coding","description":"d","providers":[
+				{"provider":"openai","models":["gpt-4o-mini"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"openai","base_url":"https://ignored.example.com/v1"},
+				{"provider":"together","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"openai","base_url":"https://api.together.xyz/v1"},
+				{"provider":"acme","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":""},
+				{"provider":"badbase","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"fireworks","base_url":"https://api.bad.example.com/v1"},
+				{"provider":"badurl","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"openai","base_url":"ftp://api.bad.example.com"}]}
+		]}`))
+	})
+	h, _ := newCatalogHandlerForTest(t, mux)
+
+	ctx := runCatalogBundlesRequest(t, h, "lang=en", "")
+	if status := ctx.Response.StatusCode(); status != fasthttp.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", status, ctx.Response.Body())
+	}
+
+	var resp catalogBundlesResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("decode bundles response: %v (body=%s)", err, ctx.Response.Body())
+	}
+	provs := resp.Bundles[0].Providers
+	if len(provs) != 5 {
+		t.Fatalf("providers len = %d, want 5", len(provs))
+	}
+
+	// Built-in: supported, and any upstream fallback fields are cleared —
+	// the built-in path always wins.
+	if !provs[0].Supported || provs[0].BaseProvider != "" || provs[0].BaseURL != "" {
+		t.Fatalf("built-in openai = %+v, want supported=true with cleared fallback fields", provs[0])
+	}
+	// Unknown + valid fallback: supported via custom-provider route, fields kept.
+	if !provs[1].Supported || provs[1].BaseProvider != "openai" || provs[1].BaseURL != "https://api.together.xyz/v1" {
+		t.Fatalf("together = %+v, want supported=true with fallback preserved", provs[1])
+	}
+	// Unknown, no fallback: unsupported, fields stay empty.
+	if provs[2].Supported {
+		t.Fatalf("acme = %+v, want supported=false (no fallback)", provs[2])
+	}
+	// Unknown + unsupported base protocol (fireworks is not a supported base
+	// provider in core): unsupported, fallback cleared.
+	if provs[3].Supported || provs[3].BaseProvider != "" || provs[3].BaseURL != "" {
+		t.Fatalf("badbase = %+v, want supported=false with cleared fallback fields", provs[3])
+	}
+	// Unknown + invalid base URL scheme: unsupported, fallback cleared.
+	if provs[4].Supported || provs[4].BaseURL != "" {
+		t.Fatalf("badurl = %+v, want supported=false with cleared fallback fields", provs[4])
 	}
 }

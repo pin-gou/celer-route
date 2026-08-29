@@ -144,6 +144,7 @@ describe("FreeTierRecommendationCard", () => {
 		expect(providerRows[1].textContent, "已配置的 opencode 应排在后").toContain("opencode");
 		expect(providerRows[1].getAttribute("href"), "已配置行应链接到提供商详情页").toBe("/workspace/providers/opencode");
 		expect(screen.getByTestId("home-free-tier-configured-opencode"), "已配置 provider 应带'已配置'标注").toBeTruthy();
+		expect(screen.getByTestId("home-free-tier-status-opencode"), "已配置 provider 应显示健康状态点").toBeTruthy();
 		expect(screen.queryByTestId("home-free-tier-configure-opencode"), "已配置 provider 不应显示一键配置按钮").toBeNull();
 		expect(screen.queryByTestId("home-free-tier-configure-openai"), "未配置 provider 应保留一键配置按钮").toBeTruthy();
 	});
@@ -182,5 +183,73 @@ describe("FreeTierRecommendationCard", () => {
 
 		fireEvent.click(screen.getByTestId("home-free-tier-retry"));
 		expect(retry, "点击重试应触发 refetch").toHaveBeenCalledTimes(1);
+	});
+
+	it("should render unsupported providers greyed out with a hint and no configure button", () => {
+		mockGetBundles.mockReturnValue({
+			data: {
+				bundles: [
+					{
+						...bundleCoding,
+						providers: [
+							{
+								provider: "acme",
+								models: ["acme-1"],
+								apply_url: "https://acme.ai",
+								apply_steps: [],
+								is_keyless: false,
+								notes: "",
+								supported: false,
+							},
+						],
+					},
+				],
+				updated_at: null,
+				version: null,
+			},
+			isSuccess: true,
+			refetch: vi.fn(),
+		});
+
+		render(<FreeTierRecommendationCard />);
+
+		expect(screen.getByTestId("home-free-tier-provider-coding-acme"), "不支持的卡片仍应保留展示").toBeTruthy();
+		expect(screen.getByTestId("home-free-tier-unsupported-acme"), "应渲染当前版本不支持提示").toBeTruthy();
+		expect(screen.queryByTestId("home-free-tier-configure-acme"), "不应提供一键配置入口").toBeNull();
+		expect(screen.getByTestId("home-free-tier-apply-acme"), "去申请外链应保留").toBeTruthy();
+	});
+
+	it("should show a protocol badge and keep the configure button for custom-fallback providers", () => {
+		mockGetBundles.mockReturnValue({
+			data: {
+				bundles: [
+					{
+						...bundleCoding,
+						providers: [
+							{
+								provider: "together",
+								models: ["m1"],
+								apply_url: "",
+								apply_steps: [],
+								is_keyless: false,
+								notes: "",
+								base_provider: "openai",
+								base_url: "https://api.together.xyz/v1",
+								supported: true,
+							},
+						],
+					},
+				],
+				updated_at: null,
+				version: null,
+			},
+			isSuccess: true,
+			refetch: vi.fn(),
+		});
+
+		render(<FreeTierRecommendationCard />);
+
+		expect(screen.getByTestId("home-free-tier-protocol-together"), "应渲染基于 openai 协议徽章").toBeTruthy();
+		expect(screen.getByTestId("home-free-tier-configure-together"), "自定义兜底提供商仍应可一键配置").toBeTruthy();
 	});
 });

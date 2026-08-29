@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import FreeTierOneKeyConfigDialog from "./freeTierOneKeyConfigDialog";
+import { DefaultNetworkConfig } from "@/lib/constants/config";
 import { useCreateProviderMutation, useCreateProviderKeyMutation, catalogApi } from "@/lib/store/apis/catalogApi";
 
 vi.mock("react-i18next", () => ({
@@ -59,7 +60,33 @@ const opencodeProvider = {
 	apply_url: "",
 	apply_steps: [],
 	is_keyless: true,
-	notes: "免 Key, 直接添加",
+	notes: "免 Key，直接添加",
+};
+
+// 非内建提供商（服务端标注 supported + custom-provider 兜底字段）
+const togetherProvider = {
+	provider: "together",
+	models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"],
+	apply_url: "https://api.together.ai/",
+	apply_steps: ["注册账号"],
+	is_keyless: false,
+	notes: "开源模型免费额度",
+	base_provider: "openai",
+	base_url: "https://api.together.xyz/v1",
+	supported: true,
+};
+
+// 非内建 + keyless（is_key_less 走 custom_provider_config）
+const pollinationsProvider = {
+	provider: "pollinations",
+	models: ["openai"],
+	apply_url: "",
+	apply_steps: [],
+	is_keyless: true,
+	notes: "免 Key，直接添加",
+	base_provider: "openai",
+	base_url: "https://text.pollinations.ai/openai",
+	supported: true,
 };
 
 // RTK Query mutation trigger mocks. The component awaits `trigger(args).unwrap()`,
@@ -142,5 +169,49 @@ describe("FreeTierOneKeyConfigDialog", () => {
 		await waitFor(() => expect(createProvider).toHaveBeenCalledWith({ provider: "opencode" }));
 		expect(createKey, "keyless provider 不应调用 createKey").not.toHaveBeenCalled();
 		expect(mockToastSuccess, "keyless 成功后也应弹成功 toast").toHaveBeenCalledWith("freeTier.configSuccess");
+	});
+
+	it("should create custom-fallback providers with custom_provider_config + network_config", async () => {
+		const createProvider = resolveTrigger<ProviderTrigger>({ name: "together" });
+		const createKey = resolveTrigger<ProviderKeyTrigger>({ provider: "together", key_id: "k-3" });
+		mockCreateProvider.mockReturnValue([createProvider, resolvedState]);
+		mockCreateKey.mockReturnValue([createKey, keyResolvedState]);
+
+		render(<FreeTierOneKeyConfigDialog open provider={togetherProvider} onOpenChange={() => {}} />);
+
+		expect(screen.getByTestId("home-free-tier-custom-hint"), "自定义提供商提示应渲染").toBeTruthy();
+
+		fireEvent.change(screen.getByTestId("home-free-tier-key-input"), { target: { value: "sk-together" } });
+		fireEvent.click(screen.getByTestId("home-free-tier-submit"));
+
+		await waitFor(() =>
+			expect(createProvider).toHaveBeenCalledWith({
+				provider: "together",
+				custom_provider_config: { base_provider_type: "openai", is_key_less: false },
+				network_config: { ...DefaultNetworkConfig, base_url: "https://api.together.xyz/v1" },
+			}),
+		);
+		await waitFor(() => expect(createKey).toHaveBeenCalledWith({ provider: "together", key: "sk-together" }));
+		expect(mockToastSuccess, "自定义提供商成功后应弹成功 toast").toHaveBeenCalledWith("freeTier.configSuccess");
+	});
+
+	it("should skip key creation for keyless custom providers (is_key_less=true)", async () => {
+		const createProvider = resolveTrigger<ProviderTrigger>({ name: "pollinations" });
+		const createKey = vi.fn();
+		mockCreateProvider.mockReturnValue([createProvider, resolvedState]);
+		mockCreateKey.mockReturnValue([createKey, keyResolvedState]);
+
+		render(<FreeTierOneKeyConfigDialog open provider={pollinationsProvider} onOpenChange={() => {}} />);
+
+		fireEvent.click(screen.getByTestId("home-free-tier-submit"));
+
+		await waitFor(() =>
+			expect(createProvider).toHaveBeenCalledWith({
+				provider: "pollinations",
+				custom_provider_config: { base_provider_type: "openai", is_key_less: true },
+				network_config: { ...DefaultNetworkConfig, base_url: "https://text.pollinations.ai/openai" },
+			}),
+		);
+		expect(createKey, "keyless 自定义提供商不应调用 createKey").not.toHaveBeenCalled();
 	});
 });

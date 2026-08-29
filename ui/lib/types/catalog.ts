@@ -7,6 +7,11 @@
  * A single provider inside a bundle. `apply_url` is an external sign-up page
  * (opened in a new tab); `is_keyless` marks providers that need no API key
  * (the configure dialog skips the key step for them).
+ *
+ * `base_provider` / `base_url` describe the custom-provider fallback for
+ * providers not built into this gateway build (server clears them when not
+ * usable); `supported` is server-annotated — whether this gateway build can
+ * configure the provider at all.
  */
 export interface BundleProviderEntry {
 	provider: string;
@@ -15,6 +20,9 @@ export interface BundleProviderEntry {
 	apply_steps?: string[];
 	is_keyless?: boolean;
 	notes?: string;
+	base_provider?: string;
+	base_url?: string;
+	supported?: boolean;
 }
 
 /**
