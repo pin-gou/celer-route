@@ -91,10 +91,10 @@
      track=transports (常驻, 无 on_conditions)
 -->
 
-- [ ] 8.1 review agent 读 design.md + tasks.md
-- [ ] 8.2 review agent 对 git diff 做静态审查
-- [ ] 8.3 review agent 输出 review_score + p0_failures
-- [ ] 8.4 score < pass_threshold → escalate；≥ pass_threshold → completed
+- [x] 8.1 review agent 读 design.md + tasks.md
+- [x] 8.2 review agent 对 git diff 做静态审查
+- [x] 8.3 review agent 输出 review_score + p0_failures
+- [x] 8.4 score < pass_threshold → escalate；≥ pass_threshold → completed
 
 > **本次变更 review 关注点**：
 > - schema 字段描述是否清晰、是否与 design.md 中描述一致
