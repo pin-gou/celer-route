@@ -1,0 +1,35 @@
+{
+  "name": "composer-install",
+  "id": "composer-install",
+  "label": "Composer Install",
+  "description": "Compact `composer install` output. Strips dependency-resolution chatter; preserves install/update/remove summary or no-op message.",
+  "command": "composer",
+  "category": "package",
+  "commandPatterns": ["^composer\\s+install\\b"],
+  "matchOutput": [
+    {
+      "pattern": "Nothing to install, update or remove",
+      "message": "[composer: ok (up to date)]",
+      "unless": "(?i)error|warning:"
+    }
+  ],
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^Loading composer repositories with package information"},
+    {"type": "strip", "pattern": "^Updating dependencies"},
+    {"type": "strip", "pattern": "^Lock file operations:"},
+    {"type": "strip", "pattern": "^Installing dependencies"},
+    {"type": "strip", "pattern": "^  - "},
+    {"type": "strip", "pattern": "^Reading \\S+ from cache"}
+  ],
+  "head": 10,
+  "tail": 10,
+  "priorityPatterns": ["^Error:", "error:", "Lock file operations", "Package operations"],
+  "tests": [
+    {
+      "name": "nothing-to-do-short-circuits",
+      "input": "Loading composer repositories with package information\nUpdating dependencies\nLock file operations: 0 installs, 0 updates, 0 removals\nNothing to install, update or remove\nGenerating autoload files\n",
+      "expected": "[composer: ok (up to date)]\n"
+    }
+  ]
+}

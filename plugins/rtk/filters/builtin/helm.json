@@ -1,8 +1,24 @@
 {
   "name": "helm",
+  "id": "helm",
+  "label": "Helm",
+  "description": "Compact `helm` output. Strips blank lines and Helm W#### deprecation warnings; preserves resource state changes.",
   "command": "helm",
-  "head": 5,
-  "tail": 3,
-  "priority_patterns": ["^Error:", "^error:", "failed", "already exists", "not found", "deployed", "installed", "upgraded"],
-  "tests": [{"name":"preserves-release-table","input":"NAME  REVISION  UPDATED  STATUS  CHART  APP VERSION\nweb   1         ...      deployed  nginx 4.0","expected":"NAME  REVISION  UPDATED  STATUS  CHART  APP VERSION\nweb   1         ...      deployed  nginx 4.0"}]
+  "category": "infra",
+  "commandPatterns": ["^helm\\b"],
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^W\\d{4}"}
+  ],
+  "truncateLineAt": 120,
+  "head": 15,
+  "tail": 10,
+  "priorityPatterns": ["^Error:", "^error:", "error:", "failed", "FAILED", "not found", "already exists", "STATUS", "RELEASED", "DEPLOYED", "UPGRADE FAILED", "installed", "upgraded"],
+  "tests": [
+    {
+      "name": "strips-deprecation-warnings",
+      "input": "W1011 12:34:56.789012 1 warnings.go:70] policy/v1beta1 PodSecurityPolicy is deprecated\nNAME: my-release\nLAST DEPLOYED: Sat Jan 01 12:00:00 2026\nNAMESPACE: default\nSTATUS: deployed\n",
+      "expected": "NAME: my-release\nLAST DEPLOYED: Sat Jan 01 12:00:00 2026\nNAMESPACE: default\nSTATUS: deployed\n"
+    }
+  ]
 }
