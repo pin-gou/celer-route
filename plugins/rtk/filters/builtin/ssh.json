@@ -1,8 +1,20 @@
 {
   "name": "ssh",
   "command": "ssh",
-  "head": 5,
-  "tail": 3,
+  "description": "Compact ssh output — strip connection banners and debug lines, keep command output.",
+  "stripAnsi": true,
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^Warning: Permanently added"},
+    {"type": "strip", "pattern": "^Connection to .+ closed"},
+    {"type": "strip", "pattern": "^Authenticated to"},
+    {"type": "strip", "pattern": "^debug1:"},
+    {"type": "strip", "pattern": "^OpenSSH_"},
+    {"type": "strip", "pattern": "^Pseudo-terminal"}
+  ],
+  "truncateLineAt": 120,
+  "head": 0,
+  "tail": 0,
   "priority_patterns": ["^ssh:", "Permission denied", "Connection refused", "Connection timed out", "Host key verification failed", "No route to host", "Connection reset"],
   "tests": [{"name":"preserves-login-banner","input":"Welcome to Ubuntu 22.04 LTS\nLast login: Sun Jan 1 00:00:00 2024 from 10.0.0.1","expected":"Welcome to Ubuntu 22.04 LTS\nLast login: Sun Jan 1 00:00:00 2024 from 10.0.0.1"}]
 }

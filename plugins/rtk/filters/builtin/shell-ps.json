@@ -1,10 +1,12 @@
 {
   "name": "shell-ps",
   "command": "ps",
+  "description": "Compact ps output — strip blank lines, truncate wide COMMAND columns, limit rows.",
   "rules": [
     {"type": "strip", "pattern": "^\\s*$"}
   ],
-  "head": 50,
+  "truncateLineAt": 120,
+  "head": 30,
   "tail": 0,
   "priority_patterns": [],
   "tests": [{"name":"passthrough","input":"  PID TTY          TIME CMD\n    1 ?        00:00:01 init","expected":"  PID TTY          TIME CMD\n    1 ?        00:00:01 init"}]

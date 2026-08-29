@@ -1,12 +1,40 @@
 {
   "name": "gradle",
+  "id": "gradle",
+  "label": "Gradle",
+  "description": "Compact `gradle`/`gradlew` output. Strips UP-TO-DATE/NO-SOURCE/FROM-CACHE tasks; preserves task results and BUILD summary.",
   "command": "gradle",
+  "category": "build",
+  "commandPatterns": ["^(gradle|gradlew|\\./)gradlew?\\b"],
   "rules": [
-    {"type": "strip", "pattern": "^> Task :"},
-    {"type": "strip", "pattern": "^\\s*$"}
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^> Configuring project"},
+    {"type": "strip", "pattern": "^> Resolving dependencies"},
+    {"type": "strip", "pattern": "^> Transform "},
+    {"type": "strip", "pattern": "^Download(ing)?\\s+http"},
+    {"type": "strip", "pattern": "^\\s*<-+>\\s*$"},
+    {"type": "strip", "pattern": "^> Task :.*UP-TO-DATE$"},
+    {"type": "strip", "pattern": "^> Task :.*NO-SOURCE$"},
+    {"type": "strip", "pattern": "^> Task :.*FROM-CACHE$"},
+    {"type": "strip", "pattern": "^Starting a Gradle Daemon"},
+    {"type": "strip", "pattern": "^Daemon will be stopped"}
   ],
-  "head": 5,
-  "tail": 3,
-  "priority_patterns": ["BUILD FAILED", "error:", "Error:", "FAILURE", "BUILD SUCCESSFUL", "FAILED", "Could not", "unresolved dependency"],
-  "tests": [{"name":"strips-task-and-blank-lines","input":"\u003e Task :compileJava\n\u003e Task :test\n\nBUILD SUCCESSFUL in 3s","expected":"BUILD SUCCESSFUL in 3s"}]
+  "truncateLineAt": 150,
+  "head": 20,
+  "tail": 15,
+  "matchOutput": [
+    {
+      "pattern": "BUILD SUCCESSFUL in \\S+",
+      "message": "[gradle: build ok]",
+      "unless": "(?i)error|warning:"
+    }
+  ],
+  "priorityPatterns": ["^> Task :", "BUILD SUCCESSFUL", "BUILD FAILED", "FAILURE", "FAILED", "tests completed", "error:", "Error:", "Could not", "unresolved dependency"],
+  "tests": [
+    {
+      "name": "strips-up-to-date-keeps-build-result",
+      "input": "> Configuring project :app\n> Task :app:compileJava UP-TO-DATE\n> Task :app:compileKotlin UP-TO-DATE\n> Task :app:test\n\n3 tests completed, 1 failed\n\nBUILD FAILED in 12s\n",
+      "expected": "> Task :app:test\n3 tests completed, 1 failed\nBUILD FAILED in 12s\n"
+    }
+  ]
 }

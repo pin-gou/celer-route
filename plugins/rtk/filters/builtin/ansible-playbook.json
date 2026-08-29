@@ -1,0 +1,24 @@
+{
+  "name": "ansible-playbook",
+  "id": "ansible-playbook",
+  "label": "Ansible Playbook",
+  "description": "Compact `ansible-playbook` output. Strips ok:/skipping: lines; preserves changed:/failed: and PLAY RECAP summary.",
+  "command": "ansible-playbook",
+  "category": "config_mgmt",
+  "commandPatterns": ["^ansible-playbook\\b"],
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^ok: \\["},
+    {"type": "strip", "pattern": "^skipping: \\["}
+  ],
+  "head": 10,
+  "tail": 10,
+  "priorityPatterns": ["^failed:", "^fatal:", "PLAY RECAP", "TASK \\["],
+  "tests": [
+    {
+      "name": "strips-ok-and-skipping-keeps-changed-and-failures",
+      "input": "PLAY [all] *********************************************************************\n\nTASK [Gathering Facts] *********************************************************\nok: [web01]\nok: [web02]\n\nTASK [Install nginx] ***********************************************************\nchanged: [web01]\nskipping: [web02]\n\nPLAY RECAP *********************************************************************\nweb01                      : ok=2    changed=1    unreachable=0    failed=0\nweb02                      : ok=1    changed=0    unreachable=0    failed=0\n",
+      "expected": "PLAY [all] *********************************************************************\nTASK [Gathering Facts] *********************************************************\nTASK [Install nginx] ***********************************************************\nchanged: [web01]\nPLAY RECAP *********************************************************************\nweb01                      : ok=2    changed=1    unreachable=0    failed=0\nweb02                      : ok=1    changed=0    unreachable=0    failed=0\n"
+    }
+  ]
+}

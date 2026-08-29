@@ -1,9 +1,13 @@
 {
   "name": "gcloud",
   "command": "gcloud",
+  "description": "Compact gcloud output — strip blank lines and property-update confirmations, cap wide tables.",
+  "stripAnsi": true,
   "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
     {"type": "strip", "pattern": "^Updated property \\[\\S+\\]\\.$"}
   ],
+  "truncateLineAt": 120,
   "head": 20,
   "tail": 5,
   "priority_patterns": ["ERROR", "FAILED", "error"],

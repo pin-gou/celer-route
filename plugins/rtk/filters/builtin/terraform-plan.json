@@ -1,0 +1,33 @@
+{
+  "name": "terraform-plan",
+  "id": "terraform-plan",
+  "label": "Terraform Plan",
+  "description": "Compact `terraform plan` output. Strips Refreshing state lines and lock chatter; preserves the Plan summary and resource diffs.",
+  "command": "terraform",
+  "category": "infra",
+  "commandPatterns": ["^terraform\\s+plan"],
+  "matchOutput": [
+    {
+      "pattern": "No changes\\.\\s*Your infrastructure matches the configuration\\.",
+      "message": "[terraform: plan: no changes]",
+      "unless": "(?i)error|fail"
+    }
+  ],
+  "rules": [
+    {"type": "strip", "pattern": "^Refreshing state"},
+    {"type": "strip", "pattern": "^\\s*#.*unchanged"},
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^Acquiring state lock"},
+    {"type": "strip", "pattern": "^Releasing state lock"}
+  ],
+  "head": 20,
+  "tail": 20,
+  "priorityPatterns": ["^Error:", "error:", "Plan:", "^\\s*[+-]\\s+resource"],
+  "tests": [
+    {
+      "name": "strips-refreshing-and-blank-lines",
+      "input": "Acquiring state lock. This may take a few moments...\nRefreshing state... [id=vpc-abc]\nRefreshing state... [id=sg-123]\n\nPlan: 1 to add, 0 to change, 0 to destroy.\n",
+      "expected": "Acquiring state lock. This may take a few moments...\nPlan: 1 to add, 0 to change, 0 to destroy.\n"
+    }
+  ]
+}

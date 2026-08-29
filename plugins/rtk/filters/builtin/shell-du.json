@@ -1,9 +1,12 @@
 {
   "name": "shell-du",
   "command": "du",
+  "description": "Compact du output — strip blank lines, cap wide rows.",
   "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
     {"type": "strip", "pattern": "^\\d+\\s+/(\\s*\\.)?$"}
   ],
+  "truncateLineAt": 120,
   "head": 30,
   "tail": 0,
   "priority_patterns": [],
