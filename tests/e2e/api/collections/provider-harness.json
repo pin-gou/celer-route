@@ -50806,6 +50806,98 @@
      }
     }
    ]
+  },
+  {
+    "name": "53. RTK Fetch Tool (rtk_fetch_raw_output + sentinel bypass)",
+    "description": "RTK compression plugin wire-visible surface: (1) the bifrostInternal-rtk_fetch_raw_output tool schema is injected into chat requests when the plugin is enabled with inject_fetch_tool=true; (2) a bulk tool_result is truncated by RTK with original/compressed usage fields; (3) a sentinel-wrapped tool_result (NUL-prefixed RTK_RAW_OUTPUT_BEGIN...RTK_RAW_OUTPUT_BODY_FOLLOWS) re-entering the pipeline is stripped and passed through byte-for-byte (rtk-raw-output-bypass technique) instead of being re-compressed.",
+    "item": [
+      {
+        "name": "53.1 RTK truncation + fetch-tool injection (chat completion)",
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                "pm.test('RTK truncation request accepted', function () {",
+                "  pm.expect(pm.response.code).to.be.below(400);",
+                "  var j = pm.response.json();",
+                "  pm.expect(j.usage).to.be.an('object');",
+                "});"
+              ]
+            }
+          }
+        ],
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"model\": \"deepseek/deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What does the git status show?\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call_bash_001\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"bash\",\n            \"arguments\": \"{\\\"command\\\": \\\"git status\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call_bash_001\",\n      \"content\": \"On branch main\\nYour branch is up to date with 'origin/main'.\\n\\nChanges not staged for commit:\\n  modified:   plugins/rtk/file0.go\\n  modified:   plugins/rtk/file1.go\\n  modified:   plugins/rtk/file2.go\\n  modified:   plugins/rtk/file3.go\\n  modified:   plugins/rtk/file4.go\\n  modified:   plugins/rtk/file5.go\\n  modified:   plugins/rtk/file6.go\\n  modified:   plugins/rtk/file7.go\\n  modified:   plugins/rtk/file8.go\\n  modified:   plugins/rtk/file9.go\\n\\nUntracked files:\\n  plugins/rtk/newfile0.go\\n  plugins/rtk/newfile1.go\\n  plugins/rtk/newfile2.go\\n  plugins/rtk/newfile3.go\\n  plugins/rtk/newfile4.go\\n  plugins/rtk/newfile5.go\\n  plugins/rtk/newfile6.go\\n  plugins/rtk/newfile7.go\\n  plugins/rtk/newfile8.go\\n  plugins/rtk/newfile9.go\"\n    }\n  ]\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/v1/chat/completions",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "v1",
+              "chat",
+              "completions"
+            ]
+          }
+        }
+      },
+      {
+        "name": "53.2 Sentinel-wrapped tool_result re-entry is passed through (rtk-raw-output-bypass)",
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                "pm.test('sentinel bypass request accepted', function () {",
+                "  pm.expect(pm.response.code).to.be.below(400);",
+                "  var j = pm.response.json();",
+                "  pm.expect(j.choices && j.choices[0] && j.choices[0].message).to.be.an('object');",
+                "});"
+              ]
+            }
+          }
+        ],
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"model\": \"deepseek/deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Summarise the recovered output\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call_rtk_001\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"bifrostInternal-rtk_fetch_raw_output\",\n            \"arguments\": \"{\\\"id\\\": \\\"0123456789abcdef01234567\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call_rtk_001\",\n      \"content\": \"\\u0000RTK_RAW_OUTPUT_BEGIN\\u00000123456789abcdef01234567:100:\\u0000RTK_RAW_OUTPUT_BODY_FOLLOWS\\u0000On branch main\\nmodified: plugins/rtk/file0.go\"\n    }\n  ]\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/v1/chat/completions",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "v1",
+              "chat",
+              "completions"
+            ]
+          }
+        }
+      }
+    ]
   }
   ]
 }
