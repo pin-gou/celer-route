@@ -208,10 +208,12 @@ func TestRawOutputHint_NotAppendedWhenNoPointer(t *testing.T) {
 // LLM that recovered bodies bypass re-compression. Without this note the
 // LLM has no way to tell that a fresh [rtk:raw_output_id=...] marker after
 // recovery means "fetch URL malformed" rather than the expected behaviour,
-// so it would loop fetching forever.
+// so it would loop fetching forever. The "strips" wording also tells the LLM
+// that the recovery sentinel itself never reaches the model — important so
+// the LLM does not spend context reasoning about an artifact it will never see.
 func TestRecoveryHint_NotesBypass(t *testing.T) {
 	must := []string{
-		"unwraps the recovered body",
+		"strips the recovery sentinel",
 		"IS the file content",
 		"disk copy expired",
 	}

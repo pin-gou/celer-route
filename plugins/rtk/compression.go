@@ -527,14 +527,21 @@ func applyResponsesToolOutput(out *schemas.ResponsesToolMessageOutputStruct, con
 // detects the command, applies the matched filter, deduplicates, and
 // truncates. Used by tests directly.
 func processRtkText(input string, config *Config) (string, *ProcessStats) {
-	return processRtkTextWithCommand(input, config, nil, "", "")
+	return processRtkTextWithCommand(nil, input, config, nil, "", "")
 }
 
 // processRtkTextWithCommand is the internal pipeline that accepts an optional
 // command hint from the tool call lookup. When commandHint is empty, content
 // detection is used. When loader is nil, a throwaway builtin-only loader is
 // created (for backward-compat test paths).
-func processRtkTextWithCommand(input string, config *Config, loader *FilterLoader, commandHint string, recoveryBaseURL string) (string, *ProcessStats) {
+//
+// ctx is optional: when non-nil and carrying a positive
+// BifrostContextKeyRTKSentinelStripped count, the PreLLMHook entry strip has
+// already removed the sentinel from this request's tool messages, so the
+// pipeline's own sentinel check on the same body is redundant and skipped.
+// When ctx is nil (admin test path), the in-pipeline check still fires so the
+// admin handler can drive the bypass deliberately with wrapped input.
+func processRtkTextWithCommand(ctx *schemas.BifrostContext, input string, config *Config, loader *FilterLoader, commandHint string, recoveryBaseURL string) (string, *ProcessStats) {
 	stats := &ProcessStats{
 		OriginalTokens: estimateTokens(input),
 		OriginalBytes:  len(input),
@@ -546,6 +553,23 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		return input, stats
 	}
 
+	// Pre-strip bypass: when PreLLMHook already stripped a sentinel off this
+	// request's tool messages, the body we are about to compress is already
+	// sentinel-free. Skip our own StripRawOutputSentinel check so we do not
+	// re-run the prefix match on every per-message compress call. The
+	// standalone bypass path (no ctx, e.g. admin test handler) still falls
+	// through to the explicit check below so the bypass contract is testable
+	// from outside the hook chain.
+	preStripped := false
+	if ctx != nil {
+		if v, ok := ctx.Value(schemas.BifrostContextKeyRTKSentinelStripped).(int); ok && v > 0 {
+			preStripped = true
+			stats.Techniques = append(stats.Techniques, "rtk-raw-output-bypass")
+			stats.CompressedTokens = estimateTokens(input)
+			return input, stats
+		}
+	}
+
 	// Anti-recursion bypass: tool messages produced by an LLM calling
 	// /api/context/rtk/raw-output/{id} arrive with a server-side sentinel
 	// prefix. Re-compressing them yields a smaller subset plus a fresh
@@ -554,10 +578,12 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 	// through unchanged. Detection, filtering, and redaction are all
 	// skipped on the bypass path because the persisted body was already
 	// redacted at write time (RedactRtkRawOutput).
-	if stripped, ok := StripRawOutputSentinel(input); ok {
-		stats.CompressedTokens = estimateTokens(stripped)
-		stats.Techniques = append(stats.Techniques, "rtk-raw-output-bypass")
-		return stripped, stats
+	if !preStripped {
+		if stripped, ok := StripRawOutputSentinel(input); ok {
+			stats.CompressedTokens = estimateTokens(stripped)
+			stats.Techniques = append(stats.Techniques, "rtk-raw-output-bypass")
+			return stripped, stats
+		}
 	}
 
 	// 1. Always strip ANSI escape codes.

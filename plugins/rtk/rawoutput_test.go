@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestRedactRtkRawOutput (V-plugins-2) verifies the 5 secret-redaction
@@ -579,3 +581,169 @@ func TestStripRawOutputSentinel_EmptyBodyAfterClose(t *testing.T) {
 		t.Fatalf("empty body should strip to empty string, got %q", stripped)
 	}
 }
+
+// TestStripSentinelFromChatToolMessages verifies the bulk stripper walks
+// every role=tool / role=function message, strips the sentinel from both
+// string Content and Text content blocks, and leaves user/assistant/system
+// messages byte-identical. This is the contract the PreLLMHook relies on:
+// by the time the request leaves the plugin boundary the wire-protocol
+// prefix must be gone from every tool message field.
+func TestStripSentinelFromChatToolMessages(t *testing.T) {
+	const (
+		plainBody   = "ok github.com/foo/bar 0.123s\n"
+		wrappedBody = rawOutputSentinelMagic + "abc123456789abcdef01234567:42:" + "deadbeef0000" + rawOutputSentinelClose + plainBody
+		userMsg     = "user typed this verbatim"
+	)
+
+	messages := []schemas.ChatMessage{
+		{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: ptrString(wrappedBody)}},
+		{Role: schemas.ChatMessageRoleTool, Content: &schemas.ChatMessageContent{ContentStr: ptrString(wrappedBody)}},
+		{Role: schemas.ChatMessageRoleTool, Content: &schemas.ChatMessageContent{
+			ContentBlocks: []schemas.ChatContentBlock{
+				{Type: schemas.ChatContentBlockTypeText, Text: ptrString("not a sentinel")},
+				{Type: schemas.ChatContentBlockTypeText, Text: ptrString(wrappedBody)},
+			},
+		}},
+		{Role: "function", Content: &schemas.ChatMessageContent{ContentStr: ptrString(wrappedBody)}},
+		{Role: schemas.ChatMessageRoleAssistant},
+		{Role: schemas.ChatMessageRoleSystem, Content: &schemas.ChatMessageContent{ContentStr: ptrString(wrappedBody)}},
+	}
+
+	stripped, toolScanned := StripSentinelFromChatToolMessages(messages)
+	if stripped != 3 {
+		// 1 string-Content tool + 1 string-Content function + 1 of the 2 tool Text blocks.
+		// The "not a sentinel" block counts as scanned-not-stripped, the other wraps.
+		t.Fatalf("expected 3 fields rewritten (1 tool str + 1 function str + 1 wrapped tool text), got %d", stripped)
+	}
+	if toolScanned != 3 {
+		t.Fatalf("expected 3 tool messages scanned (tool/function/tool), got %d", toolScanned)
+	}
+	if got := *messages[0].Content.ContentStr; got != wrappedBody {
+		t.Errorf("user message must be preserved verbatim (a user can legitimately paste a sentinel); got prefix=%q", got[:min(40, len(got))])
+	}
+	if got := *messages[1].Content.ContentStr; got != plainBody {
+		t.Errorf("role=tool ContentStr should strip to plain body; got prefix=%q", got[:min(40, len(got))])
+	}
+	if got := *messages[2].Content.ContentBlocks[0].Text; got != "not a sentinel" {
+		t.Errorf("plain Text block must be untouched; got %q", got)
+	}
+	if got := *messages[2].Content.ContentBlocks[1].Text; got != plainBody {
+		t.Errorf("wrapped Text block should strip to plain body; got prefix=%q", got[:min(40, len(got))])
+	}
+	if got := *messages[3].Content.ContentStr; got != plainBody {
+		t.Errorf("role=function ContentStr should strip to plain body; got prefix=%q", got[:min(40, len(got))])
+	}
+	if messages[4].Content != nil {
+		t.Errorf("assistant message Content should remain nil (no sentinel write path)")
+	}
+	if got := *messages[5].Content.ContentStr; got != wrappedBody {
+		t.Errorf("system message must be preserved verbatim; got prefix=%q", got[:min(40, len(got))])
+	}
+}
+
+// TestStripSentinelFromChatToolMessages_NoSentinel verifies the bulk stripper
+// leaves everything byte-identical when no sentinel is present — the no-op
+// path is the common case on every request that does not involve raw-output
+// recovery, so it must not allocate or rewrite.
+func TestStripSentinelFromChatToolMessages_NoSentinel(t *testing.T) {
+	const plain = "ok github.com/foo/bar 0.123s\n"
+	original := []schemas.ChatMessage{
+		{Role: schemas.ChatMessageRoleTool, Content: &schemas.ChatMessageContent{ContentStr: ptrString(plain)}},
+		{Role: schemas.ChatMessageRoleTool, Content: &schemas.ChatMessageContent{
+			ContentBlocks: []schemas.ChatContentBlock{
+				{Type: schemas.ChatContentBlockTypeText, Text: ptrString(plain)},
+			},
+		}},
+	}
+
+	stripped, toolScanned := StripSentinelFromChatToolMessages(original)
+	if stripped != 0 {
+		t.Fatalf("no-sentinel input must not rewrite any field; got %d", stripped)
+	}
+	if toolScanned != 2 {
+		t.Fatalf("expected 2 tool messages scanned; got %d", toolScanned)
+	}
+	if *original[0].Content.ContentStr != plain {
+		t.Errorf("ContentStr pointer changed even though no strip happened")
+	}
+	if *original[1].Content.ContentBlocks[0].Text != plain {
+		t.Errorf("Text pointer changed even though no strip happened")
+	}
+}
+
+// TestStripSentinelFromResponsesToolMessages verifies the Responses-API twin
+// of the chat stripper: every message with a non-nil ResponsesToolMessage
+// has its ResponsesToolCallOutputStr + ResponsesFunctionToolCallOutputBlocks
+// text + ResponsesToolMessage.Arguments scanned, and only those fields
+// rewritten. Other Responses variants (user/assistant text messages, raw-
+// preserved tool_search_call / additional_tools items) are left untouched.
+func TestStripSentinelFromResponsesToolMessages(t *testing.T) {
+	const (
+		plainBody   = "15 degrees"
+		wrappedBody = rawOutputSentinelMagic + "0123456789abcdef01234567:9:" + rawOutputSentinelClose + plainBody
+	)
+
+	messages := []schemas.ResponsesMessage{
+		{
+			Type: ptrResponsesMessageType(schemas.ResponsesMessageTypeMessage),
+			Role: ptrResponsesMessageRole(schemas.ResponsesInputMessageRoleUser),
+			Content: &schemas.ResponsesMessageContent{
+				ContentBlocks: []schemas.ResponsesMessageContentBlock{
+					{Type: schemas.ResponsesInputMessageContentBlockTypeText, Text: ptrString(wrappedBody)},
+				},
+			},
+		},
+		{
+			Type: ptrResponsesMessageType(schemas.ResponsesMessageTypeFunctionCallOutput),
+			ResponsesToolMessage: &schemas.ResponsesToolMessage{
+				CallID: ptrString("call_1"),
+				Output: &schemas.ResponsesToolMessageOutputStruct{
+					ResponsesToolCallOutputStr: ptrString(wrappedBody),
+				},
+			},
+		},
+		{
+			Type: ptrResponsesMessageType(schemas.ResponsesMessageTypeCustomToolCallOutput),
+			ResponsesToolMessage: &schemas.ResponsesToolMessage{
+				Output: &schemas.ResponsesToolMessageOutputStruct{
+					ResponsesFunctionToolCallOutputBlocks: []schemas.ResponsesMessageContentBlock{
+						{Type: schemas.ResponsesInputMessageContentBlockTypeText, Text: ptrString(wrappedBody)},
+						{Type: schemas.ResponsesInputMessageContentBlockTypeText, Text: ptrString(plainBody)},
+					},
+				},
+			},
+		},
+		{
+			Type: ptrResponsesMessageType(schemas.ResponsesMessageTypeFunctionCall),
+			ResponsesToolMessage: &schemas.ResponsesToolMessage{
+				Arguments: ptrString(wrappedBody),
+			},
+		},
+	}
+
+	stripped, toolScanned := StripSentinelFromResponsesToolMessages(messages)
+	if stripped != 3 {
+		// 1 string output + 1 wrapped text block + 1 arguments string.
+		t.Fatalf("expected 3 fields rewritten (output-str + 1 text-block + arguments), got %d", stripped)
+	}
+	if toolScanned != 3 {
+		t.Fatalf("expected 3 tool messages scanned (function_call_output / custom_tool_call_output / function_call); got %d", toolScanned)
+	}
+	if got := *messages[0].Content.ContentBlocks[0].Text; got != wrappedBody {
+		t.Errorf("user message text block must be preserved verbatim; got prefix=%q", got[:min(40, len(got))])
+	}
+	if got := *messages[1].ResponsesToolMessage.Output.ResponsesToolCallOutputStr; got != plainBody {
+		t.Errorf("function_call_output ResponsesToolCallOutputStr should strip; got prefix=%q", got[:min(40, len(got))])
+	}
+	if got := *messages[2].ResponsesToolMessage.Output.ResponsesFunctionToolCallOutputBlocks[0].Text; got != plainBody {
+		t.Errorf("custom_tool_call_output wrapped text block should strip; got prefix=%q", got[:min(40, len(got))])
+	}
+	if got := *messages[2].ResponsesToolMessage.Output.ResponsesFunctionToolCallOutputBlocks[1].Text; got != plainBody {
+		t.Errorf("plain text block must be untouched; got %q", got)
+	}
+	if got := *messages[3].ResponsesToolMessage.Arguments; got != plainBody {
+		t.Errorf("function_call arguments should strip; got prefix=%q", got[:min(40, len(got))])
+	}
+}
+
+func ptrString(s string) *string { return &s }

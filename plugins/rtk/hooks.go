@@ -74,6 +74,17 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 	if req == nil {
 		return req, nil, nil
 	}
+
+	// Sentinel strip happens BEFORE the Enabled gate so the wire protocol
+	// prefix never reaches the model even when compression is disabled. The
+	// HTTP handler always wraps the raw-output response with the sentinel, so
+	// any tool message carrying the recovered body must be unwrapped here;
+	// processRtkTextWithCommand later reads the strip-count ctx flag to skip
+	// its own redundant sentinel check on the same body.
+	if stripped := stripToolMessageSentinels(req); stripped > 0 {
+		ctx.SetValue(schemas.BifrostContextKeyRTKSentinelStripped, stripped)
+	}
+
 	if !p.config.Enabled {
 		return req, nil, nil
 	}
@@ -145,11 +156,46 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 	return req, nil, nil
 }
 
+// stripToolMessageSentinels walks every tool-output message in req and strips
+// the RTK raw-output sentinel from any field that carries it. Returns the
+// total count of fields rewritten across both chat and responses variants;
+// the caller uses a non-zero return to set BifrostContextKeyRTKSentinelStripped
+// so processRtkTextWithCommand can short-circuit its own internal sentinel
+// check on the same request.
+//
+// Zero-allocation when no sentinel is present (the per-message checks bail
+// before any string copy); a single alloc per affected string when one is.
+func stripToolMessageSentinels(req *schemas.BifrostRequest) int {
+	if req == nil {
+		return 0
+	}
+	total := 0
+	if req.ChatRequest != nil {
+		n, _ := StripSentinelFromChatToolMessages(req.ChatRequest.Input)
+		total += n
+	}
+	if req.ResponsesRequest != nil {
+		n, _ := StripSentinelFromResponsesToolMessages(req.ResponsesRequest.Input)
+		total += n
+	}
+	return total
+}
+
 // PostLLMHook implements schemas.LLMPlugin. It retrieves the compression
 // state from PreLLMHook, rewrites the usage prompt tokens to the compressed
 // value, and propagates the original/compressed token counts to the context
 // for downstream plugins (e.g. logging) to read.
 func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	// Drop the sentinel-stripped marker on every PostLLMHook invocation,
+	// BEFORE the early-return below: the marker has the same per-request
+	// lifecycle as the compression state, and reusing the ctx across
+	// requests would otherwise leak a stale count into the next request's
+	// processRtkTextWithCommand, which would silently skip its sentinel
+	// check on a body that may not have been pre-stripped. The clear runs
+	// unconditionally so even a no-compression request (Disabled, no
+	// matched filter) leaves a clean ctx behind.
+	ctx.SetValue(schemas.BifrostContextKeyRTKSentinelStripped, nil)
+
 	state := p.getCompressionState(ctx)
 	if state == nil || !state.Compressed {
 		return resp, bifrostErr, nil

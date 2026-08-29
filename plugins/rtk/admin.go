@@ -260,7 +260,7 @@ func (p *Plugin) RunTest(payload TestPayload) TestResult {
 	}
 
 	res.OriginalTokens = estimateTokens(payload.Output)
-	compressed, stats := processRtkTextWithCommand(payload.Output, &cfgCopy, p.loader, payload.Command, "")
+	compressed, stats := processRtkTextWithCommand(nil, payload.Output, &cfgCopy, p.loader, payload.Command, "")
 
 	if stats != nil {
 		res.CompressedTokens = stats.CompressedTokens

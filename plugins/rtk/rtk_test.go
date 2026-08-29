@@ -1370,7 +1370,7 @@ func TestCompressionTriggersRawOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status", "")
+		_, stats := processRtkTextWithCommand(nil, gitStatusFixture, cfg, loader, "git status", "")
 		if stats.CompressedTokens >= stats.OriginalTokens {
 			t.Fatalf("fixture must actually compress for this test: original=%d compressed=%d",
 				stats.OriginalTokens, stats.CompressedTokens)
@@ -1401,7 +1401,7 @@ func TestCompressionTriggersRawOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, stats := processRtkTextWithCommand(gitStatusFixture, cfg, loader, "git status", "")
+		_, stats := processRtkTextWithCommand(nil, gitStatusFixture, cfg, loader, "git status", "")
 		if len(stats.RawOutputPointers) != 0 {
 			t.Errorf("expected 0 raw output pointers with retention=never, got %d",
 				len(stats.RawOutputPointers))

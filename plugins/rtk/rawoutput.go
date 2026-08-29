@@ -328,9 +328,14 @@ func WrapRawOutputForHTTP(body, pointerID string, bytes int, sha256Hex string) s
 // (Close token missing) is treated as no sentinel rather than dropping
 // arbitrary bytes, so a malformed fetch response cannot silently lose data.
 //
-// This is the ONLY function that consumes the sentinel — it is called exactly
-// once at the compression pipeline entry — so the body that ultimately reaches
-// the LLM is byte-identical to what was persisted on disk.
+// StripRawOutputSentinel is consumed by two call sites that must stay in sync:
+// processRtkTextWithCommand uses it as the bypass-detector for the in-pipeline
+// anti-recursion short-circuit, and the PreLLMHook entry strip uses it to
+// remove the sentinel from tool messages before they leave the plugin boundary
+// (so the model never sees the wire-protocol prefix). The PreLLMHook entry
+// records a count in BifrostContextKeyRTKSentinelStripped so the in-pipeline
+// caller can skip its own sentinel check on the same request — otherwise the
+// stripper would run twice on the same body.
 func StripRawOutputSentinel(s string) (string, bool) {
 	if !strings.HasPrefix(s, rawOutputSentinelMagic) {
 		return s, false
@@ -341,6 +346,115 @@ func StripRawOutputSentinel(s string) (string, bool) {
 		return s, false
 	}
 	return rest[closeIdx+len(rawOutputSentinelClose):], true
+}
+
+// StripSentinelFromChatToolMessages walks the chat message slice and strips the
+// raw-output sentinel from every role=tool / role=function message it finds.
+// Content is rewritten in place — string Content fields and Text content blocks
+// are scanned; non-text blocks (image_url, input_audio, file, refusal) are left
+// untouched because they cannot carry a sentinel in legitimate use. Other
+// roles (user / assistant / system / developer) are also left untouched so a
+// user pasting a sentinel into a prompt is preserved verbatim.
+//
+// Returns the number of fields actually rewritten (not the number of messages
+// with the sentinel — one tool message can carry a sentinel in both its
+// Content string and a Text block). Returned unchanged is the count of tool
+// messages scanned (caller can sanity-check that stripped + scanned ==
+// expected tool-message count).
+//
+// Allocation-conscious: when the sentinel is absent on a field the pointer is
+// left alone (no string copy). When present, a single alloc per affected
+// string is unavoidable.
+func StripSentinelFromChatToolMessages(messages []schemas.ChatMessage) (stripped, toolScanned int) {
+	for i := range messages {
+		msg := &messages[i]
+		if msg.Role != schemas.ChatMessageRoleTool && msg.Role != "function" {
+			continue
+		}
+		toolScanned++
+		if msg.Content == nil {
+			continue
+		}
+		if msg.Content.ContentStr != nil {
+			if body, ok := StripRawOutputSentinel(*msg.Content.ContentStr); ok {
+				updated := body
+				msg.Content.ContentStr = &updated
+				stripped++
+			}
+		}
+		for j := range msg.Content.ContentBlocks {
+			block := &msg.Content.ContentBlocks[j]
+			if block.Text == nil {
+				continue
+			}
+			if body, ok := StripRawOutputSentinel(*block.Text); ok {
+				updated := body
+				block.Text = &updated
+				stripped++
+			}
+		}
+	}
+	return stripped, toolScanned
+}
+
+// StripSentinelFromResponsesToolMessages walks the responses message slice and
+// strips the raw-output sentinel from every function_call_output / custom_tool_call_output
+// message it finds. Output is rewritten in place — both the flat output string
+// (ResponsesToolCallOutputStr) and the per-block Text fields (input_text /
+// output_text) are scanned; other output variants (computer_tool_call_output,
+// image_generation_call) are left untouched because they cannot carry a
+// sentinel in legitimate use.
+//
+// tool message detection uses ResponsesMessage.ResponsesToolMessage != nil,
+// which covers every embedded tool-output variant (function_call_output,
+// custom_tool_call_output, code_interpreter_call output, local_shell_call
+// output, web_fetch_call output, advisor_call result, tool_search_output,
+// mcp_call output, etc.). Other ResponsesMessage variants (user / assistant /
+// system messages and tool_call *request* items) are left untouched.
+//
+// Returns the number of fields actually rewritten, plus the number of tool
+// output messages scanned (caller can sanity-check that scanned matches the
+// expected count).
+//
+// Allocation-conscious: when the sentinel is absent on a field the pointer is
+// left alone (no string copy). When present, a single alloc per affected
+// string is unavoidable.
+func StripSentinelFromResponsesToolMessages(messages []schemas.ResponsesMessage) (stripped, toolScanned int) {
+	for i := range messages {
+		msg := &messages[i]
+		if msg.ResponsesToolMessage == nil {
+			continue
+		}
+		toolScanned++
+		if msg.Output != nil {
+			if msg.Output.ResponsesToolCallOutputStr != nil {
+				if body, ok := StripRawOutputSentinel(*msg.Output.ResponsesToolCallOutputStr); ok {
+					updated := body
+					msg.Output.ResponsesToolCallOutputStr = &updated
+					stripped++
+				}
+			}
+			for j := range msg.Output.ResponsesFunctionToolCallOutputBlocks {
+				block := &msg.Output.ResponsesFunctionToolCallOutputBlocks[j]
+				if block.Text == nil {
+					continue
+				}
+				if body, ok := StripRawOutputSentinel(*block.Text); ok {
+					updated := body
+					block.Text = &updated
+					stripped++
+				}
+			}
+		}
+		if msg.Arguments != nil {
+			if body, ok := StripRawOutputSentinel(*msg.Arguments); ok {
+				updated := body
+				msg.Arguments = &updated
+				stripped++
+			}
+		}
+	}
+	return stripped, toolScanned
 }
 
 // ReadRtkRawOutputByID reads the persisted raw output by pointer ID, preferring

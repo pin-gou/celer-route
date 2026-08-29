@@ -869,3 +869,216 @@ Changes not staged for commit:
 func bytesContains(raw []byte, substr string) bool {
 	return bytes.Index(raw, []byte(substr)) >= 0
 }
+
+// TestPreLLMHookStripsSentinelFromToolMessages verifies the PreLLMHook entry
+// strip removes the raw-output sentinel from every tool message field before
+// the request leaves the plugin boundary. The wire-protocol prefix must NEVER
+// reach the model — that was the leakage the regression test
+// tests/manual/raw_output_recursion_regression.sh used to assert (in the
+// earlier, recursive behaviour).
+func TestPreLLMHookStripsSentinelFromToolMessages(t *testing.T) {
+	p := newTestPlugin(t)
+	ctx := newTestCtx(t)
+
+	const plainBody = "ok github.com/foo/bar 0.123s\n"
+	wrappedBody := rawOutputSentinelMagic + "abc123456789abcdef01234567:42:" + rawOutputSentinelClose + plainBody
+
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-5",
+			Input: []schemas.ChatMessage{
+				{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: ptrString("ls -la")}},
+
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{ID: ptrString("call_1"), Type: ptrString("function"), Function: schemas.ChatAssistantMessageToolCallFunction{Name: ptrString("exec"), Arguments: `{"cmd":"ls"}`}},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: ptrString("call_1"),
+					},
+					Content: &schemas.ChatMessageContent{ContentStr: ptrString(wrappedBody)},
+				},
+			},
+		},
+	}
+
+	out, _, err := p.PreLLMHook(ctx, req)
+	if err != nil {
+		t.Fatalf("PreLLMHook returned error: %v", err)
+	}
+	if out == nil || out.ChatRequest == nil {
+		t.Fatal("PreLLMHook must return the request unchanged structurally")
+	}
+
+	// PreLLMHook prepends a system-message recovery hint to Input, so the
+	// tool message is no longer at index 2. Find it by role so the test
+	// stays robust against hint-injection changes.
+	var toolMsg *schemas.ChatMessage
+	for i := range out.ChatRequest.Input {
+		if out.ChatRequest.Input[i].Role == schemas.ChatMessageRoleTool {
+			toolMsg = &out.ChatRequest.Input[i]
+			break
+		}
+	}
+	if toolMsg == nil {
+		t.Fatal("tool message must still be present in input after PreLLMHook")
+	}
+	if toolMsg.Content == nil || toolMsg.Content.ContentStr == nil {
+		t.Fatal("tool message ContentStr must remain populated after strip")
+	}
+	if got := *toolMsg.Content.ContentStr; got != plainBody {
+		t.Errorf("sentinel must be stripped from tool message ContentStr; got prefix=%q", got[:min(40, len(got))])
+	}
+	if ctx.Value(schemas.BifrostContextKeyRTKSentinelStripped) == nil {
+		t.Error("ctx must carry a positive RTKSentinelStripped count after a strip occurred")
+	}
+
+	// PostLLMHook must clear the marker so the next request on the same ctx
+	// does not silently inherit a stale count.
+	_, _, err = p.PostLLMHook(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("PostLLMHook returned error: %v", err)
+	}
+	if v := ctx.Value(schemas.BifrostContextKeyRTKSentinelStripped); v != nil {
+		t.Errorf("PostLLMHook must clear RTKSentinelStripped; got %#v", v)
+	}
+}
+
+// TestPreLLMHookStripsSentinelWhenDisabled verifies the strip runs even when
+// RTK compression is disabled. The wire protocol prefix is a leak that has
+// nothing to do with compression — the strip must happen unconditionally so
+// the model never sees it regardless of config.
+func TestPreLLMHookStripsSentinelWhenDisabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Enabled = false
+	p := newTestPluginWithConfig(t, cfg)
+	ctx := newTestCtx(t)
+
+	const plainBody = "15 degrees"
+	wrappedBody := rawOutputSentinelMagic + "0123456789abcdef01234567:9:" + rawOutputSentinelClose + plainBody
+
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-5",
+			Input: []schemas.ChatMessage{
+				{Role: schemas.ChatMessageRoleTool, Content: &schemas.ChatMessageContent{ContentStr: ptrString(wrappedBody)}},
+			},
+		},
+	}
+
+	if _, _, err := p.PreLLMHook(ctx, req); err != nil {
+		t.Fatalf("PreLLMHook returned error: %v", err)
+	}
+
+	// PreLLMHook prepends a system-message recovery hint to Input only when
+	// compression is enabled; here it is disabled, so the tool message is
+	// still at index 0.
+	got := *req.ChatRequest.Input[0].Content.ContentStr
+	if got != plainBody {
+		t.Errorf("sentinel must be stripped even when RTK is disabled; got prefix=%q", got[:min(40, len(got))])
+	}
+	if v := ctx.Value(schemas.BifrostContextKeyRTKSentinelStripped); v == nil {
+		t.Error("stripped-count marker must be set even when compression is disabled")
+	}
+}
+
+// TestPreLLMHookNoSentinelLeavesRequestUntouched verifies the strip is a
+// no-op when no sentinel is present (the common case). The strip count in
+// ctx must be nil so downstream pipeline calls do not falsely take the
+// pre-stripped bypass.
+func TestPreLLMHookNoSentinelLeavesRequestUntouched(t *testing.T) {
+	p := newTestPlugin(t)
+	ctx := newTestCtx(t)
+
+	const plain = "ok github.com/foo/bar 0.123s\n"
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-5",
+			Input: []schemas.ChatMessage{
+				{Role: schemas.ChatMessageRoleTool, Content: &schemas.ChatMessageContent{ContentStr: ptrString(plain)}},
+			},
+		},
+	}
+
+	if _, _, err := p.PreLLMHook(ctx, req); err != nil {
+		t.Fatalf("PreLLMHook returned error: %v", err)
+	}
+
+	// PreLLMHook prepends a system-message recovery hint to Input, so the
+	// tool message is no longer at index 0 — find it by role instead.
+	var toolMsg *schemas.ChatMessage
+	for i := range req.ChatRequest.Input {
+		if req.ChatRequest.Input[i].Role == schemas.ChatMessageRoleTool {
+			toolMsg = &req.ChatRequest.Input[i]
+			break
+		}
+	}
+	if toolMsg == nil {
+		t.Fatal("tool message must still be present in input after PreLLMHook")
+	}
+	if toolMsg.Content == nil || toolMsg.Content.ContentStr == nil {
+		t.Fatal("tool message ContentStr must remain populated on the no-sentinel path")
+	}
+	if got := *toolMsg.Content.ContentStr; got != plain {
+		t.Errorf("plain tool message must round-trip unchanged; got %q", got)
+	}
+	if v := ctx.Value(schemas.BifrostContextKeyRTKSentinelStripped); v != nil {
+		t.Errorf("no-sentinel path must NOT set the stripped-count marker (would falsely short-circuit downstream pipeline); got %#v", v)
+	}
+}
+
+// TestProcessRtkTextWithCommand_PreStrippedBypass verifies the in-pipeline
+// bypass contract: when ctx carries a positive RTKSentinelStripped count,
+// processRtkTextWithCommand returns the input unchanged with the bypass
+// technique recorded and does NOT call StripRawOutputSentinel on the body
+// (which would otherwise re-run the prefix match for every tool message
+// field on every compress call).
+func TestProcessRtkTextWithCommand_PreStrippedBypass(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxCharsPerResult = 1 // would truncate any non-trivial input without bypass
+	ctx := newTestCtx(t)
+	ctx.SetValue(schemas.BifrostContextKeyRTKSentinelStripped, 1)
+
+	const body = "ok github.com/foo/bar 0.123s\n"
+	out, stats := processRtkTextWithCommand(ctx, body, cfg, NewFilterLoader(cfg), "", "")
+
+	if out != body {
+		t.Errorf("pre-stripped bypass must return body unchanged; got %q want %q", out, body)
+	}
+	if !hasTechnique(stats.Techniques, "rtk-raw-output-bypass") {
+		t.Errorf("pre-stripped bypass must record the rtk-raw-output-bypass technique; got %v", stats.Techniques)
+	}
+}
+
+// TestProcessRtkTextWithCommand_NilCtxStillStrips verifies the legacy admin
+// test path: when ctx is nil (no hook chain), the in-pipeline
+// StripRawOutputSentinel check must still fire so the bypass contract is
+// testable from outside the hook chain (admin handler drives the bypass
+// deliberately by feeding wrapped input through processRtkTextWithCommand).
+func TestProcessRtkTextWithCommand_NilCtxStillStrips(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxCharsPerResult = 1
+
+	const body = "ok github.com/foo/bar 0.123s\n"
+	wrapped := WrapRawOutputForHTTP(body, "abc123456789abcdef01234567", len(body), "")
+
+	out, stats := processRtkTextWithCommand(nil, wrapped, cfg, NewFilterLoader(cfg), "", "")
+	if out != body {
+		t.Errorf("nil-ctx bypass must still strip via the in-pipeline check; got %q want %q", out, body)
+	}
+	if !hasTechnique(stats.Techniques, "rtk-raw-output-bypass") {
+		t.Errorf("nil-ctx bypass must record the rtk-raw-output-bypass technique; got %v", stats.Techniques)
+	}
+}
