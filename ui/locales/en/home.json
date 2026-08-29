@@ -5,6 +5,7 @@
 		"updatedAt": "Updated {{at}}",
 		"applyNow": "Apply",
 		"configureNow": "Configure",
+		"configured": "Configured",
 		"submit": "Add provider",
 		"cancel": "Cancel",
 		"keyInputLabel": "API key",
@@ -22,6 +23,7 @@
 		"note": "Note",
 		"applySteps": "Steps to apply",
 		"useCount": "{{count}} uses",
-		"lastUsed": "Last used {{at}}"
+		"lastUsed": "Last used {{at}}",
+		"viewDetails": "View details"
 	}
 }

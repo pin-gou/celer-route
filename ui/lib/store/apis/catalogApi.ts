@@ -1,4 +1,4 @@
-import { BundlesResponse, RecentRoutingRulesResponse } from "@/lib/types/catalog";
+import { BundlesResponse } from "@/lib/types/catalog";
 import { ModelProvider, ModelProviderKey } from "@/lib/types/config";
 import { baseApi } from "./baseApi";
 
@@ -7,7 +7,6 @@ import { baseApi } from "./baseApi";
  *
  * Endpoints:
  *   - GET  /api/catalog/bundles?lang=<lang>          (运营推送的免费套餐)
- *   - GET  /api/logs/recent-routing-rules?limit=<n>  (最近用过的路由规则热度)
  *   - POST /api/providers                            (一键接入 provider)
  *   - POST /api/providers/{provider}/keys            (一键填入 API key)
  */
@@ -22,15 +21,6 @@ export const catalogApi = baseApi.injectEndpoints({
 				params: lang ? { lang } : {},
 			}),
 			providesTags: ["CatalogBundles"],
-		}),
-
-		// Aggregate the most recently used routing rules from request logs,
-		// shown as a "heat" footer under each bundle card.
-		getRecentRoutingRules: builder.query<RecentRoutingRulesResponse, { limit?: number }>({
-			query: ({ limit }) => ({
-				url: "/logs/recent-routing-rules",
-				params: { limit: limit ?? 100 },
-			}),
 		}),
 
 		// One-click provider registration from a bundle row. The backend fills
@@ -64,4 +54,4 @@ export const catalogApi = baseApi.injectEndpoints({
 	}),
 });
 
-export const { useGetBundlesQuery, useGetRecentRoutingRulesQuery, useCreateProviderMutation, useCreateProviderKeyMutation } = catalogApi;
+export const { useGetBundlesQuery, useCreateProviderMutation, useCreateProviderKeyMutation } = catalogApi;

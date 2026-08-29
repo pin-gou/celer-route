@@ -48,7 +48,7 @@ export default function ProviderTopologyCard() {
 		return {
 			provider: p.name,
 			keysCount: keysForProvider.length,
-			modelsCount: p.is_key_less ? (p.models_count ?? 0) : models.size,
+			modelsCount: p.models_count ?? models.size,
 			dotState,
 		};
 	});
@@ -82,22 +82,27 @@ export default function ProviderTopologyCard() {
 					<ul className="space-y-2">
 						{summaries.map((s) => {
 							return (
-								<li
-									key={s.provider}
-									className="bg-muted/20 flex items-center gap-3 rounded-md border px-3 py-2"
-									data-testid={`home-provider-topology-row-${s.provider}`}
-								>
-									<Provider provider={s.provider} size={22} className="mt-0 shrink-0" />
-									<span className="flex-1 truncate text-sm font-medium capitalize">{s.provider}</span>
-									<span className={["inline-block h-2 w-2 shrink-0 rounded-full", dotClass[s.dotState]].join(" ")} aria-hidden />
-									<span
-										className="text-muted-foreground flex items-center gap-1 text-xs"
-										title={t("home.providers.keysCount", { count: String(s.keysCount) })}
+								<li key={s.provider}>
+									<Link
+										to="/workspace/providers/$id"
+										params={{ id: s.provider }}
+										className="bg-muted/20 hover:bg-muted/40 flex items-center gap-3 rounded-md border px-3 py-2 transition-colors"
+										data-testid={`home-provider-topology-row-${s.provider}`}
 									>
-										<KeyRound className="h-3.5 w-3.5" />
-										{s.keysCount}
-									</span>
-									<span className="text-muted-foreground text-xs">{t("home.providers.modelsCount", { count: String(s.modelsCount) })}</span>
+										<Provider provider={s.provider} size={22} className="mt-0 shrink-0" />
+										<span className="flex-1 truncate text-sm font-medium capitalize">{s.provider}</span>
+										<span className={["inline-block h-2 w-2 shrink-0 rounded-full", dotClass[s.dotState]].join(" ")} aria-hidden />
+										<span
+											className="text-muted-foreground flex items-center gap-1 text-xs"
+											title={t("home.providers.keysCount", { count: String(s.keysCount) })}
+										>
+											<KeyRound className="h-3.5 w-3.5" />
+											{s.keysCount}
+										</span>
+										<span className="text-muted-foreground text-xs">
+											{t("home.providers.modelsCount", { count: String(s.modelsCount) })}
+										</span>
+									</Link>
 								</li>
 							);
 						})}

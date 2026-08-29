@@ -2,7 +2,6 @@
 //
 // Mirrors the backend response shapes documented in design.md:
 //   - GET /api/catalog/bundles?lang=<lang>
-//   - GET /api/logs/recent-routing-rules?limit=<n>
 
 /**
  * A single provider inside a bundle. `apply_url` is an external sign-up page
@@ -36,21 +35,4 @@ export interface BundlesResponse {
 	bundles: BundleEntry[];
 	updated_at: string | null;
 	version: string | null;
-}
-
-/**
- * One aggregated routing-rule usage entry from recent request logs.
- */
-export interface RecentRoutingRule {
-	id: string;
-	name: string;
-	last_used_at: string;
-	use_count: number;
-}
-
-/**
- * Response of GET /api/logs/recent-routing-rules.
- */
-export interface RecentRoutingRulesResponse {
-	rules: RecentRoutingRule[];
 }

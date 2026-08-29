@@ -1393,7 +1393,10 @@ func (h *ProviderHandler) computeInMemoryProviderStats(providerName schemas.Mode
 		stats.KeysEnabled = computeKeysEnabled(providerConfig.Keys)
 	}
 	if h.modelsManager != nil {
-		stats.ModelsCount = len(h.modelsManager.GetModelsForProvider(providerName))
+		// Use the unfiltered catalog view so models_count matches what the
+		// provider's Models tab shows (GET /models/details?unfiltered=true),
+		// rather than the key-filtered effective set.
+		stats.ModelsCount = len(h.modelsManager.GetUnfilteredModelsForProvider(providerName))
 	}
 	return stats
 }

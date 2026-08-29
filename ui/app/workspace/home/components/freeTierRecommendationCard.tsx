@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useGetBundlesQuery } from "@/lib/store/apis/catalogApi";
+import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
+import { format } from "date-fns";
 import { RefreshCw, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useRecentRoutingRulesQuery } from "../hooks/useRecentRoutingRulesQuery";
 import BundleApplyCard from "./bundleApplyCard";
 
 /**
@@ -32,14 +33,18 @@ function EmptyStateCard({ onRetry }: { onRetry: () => void }) {
  * Free-tier recommendation card for the home page.
  *
  * Fetches GET /api/catalog/bundles?lang=<current locale> and renders one
- * bundle card per entry, plus the top 3 recently used routing rules as a
- * "heat" footer (V-ui-2). Empty results or fetch errors degrade to the empty
+ * bundle card per entry. Empty results or fetch errors degrade to the empty
  * state with a retry button (V-ui-4).
  */
 export default function FreeTierRecommendationCard() {
 	const { t, i18n } = useTranslation("home");
 	const { data, error, isSuccess, refetch } = useGetBundlesQuery({ lang: i18n.language });
-	const recent = useRecentRoutingRulesQuery({ limit: 100 });
+	const { data: providers } = useGetProvidersQuery();
+
+	// Providers already configured on this instance — their bundle rows get a
+	// "configured" marker, become direct links to the provider detail page and
+	// are sorted to the end of each bundle.
+	const configuredProviders = new Set((providers ?? []).map((p) => p.name.toLowerCase()));
 
 	if (!isSuccess || error || !data || data.bundles.length === 0) {
 		return <EmptyStateCard onRetry={refetch} />;
@@ -49,11 +54,15 @@ export default function FreeTierRecommendationCard() {
 		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-free-tier-card">
 			<CardHeader className="border-b px-6 py-3">
 				<CardTitle className="text-sm font-semibold">{t("freeTier.title")}</CardTitle>
-				{data.updated_at && <CardDescription className="text-xs">{t("freeTier.updatedAt", { at: data.updated_at })}</CardDescription>}
+				{data.updated_at && (
+					<CardDescription className="text-xs">
+						{t("freeTier.updatedAt", { at: format(new Date(data.updated_at), "yyyy-MM-dd HH:mm:ss") })}
+					</CardDescription>
+				)}
 			</CardHeader>
 			<CardContent className="grid grid-cols-1 gap-4 px-6 py-4 md:grid-cols-2 lg:grid-cols-3">
 				{data.bundles.map((bundle) => (
-					<BundleApplyCard key={bundle.id} bundle={bundle} recentRules={recent.data?.rules.slice(0, 3)} />
+					<BundleApplyCard key={bundle.id} bundle={bundle} configuredProviders={configuredProviders} />
 				))}
 			</CardContent>
 		</Card>

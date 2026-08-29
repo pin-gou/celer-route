@@ -5,6 +5,7 @@
 		"updatedAt": "更新于 {{at}}",
 		"applyNow": "去申请",
 		"configureNow": "一键配置",
+		"configured": "已配置",
 		"submit": "添加提供商",
 		"cancel": "取消",
 		"keyInputLabel": "API 密钥",
@@ -22,6 +23,7 @@
 		"note": "说明",
 		"applySteps": "申请步骤",
 		"useCount": "使用 {{count}} 次",
-		"lastUsed": "最近使用 {{at}}"
+		"lastUsed": "最近使用 {{at}}",
+		"viewDetails": "查看详情"
 	}
 }

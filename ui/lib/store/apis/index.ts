@@ -7,7 +7,7 @@ export * from "./brandingApi";
 // (useCreateProviderMutation / useCreateProviderKeyMutation), so it is
 // re-exported selectively — the mutation hooks remain importable from
 // "@/lib/store/apis/catalogApi" directly.
-export { catalogApi, useGetBundlesQuery, useGetRecentRoutingRulesQuery } from "./catalogApi";
+export { catalogApi, useGetBundlesQuery } from "./catalogApi";
 export * from "./configApi";
 export * from "./featureFlagsApi";
 export * from "./devApi";
