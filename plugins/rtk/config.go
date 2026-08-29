@@ -64,8 +64,8 @@ type Config struct {
 	DisabledFilters []string `json:"disabled_filters"`
 
 	// RawOutputRetention controls when raw tool outputs are persisted to disk
-	// under <appDir>/rtk/raw-output/ for debugging: "never" (default) |
-	// "failures" | "always".
+	// under <appDir>/rtk/raw-output/ for debugging: "always" (default) |
+	// "failures" | "never".
 	RawOutputRetention string `json:"raw_output_retention"`
 
 	// RawOutputMaxBytes caps the persisted raw output size in UTF-8 bytes
@@ -271,12 +271,12 @@ func applyConfigDefaults(c *Config) {
 	// custom_filters_enabled=false in config.json survives to the loader.
 
 	// RawOutputRetention defaults to "always". The plain-bool zero value cannot
-// distinguish "explicit never" from "unset", so on first load we enable
-// persistence; an operator who wants the old behaviour can set the field
-// to "never" explicitly. The retention-default flip pairs with the LLM
-// raw-output recovery hint: with persistence always on, every truncated
-// tool result lands on disk and the LLM can recover the original via the
-// /api/context/rtk/raw-output/{id} endpoint.
+	// distinguish "explicit never" from "unset", so on first load we enable
+	// persistence; an operator who wants the old behaviour can set the field
+	// to "never" explicitly. The retention-default flip pairs with the LLM
+	// raw-output recovery hint: with persistence always on, every truncated
+	// tool result lands on disk and the LLM can recover the original via the
+	// /api/context/rtk/raw-output/{id} endpoint.
 	if c.RawOutputRetention == "" {
 		c.RawOutputRetention = "always"
 	}
