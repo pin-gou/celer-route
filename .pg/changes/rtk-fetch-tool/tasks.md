@@ -168,10 +168,10 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 13.1 review agent 读 design.md + tasks.md
-- [ ] 13.2 review agent 对 git diff 做静态审查
-- [ ] 13.3 review agent 输出 review_score + p0_failures
-- [ ] 13.4 score < pass_threshold → escalate；≥ pass_threshold → completed
+- [x] 13.1 review agent 读 design.md + tasks.md
+- [x] 13.2 review agent 对 git diff 做静态审查
+- [x] 13.3 review agent 输出 review_score + p0_failures
+- [x] 13.4 score < pass_threshold → escalate；≥ pass_threshold → completed
 
 > **本次变更 review 关注点**：
 > - `RtkFetchRawOutputTool` 的 function.name 是否是 byte-stable 常量（不能放在 init 函数中拼装）
