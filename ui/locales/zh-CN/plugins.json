@@ -207,7 +207,7 @@
 		"rawOutputSection": "调试：原始输出",
 		"rawOutputRetentionLabel": "原始输出保留",
 		"rawOutputRetentionPlaceholder": "选择保留模式",
-		"rawOutputRetentionDescription": "控制何时将原始工具输出持久化到磁盘",
+		"rawOutputRetentionDescription": "控制何时将原始工具输出持久化到磁盘。设为非「从不」时，网关会在 tool_result 末尾嵌入一个免鉴权恢复 URL（无需 Authorization 头），LLM 可直接 GET 取回原文。24 位十六进制 ID 即访问凭证（96 位熵），按 Raw Output TTL 到期后失效；在此之前任何持有该 ID 者均可读取。",
 		"rawOutputRetentionWhen": "日常保持「从不」以省磁盘；排查问题时切到「失败时」或「始终」，去「原始输出」查看器读脱敏原文。",
 		"rawOutputRetentionNever": "从不",
 		"rawOutputRetentionFailures": "失败时",

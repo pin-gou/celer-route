@@ -222,6 +222,8 @@
 		"sections": {
 			"trafficAndStability": "流量与稳定性",
 			"trafficAndStabilityDesc": "控制并发、请求存活时间，以及错误如何被记录。",
+			"gatewayPublicUrl": "网关公网地址",
+			"gatewayPublicUrlDesc": "本 celer-route 网关的对外访问地址，用于拼接写入 tool 输出恢复提示中的自指 URL（例如 RTK 原始输出 fetch URL）。",
 			"diagnostics": "诊断信息",
 			"diagnosticsDesc": "自上次重启以来的运行统计。",
 			"allowlist": "白名单",
@@ -249,6 +251,8 @@
 		"noConfig": "未配置客户端设置",
 		"dropExcessRequests": "丢弃超额请求",
 		"dropExcessRequestsDesc": "启用后，celer-route 将丢弃超过池容量的请求。",
+		"celerRouteBaseUrl": "Celer-Route 公网地址",
+		"celerRouteBaseUrlDesc": "网关部署在反向代理后时，配置对外可访问的公网地址。留空则按入站 Host 头推导。支持环境变量语法（如 env.CELER_ROUTE_BASE_URL）。",
 		"droppedRequests": "自上次重启以来已丢弃 <1>{{count}} 个请求</1>。",
 		"disableDbPings": "健康检查中禁用数据库 Ping",
 		"disableDbPingsDesc": "启用后，/health 端点将跳过数据库连接检查并立即返回 OK。",

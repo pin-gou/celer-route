@@ -86,16 +86,20 @@ func TestRecoveryHint_ContainsRecoveryEndpoint(t *testing.T) {
 	injectRtkRecoveryHint(ctx, req)
 
 	hint := *req.ChatRequest.Input[0].Content.ContentStr
-	// Three signals the LLM needs to act on the marker:
-	//   - the marker format itself
-	//   - the URL it should call
+	// Signals the LLM needs to act on the marker:
+	//   - the marker format itself (raw_output_id, orig=, ttl=)
+	//   - the URL path it should call when the marker carries a fetch= URL
 	//   - the 24-hour retention cue
-	//   - the auth-header cue (re-use the same bearer)
+	//   - the no-auth cue (the dedicated fetch= URL requires no Authorization header
+	//     when the gateway serves the endpoint unauthenticated; we still mention
+	//     "Authorization" because the recovery hint text explicitly tells the LLM
+	//     the dedicated URL path does not need it, and that statement mentions
+	//     "Authorization" verbatim).
 	for _, want := range []string{
-		"[rtk:raw_output_id=<24hex>]",
+		"[rtk:raw_output_id=<24hex>",
 		"/api/context/rtk/raw-output/",
 		"24h",
-		"Authorization header",
+		"Authorization",
 	} {
 		if !strings.Contains(hint, want) {
 			t.Errorf("hint missing required phrase %q", want)
@@ -133,14 +137,44 @@ func ptrResponsesString(s string) *string { return &s }
 func TestRawOutputHint_AppendedOnTruncate(t *testing.T) {
 	// Simulate the post-pipeline state: truncated + a raw-output pointer.
 	stats := &ProcessStats{
-		Truncated: true,
+		OriginalBytes: 1024 * 48 + 231,
+		Truncated:     true,
 		RawOutputPointers: []*RtkRawOutputPointer{
 			{ID: "0123456789abcdef01234567", Path: "/tmp/x.log", Bytes: 42, SHA256: "deadbeef", Redacted: false},
 		},
 	}
-	got := appendRawOutputHint("truncated output...", stats)
-	if !strings.Contains(got, "[rtk:raw_output_id=0123456789abcdef01234567; ttl=24h; redacted=true]") {
-		t.Errorf("expected pointer hint in result, got %q", got)
+	got := appendRawOutputHint("truncated output...", stats, "")
+	if !strings.Contains(got, "[rtk:raw_output_id=0123456789abcdef01234567") {
+		t.Errorf("expected pointer id in result, got %q", got)
+	}
+	if !strings.Contains(got, "orig=48.2KB") {
+		t.Errorf("expected orig=<size> in result, got %q", got)
+	}
+	if !strings.Contains(got, "ttl=24h") {
+		t.Errorf("expected ttl=24h in result, got %q", got)
+	}
+	if !strings.Contains(got, "redacted=true") {
+		t.Errorf("expected redacted=true in result, got %q", got)
+	}
+	if strings.Contains(got, "fetch=") {
+		t.Errorf("expected no fetch= when recoveryBaseURL is empty, got %q", got)
+	}
+}
+
+func TestRawOutputHint_AppendedWithFetchURL(t *testing.T) {
+	stats := &ProcessStats{
+		OriginalBytes: 2048,
+		Truncated:     true,
+		RawOutputPointers: []*RtkRawOutputPointer{
+			{ID: "abcdef0123456789abcdef01", Path: "/tmp/x.log", Bytes: 2048, SHA256: "deadbeef", Redacted: true},
+		},
+	}
+	got := appendRawOutputHint("truncated output...", stats, "http://192.168.3.18:20128")
+	if !strings.Contains(got, "fetch=GET http://192.168.3.18:20128/api/context/rtk/raw-output/abcdef0123456789abcdef01") {
+		t.Errorf("expected complete fetch=GET URL in result, got %q", got)
+	}
+	if !strings.Contains(got, "orig=2.0KB") {
+		t.Errorf("expected orig=2.0KB in result, got %q", got)
 	}
 }
 
@@ -152,7 +186,7 @@ func TestRawOutputHint_NotAppendedWhenNotTruncated(t *testing.T) {
 		},
 	}
 	original := "no truncation happened"
-	got := appendRawOutputHint(original, stats)
+	got := appendRawOutputHint(original, stats, "")
 	if got != original {
 		t.Errorf("hint must not be appended when not truncated; got %q", got)
 	}
@@ -164,7 +198,7 @@ func TestRawOutputHint_NotAppendedWhenNoPointer(t *testing.T) {
 	// so we must skip it to avoid dangling references.
 	stats := &ProcessStats{Truncated: true}
 	original := "truncated but no retention"
-	got := appendRawOutputHint(original, stats)
+	got := appendRawOutputHint(original, stats, "")
 	if got != original {
 		t.Errorf("hint must not be appended when no pointer exists; got %q", got)
 	}

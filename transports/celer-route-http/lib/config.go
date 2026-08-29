@@ -93,6 +93,11 @@ type HandlerStore interface {
 	// redirect_uri when acting as an OAuth client to upstream MCP servers, or empty string
 	// if not configured (falls back to dynamic Host-header-based URL).
 	GetMCPExternalClientURL() string
+	// GetCelerRouteBaseURL returns the configured public base URL of the celer-route gateway,
+	// used to build self-referential URLs embedded in tool output recovery hints (e.g. the
+	// RTK raw-output fetch URL). Empty string falls back to dynamic Host-header-based URL
+	// resolution at request time (see BuildBaseURL).
+	GetCelerRouteBaseURL() string
 }
 
 // Retry backoff constants for validation
@@ -1272,6 +1277,24 @@ func sanitizeMCPExternalOAuthURLs(client *configstore.ClientConfig) {
 	}
 }
 
+// sanitizeCelerRouteBaseURL validates the gateway's public base URL override and clears
+// any invalid value so it cannot leak into self-referential recovery hint URLs (e.g. the
+// RTK raw-output fetch URL). The warning intentionally omits the offending value: this
+// field supports env-var references ("env.MY_VAR"), and echoing the resolved URL back
+// in logs would let a misconfigured deployment surface env contents.
+func sanitizeCelerRouteBaseURL(client *configstore.ClientConfig) {
+	if client == nil {
+		return
+	}
+	if client.CelerRouteBaseURL == nil || !client.CelerRouteBaseURL.IsSet() {
+		return
+	}
+	if err := ValidateBaseURL(client.CelerRouteBaseURL.GetValue()); err != nil {
+		logger.Warn("celer_route_base_url %v; override will be ignored and recovery hints will fall back to the request Host header", err)
+		client.CelerRouteBaseURL = nil
+	}
+}
+
 // loadClientConfig loads and merges client config from file with store using hash-based reconciliation.
 // The hash covers both the client section and mcp.tool_manager_config so that UI changes to either
 // survive restarts when the file is unchanged.
@@ -1296,6 +1319,7 @@ func loadClientConfig(ctx context.Context, config *Config, configData *ConfigDat
 		logger.Debug("client config not found in store, using config file")
 		if configData.Client != nil {
 			sanitizeMCPExternalOAuthURLs(configData.Client)
+			sanitizeCelerRouteBaseURL(configData.Client)
 			config.ClientConfig = configData.Client
 			applyClientConfigDefaults(config.ClientConfig)
 			applyToolManagerToClientConfig(config.ClientConfig, toolManagerFromFile)
@@ -1363,6 +1387,7 @@ func loadClientConfig(ctx context.Context, config *Config, configData *ConfigDat
 		// Full hash mismatch - file changed, sync from file (file takes precedence)
 		logger.Info("client config was updated in config.json, syncing. Note that: file config takes precedence.")
 		sanitizeMCPExternalOAuthURLs(configData.Client)
+		sanitizeCelerRouteBaseURL(configData.Client)
 		config.ClientConfig = configData.Client
 		config.ClientConfig.ConfigHash = fileHash
 		applyClientConfigDefaults(config.ClientConfig)
@@ -5321,6 +5346,15 @@ func (c *Config) ShouldAllowDirectKeys() bool {
 // if not configured. Resolves env var references automatically.
 func (c *Config) GetMCPExternalClientURL() string {
 	return c.ClientConfig.MCPExternalClientURL.GetValue()
+}
+
+// GetCelerRouteBaseURL returns the configured public base URL of the celer-route gateway,
+// used to build self-referential URLs embedded in tool output recovery hints (e.g. the
+// RTK raw-output fetch URL). Empty string when not configured — callers fall back to the
+// dynamic Host-header-derived URL at request time (see BuildBaseURL). Resolves env var
+// references (e.g. "env.MY_VAR") automatically.
+func (c *Config) GetCelerRouteBaseURL() string {
+	return c.ClientConfig.CelerRouteBaseURL.GetValue()
 }
 
 // GetHeaderMatcher returns the precompiled header matcher for header filtering.

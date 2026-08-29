@@ -32,6 +32,14 @@ type EngineConfig struct {
 	// When non-empty, the command hint is first run through lastCommandSegment
 	// to extract the last meaningful segment from composite commands.
 	CommandHint string `json:"-"`
+
+	// RecoveryBaseURL is the public base URL of the celer-route gateway itself,
+	// resolved at request time from the request context (client-settings
+	// override → Host header fallback). It is forwarded into the pipeline so the
+	// raw-output recovery hint can embed a complete, copy-pasteable fetch URL
+	// instead of a relative path the LLM cannot resolve on its own. Not
+	// serialised — same plumbing-field pattern as CommandHint above.
+	RecoveryBaseURL string `json:"-"`
 }
 
 // EngineResult holds the result of a single engine's compression pass.

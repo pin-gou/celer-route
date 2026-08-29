@@ -75,6 +75,10 @@ func (m *mockHandlerStore) GetMCPExternalClientURL() string {
 	return ""
 }
 
+func (m *mockHandlerStore) GetCelerRouteBaseURL() string {
+	return ""
+}
+
 func (m *mockHandlerStore) GetModelCatalog() *modelcatalog.ModelCatalog {
 	return m.modelCatalog
 }

@@ -52,7 +52,8 @@ func (e *rtkEngine) Apply(ctx *schemas.BifrostContext, text string, cfg EngineCo
 	loader := e.plugin.loader
 
 	commandHint := cfg.CommandHint
-	result, stats := processRtkTextWithCommand(text, config, loader, commandHint)
+	recoveryBaseURL := cfg.RecoveryBaseURL
+	result, stats := processRtkTextWithCommand(text, config, loader, commandHint, recoveryBaseURL)
 	if stats == nil {
 		return EngineResult{
 			Text:         result,
