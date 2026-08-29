@@ -1,5 +1,5 @@
 import { BundlesResponse } from "@/lib/types/catalog";
-import { ModelProvider, ModelProviderKey } from "@/lib/types/config";
+import { CustomProviderConfig, ModelProvider, ModelProviderKey, NetworkConfig } from "@/lib/types/config";
 import { baseApi } from "./baseApi";
 
 /**
@@ -24,12 +24,22 @@ export const catalogApi = baseApi.injectEndpoints({
 		}),
 
 		// One-click provider registration from a bundle row. The backend fills
-		// in defaults for every field not present here.
-		createProvider: builder.mutation<ModelProvider, { provider: string }>({
-			query: ({ provider }) => ({
+		// in defaults for every field not present here. Entries whose provider
+		// is not built into this gateway build additionally carry the
+		// custom-provider fallback (custom_provider_config + network_config),
+		// which the server annotated into the catalog snapshot.
+		createProvider: builder.mutation<
+			ModelProvider,
+			{
+				provider: string;
+				custom_provider_config?: CustomProviderConfig;
+				network_config?: NetworkConfig;
+			}
+		>({
+			query: (body) => ({
 				url: "/providers",
 				method: "POST",
-				body: { provider },
+				body,
 			}),
 			invalidatesTags: ["Providers", "CatalogBundles"],
 		}),

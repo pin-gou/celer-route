@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DefaultNetworkConfig } from "@/lib/constants/config";
 import { catalogApi, useCreateProviderKeyMutation, useCreateProviderMutation } from "@/lib/store/apis/catalogApi";
 import { BundleProviderEntry } from "@/lib/types/catalog";
-import { cn } from "@/lib/utils";
-import { ExternalLink, Info, KeyRound, ListChecks, Sparkles } from "lucide-react";
+import { KnownProvider } from "@/lib/types/config";
+import { ExternalLink, Info, KeyRound, ListChecks, Plus, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -30,6 +31,9 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 	const [apiKey, setApiKey] = useState("");
 
 	const isKeyless = provider?.is_keyless ?? false;
+	// The server keeps base_provider only on entries this build does not ship
+	// natively — those are created through the custom-provider fallback.
+	const isCustom = !!provider?.base_provider;
 	const isSubmitting = isCreatingProvider || isCreatingKey;
 
 	const handleSubmit = async () => {
@@ -38,7 +42,21 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 
 		try {
 			try {
-				await createProvider({ provider: provider.provider }).unwrap();
+				await createProvider(
+					isCustom
+						? {
+								provider: provider.provider,
+								custom_provider_config: {
+									base_provider_type: provider.base_provider as KnownProvider,
+									is_key_less: isKeyless,
+								},
+								network_config: {
+									...DefaultNetworkConfig,
+									base_url: provider.base_url ?? "",
+								},
+							}
+						: { provider: provider.provider },
+				).unwrap();
 			} catch (e) {
 				if ((e as { status?: number })?.status === 409) {
 					// Provider already configured — fall through and add the key.
@@ -60,10 +78,21 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent data-testid="home-free-tier-config-dialog" className={cn(!isKeyless && provider?.apply_url && "sm:max-w-md")}>
+			<DialogContent
+				data-testid="home-free-tier-config-dialog"
+				// Wide dialog capped at min(80vw, 720px); since 80vw never
+				// exceeds the viewport, no extra clamp is needed. overflow-x-hidden
+				// is the final guard for inner content.
+				className="overflow-x-hidden sm:max-w-[min(80vw,720px)]"
+			>
 				<DialogHeader>
 					<DialogTitle className="capitalize">{provider?.provider}</DialogTitle>
-					<DialogDescription>{provider?.notes || t("freeTier.configureNow")}</DialogDescription>
+					<DialogDescription className="break-words">{provider?.notes || t("freeTier.configureNow")}</DialogDescription>
+					{isCustom && (
+						<DialogDescription data-testid="home-free-tier-custom-hint" className="break-words text-orange-600/90 dark:text-orange-400/90">
+							{t("freeTier.customProviderHint", { protocol: provider?.base_provider ?? "" })}
+						</DialogDescription>
+					)}
 				</DialogHeader>
 
 				{/* 1) Promo highlight: recommended models (the offer summary lives
@@ -79,9 +108,9 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 							<Sparkles className="h-3.5 w-3.5 shrink-0 text-orange-500 dark:text-orange-400" aria-hidden />
 							<span className="text-foreground/80 font-medium">{t("freeTier.models")}:</span>
 							{provider?.models && provider.models.length > 0 ? (
-								<span className="text-muted-foreground truncate">{provider.models.join(", ")}</span>
+								<span className="text-muted-foreground min-w-0 truncate">{provider.models.join(", ")}</span>
 							) : (
-								<span className="text-muted-foreground truncate">{provider?.provider ?? ""}</span>
+								<span className="text-muted-foreground min-w-0 truncate">{provider?.provider ?? ""}</span>
 							)}
 						</div>
 					)}
@@ -97,7 +126,7 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 						</div>
 						<ol className="text-muted-foreground space-y-1 pl-5 text-xs leading-relaxed">
 							{provider.apply_steps.map((step, idx) => (
-								<li key={idx} className="list-decimal">
+								<li key={idx} className="list-decimal break-words">
 									{step}
 								</li>
 							))}
@@ -149,6 +178,7 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 						disabled={isSubmitting}
 						dataTestId="home-free-tier-cancel"
 					>
+						<X className="h-3.5 w-3.5" />
 						{t("freeTier.cancel")}
 					</Button>
 					<Button
@@ -159,6 +189,7 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 						isLoading={isSubmitting}
 						disabled={!isKeyless && !apiKey.trim()}
 					>
+						<Plus className="h-3.5 w-3.5" />
 						{t("freeTier.submit")}
 					</Button>
 				</DialogFooter>

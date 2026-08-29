@@ -26,6 +26,9 @@
 		"note": "Note",
 		"applySteps": "Steps to apply",
 		"applyHintKeyless": "This provider needs no API key — click the button below to add it directly.",
+		"unsupportedHint": "Not supported in this version",
+		"customProtocol": "via {{protocol}} API",
+		"customProviderHint": "This provider is not built in — it will be added as a custom provider using the {{protocol}}-compatible API.",
 		"useCount": "{{count}} uses",
 		"lastUsed": "Last used {{at}}",
 		"viewDetails": "View details"

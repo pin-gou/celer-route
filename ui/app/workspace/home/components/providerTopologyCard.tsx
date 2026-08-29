@@ -8,15 +8,7 @@ import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { Link } from "@tanstack/react-router";
 import { KeyRound, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-type DotState = "ok" | "missing" | "degraded" | "error";
-
-const dotClass: Record<DotState, string> = {
-	ok: "bg-emerald-500",
-	missing: "bg-zinc-400",
-	degraded: "bg-amber-500",
-	error: "bg-red-500",
-};
+import { computeDotState, dotClass, DotState } from "./providerHealth";
 
 interface ProviderHealthSummary {
 	provider: string;
@@ -37,15 +29,7 @@ export default function ProviderTopologyCard() {
 			for (const m of k.models ?? []) models.add(m);
 		}
 
-		let dotState: DotState;
-		if (p.is_key_less) {
-			// Keyless providers (opencode, custom keyless) have no keys — infer
-			// health from the operational status instead of key presence.
-			dotState = p.provider_status === "error" ? "missing" : p.status === "list_models_failed" ? "degraded" : "ok";
-		} else {
-			const enabled = (p.keys_enabled ?? true) && keysForProvider.length > 0;
-			dotState = !enabled ? "missing" : p.last_error_at ? "error" : "ok";
-		}
+		const dotState: DotState = computeDotState(p, keysForProvider.length);
 
 		return {
 			provider: p.name,
