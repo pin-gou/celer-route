@@ -1,6 +1,9 @@
 package rtk
 
 import (
+	"context"
+
+	"github.com/pin-gou/celer-route/core/mcp"
 	"github.com/pin-gou/celer-route/core/schemas"
 )
 
@@ -97,6 +100,7 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 			}
 			if p.config.Enabled {
 				injectRtkRecoveryHint(ctx, req)
+				p.injectFetchToolSchemaIfAvailable(req)
 			}
 			return req, nil, nil
 		}
@@ -142,7 +146,131 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		injectRtkRecoveryHint(ctx, req)
 	}
 
+	// Inject the rtk_fetch_raw_output tool schema into the request's tools=
+	// list when the plugin opts in (InjectFetchTool default true) and the
+	// tool is actually registered with the MCP manager. Source of truth is
+	// the manager's live tool map (mcpManagerHasFetchTool), so multi-instance
+	// / reload / test scenarios where registration did not happen are safe:
+	// the schema is only exposed when the tool can actually be called.
+	p.injectFetchToolSchemaIfAvailable(req)
+
 	return req, nil, nil
+}
+
+// injectFetchToolSchemaIfAvailable appends the rtk_fetch_raw_output tool
+// schema to req.Params.Tools when the plugin is enabled, InjectFetchTool is
+// true, the bifrost instance is attached, the MCP manager exists, and the
+// tool is currently registered in the manager's live tool map. It is a no-op
+// otherwise, so callers can invoke it unconditionally at every PreLLMHook
+// exit point (including the min-tokens skip path) without extra gating.
+func (p *Plugin) injectFetchToolSchemaIfAvailable(req *schemas.BifrostRequest) {
+	if p.bifrost == nil {
+		return
+	}
+	p.injectFetchToolSchemaIfManagerAvailable(req, p.bifrost.GetMCPManager())
+}
+
+// injectFetchToolSchemaIfManagerAvailable is the parameterised core of
+// injectFetchToolSchemaIfAvailable: it decides whether to inject based solely
+// on the config and the given manager, so unit tests can exercise the branch
+// logic with a mock MCPManagerLike instead of a full bifrost instance.
+func (p *Plugin) injectFetchToolSchemaIfManagerAvailable(req *schemas.BifrostRequest, mgr MCPManagerLike) {
+	if p == nil || p.config == nil {
+		return
+	}
+	if !p.config.Enabled || !IsTruePtr(p.config.InjectFetchTool) || mgr == nil {
+		return
+	}
+	if p.mcpManagerHasFetchTool(mgr) {
+		p.injectFetchToolSchema(req)
+	}
+}
+
+// MCPManagerLike is the minimal surface the RTK plugin needs from the MCP
+// manager to discover whether the fetch tool is registered. It is declared so
+// unit tests can inject a fake without spinning up a full MCPManager (which
+// would require clients, network setup, etc.). *mcp.MCPManager satisfies it
+// (utils.go GetToolPerClient), enforced by the var _ assertion below.
+type MCPManagerLike interface {
+	// GetToolPerClient returns all currently available tools grouped by
+	// client name. The agent loop uses this when the LLM response includes
+	// tool calls; the RTK plugin uses it as a source of truth to know
+	// whether the fetch tool has been registered (and therefore should be
+	// exposed in req.Params.Tools).
+	GetToolPerClient(ctx context.Context) map[string][]schemas.ChatTool
+}
+
+// Compile-time assertion that the concrete MCP manager satisfies the minimal
+// interface the plugin depends on.
+var _ MCPManagerLike = (*mcp.MCPManager)(nil)
+
+// mcpManagerHasFetchTool returns true when the rtk_fetch_raw_output tool is
+// currently registered in the manager's tool map (under its prefixed name).
+// Avoids duplicating the registration list in the plugin: instead of the
+// plugin remembering whether AttachBifrost succeeded, it asks the manager.
+func (p *Plugin) mcpManagerHasFetchTool(mgr MCPManagerLike) bool {
+	if mgr == nil {
+		return false
+	}
+	for _, tools := range mgr.GetToolPerClient(context.Background()) {
+		for _, t := range tools {
+			if t.Function != nil && t.Function.Name == rtkFetchRawOutputToolName {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// injectFetchToolSchema appends RtkFetchRawOutputTool to req.Params.Tools when
+// not already present. Idempotent: a no-op when the schema is already in the
+// list (e.g. the client supplied it directly). Handles both the chat
+// completions shape (Params.Tools []ChatTool) and the responses shape
+// (Params.Tools []ResponsesTool, converted via ToResponsesTool so the schema
+// is emitted in the responses-API tool shape).
+func (p *Plugin) injectFetchToolSchema(req *schemas.BifrostRequest) {
+	switch req.RequestType {
+	case schemas.ChatCompletionRequest, schemas.ChatCompletionStreamRequest:
+		if req.ChatRequest == nil || req.ChatRequest.Params == nil {
+			return
+		}
+		if !hasTool(req.ChatRequest.Params.Tools, rtkFetchRawOutputToolName) {
+			req.ChatRequest.Params.Tools = append(req.ChatRequest.Params.Tools, RtkFetchRawOutputTool)
+		}
+	case schemas.ResponsesRequest, schemas.ResponsesStreamRequest:
+		if req.ResponsesRequest == nil || req.ResponsesRequest.Params == nil {
+			return
+		}
+		if !hasResponsesTool(req.ResponsesRequest.Params.Tools, rtkFetchRawOutputToolName) {
+			rt := RtkFetchRawOutputTool.ToResponsesTool()
+			if rt != nil {
+				req.ResponsesRequest.Params.Tools = append(req.ResponsesRequest.Params.Tools, *rt)
+			}
+		}
+	}
+}
+
+// hasTool reports whether a chat-completions tools list already contains the
+// given prefixed function name.
+func hasTool(tools []schemas.ChatTool, name string) bool {
+	for _, t := range tools {
+		if t.Function != nil && t.Function.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// hasResponsesTool reports whether a responses-API tools list already contains
+// the given prefixed function name (ResponsesTool carries the name in its
+// Name field, not inside a nested Function).
+func hasResponsesTool(tools []schemas.ResponsesTool, name string) bool {
+	for _, t := range tools {
+		if t.Name != nil && *t.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // PostLLMHook implements schemas.LLMPlugin. It retrieves the compression

@@ -122,6 +122,17 @@ type Config struct {
 	// SnapshotMaxBytes caps the total bytes persisted per request across all
 	// snapshots. Default 30 KiB, minimum 1 KiB, maximum 256 KiB.
 	SnapshotMaxBytes int `json:"snapshot_max_bytes"`
+
+	// InjectFetchTool controls whether the RTK plugin registers the
+	// bifrostInternal-rtk_fetch_raw_output MCP tool on startup and injects
+	// its schema into every chat request's tools= list.
+	//
+	// Default: true. Set to false to opt out — clients without an MCP-style
+	// tool-call loop (or with a hard cap on the number of allowed tools) can
+	// disable this and rely on the system-prompt hint to issue plain GETs.
+	// The *bool pointer distinguishes "unset" (nil → default true, applied
+	// in applyConfigDefaults) from an explicit false (opt-out survives).
+	InjectFetchTool *bool `json:"inject_fetch_tool,omitempty"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -316,4 +327,26 @@ func applyConfigDefaults(c *Config) {
 	} else if c.SnapshotMaxBytes > 256*1024 {
 		c.SnapshotMaxBytes = 256 * 1024
 	}
+
+	// InjectFetchTool defaults to true so existing operators get the new
+	// behaviour without changing their config.json. The *bool pointer
+	// distinguishes "unset" (nil → fill in *true) from an explicit opt-out
+	// (*false survives). An explicit true also survives (we overwrite the
+	// existing *true with another *true — same value, no semantic change).
+	if c.InjectFetchTool == nil {
+		t := true
+		c.InjectFetchTool = &t
+	}
+}
+
+// IsTruePtr reports whether a *bool is non-nil and dereferences to true. The
+// RTK plugin's InjectFetchTool uses a *bool so "unset" can be distinguished
+// from "explicit false"; a plain-bool "if c.InjectFetchTool" would treat
+// every false (including the unset default) the same as the explicit opt-out.
+// Centralising the dereference keeps every call site consistent — a
+// previously-true pointer that was toggled to false (e.g. by a config reload)
+// still works, and a nil pointer (defensive code that bypasses
+// applyConfigDefaults) reads as "not opted in".
+func IsTruePtr(b *bool) bool {
+	return b != nil && *b
 }

@@ -100,6 +100,10 @@ func TestRecoveryHint_ContainsRecoveryEndpoint(t *testing.T) {
 		"/api/context/rtk/raw-output/",
 		"24h",
 		"Authorization",
+		// V-plugins-4: the primary recovery path is now the MCP tool call —
+		// the hint must name the full prefixed tool so the LLM knows which
+		// tool to invoke (design.md §"Hint 文本改写" 主路径).
+		"bifrostInternal-rtk_fetch_raw_output",
 	} {
 		if !strings.Contains(hint, want) {
 			t.Errorf("hint missing required phrase %q", want)
@@ -211,8 +215,8 @@ func TestRawOutputHint_NotAppendedWhenNoPointer(t *testing.T) {
 // so it would loop fetching forever.
 func TestRecoveryHint_NotesBypass(t *testing.T) {
 	must := []string{
-		"unwraps the recovered body",
-		"IS the file content",
+		"automatically unwrapped by RTK",
+		"is the file content",
 		"disk copy expired",
 	}
 	for _, sub := range must {

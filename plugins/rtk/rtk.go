@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	bifrost "github.com/pin-gou/celer-route/core"
 	"github.com/pin-gou/celer-route/core/schemas"
 )
 
@@ -27,6 +28,7 @@ type Plugin struct {
 	metrics      *CompressionMetrics
 	rawOutputDir string               // resolved on-disk root for raw-output persistence
 	janitor      *RtkRawOutputJanitor // TTL reaper for persisted raw outputs (nil when TTL=0)
+	bifrost      *bifrost.Bifrost     // core instance, attached post-Init for MCP tool registration (nil when unattached)
 }
 
 // Init creates a new RTK plugin instance with the given configuration.
@@ -183,6 +185,68 @@ func (p *Plugin) Loader() *FilterLoader {
 		return nil
 	}
 	return p.loader
+}
+
+// AttachBifrost wires the core bifrost instance into the plugin and registers
+// the rtk_fetch_raw_output MCP tool when the plugin is enabled, the config
+// opts in (InjectFetchTool default true), and the core exposes an MCP manager.
+//
+// It is called by the transports host AFTER bifrost.Init (the core instance
+// does not exist during loadBuiltinPlugins), matching the provider-cooldown
+// post-init wiring pattern (server.server.go). It is safe to call multiple
+// times: RegisterTool on an already-registered name returns an error which is
+// logged at WARN and swallowed (the design's error table for RegisterTool).
+func (p *Plugin) AttachBifrost(b *bifrost.Bifrost) {
+	if p == nil {
+		return
+	}
+	p.bifrost = b
+	p.registerFetchToolIfEnabled()
+}
+
+// registerFetchToolIfEnabled registers the raw-output fetch tool with the
+// MCP manager when the plugin is enabled and InjectFetchTool is true. No-op
+// when the plugin is disabled, when the opt-in flag is false, when no bifrost
+// instance is attached, or when the core has no MCP manager (e.g. unit tests
+// that bypass MCP entirely). A RegisterTool failure (name already registered)
+// is logged at WARN and swallowed so a tool conflict cannot take down the
+// gateway — the recovery hint text still works via plain GET as a fallback.
+func (p *Plugin) registerFetchToolIfEnabled() {
+	if p == nil || p.config == nil {
+		return
+	}
+	if !p.config.Enabled || !IsTruePtr(p.config.InjectFetchTool) {
+		return
+	}
+	if p.bifrost == nil {
+		return
+	}
+	mgr := p.bifrost.GetMCPManager()
+	if mgr == nil {
+		return
+	}
+	if err := mgr.RegisterTool(
+		"rtk_fetch_raw_output", // internal name (no hyphen); RegisterTool prefixes it
+		rtkFetchRawOutputToolDescription,
+		p.rawOutputReadHandlerMCPTool, // MCPToolFunction[any] adapter
+		RtkFetchRawOutputTool,         // byte-stable schema (prefixed name)
+	); err != nil {
+		if p.logger != nil {
+			p.logger.Warn("rtk: failed to register rtk_fetch_raw_output MCP tool: %v", err)
+		}
+		return
+	}
+	if p.logger != nil {
+		p.logger.Info("rtk: registered rtk_fetch_raw_output MCP tool")
+	}
+}
+
+// rawOutputReadHandlerMCPTool adapts RawOutputReadHandler to the
+// MCPToolFunction[any] shape RegisterTool expects. The MCP layer passes args
+// as map[string]any (deserialised from the JSON Schema declaration), and the
+// handler is a pure (ctx, args) → (string, error) function per design.md.
+func (p *Plugin) rawOutputReadHandlerMCPTool(args any) (string, error) {
+	return p.RawOutputReadHandler(context.Background(), args)
 }
 
 // Cleanup performs plugin cleanup — drains the state store and stops

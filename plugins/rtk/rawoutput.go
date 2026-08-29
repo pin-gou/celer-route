@@ -584,6 +584,41 @@ func (j *RtkRawOutputJanitor) reapOnce() {
 	}
 }
 
+// RawOutputReadHandler is the Go handler backing the rtk_fetch_raw_output MCP
+// tool. It reads <appDir>/rtk/raw-output/<unix-ms>-<slug>-<id>.log, wraps the
+// body in the RTK raw-output sentinel so the next RTK compression pass strips
+// it back out (anti-recursion), and returns the wrapped body. Same wire shape
+// as the LLM-bound response of /api/context/rtk/raw-output/{id}
+// (handlers/rtk.go:386).
+//
+// Authorization: today the endpoint has no per-request_id isolation — anyone
+// with the 24-hex id can read. The tool inherits the same surface; adding
+// owner isolation is a separate task (Phase 2).
+//
+// The read path mirrors the HTTP accessor (server.go:2079 ReadRawOutput):
+// operator-configured RawOutputDir when set, else the appDir-derived default,
+// with the in-memory registry and CWD glob as last-ditch fallbacks. Using the
+// same resolution guarantees the MCP tool and the HTTP endpoint return
+// byte-identical bodies for the same id (V-plugins-7).
+func (p *Plugin) RawOutputReadHandler(ctx context.Context, args any) (string, error) {
+	if p == nil {
+		return "", fmt.Errorf("rtk plugin is nil")
+	}
+	argsMap, ok := args.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("invalid args type: %T", args)
+	}
+	id, _ := argsMap["id"].(string)
+	if !IsValidRawOutputID(id) {
+		return "", fmt.Errorf("invalid id %q: must be 24 lowercase hex characters", id)
+	}
+	data, found := ReadRtkRawOutputByIDInDir(id, p.GetAppDir(), p.RawOutputDir())
+	if !found {
+		return "", fmt.Errorf("raw output %q not found or expired (24h TTL)", id)
+	}
+	return WrapRawOutputForHTTP(data, id, len(data), ""), nil
+}
+
 // rawOutputFilenameTimestamp extracts the leading unix-ms timestamp from a
 // raw-output filename of the form `<unix-ms>-<slug>-<id>.log`. Returns false
 // when the name does not match the expected shape — non-matching files are

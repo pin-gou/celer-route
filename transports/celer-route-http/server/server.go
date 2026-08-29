@@ -2028,6 +2028,13 @@ func (s *BifrostHTTPServer) SyncLoadedPlugin(ctx context.Context, name string, p
 		s.rtkPluginMu.Lock()
 		s.rtkPlugin = rp
 		s.rtkPluginMu.Unlock()
+		// Re-wire the core instance on the reloaded plugin so its fetch
+		// tool stays registered with the MCP manager (the old instance's
+		// registration is dropped by Manager re-init / name conflict;
+		// AttachBifrost is idempotent and logs a WARN on re-register).
+		if s.Client != nil {
+			rp.AttachBifrost(s.Client)
+		}
 	}
 	// 4. Special handling for observability plugins
 	if _, ok := plugin.(schemas.ObservabilityPlugin); ok {
@@ -2101,6 +2108,24 @@ func (s *BifrostHTTPServer) ResolveRtkPlugin() (handlers.RtkPluginAccessor, bool
 		return nil, false
 	}
 	return &rtkAccessor{p: p}, true
+}
+
+// attachRTKFetchTool wires the live bifrost instance into the cached rtk
+// plugin and lets it register the rtk_fetch_raw_output MCP tool. It must be
+// called after bifrost.Init (s.Client non-nil) — loadBuiltinPlugins runs
+// before that and cannot hand the core over. No-op when the rtk plugin is
+// not loaded or the core instance is nil. Idempotent: RegisterTool on an
+// already-registered name logs a WARN and is swallowed inside the plugin.
+func (s *BifrostHTTPServer) attachRTKFetchTool() {
+	if s.Client == nil {
+		return
+	}
+	s.rtkPluginMu.RLock()
+	p := s.rtkPlugin
+	s.rtkPluginMu.RUnlock()
+	if p != nil {
+		p.AttachBifrost(s.Client)
+	}
 }
 
 // ReloadRtkPlugin is the RtkReloader implementation that the RTK handler
@@ -2759,6 +2784,12 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	}
 	logger.Info("models added to catalog")
 	s.Config.SetBifrostClient(s.Client)
+	// Wire the live bifrost instance into the rtk plugin now that s.Client
+	// exists (loadBuiltinPlugins ran before bifrost.Init and could not hand
+	// it over). The rtk plugin registers its rtk_fetch_raw_output MCP tool
+	// here when enabled and InjectFetchTool is true — mirroring the
+	// provider-cooldown post-init wiring pattern above.
+	s.attachRTKFetchTool()
 	// Initialize routes
 	s.Router = router.New()
 	// Save the matched route template on each request
