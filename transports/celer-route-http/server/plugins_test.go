@@ -219,6 +219,44 @@ func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
 	}
 }
 
+// TestInstantiatePlugin_RTK_AppDirPropagates pins the app-dir contract for the
+// RTK plugin: when bifrostConfig.AppDir is set (the -app-dir flag / APP_DIR env
+// in container deployments), rtk.Init receives it as its appDir so on-disk
+// roots default to <appDir>/rtk/... instead of the process CWD. Without this,
+// the raw-output files land in the ephemeral container layer rather than the
+// mounted volume (see the compose APP_DIR deployment).
+func TestInstantiatePlugin_RTK_AppDirPropagates(t *testing.T) {
+	prevLogger := logger
+	logger = noopTestLogger{}
+	defer func() { logger = prevLogger }()
+
+	appDir := t.TempDir()
+	config := &lib.Config{
+		ClientConfig: &configstore.ClientConfig{},
+		AppDir:       appDir,
+	}
+
+	plugin, err := InstantiatePlugin(context.Background(), "rtk", nil, nil, config)
+	if err != nil {
+		t.Fatalf("InstantiatePlugin(rtk) returned error: %v", err)
+	}
+	rtkPlugin, ok := plugin.(interface{ GetAppDir() string })
+	if !ok {
+		t.Fatalf("rtk plugin %T does not expose GetAppDir()", plugin)
+	}
+	if got := rtkPlugin.GetAppDir(); got != appDir {
+		t.Errorf("rtk appDir = %q, want config.AppDir %q", got, appDir)
+	}
+	// The raw-output default root is derived from appDir — pin it too so a
+	// regression here is caught without running the full server.
+	if rawOut, ok := plugin.(interface{ RawOutputDir() string }); ok {
+		want := filepath.Join(appDir, "rtk", "raw-output")
+		if got := rawOut.RawOutputDir(); got != want {
+			t.Errorf("raw-output root = %q, want %q", got, want)
+		}
+	}
+}
+
 // TestLoadBuiltinPlugins_RTK_DefaultsOn_WhenUnconfigured verifies that when no
 // PluginConfigs entry exists for RTK, the fresh-install seed config is applied:
 //   - RTK is active (not disabled)

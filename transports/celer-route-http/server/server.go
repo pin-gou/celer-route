@@ -2568,6 +2568,13 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config %v", err)
 	}
+	// Propagate the app data directory to the config so built-in plugins that
+	// default their on-disk roots to <appDir>/<subdir> (e.g. RTK raw-output)
+	// resolve them inside the app dir rather than the process CWD — in
+	// container deployments APP_DIR (-app-dir) is /app/data while CWD stays
+	// /app, so without this the raw-output files would land in the ephemeral
+	// container layer instead of the mounted volume.
+	s.Config.AppDir = s.AppDir
 	if s.Config.KVStore != nil {
 		integrations.RegisterKVDecoders(s.Config.KVStore)
 	}

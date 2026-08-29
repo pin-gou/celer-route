@@ -127,7 +127,15 @@ func loadBuiltinPlugin(ctx context.Context, name string, pluginConfig any, bifro
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal rtk plugin config: %w", err)
 		}
-		appDir, _ := os.Getwd()
+		// Base the RTK on-disk roots (raw-output, custom filters) on the
+		// application data directory (-app-dir / APP_DIR) when configured, so
+		// container deployments persist them on the mounted volume instead of
+		// the process CWD. Falls back to os.Getwd() for bare local runs (no
+		// -app-dir flag) to keep the historical behaviour.
+		appDir := bifrostConfig.AppDir
+		if appDir == "" {
+			appDir, _ = os.Getwd()
+		}
 		return rtk.Init(ctx, rtkConfig, logger, appDir)
 
 	case otel.PluginName:

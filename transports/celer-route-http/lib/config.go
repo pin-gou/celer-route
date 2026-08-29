@@ -606,6 +606,14 @@ type Config struct {
 
 	configPath string
 
+	// AppDir is the application data directory (from the -app-dir flag /
+	// APP_DIR env var in container deployments). Used as the base for
+	// config.json, config.db and logs.db (see GetDefaultConfigDir), and
+	// propagated to built-in plugins (e.g. RTK) that default their on-disk
+	// roots to <appDir>/<subdir> instead of the process working directory.
+	// Empty when not configured; plugins fall back to os.Getwd().
+	AppDir string `json:"-"`
+
 	// Stores
 	ConfigStore configstore.ConfigStore
 	VectorStore vectorstore.VectorStore
