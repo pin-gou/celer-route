@@ -3778,11 +3778,12 @@
   "$defs": {
     "remote_catalog_config": {
       "type": "object",
-      "description": "Remote free-tier bundle catalog settings. When url_template is set, the transport periodically fetches bundle catalogs from the configured template (the {lang} placeholder is replaced with the requested language code, defaulting to en) and serves them at GET /api/catalog/bundles with ETag negotiation. When absent/empty, the catalog module is hidden and the endpoint returns an empty bundle list.",
+      "description": "Remote free-tier bundle catalog settings. The transport periodically fetches bundle catalogs from the configured template (the {lang} placeholder is replaced with the requested language code, defaulting to en) and serves them at GET /api/catalog/bundles with ETag negotiation.",
       "properties": {
         "url_template": {
           "type": "string",
-          "description": "URL template for fetching bundle catalogs. May contain a single {lang} placeholder substituted with the requested language (e.g. https://cdn.example.com/bundles/{lang}.json). Fetches are SSRF-guarded."
+          "default": "https://pin-gou.github.io/celer-route/recommended-providers/{lang}.json",
+          "description": "URL template for fetching bundle catalogs. May contain a single {lang} placeholder substituted with the requested language (e.g. https://cdn.example.com/bundles/{lang}.json). Fetches are SSRF-guarded. Defaults to the project's published catalog on GitHub Pages."
         },
         "refresh_interval_seconds": {
           "type": "integer",

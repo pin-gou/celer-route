@@ -205,12 +205,18 @@ type ConfigData struct {
 	RemoteCatalog             *RemoteCatalogConfig  `json:"remote_catalog,omitempty"`
 }
 
-// RemoteCatalogConfig configures the remote free-tier bundle catalog. When
-// URLTemplate is set, the transport periodically fetches bundle catalogs from
-// the configured template (the {lang} placeholder is replaced with the
-// requested language code, defaulting to en) and serves them at
-// GET /api/catalog/bundles with ETag negotiation. When empty, the catalog
-// module is hidden and the endpoint returns an empty bundle list.
+// DefaultRemoteCatalogURLTemplate is the default free-tier bundle catalog
+// source, published to the project GitHub Pages. It is used when the operator
+// does not configure remote_catalog.url_template. The {lang} placeholder is
+// substituted with the requested language code (defaulting to en).
+const DefaultRemoteCatalogURLTemplate = "https://pin-gou.github.io/celer-route/recommended-providers/{lang}.json"
+
+// RemoteCatalogConfig configures the remote free-tier bundle catalog. The
+// transport periodically fetches bundle catalogs from the configured template
+// (the {lang} placeholder is replaced with the requested language code,
+// defaulting to en) and serves them at GET /api/catalog/bundles with ETag
+// negotiation. When url_template is unset it falls back to
+// DefaultRemoteCatalogURLTemplate.
 type RemoteCatalogConfig struct {
 	URLTemplate        string `json:"url_template,omitempty"`
 	RefreshIntervalSec int    `json:"refresh_interval_seconds,omitempty"`
@@ -223,6 +229,9 @@ type RemoteCatalogConfig struct {
 func (rc *RemoteCatalogConfig) CheckAndSetDefaults() {
 	if rc == nil {
 		return
+	}
+	if strings.TrimSpace(rc.URLTemplate) == "" {
+		rc.URLTemplate = DefaultRemoteCatalogURLTemplate
 	}
 	if rc.RefreshIntervalSec <= 0 {
 		rc.RefreshIntervalSec = 3600

@@ -5,6 +5,8 @@ package handlers
 //
 // The remote catalog URL is operator-configured via
 // config.remote_catalog.url_template (e.g. https://cdn.example.com/bundles/{lang}.json).
+// When unconfigured it defaults to
+// lib.DefaultRemoteCatalogURLTemplate (the project's GitHub Pages catalog).
 // The {lang} placeholder is substituted with the request's lang query param
 // (defaulting to en). Because that substitution value is client-controlled,
 // every upstream fetch is SSRF-guarded:
@@ -208,7 +210,7 @@ func (h *CatalogHandler) RegisterRoutes(r *router.Router, middlewares ...schemas
 // Safe to call multiple times: only one goroutine is started per handler.
 func (h *CatalogHandler) StartCatalogRefresher(ctx context.Context) {
 	if h.config == nil || h.config.RemoteCatalog == nil || strings.TrimSpace(h.config.RemoteCatalog.URLTemplate) == "" {
-		return // catalog module disabled
+		return // catalog module disabled (e.g. handler built without a config)
 	}
 	interval := time.Duration(h.config.RemoteCatalog.RefreshIntervalSec) * time.Second
 	go h.startCatalogRefresher(ctx, interval)

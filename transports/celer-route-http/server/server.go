@@ -2321,8 +2321,9 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	oauth2ConsentHandler.RegisterRoutes(s.Router, middlewares...)
 	healthHandler.RegisterRoutes(s.Router, middlewares...)
 	// Remote catalog proxy (free-tier recommendations). The refresher
-	// goroutine is only spawned when remote_catalog.url_template is set
-	// (StartCatalogRefresher no-ops otherwise).
+	// goroutine is spawned when a remote_catalog source is configured;
+	// url_template falls back to DefaultRemoteCatalogURLTemplate when unset
+	// (StartCatalogRefresher no-ops only for a nil RemoteCatalog).
 	catalogHandler.RegisterRoutes(s.Router, middlewares...)
 	catalogHandler.StartCatalogRefresher(ctx)
 	providerHandler.RegisterRoutes(s.Router, middlewares...)
