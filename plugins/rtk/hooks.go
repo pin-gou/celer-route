@@ -82,11 +82,21 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 	// are below the configured minimum, skip the entire compression pipeline.
 	// This is a performance optimisation: small requests that don't benefit
 	// from compression are passed through unchanged.
+	//
+	// The recovery-hint system message is still injected on this path — the
+	// hint is about telling the LLM how to fetch a truncated tool_result in
+	// the FUTURE, not about what happened to this request. Skipping it here
+	// would make the hint appear only on large requests, which would break
+	// prompt-cache prefix stability (the system block would then vary in
+	// content from turn to turn).
 	if p.config.MinTokensToCompress > 0 {
 		estimated := estimateRequestTokens(req)
 		if estimated < p.config.MinTokensToCompress {
 			if p.logger != nil {
 				p.logger.Debug("rtk", "skipping compression: estimated=%d < min_tokens_to_compress=%d", estimated, p.config.MinTokensToCompress)
+			}
+			if p.config.Enabled {
+				injectRtkRecoveryHint(ctx, req)
 			}
 			return req, nil, nil
 		}
@@ -121,6 +131,15 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		}
 		state := applyRtkCompressionResponses(ctx, req, p, runner, pipeline, defaultCfg)
 		p.setState(ctx, state)
+	}
+
+	// System-message hint: whenever RTK is enabled, prepend a literal-constant
+	// instruction to the request's leading system messages so the LLM knows
+	// how to recover a truncated tool_result via /api/context/rtk/raw-output.
+	// The string is byte-stable across calls so Anthropic / OpenAI prompt
+	// caches still hit on the system prefix.
+	if p.config.Enabled {
+		injectRtkRecoveryHint(ctx, req)
 	}
 
 	return req, nil, nil

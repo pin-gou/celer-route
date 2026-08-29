@@ -107,8 +107,10 @@ Changes not staged for commit:
 		t.Error("PreLLMHook should return the same request (mutated in place)")
 	}
 
-	// The tool message should have been compressed (shorter than original)
-	compressed := *outReq.ChatRequest.Input[1].Content.ContentStr
+	// The tool message should have been compressed (shorter than original).
+	// Input[0] is the RTK recovery hint prepended by PreLLMHook; the tool
+	// message under test now sits at Input[2].
+	compressed := *outReq.ChatRequest.Input[2].Content.ContentStr
 	if len(compressed) >= len(toolContent) {
 		t.Errorf("expected tool content to be compressed, original len=%d compressed len=%d", len(toolContent), len(compressed))
 	}
@@ -681,8 +683,10 @@ Changes not staged for commit:
 		t.Fatalf("PreLLMHook returned error: %v", err)
 	}
 
-	// With MinTokensToCompress=0, compression should occur
-	compressed := *outReq.ChatRequest.Input[1].Content.ContentStr
+	// With MinTokensToCompress=0, compression should occur.
+	// Input[0] is now the RTK recovery hint prepended by PreLLMHook;
+	// the tool message under test moved from [1] to [2].
+	compressed := *outReq.ChatRequest.Input[2].Content.ContentStr
 	if len(compressed) >= len(toolContent) {
 		t.Errorf("expected compression with MinTokensToCompress=0, original len=%d compressed len=%d",
 			len(toolContent), len(compressed))
@@ -750,7 +754,9 @@ func TestPreLLMHookMinTokensHighSkipsCompression(t *testing.T) {
 		},
 	}
 
-	// Save the original content bytes to compare after the hook
+	// Save the original content bytes to compare after the hook.
+	// Before the hook runs the layout is [assistant, tool]; PreLLMHook
+	// prepends the RTK recovery hint at [0] shifting the tool message to [2].
 	originalBytes := *req.ChatRequest.Input[1].Content.ContentStr
 
 	outReq, _, err := p.PreLLMHook(ctx, req)
@@ -759,8 +765,8 @@ func TestPreLLMHookMinTokensHighSkipsCompression(t *testing.T) {
 	}
 
 	// With MinTokensToCompress=1000000 and small input, compression should be skipped
-	// Output bytes must be identical to input
-	afterHook := *outReq.ChatRequest.Input[1].Content.ContentStr
+	// Output bytes must be identical to input.
+	afterHook := *outReq.ChatRequest.Input[2].Content.ContentStr
 	if afterHook != originalBytes {
 		t.Errorf("output should be byte-identical to input when MinTokensToCompress threshold is not met, "+
 			"got %q, want %q", afterHook, originalBytes)
@@ -838,8 +844,10 @@ Changes not staged for commit:
 		t.Fatalf("PreLLMHook returned error: %v", err)
 	}
 
-	// With MinTokensToCompress=5 and output much larger, compression should occur
-	compressed := *outReq.ChatRequest.Input[1].Content.ContentStr
+	// With MinTokensToCompress=5 and output much larger, compression should occur.
+	// Input[0] is now the RTK recovery hint (prepended by PreLLMHook when
+	// RTK is enabled); the tool message under test moved from [1] to [2].
+	compressed := *outReq.ChatRequest.Input[2].Content.ContentStr
 	if len(compressed) >= len(toolContent) {
 		t.Errorf("expected compression when input exceeds MinTokensToCompress threshold, "+
 			"original len=%d compressed len=%d", len(toolContent), len(compressed))
