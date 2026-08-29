@@ -51,6 +51,18 @@ export default function FreeTierProviderCard({ bundleId, provider, configured, r
 		</Badge>
 	);
 
+	// Present only when the entry has a fixed end date (e.g. a limited-time
+	// free model window). Rendered next to the provider name as an orange badge.
+	const freeValidBadge = provider.free_valid_until && (
+		<Badge
+			variant="outline"
+			className="h-4 shrink-0 rounded-sm border-orange-300/70 px-1.5 text-[10px] font-normal text-orange-700 dark:border-orange-700/50 dark:text-orange-400"
+			data-testid={`home-free-tier-valid-until-${provider.provider}`}
+		>
+			{t("freeTier.validUntil", { date: provider.free_valid_until })}
+		</Badge>
+	);
+
 	// Shared model list — rendered as muted Badges so users can scan the
 	// supported model names without the row becoming visually loud.
 	const modelBadges = provider.models.length > 0 && (
@@ -89,6 +101,7 @@ export default function FreeTierProviderCard({ bundleId, provider, configured, r
 					>
 						{t("freeTier.configured")}
 					</Badge>
+					{freeValidBadge}
 				</div>
 				{modelBadges}
 				{provider.notes && <p className="text-muted-foreground text-xs">{provider.notes}</p>}
@@ -112,6 +125,7 @@ export default function FreeTierProviderCard({ bundleId, provider, configured, r
 				<div className="flex items-center justify-between gap-2">
 					<span className="text-muted-foreground text-sm font-medium capitalize">{provider.provider}</span>
 					{customBadge}
+					{freeValidBadge}
 				</div>
 				{modelBadges && <div className="opacity-70">{modelBadges}</div>}
 				{provider.notes && <p className="text-muted-foreground/70 text-xs">{provider.notes}</p>}
@@ -152,6 +166,7 @@ export default function FreeTierProviderCard({ bundleId, provider, configured, r
 			<div className="flex items-center justify-between gap-2">
 				<span className="text-sm font-medium capitalize">{provider.provider}</span>
 				{customBadge}
+				{freeValidBadge}
 			</div>
 			{modelBadges}
 			{provider.notes && <p className="text-muted-foreground text-xs">{provider.notes}</p>}

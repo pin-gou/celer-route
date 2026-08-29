@@ -20,6 +20,8 @@ export interface BundleProviderEntry {
 	apply_steps?: string[];
 	is_keyless?: boolean;
 	notes?: string;
+	/** Optional yyyy-mm-dd end date of a temporary free-tier promotion. */
+	free_valid_until?: string;
 	base_provider?: string;
 	base_url?: string;
 	supported?: boolean;

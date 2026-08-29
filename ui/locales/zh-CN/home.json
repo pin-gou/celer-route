@@ -28,6 +28,7 @@
 		"applyHintKeyless": "该提供商无需 API 密钥，点击下方按钮即可直接添加。",
 		"unsupportedHint": "当前版本暂不支持",
 		"customProtocol": "基于 {{protocol}} 协议",
+		"validUntil": "免费至 {{date}}",
 		"customProviderHint": "该提供商未内置，将基于 {{protocol}} 兼容协议作为自定义提供商添加。",
 		"useCount": "使用 {{count}} 次",
 		"lastUsed": "最近使用 {{at}}",

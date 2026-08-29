@@ -83,6 +83,7 @@ const bundleCoding = {
 			apply_steps: [],
 			is_keyless: true,
 			notes: "免 Key, 直接添加",
+			free_valid_until: "2026-09-06",
 		},
 	],
 };
@@ -118,6 +119,7 @@ describe("FreeTierRecommendationCard", () => {
 		expect(screen.getByTestId("home-free-tier-card"), "主卡应渲染").toBeTruthy();
 		expect(screen.getByTestId("home-free-tier-bundle-coding"), "coding bundle 子卡应渲染").toBeTruthy();
 		expect(screen.getByTestId("home-free-tier-bundle-writing"), "writing bundle 子卡应渲染").toBeTruthy();
+		expect(screen.getByTestId("home-free-tier-valid-until-opencode"), "应渲染免费有效期徽章").toBeTruthy();
 		expect(screen.getByText("编程开发"), "bundle title 应渲染").toBeTruthy();
 		expect(screen.getByText("代码补全与调试首选"), "bundle description 应渲染").toBeTruthy();
 	});

@@ -86,6 +86,10 @@ type bundleProviderEntry struct {
 	ApplySteps []string `json:"apply_steps"`
 	IsKeyless  bool     `json:"is_keyless"`
 	Notes      string   `json:"notes"`
+	// FreeValidUntil is the optional yyyy-mm-dd end date of a temporary
+	// free-tier promotion (e.g. a limited-time free model window). Omitted
+	// when the provider's free access is permanent or quota-based.
+	FreeValidUntil string `json:"free_valid_until,omitempty"`
 	// BaseProvider and BaseURL describe the custom-provider fallback for
 	// providers that are not built into this gateway build: the UI creates
 	// them with custom_provider_config.base_provider_type = BaseProvider and
