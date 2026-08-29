@@ -325,7 +325,13 @@
 			"addProvider": "添加提供商",
 			"configuredCount": "已配置 {{configured}} / {{total}}",
 			"keysCount": "{{count}} 个 key",
-			"modelsCount": "{{count}} 个模型"
+			"modelsCount": "{{count}} 个模型",
+			"dotState": {
+				"ok": "健康",
+				"missing": "未配置",
+				"degraded": "降级",
+				"error": "错误"
+			}
 		},
 		"quickStart": {
 			"title": "快速上手",

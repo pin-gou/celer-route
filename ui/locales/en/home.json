@@ -1,6 +1,9 @@
 {
 	"freeTier": {
 		"title": "Free provider recommendations",
+		"promoBadge": "Limited free",
+		"providerCount_one": "{{count}} provider",
+		"providerCount_other": "{{count}} providers",
 		"subtitle": "Hand-picked free LLM providers and models to get you started.",
 		"updatedAt": "Updated {{at}}",
 		"applyNow": "Apply",
@@ -9,7 +12,7 @@
 		"submit": "Add provider",
 		"cancel": "Cancel",
 		"keyInputLabel": "API key",
-		"apiKeyPlaceholder": "Paste your API key here",
+		"apiKeyPlaceholder": "Paste the API key you got from {{provider}}",
 		"keylessNote": "No API key required",
 		"noBundles": "No free bundles available right now. Please try again later.",
 		"retry": "Retry",
@@ -22,6 +25,7 @@
 		"models": "Models",
 		"note": "Note",
 		"applySteps": "Steps to apply",
+		"applyHintKeyless": "This provider needs no API key — click the button below to add it directly.",
 		"useCount": "{{count}} uses",
 		"lastUsed": "Last used {{at}}",
 		"viewDetails": "View details"

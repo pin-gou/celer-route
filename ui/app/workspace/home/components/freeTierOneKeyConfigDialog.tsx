@@ -3,6 +3,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { catalogApi, useCreateProviderKeyMutation, useCreateProviderMutation } from "@/lib/store/apis/catalogApi";
 import { BundleProviderEntry } from "@/lib/types/catalog";
+import { cn } from "@/lib/utils";
+import { ExternalLink, Info, KeyRound, ListChecks, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -58,17 +60,74 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent data-testid="home-free-tier-config-dialog">
+			<DialogContent data-testid="home-free-tier-config-dialog" className={cn(!isKeyless && provider?.apply_url && "sm:max-w-md")}>
 				<DialogHeader>
-					<DialogTitle>{provider?.provider}</DialogTitle>
+					<DialogTitle className="capitalize">{provider?.provider}</DialogTitle>
 					<DialogDescription>{provider?.notes || t("freeTier.configureNow")}</DialogDescription>
 				</DialogHeader>
 
+				{/* 1) Promo highlight: recommended models (the offer summary lives
+				    in DialogDescription above via `provider.notes`). */}
+				<div className="space-y-1.5 rounded-md border border-orange-200/60 bg-gradient-to-br from-orange-50/60 via-amber-50/40 to-rose-50/60 px-3 py-2 text-xs leading-relaxed dark:border-orange-900/40 dark:from-orange-950/20 dark:via-amber-950/15 dark:to-rose-950/20">
+					{isKeyless ? (
+						<div className="flex items-start gap-2">
+							<Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500 dark:text-orange-400" aria-hidden />
+							<span className="text-muted-foreground">{t("freeTier.applyHintKeyless")}</span>
+						</div>
+					) : (
+						<div className="flex items-center gap-1.5">
+							<Sparkles className="h-3.5 w-3.5 shrink-0 text-orange-500 dark:text-orange-400" aria-hidden />
+							<span className="text-foreground/80 font-medium">{t("freeTier.models")}:</span>
+							{provider?.models && provider.models.length > 0 ? (
+								<span className="text-muted-foreground truncate">{provider.models.join(", ")}</span>
+							) : (
+								<span className="text-muted-foreground truncate">{provider?.provider ?? ""}</span>
+							)}
+						</div>
+					)}
+				</div>
+
+				{/* 2) Apply steps (keyed providers only). Skipped when keyless or
+				    when the catalog did not provide any steps. */}
+				{!isKeyless && provider?.apply_steps && provider.apply_steps.length > 0 && (
+					<div className="space-y-1.5">
+						<div className="text-foreground/80 flex items-center gap-1.5 text-xs font-medium">
+							<ListChecks className="text-muted-foreground h-3.5 w-3.5" aria-hidden />
+							{t("freeTier.applySteps")}
+						</div>
+						<ol className="text-muted-foreground space-y-1 pl-5 text-xs leading-relaxed">
+							{provider.apply_steps.map((step, idx) => (
+								<li key={idx} className="list-decimal">
+									{step}
+								</li>
+							))}
+						</ol>
+					</div>
+				)}
+
+				{/* 3) "Apply" CTA — placed right above the API key input so the
+				    journey reads: steps → apply link → paste key. Keyless providers
+				    have no sign-up flow and skip this. */}
+				{!isKeyless && provider?.apply_url && (
+					<a
+						href={provider.apply_url}
+						target="_blank"
+						rel="noreferrer"
+						className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-orange-200/60 bg-orange-50/60 px-3 py-1.5 text-xs font-medium text-orange-600 transition-colors hover:bg-orange-100/80 hover:text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/30 dark:text-orange-400 dark:hover:bg-orange-950/50"
+						data-testid="home-free-tier-apply-dialog"
+					>
+						<ExternalLink className="h-3.5 w-3.5" />
+						{t("freeTier.applyNow")}
+					</a>
+				)}
+
+				{/* 4) API key input (keyless providers skip this entirely). */}
 				{isKeyless ? (
 					<p className="text-muted-foreground text-sm">{t("freeTier.keylessNote")}</p>
 				) : (
 					<div className="space-y-2">
-						<label htmlFor="home-free-tier-key-input" className="text-sm font-medium">
+						<label htmlFor="home-free-tier-key-input" className="flex items-center gap-1.5 text-sm font-medium">
+							<KeyRound className="text-muted-foreground h-3.5 w-3.5" aria-hidden />
 							{t("freeTier.keyInputLabel")}
 						</label>
 						<Input
@@ -76,13 +135,13 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 							data-testid="home-free-tier-key-input"
 							value={apiKey}
 							onChange={(e) => setApiKey(e.target.value)}
-							placeholder={t("freeTier.apiKeyPlaceholder")}
+							placeholder={t("freeTier.apiKeyPlaceholder", { provider: provider?.provider ?? "" })}
 							autoComplete="off"
 						/>
 					</div>
 				)}
 
-				<DialogFooter>
+				<DialogFooter className="gap-2 sm:justify-end">
 					<Button
 						type="button"
 						variant="outline"
@@ -94,6 +153,7 @@ export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChang
 					</Button>
 					<Button
 						type="button"
+						className="bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-400"
 						dataTestId="home-free-tier-submit"
 						onClick={handleSubmit}
 						isLoading={isSubmitting}

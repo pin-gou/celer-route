@@ -325,7 +325,13 @@
 			"addProvider": "Add a provider",
 			"configuredCount": "{{configured}} of {{total}} configured",
 			"keysCount": "{{count}} key(s)",
-			"modelsCount": "{{count}} model(s)"
+			"modelsCount": "{{count}} model(s)",
+			"dotState": {
+				"ok": "Healthy",
+				"missing": "Not configured",
+				"degraded": "Degraded",
+				"error": "Error"
+			}
 		},
 		"quickStart": {
 			"title": "Quick Start",

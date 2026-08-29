@@ -81,29 +81,32 @@ export default function ProviderTopologyCard() {
 						</Button>
 					</div>
 				) : (
-					<ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+					<ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 						{summaries.map((s) => {
 							return (
 								<li key={s.provider} className="min-w-0">
 									<Link
 										to="/workspace/providers/$id"
 										params={{ id: s.provider }}
-										className="bg-muted/20 hover:bg-muted/40 flex h-full items-center gap-3 rounded-md border px-3 py-2 transition-colors"
+										className="bg-muted/20 hover:bg-muted/40 flex h-full flex-col gap-2 rounded-md border px-3 py-2 transition-colors"
 										data-testid={`home-provider-topology-row-${s.provider}`}
 									>
-										<RenderProviderIcon provider={s.provider as ProviderIconType} size={22} className="mt-0 shrink-0" />
-										<span className="min-w-0 flex-1 truncate text-sm font-medium">{getProviderLabel(s.provider)}</span>
-										<span className={["inline-block h-2 w-2 shrink-0 rounded-full", dotClass[s.dotState]].join(" ")} aria-hidden />
-										<span
-											className="text-muted-foreground flex items-center gap-1 text-xs"
-											title={t("home.providers.keysCount", { count: String(s.keysCount) })}
-										>
-											<KeyRound className="h-3.5 w-3.5" />
-											{s.keysCount}
-										</span>
-										<span className="text-muted-foreground text-xs">
-											{t("home.providers.modelsCount", { count: String(s.modelsCount) })}
-										</span>
+										<div className="flex items-center gap-3">
+											<RenderProviderIcon provider={s.provider as ProviderIconType} size={22} className="mt-0 shrink-0" />
+											<span className="min-w-0 flex-1 truncate text-sm font-medium">{getProviderLabel(s.provider)}</span>
+											<span
+												className={["inline-block h-2 w-2 shrink-0 rounded-full", dotClass[s.dotState]].join(" ")}
+												aria-hidden
+												title={t(`home.providers.dotState.${s.dotState}`)}
+											/>
+										</div>
+										<div className="text-muted-foreground flex items-center gap-3 pl-[30px] text-xs">
+											<span className="flex items-center gap-1" title={t("home.providers.keysCount", { count: String(s.keysCount) })}>
+												<KeyRound className="h-3.5 w-3.5" />
+												{t("home.providers.keysCount", { count: String(s.keysCount) })}
+											</span>
+											<span>{t("home.providers.modelsCount", { count: String(s.modelsCount) })}</span>
+										</div>
 									</Link>
 								</li>
 							);
