@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	mcp "github.com/pin-gou/celer-route/core/mcp"
 	mistralprovider "github.com/pin-gou/celer-route/core/providers/mistral"
 	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"golang.org/x/text/cases"
@@ -3861,4 +3862,46 @@ func TestClearCtxForFallbackClearsSilentLog(t *testing.T) {
 			t.Errorf("clearCtxForFallback must clear %s, but ctx still has value %v", k.name, v)
 		}
 	}
+}
+
+// TestGetMCPManager verifies that Bifrost.GetMCPManager() exposes the MCP
+// manager to plugins (V-core-1). The RTK plugin relies on this to register the
+// rtk_fetch_raw_output internal tool at startup: it must return the exact
+// *mcp.MCPManager the Bifrost instance was constructed with, must be nil-safe
+// when no MCP manager is configured, and must not panic on a nil receiver.
+func TestGetMCPManager(t *testing.T) {
+	t.Run("ReturnsSameManagerReference", func(t *testing.T) {
+		// Mirror the real construction path (bifrost.go:368) where the field is
+		// assigned the concrete manager built via mcp.NewMCPManager.
+		manager := mcp.NewMCPManager(context.Background(), schemas.MCPConfig{}, nil, nil, nil)
+		b := &Bifrost{}
+		b.MCPManager = manager
+
+		got := b.GetMCPManager()
+		if got == nil {
+			t.Fatal("GetMCPManager() returned nil, want the configured *mcp.MCPManager")
+		}
+		if got != manager {
+			t.Fatalf("GetMCPManager() = %p, want the same manager instance %p", got, manager)
+		}
+	})
+
+	t.Run("ReturnsNilWhenNoMCPManagerConfigured", func(t *testing.T) {
+		b := &Bifrost{}
+		if got := b.GetMCPManager(); got != nil {
+			t.Fatalf("GetMCPManager() = %v, want nil when no MCP manager is configured", got)
+		}
+	})
+
+	t.Run("NilBifrostDoesNotPanic", func(t *testing.T) {
+		var b *Bifrost
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("GetMCPManager() on nil *Bifrost panicked: %v", r)
+			}
+		}()
+		if got := b.GetMCPManager(); got != nil {
+			t.Fatalf("GetMCPManager() on nil *Bifrost = %v, want nil", got)
+		}
+	})
 }
