@@ -348,6 +348,8 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			disabled_filters: pluginConfig.disabled_filters ?? [],
 			raw_output_retention: pluginConfig.raw_output_retention ?? "never",
 			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
+			raw_output_dir: pluginConfig.raw_output_dir ?? "",
+			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
@@ -385,6 +387,8 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			disabled_filters: pluginConfig.disabled_filters ?? [],
 			raw_output_retention: pluginConfig.raw_output_retention ?? "never",
 			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
+			raw_output_dir: pluginConfig.raw_output_dir ?? "",
+			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
@@ -906,6 +910,52 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 														/>
 													</FormControl>
 													<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+										<FormField
+											control={form.control}
+											name="raw_output_dir"
+											render={({ field }) => (
+												<FormItem>
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.rawOutputDirLabel")}</FormLabel>
+														<HelpHint>{t("rtk.rawOutputDirWhen")}</HelpHint>
+													</div>
+													<FormControl>
+														<Input
+															data-testid="rtk-field-raw-output-dir"
+															type="text"
+															placeholder={t("rtk.rawOutputDirPlaceholder")}
+															{...field}
+														/>
+													</FormControl>
+													<FormDescription>{t("rtk.rawOutputDirDescription")}</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+										<FormField
+											control={form.control}
+											name="raw_output_ttl_hours"
+											render={({ field }) => (
+												<FormItem>
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.rawOutputTTLLabel")}</FormLabel>
+														<HelpHint>{t("rtk.rawOutputTTLWhen")}</HelpHint>
+													</div>
+													<FormControl>
+														<Input
+															data-testid="rtk-field-raw-output-ttl-hours"
+															type="number"
+															min={0}
+															max={168}
+															{...field}
+															onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+														/>
+													</FormControl>
+													<FormDescription>{t("rtk.rawOutputTTLDescription")}</FormDescription>
 													<FormMessage />
 												</FormItem>
 											)}
