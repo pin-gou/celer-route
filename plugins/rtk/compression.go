@@ -546,6 +546,20 @@ func processRtkTextWithCommand(input string, config *Config, loader *FilterLoade
 		return input, stats
 	}
 
+	// Anti-recursion bypass: tool messages produced by an LLM calling
+	// /api/context/rtk/raw-output/{id} arrive with a server-side sentinel
+	// prefix. Re-compressing them yields a smaller subset plus a fresh
+	// [rtk:raw_output_id=...] marker, which is the exact recursion the
+	// LLM is trying to escape. Strip the sentinel and pass the body
+	// through unchanged. Detection, filtering, and redaction are all
+	// skipped on the bypass path because the persisted body was already
+	// redacted at write time (RedactRtkRawOutput).
+	if stripped, ok := StripRawOutputSentinel(input); ok {
+		stats.CompressedTokens = estimateTokens(stripped)
+		stats.Techniques = append(stats.Techniques, "rtk-raw-output-bypass")
+		return stripped, stats
+	}
+
 	// 1. Always strip ANSI escape codes.
 	text := stripANSI(input)
 

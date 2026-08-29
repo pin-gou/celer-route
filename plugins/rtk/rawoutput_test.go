@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -493,5 +494,88 @@ func TestJanitor_FilenameTimestampParser(t *testing.T) {
 		if ok != tc.want {
 			t.Errorf("rawOutputFilenameTimestamp(%q) ok=%v, want %v", tc.in, ok, tc.want)
 		}
+	}
+}
+
+// TestWrapStripRoundTrip verifies that WrapRawOutputForHTTP followed by
+// StripRawOutputSentinel recovers the original body byte-for-byte. This is
+// the contract the compression pipeline relies on for the anti-recursion
+// bypass: the LLM must see the persisted body unchanged.
+func TestWrapStripRoundTrip(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		id        string
+		bytes     int
+		sha256Hex string
+	}{
+		{"simple ascii", "PASS\nok github.com/foo/bar 0.123s\n", "abc123456789abcdef01234567", 35, "deadbeefcafe0123456789abcdef"},
+		{"empty body", "", "0123456789abcdef01234567", 0, ""},
+		{"unicode", "你好\n世界\n🚀\n", "ffffffffffffffffffffffff", 18, ""},
+		{"short sha256", "body", "abc123", 4, "deadbeef"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := WrapRawOutputForHTTP(tc.body, tc.id, tc.bytes, tc.sha256Hex)
+			if !strings.HasPrefix(wrapped, rawOutputSentinelMagic) {
+				t.Fatalf("wrapped output must start with sentinel magic; got prefix=%q", wrapped[:min(40, len(wrapped))])
+			}
+			stripped, ok := StripRawOutputSentinel(wrapped)
+			if !ok {
+				t.Fatalf("StripRawOutputSentinel must recognise wrapped output")
+			}
+			if stripped != tc.body {
+				t.Fatalf("round-trip lost data:\n got: %q\nwant: %q", stripped, tc.body)
+			}
+		})
+	}
+}
+
+// TestStripRawOutputSentinel_NoSentinel confirms the stripper leaves input
+// unchanged when no sentinel is present. Callers (compression pipeline) rely
+// on this to safely no-op for normal tool messages.
+func TestStripRawOutputSentinel_NoSentinel(t *testing.T) {
+	cases := []string{
+		"normal text without sentinel",
+		"",
+		rawOutputSentinelMagic,                                                              // only magic, no close
+		rawOutputSentinelClose + "body",                                                     // only close, no magic
+		"prefix" + rawOutputSentinelMagic + "<id>:0:" + rawOutputSentinelClose + "body", // magic not at start
+	}
+	for _, s := range cases {
+		got, ok := StripRawOutputSentinel(s)
+		if ok {
+			t.Errorf("StripRawOutputSentinel(%q) ok=true, want false", s)
+		}
+		if got != s {
+			t.Errorf("StripRawOutputSentinel(%q) modified input: got %q", s, got)
+		}
+	}
+}
+
+// TestStripRawOutputSentinel_Truncated ensures a sentineled body missing the
+// close token is treated as no-sentinel (no data loss). A truncated network
+// response must not silently drop bytes.
+func TestStripRawOutputSentinel_Truncated(t *testing.T) {
+	s := rawOutputSentinelMagic + "abc123:42:deadbeef0000" // no close
+	got, ok := StripRawOutputSentinel(s)
+	if ok {
+		t.Fatalf("truncated sentinel must not match")
+	}
+	if got != s {
+		t.Fatalf("truncated sentinel must be returned unchanged; got %q want %q", got, s)
+	}
+}
+
+// TestStripRawOutputSentinel_EmptyBodyAfterClose ensures the stripper
+// handles an empty body (no content after the close token).
+func TestStripRawOutputSentinel_EmptyBodyAfterClose(t *testing.T) {
+	s := rawOutputSentinelMagic + "abc123:0:" + rawOutputSentinelClose
+	stripped, ok := StripRawOutputSentinel(s)
+	if !ok {
+		t.Fatalf("empty body must still match sentinel")
+	}
+	if stripped != "" {
+		t.Fatalf("empty body should strip to empty string, got %q", stripped)
 	}
 }

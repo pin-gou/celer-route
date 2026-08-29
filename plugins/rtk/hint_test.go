@@ -203,3 +203,21 @@ func TestRawOutputHint_NotAppendedWhenNoPointer(t *testing.T) {
 		t.Errorf("hint must not be appended when no pointer exists; got %q", got)
 	}
 }
+
+// TestRecoveryHint_NotesBypass verifies the system-message hint tells the
+// LLM that recovered bodies bypass re-compression. Without this note the
+// LLM has no way to tell that a fresh [rtk:raw_output_id=...] marker after
+// recovery means "fetch URL malformed" rather than the expected behaviour,
+// so it would loop fetching forever.
+func TestRecoveryHint_NotesBypass(t *testing.T) {
+	must := []string{
+		"unwraps the recovered body",
+		"IS the file content",
+		"disk copy expired",
+	}
+	for _, sub := range must {
+		if !strings.Contains(rtkRecoveryHintText, sub) {
+			t.Errorf("recovery hint must mention %q to break the recursion; full hint:\n%s", sub, rtkRecoveryHintText)
+		}
+	}
+}

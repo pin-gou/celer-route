@@ -106,6 +106,10 @@ func NewRtkHandler(cs RtkConfigStore, resolver RtkPluginResolver) *RtkHandler {
 // exposing 96-bit random ids that expire after raw_output_ttl_hours. The id
 // is also recorded in log metadata, so logging access is a stricter boundary
 // than this endpoint's access by design.
+//
+// Additionally, the response body is wrapped with a server-side sentinel
+// prefix by default (see rtk.WrapRawOutputForHTTP); pass ?raw=1 to retrieve
+// the verbatim file body for operator inspection.
 func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	r.GET("/api/context/rtk/config", lib.ChainMiddlewares(h.getConfig, middlewares...))
 	r.PUT("/api/context/rtk/config", lib.ChainMiddlewares(h.putConfig, middlewares...))
@@ -329,6 +333,20 @@ func (h *RtkHandler) postTest(ctx *fasthttp.RequestCtx) {
 
 // getRawOutput reads a persisted raw-output file. The {id} path parameter
 // is validated against rtk.IsValidRawOutputID before any disk lookup.
+//
+// Two response shapes share this endpoint:
+//
+//   - Default (LLM-bound): the body is wrapped with a server-side sentinel
+//     prefix (see rtk.WrapRawOutputForHTTP). The compression pipeline
+//     recognises the sentinel and bypasses re-compression for messages
+//     carrying it, which breaks the raw-output recursion bug (LLM fetches
+//     → response gets re-compressed → smaller subset → new marker → fetch
+//     again → ...).
+//
+//   - ?raw=1 (operator/UI): the body is returned verbatim. The ops UI at
+//     /workspace/plugins/rtk/raw-output reads through this endpoint and
+//     renders the body in a <pre>; sentinel noise would corrupt that
+//     view.
 func (h *RtkHandler) getRawOutput(ctx *fasthttp.RequestCtx) {
 	idValue := ctx.UserValue("id")
 	if idValue == nil {
@@ -356,9 +374,16 @@ func (h *RtkHandler) getRawOutput(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if string(ctx.QueryArgs().Peek("raw")) == "1" {
+		ctx.SetContentType("text/plain; charset=utf-8")
+		ctx.SetStatusCode(fasthttp.StatusOK)
+		ctx.SetBodyString(data)
+		return
+	}
+
 	ctx.SetContentType("text/plain; charset=utf-8")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	ctx.SetBodyString(data)
+	ctx.SetBodyString(rtk.WrapRawOutputForHTTP(data, id, len(data), ""))
 }
 
 // ---------------------------------------------------------------------------

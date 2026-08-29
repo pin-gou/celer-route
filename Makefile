@@ -868,7 +868,10 @@ cleanup-junit-xml: ## Internal: Clean up JUnit XML to remove parent test cases w
 		fi; \
 	fi
 
-test-plugins: install-gotestsum ## Run plugin tests
+test-rtk-regression: ## RTK raw-output recursion regression (no LLM required).
+	@bash tests/manual/raw_output_recursion_regression.sh
+
+test-plugins: install-gotestsum test-rtk-regression ## Run plugin tests
 	@$(EXPOSE_ENV); \
 	$(ECHO) "$(GREEN)Running plugin tests...$(NC)"; \
 	mkdir -p $(TEST_REPORTS_DIR); \

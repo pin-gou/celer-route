@@ -45,10 +45,14 @@ export const rtkAdminApi = baseApi.injectEndpoints({
 
 		// GET /api/context/rtk/raw-output/{id} — query against the raw text
 		// directly. transformResponse drops the response wrapper so callers
-		// can render the body as-is.
+		// can render the body as-is. The `?raw=1` query parameter requests
+		// the verbatim file body (no sentinel prefix) so the ops viewer at
+		// /workspace/plugins/rtk/raw-output renders clean text instead of
+		// NUL-prefixed noise.
 		getRtkRawOutput: builder.query<string, string>({
 			query: (id) => ({
 				url: `/context/rtk/raw-output/${id}`,
+				params: { raw: "1" },
 				responseHandler: "text",
 			}),
 		}),

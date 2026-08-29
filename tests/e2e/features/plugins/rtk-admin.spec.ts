@@ -110,4 +110,61 @@ test.describe('RTK Admin Sub-router', () => {
       expect(body).toHaveProperty('config')
     }
   })
+
+  // ---------------------------------------------------------------------------
+  // Raw-output sentinel: default response wraps body with a server-side
+  // sentinel prefix; ?raw=1 bypasses it for operator inspection. The
+  // ops UI consumes ?raw=1 (see ui/lib/store/apis/rtkAdminApi.ts) so the
+  // page must render clean text — not NUL-prefixed noise.
+  // ---------------------------------------------------------------------------
+
+  test('raw-output viewer renders verbatim body (?raw=1 path)', async ({ page, request }) => {
+    // Drive the test endpoint to materialise a real raw-output id.
+    const fixture =
+      'row 1\nrow 2\nrow 3\n' + Array.from({ length: 200 }, (_, i) => `line ${i}`).join('\n') + '\n'
+    const testResp = await request.post('/api/context/rtk/test', {
+      data: { output: fixture, command: 'echo regression-sentinel' },
+    })
+    expect(testResp.status()).toBeLessThan(500)
+
+    if (testResp.status() !== 200) {
+      test.skip(true, 'RTK test endpoint unavailable — plugin not enabled or no LLM')
+      return
+    }
+
+    const testBody = await testResp.json()
+    const pointer = testBody?.stats?.rawOutputPointers?.[0]
+    if (!pointer?.id) {
+      test.skip(true, 'test endpoint did not produce a raw_output_pointer — retention may be disabled')
+      return
+    }
+
+    // 1. Default (LLM-bound) response must start with the sentinel prefix.
+    const defaultResp = await request.get(`/api/context/rtk/raw-output/${pointer.id}`)
+    expect(defaultResp.status()).toBe(200)
+    const defaultText = await defaultResp.text()
+    expect(defaultText.startsWith('\x00RTK_RAW_OUTPUT_BEGIN\x00')).toBe(true)
+    // Persisted body text is still present after the sentinel.
+    expect(defaultText).toContain('regression-sentinel')
+
+    // 2. ?raw=1 response is verbatim, no sentinel noise.
+    const rawResp = await request.get(`/api/context/rtk/raw-output/${pointer.id}?raw=1`)
+    expect(rawResp.status()).toBe(200)
+    const rawText = await rawResp.text()
+    expect(rawText.startsWith('\x00RTK_RAW_OUTPUT_BEGIN\x00')).toBe(false)
+    expect(rawText).toContain('regression-sentinel')
+
+    // 3. The ops UI consumes ?raw=1, so the rendered body must match the
+    //    verbatim response — no NUL characters leaking into <pre>.
+    await page.goto('/workspace/plugins/rtk/raw-output')
+    await page.locator('[data-testid="rtk-raw-output-id"]').fill(pointer.id)
+    await page.locator('[data-testid="rtk-raw-output-fetch"]').click()
+    const pre = page.locator('[data-testid="rtk-raw-output-body"]')
+    await expect(pre).toBeVisible({ timeout: 10_000 })
+    const preText = (await pre.textContent()) ?? ''
+    expect(preText).not.toContain('\x00')
+    expect(preText).toContain('regression-sentinel')
+    // And the rendered text must equal the ?raw=1 response byte-for-byte.
+    expect(preText).toBe(rawText)
+  })
 })

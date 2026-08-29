@@ -472,8 +472,32 @@ func TestRtkRawOutput(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", status, body)
 	}
+	// Default response is wrapped with the server-side sentinel so the
+	// compression pipeline can detect (and bypass) recovered bodies. The
+	// persisted text must still be present after the sentinel prefix.
 	if !strings.Contains(string(body), "hello raw") {
 		t.Errorf("body = %q, want it to contain 'hello raw'", body)
+	}
+	if !strings.HasPrefix(string(body), "\x00RTK_RAW_OUTPUT_BEGIN\x00") {
+		t.Errorf("body = %q, want it to start with the raw-output sentinel", body)
+	}
+}
+
+// TestRtkRawOutputRawQuery bypasses the sentinel and returns the verbatim
+// file body. Used by the ops UI (/workspace/plugins/rtk/raw-output) which
+// renders the body in a <pre> and would otherwise see sentinel noise.
+func TestRtkRawOutputRawQuery(t *testing.T) {
+	cs := newMemoryConfigStore()
+	accessor := &stubRtkAccessor{rawOutput: "hello raw", rawFound: true}
+	resolver := &stubRtkResolver{accessor: accessor, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/raw-output/0123456789abcdef01234567?raw=1")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	if string(body) != "hello raw" {
+		t.Errorf("body = %q, want %q (verbatim file body, no sentinel)", body, "hello raw")
 	}
 }
 

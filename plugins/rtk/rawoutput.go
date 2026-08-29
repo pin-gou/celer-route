@@ -273,6 +273,76 @@ func IsValidRawOutputID(id string) bool {
 	return reRawOutputID.MatchString(id)
 }
 
+const (
+	// rawOutputSentinelMagic / rawOutputSentinelClose are NUL-prefixed markers
+	// bracketing a server-injected metadata region on every response from
+	// /api/context/rtk/raw-output/{id}. They exist so the compression pipeline
+	// can recognise "this tool message is a recovery fetch, do not re-compress
+	// it" with zero heuristic guessing about tool name, message role, or
+	// content shape. NUL-prefixed because (a) the marker can never appear in
+	// legitimate UTF-8 prose by accident, and (b) HTTP body is byte-safe for
+	// any byte sequence including NUL.
+	//
+	// The closing token is intentionally a different string from the opening
+	// one so a truncated fetch response (network drop mid-stream) cannot be
+	// mistaken for a sentineled one: StripRawOutputSentinel requires both
+	// tokens to be present.
+	rawOutputSentinelMagic = "\x00RTK_RAW_OUTPUT_BEGIN\x00"
+	rawOutputSentinelClose = "\x00RTK_RAW_OUTPUT_BODY_FOLLOWS\x00"
+)
+
+// WrapRawOutputForHTTP attaches the sentinel prefix to a raw-output body
+// before it leaves the gateway. Callers MUST go through this helper so the
+// sentinel layout has a single source of truth.
+//
+// Layout:
+//
+//	\x00RTK_RAW_OUTPUT_BEGIN\x00<id>:<bytes>:<sha256-prefix-12>\x00RTK_RAW_OUTPUT_BODY_FOLLOWS\x00<body>
+//
+// The metadata region (between Magic and Close) is opaque to the LLM and only
+// consumed by StripRawOutputSentinel when the body re-enters the compression
+// pipeline via the WebFetch tool result. sha256Hex may be empty when the
+// caller has not computed it; the metadata is informational and the stripper
+// never parses it.
+func WrapRawOutputForHTTP(body, pointerID string, bytes int, sha256Hex string) string {
+	var b strings.Builder
+	b.Grow(len(rawOutputSentinelMagic) + len(pointerID) + 32 +
+		len(rawOutputSentinelClose) + len(body))
+	b.WriteString(rawOutputSentinelMagic)
+	b.WriteString(pointerID)
+	b.WriteByte(':')
+	b.WriteString(strconv.Itoa(bytes))
+	b.WriteByte(':')
+	if len(sha256Hex) >= 12 {
+		b.WriteString(sha256Hex[:12])
+	}
+	b.WriteString(rawOutputSentinelClose)
+	b.WriteString(body)
+	return b.String()
+}
+
+// StripRawOutputSentinel returns (body, true) when the input starts with the
+// raw-output sentinel, removing the entire metadata region (including the
+// Close token) and returning only the original body. Returns (s, false) when
+// no sentinel is present so callers can safely no-op; a truncated sentinel
+// (Close token missing) is treated as no sentinel rather than dropping
+// arbitrary bytes, so a malformed fetch response cannot silently lose data.
+//
+// This is the ONLY function that consumes the sentinel — it is called exactly
+// once at the compression pipeline entry — so the body that ultimately reaches
+// the LLM is byte-identical to what was persisted on disk.
+func StripRawOutputSentinel(s string) (string, bool) {
+	if !strings.HasPrefix(s, rawOutputSentinelMagic) {
+		return s, false
+	}
+	rest := s[len(rawOutputSentinelMagic):]
+	closeIdx := strings.Index(rest, rawOutputSentinelClose)
+	if closeIdx < 0 {
+		return s, false
+	}
+	return rest[closeIdx+len(rawOutputSentinelClose):], true
+}
+
 // ReadRtkRawOutputByID reads the persisted raw output by pointer ID, preferring
 // the explicit appDir for path resolution when set. Falls back to the in-memory
 // registry and finally a glob search under the current working directory, the
