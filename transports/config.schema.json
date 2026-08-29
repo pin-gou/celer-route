@@ -3283,6 +3283,11 @@
                       "description": "Enable or disable the RTK compression plugin",
                       "default": true
                     },
+                    "inject_fetch_tool": {
+                      "type": "boolean",
+                      "description": "When true, the rtk plugin registers an MCP tool (bifrostInternal-rtk_fetch_raw_output) and injects its schema into every chat request so the LLM can recover truncated tool results via a tool_call instead of a plain HTTP GET",
+                      "default": true
+                    },
                     "intensity": {
                       "type": "string",
                       "description": "Compression aggressiveness: minimal | standard | aggressive",
