@@ -1,6 +1,6 @@
 {
   "version": "2026-08-29",
-  "updated_at": "2026-08-29T08:00:00Z",
+  "updated_at": "2026-08-29T10:18:21Z",
   "bundles": [
     {
       "id": "coding",
@@ -8,18 +8,18 @@
       "description": "Code completion and debugging essentials",
       "providers": [
         {
-          "provider": "openai",
+          "provider": "sensenova",
           "models": [
-            "gpt-4o-mini",
-            "gpt-4.1"
+            "deepseek-v4-flash",
+            "glm-5.2"
           ],
-          "apply_url": "https://platform.openai.com/signup",
+          "apply_url": "https://platform.sensenova.cn",
           "apply_steps": [
-            "Sign up for an account",
-            "Create an API key"
+            "Register with a phone number",
+            "Create an API key in the Token Plan console"
           ],
           "is_keyless": false,
-          "notes": "$5 free credit for new users"
+          "notes": "Free 500 calls per model every 5 hours (deepseek-v4-flash, glm-5.2)"
         },
         {
           "provider": "opencode",
@@ -32,36 +32,32 @@
           "notes": "No key required, add directly"
         },
         {
-          "provider": "together",
+          "provider": "groq",
           "models": [
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-            "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "llama-3.3-70b-versatile"
           ],
-          "apply_url": "https://api.together.ai/",
+          "apply_url": "https://console.groq.com/keys",
           "apply_steps": [
             "Sign up for an account",
             "Create an API key"
           ],
           "is_keyless": false,
-          "notes": "Free credits for open-source models",
-          "base_provider": "openai",
-          "base_url": "https://api.together.xyz/v1"
+          "notes": "Free tier with daily rate limits"
         },
         {
-          "provider": "sambanova",
+          "provider": "gmicloud",
           "models": [
-            "Llama-4-Scout-17B-16E-Instruct",
-            "DeepSeek-R1-Distill-Llama-70B"
+            "minimax/MiniMax-M3",
+            "minimax/MiniMax-M2.7"
           ],
-          "apply_url": "https://cloud.sambanova.ai/",
+          "apply_url": "https://console.gmicloud.ai",
           "apply_steps": [
             "Sign up for an account",
             "Create an API key"
           ],
           "is_keyless": false,
-          "notes": "Open-source models fully free",
-          "base_provider": "openai",
-          "base_url": "https://api.sambanova.ai/v1"
+          "notes": "MiniMax Week promo: M3 & M2.7 free until 2026-09-06",
+          "free_valid_until": "2026-09-06"
         }
       ]
     },
@@ -71,25 +67,9 @@
       "description": "Data analysis and visualization",
       "providers": [
         {
-          "provider": "deepseek",
-          "models": [
-            "deepseek-chat",
-            "deepseek-reasoner"
-          ],
-          "apply_url": "https://platform.deepseek.com",
-          "apply_steps": [
-            "Sign up for an account",
-            "Create an API key"
-          ],
-          "is_keyless": false,
-          "notes": "New user discount available"
-        },
-        {
           "provider": "pollinations",
           "models": [
-            "openai",
-            "mistral",
-            "llama"
+            "openai"
           ],
           "apply_url": "",
           "apply_steps": [],
@@ -97,6 +77,19 @@
           "notes": "No key required, add directly",
           "base_provider": "openai",
           "base_url": "https://text.pollinations.ai/openai"
+        },
+        {
+          "provider": "siliconflow",
+          "models": [
+            "THUDM/GLM-Z1-9B-0414"
+          ],
+          "apply_url": "https://cloud.siliconflow.cn",
+          "apply_steps": [
+            "Sign up for an account",
+            "Create an API key"
+          ],
+          "is_keyless": false,
+          "notes": "Free models such as GLM-Z1-9B reasoning"
         }
       ]
     },
@@ -108,8 +101,7 @@
         {
           "provider": "runware",
           "models": [
-            "flux-schnell",
-            "flux-dev"
+            "bfl-flux-1-schnell"
           ],
           "apply_url": "https://runware.ai",
           "apply_steps": [
@@ -117,7 +109,7 @@
             "Create an API key"
           ],
           "is_keyless": false,
-          "notes": "Free tier includes monthly credits"
+          "notes": "$2 free credit at signup, no card required"
         }
       ]
     }
