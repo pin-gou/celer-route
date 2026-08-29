@@ -187,15 +187,15 @@
      track=plugins (常驻, 无 on_conditions)
 -->
 
-- [ ] 14.1 执行 `cd plugins/rtk && go test ./... -race`（含 race detector）
-- [ ] 14.2 执行 `cd plugins/rtk && go test -run TestRawOutputReadHandler -v` 单点 verify
-- [ ] 14.3 启动 gateway（按 .pg/context/agent-protocol.md §2 走 hooks 协议）
-- [ ] 14.4 验证 V-plugins-1（来自 design.md Verification Criteria）
-- [ ] 14.5 验证 V-plugins-2（来自 design.md Verification Criteria）
-- [ ] 14.6 验证 V-plugins-3（来自 design.md Verification Criteria）
-- [ ] 14.7 验证 V-plugins-4（来自 design.md Verification Criteria）
-- [ ] 14.8 验证 V-plugins-7（来自 design.md Verification Criteria）
-- [ ] 14.9 验证 V-plugins-N：来自 design.md Verification Criteria（N 由 design.md 决定）
+- [x] 14.1 执行 `cd plugins/rtk && go test ./... -race`（含 race detector）
+- [x] 14.2 执行 `cd plugins/rtk && go test -run TestRawOutputReadHandler -v` 单点 verify
+- [x] 14.3 启动 gateway（按 .pg/context/agent-protocol.md §2 走 hooks 协议）
+- [x] 14.4 验证 V-plugins-1（来自 design.md Verification Criteria）
+- [x] 14.5 验证 V-plugins-2（来自 design.md Verification Criteria）
+- [x] 14.6 验证 V-plugins-3（来自 design.md Verification Criteria）
+- [x] 14.7 验证 V-plugins-4（来自 design.md Verification Criteria）
+- [x] 14.8 验证 V-plugins-7（来自 design.md Verification Criteria）
+- [x] 14.9 验证 V-plugins-N：来自 design.md Verification Criteria（N 由 design.md 决定）
 
   **Evidence 要求**：
   - 单元测试日志
