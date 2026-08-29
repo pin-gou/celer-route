@@ -45,10 +45,10 @@
      track=core (常驻, 无 on_conditions)
 -->
 
-- [ ] 4.1 执行 lint（runner 通过 modules 注入命令）
-- [ ] 4.2 执行测试（runner 通过 modules 注入命令）
-- [ ] 4.3 验证 V-core-1：来自 design.md Verification Criteria
-- [ ] 4.4 验证 V-core-N：来自 design.md Verification Criteria（N 由 design.md 决定）
+- [x] 4.1 执行 lint（runner 通过 modules 注入命令）
+- [x] 4.2 执行测试（runner 通过 modules 注入命令）
+- [x] 4.3 验证 V-core-1：来自 design.md Verification Criteria
+- [x] 4.4 验证 V-core-N：来自 design.md Verification Criteria（N 由 design.md 决定）
 
   **Evidence 要求**：
   - 测试运行结果必须有日志摘要
