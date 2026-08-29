@@ -1,8 +1,13 @@
 {
   "name": "biome",
   "command": "biome",
+  "description": "Compact Biome lint/format output — strip summary/suggestion chatter, keep diagnostics.",
+  "stripAnsi": true,
   "rules": [
-    {"type": "strip", "pattern": "^Checked \\d+ files? in"}
+    {"type": "strip", "pattern": "^Checked \\d+ files? in"},
+    {"type": "strip", "pattern": "^Fixed \\d+ files?"},
+    {"type": "strip", "pattern": "^The following command"},
+    {"type": "strip", "pattern": "^Run it with"}
   ],
   "head": 10,
   "tail": 5,

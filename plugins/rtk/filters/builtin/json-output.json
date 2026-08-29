@@ -1,8 +1,12 @@
 {
   "name": "json-output",
   "command": "jq",
-  "rules": [],
-  "head": 200,
+  "description": "Compact jq output — strip blank lines, cap large JSON results at 40 lines. No per-line truncation: JSON arrays feed the structured-table renderer and must stay parseable.",
+  "stripAnsi": true,
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"}
+  ],
+  "head": 40,
   "tail": 0,
   "priority_patterns": ["error", "Error", "ERROR"],
   "tests": [{"name":"passthrough","input":"{\"name\":\"foo\",\"value\":42}","expected":"{\"name\":\"foo\",\"value\":42}"}]

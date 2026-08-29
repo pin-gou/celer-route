@@ -1,8 +1,25 @@
 {
   "name": "rsync",
   "command": "rsync",
-  "head": 5,
-  "tail": 3,
+  "description": "Compact rsync output — short-circuit successful syncs to a summary, strip progress lines.",
+  "stripAnsi": true,
+  "rules": [
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^sending incremental file list"},
+    {"type": "strip", "pattern": "^sent \\d"}
+  ],
+  "matchOutput": [
+    {
+      "pattern": "total size is",
+      "message": "[rsync: ok (synced)]",
+      "unless": "error|failed|No such file"
+    }
+  ],
+  "head": 15,
+  "tail": 5,
   "priority_patterns": ["^error:", "^Error:", "failed", "rsync error", "rsync: ", "Permission denied", "No such file or directory"],
-  "tests": [{"name":"preserves-sync-summary","input":"sent 123 bytes  received 45 bytes  336.00 bytes/sec\ntotal size is 100  speedup is 0.60","expected":"sent 123 bytes  received 45 bytes  336.00 bytes/sec\ntotal size is 100  speedup is 0.60"}]
+  "tests": [
+    {"name":"successful-sync-short-circuits","input":"sending incremental file list\nfile1.txt\nfile2.txt\n\nsent 1,234 bytes  received 42 bytes  2,552.00 bytes/sec\ntotal size is 98,765  speedup is 77.31\n","expected":"[rsync: ok (synced)]\n"},
+    {"name":"error-lines-pass-through","input":"sending incremental file list\nrsync: [Receiver] mkdir \"/remote/path\" failed: Permission denied (13)\nrsync error: error in file system (code 11) at receiver.c(741) [Receiver=3.2.7]\n","expected":"rsync: [Receiver] mkdir \"/remote/path\" failed: Permission denied (13)\nrsync error: error in file system (code 11) at receiver.c(741) [Receiver=3.2.7]\n"}
+  ]
 }

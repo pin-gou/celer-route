@@ -1,6 +1,8 @@
 {
   "name": "systemctl-status",
   "command": "systemctl status",
+  "description": "Compact systemctl status output — strip ANSI colors and blank lines.",
+  "stripAnsi": true,
   "rules": [
     {"type": "strip", "pattern": "^\\s*$"}
   ],
