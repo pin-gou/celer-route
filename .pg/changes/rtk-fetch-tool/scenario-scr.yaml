@@ -1,0 +1,235 @@
+scenarios:
+# ============================================================================
+# S-rtk-fetch-tool-tool-call-recovery (critical, happy path)
+# ============================================================================
+# 端到端验证: LLM 看到 [rtk:raw_output_id=...] 标记后调 tool_call →
+# gateway 沿用 MCP agent loop 自动执行 handler →
+# tool_result 含 sentinel-wrapped 原文 →
+# 下轮 chat request 进入 RTK 压缩 pipeline 时 sentinel 被识别、body 透传。
+#
+# 注意: 本场景需要 fixture 控制 LLM 行为——使用 mock provider
+# (logging plugin 的 mocker 模式或 core 内部的 DynamicLLMMocker)
+# 模拟 "看到 marker 后调 bifrostInternal-rtk_fetch_raw_output" 的 LLM。
+# 真实 provider 上跑要等 provider-harness 套件补齐 mock 能力。
+# ============================================================================
+- scenario_id: S-rtk-fetch-tool-tool-call-recovery
+  critical: true
+  description: |
+    E2E happy path: LLM 收到 RTK 截断的 tool_result 后调内置 tool
+    bifrostInternal-rtk_fetch_raw_output，gateway 沿用 MCP agent loop
+    自动执行；返回的 sentinel-wrapped body 在下一轮 request 进入 RTK
+    pipeline 时被识别并透传，LLM 拿到完整原文（覆盖 V-plugins-5）。
+  given:
+  - '{env.business_systems[name=celer-route-api].endpoints[name=api].url} 已启动，rtk plugin enabled=true, inject_fetch_tool=true'
+  - fixture 中含 mock provider 配置（mock provider 能按顺序返回 tool_call + 终态响应）
+  - 已通过 fixture 阶段在 {env.data_resources[name=rtk-raw-output-dir].location}/1700000000000-fixture-0123456789abcdef01234567.log 落盘 fixture 内容"原始 git status 输出（>5KB）"
+  covers:
+  - V-plugins-5
+  - V-plugins-3
+  - V-plugins-4
+  when:
+  - name: 第 1 轮：触发 RTK 截断（mock provider 第 1 步返回 tool_call）
+    type: api
+    method: POST
+    url: '{env.business_systems[name=celer-route-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: user
+        content: '请列出 git 状态'
+      - role: assistant
+        tool_calls:
+        - id: call_bash_001
+          type: function
+          function:
+            name: bash
+            arguments: '{"command": "git status"}'
+      - role: tool
+        tool_call_id: call_bash_001
+        content: |
+          On branch main
+          Your branch is up to date with 'origin/main'.
+
+          Changes not staged for commit:
+            modified:   plugins/rtk/hint.go
+            modified:   plugins/rtk/hooks.go
+
+          Untracked files:
+            plugins/rtk/tool_schema.go
+    expect_status: 200
+  - name: 第 2 轮：mock provider 模拟 LLM 调 tool_call（id 来自 fixture 的固定 24-hex）
+    type: api
+    method: POST
+    url: '{env.business_systems[name=celer-route-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: user
+        content: '请简述上轮的 git status'
+      - role: assistant
+        tool_calls:
+        - id: call_rtk_001
+          type: function
+          function:
+            name: bifrostInternal-rtk_fetch_raw_output
+            arguments: '{"id": "0123456789abcdef01234567"}'
+    expect_status: 200
+  then:
+  - 第 1 轮响应 status_code == 200
+  - 第 1 轮响应 choices[0].message.content 含 [rtk:raw_output_id=0123456789abcdef01234567]
+  - 第 1 轮响应 usage.prompt_tokens < 500（截断生效）
+  - 第 1 轮响应 usage.original_prompt_tokens > 100（原始 token 数）
+  - 第 2 轮响应 status_code == 200
+  - 第 2 轮响应 choices[0].message.tool_calls 含 bifrostInternal-rtk_fetch_raw_output
+  - gateway 日志含 bifrostInternal-rtk_fetch_raw_output 注册记录（启动期）
+  - gateway 日志含 rtk-raw-output-bypass technique 记录（sentinel 透传命中）
+  and:
+  - name: 无 cleanup（raw-output 文件由 janitor 处理）
+  evidence:
+  - 2-build/<report_seq>-S-rtk-fetch-tool-tool-call-recovery-evidence.json
+
+# ============================================================================
+# S-rtk-fetch-tool-invalid-id (handler error 路径)
+# ============================================================================
+- scenario_id: S-rtk-fetch-tool-invalid-id
+  critical: false
+  description: |
+    LLM 调 tool_call 但传入非法 id（24-hex 校验失败），handler 返回
+    error，MCP 层映射为 tool_result error message。验证 error 路径
+    不影响 agent loop 继续运行。
+  covers:
+  - V-plugins-1
+  given:
+  - '{env.business_systems[name=celer-route-api].endpoints[name=api].url} 已启动，rtk plugin enabled=true, inject_fetch_tool=true'
+  - rtk-raw-output-dir 为空（无任何落盘文件）
+  when:
+  - name: 调 tool_call 传入非 hex id
+    type: api
+    method: POST
+    url: '{env.business_systems[name=celer-route-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: user
+        content: '请恢复 raw output'
+      - role: assistant
+        tool_calls:
+        - id: call_invalid_001
+          type: function
+          function:
+            name: bifrostInternal-rtk_fetch_raw_output
+            arguments: '{"id": "not-a-valid-hex-id"}'
+    expect_status: 200
+  then:
+  - status_code == 200
+  - response.choices[*].message.content 含 "invalid id" 或类似错误描述
+  - gateway 日志含 RawOutputReadHandler error 记录
+  and:
+  - name: 无 cleanup
+  evidence:
+  - 2-build/<report_seq>-S-rtk-fetch-tool-invalid-id-evidence.json
+
+# ============================================================================
+# S-rtk-fetch-tool-opt-out (InjectFetchTool=false 路径)
+# ============================================================================
+- scenario_id: S-rtk-fetch-tool-opt-out
+  critical: false
+  description: |
+    Operator 在 config.json 设 inject_fetch_tool=false，验证
+      (1) gateway 启动时 RegisterTool 未被调用
+      (2) chat request 的 tools= 列表不含 bifrostInternal-rtk_fetch_raw_output
+      (3) hint 文本仍含 fallback 路径（issue a plain GET）
+  covers:
+  - V-plugins-3
+  - V-plugins-4
+  given:
+  - '{env.business_systems[name=celer-route-api].endpoints[name=api].url} 已启动，rtk plugin enabled=true, inject_fetch_tool=true'
+  preconditions:
+  - name: 关闭 inject_fetch_tool
+    type: api
+    method: PUT
+    url: '{env.business_systems[name=celer-route-api].endpoints[name=api].url}/api/context/rtk/config'
+    body:
+      config:
+        enabled: true
+        inject_fetch_tool: false
+    expect_status: 200
+  - name: 重启 gateway 让新 config 生效
+    type: shell
+    command: 'pg-invoke-hook.py restart --role celer-route-api --instance celer-route-api-1'
+  when:
+  - name: 发送 chat request
+    type: api
+    method: POST
+    url: '{env.business_systems[name=celer-route-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: user
+        content: '你好'
+    expect_status: 200
+  - name: 单独取 system hint 内容
+    type: api
+    method: GET
+    url: '{env.business_systems[name=celer-route-api].endpoints[name=api].url}/api/context/rtk/stats'
+    expect_status: 200
+  then:
+  - 启动日志（gateway log）不含 "registered rtk_fetch_raw_output" 字样
+  - GET /api/context/rtk/stats 返回 200
+  - system prompt 文本仍含 "issue a plain GET" 字样（fallback 保留）
+  and:
+  - name: 'cleanup: 重启 gateway 恢复 inject_fetch_tool=true'
+    type: shell
+    command: 'pg-invoke-hook.py restart --role celer-route-api --instance celer-route-api-1'
+  evidence:
+  - 2-build/<report_seq>-S-rtk-fetch-tool-opt-out-evidence.json
+
+# ============================================================================
+# S-rtk-fetch-tool-cross-module (cross-module 维度：logging plugin 看到 fetch tool 调用)
+# ============================================================================
+- scenario_id: S-rtk-fetch-tool-cross-module
+  critical: false
+  description: |
+    跨模块联调场景：RTK plugin + logging plugin 同时启用时，logging
+    plugin 在 logs-db 中记录 fetch tool 的调用元数据（tool_name,
+    client_name, latency）。验证 plugin pipeline (governance /
+    observability) 在 tool_call 路径上正确串联。
+  covers:
+  - V-plugins-5
+  given:
+  - '{env.business_systems[name=celer-route-api].endpoints[name=api].url} 已启动，rtk plugin enabled=true, inject_fetch_tool=true, logging plugin enabled=true'
+  - '{env.data_resources[name=logs-db]} 可查询'
+  - 已落盘一个 fixture raw-output 文件（同 S-rtk-fetch-tool-tool-call-recovery）
+  covers_secondary:
+  - V-plugins-3
+  when:
+  - name: LLM 调 fetch tool（agent loop 执行）
+    type: api
+    method: POST
+    url: '{env.business_systems[name=celer-route-api].endpoints[name=api].url}/v1/chat/completions'
+    body:
+      model: '{env.fixture_model}'
+      messages:
+      - role: user
+        content: '恢复 raw output'
+      - role: assistant
+        tool_calls:
+        - id: call_cross_001
+          type: function
+          function:
+            name: bifrostInternal-rtk_fetch_raw_output
+            arguments: '{"id": "0123456789abcdef01234567"}'
+    expect_status: 200
+  - name: 查询 logs-db 中 fetch tool 的调用记录
+    type: db
+    action: SQL SELECT
+    url: '{env.data_resources[name=logs-db].schema_ref}'
+    query: "SELECT metadata FROM logs WHERE metadata LIKE '%rtk_fetch_raw_output%' ORDER BY created_at DESC LIMIT 1"
+  then:
+  - 第 1 步 status_code == 200
+  - logs-db 查询返回 1 行
+  - 返回行 metadata 含 tool_name=rtk_fetch_raw_output、client_name=bifrostInternal、latency_ms 字段
+  and:
+  - name: 无 cleanup
+  evidence:
+  - 2-build/<report_seq>-S-rtk-fetch-tool-cross-module-evidence.json

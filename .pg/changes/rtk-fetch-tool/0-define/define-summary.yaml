@@ -1,0 +1,280 @@
+schema_version: 1
+change_id: rtk-fetch-tool
+defined_at: "2026-08-29T22:50:00Z"
+defined_by: define
+target_environment: local
+
+problem: >-
+  `plugins/rtk/` 当前通过 (1) system prompt 提示 LLM 自行 `curl` 取回原文，
+  (2) sentinel 自动透传绕过 RTK 再次压缩——两条机制配合实现"截断可恢复"。
+
+  但机制 (1) 有一个关键短板：依赖 LLM 客户端拥有 Bash / curl 类 HTTP tool。
+  多数 agent 都有，但纯 MCP-only agent 或最小化 SDK 直连场景没有——它们看到
+  `[rtk:raw_output_id=...]` 标记后无能为力，被迫接受被截断的 tool_result。
+
+  设计草案 `.pg/changes/_draft-rtk-llm-raw-output-recovery.md` §方案 B 已规划解
+  决方案：在 core 层注册内置 MCP tool `rtk_fetch_raw_output(id)`，gateway
+  自动在每次 chat request 的 `tools=` 列表里塞入该 tool schema。LLM 看到后直
+  接 tool_call → gateway 在 MCP agent loop 内执行 → sentinel 包好返回 → 透
+  传。对 agent 完全透明，无需修改任何客户端代码。
+
+solution: >-
+  复用 core/mcp 现有承载，不发明新机制：
+
+  - `core/bifrost.go` 新增导出方法 `GetMCPManager() *mcp.MCPManager`，
+    让 RTK plugin 可访问 MCP manager。
+  - `plugins/rtk/tool_schema.go`（新）定义 `RtkFetchRawOutputTool`
+    schemas.ChatTool —— byte-stable JSON Schema，含完整带 prefix 的
+    function name `bifrostInternal-rtk_fetch_raw_output`。
+  - `plugins/rtk/rawoutput.go` 新增 `RawOutputReadHandler(ctx, args)
+    (string, error)` Go 函数，读 raw-output 文件并返回 sentinel-wrapped
+    body（与 HTTP 端点 LLM-bound 响应字节级一致）。
+  - `plugins/rtk/rtk.go` 的 `NewPlugin` 在 RTK enabled +
+    InjectFetchTool=true 时调用 `bifrost.GetMCPManager().RegisterTool(...)`
+    注册该 tool。
+  - `plugins/rtk/hooks.go` 的 PreLLMHook 末尾向
+    `req.ChatRequest.Params.Tools` 注入 tool schema（以 MCPManager
+    ToolMap 为 source of truth，幂等）。
+  - `plugins/rtk/hint.go` 改写 `rtkRecoveryHintText`，主路径改为
+    "call the bifrostInternal-rtk_fetch_raw_output tool"，保留 fallback
+    GET URL 说明（SDK / streaming 场景）。
+  - `plugins/rtk/config.go` 新增 `InjectFetchTool *bool` 配置（默认 true），
+    `transports/config.schema.json` 同步增字段。
+
+  复用清单：
+  - `MCPManager.RegisterTool`（clientmanager.go:1736）
+  - `MCPManager.GetClientForTool`（utils.go:115）— agent loop 自动归入
+    `autoExecutableTools`
+  - `executeToolWithHooks` + `prepareToolExecution`（exec.go:61）— plugin
+    pipeline (governance / observability) 自动跑
+  - `StripRawOutputSentinel`（compression.go:557）— fetch 后 tool_result
+    透传
+  - `WrapRawOutputForHTTP`（rawoutput.go:307）— sentinel 包裹
+  - `ReadRtkRawOutputByID`（rawoutput.go:351）— id → 文件查找
+  - `IsValidRawOutputID`（rawoutput.go:266）— id 格式校验
+
+scope: >-
+  包含：
+  - core 1 文件 + 1 方法（GetMCPManager）
+  - plugins/rtk 6 文件（tool_schema.go 新建，其余修改）
+  - transports/config.schema.json 1 文件（RTK 块加 inject_fetch_tool）
+  - plugins/rtk 单元测试 11+ 用例
+  - tests/e2e/api/collections/provider-harness.json 1 用例
+
+  不包含：
+  - raw-output 端点 per-request_id 隔离（Phase 2）
+  - UI banner / tool_stats（Phase 2）
+  - 多 tool 化 / 工具市场（Phase 3）
+  - streaming 路径下 tool 自动执行（架构性限制，本次不动）
+  - SDK 直连路径（hint 文本 fallback 提示）
+
+boundary:
+  in_scope:
+    - core/bifrost.go 导出 GetMCPManager() 方法
+    - plugins/rtk/tool_schema.go 新建（schemas.ChatTool JSON Schema）
+    - plugins/rtk/rawoutput.go 新增 RawOutputReadHandler Go 函数
+    - plugins/rtk/rtk.go NewPlugin 调用 MCPManager.RegisterTool 注册
+    - plugins/rtk/hooks.go PreLLMHook 注入 tool schema 到 req.Params.Tools
+    - plugins/rtk/hint.go 改写 rtkRecoveryHintText（主路径 tool + fallback GET）
+    - plugins/rtk/config.go 新增 InjectFetchTool *bool 字段（默认 true）
+    - transports/config.schema.json RTK 块加 inject_fetch_tool 字段
+    - plugins/rtk 单元测试 11+ 用例（rawoutput、tool_schema、hooks、hint）
+    - tests/e2e/api/collections/provider-harness.json 新增 tool_call bypass 用例
+  out_of_scope:
+    - raw-output 端点 per-request_id 隔离鉴权（Phase 2）
+    - UI banner（gateway 启动提示 tool 已启用）
+    - 多 tool 化（rtk_compress / rtk_redact / rtk_stats 等工具市场）
+    - inline tool result（MCP 协议原生支持，节省一轮 LLM）
+    - ChatCompletionStreamRequest 路径下 tool 自动执行（架构性限制）
+    - SDK 直接调 bifrost.ChatCompletionRequest 路径（hint fallback 提示）
+
+verification_needs:
+  - id: V-plugins-1
+    track_id: plugins
+    name: handler 单元测试覆盖（id 校验、文件存在/缺失、sentinel 包裹）
+    what: >-
+      写入 fixture raw-output 文件，调 p.RawOutputReadHandler：
+      (1) 24-hex id 接受，返回 sentinel-wrapped body
+      (2) 非 hex / 长度错 id 拒绝，返回 error
+      (3) 不存在 id 返回 error 含 "not found or expired"
+      (4) 空 args 返回 error
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+        description: Go 编译产物 + 单元测试运行能力
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-2
+    track_id: plugins
+    name: tool schema 单测（byte-stable JSON Schema）
+    what: >-
+      断言 RtkFetchRawOutputTool.Function.Name ==
+      bifrostInternal-rtk_fetch_raw_output、Required: [id]、
+      id 字段含 pattern ^[0-9a-f]{24}$；跑两次 sonic.Marshal
+      断言输出字节一致（Anthropic cache 命中依赖）
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-3
+    track_id: plugins
+    name: PreLLMHook 注入分支覆盖
+    what: >-
+      RTK enabled + InjectFetchTool=true 时 req.ChatRequest.Params.Tools
+      末尾追加 schema；RTK disabled 或 InjectFetchTool=false 时不追加；
+      幂等：已含 schema 时跳过
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-4
+    track_id: plugins
+    name: hint 文本更新（byte-stable + 主路径 tool + fallback GET）
+    what: >-
+      hint 文本含完整 bifrostInternal-rtk_fetch_raw_output tool name、
+      描述 tool 调用方式、保留 fallback GET URL 文本
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-5
+    track_id: plugins
+    name: E2E provider-harness：tool_call → sentinel bypass → 原文透传
+    what: >-
+      chat request → LLM 调 tool_call → agent loop 执行 handler →
+      tool_result 含 sentinel-wrapped 原文 → 下轮 chat request 走
+      RTK pipeline 时 sentinel 被识别并透传 → LLM 拿到完整原文
+    requires_capabilities:
+      - capability: bifrost_openai_compatible_api
+        min_quantity: 1
+      - capability: mcp_gateway
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.business_systems[name=celer-route-api]}"
+      - "{env.data_resources[name=rtk-raw-output-dir]}"
+
+  - id: V-core-1
+    track_id: core
+    name: GetMCPManager 暴露（plugin 可拿到 *MCPManager）
+    what: >-
+      Bifrost.GetMCPManager() 返回正确的 *mcp.MCPManager 指针；nil
+      bifrost 不 panic；返回的 manager 与构造时传入的 manager 同一引用
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+  - id: V-plugins-7
+    track_id: plugins
+    name: handler 输出与 HTTP 端点 LLM-bound 响应字节级一致
+    what: >-
+      同一 id，分别调 handler 和模拟 handlers/rtk.go:386 的
+      WrapRawOutputForHTTP，断言两次输出 byte-equal（防止 sentinel
+      格式漂移）
+    requires_capabilities:
+      - capability: bifrost_build_artifact
+        min_quantity: 1
+    post_discussion_status: verifiable
+    env_resource_refs:
+      - "{env.config_resources[name=bifrost-binary]}"
+
+verification_strategy: >-
+  - V-plugins-1: handler 单元测试（id 校验、文件存在/缺失、
+    sentinel 包裹）
+  - V-plugins-2: tool schema 单测（JSON Schema 合法、name 含 prefix）
+  - V-plugins-3: PreLLMHook 注入分支（InjectFetchTool=true/false，
+    RTK enabled/disabled）
+  - V-plugins-4: hint 文本（byte-stable，含完整 tool name +
+    fallback GET）
+  - V-plugins-5: E2E provider-harness（chat request → LLM 调
+    tool_call → agent loop 执行 → sentinel bypass → 原文透传）
+  - V-core-1: GetMCPManager 暴露（plugin 可拿到 manager）
+  - V-plugins-7: handler 输出 vs HTTP 端点 LLM-bound 响应
+    byte-equal
+
+risks:
+  - risk_id: R-1
+    description: >-
+      `MCPManager.RegisterTool` 启动 in-process MCP stdio server，每次
+      gateway 启动多起一个 stdio server
+    severity: low
+    mitigation: 内存开销 < 5MB；仅在 RTK enabled + InjectFetchTool=true
+      时启动；docs 注明
+  - risk_id: R-2
+    description: >-
+      tool name prefix `bifrostInternal-` 暴露内部命名给 LLM
+    severity: low
+    mitigation: 可接受；`bifrostInternal` 表明是网关提供，反而是品牌一
+      致性；hint 文本写完整带 prefix 名字
+  - risk_id: R-3
+    description: >-
+      streaming 不支持 tool 自动执行（架构性限制，agent loop 不跑
+      ChatCompletionStreamRequest）
+    severity: medium
+    mitigation: hint 文本保留 fallback（"issue a plain GET"），streaming
+      结束后客户端可通过非 stream 请求调用 tool
+  - risk_id: R-4
+    description: >-
+      鉴权缺失：raw-output 端点仍是"24-char hex id 即凭据"，tool 继承同
+      一鉴权（任何人拿到 id 可读）
+    severity: medium
+    mitigation: 与现有 HTTP 端点一致；加固留 Phase 2（per-request_id
+      隔离）
+  - risk_id: V-plugins-5
+    description: >-
+      E2E provider-harness 需 mock provider 控制 LLM 行为；当前 harness
+      不一定有 mock provider 能力
+    severity: medium
+    mitigation: 复用现有 mock 框架（如有）；否则改用 mocker plugin 注入
+      预编排 LLM 响应
+
+environment:
+  business_systems:
+    - name: celer-route-api
+      role: rest-api
+      capabilities_needed:
+        - llm_request_logging
+        - rest_api_endpoint
+        - sse_streaming
+        - bifrost_openai_compatible_api
+        - mcp_gateway
+  data_resources:
+    - name: config-db
+      role: db-table
+      purpose: 读取 rtk plugin config
+    - name: logs-db
+      role: db-table
+      purpose: 记录 fetch tool 调用 metadata
+    - name: rtk-raw-output-dir
+      role: file-dir
+      purpose: LLM 调 fetch tool 时读文件
+  config_resources: []
+  runtime_environment:
+    - name: localhost
+      ports_needed:
+        - port: 9080
+          role: celer-route-api
+
+deferred_items:
+  - raw-output per-request_id 隔离鉴权（V-plugins-N/A, 走 R-4）
+  - UI banner（gateway 启动时显示 tool 已启用）
+  - 多 tool 化（rtk_compress / rtk_redact / rtk_stats 等）
+  - inline tool result（MCP 协议原生支持，节省一轮 LLM 调用）
+
+degraded_items: []
+
+skipped_items: []
