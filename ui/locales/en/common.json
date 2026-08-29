@@ -274,7 +274,6 @@
 	},
 	"home": {
 		"pageTitle": "Home",
-		"pageDescription": "Get up and running in 4 steps. Your gateway is at {{url}}.",
 		"endpointCard": {
 			"title": "Your endpoint",
 			"subtitle": "Use this URL with any OpenAI-compatible client.",

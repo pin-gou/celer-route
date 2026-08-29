@@ -274,7 +274,6 @@
 	},
 	"home": {
 		"pageTitle": "首页",
-		"pageDescription": "4 步即可上手。网关地址：{{url}}。",
 		"endpointCard": {
 			"title": "你的端点",
 			"subtitle": "使用此 URL 配合任何 OpenAI 兼容客户端。",

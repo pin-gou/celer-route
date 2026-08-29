@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import EndpointCard from "../components/endpointCard";
 import FreeTierRecommendationCard from "../components/freeTierRecommendationCard";
 import ProviderTopologyCard from "../components/providerTopologyCard";
-import SetupStatusBar from "../components/setupStatusBar";
 import SystemHealthCard from "../components/systemHealthCard";
 
 function resolveEndpoint(): string {
@@ -31,14 +30,12 @@ export default function HomePage() {
 		<div className="mx-auto w-full max-w-7xl space-y-4">
 			<header className="space-y-1">
 				<h1 className="text-2xl font-semibold tracking-tight">{t("home.pageTitle")}</h1>
-				<p className="text-muted-foreground text-sm">{t("home.pageDescription", { url: endpoint })}</p>
 			</header>
 
-			<EndpointCard endpointUrl={endpoint} />
 			<SystemHealthCard />
-			<SetupStatusBar />
 			<FreeTierRecommendationCard />
 			<ProviderTopologyCard />
+			<EndpointCard endpointUrl={endpoint} />
 		</div>
 	);
 }
