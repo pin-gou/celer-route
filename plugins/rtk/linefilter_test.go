@@ -523,6 +523,67 @@ func TestCharTruncateMarker(t *testing.T) {
 	}
 }
 
+// TestApplyLineFilterTruncateLineAt verifies that TruncateLineAt caps each
+// surviving line to N runes (with an ellipsis marker), rune-safe. This is the
+// rtk TOML truncate_lines_at behavior for wide outputs (ps, gcloud tables).
+func TestApplyLineFilterTruncateLineAt(t *testing.T) {
+	filter := &Filter{
+		Rules:          []LineRule{{Type: "keep", Pattern: "."}},
+		TruncateLineAt: 10,
+	}
+	input := "short\nthis line is much longer than ten runes\n你好世界这是很长的行啊"
+	got := applyLineFilter(input, filter)
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %q", len(lines), got)
+	}
+	// Line 1: "short" (5 runes ≤ 10) → unchanged.
+	if lines[0] != "short" {
+		t.Errorf("line[0] = %q, want %q", lines[0], "short")
+	}
+	// Line 2: truncated to 10 runes + ellipsis.
+	if lines[1] != "this line …" {
+		t.Errorf("line[1] = %q, want %q", lines[1], "this line …")
+	}
+	// Line 3: 10 CJK runes + ellipsis (rune-safe, no split multi-byte).
+	if !strings.HasSuffix(lines[2], "…") {
+		t.Errorf("line[2] = %q, want ellipsis suffix", lines[2])
+	}
+	if r := []rune(strings.TrimSuffix(lines[2], "…")); len(r) != 10 {
+		t.Errorf("line[2] rune count = %d, want 10 (got %q)", len(r), lines[2])
+	}
+}
+
+// TestApplyLineFilterTruncateLineAt_NoTruncateWhenShort verifies that lines
+// shorter than TruncateLineAt pass through without an ellipsis.
+func TestApplyLineFilterTruncateLineAt_NoTruncateWhenShort(t *testing.T) {
+	filter := &Filter{
+		Rules:          []LineRule{{Type: "keep", Pattern: "."}},
+		TruncateLineAt: 100,
+	}
+	input := "a short line"
+	got := applyLineFilter(input, filter)
+	if got != "a short line" {
+		t.Errorf("applyLineFilter TruncateLineAt=100 on short line: got %q, want unchanged", got)
+	}
+}
+
+// TestApplyLineFilter_NoRulesButTruncate verifies that a filter with no rules
+// but a positive TruncateLineAt still processes (the early-return guard must
+// not skip it). Regression for the guard change that lets truncateLineAt-only
+// filters run.
+func TestApplyLineFilter_NoRulesButTruncate(t *testing.T) {
+	filter := &Filter{
+		// No Rules.
+		TruncateLineAt: 5,
+	}
+	input := "abcdefghij"
+	got := applyLineFilter(input, filter)
+	if got != "abcde…" {
+		t.Errorf("applyLineFilter no-rules+truncateLineAt: got %q, want %q", got, "abcde…")
+	}
+}
+
 // TestApplyMatchOutputRules_Hit verifies that a matching pattern collapses
 // the entire input into the rule's message. This is the canonical "success
 // summary" pattern (rtk TOML matchOutput semantics).

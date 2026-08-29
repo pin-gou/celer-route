@@ -168,10 +168,16 @@ func applyMatchOutputRules(input string, filter *Filter) (string, bool) {
 }
 
 // applyLineFilter applies the filter's rules to the input text. Rules are
-// applied in order: strip → keep → collapse → replace. If the filter is nil
-// or has no rules, the input is returned unchanged.
+// applied in order: strip → keep → collapse → replace. After the rules, each
+// surviving line is truncated to TruncateLineAt runes (when set) and the whole
+// output is capped at MaxBytes bytes (when set). If the filter is nil, the
+// input is empty, or the filter has no rules/truncation configured, the input
+// is returned unchanged.
 func applyLineFilter(input string, filter *Filter) string {
-	if filter == nil || len(filter.Rules) == 0 || input == "" {
+	if filter == nil || input == "" {
+		return input
+	}
+	if len(filter.Rules) == 0 && filter.TruncateLineAt <= 0 && filter.MaxBytes <= 0 {
 		return input
 	}
 
@@ -235,11 +241,18 @@ func applyLineFilter(input string, filter *Filter) string {
 		}
 	}
 
-	// Build result.
+	// Build result. When TruncateLineAt is set, cap each surviving line to
+	// that many runes (rune-safe so multi-byte characters are never split).
+	// This mirrors rtk TOML's truncate_lines_at for wide outputs (ps, jq,
+	// gcloud tables, long paths).
 	result := make([]string, 0, len(content))
 	for i, ok := range kept {
 		if ok {
-			result = append(result, content[i])
+			line := content[i]
+			if filter.TruncateLineAt > 0 {
+				line = truncateLineToRunes(line, filter.TruncateLineAt)
+			}
+			result = append(result, line)
 		}
 	}
 
@@ -259,6 +272,20 @@ func applyLineFilter(input string, filter *Filter) string {
 	}
 
 	return out
+}
+
+// truncateLineToRunes returns line truncated to at most n runes, appending an
+// ellipsis marker when truncation occurred. Rune-based (not byte-based) so
+// multi-byte characters are never split. Mirrors rtk TOML truncate_lines_at.
+func truncateLineToRunes(line string, n int) string {
+	if n <= 0 {
+		return line
+	}
+	r := []rune(line)
+	if len(r) <= n {
+		return line
+	}
+	return string(r[:n]) + "…"
 }
 
 // truncateToMaxBytes returns the longest prefix of s whose UTF-8 encoding
