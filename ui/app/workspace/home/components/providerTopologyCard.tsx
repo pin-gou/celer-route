@@ -1,6 +1,8 @@
 import Provider from "@/components/provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
+import { getProviderLabel } from "@/lib/constants/logs";
 import { useGetAllKeysQuery } from "@/lib/store/apis/providersApi";
 import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { Link } from "@tanstack/react-router";
@@ -79,18 +81,18 @@ export default function ProviderTopologyCard() {
 						</Button>
 					</div>
 				) : (
-					<ul className="space-y-2">
+					<ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
 						{summaries.map((s) => {
 							return (
-								<li key={s.provider}>
+								<li key={s.provider} className="min-w-0">
 									<Link
 										to="/workspace/providers/$id"
 										params={{ id: s.provider }}
-										className="bg-muted/20 hover:bg-muted/40 flex items-center gap-3 rounded-md border px-3 py-2 transition-colors"
+										className="bg-muted/20 hover:bg-muted/40 flex h-full items-center gap-3 rounded-md border px-3 py-2 transition-colors"
 										data-testid={`home-provider-topology-row-${s.provider}`}
 									>
-										<Provider provider={s.provider} size={22} className="mt-0 shrink-0" />
-										<span className="flex-1 truncate text-sm font-medium capitalize">{s.provider}</span>
+										<RenderProviderIcon provider={s.provider as ProviderIconType} size={22} className="mt-0 shrink-0" />
+										<span className="min-w-0 flex-1 truncate text-sm font-medium">{getProviderLabel(s.provider)}</span>
 										<span className={["inline-block h-2 w-2 shrink-0 rounded-full", dotClass[s.dotState]].join(" ")} aria-hidden />
 										<span
 											className="text-muted-foreground flex items-center gap-1 text-xs"
