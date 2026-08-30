@@ -2974,6 +2974,152 @@ func (s *RDBLogStore) GetModelRankings(ctx context.Context, filters SearchFilter
 	return &ModelRankingResult{Rankings: rankings}, nil
 }
 
+// GetProviderRankings returns providers ranked by usage with trend comparison
+// to the previous period. It mirrors GetModelRankings but groups by provider
+// instead of (model, provider), so the dashboard's provider-usage tab can show
+// the same columns and trends as the model-rankings tab but per provider.
+// Uses the same fresh-aggregate matview gate as GetModelRankings.
+func (s *RDBLogStore) GetProviderRankings(ctx context.Context, filters SearchFilters) (*ProviderRankingResult, error) {
+	if s.db.Dialector.Name() == "postgres" && s.canUseMatViewForFreshAggregate(filters) {
+		if res, err := s.getProviderRankingsFromMatView(ctx, filters); !s.fallBackToRaw(err) {
+			return res, err
+		}
+	}
+	selectClause := `
+		provider,
+		COUNT(*) as total_requests,
+		SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+		SUM(total_tokens) as total_tokens,
+		COALESCE(SUM(cost), 0) as total_cost,
+		AVG(latency) as avg_latency,
+		COALESCE(SUM(CASE WHEN status = 'success' AND latency > 0 THEN completion_tokens ELSE 0 END), 0) as tp_completion_tokens,
+		COALESCE(SUM(CASE WHEN status = 'success' AND latency > 0 THEN latency ELSE 0 END), 0) as tp_latency_ms
+	`
+
+	// Query current period. Mirror GetModelRankings but drop the canonical_name
+	// selection — providers don't share a canonical-name lookup table.
+	currentQuery := s.ScopedDB(ctx).Model(&Log{})
+	currentQuery = s.applyFilters(currentQuery, filters)
+	currentQuery = currentQuery.Where("status IN ?", terminalLogStatuses)
+	currentQuery = currentQuery.Where("provider IS NOT NULL AND provider != ''")
+
+	var currentResults []struct {
+		Provider           string          `gorm:"column:provider"`
+		TotalRequests      int64           `gorm:"column:total_requests"`
+		SuccessCount       int64           `gorm:"column:success_count"`
+		TotalTokens        sql.NullInt64   `gorm:"column:total_tokens"`
+		TotalCost          sql.NullFloat64 `gorm:"column:total_cost"`
+		AvgLatency         sql.NullFloat64 `gorm:"column:avg_latency"`
+		TPCompletionTokens int64           `gorm:"column:tp_completion_tokens"`
+		TPLatencyMs        float64         `gorm:"column:tp_latency_ms"`
+	}
+
+	if err := applyRankingLimit(currentQuery.
+		Select(selectClause).
+		Group("provider").
+		Order("total_requests DESC, provider ASC"), filters).
+		Find(&currentResults).Error; err != nil {
+		return nil, fmt.Errorf("failed to get provider rankings: %w", err)
+	}
+
+	// Query previous period for trend comparison.
+	prevMap := make(map[string]ProviderRankingEntry)
+	if filters.StartTime != nil && filters.EndTime != nil {
+		duration := filters.EndTime.Sub(*filters.StartTime)
+		prevStart := filters.StartTime.Add(-duration)
+		prevEnd := filters.StartTime.Add(-time.Nanosecond)
+
+		prevFilters := filters
+		prevFilters.StartTime = &prevStart
+		prevFilters.EndTime = &prevEnd
+
+		prevQuery := s.ScopedDB(ctx).Model(&Log{})
+		prevQuery = s.applyFilters(prevQuery, prevFilters)
+		prevQuery = prevQuery.Where("status IN ?", terminalLogStatuses)
+		prevQuery = prevQuery.Where("provider IS NOT NULL AND provider != ''")
+
+		// Only fetch previous-period data for providers that appear in the current
+		// ranking so trend computation stays accurate when the previous period
+		// has more groups than the limit.
+		if len(currentResults) > 0 {
+			providerConditions := make([]string, len(currentResults))
+			providerArgs := make([]interface{}, 0, len(currentResults))
+			for i, r := range currentResults {
+				providerConditions[i] = "provider = ?"
+				providerArgs = append(providerArgs, r.Provider)
+			}
+			prevQuery = prevQuery.Where(strings.Join(providerConditions, " OR "), providerArgs...)
+		}
+
+		var prevResults []struct {
+			Provider           string          `gorm:"column:provider"`
+			TotalRequests      int64           `gorm:"column:total_requests"`
+			SuccessCount       int64           `gorm:"column:success_count"`
+			TotalTokens        sql.NullInt64   `gorm:"column:total_tokens"`
+			TotalCost          sql.NullFloat64 `gorm:"column:total_cost"`
+			AvgLatency         sql.NullFloat64 `gorm:"column:avg_latency"`
+			TPCompletionTokens int64           `gorm:"column:tp_completion_tokens"`
+			TPLatencyMs        float64         `gorm:"column:tp_latency_ms"`
+		}
+
+		if err := prevQuery.
+			Select(selectClause).
+			Group("provider").
+			Find(&prevResults).Error; err != nil {
+			return nil, fmt.Errorf("failed to get previous period provider rankings: %w", err)
+		}
+
+		for _, r := range prevResults {
+			prevMap[r.Provider] = ProviderRankingEntry{
+				Provider:      r.Provider,
+				TotalRequests: r.TotalRequests,
+				TotalTokens:   r.TotalTokens.Int64,
+				TotalCost:     r.TotalCost.Float64,
+				AvgLatency:    r.AvgLatency.Float64,
+				Throughput:    tokensPerSecond(r.TPCompletionTokens, r.TPLatencyMs),
+			}
+		}
+	}
+
+	// Build results with trends.
+	rankings := make([]ProviderRankingWithTrend, len(currentResults))
+	for i, r := range currentResults {
+		entry := ProviderRankingEntry{
+			Provider:      r.Provider,
+			TotalRequests: r.TotalRequests,
+			SuccessCount:  r.SuccessCount,
+			TotalTokens:   r.TotalTokens.Int64,
+			TotalCost:     r.TotalCost.Float64,
+			AvgLatency:    r.AvgLatency.Float64,
+			Throughput:    tokensPerSecond(r.TPCompletionTokens, r.TPLatencyMs),
+		}
+		if r.TotalRequests > 0 {
+			entry.SuccessRate = float64(r.SuccessCount) / float64(r.TotalRequests) * 100
+		}
+
+		var trend ProviderRankingTrend
+		if prev, ok := prevMap[r.Provider]; ok && prev.TotalRequests > 0 {
+			trend.HasPreviousPeriod = true
+			trend.RequestsTrend = pctChange(float64(prev.TotalRequests), float64(r.TotalRequests))
+			trend.TokensTrend = pctChange(float64(prev.TotalTokens), float64(r.TotalTokens.Int64))
+			trend.CostTrend = pctChange(prev.TotalCost, r.TotalCost.Float64)
+			if prev.AvgLatency > 0 {
+				trend.LatencyTrend = pctChange(prev.AvgLatency, r.AvgLatency.Float64)
+			}
+			if prev.Throughput > 0 {
+				trend.ThroughputTrend = pctChange(prev.Throughput, entry.Throughput)
+			}
+		}
+
+		rankings[i] = ProviderRankingWithTrend{
+			ProviderRankingEntry: entry,
+			Trend:                trend,
+		}
+	}
+
+	return &ProviderRankingResult{Rankings: rankings}, nil
+}
+
 // GetUserRankings returns users ranked by usage with trend comparison to the previous period.
 // Uses the same fresh-aggregate matview gate as GetStats: short windows go to
 // the raw table because mv_logs_hourly rounds the window out to full hour

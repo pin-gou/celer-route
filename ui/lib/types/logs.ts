@@ -1305,6 +1305,31 @@ export interface ModelRankingsResponse {
 	rankings: ModelRankingEntry[];
 }
 
+export interface ProviderRankingTrend {
+	has_previous_period: boolean;
+	requests_trend: number;
+	tokens_trend: number;
+	cost_trend: number;
+	latency_trend: number;
+	throughput_trend: number;
+}
+
+export interface ProviderRankingEntry {
+	provider: string;
+	total_requests: number;
+	success_count: number;
+	success_rate: number;
+	total_tokens: number;
+	total_cost: number;
+	avg_latency: number;
+	throughput: number;
+	trend: ProviderRankingTrend;
+}
+
+export interface ProviderRankingsResponse {
+	rankings: ProviderRankingEntry[];
+}
+
 export interface UserRankingTrend {
 	has_previous_period: boolean;
 	requests_trend: number;

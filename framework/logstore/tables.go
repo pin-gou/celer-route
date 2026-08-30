@@ -1968,6 +1968,44 @@ type ModelRankingResult struct {
 	Rankings []ModelRankingWithTrend `json:"rankings"`
 }
 
+// ProviderRankingEntry represents aggregated stats for a single provider over a time period.
+// It mirrors ModelRankingEntry's metrics but drops the model/canonical-model fields because
+// the grouping key is the provider.
+type ProviderRankingEntry struct {
+	Provider      string  `json:"provider"`
+	TotalRequests int64   `json:"total_requests"`
+	SuccessCount  int64   `json:"success_count"`
+	SuccessRate   float64 `json:"success_rate"`
+	TotalTokens   int64   `json:"total_tokens"`
+	TotalCost     float64 `json:"total_cost"`
+	AvgLatency    float64 `json:"avg_latency"`
+	// Throughput is aggregate token-generation rate (tokens/sec) for this provider:
+	// SUM(completion_tokens) / (SUM(latency_ms)/1000) over successful rows with
+	// latency > 0 — the same definition as the throughput histogram.
+	Throughput float64 `json:"throughput"`
+}
+
+// ProviderRankingWithTrend combines a provider ranking entry with its trend data.
+type ProviderRankingWithTrend struct {
+	ProviderRankingEntry
+	Trend ProviderRankingTrend `json:"trend"`
+}
+
+// ProviderRankingTrend represents the percentage change compared to the previous period.
+type ProviderRankingTrend struct {
+	HasPreviousPeriod bool    `json:"has_previous_period"`
+	RequestsTrend     float64 `json:"requests_trend"`
+	TokensTrend       float64 `json:"tokens_trend"`
+	CostTrend         float64 `json:"cost_trend"`
+	LatencyTrend      float64 `json:"latency_trend"`
+	ThroughputTrend   float64 `json:"throughput_trend"`
+}
+
+// ProviderRankingResult is the response for the provider rankings endpoint.
+type ProviderRankingResult struct {
+	Rankings []ProviderRankingWithTrend `json:"rankings"`
+}
+
 // UserRankingEntry represents a single user's usage statistics.
 type UserRankingEntry struct {
 	UserID        string  `json:"user_id"`

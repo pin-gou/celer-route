@@ -658,6 +658,9 @@ func (m *dashboardLogManager) GetProviderThroughputHistogram(ctx context.Context
 func (m *dashboardLogManager) GetModelRankings(ctx context.Context, filters *logstore.SearchFilters) (*logstore.ModelRankingResult, error) {
 	return &logstore.ModelRankingResult{}, nil
 }
+func (m *dashboardLogManager) GetProviderRankings(ctx context.Context, filters *logstore.SearchFilters) (*logstore.ProviderRankingResult, error) {
+	return &logstore.ProviderRankingResult{}, nil
+}
 func (m *dashboardLogManager) GetDimensionRankings(ctx context.Context, filters *logstore.SearchFilters, dimension logstore.RankingDimension) (*logstore.DimensionRankingResult, error) {
 	return &logstore.DimensionRankingResult{Dimension: dimension}, nil
 }

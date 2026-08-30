@@ -407,6 +407,7 @@ func (h *LoggingHandler) RegisterRoutes(r *router.Router, middlewares ...schemas
 	r.GET("/api/logs/dropped", lib.ChainMiddlewares(h.getDroppedRequests, middlewares...))
 	r.GET("/api/logs/filterdata", lib.ChainMiddlewares(h.getAvailableFilterData, middlewares...))
 	r.GET("/api/logs/rankings", lib.ChainMiddlewares(h.getModelRankings, middlewares...))
+	r.GET("/api/logs/rankings/by-provider", lib.ChainMiddlewares(h.getProviderRankings, middlewares...))
 	r.GET("/api/logs/rankings/by-dimension", lib.ChainMiddlewares(h.getDimensionRankings, middlewares...))
 	// Consolidated, public-facing dashboard payload (all of the above in one call)
 	r.GET("/api/logs/dashboard", lib.ChainMiddlewares(h.getDashboard, middlewares...))
@@ -1610,6 +1611,23 @@ func (h *LoggingHandler) getModelRankings(ctx *fasthttp.RequestCtx) {
 	if err != nil {
 		logger.Error("failed to get model rankings: %v", err)
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Model rankings calculation failed: %v", err))
+		return
+	}
+
+	SendJSON(ctx, result)
+}
+
+// getProviderRankings handles GET /api/logs/rankings/by-provider - Get providers ranked by usage with trends
+func (h *LoggingHandler) getProviderRankings(ctx *fasthttp.RequestCtx) {
+	filters := parseHistogramFilters(ctx)
+	if !ParseRankingLimit(ctx, filters) {
+		return
+	}
+
+	result, err := h.logManager.GetProviderRankings(ctx, filters)
+	if err != nil {
+		logger.Error("failed to get provider rankings: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Provider rankings calculation failed: %v", err))
 		return
 	}
 

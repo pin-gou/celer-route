@@ -44,7 +44,6 @@
 		"rtkTooltip": "受所选时间范围影响 — 不受维度筛选影响。",
 		"localCacheHitRate": "本地缓存命中率",
 		"modelUsage": "模型用量",
-		"providerCost": "提供商成本",
 		"providerTokenUsage": "提供商词元用量",
 		"providerLatency": "提供商延迟",
 		"providerThroughput": "提供商吞吐量",
@@ -89,6 +88,7 @@
 	},
 	"rankings": {
 		"modelRankings": "模型排名",
+		"providerRankings": "供应商排名",
 		"dimensionRankings": "{{dimension}} 排名",
 		"requests": "请求数",
 		"successRate": "成功率",
@@ -97,6 +97,7 @@
 		"avgLatency": "平均延迟",
 		"throughput": "吞吐量",
 		"model": "模型",
+		"provider": "供应商",
 		"topDimension": "热门 {{dimensionLabel}}",
 		"more": "还有 {{count}} 个",
 		"new": "新"

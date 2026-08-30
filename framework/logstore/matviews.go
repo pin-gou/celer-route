@@ -2420,6 +2420,117 @@ func (s *RDBLogStore) getModelRankingsFromMatView(ctx context.Context, filters S
 	return &ModelRankingResult{Rankings: rankings}, nil
 }
 
+// getProviderRankingsFromMatView returns providers ranked by usage with trend
+// comparison to the previous period of equal duration from mv_logs_hourly.
+// It mirrors getModelRankingsFromMatView but GROUP BY provider — the
+// dashboard's provider-usage tab consumes this so its ranking table can show
+// the same columns and trends as the model-rankings tab but per provider.
+func (s *RDBLogStore) getProviderRankingsFromMatView(ctx context.Context, filters SearchFilters) (*ProviderRankingResult, error) {
+	var results []struct {
+		Provider           string  `gorm:"column:provider"`
+		Total              int64   `gorm:"column:total"`
+		SuccessCount       int64   `gorm:"column:success_count"`
+		AvgLatency         float64 `gorm:"column:avg_lat"`
+		TotalTokens        int64   `gorm:"column:total_tkns"`
+		TotalCost          float64 `gorm:"column:total_cost"`
+		TPCompletionTokens int64   `gorm:"column:tp_completion_tokens"`
+		TPLatencyMs        float64 `gorm:"column:tp_latency_ms"`
+	}
+	q := s.ScopedDB(ctx).Table("mv_logs_hourly")
+	q = s.applyMatViewFilters(q, filters)
+	q = q.Where("provider IS NOT NULL AND provider != ''")
+	q = q.Select(`
+		provider,
+		SUM(count) AS total,
+		SUM(success_count) AS success_count,
+		CASE WHEN SUM(count) > 0 THEN SUM(avg_latency * count) / SUM(count) ELSE 0 END AS avg_lat,
+		SUM(total_tokens) AS total_tkns,
+		SUM(total_cost) AS total_cost,
+		COALESCE(SUM(CASE WHEN status = 'success' THEN throughput_completion_tokens ELSE 0 END), 0) AS tp_completion_tokens,
+		COALESCE(SUM(CASE WHEN status = 'success' THEN throughput_latency_ms ELSE 0 END), 0) AS tp_latency_ms
+	`).Group("provider").
+		Order("total DESC, provider ASC")
+	if err := applyRankingLimit(q, filters).Find(&results).Error; err != nil {
+		return nil, err
+	}
+
+	// Previous period for trend (same duration, ending just before current start).
+	type prevRow struct {
+		Provider           string  `gorm:"column:provider"`
+		Total              int64   `gorm:"column:total"`
+		AvgLatency         float64 `gorm:"column:avg_lat"`
+		TotalTokens        int64   `gorm:"column:total_tkns"`
+		TotalCost          float64 `gorm:"column:total_cost"`
+		TPCompletionTokens int64   `gorm:"column:tp_completion_tokens"`
+		TPLatencyMs        float64 `gorm:"column:tp_latency_ms"`
+	}
+	var prevResults []prevRow
+	if filters.StartTime != nil && filters.EndTime != nil {
+		// Anchor the previous period to the hour grid for the same reason as
+		// getModelRankingsFromMatView: mv_logs_hourly rounds windows to full
+		// hours, so a sub-hour StartTime would otherwise skew the trend by
+		// claiming the boundary hour twice.
+		hourStart := filters.StartTime.Truncate(time.Hour)
+		duration := filters.EndTime.Sub(hourStart)
+		prevStart := hourStart.Add(-duration)
+		prevEnd := hourStart.Add(-time.Nanosecond)
+		prevFilters := filters
+		prevFilters.StartTime = &prevStart
+		prevFilters.EndTime = &prevEnd
+		pq := s.ScopedDB(ctx).Table("mv_logs_hourly")
+		pq = s.applyMatViewFilters(pq, prevFilters)
+		pq = pq.Where("provider IS NOT NULL AND provider != ''")
+		if err := pq.Select(`
+			provider,
+			SUM(count) AS total,
+			CASE WHEN SUM(count) > 0 THEN SUM(avg_latency * count) / SUM(count) ELSE 0 END AS avg_lat,
+			SUM(total_tokens) AS total_tkns,
+			SUM(total_cost) AS total_cost,
+			COALESCE(SUM(CASE WHEN status = 'success' THEN throughput_completion_tokens ELSE 0 END), 0) AS tp_completion_tokens,
+			COALESCE(SUM(CASE WHEN status = 'success' THEN throughput_latency_ms ELSE 0 END), 0) AS tp_latency_ms
+		`).Group("provider").Find(&prevResults).Error; err != nil {
+			return nil, fmt.Errorf("failed to get previous period provider rankings: %w", err)
+		}
+	}
+
+	prevMap := make(map[string]int, len(prevResults))
+	for i, r := range prevResults {
+		prevMap[r.Provider] = i
+	}
+
+	rankings := make([]ProviderRankingWithTrend, 0, len(results))
+	for _, r := range results {
+		var successRate float64
+		if r.Total > 0 {
+			successRate = float64(r.SuccessCount) / float64(r.Total) * 100
+		}
+		entry := ProviderRankingEntry{
+			Provider:      r.Provider,
+			TotalRequests: r.Total,
+			SuccessCount:  r.SuccessCount,
+			SuccessRate:   successRate,
+			TotalTokens:   r.TotalTokens,
+			TotalCost:     r.TotalCost,
+			AvgLatency:    r.AvgLatency,
+			Throughput:    tokensPerSecond(r.TPCompletionTokens, r.TPLatencyMs),
+		}
+		prt := ProviderRankingWithTrend{ProviderRankingEntry: entry}
+		if idx, ok := prevMap[r.Provider]; ok {
+			prev := prevResults[idx]
+			prt.Trend = ProviderRankingTrend{
+				HasPreviousPeriod: true,
+				RequestsTrend:     trendPct(float64(r.Total), float64(prev.Total)),
+				TokensTrend:       trendPct(float64(r.TotalTokens), float64(prev.TotalTokens)),
+				CostTrend:         trendPct(r.TotalCost, prev.TotalCost),
+				LatencyTrend:      trendPct(r.AvgLatency, prev.AvgLatency),
+				ThroughputTrend:   trendPct(entry.Throughput, tokensPerSecond(prev.TPCompletionTokens, prev.TPLatencyMs)),
+			}
+		}
+		rankings = append(rankings, prt)
+	}
+	return &ProviderRankingResult{Rankings: rankings}, nil
+}
+
 // getUserRankingsFromMatView returns users ranked by usage with trend
 // comparison to the previous period of equal duration from mv_logs_hourly.
 func (s *RDBLogStore) getUserRankingsFromMatView(ctx context.Context, filters SearchFilters) (*UserRankingResult, error) {

@@ -957,6 +957,12 @@ func (h *HybridLogStore) GetModelRankings(ctx context.Context, filters SearchFil
 	return h.inner.GetModelRankings(ctx, filters)
 }
 
+// GetProviderRankings delegates to the inner store and returns ranked usage
+// aggregates per provider for the matching log rows.
+func (h *HybridLogStore) GetProviderRankings(ctx context.Context, filters SearchFilters) (*ProviderRankingResult, error) {
+	return h.inner.GetProviderRankings(ctx, filters)
+}
+
 // GetUserRankings delegates to the inner store and returns ranked usage
 // aggregates per user for the matching log rows.
 func (h *HybridLogStore) GetUserRankings(ctx context.Context, filters SearchFilters) (*UserRankingResult, error) {

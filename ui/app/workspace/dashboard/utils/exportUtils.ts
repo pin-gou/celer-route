@@ -11,8 +11,8 @@ import type {
 	LogsHistogramResponse,
 	ModelHistogramResponse,
 	ModelRankingsResponse,
-	ProviderCostHistogramResponse,
 	ProviderLatencyHistogramResponse,
+	ProviderRankingsResponse,
 	ProviderTokenHistogramResponse,
 	TokenHistogramResponse,
 } from "@/lib/types/logs";
@@ -87,13 +87,6 @@ export function overviewRtkToCSV(data: RtkStatsHistogramResponse | null): CSVDat
 	return { headers, rows };
 }
 
-export function providerCostToCSV(data: ProviderCostHistogramResponse | null): CSVData {
-	const providers = data?.providers ?? [];
-	const headers = ["Timestamp", "Total Cost", ...providers];
-	const rows = (data?.buckets ?? []).map((b) => [b.timestamp, b.total_cost, ...providers.map((p) => b.by_provider?.[p] ?? 0)]);
-	return { headers, rows };
-}
-
 export function providerTokensToCSV(data: ProviderTokenHistogramResponse | null): CSVData {
 	const providers = data?.providers ?? [];
 	const provHeaders = providers.flatMap((p) => [`${p} Prompt`, `${p} Completion`, `${p} Total`]);
@@ -160,6 +153,40 @@ export function modelRankingsToCSV(data: ModelRankingsResponse | null): CSVData 
 	return { headers, rows };
 }
 
+export function providerRankingsToCSV(data: ProviderRankingsResponse | null): CSVData {
+	const headers = [
+		"Provider",
+		"Total Requests",
+		"Success Count",
+		"Success Rate (%)",
+		"Total Tokens",
+		"Total Cost ($)",
+		"Avg Latency (ms)",
+		"Throughput (tok/s)",
+		"Requests Trend (%)",
+		"Tokens Trend (%)",
+		"Cost Trend (%)",
+		"Latency Trend (%)",
+		"Throughput Trend (%)",
+	];
+	const rows = (data?.rankings ?? []).map((r) => [
+		r.provider,
+		r.total_requests,
+		r.success_count,
+		r.success_rate,
+		r.total_tokens,
+		r.total_cost,
+		r.avg_latency,
+		r.throughput,
+		r.trend.has_previous_period ? r.trend.requests_trend : "N/A",
+		r.trend.has_previous_period ? r.trend.tokens_trend : "N/A",
+		r.trend.has_previous_period ? r.trend.cost_trend : "N/A",
+		r.trend.has_previous_period ? r.trend.latency_trend : "N/A",
+		r.trend.has_previous_period ? r.trend.throughput_trend : "N/A",
+	]);
+	return { headers, rows };
+}
+
 export function dimensionRankingsToCSV(data: DimensionRankingsResponse | null, dimensionLabel: string): CSVData {
 	const headers = [
 		`${dimensionLabel} ID`,
@@ -192,7 +219,7 @@ export interface DashboardData {
 	latencyData: LatencyHistogramResponse | null;
 	rtkHistogramData: RtkStatsHistogramResponse | null;
 	// Provider Usage
-	providerCostData: ProviderCostHistogramResponse | null;
+	providerRankingsData: ProviderRankingsResponse | null;
 	providerTokenData: ProviderTokenHistogramResponse | null;
 	providerLatencyData: ProviderLatencyHistogramResponse | null;
 	// Rankings
@@ -236,7 +263,7 @@ export function getCSVSections(data: DashboardData, tab: ExportTab): { name: str
 
 	if (tab === "all" || tab === "provider-usage") {
 		sections.push(
-			{ name: "provider-cost", csv: providerCostToCSV(data.providerCostData) },
+			{ name: "provider-rankings", csv: providerRankingsToCSV(data.providerRankingsData) },
 			{ name: "provider-tokens", csv: providerTokensToCSV(data.providerTokenData) },
 			{ name: "provider-latency", csv: providerLatencyToCSV(data.providerLatencyData) },
 		);

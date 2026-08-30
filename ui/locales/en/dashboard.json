@@ -44,7 +44,6 @@
 		"rtkTooltip": "Scoped to selected time range — not affected by dimension filters.",
 		"localCacheHitRate": "Local Cache Hit Rate",
 		"modelUsage": "Model Usage",
-		"providerCost": "Provider Cost",
 		"providerTokenUsage": "Provider Token Usage",
 		"providerLatency": "Provider Latency",
 		"providerThroughput": "Provider Throughput",
@@ -89,6 +88,7 @@
 	},
 	"rankings": {
 		"modelRankings": "Model Rankings",
+		"providerRankings": "Provider Rankings",
 		"dimensionRankings": "{{dimension}} Rankings",
 		"requests": "Requests",
 		"successRate": "Success Rate",
@@ -97,6 +97,7 @@
 		"avgLatency": "Avg Latency",
 		"throughput": "Throughput",
 		"model": "Model",
+		"provider": "Provider",
 		"topDimension": "Top {{dimensionLabel}}s",
 		"more": "+{{count}} more",
 		"new": "new"

@@ -12,8 +12,8 @@ import {
 	ModelHistogramResponse,
 	ModelRankingsResponse,
 	Pagination,
-	ProviderCostHistogramResponse,
 	ProviderLatencyHistogramResponse,
+	ProviderRankingsResponse,
 	ProviderThroughputHistogramResponse,
 	ProviderTokenHistogramResponse,
 	RankingDimension,
@@ -295,20 +295,6 @@ export const logsApi = baseApi.injectEndpoints({
 			providesTags: ["Logs"],
 		}),
 
-		// Get provider cost histogram with provider breakdown
-		getLogsProviderCostHistogram: builder.query<
-			ProviderCostHistogramResponse,
-			{
-				filters: LogFilters;
-			}
-		>({
-			query: ({ filters }) => ({
-				url: "/logs/histogram/cost/by-provider",
-				params: buildFilterParams(filters),
-			}),
-			providesTags: ["Logs"],
-		}),
-
 		// Get provider token histogram with provider breakdown
 		getLogsProviderTokenHistogram: builder.query<
 			ProviderTokenHistogramResponse,
@@ -350,6 +336,24 @@ export const logsApi = baseApi.injectEndpoints({
 		>({
 			query: ({ filters, limit, all }) => ({
 				url: "/logs/rankings",
+				params: { ...buildFilterParams(filters), ...buildRankingLimitParams(limit, all) },
+			}),
+			providesTags: ["Logs"],
+		}),
+
+		// Get provider rankings with trends. Mirrors getModelRankings but
+		// grouped by provider so the provider-usage tab can render the same
+		// columns and trends per provider.
+		getProviderRankings: builder.query<
+			ProviderRankingsResponse,
+			{
+				filters: LogFilters;
+				limit?: number;
+				all?: boolean;
+			}
+		>({
+			query: ({ filters, limit, all }) => ({
+				url: "/logs/rankings/by-provider",
 				params: { ...buildFilterParams(filters), ...buildRankingLimitParams(limit, all) },
 			}),
 			providesTags: ["Logs"],
@@ -487,7 +491,6 @@ export const {
 	useGetLogsCostHistogramQuery,
 	useGetLogsModelHistogramQuery,
 	useGetLogsLatencyHistogramQuery,
-	useGetLogsProviderCostHistogramQuery,
 	useGetLogsProviderTokenHistogramQuery,
 	useGetLogsProviderLatencyHistogramQuery,
 	useGetLogsThroughputHistogramQuery,
@@ -503,14 +506,15 @@ export const {
 	useLazyGetLogsCostHistogramQuery,
 	useLazyGetLogsModelHistogramQuery,
 	useLazyGetLogsLatencyHistogramQuery,
-	useLazyGetLogsProviderCostHistogramQuery,
 	useLazyGetLogsProviderTokenHistogramQuery,
 	useLazyGetLogsProviderLatencyHistogramQuery,
 	useLazyGetLogsThroughputHistogramQuery,
 	useLazyGetLogsProviderThroughputHistogramQuery,
 	useGetModelRankingsQuery,
+	useGetProviderRankingsQuery,
 	useGetDimensionRankingsQuery,
 	useLazyGetModelRankingsQuery,
+	useLazyGetProviderRankingsQuery,
 	useLazyGetDimensionRankingsQuery,
 	useLazyGetDroppedRequestsQuery,
 	useLazyGetAvailableFilterDataQuery,

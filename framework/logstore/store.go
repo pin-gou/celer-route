@@ -87,6 +87,7 @@ type LogStore interface {
 	// GetProviderThroughputHistogram returns time-bucketed tokens/sec with provider breakdown.
 	GetProviderThroughputHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderThroughputHistogramResult, error)
 	GetModelRankings(ctx context.Context, filters SearchFilters) (*ModelRankingResult, error)
+	GetProviderRankings(ctx context.Context, filters SearchFilters) (*ProviderRankingResult, error)
 	GetUserRankings(ctx context.Context, filters SearchFilters) (*UserRankingResult, error)
 	GetDimensionRankings(ctx context.Context, filters SearchFilters, dimension RankingDimension) (*DimensionRankingResult, error)
 	// GetDimensionCostHistogram returns time-bucketed cost data grouped by the specified dimension (e.g., team_id, customer_id).

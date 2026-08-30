@@ -1248,6 +1248,10 @@ func (p *LoggerPlugin) GetModelRankings(ctx context.Context, filters logstore.Se
 	return p.store.GetModelRankings(ctx, filters)
 }
 
+func (p *LoggerPlugin) GetProviderRankings(ctx context.Context, filters logstore.SearchFilters) (*logstore.ProviderRankingResult, error) {
+	return p.store.GetProviderRankings(ctx, filters)
+}
+
 func (p *LoggerPlugin) GetDimensionRankings(ctx context.Context, filters logstore.SearchFilters, dimension logstore.RankingDimension) (*logstore.DimensionRankingResult, error) {
 	return p.store.GetDimensionRankings(ctx, filters, dimension)
 }
