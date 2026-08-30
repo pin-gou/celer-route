@@ -34,19 +34,35 @@ func (s *Store) SyncFromURL(ctx context.Context) error {
 	})
 	if err != nil {
 		// URL failed — fall back to existing DB records when we have them.
+		dbHasRecords := false
 		if s.configStore != nil {
 			records, dbErr := s.configStore.GetModelPrices(ctx)
 			if dbErr != nil {
 				return fmt.Errorf("failed to get pricing records: %w", dbErr)
 			}
-			if len(records) > 0 {
+			dbHasRecords = len(records) > 0
+			if dbHasRecords {
 				if s.logger != nil {
 					s.logger.Warn("failed to fetch pricing from URL, falling back to existing database records: %v", err)
 				}
 				return nil
 			}
 		}
-		return fmt.Errorf("failed to load pricing data from URL and no existing data available: %w", err)
+		// No existing data to serve — fall back to the bundled datasheet copy
+		// when syncing from the default URL, so a cold start with the network
+		// down still boots with a usable catalog.
+		if shouldFallbackToBundled(s.URL(), DefaultURL, dbHasRecords) {
+			if bundled, bErr := loadBundledPricing(); bErr == nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to fetch pricing from URL, using bundled datasheet copy: %v", err)
+				}
+				pricingData = bundled
+				err = nil
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("failed to load pricing data from URL and no existing data available: %w", err)
+		}
 	}
 
 	if s.configStore != nil {
@@ -121,7 +137,20 @@ func (s *Store) LoadFromURLIntoMemory(ctx context.Context) error {
 		return s.loadPricingFromURL(ctx)
 	})
 	if err != nil {
-		return fmt.Errorf("failed to load pricing data from URL: %w", err)
+		// No config store exists — the bundled datasheet copy is the only
+		// fallback, and only when fetching from the default URL.
+		if shouldFallbackToBundled(s.URL(), DefaultURL, false) {
+			if bundled, bErr := loadBundledPricing(); bErr == nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to load pricing data from URL, using bundled datasheet copy: %v", err)
+				}
+				pricingData = bundled
+				err = nil
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("failed to load pricing data from URL: %w", err)
+		}
 	}
 	s.applyPricingData(pricingData)
 	s.populateModelParamsFromPricing(pricingData)
@@ -184,25 +213,32 @@ func (s *Store) loadPricingFromURL(ctx context.Context) (map[string]Entry, error
 			return nil, fmt.Errorf("failed to read pricing file: %w", err)
 		}
 	} else {
-		if err := bifrost.ValidateExternalURL(rawURL, true); err != nil {
-			return nil, fmt.Errorf("pricing URL validation failed: %w", err)
-		}
-		client := &http.Client{Timeout: DefaultPricingTimeout}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.URL(), nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HTTP request: %w", err)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to download pricing data: %w", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to download pricing data: HTTP %d", resp.StatusCode)
-		}
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read pricing data response: %w", err)
+		if s.fetchURL != nil {
+			data, err = s.fetchURL(ctx, rawURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to download pricing data: %w", err)
+			}
+		} else {
+			if err := bifrost.ValidateExternalURL(rawURL, true); err != nil {
+				return nil, fmt.Errorf("pricing URL validation failed: %w", err)
+			}
+			client := &http.Client{Timeout: DefaultPricingTimeout}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.URL(), nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to download pricing data: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("failed to download pricing data: HTTP %d", resp.StatusCode)
+			}
+			data, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read pricing data response: %w", err)
+			}
 		}
 	}
 	var pricingData map[string]Entry

@@ -102,7 +102,7 @@ const (
 	DefaultModelParametersTimeout = datasheet.DefaultModelParametersTimeout
 
 	DefaultMCPLibraryURL     = "https://getbifrost.ai/mcp-library"
-	DefaultMCPLibraryTimeout = 45 * time.Second
+	DefaultMCPLibraryTimeout = 5 * time.Second
 )
 
 // syncWorkerTickerPeriod is the fixed interval at which the background sync worker

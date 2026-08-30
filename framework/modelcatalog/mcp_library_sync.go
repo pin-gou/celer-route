@@ -109,6 +109,14 @@ func SyncMCPLibrary(ctx context.Context, url string, store configstore.ConfigSto
 		return 0, fmt.Errorf("failed to fetch MCP library from %s: %w", url, err)
 	}
 
+	return syncMCPLibraryEntries(ctx, entries, store)
+}
+
+// syncMCPLibraryEntries upserts parsed MCP library entries into the config
+// store, keyed by slug. It is shared by the URL-fetch path (SyncMCPLibrary)
+// and the bundled-fallback path (syncMCPLibraryNow) so both reuse the same
+// dedup / protected-slug / transaction logic.
+func syncMCPLibraryEntries(ctx context.Context, entries []MCPLibraryEntry, store configstore.ConfigStore) (int, error) {
 	if len(entries) == 0 {
 		return 0, nil
 	}
@@ -218,6 +226,17 @@ func (mc *ModelCatalog) syncMCPLibraryNow(ctx context.Context) (int, error) {
 	url := mc.getMCPLibraryURL()
 	count, err := SyncMCPLibrary(ctx, url, mc.configStore)
 	if err != nil {
+		// Fall back to the bundled catalog copy when syncing from the default
+		// URL, so a cold start with the network down still populates the
+		// library page. Unlike pricing/model-parameters this is non-fatal
+		// anyway, but the bundled copy keeps the page useful until the next
+		// background sync succeeds.
+		if url == DefaultMCPLibraryURL {
+			if bundled, bErr := loadBundledMCPLibrary(); bErr == nil {
+				mc.logger.Warn("failed to fetch MCP library from %s, using bundled copy: %v", url, err)
+				return syncMCPLibraryEntries(ctx, bundled, mc.configStore)
+			}
+		}
 		return 0, err
 	}
 	mc.logger.Info("MCP library sync completed: %d entries synced from %s", count, url)

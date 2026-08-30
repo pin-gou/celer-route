@@ -1,6 +1,7 @@
 package datasheet
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"sync"
@@ -18,8 +19,8 @@ const (
 	DefaultURL                    = "https://getbifrost.ai/datasheet"
 	DefaultModelParametersURL     = "https://getbifrost.ai/datasheet/model-parameters"
 	DefaultSyncInterval           = 24 * time.Hour
-	DefaultPricingTimeout         = 60 * time.Second
-	DefaultModelParametersTimeout = 45 * time.Second
+	DefaultPricingTimeout         = 5 * time.Second
+	DefaultModelParametersTimeout = 5 * time.Second
 )
 
 // Config groups the values the composer hands to New / UpdateSyncConfig.
@@ -52,6 +53,11 @@ func (c Config) resolved() Config {
 type Store struct {
 	configStore configstore.ConfigStore
 	logger      schemas.Logger
+
+	// fetchURL, when non-nil, replaces the real HTTP GET for the pricing and
+	// model-parameters datasheets. Test-only seam for exercising the bundled
+	// fallback without touching the network; nil means real HTTP.
+	fetchURL func(ctx context.Context, rawURL string) ([]byte, error)
 
 	// Canonical pricing state, protected by mu. Read paths take RLock and
 	// return defensive copies of any slice/map they expose.

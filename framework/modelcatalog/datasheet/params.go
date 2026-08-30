@@ -65,16 +65,33 @@ func (s *Store) SyncModelParamsFromURL(ctx context.Context) error {
 		return s.loadModelParametersFromURL(ctx)
 	})
 	if err != nil {
+		// URL failed — fall back to existing DB records when we have them.
+		dbHasRecords := false
 		if s.configStore != nil {
 			rows, dbErr := s.configStore.GetModelParameters(ctx)
 			if dbErr == nil && len(rows) > 0 {
+				dbHasRecords = true
 				if s.logger != nil {
 					s.logger.Error("failed to load model parameters from URL, falling back to existing database records: %v", err)
 				}
 				return nil
 			}
 		}
-		return fmt.Errorf("failed to load model parameters from URL and no existing data in database: %w", err)
+		// No existing data to serve — fall back to the bundled model-parameters
+		// datasheet when syncing from the default URL, so a cold start with the
+		// network down still boots with a usable catalog.
+		if shouldFallbackToBundled(s.ModelParametersURL(), DefaultModelParametersURL, dbHasRecords) {
+			if bundled, bErr := loadBundledModelParams(); bErr == nil {
+				if s.logger != nil {
+					s.logger.Error("failed to load model parameters from URL, using bundled model parameters copy: %v", err)
+				}
+				paramsData = bundled
+				err = nil
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("failed to load model parameters from URL and no existing data in database: %w", err)
+		}
 	}
 
 	if s.configStore != nil {
@@ -104,7 +121,20 @@ func (s *Store) LoadModelParamsFromURLIntoMemory(ctx context.Context) error {
 		return s.loadModelParametersFromURL(ctx)
 	})
 	if err != nil {
-		return fmt.Errorf("failed to load model parameters from URL: %w", err)
+		// No config store exists — the bundled copy is the only fallback, and
+		// only when fetching from the default URL.
+		if shouldFallbackToBundled(s.ModelParametersURL(), DefaultModelParametersURL, false) {
+			if bundled, bErr := loadBundledModelParams(); bErr == nil {
+				if s.logger != nil {
+					s.logger.Error("failed to load model parameters from URL, using bundled model parameters copy: %v", err)
+				}
+				paramsData = bundled
+				err = nil
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("failed to load model parameters from URL: %w", err)
+		}
 	}
 	s.applyModelParameters(paramsData)
 	return nil
@@ -130,25 +160,32 @@ func (s *Store) loadModelParametersFromURL(ctx context.Context) (map[string]json
 			return nil, fmt.Errorf("failed to read model parameters file: %w", err)
 		}
 	} else {
-		if err := bifrost.ValidateExternalURL(rawURL, true); err != nil {
-			return nil, fmt.Errorf("model parameters URL validation failed: %w", err)
-		}
-		client := &http.Client{Timeout: DefaultModelParametersTimeout}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HTTP request: %w", err)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to download model parameters data: %w", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to download model parameters data: HTTP %d", resp.StatusCode)
-		}
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read model parameters response: %w", err)
+		if s.fetchURL != nil {
+			data, err = s.fetchURL(ctx, rawURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to download model parameters data: %w", err)
+			}
+		} else {
+			if err := bifrost.ValidateExternalURL(rawURL, true); err != nil {
+				return nil, fmt.Errorf("model parameters URL validation failed: %w", err)
+			}
+			client := &http.Client{Timeout: DefaultModelParametersTimeout}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to download model parameters data: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("failed to download model parameters data: HTTP %d", resp.StatusCode)
+			}
+			data, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read model parameters response: %w", err)
+			}
 		}
 	}
 	var paramsData map[string]json.RawMessage
