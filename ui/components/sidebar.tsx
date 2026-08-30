@@ -854,6 +854,22 @@ export default function AppSidebar() {
 		setMounted(true);
 	}, []);
 
+	// Expand all parent items with subitems by default on initial load
+	const initialExpandRef = useRef(false);
+	useEffect(() => {
+		if (initialExpandRef.current) return;
+		initialExpandRef.current = true;
+		setExpandedItems((prev) => {
+			const next = new Set(prev);
+			items.forEach((item) => {
+				if (item.subItems?.length) {
+					next.add(item.title);
+				}
+			});
+			return next;
+		});
+	}, [items]);
+
 	// Auto-expand items when their subitems are active
 	useEffect(() => {
 		const newExpandedItems = new Set<string>();
