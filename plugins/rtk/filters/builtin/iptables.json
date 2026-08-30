@@ -1,0 +1,31 @@
+{
+  "id": "iptables",
+  "description": "Compact iptables output",
+  "category": "generic",
+  "priority": 50,
+  "commandPatterns": [
+    "^iptables\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Chain DOCKER",
+    "^Chain BR-"
+  ],
+  "truncateLineAt": 120,
+  "maxLines": 50,
+  "tests": [
+    {
+      "name": "strips Docker chains, preserves real rules",
+      "input": "\nChain INPUT (policy ACCEPT)\nnum  target     prot opt source               destination\n1    ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0\nChain DOCKER (1 references)\n    DOCKER     all  --  0.0.0.0/0            0.0.0.0/0\nChain BR-abcdef (0 references)\n",
+      "expected": "Chain INPUT (policy ACCEPT)\nnum  target     prot opt source               destination\n1    ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0\n    DOCKER     all  --  0.0.0.0/0            0.0.0.0/0"
+    },
+    {
+      "name": "preserves FORWARD and OUTPUT chains",
+      "input": "Chain FORWARD (policy DROP)\n1 ACCEPT tcp\nChain OUTPUT (policy ACCEPT)\n1 ACCEPT all",
+      "expected": "Chain FORWARD (policy DROP)\n1 ACCEPT tcp\nChain OUTPUT (policy ACCEPT)\n1 ACCEPT all"
+    }
+  ]
+}

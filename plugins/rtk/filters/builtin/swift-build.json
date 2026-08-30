@@ -1,0 +1,43 @@
+{
+  "id": "swift-build",
+  "description": "Compact swift build output — short-circuit on success, strip Compiling/Linking",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^swift\\s+build\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Compiling ",
+    "^Linking "
+  ],
+  "matchOutput": [
+    {
+      "pattern": "Build complete!",
+      "message": "ok (build complete)",
+      "unless": "warning:|error:"
+    }
+  ],
+  "stripAnsi": true,
+  "maxLines": 40,
+  "tests": [
+    {
+      "name": "successful build short-circuits to ok",
+      "input": "\nBuild complete!\n",
+      "expected": "ok (build complete)"
+    },
+    {
+      "name": "build errors pass through after stripping noise",
+      "input": "\nCompiling MyApp MyApp.swift\n/home/user/MyApp/Sources/MyApp/main.swift:5:1: error: use of unresolved identifier 'foo'\nfoo()\n^~~\nLinking MyApp\nerror: build had 1 command failure\n",
+      "expected": "/home/user/MyApp/Sources/MyApp/main.swift:5:1: error: use of unresolved identifier 'foo'\nfoo()\n^~~\nerror: build had 1 command failure"
+    },
+    {
+      "name": "warnings not swallowed when Build complete present",
+      "input": "\nCompileSwift normal x86_64 MyFile.swift\n/path/to/MyFile.swift:42:10: warning: unused variable 'x'\nBuild complete! (with warnings)\n",
+      "expected": "CompileSwift normal x86_64 MyFile.swift\n/path/to/MyFile.swift:42:10: warning: unused variable 'x'\nBuild complete! (with warnings)"
+    }
+  ]
+}

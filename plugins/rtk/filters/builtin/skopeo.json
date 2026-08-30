@@ -1,0 +1,40 @@
+{
+  "id": "skopeo",
+  "description": "Compact skopeo output — truncate large manifests, strip verbosity",
+  "category": "generic",
+  "priority": 50,
+  "commandPatterns": [
+    "^skopeo\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Getting image source signatures",
+    "^Copying blob",
+    "^Copying config",
+    "^Writing manifest",
+    "^Storing signatures"
+  ],
+  "stripAnsi": true,
+  "truncateLineAt": 120,
+  "onEmpty": "skopeo: ok",
+  "maxLines": 30,
+  "tests": [
+    {
+      "name": "copy strips progress, keeps result",
+      "input": "\nGetting image source signatures\nCopying blob sha256:abc123 done\nCopying blob sha256:def456 done\nCopying config sha256:789ghi done\nWriting manifest to image destination\nStoring signatures\n",
+      "expected": "skopeo: ok"
+    },
+    {
+      "name": "inspect keeps output",
+      "input": "\n{\n    \"Name\": \"docker.io/library/nginx\",\n    \"Tag\": \"latest\",\n    \"Digest\": \"sha256:abc123\",\n    \"RepoTags\": [\"latest\", \"1.25\"],\n    \"Created\": \"2026-01-01T00:00:00Z\"\n}\n",
+      "expected": "{\n    \"Name\": \"docker.io/library/nginx\",\n    \"Tag\": \"latest\",\n    \"Digest\": \"sha256:abc123\",\n    \"RepoTags\": [\"latest\", \"1.25\"],\n    \"Created\": \"2026-01-01T00:00:00Z\"\n}"
+    },
+    {
+      "name": "empty input returns on_empty message",
+      "expected": "skopeo: ok"
+    }
+  ]
+}

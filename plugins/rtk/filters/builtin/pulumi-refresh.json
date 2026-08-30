@@ -1,0 +1,26 @@
+{
+  "id": "pulumi-refresh",
+  "description": "Compact Pulumi refresh (state reconciliation) output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^pulumi\\s+refresh(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "pulumi refresh: no drift",
+  "tests": [
+    {
+      "name": "strips refresh header and passes drift rows",
+      "input": "\nRefreshing (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/updates/44\n\n     Type                          Name              Status\n ~   aws:s3:Bucket                 my-bucket         refreshed\n\nResources:\n    ~ 1 updated\n\nDuration: 4s\n",
+      "expected": " ~   aws:s3:Bucket                 my-bucket         refreshed\nResources:\n    ~ 1 updated"
+    },
+    {
+      "name": "on_empty when no drift detected",
+      "input": "\nRefreshing (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/updates/44\n\nDuration: 2s\n",
+      "expected": "pulumi refresh: no drift"
+    }
+  ]
+}

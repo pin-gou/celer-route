@@ -497,6 +497,227 @@ func buildDefaultDetector() *commandDetector {
 				commandPatterns: mustPatterns(`^jq\b`, `^cat\s+.*\.json\b`),
 				contentPatterns: mustPatterns(`^\s*[\[{][\s\S]*[\]}]\s*$`),
 			},
+
+			{ // jq
+				typ: "jq", category: "generic", command: "jq",
+				commandPatterns: mustPatterns(`^jq\b`),
+				contentPatterns: mustPatterns(),
+			},
+			{ // ping
+				typ: "ping", category: "generic", command: "ping",
+				commandPatterns: mustPatterns(`^ping\b`),
+				contentPatterns: mustPatterns(`^--- example\.com ping statistics ---`, `^Ping statistics for 192\.0\.2\.1:`, `^Request timeout for icmp_seq 0`),
+			},
+			{ // stat
+				typ: "stat", category: "generic", command: "stat",
+				commandPatterns: mustPatterns(`^stat\b`),
+				contentPatterns: mustPatterns(`^File: main\.rs`, `^File: "main\.rs"`),
+			},
+			{ // sops
+				typ: "sops", category: "generic", command: "sops",
+				commandPatterns: mustPatterns(`^sops\b`),
+				contentPatterns: mustPatterns(`^mac: xyz123`, `^mac: abc123`),
+			},
+			{ // jira
+				typ: "jira", category: "generic", command: "jira",
+				commandPatterns: mustPatterns(`^jira\b`),
+				contentPatterns: mustPatterns(`^TYPE\tKEY\tSUMMARY\tSTATUS`, `^KEY: PROJ-123`),
+			},
+			{ // iptables
+				typ: "iptables", category: "generic", command: "iptables",
+				commandPatterns: mustPatterns(`^iptables\b`),
+				contentPatterns: mustPatterns(`^Chain INPUT \(policy ACCEPT\)`, `^Chain FORWARD \(policy DROP\)`),
+			},
+			{ // skopeo
+				typ: "skopeo", category: "generic", command: "skopeo",
+				commandPatterns: mustPatterns(`^skopeo\b`),
+				contentPatterns: mustPatterns(`^skopeo: ok`),
+			},
+			{ // fail2ban-client
+				typ: "fail2ban-client", category: "generic", command: "fail2ban-client",
+				commandPatterns: mustPatterns(`^fail2ban-client\b`),
+				contentPatterns: mustPatterns(`^Status for the jail: sshd`, `^Shutdown successful`),
+			},
+			{ // jj
+				typ: "jj", category: "generic", command: "jj",
+				commandPatterns: mustPatterns(`^jj\b`),
+				contentPatterns: mustPatterns(`^@  qpvuntsm patrick@example\.com 2026-03-`),
+			},
+			{ // yadm
+				typ: "yadm", category: "generic", command: "yadm",
+				commandPatterns: mustPatterns(`^yadm\b`),
+				contentPatterns: mustPatterns(`^On branch main`, `^Already up to date\.`),
+			},
+			{ // ollama
+				typ: "ollama", category: "generic", command: "ollama",
+				commandPatterns: mustPatterns(`^ollama\s+run\b`),
+				contentPatterns: mustPatterns(`^Hello! How can I help you today\?`, `^Line one of the response\.`),
+			},
+			{ // markdownlint
+				typ: "markdownlint", category: "generic", command: "markdownlint",
+				commandPatterns: mustPatterns(`^markdownlint\b`),
+				contentPatterns: mustPatterns(`^README\.md:1:1 MD041/first-line-heading/f`),
+			},
+			{ // yamllint
+				typ: "yamllint", category: "generic", command: "yamllint",
+				commandPatterns: mustPatterns(`^yamllint\b`),
+				contentPatterns: mustPatterns(`^config\.yml`),
+			},
+			{ // shopify-theme
+				typ: "shopify-theme", category: "cloud", command: "shopify-theme",
+				commandPatterns: mustPatterns(`^shopify\s+theme\s+(push|pull)`),
+				contentPatterns: mustPatterns(`^shopify theme: ok`, `^Theme 'Development' \(id: 12345\) pushed t`),
+			},
+			{ // mix-format
+				typ: "mix-format", category: "build", command: "mix-format",
+				commandPatterns: mustPatterns(`^mix\s+format(\s|$)`),
+				contentPatterns: mustPatterns(`^mix format: ok`, `^lib/my_app\.ex`),
+			},
+			{ // mix-compile
+				typ: "mix-compile", category: "build", command: "mix-compile",
+				commandPatterns: mustPatterns(`^mix\s+compile(\s|$)`),
+				contentPatterns: mustPatterns(`^mix compile: ok`, `^warning: variable "conn" is unused`),
+			},
+			{ // pulumi-destroy
+				typ: "pulumi-destroy", category: "infra", command: "pulumi-destroy",
+				commandPatterns: mustPatterns(`^pulumi\s+destroy(\s|$)`),
+				contentPatterns: mustPatterns(`^pulumi destroy: nothing to des`, `^-   pulumi:pulumi:Stack           my-pro`, `^pulumi destroy: nothing to destroy`),
+			},
+			{ // pulumi-preview
+				typ: "pulumi-preview", category: "infra", command: "pulumi-preview",
+				commandPatterns: mustPatterns(`^pulumi\s+preview(\s|$)`),
+				contentPatterns: mustPatterns(`^pulumi preview: no changes`, `^\+   pulumi:pulumi:Stack           my-pro`),
+			},
+			{ // pulumi-refresh
+				typ: "pulumi-refresh", category: "infra", command: "pulumi-refresh",
+				commandPatterns: mustPatterns(`^pulumi\s+refresh(\s|$)`),
+				contentPatterns: mustPatterns(`^pulumi refresh: no drift`, `^~   aws:s3:Bucket                 my-buc`),
+			},
+			{ // pulumi-stack
+				typ: "pulumi-stack", category: "infra", command: "pulumi-stack",
+				commandPatterns: mustPatterns(`^pulumi\s+stack(\s+(ls|output|history|select|init|rm|rename|tag|unselect|change-secrets-provider)\b|\s*$)`),
+				contentPatterns: mustPatterns(`^pulumi stack: ok`, `^pulumi stack: empty`, `^Current stack is dev:`),
+			},
+			{ // pulumi-up
+				typ: "pulumi-up", category: "infra", command: "pulumi-up",
+				commandPatterns: mustPatterns(`^pulumi\s+up(\s|$)`),
+				contentPatterns: mustPatterns(`^pulumi up: no changes`, `^\+   pulumi:pulumi:Stack           my-pro`),
+			},
+			{ // tofu-fmt
+				typ: "tofu-fmt", category: "infra", command: "tofu-fmt",
+				commandPatterns: mustPatterns(`^tofu\s+fmt(\s|$)`),
+				contentPatterns: mustPatterns(`^tofu fmt: ok \(no changes\)`, `^main\.tf`),
+			},
+			{ // tofu-init
+				typ: "tofu-init", category: "infra", command: "tofu-init",
+				commandPatterns: mustPatterns(`^tofu\s+init(\s|$)`),
+				contentPatterns: mustPatterns(`^tofu init: ok`, `^OpenTofu has been successfully initializ`),
+			},
+			{ // tofu-plan
+				typ: "tofu-plan", category: "infra", command: "tofu-plan",
+				commandPatterns: mustPatterns(`^tofu\s+plan(\s|$)`),
+				contentPatterns: mustPatterns(`^tofu plan: no changes detected`, `^OpenTofu will perform the following acti`),
+			},
+			{ // tofu-validate
+				typ: "tofu-validate", category: "infra", command: "tofu-validate",
+				commandPatterns: mustPatterns(`^tofu\s+validate(\s|$)`),
+				contentPatterns: mustPatterns(`^ok \(valid\)`, `^Error: Invalid resource type`),
+			},
+			{ // liquibase
+				typ: "liquibase", category: "infra", command: "liquibase",
+				commandPatterns: mustPatterns(`(?:^|/)liquibase(?:\s|$)`),
+				contentPatterns: mustPatterns(`^liquibase: ok`),
+			},
+			{ // dotnet-build
+				typ: "dotnet-build", category: "build", command: "dotnet-build",
+				commandPatterns: mustPatterns(`^dotnet\s+build\b`),
+				contentPatterns: mustPatterns(`^ok \(build succeeded\)`, `^MyApp -> /home/user/MyApp/bin/Debug/net8`, `^src/Program\.cs\(10,5\): error CS1002: ; ex`),
+			},
+			{ // gcc
+				typ: "gcc", category: "build", command: "gcc",
+				commandPatterns: mustPatterns(`^g(cc|\+\+)\b`),
+				contentPatterns: mustPatterns(`^gcc: ok`, `^main\.c:10:5: error: use of undeclared id`, `^/usr/bin/ld: /tmp/main\.o: undefined refe`),
+			},
+			{ // just
+				typ: "just", category: "build", command: "just",
+				commandPatterns: mustPatterns(`^just\b`),
+				contentPatterns: mustPatterns(`^cargo test`, `^error: Compilation failed`),
+			},
+			{ // mise
+				typ: "mise", category: "build", command: "mise",
+				commandPatterns: mustPatterns(`^mise\s+(run|exec|install|upgrade)\b`),
+				contentPatterns: mustPatterns(`^mise: ok`, `^lint check passed`, `^mise run lint`),
+			},
+			{ // task
+				typ: "task", category: "build", command: "task",
+				commandPatterns: mustPatterns(`^task\b`),
+				contentPatterns: mustPatterns(`^task: ok`, `^ok  myapp 0\.5s`, `^\./main\.go:10: undefined: foo`),
+			},
+			{ // oxlint
+				typ: "oxlint", category: "build", command: "oxlint",
+				commandPatterns: mustPatterns(`^oxlint\b`),
+				contentPatterns: mustPatterns(`^oxlint: ok`, `^× eslint\(no-console\): Unexpected console`),
+			},
+			{ // spring-boot
+				typ: "spring-boot", category: "build", command: "spring-boot",
+				commandPatterns: mustPatterns(`^(mvn\s+spring-boot:run|java\s+-jar.*\.jar|gradle\s+.*bootRun)`),
+				contentPatterns: mustPatterns(`^2024-01-01 INFO Tomcat started on port 8`, `^2024-01-01 ERROR Application run failed`),
+			},
+			{ // trunk-build
+				typ: "trunk-build", category: "build", command: "trunk-build",
+				commandPatterns: mustPatterns(`^trunk\s+build`),
+				contentPatterns: mustPatterns(`^trunk build: ok`, `^Finished release \[optimized\] target\(s\) i`),
+			},
+			{ // ty
+				typ: "ty", category: "build", command: "ty",
+				commandPatterns: mustPatterns(`^ty\b`),
+				contentPatterns: mustPatterns(`^ty: ok`, `^All checks passed!`),
+			},
+			{ // xcodebuild
+				typ: "xcodebuild", category: "build", command: "xcodebuild",
+				commandPatterns: mustPatterns(`^xcodebuild\b`),
+				contentPatterns: mustPatterns(`^xcodebuild: ok`, `^/Users/dev/App/ViewController\.swift:42:9`, `^\*\* BUILD SUCCEEDED \*\*`),
+			},
+			{ // pio-run
+				typ: "pio-run", category: "build", command: "pio-run",
+				commandPatterns: mustPatterns(`^pio\s+run`),
+				contentPatterns: mustPatterns(`^pio run: ok`, `^src/main\.cpp:10:3: error: 'LED_BUILTINN'`),
+			},
+			{ // basedpyright
+				typ: "basedpyright", category: "build", command: "basedpyright",
+				commandPatterns: mustPatterns(`^basedpyright\b`),
+				contentPatterns: mustPatterns(`^basedpyright: ok`, `^/home/user/app/main\.py`, `^0 errors, 0 warnings, 0 informations`),
+			},
+			{ // pre-commit
+				typ: "pre-commit", category: "build", command: "pre-commit",
+				commandPatterns: mustPatterns(`^pre-commit\b`),
+				contentPatterns: mustPatterns(`^Trim Trailing Whitespace\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.`, `^isort\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.`),
+			},
+			{ // quarto-render
+				typ: "quarto-render", category: "build", command: "quarto-render",
+				commandPatterns: mustPatterns(`^quarto\s+render`),
+				contentPatterns: mustPatterns(`^ok \(output created\)`, `^ERROR: Render failed`),
+			},
+			{ // swift-build
+				typ: "swift-build", category: "build", command: "swift-build",
+				commandPatterns: mustPatterns(`^swift\s+build\b`),
+				contentPatterns: mustPatterns(`^ok \(build complete\)`, `^/home/user/MyApp/Sources/MyApp/main\.swif`, `^CompileSwift normal x86_64 MyFile\.swift`),
+			},
+			{ // brew-install
+				typ: "brew-install", category: "package", command: "brew-install",
+				commandPatterns: mustPatterns(`^brew\s+(install|upgrade)\b`),
+				contentPatterns: mustPatterns(`^ok \(already installed\)`, `^==> Summary`),
+			},
+			{ // hadolint
+				typ: "hadolint", category: "build", command: "hadolint",
+				commandPatterns: mustPatterns(`^hadolint\b`),
+				contentPatterns: mustPatterns(`^Dockerfile:3 DL3008 warning: Pin version`),
+			},
+			{ // shellcheck
+				typ: "shellcheck", category: "build", command: "shellcheck",
+				commandPatterns: mustPatterns(`^shellcheck\b`),
+				contentPatterns: mustPatterns(`^In script\.sh line 3:`),
+			},
 		},
 	}
 }

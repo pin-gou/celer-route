@@ -515,13 +515,36 @@ func matchLongest(filters []*Filter, command string) *Filter {
 	var best *Filter
 	bestLen := -1
 	for _, f := range filters {
-		if f == nil || f.Command == "" {
+		if f == nil {
 			continue
 		}
-		if command == f.Command || strings.HasPrefix(command, f.Command) {
-			if len(f.Command) > bestLen {
-				best = f
-				bestLen = len(f.Command)
+		// Legacy path: literal Command prefix.
+		if f.Command != "" {
+			if command == f.Command || strings.HasPrefix(command, f.Command) {
+				if len(f.Command) > bestLen {
+					best = f
+					bestLen = len(f.Command)
+				}
+			}
+		}
+		// Canonical path: regex match against CommandPatterns. Use the longest
+		// matching pattern length as the tie-breaker so a specific pattern
+		// (`^dotnet\s+build\b`) beats a generic one (`^dotnet\b`). The filter
+		// regexes are pre-validated by validateFilter, so a compile error here
+		// means a programmer mistake — fall back to skipping this filter.
+		for _, p := range f.CommandPatterns {
+			if p == "" {
+				continue
+			}
+			re, err := f.commandPatternRe(p)
+			if err != nil {
+				continue
+			}
+			if re.MatchString(command) {
+				if len(p) > bestLen {
+					best = f
+					bestLen = len(p)
+				}
 			}
 		}
 	}
@@ -608,6 +631,7 @@ func (l *FilterLoader) RegisterGlobalFilter(filter *Filter) error {
 
 // validateFilter compiles and ReDoS-checks every rule pattern in the filter.
 func (l *FilterLoader) validateFilter(filter *Filter) error {
+	// Legacy path: Rules + PriorityPatterns.
 	for _, rule := range filter.Rules {
 		if rule.Pattern == "" {
 			continue
@@ -628,6 +652,53 @@ func (l *FilterLoader) validateFilter(filter *Filter) error {
 		}
 		if _, err := l.compilePattern(p); err != nil {
 			return fmt.Errorf("rtk: filter %q priority pattern %q: invalid regex: %w", filter.Name, p, err)
+		}
+	}
+	// Canonical path: CommandPatterns + MatchOutput + Replace. Without this,
+	// filters written purely in the 27-field canonical shape slip past ReDoS
+	// gating even though their patterns are compiled at runtime by
+	// applyLineFilter / applyMatchOutputRules. The UnmarshalJSON step 4
+	// materialises StripPatterns/KeepPatterns/CollapsePatterns into Rules
+	// above, so they are already covered by the legacy loop.
+	for _, p := range filter.CommandPatterns {
+		if p == "" {
+			continue
+		}
+		if isReDoSProne(p) {
+			return fmt.Errorf("rtk: filter %q commandPatterns %q: ReDoS-prone pattern rejected", filter.Name, p)
+		}
+		if _, err := l.compilePattern(p); err != nil {
+			return fmt.Errorf("rtk: filter %q commandPatterns %q: invalid regex: %w", filter.Name, p, err)
+		}
+	}
+	for _, r := range filter.MatchOutput {
+		if r.Pattern == "" {
+			continue
+		}
+		if isReDoSProne(r.Pattern) {
+			return fmt.Errorf("rtk: filter %q matchOutput %q: ReDoS-prone pattern rejected", filter.Name, r.Pattern)
+		}
+		if _, err := l.compilePattern(r.Pattern); err != nil {
+			return fmt.Errorf("rtk: filter %q matchOutput %q: invalid regex: %w", filter.Name, r.Pattern, err)
+		}
+		if r.Unless != "" {
+			if isReDoSProne(r.Unless) {
+				return fmt.Errorf("rtk: filter %q matchOutput.unless %q: ReDoS-prone pattern rejected", filter.Name, r.Unless)
+			}
+			if _, err := l.compilePattern(r.Unless); err != nil {
+				return fmt.Errorf("rtk: filter %q matchOutput.unless %q: invalid regex: %w", filter.Name, r.Unless, err)
+			}
+		}
+	}
+	for _, r := range filter.Replace {
+		if r.Pattern == "" {
+			continue
+		}
+		if isReDoSProne(r.Pattern) {
+			return fmt.Errorf("rtk: filter %q replace %q: ReDoS-prone pattern rejected", filter.Name, r.Pattern)
+		}
+		if _, err := l.compilePattern(r.Pattern); err != nil {
+			return fmt.Errorf("rtk: filter %q replace %q: invalid regex: %w", filter.Name, r.Pattern, err)
 		}
 	}
 	return nil

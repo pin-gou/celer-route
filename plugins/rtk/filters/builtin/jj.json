@@ -1,0 +1,30 @@
+{
+  "id": "jj",
+  "description": "Compact Jujutsu (jj) output — strip blank lines, truncate",
+  "category": "generic",
+  "priority": 50,
+  "commandPatterns": [
+    "^jj\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Hint:",
+    "^Working copy now at:"
+  ],
+  "stripAnsi": true,
+  "truncateLineAt": 120,
+  "maxLines": 30,
+  "tests": [
+    {
+      "name": "log output stripped of hints",
+      "input": "\n@  qpvuntsm patrick@example.com 2026-03-10 12:00 abc123\n│  feat: add new feature\n◉  zzzzzzzz root()\n\nWorking copy now at: qpvuntsm abc123 feat: add new feature\nHint: use `jj log` to see the full history\n",
+      "expected": "@  qpvuntsm patrick@example.com 2026-03-10 12:00 abc123\n│  feat: add new feature\n◉  zzzzzzzz root()"
+    },
+    {
+      "name": "empty input passes through"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "hadolint",
+  "description": "Compact hadolint Dockerfile linting output",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^hadolint\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$"
+  ],
+  "stripAnsi": true,
+  "truncateLineAt": 120,
+  "maxLines": 40,
+  "tests": [
+    {
+      "name": "Dockerfile warnings kept, blank lines stripped",
+      "input": "\nDockerfile:3 DL3008 warning: Pin versions in apt-get install\nDockerfile:5 DL3009 info: Delete apt-get lists after installing\n\nDockerfile:8 DL4006 warning: Set SHELL option -o pipefail before RUN with pipe\n",
+      "expected": "Dockerfile:3 DL3008 warning: Pin versions in apt-get install\nDockerfile:5 DL3009 info: Delete apt-get lists after installing\nDockerfile:8 DL4006 warning: Set SHELL option -o pipefail before RUN with pipe"
+    },
+    {
+      "name": "empty input passes through"
+    }
+  ]
+}

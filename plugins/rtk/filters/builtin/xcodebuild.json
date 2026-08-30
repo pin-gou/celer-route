@@ -1,0 +1,69 @@
+{
+  "id": "xcodebuild",
+  "description": "Compact xcodebuild output — strip build phases, keep errors/warnings/summary",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^xcodebuild\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^CompileC\\s",
+    "^CompileSwift\\s",
+    "^Ld\\s",
+    "^CreateBuildDirectory\\s",
+    "^MkDir\\s",
+    "^ProcessInfoPlistFile\\s",
+    "^CopySwiftLibs\\s",
+    "^CodeSign\\s",
+    "^Signing Identity:",
+    "^RegisterWithLaunchServices",
+    "^Validate\\s",
+    "^ProcessProductPackaging",
+    "^Touch\\s",
+    "^LinkStoryboards",
+    "^CompileStoryboard",
+    "^CompileAssetCatalog",
+    "^GenerateDSYMFile",
+    "^PhaseScriptExecution",
+    "^PBXCp\\s",
+    "^SetMode\\s",
+    "^SetOwnerAndGroup\\s",
+    "^Ditto\\s",
+    "^CpResource\\s",
+    "^CpHeader\\s",
+    "^\\s+cd\\s+/",
+    "^\\s+export\\s",
+    "^\\s+/Applications/Xcode",
+    "^\\s+/usr/bin/",
+    "^\\s+builtin-",
+    "^note: Using new build system"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "xcodebuild: ok",
+  "maxLines": 60,
+  "tests": [
+    {
+      "name": "strips build phases, keeps errors and summary",
+      "input": "\nnote: Using new build system\nCompileSwift normal arm64 /Users/dev/App/ViewController.swift\n    cd /Users/dev/App\n    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -c\nCompileSwift normal arm64 /Users/dev/App/AppDelegate.swift\n    cd /Users/dev/App\n    export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer\nLd /Users/dev/Build/Products/Debug/App normal arm64\n    cd /Users/dev/App\n    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang\nCodeSign /Users/dev/Build/Products/Debug/App.app\n    cd /Users/dev/App\n    builtin-codesign --force --sign\n\n/Users/dev/App/ViewController.swift:42:9: error: use of unresolved identifier 'foo'\n/Users/dev/App/Model.swift:18:5: warning: variable 'x' was never used\n\n** BUILD FAILED **\n",
+      "expected": "/Users/dev/App/ViewController.swift:42:9: error: use of unresolved identifier 'foo'\n/Users/dev/App/Model.swift:18:5: warning: variable 'x' was never used\n** BUILD FAILED **"
+    },
+    {
+      "name": "clean build success",
+      "input": "\nnote: Using new build system\nCompileSwift normal arm64 /Users/dev/App/Main.swift\n    cd /Users/dev/App\nLd /Users/dev/Build/Products/Debug/App normal arm64\n    cd /Users/dev/App\nCodeSign /Users/dev/Build/Products/Debug/App.app\n    cd /Users/dev/App\n    builtin-codesign --force --sign\n\n** BUILD SUCCEEDED **\n",
+      "expected": "** BUILD SUCCEEDED **"
+    },
+    {
+      "name": "test output keeps test results",
+      "input": "\nnote: Using new build system\nCompileSwift normal arm64 /Users/dev/AppTests/Tests.swift\n    cd /Users/dev/App\nTest Suite 'All tests' started at 2026-03-10 12:00:00\nTest Suite 'AppTests' started at 2026-03-10 12:00:00\nTest Case '-[AppTests testExample]' passed (0.001 seconds).\nTest Case '-[AppTests testFailing]' failed (0.002 seconds).\nTest Suite 'AppTests' passed at 2026-03-10 12:00:01\nExecuted 2 tests, with 1 failure in 0.003 seconds\n",
+      "expected": "Test Suite 'All tests' started at 2026-03-10 12:00:00\nTest Suite 'AppTests' started at 2026-03-10 12:00:00\nTest Case '-[AppTests testExample]' passed (0.001 seconds).\nTest Case '-[AppTests testFailing]' failed (0.002 seconds).\nTest Suite 'AppTests' passed at 2026-03-10 12:00:01\nExecuted 2 tests, with 1 failure in 0.003 seconds"
+    },
+    {
+      "name": "empty input returns on_empty message",
+      "expected": "xcodebuild: ok"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "tofu-fmt",
+  "description": "Compact OpenTofu fmt output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^tofu\\s+fmt(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "tofu fmt: ok (no changes)",
+  "maxLines": 30,
+  "tests": [
+    {
+      "name": "empty output returns on_empty message",
+      "expected": "tofu fmt: ok (no changes)"
+    },
+    {
+      "name": "changed files pass through",
+      "input": "main.tf\nvariables.tf",
+      "expected": "main.tf\nvariables.tf"
+    }
+  ]
+}

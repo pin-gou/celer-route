@@ -482,7 +482,7 @@ func buildResponsesCommandLookup(input []schemas.ResponsesMessage) []string {
 			commands = append(commands, "")
 			continue
 		}
-		commands = append(commands, *msg.ResponsesToolMessage.Arguments)
+		commands = append(commands, extractCommandFromArguments(*msg.ResponsesToolMessage.Arguments))
 	}
 	return commands
 }

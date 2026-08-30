@@ -1,0 +1,31 @@
+{
+  "id": "jira",
+  "description": "Compact Jira CLI output — strip verbose metadata, keep essentials",
+  "category": "generic",
+  "priority": 50,
+  "commandPatterns": [
+    "^jira\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^\\s*--"
+  ],
+  "stripAnsi": true,
+  "truncateLineAt": 120,
+  "maxLines": 40,
+  "tests": [
+    {
+      "name": "strips blank lines from issue list",
+      "input": "TYPE\tKEY\tSUMMARY\tSTATUS\n\nStory\tPROJ-123\tAdd login feature\tIn Progress\n\nBug\tPROJ-456\tFix crash on startup\tOpen",
+      "expected": "TYPE\tKEY\tSUMMARY\tSTATUS\nStory\tPROJ-123\tAdd login feature\tIn Progress\nBug\tPROJ-456\tFix crash on startup\tOpen"
+    },
+    {
+      "name": "single issue view",
+      "input": "KEY: PROJ-123\nSummary: Add login feature\nStatus: In Progress\nAssignee: john@example.com",
+      "expected": "KEY: PROJ-123\nSummary: Add login feature\nStatus: In Progress\nAssignee: john@example.com"
+    }
+  ]
+}

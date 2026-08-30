@@ -1,0 +1,28 @@
+{
+  "id": "fail2ban-client",
+  "description": "Compact fail2ban-client output",
+  "category": "generic",
+  "priority": 50,
+  "commandPatterns": [
+    "^fail2ban-client\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$"
+  ],
+  "maxLines": 30,
+  "tests": [
+    {
+      "name": "strips blank lines",
+      "input": "Status for the jail: sshd\n|- Filter\n|  |- Currently failed: 3\n\n|- Actions\n   `- Total banned: 42",
+      "expected": "Status for the jail: sshd\n|- Filter\n|  |- Currently failed: 3\n|- Actions\n   `- Total banned: 42"
+    },
+    {
+      "name": "single line passthrough",
+      "input": "Shutdown successful",
+      "expected": "Shutdown successful"
+    }
+  ]
+}

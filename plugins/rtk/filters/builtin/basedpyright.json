@@ -1,0 +1,38 @@
+{
+  "id": "basedpyright",
+  "description": "Compact basedpyright type checker output — strip blank lines, keep errors",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^basedpyright\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Searching for source files",
+    "^Found \\d+ source file",
+    "^Pyright \\d+\\.\\d+",
+    "^basedpyright \\d+\\.\\d+"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "basedpyright: ok",
+  "maxLines": 50,
+  "tests": [
+    {
+      "name": "strips noise, keeps errors and summary",
+      "input": "\nbasedpyright 1.22.0\nSearching for source files\nFound 42 source files\n\n/home/user/app/main.py\n  /home/user/app/main.py:10:5 - error: \"foo\" is not defined (reportUndefinedVariable)\n  /home/user/app/main.py:25:1 - error: Type \"str\" is not assignable to type \"int\" (reportAssignmentType)\n\n/home/user/app/utils.py\n  /home/user/app/utils.py:8:9 - warning: Variable \"x\" is not accessed (reportUnusedVariable)\n\n3 errors, 1 warning, 0 informations\n",
+      "expected": "/home/user/app/main.py\n  /home/user/app/main.py:10:5 - error: \"foo\" is not defined (reportUndefinedVariable)\n  /home/user/app/main.py:25:1 - error: Type \"str\" is not assignable to type \"int\" (reportAssignmentType)\n/home/user/app/utils.py\n  /home/user/app/utils.py:8:9 - warning: Variable \"x\" is not accessed (reportUnusedVariable)\n3 errors, 1 warning, 0 informations"
+    },
+    {
+      "name": "clean output",
+      "input": "\nbasedpyright 1.22.0\nSearching for source files\nFound 10 source files\n\n0 errors, 0 warnings, 0 informations\n",
+      "expected": "0 errors, 0 warnings, 0 informations"
+    },
+    {
+      "name": "empty input returns on_empty message",
+      "expected": "basedpyright: ok"
+    }
+  ]
+}

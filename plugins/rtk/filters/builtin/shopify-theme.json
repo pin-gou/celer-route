@@ -1,0 +1,33 @@
+{
+  "id": "shopify-theme",
+  "description": "Compact shopify theme push/pull output",
+  "category": "cloud",
+  "priority": 50,
+  "commandPatterns": [
+    "^shopify\\s+theme\\s+(push|pull)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^\\s*Uploading",
+    "^\\s*Downloading"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "shopify theme: ok",
+  "tailLines": 5,
+  "maxLines": 15,
+  "tests": [
+    {
+      "name": "strips upload/download lines, keeps tail",
+      "input": "\nUploading assets/app.css\nUploading assets/app.js\nUploading templates/index.liquid\nDownloading assets/old.css\n\nTheme 'Development' (id: 12345) pushed to store.example.myshopify.com\n",
+      "expected": "Theme 'Development' (id: 12345) pushed to store.example.myshopify.com"
+    },
+    {
+      "name": "on_empty when all stripped",
+      "input": "Uploading assets/app.css\nDownloading assets/base.css\n",
+      "expected": "shopify theme: ok"
+    }
+  ]
+}

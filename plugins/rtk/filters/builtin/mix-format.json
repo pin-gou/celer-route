@@ -1,0 +1,25 @@
+{
+  "id": "mix-format",
+  "description": "Compact mix format output",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^mix\\s+format(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "onEmpty": "mix format: ok",
+  "maxLines": 20,
+  "tests": [
+    {
+      "name": "empty output returns ok",
+      "expected": "mix format: ok"
+    },
+    {
+      "name": "changed files pass through",
+      "input": "lib/my_app.ex\ntest/my_app_test.exs",
+      "expected": "lib/my_app.ex\ntest/my_app_test.exs"
+    }
+  ]
+}

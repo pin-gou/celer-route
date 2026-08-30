@@ -406,7 +406,15 @@ func (p *Plugin) PreviewCompression(req PreviewRequest) PreviewResponse {
 
 	runner := NewPipelineRunner(globalCatalog)
 	pipeline := &Pipeline{Engines: []string{"rtk"}}
-	resultText, breakdown, _, _, _, _ := runner.Run(nil, pipeline, req.Payload.Output, EngineConfig{Enabled: true})
+	// Pass the payload's command hint through to the engine so the preview
+	// routes identically to the real PreLLMHook path (which forwards the
+	// extracted command from the tool call). Without this, preview would
+	// fall back to pure content detection and diverge from production for
+	// commands whose output carries no recognisable content signature.
+	resultText, breakdown, _, _, _, _ := runner.Run(nil, pipeline, req.Payload.Output, EngineConfig{
+		Enabled:     true,
+		CommandHint: req.Payload.Command,
+	})
 
 	resp.EngineStats = breakdown
 	resp.Result.OriginalText = req.Payload.Output

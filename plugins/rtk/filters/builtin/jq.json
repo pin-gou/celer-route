@@ -1,0 +1,28 @@
+{
+  "id": "jq",
+  "description": "Compact jq output — truncate large JSON results",
+  "category": "generic",
+  "priority": 50,
+  "commandPatterns": [
+    "^jq\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$"
+  ],
+  "stripAnsi": true,
+  "truncateLineAt": 120,
+  "maxLines": 40,
+  "tests": [
+    {
+      "name": "short output passes through",
+      "input": "\n{\n  \"name\": \"test\",\n  \"version\": \"1.0\"\n}\n",
+      "expected": "{\n  \"name\": \"test\",\n  \"version\": \"1.0\"\n}"
+    },
+    {
+      "name": "empty input passes through"
+    }
+  ]
+}

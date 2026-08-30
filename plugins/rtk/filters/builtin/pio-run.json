@@ -1,0 +1,38 @@
+{
+  "id": "pio-run",
+  "description": "Compact PlatformIO build output",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^pio\\s+run"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Verbose mode",
+    "^CONFIGURATION:",
+    "^LDF:",
+    "^Library Manager:",
+    "^Compiling\\s",
+    "^Linking\\s",
+    "^Building\\s",
+    "^Checking size"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "pio run: ok",
+  "maxLines": 30,
+  "tests": [
+    {
+      "name": "strips build noise, preserves errors",
+      "input": "\nVerbose mode can be enabled via `-v, --verbose` option\nCONFIGURATION: https://docs.platformio.org/page/boards/espressif32/esp32dev.html\nLDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf\nCompiling .pio/build/esp32dev/src/main.cpp.o\nBuilding .pio/build/esp32dev/firmware.elf\nLinking .pio/build/esp32dev/firmware.elf\nChecking size .pio/build/esp32dev/firmware.elf\nsrc/main.cpp:10:3: error: 'LED_BUILTINN' was not declared\n",
+      "expected": "src/main.cpp:10:3: error: 'LED_BUILTINN' was not declared"
+    },
+    {
+      "name": "on_empty when clean build with only noise",
+      "input": "\nVerbose mode can be enabled via `-v, --verbose` option\nCompiling .pio/build/esp32dev/src/main.cpp.o\nLinking .pio/build/esp32dev/firmware.elf\n",
+      "expected": "pio run: ok"
+    }
+  ]
+}

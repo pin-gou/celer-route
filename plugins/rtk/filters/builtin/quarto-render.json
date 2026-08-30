@@ -1,0 +1,42 @@
+{
+  "id": "quarto-render",
+  "description": "Compact quarto render output",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^quarto\\s+render"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^\\s*processing file:",
+    "^\\s*\\d+/\\d+\\s",
+    "^\\s*running",
+    "^\\s*Rendering",
+    "^pandoc ",
+    "^  Validating",
+    "^  Resolving"
+  ],
+  "matchOutput": [
+    {
+      "pattern": "Output created:",
+      "message": "ok (output created)"
+    }
+  ],
+  "stripAnsi": true,
+  "maxLines": 20,
+  "tests": [
+    {
+      "name": "success short-circuits to ok",
+      "input": "\nprocessing file: index.qmd\n  Validating schema\n  Resolving resources\npandoc to html5\nOutput created: _site/index.html\n",
+      "expected": "ok (output created)"
+    },
+    {
+      "name": "error passes through",
+      "input": "\nprocessing file: broken.qmd\n  Validating schema\nERROR: Render failed\n\ncaused by:\n  syntax error at line 10\n",
+      "expected": "ERROR: Render failed\ncaused by:\n  syntax error at line 10"
+    }
+  ]
+}

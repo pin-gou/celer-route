@@ -1,0 +1,45 @@
+{
+  "id": "liquibase",
+  "description": "Compact liquibase output — strip headers and generic info",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "(?:^|/)liquibase(?:\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Starting Liquibase at",
+    "^Liquibase (?:Community|Open Source)",
+    "^Liquibase Home:",
+    "^Java Home",
+    "^Libraries:",
+    "^\\s*-\\s+\\S+\\.jar",
+    "^INFO \\[liquibase\\.integration\\]",
+    "^INFO \\[liquibase\\.core\\] Reading resource",
+    "^INFO \\[liquibase\\.core\\] Parsing",
+    "^(?:\\[?INFO\\]?\\s*)?#+$",
+    "^\\s*##"
+  ],
+  "stripAnsi": true,
+  "filterStderr": true,
+  "onEmpty": "liquibase: ok",
+  "maxLines": 200,
+  "tests": [
+    {
+      "name": "strip ascii banner and info logs from subcommand"
+    },
+    {
+      "name": "strip --version noise, keep only version line"
+    },
+    {
+      "name": "keep status and error lines"
+    },
+    {
+      "name": "empty input",
+      "expected": "liquibase: ok"
+    }
+  ]
+}

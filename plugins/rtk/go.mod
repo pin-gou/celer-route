@@ -2,7 +2,10 @@ module github.com/pin-gou/celer-route/plugins/rtk
 
 go 1.26.5
 
-require github.com/pin-gou/celer-route/core v1.7.8
+require (
+	github.com/pin-gou/celer-route/core v1.7.8
+	github.com/tidwall/gjson v1.18.0
+)
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
@@ -19,7 +22,6 @@ require (
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mark3labs/mcp-go v0.43.2 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect

@@ -1,0 +1,26 @@
+{
+  "id": "pulumi-destroy",
+  "description": "Compact Pulumi destroy output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^pulumi\\s+destroy(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "pulumi destroy: nothing to destroy",
+  "tests": [
+    {
+      "name": "strips destroy header and url banner",
+      "input": "\nDestroying (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/updates/43\n\n     Type                          Name              Status\n -   pulumi:pulumi:Stack           my-proj-dev       deleted\n -   └─ aws:s3:Bucket              my-bucket         deleted\n\nResources:\n    - 2 deleted\n\nDuration: 7s\n",
+      "expected": " -   pulumi:pulumi:Stack           my-proj-dev       deleted\n -   └─ aws:s3:Bucket              my-bucket         deleted\nResources:\n    - 2 deleted"
+    },
+    {
+      "name": "on_empty when nothing to destroy",
+      "input": "\nDestroying (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/updates/43\n\nDuration: 1s\n",
+      "expected": "pulumi destroy: nothing to destroy"
+    }
+  ]
+}

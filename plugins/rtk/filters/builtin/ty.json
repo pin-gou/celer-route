@@ -1,0 +1,36 @@
+{
+  "id": "ty",
+  "description": "Compact ty type checker output — strip blank lines, keep errors",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^ty\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Checking \\d+ file",
+    "^ty \\d+\\.\\d+"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "ty: ok",
+  "maxLines": 50,
+  "tests": [
+    {
+      "name": "strips noise, keeps diagnostics",
+      "input": "\nty 0.1.0\nChecking 15 files\n\nerror[unresolved-reference]: Name `foo` used when not defined\n  --> app/main.py:10:5\n   |\n10 |     foo()\n   |     ^^^\n   |\n\nwarning[unused-variable]: Variable `x` is not used\n  --> app/utils.py:8:9\n   |\n 8 |     x = 42\n   |     ^\n   |\n\nFound 1 error, 1 warning\n",
+      "expected": "error[unresolved-reference]: Name `foo` used when not defined\n  --> app/main.py:10:5\n   |\n10 |     foo()\n   |     ^^^\n   |\nwarning[unused-variable]: Variable `x` is not used\n  --> app/utils.py:8:9\n   |\n 8 |     x = 42\n   |     ^\n   |\nFound 1 error, 1 warning"
+    },
+    {
+      "name": "clean output",
+      "input": "\nty 0.1.0\nChecking 10 files\n\nAll checks passed!\n",
+      "expected": "All checks passed!"
+    },
+    {
+      "name": "empty input returns on_empty message",
+      "expected": "ty: ok"
+    }
+  ]
+}

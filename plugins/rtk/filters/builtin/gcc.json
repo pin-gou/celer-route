@@ -1,0 +1,44 @@
+{
+  "id": "gcc",
+  "description": "Compact gcc/g++ compiler output — strip notes, keep errors and warnings",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^g(cc|\\+\\+)\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^\\s+\\|\\s*$",
+    "^In file included from",
+    "^\\s+from\\s",
+    "^\\d+ warnings? generated",
+    "^\\d+ errors? generated"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "gcc: ok",
+  "maxLines": 50,
+  "tests": [
+    {
+      "name": "strips include chain, keeps errors and warnings",
+      "input": "\nIn file included from /usr/include/stdio.h:42:\n                 from main.c:1:\nmain.c:10:5: error: use of undeclared identifier 'foo'\n    foo();\n    ^\nmain.c:15:12: warning: unused variable 'x' [-Wunused-variable]\n    int x = 42;\n        ^\n2 warnings generated.\n1 error generated.\n",
+      "expected": "main.c:10:5: error: use of undeclared identifier 'foo'\n    foo();\n    ^\nmain.c:15:12: warning: unused variable 'x' [-Wunused-variable]\n    int x = 42;\n        ^"
+    },
+    {
+      "name": "clean compilation",
+      "input": "\n",
+      "expected": "gcc: ok"
+    },
+    {
+      "name": "linker error kept",
+      "input": "\n/usr/bin/ld: /tmp/main.o: undefined reference to 'missing_func'\ncollect2: error: ld returned 1 exit status\n",
+      "expected": "/usr/bin/ld: /tmp/main.o: undefined reference to 'missing_func'\ncollect2: error: ld returned 1 exit status"
+    },
+    {
+      "name": "empty input returns on_empty message",
+      "expected": "gcc: ok"
+    }
+  ]
+}

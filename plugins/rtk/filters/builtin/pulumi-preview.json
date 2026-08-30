@@ -1,0 +1,26 @@
+{
+  "id": "pulumi-preview",
+  "description": "Compact Pulumi preview output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^pulumi\\s+preview(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "pulumi preview: no changes",
+  "tests": [
+    {
+      "name": "strips header, url and duration noise",
+      "input": "\nPreviewing update (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/previews/abc123\n\n     Type                          Name              Plan\n +   pulumi:pulumi:Stack           my-proj-dev       create\n +   └─ aws:s3:Bucket              my-bucket         create\n\nResources:\n    + 2 to create\n\nDuration: 3s\n",
+      "expected": " +   pulumi:pulumi:Stack           my-proj-dev       create\n +   └─ aws:s3:Bucket              my-bucket         create\nResources:\n    + 2 to create"
+    },
+    {
+      "name": "on_empty when only noise lines present",
+      "input": "\nPreviewing update (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/previews/abc123\n\nDuration: 1s\n",
+      "expected": "pulumi preview: no changes"
+    }
+  ]
+}

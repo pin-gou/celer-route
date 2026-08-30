@@ -1,0 +1,36 @@
+{
+  "id": "oxlint",
+  "description": "Compact oxlint output — strip blank lines, keep diagnostics",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^oxlint\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Finished in \\d+",
+    "^Found \\d+ warning"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "oxlint: ok",
+  "maxLines": 50,
+  "tests": [
+    {
+      "name": "strips noise, keeps diagnostics",
+      "input": "\n  × eslint(no-console): Unexpected console statement.\n   ╭─[src/app.ts:5:3]\n 5 │   console.log(\"debug\");\n   │   ^^^^^^^^^^^\n   ╰────\n\n  × eslint(no-unused-vars): 'x' is defined but never used.\n   ╭─[src/utils.ts:2:7]\n 2 │   let x = 42;\n   │       ^\n   ╰────\n\nFound 2 warnings on 2 files.\nFinished in 12ms on 100 files.\n",
+      "expected": "  × eslint(no-console): Unexpected console statement.\n   ╭─[src/app.ts:5:3]\n 5 │   console.log(\"debug\");\n   │   ^^^^^^^^^^^\n   ╰────\n  × eslint(no-unused-vars): 'x' is defined but never used.\n   ╭─[src/utils.ts:2:7]\n 2 │   let x = 42;\n   │       ^\n   ╰────"
+    },
+    {
+      "name": "clean output",
+      "input": "\nFinished in 5ms on 100 files.\n",
+      "expected": "oxlint: ok"
+    },
+    {
+      "name": "empty input returns on_empty message",
+      "expected": "oxlint: ok"
+    }
+  ]
+}

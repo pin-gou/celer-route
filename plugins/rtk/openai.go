@@ -42,5 +42,5 @@ func getAnthropicCommand(blockIndex int, pendingToolCalls []schemas.ChatAssistan
 	if !isShellTool(name) {
 		return "", false
 	}
-	return tc.Function.Arguments, true
+	return extractCommandFromArguments(tc.Function.Arguments), true
 }

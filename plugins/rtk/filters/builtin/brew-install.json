@@ -1,0 +1,40 @@
+{
+  "id": "brew-install",
+  "description": "Compact brew install/upgrade output — strip downloads, short-circuit when already installed",
+  "category": "package",
+  "priority": 50,
+  "commandPatterns": [
+    "^brew\\s+(install|upgrade)\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^==> Downloading",
+    "^==> Pouring",
+    "^Already downloaded:",
+    "^###",
+    "^==> Fetching"
+  ],
+  "matchOutput": [
+    {
+      "pattern": "already installed",
+      "message": "ok (already installed)"
+    }
+  ],
+  "stripAnsi": true,
+  "maxLines": 20,
+  "tests": [
+    {
+      "name": "already installed short-circuits",
+      "input": "\nWarning: rtk 0.27.1 is already installed and up-to-date.\nTo reinstall 0.27.1, run:\n  brew reinstall rtk\n",
+      "expected": "ok (already installed)"
+    },
+    {
+      "name": "install strips download lines",
+      "input": "\n==> Fetching jq\n==> Downloading https://homebrew.bintray.com/bottles/jq-1.7.1.arm64_sonoma.bottle.tar.gz\n######################################################################## 100.0%\n==> Pouring jq-1.7.1.arm64_sonoma.bottle.tar.gz\n==> Summary\n/opt/homebrew/Cellar/jq/1.7.1: 18 files, 1.2MB\n",
+      "expected": "==> Summary\n/opt/homebrew/Cellar/jq/1.7.1: 18 files, 1.2MB"
+    }
+  ]
+}

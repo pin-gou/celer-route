@@ -36,7 +36,7 @@ func buildToolCallLookup(messages []schemas.ChatMessage) map[string]*ToolCallLoo
 			}
 			lookup[*tc.ID] = &ToolCallLookupEntry{
 				ToolName: name,
-				Command:  tc.Function.Arguments,
+				Command:  extractCommandFromArguments(tc.Function.Arguments),
 			}
 		}
 	}

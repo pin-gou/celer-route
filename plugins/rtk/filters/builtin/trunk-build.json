@@ -1,0 +1,36 @@
+{
+  "id": "trunk-build",
+  "description": "Compact trunk build output",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^trunk\\s+build"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^\\s*Compiling\\s",
+    "^\\s*Downloading\\s",
+    "^\\s*Fetching\\s",
+    "^\\s*Fresh\\s",
+    "^\\s*Checking\\s"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "trunk build: ok",
+  "tailLines": 10,
+  "maxLines": 30,
+  "tests": [
+    {
+      "name": "strips compile noise, keeps tail summary",
+      "input": "\n   Compiling tokio v1.35.0\n   Compiling hyper v0.14.28\n   Compiling my-crate v0.1.0\n   Downloading serde v1.0.195\n   Fresh regex v1.10.2\n\n   Finished release [optimized] target(s) in 45.23s\n   Binary: target/release/my-crate (5.2MB)\n",
+      "expected": "   Finished release [optimized] target(s) in 45.23s\n   Binary: target/release/my-crate (5.2MB)"
+    },
+    {
+      "name": "on_empty when all noise stripped",
+      "input": "\n   Compiling my-crate v0.1.0\n   Fresh serde v1.0\n   Checking tokio v1.35.0\n\n",
+      "expected": "trunk build: ok"
+    }
+  ]
+}

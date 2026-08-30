@@ -1,0 +1,43 @@
+{
+  "id": "dotnet-build",
+  "description": "Compact dotnet build output — short-circuit on success, strip banners",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^dotnet\\s+build\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$",
+    "^Microsoft \\(R\\)",
+    "^Copyright \\(C\\)",
+    "^  Determining projects"
+  ],
+  "matchOutput": [
+    {
+      "pattern": "0 Warning\\(s\\)\\n\\s+0 Error\\(s\\)",
+      "message": "ok (build succeeded)"
+    }
+  ],
+  "stripAnsi": true,
+  "maxLines": 40,
+  "tests": [
+    {
+      "name": "successful build short-circuits to ok",
+      "input": "\nMicrosoft (R) Build Engine version 17.8.3+195e7f5a3\nCopyright (C) Microsoft Corporation. All rights reserved.\n\n  Determining projects to restore...\n  All projects are up-to-date for restore.\n  MyApp -> /home/user/MyApp/bin/Debug/net8.0/MyApp.dll\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n\nTime Elapsed 00:00:02.34\n",
+      "expected": "ok (build succeeded)"
+    },
+    {
+      "name": "build with warnings not short-circuited",
+      "input": "\nMicrosoft (R) Build Engine version 17.8.3+195e7f5a3\nCopyright (C) Microsoft Corporation. All rights reserved.\n\n  Determining projects to restore...\n  MyApp -> /home/user/MyApp/bin/Debug/net8.0/MyApp.dll\n\nBuild succeeded.\n    3 Warning(s)\n    0 Error(s)\n\nTime Elapsed 00:00:01.87\n",
+      "expected": "  MyApp -> /home/user/MyApp/bin/Debug/net8.0/MyApp.dll\nBuild succeeded.\n    3 Warning(s)\n    0 Error(s)\nTime Elapsed 00:00:01.87"
+    },
+    {
+      "name": "build errors pass through",
+      "input": "\nMicrosoft (R) Build Engine version 17.8.3+195e7f5a3\nCopyright (C) Microsoft Corporation. All rights reserved.\n\n  Determining projects to restore...\nsrc/Program.cs(10,5): error CS1002: ; expected [/home/user/MyApp/MyApp.csproj]\n\nBuild FAILED.\n    0 Warning(s)\n    1 Error(s)\n",
+      "expected": "src/Program.cs(10,5): error CS1002: ; expected [/home/user/MyApp/MyApp.csproj]\nBuild FAILED.\n    0 Warning(s)\n    1 Error(s)"
+    }
+  ]
+}

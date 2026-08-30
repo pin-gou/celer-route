@@ -1,0 +1,31 @@
+{
+  "id": "tofu-validate",
+  "description": "Compact OpenTofu validate output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^tofu\\s+validate(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "matchOutput": [
+    {
+      "pattern": "Success! The configuration is valid",
+      "message": "ok (valid)"
+    }
+  ],
+  "stripAnsi": true,
+  "tests": [
+    {
+      "name": "success short-circuits to ok",
+      "input": "Success! The configuration is valid.",
+      "expected": "ok (valid)"
+    },
+    {
+      "name": "error passes through unchanged",
+      "input": "Error: Invalid resource type\n  on main.tf line 3: resource \"aws_instancee\" \"web\"",
+      "expected": "Error: Invalid resource type\n  on main.tf line 3: resource \"aws_instancee\" \"web\""
+    }
+  ]
+}

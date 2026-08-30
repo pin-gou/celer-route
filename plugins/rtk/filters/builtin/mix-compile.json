@@ -1,0 +1,32 @@
+{
+  "id": "mix-compile",
+  "description": "Compact mix compile output",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^mix\\s+compile(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^Compiling \\d+ file",
+    "^\\s*$",
+    "^Generated\\s"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "mix compile: ok",
+  "maxLines": 40,
+  "tests": [
+    {
+      "name": "strips compile noise, preserves warnings",
+      "input": "\nCompiling 12 files (.ex)\nGenerated my_app app\n\nwarning: variable \"conn\" is unused\n  lib/router.ex:42\n",
+      "expected": "warning: variable \"conn\" is unused\n  lib/router.ex:42"
+    },
+    {
+      "name": "on_empty when only noise",
+      "input": "Compiling 3 files (.ex)\nGenerated my_app app\n",
+      "expected": "mix compile: ok"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "id": "tofu-plan",
+  "description": "Compact OpenTofu plan output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^tofu\\s+plan(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^Refreshing state",
+    "^\\s*#.*unchanged",
+    "^\\s*$",
+    "^Acquiring state lock",
+    "^Releasing state lock"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "tofu plan: no changes detected",
+  "maxLines": 80,
+  "tests": [
+    {
+      "name": "strips Refreshing state and lock lines",
+      "input": "\nAcquiring state lock. This may take a few moments...\nRefreshing state... [id=vpc-abc123]\nRefreshing state... [id=sg-def456]\nReleasing state lock. This may take a few moments...\n\nOpenTofu will perform the following actions:\n\n  # aws_instance.web will be created\n  + resource \"aws_instance\" \"web\" {}\n\nPlan: 1 to add, 0 to change, 0 to destroy.\n",
+      "expected": "OpenTofu will perform the following actions:\n  # aws_instance.web will be created\n  + resource \"aws_instance\" \"web\" {}\nPlan: 1 to add, 0 to change, 0 to destroy."
+    },
+    {
+      "name": "on_empty when all noise stripped",
+      "input": "Refreshing state... [id=vpc-abc]\nAcquiring state lock. This may take a few moments...\nReleasing state lock. This may take a few moments...",
+      "expected": "tofu plan: no changes detected"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // Filter defines a set of line-level rules and truncation parameters for
@@ -58,6 +59,37 @@ type Filter struct {
 	// Canonical preserve block
 	ErrorPatterns   []string `json:"errorPatterns,omitempty"`
 	SummaryPatterns []string `json:"summaryPatterns,omitempty"`
+
+	// commandPatternCache memoises compiled CommandPatterns regexes so that
+	// the loader's matchLongest path can iterate over them cheaply. It is
+	// intentionally not serialised — populated lazily by commandPatternRe.
+	// Kept as a pointer so a shallow struct copy (intensity scaling) never
+	// copies the lock-bearing map itself (go vet: copylocks).
+	commandPatternCache *sync.Map // map[string]*regexp.Regexp
+}
+
+// commandPatternRe returns a compiled *regexp.Regexp for the given
+// CommandPatterns entry, caching the result. The loader's validateFilter
+// pre-checks every pattern at load time, so a compile error here is a
+// programmer mistake (filter JSON modified after Load) and we silently
+// fall back to a nil regex so the caller can skip.
+func (f *Filter) commandPatternRe(pattern string) (*regexp.Regexp, error) {
+	cache := f.commandPatternCache
+	if cache == nil {
+		cache = &sync.Map{}
+		f.commandPatternCache = cache
+	}
+	if v, ok := cache.Load(pattern); ok {
+		if re, ok := v.(*regexp.Regexp); ok {
+			return re, nil
+		}
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	cache.Store(pattern, re)
+	return re, nil
 }
 
 // FilterTest defines a single test case for a filter, used in the canonical format.
@@ -113,6 +145,46 @@ func (f *Filter) UnmarshalJSON(data []byte) error {
 	}
 	if f.Name == "" && f.ID != "" {
 		f.Name = f.ID
+	}
+
+	// Step 4: Materialise canonical StripPatterns/KeepPatterns/CollapsePatterns
+	// into the legacy Rules slice so applyLineFilter picks them up. Only fires
+	// when Rules is empty — existing legacy filters keep zero-migration, and a
+	// filter that supplies both wins through the legacy Rules path. Without
+	// this, filters written in the canonical 27-field shape would silently
+	// lose their strip/keep/collapse behaviour because applyLineFilter reads
+	// only filter.Rules (line 198) and not the canonical fields.
+	if len(f.Rules) == 0 {
+		for _, p := range f.StripPatterns {
+			if p != "" {
+				f.Rules = append(f.Rules, LineRule{Type: "strip", Pattern: p})
+			}
+		}
+		for _, p := range f.KeepPatterns {
+			if p != "" {
+				f.Rules = append(f.Rules, LineRule{Type: "keep", Pattern: p})
+			}
+		}
+		for _, p := range f.CollapsePatterns {
+			if p != "" {
+				f.Rules = append(f.Rules, LineRule{Type: "collapse", Pattern: p})
+			}
+		}
+	}
+
+	// Step 5: Derive a Command fallback from CommandPatterns for the legacy
+	// matchLongest path in filterloader. matchLongest compares against
+	// filter.Command (legacy field); without this, canonical-only filters
+	// would be invisible to command-based routing. We pick the longest
+	// pattern as the most-specific representative.
+	if f.Command == "" && len(f.CommandPatterns) > 0 {
+		longest := f.CommandPatterns[0]
+		for _, p := range f.CommandPatterns[1:] {
+			if len(p) > len(longest) {
+				longest = p
+			}
+		}
+		f.Command = longest
 	}
 
 	return nil

@@ -1,0 +1,36 @@
+{
+  "id": "tofu-init",
+  "description": "Compact OpenTofu init output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^tofu\\s+init(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^- Downloading",
+    "^- Installing",
+    "^- Using previously-installed",
+    "^\\s*$",
+    "^Initializing provider",
+    "^Initializing the backend",
+    "^Initializing modules"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "tofu init: ok",
+  "maxLines": 20,
+  "tests": [
+    {
+      "name": "strips downloading/installing lines",
+      "input": "\nInitializing the backend...\nInitializing provider plugins...\n- Downloading hashicorp/aws 5.0.0...\n- Installing hashicorp/aws 5.0.0...\n- Using previously-installed hashicorp/random 3.5.1\n\nOpenTofu has been successfully initialized!\n",
+      "expected": "OpenTofu has been successfully initialized!"
+    },
+    {
+      "name": "on_empty when all noise stripped",
+      "input": "\nInitializing the backend...\nInitializing provider plugins...\n- Using previously-installed hashicorp/aws 5.0.0\n\n",
+      "expected": "tofu init: ok"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "pulumi-up",
+  "description": "Compact Pulumi up (apply) output",
+  "category": "infra",
+  "priority": 50,
+  "commandPatterns": [
+    "^pulumi\\s+up(\\s|$)"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripAnsi": true,
+  "onEmpty": "pulumi up: no changes",
+  "tests": [
+    {
+      "name": "strips update header and url banner",
+      "input": "\nUpdating (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/updates/42\n\n     Type                          Name              Status\n +   pulumi:pulumi:Stack           my-proj-dev       created\n +   └─ aws:s3:Bucket              my-bucket         created\n\nOutputs:\n    bucket_name: \"my-bucket-abc123\"\n\nResources:\n    + 2 created\n\nDuration: 15s\n",
+      "expected": " +   pulumi:pulumi:Stack           my-proj-dev       created\n +   └─ aws:s3:Bucket              my-bucket         created\nOutputs:\n    bucket_name: \\\"my-bucket-abc123\\\"\nResources:\n    + 2 created"
+    },
+    {
+      "name": "on_empty when all noise stripped",
+      "input": "\nUpdating (dev)\n\nView in Browser (Ctrl+O): https://app.pulumi.com/org/my-proj/dev/updates/42\n\nDuration: 2s\n",
+      "expected": "pulumi up: no changes"
+    }
+  ]
+}

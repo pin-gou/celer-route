@@ -1,0 +1,27 @@
+{
+  "id": "shellcheck",
+  "description": "Compact shellcheck output — strip blank lines, keep caret indicators for error position",
+  "category": "build",
+  "priority": 50,
+  "commandPatterns": [
+    "^shellcheck\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$"
+  ],
+  "stripAnsi": true,
+  "maxLines": 50,
+  "tests": [
+    {
+      "name": "multi-warning output stripped of blank lines only",
+      "input": "\nIn script.sh line 3:\nif [[ $1 == \"\" ]]\n     ^-- SC2236: Use -z instead of ! -n.\n\nIn script.sh line 7:\necho $var\n     ^-- SC2086: Double quote to prevent globbing.\n\n",
+      "expected": "In script.sh line 3:\nif [[ $1 == \"\" ]]\n     ^-- SC2236: Use -z instead of ! -n.\nIn script.sh line 7:\necho $var\n     ^-- SC2086: Double quote to prevent globbing."
+    },
+    {
+      "name": "empty input passes through"
+    }
+  ]
+}

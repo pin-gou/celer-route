@@ -1,0 +1,29 @@
+{
+  "id": "sops",
+  "description": "Compact sops output",
+  "category": "generic",
+  "priority": 50,
+  "commandPatterns": [
+    "^sops\\b"
+  ],
+  "outputTypes": [
+    "shell"
+  ],
+  "stripPatterns": [
+    "^\\s*$"
+  ],
+  "stripAnsi": true,
+  "maxLines": 40,
+  "tests": [
+    {
+      "name": "strips blank lines",
+      "input": "mac: xyz123\n\nversion: 3.8.1",
+      "expected": "mac: xyz123\nversion: 3.8.1"
+    },
+    {
+      "name": "preserves non-blank output unchanged",
+      "input": "mac: abc123\nversion: 3.8.1",
+      "expected": "mac: abc123\nversion: 3.8.1"
+    }
+  ]
+}
