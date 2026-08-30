@@ -1,0 +1,241 @@
+---
+title: "支持的提供商"
+description: "celer-route 内置支持的 40+ LLM / 多模态提供商列表"
+sidebar_position: 1
+---
+
+# 支持的提供商
+
+celer-route 内置支持 40+ 提供商，覆盖国际主流 LLM、国内大模型、本地自托管
+推理服务与多模态生成模型。所有提供商统一通过 OpenAI 兼容 API 使用——同一套
+接口，任意切换模型与提供商。
+
+各提供的详细说明、配置步骤与常见问题，请查看对应的 `/workspace/providers` 页面
+或 GitHub 仓库文档。下面按类别罗列内置提供商。
+
+## 国际 LLM 提供商
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>OpenAI</h3>
+    <p><code>openai</code> — GPT 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Anthropic</h3>
+    <p><code>anthropic</code> — Claude 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Azure</h3>
+    <p><code>azure</code> — Azure OpenAI 服务</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>AWS Bedrock</h3>
+    <p><code>bedrock</code> — AWS 托管推理（Claude / Llama 等）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>AWS Bedrock Mantle</h3>
+    <p><code>bedrock_mantle</code> — Bedrock 上的 Mantle 推理</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Gemini</h3>
+    <p><code>gemini</code> — Google Gemini 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Vertex AI</h3>
+    <p><code>vertex</code> — Google Cloud Vertex AI 上的 Gemini</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Cohere</h3>
+    <p><code>cohere</code> — Command 系列模型与 RAG</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Mistral AI</h3>
+    <p><code>mistral</code> — Mistral 系列开源模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Groq</h3>
+    <p><code>groq</code> — LPU 极速推理（Llama / Mixtral 等）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Cerebras</h3>
+    <p><code>cerebras</code> — Cerebras 高速推理</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>DeepSeek</h3>
+    <p><code>deepseek</code> — DeepSeek 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenRouter</h3>
+    <p><code>openrouter</code> — 聚合 100+ 模型网关</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Perplexity</h3>
+    <p><code>perplexity</code> — Perplexity Sonar 系列</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>xAI</h3>
+    <p><code>xai</code> — Grok 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Nebius Token Factory</h3>
+    <p><code>nebius</code> — 开源模型托管推理</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Parasail</h3>
+    <p><code>parasail</code> — 低延迟推理平台</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Fireworks AI</h3>
+    <p><code>fireworks</code> — F1 / Llama 等快速推理</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>HuggingFace</h3>
+    <p><code>huggingface</code> — HF 推理端点 / Serverless</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Replicate</h3>
+    <p><code>replicate</code> — 社区模型托管</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Sarvam AI</h3>
+    <p><code>sarvam</code> — 印度多语言模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Wafer</h3>
+    <p><code>wafer</code> — Wafer 推理服务</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>GMI Cloud</h3>
+    <p><code>gmicloud</code> — GMI Cloud 托管推理（MiniMax 等）</p>
+  </div>
+</div>
+
+## 国内大模型提供商
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>阿里云百炼</h3>
+    <p><code>alibaba</code> — 通义千问（Qwen）系列</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>阿里云百炼 Token 计划</h3>
+    <p><code>alibaba_tokenplan</code> — 百炼 Token 计划套餐</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>智谱 AI</h3>
+    <p><code>zhipu</code> — GLM 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>月之暗面 Kimi</h3>
+    <p><code>moonshot</code> — Kimi 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>MiniMax</h3>
+    <p><code>minimax</code> — MiniMax 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>腾讯混元</h3>
+    <p><code>tencent</code> — 腾讯混元大模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>百度千帆</h3>
+    <p><code>baidu</code> — 文心一言 / ERNIE 系列</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>硅基流动</h3>
+    <p><code>siliconflow</code> — 国产开源模型聚合平台</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>火山引擎</h3>
+    <p><code>volcengine</code> — 豆包（Doubao）系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>商汤日日新</h3>
+    <p><code>sensenova</code> — SenseNova 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>百川智能</h3>
+    <p><code>baichuan</code> — 百川系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>讯飞星火</h3>
+    <p><code>iflytek</code> — 星火认知大模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>阶跃星辰</h3>
+    <p><code>stepfun</code> — 阶跃 Step 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>小米 MiMo</h3>
+    <p><code>xiaomi_mimo</code> — 小米 MiMo 系列模型</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>魔搭 ModelScope</h3>
+    <p><code>modelscope</code> — 阿里魔搭社区模型推理</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Coze</h3>
+    <p><code>coze</code> — Coze 扣子国际版 Bot API</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Coze（国内版）</h3>
+    <p><code>coze_cn</code> — 扣子国内版 Bot API</p>
+  </div>
+</div>
+
+## 本地 / 自托管推理
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>Ollama</h3>
+    <p><code>ollama</code> — 本地 Ollama 服务（无需 Key）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>vLLM</h3>
+    <p><code>vllm</code> — 自建 vLLM 推理服务（无需 Key）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>SGLang</h3>
+    <p><code>sgl</code> — 自建 SGLang 推理服务（无需 Key）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenCode Free</h3>
+    <p><code>opencode</code> — OpenCode 免费层（免 Key）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenCode Go</h3>
+    <p><code>opencode-go</code> — OpenCode Go 服务</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenCode Zen</h3>
+    <p><code>opencode-zen</code> — OpenCode Zen 服务</p>
+  </div>
+</div>
+
+## 多模态生成
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>ElevenLabs</h3>
+    <p><code>elevenlabs</code> — 语音合成与克隆（TTS）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Runway</h3>
+    <p><code>runway</code> — 视频生成（Gen-3 / Gen-4）</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Runware</h3>
+    <p><code>runware</code> — 图像生成（FLUX 等）</p>
+  </div>
+</div>
+
+:::info 更多信息
+
+- 每个提供商的模型列表、是否需要 API Key、配置步骤，可在 Web UI 的
+  **模型提供商 → 添加提供商** 中查看与配置。
+- 除内置提供商外，celer-route 还支持**自定义提供商**（OpenAI 兼容协议，
+  基于上述基础提供商派生）与自定义模型。
+- 以上列表来自 `core/schemas/bifrost.go` 的 `StandardProviders`，如需最新
+  列表请以 Web UI 中的提供商清单为准。
+
+:::

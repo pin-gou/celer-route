@@ -1,58 +1,49 @@
 ---
-title: "Dashboard Password Protection"
-description: "Two ways to enable password protection on the celer-route admin dashboard: the bootstrap setup-token flow or the operator-side CLI."
+title: "仪表盘密码保护"
+description: "为 celer-route 管理仪表盘设置用户名/密码登录：首次用 CLI 创建管理员，日常在 Web UI 改密码与开关"
 ---
 
-# Dashboard Password Protection
+# 仪表盘密码保护
 
-The celer-route admin dashboard at `http://<host>:8080` can be locked behind
-a username/password. Once enabled, every management API under `/api/*`
-requires HTTP Basic auth with the configured admin credentials, and the UI
-shows the login page instead of the workspace.
+celer-route 的管理仪表盘（`http://<host>:8080`）默认无需登录即可访问。开启
+**仪表盘密码保护**后，打开仪表盘会先要求登录，`/api/*` 下的所有管理接口也会
+要求 HTTP Basic 认证——只有持有管理员凭据的人才能查看或修改设置。
 
-Two paths can create or update the admin account:
+## 工作方式
 
-| Path | When to use | What it requires |
-|------|-------------|------------------|
-| **`PUT /api/config`** with `setup_token` | Network-driven, GUI workflow. | `BIFROST_SETUP_TOKEN` env var (or `setup_token` in config.json) configured **before first boot**. |
-| **`celer-route-admin admin reset`** CLI | Container-driven, operator workflow. | Shell access to the host or `docker exec` into the running container. |
+| 环节 | 说明 |
+|------|------|
+| **登录页** | 开启后访问任意工作区页面都会跳转到登录页，输入用户名/密码后方可进入 |
+| **凭据存储** | 用户名与密码存放在配置存储（SQLite 或 Postgres）；密码以 Argon2id 哈希存储，绝不落盘明文 |
+| **密码策略** | 至少 12 个字符，须包含大写、小写、数字、特殊字符——Web UI 与 CLI 共用同一套策略 |
+| **两条路径** | 首次创建管理员只能用 CLI（或 setup_token）；创建完成后，日常改密码、开关认证都在 Web UI 完成 |
 
-This page focuses on the **CLI**, which is the recommended approach for
-Docker deployments because it does not require a pre-configured setup token.
+## 首次设置（CLI）
 
-## Why a separate CLI?
+全新的 celer-route 实例尚无管理员账号时，无法在 Web UI 里直接设密码——因为
+创建第一个管理员的接口本身还没被保护。Docker 部署下推荐用内置 CLI 直接写入
+管理员记录，无需预配置 `setup_token`。
 
-When a fresh celer-route instance starts without an admin account, the HTTP
-endpoint that *creates* the first admin (`PUT /api/config`) is reachable
-without authentication — otherwise nobody could ever create the first
-admin. To close that window, the HTTP bootstrap requires a one-time
-`setup_token`. That token is a configuration value operators have to mint,
-distribute, and paste into the UI on first login.
+进入 **设置 → 安全 → 仪表盘访问**，把 **仪表盘密码保护** 开关打开。若尚无
+管理员，页面会提示用 CLI 创建：
 
-For Docker users this ceremony is unnecessary: anyone who can `docker exec`
-into the container already has host-level trust, so the CLI writes the admin
-row directly to the config store. The HTTP `setup_token` flow stays in place
-as the network-layer guard for non-Docker deployments.
+![首次设置提示](./dashboard-auth.assets/security-first-time.png)
 
-## Quick start (Docker)
+按提示在宿主机上执行：
 
 ```bash
-# 1. Start the container (config_store block required)
+# 1. 启动容器（需有 config_store 配置段）
 docker compose up -d
 
-# 2. From the host, exec into the container and run the CLI
+# 2. exec 进入容器并运行 CLI
 docker exec -it celer-route \
   celer-route-admin admin reset
 ```
 
-The CLI prints what it is about to do (CREATE the first admin, or RESET
-the password of an existing one), asks for confirmation, then prompts:
+CLI 会先打印当前状态（无管理员 → 将 CREATE，已有管理员 → 将 RESET 密码），
+确认后提示输入用户名与密码，完成后输出：
 
 ```
-New password (12+ chars, mixed case, digit, special):
-  ********
-Confirm password:
-  ********
 Done.
   Admin username: admin
   Auth enabled:   true
@@ -60,11 +51,15 @@ Done.
   Note:           BIFROST_SETUP_TOKEN / setup_token is no longer required for this node.
 ```
 
-Open `http://localhost:8080` and log in with the credentials you just set.
+回到浏览器刷新 **安全** 页面，即可看到用户名/密码管理表单；打开
+`http://localhost:8080` 会显示登录页：
 
-### Scripted / CI usage
+![登录页](./dashboard-auth.assets/login-page.png)
 
-Two flags let you drive the CLI from a pipeline:
+### 脚本 / CI 用法
+
+在流水线中用三个 flag 免交互驱动 CLI（stdin 不是 TTY 时必须用
+`--password-stdin`，以防密码泄漏到进程列表或 CI 日志）：
 
 ```bash
 docker exec -i celer-route \
@@ -75,53 +70,60 @@ docker exec -i celer-route \
   <<< $'NewPassword123!\nNewPassword123!\n'
 ```
 
-- `--username` skips the username prompt.
-- `--password-stdin` reads two lines (password, confirmation) from stdin
-  and skips terminal echo suppression — required when stdin is not a TTY.
-- `--yes` skips the "Proceed? [y/N]" confirmation prompt.
+- `--username` — 跳过用户名提示
+- `--password-stdin` — 从 stdin 读两行（密码、确认密码），非 TTY 时必需
+- `--yes` — 跳过 `[y/N]` 确认
 
-The CLI refuses to run without `--password-stdin` when stdin is not a TTY,
-so the password cannot leak to a process listing or a CI log.
+## 日常管理（Web UI）
 
-## CLI reference
+管理员创建后，所有日常操作都在 **设置 → 安全 → 仪表盘访问** 完成，无需再用
+CLI：
+
+![已启用密码保护](./dashboard-auth.assets/security-enabled.png)
+
+- **开关仪表盘密码保护** — 顶部开关；关闭后仪表盘与 `/api/*` 不再要求认证
+- **改用户名 / 密码** — 直接在用户名、密码输入框修改，点 **保存更改**；密码
+  框会就地校验是否符合策略（12+ 字符、大小写、数字、特殊字符）
+- **退出登录** — 侧边栏底部的 **退出登录** 按钮
+
+:::note
+CLI 创建的管理员已把 `is_enabled` 设为 `true`，所以仪表盘认证在 CLI 运行
+成功后即处于开启状态。如需临时关闭，在 Web UI 关掉开关即可。
+:::
+
+## CLI 参考
 
 ```
 celer-route-admin admin reset [flags]
 
 Flags:
-  --config PATH        Path to the celer-route config.json file. When omitted,
-                       the CLI uses a default SQLite database at <app-dir>/config.db.
-  --app-dir PATH       Application data directory (default: $APP_DIR env var,
-                       or current directory). Used only when --config is not provided.
-  --username NAME      Skip the username prompt and use NAME.
-  --password-stdin     Read the password (and confirmation) from stdin instead
-                       of the terminal.
-  --yes                Skip the interactive confirmation prompt.
+  --config PATH        celer-route config.json 路径。省略时使用
+                       <app-dir>/config.db 下的默认 SQLite 数据库
+  --app-dir PATH       应用数据目录（默认：$APP_DIR 环境变量，或当前目录）；
+                       仅在未提供 --config 时使用
+  --username NAME      跳过用户名提示并使用 NAME
+  --password-stdin     从 stdin 而非终端读取密码（及确认密码）
+  --yes                跳过交互式确认提示
 ```
 
-The command always writes `is_enabled = true` so dashboard auth is on
-after a successful run. To turn auth back off, edit the value in the
-Web UI (Security → Dashboard password protection) or in the config store
-directly.
+在 Docker 容器内通常无需任何 flag——CLI 默认用容器内的 `config.db`，直接
+`celer-route-admin admin reset` 即可。
 
-## What stays the same
+## 安全说明
 
-- The HTTP `PUT /api/config` setup_token flow is unchanged — it still
-  requires `setup_token` (or `BIFROST_SETUP_TOKEN`) for the very first
-  admin row, and `setup_token` is still fail-closed (no token → no admin).
-- Password policy is the same one the Web UI enforces (12+ characters,
-  mixed case, digit, special). It is defined once in
-  `framework/auth` and reused by both the handler and the CLI.
-- Passwords are Argon2id-hashed via `framework/encrypt.Hash` — the CLI
-  never writes plaintext to disk.
+- CLI **不打开**任何网络监听，只读写 `config.json` 声明的配置存储（SQLite 文件
+  或 Postgres DSN）。
+- 运行 CLI 所需的 shell 权限与 `cat config.json` 相同——能读后者的人本就能读
+  现有管理员哈希，因此 CLI 不增加新的攻击面。
+- 多节点部署：共享 Postgres 后端时只需在一个节点运行一次（记录是唯一事实来源）；
+  各节点独立 SQLite 时，需在每个节点上对其本地 `config.db` 各运行一次。
 
-## Security notes
+## 常见场景
 
-- The CLI does **not** open a network listener. It talks only to the
-  config store (SQLite file or Postgres DSN) declared in `config.json`.
-- Running the CLI requires the same shell access as `cat config.json` —
-  anyone who can do the latter can already read the existing admin
-  hash, so the CLI adds no new attack surface.
-- For multi-node deployments, run the CLI once per node against a
-  shared Postgres backend (the row is the source of truth), or once per
-  node against each node's local SQLite DB if you run independent stores.
+- **忘记密码** → 用 `celer-route-admin admin reset` 重置（会 RESET 已有管理员
+  密码，用户名可保持不变）
+- **想临时关闭登录** → Web UI 安全页关掉 **仪表盘密码保护** 开关
+- **CI 自动化初始化** → 用 `--username` + `--password-stdin` + `--yes` 三连，
+  把密码通过 stdin 传入，不落命令行
+- **首次打开开关却看到 CLI 提示** → 正常，此时尚无管理员，按提示用 CLI 创建
+  后刷新页面即可

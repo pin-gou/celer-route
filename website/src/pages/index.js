@@ -4,7 +4,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 import '../css/custom.css';
 
 /* ===== 复用 SVG 图标 ===== */
-const Icon = ({ d, size = 28 }) => (
+const Icon = ({ size = 28, children }) => (
   <svg
     width={size}
     height={size}
@@ -13,8 +13,9 @@ const Icon = ({ d, size = 28 }) => (
     stroke="currentColor"
     strokeWidth="2"
     strokeLinecap="round"
+    strokeLinejoin="round"
   >
-    <path d={d} />
+    {children}
   </svg>
 );
 
@@ -167,9 +168,7 @@ function FeatureCard({ iconKey, title, children }) {
   return (
     <div className="pg-feature-card">
       <div className="icon">
-        <Icon d="" size={28}>
-          {icons[iconKey]}
-        </Icon>
+        <Icon size={28}>{icons[iconKey]}</Icon>
       </div>
       <h3>{title}</h3>
       <p>{children}</p>

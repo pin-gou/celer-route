@@ -101,26 +101,6 @@ celer-route 通过 `config.json` 中的 `config_store` 与 `logs_store` 段配�
 - **批量更新优化** — `UPDATE ... FROM (VALUES ...)` 高效批改
 - **全文搜索** — 基于 `to_tsvector` / `plainto_tsquery`
 
-## ClickHouse（日志存储专用）
-
-`logs_store` 还支持 ClickHouse 类型——为海量日志场景设计：
-
-```json
-{
-  "logs_store": {
-    "enabled": true,
-    "type": "clickhouse",
-    "config": {
-      "host": "clickhouse",
-      "port": "9000",
-      "user": "default",
-      "password": "...",
-      "db_name": "pg_gateway_logs"
-    }
-  }
-}
-```
-
 ## 连接池调优
 
 | 字段                 | 作用                                  | 推荐值（低 / 中 / 高并发）   |
