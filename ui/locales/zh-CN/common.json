@@ -3,6 +3,12 @@
 		"name": "celer-route",
 		"tagline": "AI 网关"
 	},
+	"codeTabs": {
+		"curl": "cURL",
+		"python": "Python",
+		"node": "Node.js",
+		"go": "Go"
+	},
 	"nav": {
 		"home": "首页",
 		"observability": "日志与监控",
@@ -287,12 +293,6 @@
 			"vkLabel": "虚拟 key",
 			"vkPlaceholder": "选择虚拟 key",
 			"vkEmpty": "暂无虚拟 key，请先在治理页面创建。",
-			"codeTabs": {
-				"curl": "cURL",
-				"python": "Python",
-				"node": "Node.js",
-				"go": "Go"
-			},
 			"examples": {
 				"curlLabel": "curl",
 				"pythonLabel": "Python（openai）",

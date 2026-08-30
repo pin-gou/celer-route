@@ -5,10 +5,11 @@ interface UseCopyToClipboardOptions {
 	successMessage?: string;
 	errorMessage?: string;
 	resetDelay?: number;
+	toastOnSuccess?: boolean;
 }
 
 export function useCopyToClipboard(options: UseCopyToClipboardOptions = {}) {
-	const { successMessage = "Copied to clipboard", errorMessage = "Failed to copy", resetDelay = 2000 } = options;
+	const { successMessage = "Copied to clipboard", errorMessage = "Failed to copy", resetDelay = 2000, toastOnSuccess = true } = options;
 	const [copied, setCopied] = useState(false);
 	const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -17,7 +18,7 @@ export function useCopyToClipboard(options: UseCopyToClipboardOptions = {}) {
 			try {
 				await navigator.clipboard.writeText(text);
 				setCopied(true);
-				toast.success(successMessage);
+				if (toastOnSuccess) toast.success(successMessage);
 
 				if (timeoutRef.current) clearTimeout(timeoutRef.current);
 				timeoutRef.current = setTimeout(() => setCopied(false), resetDelay);
@@ -25,7 +26,7 @@ export function useCopyToClipboard(options: UseCopyToClipboardOptions = {}) {
 				toast.error(errorMessage);
 			}
 		},
-		[successMessage, errorMessage, resetDelay],
+		[successMessage, errorMessage, resetDelay, toastOnSuccess],
 	);
 
 	return { copy, copied };

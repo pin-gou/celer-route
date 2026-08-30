@@ -323,11 +323,14 @@ function skippedComment(skipped: string[], prefix: string): string {
 /**
  * Options accepted by the four language-specific generators.
  * `vkValue` is the literal API key string; `vkName` is shown only as a comment.
+ * `enforceAuth` indicates whether the gateway enforces API-key auth on
+ * inference — when false, auth headers/keys are omitted from the snippet.
  */
 interface CommandOptions {
 	baseUrl?: string;
 	vkValue?: string | null;
 	vkName?: string | null;
+	enforceAuth?: boolean;
 }
 
 /**
@@ -354,13 +357,13 @@ export function generateRoutingTestCommandCurl(rule: RoutingRule, opts: CommandO
 	};
 	if (resolvedModel) body.model = resolvedModel;
 
-	const authValue = opts.vkValue ?? "${PG_API_KEY}";
+	const authValue = opts.vkValue ?? "${CELER_ROUTE_API_KEY}";
+	const needsAuth = !!opts.vkValue || opts.enforceAuth === true;
 
-	const lines: string[] = [
-		`curl -X POST ${targetUrl} \\`,
-		`  -H "Content-Type: application/json" \\`,
-		`  -H "Authorization: Bearer ${authValue}" \\`,
-	];
+	const lines: string[] = [`curl -X POST ${targetUrl} \\`, `  -H "Content-Type: application/json" \\`];
+	if (needsAuth) {
+		lines.push(`  -H "Authorization: Bearer ${authValue}" \\`);
+	}
 	if (rule.scope === "virtual_key" && rule.scope_id) {
 		lines.push(`  -H "x-bf-vk: ${rule.scope_id}" \\`);
 	}
@@ -378,7 +381,8 @@ export function generateRoutingTestCommandPython(rule: RoutingRule, opts: Comman
 	const baseUrl = defaultBaseUrl(opts.baseUrl).replace(/\/$/, "");
 	const targetUrl = fullUrl(baseUrl, endpoint, paramPairs);
 
-	const apiKeyExpr = opts.vkValue ? `"${opts.vkValue}"` : `os.environ["PG_API_KEY"]`;
+	const apiKeyExpr = opts.vkValue ? `"${opts.vkValue}"` : `os.environ["CELER_ROUTE_API_KEY"]`;
+	const needsAuth = !!opts.vkValue || opts.enforceAuth === true;
 	const vkHeaderLine = rule.scope === "virtual_key" && rule.scope_id ? `    "x-bf-vk": "${rule.scope_id}",\n` : "";
 
 	const body: Record<string, unknown> = {
@@ -388,13 +392,17 @@ export function generateRoutingTestCommandPython(rule: RoutingRule, opts: Comman
 	const bodyStr = JSON.stringify(body, null, 4).replace(/\n/g, "\n");
 
 	const lines: string[] = [
-		`import os`,
+		...(needsAuth ? [`import os`] : []),
 		`import httpx`,
 		``,
 		`headers = {`,
 		vkHeaderLine,
 		`    "Content-Type": "application/json",`,
-		`    "Authorization": f"Bearer ${apiKeyExpr}",`,
+	];
+	if (needsAuth) {
+		lines.push(`    "Authorization": f"Bearer ${apiKeyExpr}",`);
+	}
+	lines.push(
 		`}`,
 		``,
 		`payload = ${bodyStr}`,
@@ -407,7 +415,7 @@ export function generateRoutingTestCommandPython(rule: RoutingRule, opts: Comman
 		`)`,
 		`resp.raise_for_status()`,
 		`print(resp.json())`,
-	];
+	);
 
 	return lines.join("\n") + skippedComment(skipped, "#");
 }
@@ -420,7 +428,8 @@ export function generateRoutingTestCommandNode(rule: RoutingRule, opts: CommandO
 	const baseUrl = defaultBaseUrl(opts.baseUrl).replace(/\/$/, "");
 	const baseForSdk = baseUrl.replace(/\/v1$/, "");
 
-	const apiKeyValue = opts.vkValue ? `"${opts.vkValue}"` : "process.env.PG_API_KEY";
+	const apiKeyValue = opts.vkValue ? `"${opts.vkValue}"` : "process.env.CELER_ROUTE_API_KEY";
+	const needsAuth = !!opts.vkValue || opts.enforceAuth === true;
 	const vkHeaderLine = rule.scope === "virtual_key" && rule.scope_id ? `    "x-bf-vk": "${rule.scope_id}",\n` : "";
 
 	const body: Record<string, unknown> = {
@@ -429,11 +438,13 @@ export function generateRoutingTestCommandNode(rule: RoutingRule, opts: CommandO
 	if (resolvedModel) body.model = resolvedModel;
 	const bodyStr = JSON.stringify(body, null, 2);
 
-	const lines: string[] = [
-		`import OpenAI from "openai";`,
-		``,
-		`const client = new OpenAI({`,
-		`  apiKey: ${apiKeyValue},`,
+	const lines: string[] = [`import OpenAI from "openai";`, ``];
+	if (needsAuth) {
+		lines.push(`const client = new OpenAI({`, `  apiKey: ${apiKeyValue},`);
+	} else {
+		lines.push(`const client = new OpenAI({`);
+	}
+	lines.push(
 		`  baseURL: "${baseForSdk}",`,
 		`  defaultHeaders: {`,
 		vkHeaderLine.replace(/\n$/, ""),
@@ -445,7 +456,7 @@ export function generateRoutingTestCommandNode(rule: RoutingRule, opts: CommandO
 		`const resp = await fetch(payload, { method: "POST" });`,
 		`const data = await resp.json();`,
 		`console.log(data);`,
-	];
+	);
 
 	const cleaned = lines.filter((l, idx, arr) => !(l === "" && arr[idx - 1] === ""));
 	return cleaned.join("\n") + skippedComment(skipped, "//");
@@ -459,24 +470,33 @@ export function generateRoutingTestCommandGo(rule: RoutingRule, opts: CommandOpt
 	const baseUrl = defaultBaseUrl(opts.baseUrl).replace(/\/$/, "");
 	const baseForSdk = baseUrl.replace(/\/v1$/, "");
 
-	const apiKeyExpr = opts.vkValue ? `"${opts.vkValue}"` : `os.Getenv("PG_API_KEY")`;
-	const vkHeaderLine = rule.scope === "virtual_key" && rule.scope_id ? `\t\toption.WithHeader("x-bf-vk", "${rule.scope_id}"),\n` : "";
+	const apiKeyExpr = opts.vkValue ? `"${opts.vkValue}"` : `os.Getenv("CELER_ROUTE_API_KEY")`;
+	const needsAuth = !!opts.vkValue || opts.enforceAuth === true;
+	const vkHeaderLine = rule.scope === "virtual_key" && rule.scope_id ? `\t\toption.WithHeader("x-bf-vk", "${rule.scope_id}"),` : "";
+
+	const imports: string[] = [`\t"context"`, `\t"fmt"`, `\t"github.com/openai/openai-go"`, `\t"github.com/openai/openai-go/option"`];
+	if (needsAuth && !opts.vkValue) {
+		imports.push(`\t"os"`);
+	}
+	imports.sort();
+
+	const clientArgs: string[] = [];
+	if (vkHeaderLine) clientArgs.push(vkHeaderLine);
+	clientArgs.push(`\t\toption.WithBaseURL("${baseForSdk}"),`);
+	if (needsAuth) {
+		clientArgs.push(`\t\toption.WithAPIKey(${apiKeyExpr}),`);
+	}
 
 	const lines: string[] = [
 		`package main`,
 		``,
 		`import (`,
-		`\t"context"`,
-		`\t"fmt"`,
-		`\t"os"`,
-		`\t"github.com/openai/openai-go"`,
-		`\t"github.com/openai/openai-go/option"`,
+		...imports,
 		`)`,
 		``,
 		`func main() {`,
 		`\tclient := openai.NewClient(`,
-		`${vkHeaderLine}\t\toption.WithBaseURL("${baseForSdk}"),`,
-		`${vkHeaderLine ? "\t" : ""}\t\toption.WithAPIKey(${apiKeyExpr}),`,
+		...clientArgs,
 		`\t)`,
 		`\tresp, err := client.Chat.Completions.New(`,
 		`\t\tcontext.Background(),`,

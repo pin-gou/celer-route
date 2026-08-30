@@ -3,6 +3,12 @@
 		"name": "celer-route",
 		"tagline": "AI Gateway"
 	},
+	"codeTabs": {
+		"curl": "cURL",
+		"python": "Python",
+		"node": "Node.js",
+		"go": "Go"
+	},
 	"nav": {
 		"home": "Home",
 		"observability": "Observability",
@@ -287,12 +293,6 @@
 			"vkLabel": "Virtual key",
 			"vkPlaceholder": "Select a virtual key",
 			"vkEmpty": "No API keys yet. Create one in Governance → API Keys.",
-			"codeTabs": {
-				"curl": "cURL",
-				"python": "Python",
-				"node": "Node.js",
-				"go": "Go"
-			},
 			"examples": {
 				"curlLabel": "curl",
 				"pythonLabel": "Python (openai)",

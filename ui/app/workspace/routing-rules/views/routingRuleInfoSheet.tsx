@@ -1,11 +1,11 @@
 import { SheetNavigationButtons } from "@/components/sheetNavigationButtons";
+import { TestCommandTabs } from "@/components/testCommandPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DottedSeparator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { useSheetNavigation } from "@/hooks/useSheetNavigation";
@@ -486,20 +486,39 @@ interface TestCommandPanelProps {
 }
 
 function TestCommandPanel({ rule, vkValue, vkName, enforceAuth, virtualKeys, selectedVkId, onSelectVk }: TestCommandPanelProps) {
-	const { t } = useTranslation("routing");
-	const [tab, setTab] = useState("curl");
+	const { t } = useTranslation(["routing", "common"]);
 
-	const curlCode = useMemo(() => generateRoutingTestCommandCurl(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
-	const pythonCode = useMemo(() => generateRoutingTestCommandPython(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
-	const nodeCode = useMemo(() => generateRoutingTestCommandNode(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
-	const goCode = useMemo(() => generateRoutingTestCommandGo(rule, { vkValue, vkName }), [rule, vkValue, vkName]);
+	const curlCode = useMemo(
+		() => generateRoutingTestCommandCurl(rule, { vkValue, vkName, enforceAuth }),
+		[rule, vkValue, vkName, enforceAuth],
+	);
+	const pythonCode = useMemo(
+		() => generateRoutingTestCommandPython(rule, { vkValue, vkName, enforceAuth }),
+		[rule, vkValue, vkName, enforceAuth],
+	);
+	const nodeCode = useMemo(
+		() => generateRoutingTestCommandNode(rule, { vkValue, vkName, enforceAuth }),
+		[rule, vkValue, vkName, enforceAuth],
+	);
+	const goCode = useMemo(() => generateRoutingTestCommandGo(rule, { vkValue, vkName, enforceAuth }), [rule, vkValue, vkName, enforceAuth]);
 
-	const tabs: Array<{ id: string; label: string; code: string; testId: string }> = [
-		{ id: "curl", label: t("infoSheet.testCommandPanel.codeTabs.curl"), code: curlCode, testId: "curl" },
-		{ id: "python", label: t("infoSheet.testCommandPanel.codeTabs.python"), code: pythonCode, testId: "python" },
-		{ id: "node", label: t("infoSheet.testCommandPanel.codeTabs.node"), code: nodeCode, testId: "node" },
-		{ id: "go", label: t("infoSheet.testCommandPanel.codeTabs.go"), code: goCode, testId: "go" },
-	];
+	const tabs = useMemo(
+		() =>
+			[
+				{ id: "curl", label: t("codeTabs.curl"), code: curlCode },
+				{ id: "python", label: t("codeTabs.python"), code: pythonCode },
+				{ id: "node", label: t("codeTabs.node"), code: nodeCode },
+				{ id: "go", label: t("codeTabs.go"), code: goCode },
+			].map((tabItem) => ({
+				...tabItem,
+				copyLabel: t("infoSheet.testCommandPanel.copyTab", { language: tabItem.label }),
+				copyText: "Copy",
+				copiedLabel: "Copied",
+				showCopiedState: true,
+				toastOnCopy: false,
+			})),
+		[curlCode, pythonCode, nodeCode, goCode, t],
+	);
 
 	return (
 		<div className="space-y-3" data-testid="routing-rule-test-command">
@@ -532,64 +551,7 @@ function TestCommandPanel({ rule, vkValue, vkName, enforceAuth, virtualKeys, sel
 				</div>
 			)}
 
-			<Tabs value={tab} onValueChange={setTab} data-testid="routing-rule-test-command-tabs">
-				<TabsList>
-					{tabs.map((tabItem) => (
-						<TabsTrigger key={tabItem.id} value={tabItem.id} data-testid={`routing-rule-test-command-tab-${tabItem.testId}`}>
-							{tabItem.label}
-						</TabsTrigger>
-					))}
-				</TabsList>
-				{tabs.map((tabItem) => (
-					<TabsContent key={tabItem.id} value={tabItem.id}>
-						<CodeBlock
-							code={tabItem.code}
-							testId={`routing-rule-test-command-${tabItem.testId}`}
-							copyTestId={`routing-rule-test-command-copy-${tabItem.testId}`}
-							copyLabel={t("infoSheet.testCommandPanel.copyTab", { language: tabItem.label })}
-						/>
-					</TabsContent>
-				))}
-			</Tabs>
-		</div>
-	);
-}
-
-interface CodeBlockProps {
-	code: string;
-	testId: string;
-	copyTestId: string;
-	copyLabel: string;
-}
-
-function CodeBlock({ code, testId, copyTestId, copyLabel }: CodeBlockProps) {
-	const [copied, setCopied] = useState(false);
-
-	const handleCopy = async () => {
-		try {
-			await navigator.clipboard.writeText(code);
-			setCopied(true);
-			window.setTimeout(() => setCopied(false), 1500);
-		} catch {
-			toast.error("Copy failed");
-		}
-	};
-
-	return (
-		<div className="relative" data-testid={testId}>
-			<pre className="overflow-x-auto rounded-md border bg-zinc-950 px-4 py-3 font-mono text-xs whitespace-pre text-zinc-100">
-				<code>{code}</code>
-			</pre>
-			<button
-				type="button"
-				onClick={handleCopy}
-				className="absolute top-2 right-2 flex items-center gap-1 rounded p-1 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-				aria-label={copyLabel}
-				data-testid={copyTestId}
-			>
-				{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-				<span className="text-[11px]">{copied ? "Copied" : "Copy"}</span>
-			</button>
+			<TestCommandTabs tabs={tabs} testIdPrefix="routing-rule-test-command" />
 		</div>
 	);
 }

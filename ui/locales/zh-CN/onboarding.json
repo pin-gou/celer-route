@@ -86,12 +86,6 @@
 	"yourEndpoint": "你的 OpenAI 兼容端点",
 	"copyEndpoint": "复制 URL",
 	"copiedEndpoint": "已复制",
-	"codeTabs": {
-		"curl": "cURL",
-		"python": "Python",
-		"node": "Node.js",
-		"go": "Go"
-	},
 	"alreadySetUpNotice": "你的 celer-route 已经配置完成。可以随时重新运行此向导。",
 	"section": {
 		"security": "安全",

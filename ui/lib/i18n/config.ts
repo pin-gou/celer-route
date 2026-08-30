@@ -132,6 +132,7 @@ i18n
 		},
 		react: {
 			useSuspense: false,
+			nsMode: "fallback",
 		},
 		returnObjects: false,
 	});

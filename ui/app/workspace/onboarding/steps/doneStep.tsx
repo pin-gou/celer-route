@@ -1,12 +1,13 @@
+import { TestCommandTabs } from "@/components/testCommandPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetModelsQuery, useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { useGetVirtualKeysQuery } from "@/lib/store/apis/governanceApi";
 import { useGetCoreConfigQuery } from "@/lib/store";
 import { RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
+import { buildExamples, resolveEndpointUrl } from "@/lib/utils/testCommandSnippets";
 import { Copy, KeyRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,11 +21,10 @@ interface Props {
 }
 
 export default function DoneStep({ selectedProvider, onProviderChange, selectedModel, onModelChange }: Props) {
-	const { t } = useTranslation("onboarding");
+	const { t } = useTranslation(["onboarding", "common"]);
 	const { data: providers } = useGetProvidersQuery();
 	const { data: bifrostConfig } = useGetCoreConfigQuery({});
-	const url = defaultEndpoint();
-	const [tab, setTab] = useState("curl");
+	const url = resolveEndpointUrl();
 
 	const enforceAuth = !!bifrostConfig?.client_config?.enforce_auth_on_inference;
 	const { data: vksResponse } = useGetVirtualKeysQuery(undefined, { skip: !enforceAuth });
@@ -79,6 +79,17 @@ export default function DoneStep({ selectedProvider, onProviderChange, selectedM
 	const examples = useMemo(
 		() => buildExamples(url, model, enforceAuth ? (selectedVk?.value ?? null) : null),
 		[url, model, enforceAuth, selectedVk],
+	);
+
+	const tabs = useMemo(
+		() =>
+			[
+				{ id: "curl", label: t("codeTabs.curl"), code: examples.curl },
+				{ id: "python", label: t("codeTabs.python"), code: examples.python },
+				{ id: "node", label: t("codeTabs.node"), code: examples.node },
+				{ id: "go", label: t("codeTabs.go"), code: examples.go },
+			].map((tabItem) => ({ ...tabItem, copySuccessMessage: t("copiedEndpoint") })),
+		[examples, t],
 	);
 
 	const handleCopy = async (text: string) => {
@@ -182,115 +193,7 @@ export default function DoneStep({ selectedProvider, onProviderChange, selectedM
 				</div>
 			)}
 
-			<Tabs value={tab} onValueChange={setTab}>
-				<TabsList>
-					<TabsTrigger value="curl">{t("codeTabs.curl")}</TabsTrigger>
-					<TabsTrigger value="python">{t("codeTabs.python")}</TabsTrigger>
-					<TabsTrigger value="node">{t("codeTabs.node")}</TabsTrigger>
-					<TabsTrigger value="go">{t("codeTabs.go")}</TabsTrigger>
-				</TabsList>
-				<TabsContent value="curl">
-					<CodeBlock code={examples.curl} onCopy={() => void handleCopy(examples.curl)} />
-				</TabsContent>
-				<TabsContent value="python">
-					<CodeBlock code={examples.python} onCopy={() => void handleCopy(examples.python)} />
-				</TabsContent>
-				<TabsContent value="node">
-					<CodeBlock code={examples.node} onCopy={() => void handleCopy(examples.node)} />
-				</TabsContent>
-				<TabsContent value="go">
-					<CodeBlock code={examples.go} onCopy={() => void handleCopy(examples.go)} />
-				</TabsContent>
-			</Tabs>
+			<TestCommandTabs tabs={tabs} />
 		</div>
 	);
-}
-
-function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
-	return (
-		<div className="relative">
-			<pre className="overflow-x-auto rounded-md border bg-zinc-950 px-4 py-3 text-xs text-zinc-100">
-				<code>{code}</code>
-			</pre>
-			<button
-				type="button"
-				onClick={onCopy}
-				className="absolute top-2 right-2 rounded p-1 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-				aria-label="Copy"
-			>
-				<Copy className="h-4 w-4" />
-			</button>
-		</div>
-	);
-}
-
-function defaultEndpoint(): string {
-	if (typeof window === "undefined") return "http://localhost:8080/v1";
-	return `${window.location.origin}/v1`;
-}
-
-function buildExamples(baseUrl: string, model: string, vkValue: string | null) {
-	const url = baseUrl.replace(/\/$/, "");
-
-	const curlLines = [`curl ${url}/chat/completions \\`, `  -H "Content-Type: application/json" \\`];
-	if (vkValue) {
-		curlLines.push(`  -H "Authorization: Bearer ${vkValue}" \\`);
-	}
-	curlLines.push(`  -d '{`, `    "model": "${model}",`, `    "messages": [{"role": "user", "content": "Hello!"}]`, `  }'`);
-	const curl = curlLines.join("\n");
-
-	const apiKeyLine = vkValue ? `    api_key="${vkValue}",` : null;
-	const nodeApiKey = vkValue ? `  apiKey: "${vkValue}",` : null;
-	const goApiKey = vkValue ? `\t\toption.WithAPIKey("${vkValue}"),` : null;
-
-	const python = `from openai import OpenAI
-
-client = OpenAI(
-    base_url="${url}",${apiKeyLine ? `\n${apiKeyLine}` : ""}
-)
-
-resp = client.chat.completions.create(
-    model="${model}",
-    messages=[{"role": "user", "content": "Hello!"}],
-)
-print(resp.choices[0].message.content)`;
-
-	const node = `import OpenAI from "openai";
-
-const client = new OpenAI({${nodeApiKey ? `\n${nodeApiKey}` : ""}
-  baseURL: "${url}",
-});
-
-const resp = await client.chat.completions.create({
-  model: "${model}",
-  messages: [{ role: "user", content: "Hello!" }],
-});
-console.log(resp.choices[0].message.content);`;
-
-	const go = `package main
-
-import (
-	"context"
-	"fmt"
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-)
-
-func main() {
-	client := openai.NewClient(
-		option.WithBaseURL("${url}"),${goApiKey ? `\n${goApiKey}` : ""}
-	)
-	resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model: openai.F("${model}"),
-		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage("Hello!"),
-		}),
-	})
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(resp.Choices[0].Message.Content)
-}`;
-
-	return { curl, python, node, go };
 }

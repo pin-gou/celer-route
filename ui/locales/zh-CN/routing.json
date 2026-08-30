@@ -232,13 +232,7 @@
 			"vkPlaceholder": "选择一个虚拟密钥",
 			"vkEmpty": "还没有 API 密钥。请到治理 → API 密钥 中创建。",
 			"usingVk": "正在使用：{{name}}",
-			"copyTab": "复制 {{language}} 代码片段",
-			"codeTabs": {
-				"curl": "cURL",
-				"python": "Python",
-				"node": "Node.js",
-				"go": "Go"
-			}
+			"copyTab": "复制 {{language}} 代码片段"
 		}
 	},
 	"tree": {

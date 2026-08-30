@@ -232,13 +232,7 @@
 			"vkPlaceholder": "Select a virtual key",
 			"vkEmpty": "No API keys yet. Create one in Governance → API Keys.",
 			"usingVk": "Using key: {{name}}",
-			"copyTab": "Copy {{language}} snippet",
-			"codeTabs": {
-				"curl": "cURL",
-				"python": "Python",
-				"node": "Node.js",
-				"go": "Go"
-			}
+			"copyTab": "Copy {{language}} snippet"
 		}
 	},
 	"tree": {
