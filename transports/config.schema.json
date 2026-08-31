@@ -3398,12 +3398,12 @@
                         "properties": {
                           "id": {
                             "type": "string",
-                            "enum": ["rtk"],
-                            "description": "Engine id. Currently only \"rtk\" is supported; unknown ids fail-soft (skip + warn)."
+                            "enum": ["rtk", "caveman"],
+                            "description": "Engine id. rtk compresses tool output / assistant code blocks; caveman compresses user-role prose. Unknown ids fail-soft (skip + warn)."
                           },
                           "config": {
                             "type": "object",
-                            "description": "Engine-specific config override (currently unused for id=rtk; reserved for future engines)"
+                            "description": "Engine-specific config override (currently unused for id=rtk; caveman settings live under the caveman object; reserved for future engines)"
                           }
                         },
                         "additionalProperties": false
@@ -3428,6 +3428,61 @@
                         "type": "string"
                       },
                       "default": []
+                    },
+                    "caveman": {
+                      "type": "object",
+                      "description": "Configuration for the Caveman prose-compression engine. Caveman is opt-in (enabled defaults to false); when enabled it compresses user-role message text via rule-based transformations and participates in the pipeline as the \"caveman\" engine",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "description": "Enable the Caveman prose-compression engine. Default false (opt-in)",
+                          "default": false
+                        },
+                        "intensity": {
+                          "type": "string",
+                          "description": "Compression aggressiveness: lite (safe) | full (balanced) | ultra (maximum abbreviations)",
+                          "enum": ["lite", "full", "ultra"],
+                          "default": "lite"
+                        },
+                        "language": {
+                          "type": "string",
+                          "description": "Rule pack selection: auto (detect per message) | en | zh",
+                          "enum": ["auto", "en", "zh"],
+                          "default": "auto"
+                        },
+                        "min_message_length": {
+                          "type": "integer",
+                          "description": "Minimum message length (runes) before a user message is eligible for compression. Shorter messages pass through unchanged",
+                          "minimum": 0,
+                          "default": 50
+                        },
+                        "compress_roles": {
+                          "type": "array",
+                          "description": "Message roles Caveman may compress. Default [\"user\"] (system is never touched to protect prompt-cache prefix stability)",
+                          "items": {
+                            "type": "string",
+                            "enum": ["user", "assistant", "system"]
+                          },
+                          "default": ["user"]
+                        },
+                        "skip_rules": {
+                          "type": "array",
+                          "description": "Blacklist of rule names to skip. Empty = all rules run",
+                          "items": {
+                            "type": "string"
+                          },
+                          "default": []
+                        },
+                        "preserve_patterns": {
+                          "type": "array",
+                          "description": "Extra user-supplied regexes for regions to protect from compression (on top of the built-in 17 preservation patterns)",
+                          "items": {
+                            "type": "string"
+                          },
+                          "default": []
+                        }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "additionalProperties": false

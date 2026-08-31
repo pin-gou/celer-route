@@ -356,6 +356,15 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			renderers: pluginConfig.renderers ?? [],
 			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
 			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
+			caveman: {
+				enabled: pluginConfig.caveman?.enabled ?? false,
+				intensity: pluginConfig.caveman?.intensity ?? "lite",
+				language: pluginConfig.caveman?.language ?? "auto",
+				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
+				compress_roles: pluginConfig.caveman?.compress_roles ?? ["user"],
+				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
+				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
+			},
 		},
 	});
 
@@ -395,6 +404,15 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			renderers: pluginConfig.renderers ?? [],
 			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
 			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
+			caveman: {
+				enabled: pluginConfig.caveman?.enabled ?? false,
+				intensity: pluginConfig.caveman?.intensity ?? "lite",
+				language: pluginConfig.caveman?.language ?? "auto",
+				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
+				compress_roles: pluginConfig.caveman?.compress_roles ?? ["user"],
+				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
+				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
+			},
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [JSON.stringify(pluginConfig)]);
@@ -676,6 +694,197 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 									</FormItem>
 								)}
 							/>
+						</div>
+					</fieldset>
+
+					{/* ── Caveman: prose compression engine (opt-in) ─────────────────── */}
+					<fieldset className="rounded-lg border p-4" data-testid="caveman-section">
+						<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.cavemanSection")}</legend>
+						<div className="mt-2 space-y-4">
+							<p className="text-muted-foreground text-xs">{t("rtk.cavemanIntro")}</p>
+							<FormField
+								control={form.control}
+								name="caveman.enabled"
+								render={({ field }) => (
+									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+										<FormControl>
+											<Switch
+												data-testid="caveman-field-enabled"
+												checked={field.value}
+												onCheckedChange={field.onChange}
+												disabled={!hasUpdateAccess}
+											/>
+										</FormControl>
+										<div className="space-y-1 leading-none">
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.cavemanEnabledLabel")}</FormLabel>
+												<HelpHint>{t("rtk.cavemanEnabledWhen")}</HelpHint>
+											</div>
+											<FormDescription>{t("rtk.cavemanEnabledDescription")}</FormDescription>
+										</div>
+									</FormItem>
+								)}
+							/>
+							{form.watch("caveman.enabled") && (
+								<>
+									<div className="grid gap-4 sm:grid-cols-2">
+										<FormField
+											control={form.control}
+											name="caveman.intensity"
+											render={({ field }) => (
+												<FormItem>
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.cavemanIntensityLabel")}</FormLabel>
+														<HelpHint>{t("rtk.cavemanIntensityWhen")}</HelpHint>
+													</div>
+													<Select value={field.value} onValueChange={field.onChange} disabled={!hasUpdateAccess}>
+														<FormControl>
+															<SelectTrigger data-testid="caveman-field-intensity">
+																<SelectValue placeholder={t("rtk.cavemanIntensityPlaceholder")} />
+															</SelectTrigger>
+														</FormControl>
+														<SelectContent>
+															{(["lite", "full", "ultra"] as const).map((v) => (
+																<SelectItem key={v} value={v}>
+																	{t(`rtk.cavemanIntensity${v.charAt(0).toUpperCase()}${v.slice(1)}`)}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+													<FormDescription>{t("rtk.cavemanIntensityDescription")}</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+										<FormField
+											control={form.control}
+											name="caveman.language"
+											render={({ field }) => (
+												<FormItem>
+													<div className="flex items-center gap-1.5">
+														<FormLabel>{t("rtk.cavemanLanguageLabel")}</FormLabel>
+														<HelpHint>{t("rtk.cavemanLanguageWhen")}</HelpHint>
+													</div>
+													<Select value={field.value} onValueChange={field.onChange} disabled={!hasUpdateAccess}>
+														<FormControl>
+															<SelectTrigger data-testid="caveman-field-language">
+																<SelectValue placeholder={t("rtk.cavemanLanguagePlaceholder")} />
+															</SelectTrigger>
+														</FormControl>
+														<SelectContent>
+															<SelectItem value="auto">{t("rtk.cavemanLanguageAuto")}</SelectItem>
+															<SelectItem value="en">{t("rtk.cavemanLanguageEn")}</SelectItem>
+															<SelectItem value="zh">{t("rtk.cavemanLanguageZh")}</SelectItem>
+														</SelectContent>
+													</Select>
+													<FormDescription>{t("rtk.cavemanLanguageDescription")}</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									</div>
+									<FormField
+										control={form.control}
+										name="caveman.min_message_length"
+										render={({ field }) => (
+											<FormItem>
+												<div className="flex items-center gap-1.5">
+													<FormLabel>{t("rtk.cavemanMinLengthLabel")}</FormLabel>
+													<HelpHint>{t("rtk.cavemanMinLengthWhen")}</HelpHint>
+												</div>
+												<FormControl>
+													<Input
+														data-testid="caveman-field-min-length"
+														type="number"
+														min={0}
+														{...field}
+														onChange={(e) => field.onChange(Number(e.target.value))}
+													/>
+												</FormControl>
+												<FormDescription>{t("rtk.cavemanMinLengthDescription")}</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="caveman.compress_roles"
+										render={({ field }) => (
+											<FormItem>
+												<div className="flex items-center gap-1.5">
+													<FormLabel>{t("rtk.cavemanRolesLabel")}</FormLabel>
+													<HelpHint>{t("rtk.cavemanRolesWhen")}</HelpHint>
+												</div>
+												<FormControl>
+													<Textarea
+														data-testid="caveman-field-roles"
+														className="font-mono text-xs"
+														rows={2}
+														placeholder={JSON.stringify(["user"])}
+														{...field}
+														value={Array.isArray(field.value) ? JSON.stringify(field.value) : ""}
+														onChange={(e) => {
+															try {
+																field.onChange(JSON.parse(e.target.value));
+															} catch {
+																field.onChange(e.target.value);
+															}
+														}}
+													/>
+												</FormControl>
+												<FormDescription>{t("rtk.cavemanRolesDescription")}</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="caveman.skip_rules"
+										render={({ field }) => (
+											<FormItem>
+												<div className="flex items-center gap-1.5">
+													<FormLabel>{t("rtk.cavemanSkipRulesLabel")}</FormLabel>
+													<HelpHint>{t("rtk.cavemanSkipRulesWhen")}</HelpHint>
+												</div>
+												<FormControl>
+													<Input
+														data-testid="caveman-field-skip-rules"
+														placeholder="e.g. pleasantries, articles"
+														{...field}
+														value={Array.isArray(field.value) ? field.value.join(", ") : ""}
+														onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
+													/>
+												</FormControl>
+												<FormDescription>{t("rtk.cavemanSkipRulesDescription")}</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="caveman.preserve_patterns"
+										render={({ field }) => (
+											<FormItem>
+												<div className="flex items-center gap-1.5">
+													<FormLabel>{t("rtk.cavemanPreserveLabel")}</FormLabel>
+													<HelpHint>{t("rtk.cavemanPreserveWhen")}</HelpHint>
+												</div>
+												<FormControl>
+													<Input
+														data-testid="caveman-field-preserve-patterns"
+														placeholder="e.g. THE_BRAND_NAME"
+														{...field}
+														value={Array.isArray(field.value) ? field.value.join(", ") : ""}
+														onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
+													/>
+												</FormControl>
+												<FormDescription>{t("rtk.cavemanPreserveDescription")}</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+								</>
+							)}
 						</div>
 					</fieldset>
 

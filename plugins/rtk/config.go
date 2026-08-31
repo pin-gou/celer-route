@@ -122,6 +122,12 @@ type Config struct {
 	// SnapshotMaxBytes caps the total bytes persisted per request across all
 	// snapshots. Default 30 KiB, minimum 1 KiB, maximum 256 KiB.
 	SnapshotMaxBytes int `json:"snapshot_max_bytes"`
+
+	// Caveman configures the Caveman prose-compression engine. Default is
+	// disabled (opt-in); when enabled it compresses user-role message text
+	// via rule-based transformations. Runs as the "caveman" engine in the
+	// pipeline.
+	Caveman CavemanConfig `json:"caveman"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -191,6 +197,11 @@ func (c *Config) Validate() error {
 	// SnapshotMaxBytes validation: clamp at apply time, here we only reject negative.
 	if c.SnapshotMaxBytes < 0 {
 		return fmt.Errorf("rtk: snapshot_max_bytes must be >= 0, got %d", c.SnapshotMaxBytes)
+	}
+	// Caveman sub-config validation — only meaningful when the Caveman engine
+	// is enabled, but always checked so misconfiguration fails fast.
+	if err := c.Caveman.Validate(); err != nil {
+		return fmt.Errorf("rtk: invalid caveman config: %w", err)
 	}
 	return nil
 }
@@ -316,4 +327,9 @@ func applyConfigDefaults(c *Config) {
 	} else if c.SnapshotMaxBytes > 256*1024 {
 		c.SnapshotMaxBytes = 256 * 1024
 	}
+
+	// Caveman defaults: Caveman stays opt-in (Enabled=false unless the
+	// operator sets it), but its tunables are defaulted so the engine
+	// behaves predictably the moment it is switched on.
+	normalizeCavemanConfig(&c.Caveman)
 }

@@ -101,7 +101,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
 
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
-			result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, cfg)
+			result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
 			if err != nil || result == "" || result == text {
 				compressedTotal += origTokens
 				continue
@@ -161,7 +161,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
 
 				// Compress through the PipelineRunner.
-				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, cfg)
+				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
 				if err != nil || result == "" || result == text {
 					compressedTotal += origTokens
 					continue
@@ -204,7 +204,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						originalTotal += origTokens
 						appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
 						// Assistant messages go through the pipeline runner too.
-						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "assistant"), text, defaultCfg)
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -248,7 +248,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
 						appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
-						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, defaultCfg)
+						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "assistant"), text, defaultCfg)
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -276,6 +276,48 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				}
 			}
 		}
+
+		// --- Caveman: user-role prose compression (V-caveman) ---
+		// Compress plain-text user messages through the Caveman engine. Gated
+		// by config.Caveman.Enabled and the CompressRoles whitelist (default
+		// ["user"]; system/assistant are never touched unless explicitly
+		// added). Anthropic user messages that carry tool_result blocks are
+		// deliberately skipped — those blocks are tool output handled by the
+		// RTK path above, not user prose.
+		if msg.Role == schemas.ChatMessageRoleUser &&
+			cavemanAppliesToRole(config, string(schemas.ChatMessageRoleUser)) &&
+			!carriesToolResult(msg) {
+			text, ok := getUserProseContent(msg)
+			if ok && text != "" {
+				origTokens := estimateTokens(text)
+				originalTotal += origTokens
+				appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
+				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, string(schemas.ChatMessageRoleUser)), text, defaultCfg)
+				if err == nil && result != "" && result != text {
+					if len(ptrs) > 0 {
+						state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+					}
+					if filterMatched != "" && state.FilterMatched == "" {
+						state.FilterMatched = filterMatched
+					}
+					ratio := 1.0 - float64(estimateTokens(result))/float64(origTokens)
+					if ratio >= 0.05 {
+						applyUserProseContent(msg, result)
+						anyCompressed = true
+						compressedTotal += estimateTokens(result)
+						if len(techs) > 0 {
+							state.Techniques = append(state.Techniques, techs...)
+						} else {
+							state.Techniques = append(state.Techniques, "pipeline-runner")
+						}
+					} else {
+						compressedTotal += origTokens
+					}
+				} else {
+					compressedTotal += origTokens
+				}
+			}
+		}
 	}
 
 	if anyCompressed {
@@ -298,10 +340,11 @@ func applyRtkCompressionWithDefaults(req *schemas.BifrostRequest, p *Plugin) *Co
 	}
 	// Ensure config defaults are applied so Pipeline is non-nil.
 	applyConfigDefaults(p.config)
-	// Create a local catalog with the rtk engine registered, so the pipeline
-	// runner can find and execute it.
+	// Create a local catalog with the rtk and caveman engines registered, so
+	// the pipeline runner can find and execute them.
 	catalog := NewEngineCatalog()
 	catalog.RegisterEngine("rtk", &rtkEngine{plugin: p})
+	catalog.RegisterEngine("caveman", &cavemanEngine{plugin: p})
 	runner := NewPipelineRunner(catalog)
 	pipeline := &Pipeline{Engines: make([]string, len(p.config.Pipeline))}
 	for i, step := range p.config.Pipeline {
@@ -320,6 +363,7 @@ func applyRtkCompressionResponsesWithDefaults(req *schemas.BifrostRequest, p *Pl
 	applyConfigDefaults(p.config)
 	catalog := NewEngineCatalog()
 	catalog.RegisterEngine("rtk", &rtkEngine{plugin: p})
+	catalog.RegisterEngine("caveman", &cavemanEngine{plugin: p})
 	runner := NewPipelineRunner(catalog)
 	pipeline := &Pipeline{Engines: make([]string, len(p.config.Pipeline))}
 	for i, step := range p.config.Pipeline {
@@ -371,6 +415,47 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 
 	for i := range input {
 		msg := &input[i]
+
+		// --- Caveman: user-role prose compression (Responses path) ---
+		// Responses-style user input is a "message" item with role=user and a
+		// ContentStr or text ContentBlocks. Gated by the same Caveman config
+		// as the chat path.
+		if msg.Type != nil && *msg.Type == schemas.ResponsesMessageTypeMessage &&
+			msg.Role != nil && *msg.Role == schemas.ResponsesInputMessageRoleUser &&
+			cavemanAppliesToRole(config, "user") &&
+			msg.ResponsesToolMessage == nil {
+			text, ok := getResponsesUserProse(msg)
+			if ok && text != "" {
+				origTokens := estimateTokens(text)
+				originalTotal += origTokens
+				appendSnapshot(state, i, "user", "", text)
+				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "user"), text, defaultCfg)
+				if err == nil && result != "" && result != text {
+					if len(ptrs) > 0 {
+						state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
+					}
+					if filterMatched != "" && state.FilterMatched == "" {
+						state.FilterMatched = filterMatched
+					}
+					ratio := 1.0 - float64(estimateTokens(result))/float64(origTokens)
+					if ratio >= 0.05 {
+						applyResponsesUserProse(msg, result)
+						anyCompressed = true
+						compressedTotal += estimateTokens(result)
+						if len(techs) > 0 {
+							state.Techniques = append(state.Techniques, techs...)
+						} else {
+							state.Techniques = append(state.Techniques, "pipeline-runner")
+						}
+					} else {
+						compressedTotal += origTokens
+					}
+				} else {
+					compressedTotal += origTokens
+				}
+			}
+		}
+
 		if msg.Type == nil || *msg.Type != schemas.ResponsesMessageTypeFunctionCallOutput {
 			continue
 		}
@@ -418,8 +503,9 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		}
 		appendSnapshot(state, i, "tool", name, text)
 
-		// Compress through the PipelineRunner.
-		result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, pipeline, text, cfg)
+		// Compress through the PipelineRunner (tool-role filtered so a
+		// stacked pipeline only runs its RTK-scoped engines here).
+		result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
 		if err != nil || result == "" || result == text {
 			compressedTotal += origTokens
 			continue
@@ -519,6 +605,51 @@ func applyResponsesToolOutput(out *schemas.ResponsesToolMessageOutputStruct, con
 				block.Text = &text
 				return
 			}
+		}
+	}
+}
+
+// getResponsesUserProse extracts plain prose from a Responses-style user
+// message ("message" item with role=user). Handles ContentStr and text-type
+// ContentBlocks. Returns ok=false when there is no compressible text.
+func getResponsesUserProse(msg *schemas.ResponsesMessage) (string, bool) {
+	if msg == nil || msg.Content == nil {
+		return "", false
+	}
+	if msg.Content.ContentStr != nil {
+		return *msg.Content.ContentStr, true
+	}
+	if len(msg.Content.ContentBlocks) > 0 {
+		var text string
+		for _, block := range msg.Content.ContentBlocks {
+			if block.Type == schemas.ResponsesInputMessageContentBlockTypeText && block.Text != nil {
+				text += *block.Text
+			}
+		}
+		return text, text != ""
+	}
+	return "", false
+}
+
+// applyResponsesUserProse writes compressed prose back to a Responses-style
+// user message.
+func applyResponsesUserProse(msg *schemas.ResponsesMessage, text string) {
+	if msg == nil || msg.Content == nil {
+		return
+	}
+	if msg.Content.ContentStr != nil {
+		msg.Content.ContentStr = &text
+		return
+	}
+	if len(msg.Content.ContentBlocks) > 0 {
+		for i := range msg.Content.ContentBlocks {
+			if msg.Content.ContentBlocks[i].Type == schemas.ResponsesInputMessageContentBlockTypeText {
+				msg.Content.ContentBlocks[i].Text = &text
+				return
+			}
+		}
+		if len(msg.Content.ContentBlocks) > 0 {
+			msg.Content.ContentBlocks[0].Text = &text
 		}
 	}
 }
@@ -995,6 +1126,79 @@ func getToolContent(msg *schemas.ChatMessage) (string, bool) {
 	return "", false
 }
 
+// getUserProseContent extracts plain prose from a user message. It reads
+// ContentStr or text-type ContentBlocks, skipping any non-text blocks (images,
+// files). Returns ok=false when the message carries no compressible prose.
+func getUserProseContent(msg *schemas.ChatMessage) (string, bool) {
+	if msg == nil || msg.Content == nil {
+		return "", false
+	}
+	if msg.Content.ContentStr != nil {
+		return *msg.Content.ContentStr, true
+	}
+	if len(msg.Content.ContentBlocks) > 0 {
+		var text string
+		for _, block := range msg.Content.ContentBlocks {
+			if block.Type == schemas.ChatContentBlockTypeText && block.Text != nil {
+				text += *block.Text
+			}
+		}
+		return text, text != ""
+	}
+	return "", false
+}
+
+// applyUserProseContent writes compressed prose back to a user message.
+func applyUserProseContent(msg *schemas.ChatMessage, text string) {
+	if msg.Content == nil {
+		return
+	}
+	if msg.Content.ContentStr != nil {
+		msg.Content.ContentStr = &text
+		return
+	}
+	if len(msg.Content.ContentBlocks) > 0 {
+		for i := range msg.Content.ContentBlocks {
+			if msg.Content.ContentBlocks[i].Type == schemas.ChatContentBlockTypeText {
+				msg.Content.ContentBlocks[i].Text = &text
+				return
+			}
+		}
+		// Fallback: set the first block's text.
+		if len(msg.Content.ContentBlocks) > 0 {
+			msg.Content.ContentBlocks[0].Text = &text
+		}
+	}
+}
+
+// carriesToolResult reports whether a user message carries Anthropic-style
+// tool_result content blocks (tool output, not user prose).
+func carriesToolResult(msg *schemas.ChatMessage) bool {
+	if msg == nil || msg.Content == nil {
+		return false
+	}
+	for i := range msg.Content.ContentBlocks {
+		if isToolResultBlock(&msg.Content.ContentBlocks[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// cavemanAppliesToRole reports whether the Caveman engine should process a
+// given message role per the plugin config (enabled + CompressRoles whitelist).
+func cavemanAppliesToRole(config *Config, role string) bool {
+	if config == nil || !config.Caveman.Enabled {
+		return false
+	}
+	for _, r := range config.Caveman.CompressRoles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
 // applyToolContent writes the compressed text back to the tool message.
 func applyToolContent(msg *schemas.ChatMessage, text string) {
 	if msg.Content.ContentStr != nil {
@@ -1019,6 +1223,42 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// enginesForRole returns a copy of the pipeline filtered to the engines that
+// apply to a given message role. RTK targets tool output and assistant text;
+// Caveman targets user prose. This keeps a stacked pipeline (e.g.
+// [{id:"rtk"},{id:"caveman"}]) from cross-applying engines to the wrong
+// message class: tool messages only run RTK engines, user messages only run
+// Caveman. Unknown engine ids are preserved (fail-soft forward compatibility).
+func enginesForRole(pipeline *Pipeline, role string) *Pipeline {
+	if pipeline == nil || len(pipeline.Engines) == 0 {
+		return pipeline
+	}
+	var keep []string
+	for _, id := range pipeline.Engines {
+		if engineAppliesToRole(id, role) {
+			keep = append(keep, id)
+		}
+	}
+	if len(keep) == len(pipeline.Engines) {
+		return pipeline
+	}
+	return &Pipeline{Engines: keep}
+}
+
+// engineAppliesToRole reports whether a compression engine id applies to a
+// message role. "rtk" is scoped to tool/assistant content; "caveman" is
+// scoped to user prose. Unknown ids apply to every role (fail-soft).
+func engineAppliesToRole(id, role string) bool {
+	switch id {
+	case "rtk":
+		return role != string(schemas.ChatMessageRoleUser)
+	case "caveman":
+		return role == string(schemas.ChatMessageRoleUser)
+	default:
+		return true
+	}
 }
 
 func min(a, b int) int {

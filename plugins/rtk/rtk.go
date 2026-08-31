@@ -115,6 +115,12 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, appDir str
 	// interface.
 	RegisterEngine(&rtkEngine{plugin: p})
 
+	// Register the Caveman prose-compression engine in the same catalog.
+	// Caveman is opt-in (Config.Caveman.Enabled defaults to false); once
+	// enabled it can be referenced from the pipeline as {id:"caveman"} and
+	// compresses user-role message text via rule-based transformations.
+	RegisterEngine(&cavemanEngine{plugin: p})
+
 	return p, nil
 }
 

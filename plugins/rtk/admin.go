@@ -315,9 +315,11 @@ type CompressionMode string
 const (
 	// CompressionModeRTK runs a single RTK pass.
 	CompressionModeRTK CompressionMode = "rtk"
+	// CompressionModeCaveman runs a single Caveman prose pass.
+	CompressionModeCaveman CompressionMode = "caveman"
 	// CompressionModeStacked runs the configured Pipeline as a stacked
-	// pipeline. Today the only registered engine is "rtk"; future caveman
-	// engines will appear as additional stages.
+	// pipeline. Today the registered engines are "rtk" and "caveman";
+	// future engines will appear as additional stages.
 	CompressionModeStacked CompressionMode = "stacked"
 	// CompressionModeOff returns the payload unchanged (baseline).
 	CompressionModeOff CompressionMode = "off"
@@ -365,6 +367,9 @@ func (p *Plugin) PreviewCompression(req PreviewRequest) PreviewResponse {
 		Result:         TestResult{Techniques: []string{}},
 		EnginesPlanned: []string{"rtk"},
 	}
+	if mode == CompressionModeCaveman {
+		resp.EnginesPlanned = []string{"caveman"}
+	}
 
 	if p == nil || p.config == nil {
 		// Plugin not loaded — behave like "off".
@@ -406,6 +411,21 @@ func (p *Plugin) PreviewCompression(req PreviewRequest) PreviewResponse {
 
 	runner := NewPipelineRunner(globalCatalog)
 	pipeline := &Pipeline{Engines: []string{"rtk"}}
+	if mode == CompressionModeCaveman {
+		pipeline = &Pipeline{Engines: []string{"caveman"}}
+		resp.EnginesPlanned = []string{"caveman"}
+	}
+	if mode == CompressionModeStacked && len(orig.Pipeline) > 0 {
+		pipeline = &Pipeline{Engines: make([]string, 0, len(orig.Pipeline))}
+		for _, step := range orig.Pipeline {
+			if step.ID != "" {
+				pipeline.Engines = append(pipeline.Engines, step.ID)
+			}
+		}
+		if len(pipeline.Engines) > 0 {
+			resp.EnginesPlanned = pipeline.Engines
+		}
+	}
 	// Pass the payload's command hint through to the engine so the preview
 	// routes identically to the real PreLLMHook path (which forwards the
 	// extracted command from the tool call). Without this, preview would
@@ -427,21 +447,6 @@ func (p *Plugin) PreviewCompression(req PreviewRequest) PreviewResponse {
 			ratio = 0
 		}
 		resp.Result.CompressionRatio = ratio
-	}
-
-	// If the mode is "stacked", populate EnginesPlanned with whatever the
-	// configured pipeline declares. Today only "rtk" exists; the field is
-	// forward-compatible with future caveman / llmlingua engines.
-	if mode == CompressionModeStacked && len(orig.Pipeline) > 0 {
-		ids := make([]string, 0, len(orig.Pipeline))
-		for _, step := range orig.Pipeline {
-			if step.ID != "" {
-				ids = append(ids, step.ID)
-			}
-		}
-		if len(ids) > 0 {
-			resp.EnginesPlanned = ids
-		}
 	}
 
 	// Match the filter that would have been selected so the UI can label

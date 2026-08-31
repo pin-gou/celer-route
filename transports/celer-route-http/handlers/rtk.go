@@ -556,10 +556,10 @@ func (h *RtkHandler) postPreview(ctx *fasthttp.RequestCtx) {
 	}
 	if req.Mode != "" {
 		switch req.Mode {
-		case rtk.CompressionModeRTK, rtk.CompressionModeStacked, rtk.CompressionModeOff:
+		case rtk.CompressionModeRTK, rtk.CompressionModeCaveman, rtk.CompressionModeStacked, rtk.CompressionModeOff:
 		default:
 			SendError(ctx, fasthttp.StatusBadRequest,
-				fmt.Sprintf("invalid mode %q (expected rtk | stacked | off)", req.Mode))
+				fmt.Sprintf("invalid mode %q (expected rtk | caveman | stacked | off)", req.Mode))
 			return
 		}
 	}
