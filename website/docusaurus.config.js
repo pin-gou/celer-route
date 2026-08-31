@@ -55,7 +55,7 @@ const config = {
     image: 'img/social-card.png',
     navbar: {
       title: 'celer-route',
-      logo: { alt: 'celer-route', src: 'img/logo.svg' },
+      logo: { alt: 'celer-route', src: 'img/logo-light.svg', srcDark: 'img/logo-dark.svg' },
       items: [
         {
           type: 'docSidebar',
@@ -91,8 +91,8 @@ const config = {
       copyright: `Copyright © ${new Date().getFullYear()} celer-route`,
     },
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      theme: prismThemes.oneDark,
+      darkTheme: prismThemes.oneDark,
       additionalLanguages: ['json', 'bash', 'go', 'yaml'],
     },
   },

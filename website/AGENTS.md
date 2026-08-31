@@ -62,6 +62,7 @@ docs/features/
 
 - 通过 hooks 协议启动 celer-route（`pg-invoke-hook.py`，见根 AGENTS.md §环境生命周期），**不要**直接 `make dev`。
 - 用 Chrome DevTools MCP 截图；截图前**先把界面切到简体中文**（侧边栏语言开关 → 简体中文）。
+- 截图前必须先**关闭 Dev Profiler**：点击 Dev Profiler 面板的 **Dismiss** 按钮（收起/Minimize 不算完成，面板仍会显示一行 CPU/Heap/Goroutines 摘要，会污染截图），确认页面上不再出现「Dev Profiler」字样后再截图。
 - 截图存入该文档的 `.assets/` 目录（见上文「图片存放约定」），mdx 用相对路径引用。
 
 ### 6. 结构模板

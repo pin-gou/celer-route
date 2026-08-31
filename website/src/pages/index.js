@@ -91,16 +91,16 @@ function ArchSvg() {
     <svg viewBox="0 0 700 360" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#2563eb" />
-          <stop offset="100%" stopColor="#7c3aed" />
+          <stop offset="0%" stopColor="#047857" />
+          <stop offset="100%" stopColor="#10b981" />
         </linearGradient>
         <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#059669" />
-          <stop offset="100%" stopColor="#10b981" />
+          <stop offset="100%" stopColor="#34d399" />
         </linearGradient>
         <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#d97706" />
-          <stop offset="100%" stopColor="#f59e0b" />
+          <stop offset="0%" stopColor="#0d9488" />
+          <stop offset="100%" stopColor="#2dd4bf" />
         </linearGradient>
         <marker
           id="arr"
@@ -111,25 +111,25 @@ function ArchSvg() {
           markerHeight="5"
           orient="auto"
         >
-          <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8" />
+          <path d="M0,0 L10,5 L0,10 z" fill="#a1a1aa" />
         </marker>
       </defs>
 
       <rect x="40" y="20" width="620" height="95" rx="10" fill="url(#g1)" opacity="0.12" />
       <rect x="40" y="20" width="620" height="95" rx="10" stroke="url(#g1)" strokeWidth="2" fill="none" />
       <text x="60" y="50" fontSize="14" fontWeight="700" fill="currentColor">L1 · 客户端层</text>
-      <text x="60" y="72" fontSize="12" fill="#64748b">
+      <text x="60" y="72" fontSize="12" fill="#71717b">
         OpenAI SDK / Anthropic SDK / Bedrock SDK / GenAI SDK / LangChain / LiteLLM / 标准 HTTP 客户端
       </text>
       <rect x="60" y="85" width="140" height="24" rx="6" fill="url(#g1)" opacity="0.25" />
       <text x="72" y="102" fontSize="11" fontWeight="600" fill="currentColor">统一 API 入口</text>
 
-      <line x1="350" y1="115" x2="350" y2="132" stroke="#94a3b8" strokeWidth="1.5" markerEnd="url(#arr)" />
+      <line x1="350" y1="115" x2="350" y2="132" stroke="#a1a1aa" strokeWidth="1.5" markerEnd="url(#arr)" />
 
       <rect x="40" y="138" width="620" height="110" rx="10" fill="url(#g2)" opacity="0.12" />
       <rect x="40" y="138" width="620" height="110" rx="10" stroke="url(#g2)" strokeWidth="2" fill="none" />
       <text x="60" y="168" fontSize="14" fontWeight="700" fill="currentColor">L2 · 网关引擎层</text>
-      <text x="60" y="190" fontSize="12" fill="#64748b">
+      <text x="60" y="190" fontSize="12" fill="#71717b">
         celer-route Core · 请求排队 · 推理路由 · 故障转移 · 中间件管道
       </text>
       <rect x="60" y="205" width="96" height="28" rx="6" fill="url(#g2)" opacity="0.25" />
@@ -141,12 +141,12 @@ function ArchSvg() {
       <rect x="384" y="205" width="96" height="28" rx="6" fill="url(#g2)" opacity="0.25" />
       <text x="396" y="224" fontSize="11" fontWeight="600" fill="currentColor">路由规则</text>
 
-      <line x1="350" y1="248" x2="350" y2="265" stroke="#94a3b8" strokeWidth="1.5" markerEnd="url(#arr)" />
+      <line x1="350" y1="248" x2="350" y2="265" stroke="#a1a1aa" strokeWidth="1.5" markerEnd="url(#arr)" />
 
       <rect x="40" y="270" width="620" height="70" rx="10" fill="url(#g3)" opacity="0.12" />
       <rect x="40" y="270" width="620" height="70" rx="10" stroke="url(#g3)" strokeWidth="2" fill="none" />
       <text x="60" y="300" fontSize="14" fontWeight="700" fill="currentColor">L3 · 提供商适配层</text>
-      <text x="60" y="322" fontSize="12" fill="#64748b">30+ 适配器 · 统一接口 · 各提供商独立 worker 池</text>
+      <text x="60" y="322" fontSize="12" fill="#71717b">30+ 适配器 · 统一接口 · 各提供商独立 worker 池</text>
       <rect x="60" y="325" width="80" height="22" rx="6" fill="url(#g3)" opacity="0.25" />
       <text x="70" y="340" fontSize="10" fontWeight="600" fill="currentColor">openai</text>
       <rect x="148" y="325" width="80" height="22" rx="6" fill="url(#g3)" opacity="0.25" />

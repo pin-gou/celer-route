@@ -23,7 +23,7 @@ export default {
     {
       type: 'category',
       label: 'Provider 接入',
-      items: ['providers/supported-providers'],
+      items: ['providers/supported-providers', 'providers/recommended-providers'],
     },
   ],
 };
