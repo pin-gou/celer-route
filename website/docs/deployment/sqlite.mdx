@@ -21,7 +21,35 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="docker" label="Docker Compose（推荐）" default>
+<TabItem value="docker-run" label="docker run（推荐）" default>
+
+直接拉取官方镜像并启动一条命令搞定，无需任何 Compose 或源码构建。**与首页「快速开始」的命令完全一致。**
+
+```bash
+docker pull ghcr.io/pin-gou/celer-route:latest
+docker run -d \
+  --name celer-route \
+  --restart unless-stopped \
+  --user 0:0 \
+  -p 8080:8080 \
+  -v ~/celer-route-data:/app/data \
+  ghcr.io/pin-gou/celer-route:latest
+```
+
+启动后访问 [`http://localhost:8080`](http://localhost:8080) 进入 Web 管理界面。
+
+要查看容器日志、停止容器、进入容器，分别执行：
+
+```bash
+docker logs -f celer-route          # 跟踪日志
+docker stop celer-route            # 停止
+docker start celer-route           # 再次启动
+docker rm -f celer-route           # 删除容器（数据卷 ~/celer-route-data 不会被删）
+docker exec -it celer-route sh     # 进入容器
+```
+
+</TabItem>
+<TabItem value="compose" label="Docker Compose">
 
 仓库根目录 [`examples/dockers/`](https://github.com/pin-gou/celer-route/tree/master/examples/dockers) 提供了完整示例：
 
@@ -30,15 +58,16 @@ cd examples/dockers
 docker compose up -d
 ```
 
-启动后访问 [`http://localhost:8080`](http://localhost:8080) 进入 Web 管理界面。
+适合需要把多个辅助服务（如未来的 pg / redis）一起编排的场景；单机试用优先用上面的 `docker run`。
 
 </TabItem>
 <TabItem value="binary" label="二进制">
 
+适合需要本地调试或自定义构建的场景：
+
 ```bash
-# 1. 下载镜像中的二进制（或 make build）
+# 1. 编译二进制（产物在 transports/celer-route-http/）
 make build
-# 产物在 transports/celer-route-http/
 
 # 2. 准备数据目录
 mkdir -p ~/celer-route-data
@@ -89,19 +118,15 @@ mkdir -p ~/celer-route-data
 
 ## 数据持久化
 
-SQLite 是单文件数据库，**必须将数据目录挂载到宿主机**才能保证容器重启后数据不丢：
+SQLite 是单文件数据库，**必须将数据目录挂载到宿主机**才能保证容器重启后数据不丢——上面的 `docker run` 已经通过 `-v ~/celer-route-data:/app/data` 做了这件事，数据落在宿主机的 `~/celer-route-data/` 下。
 
-```yaml
-# docker-compose.yml 片段
-volumes:
-  - ./data:/app/data
-```
+如需迁移到其他目录，把宿主机路径改掉即可，例如 `-v /srv/celer-route-data:/app/data`。容器内 `/app/data` 由镜像固定，**不要**改动。
 
 文件权限：
 
 ```bash
-# 容器内运行用户为 appuser，确保 /app/data 可写
-chown -R 1000:1000 ./data
+# 容器内进程以 UID:GID=1000:0 运行，需要 GID 1000 才能写 /app/data
+chown -R 1000:1000 ~/celer-route-data
 ```
 
 ## 备份

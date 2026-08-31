@@ -1,0 +1,181 @@
+---
+title: "Deployment: SQLite (single-node / quick start)"
+description: "Deployment guide for using SQLite as the config_store and logs_store"
+sidebar_position: 1
+---
+
+# Deployment: SQLite
+
+The SQLite mode is designed for **single-node deployment, trial use, and PoC**.
+Zero external dependencies — start it up and go.
+
+## When to use
+
+- A single-node celer-route instance
+- Trial / demo / PoC
+- Low write volume (logs < 1000 QPS)
+- You want to avoid the operational overhead of PostgreSQL
+
+## Quick start
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs>
+<TabItem value="docker-run" label="docker run (recommended)" default>
+
+Pull the official image and start it with one command — no Compose file or
+source build required. **Identical to the command on the home page's
+"Quick Start" section.**
+
+```bash
+docker pull ghcr.io/pin-gou/celer-route:latest
+docker run -d \
+  --name celer-route \
+  --restart unless-stopped \
+  --user 0:0 \
+  -p 8080:8080 \
+  -v ~/celer-route-data:/app/data \
+  ghcr.io/pin-gou/celer-route:latest
+```
+
+Once it is up, open [`http://localhost:8080`](http://localhost:8080) to reach the
+Web admin UI.
+
+To inspect logs, stop, restart, remove, or shell into the container:
+
+```bash
+docker logs -f celer-route          # follow logs
+docker stop celer-route            # stop
+docker start celer-route           # start again
+docker rm -f celer-route           # remove the container (the volume ~/celer-route-data is kept)
+docker exec -it celer-route sh     # shell into the container
+```
+
+</TabItem>
+<TabItem value="compose" label="Docker Compose">
+
+The repo root ships a complete example under
+[`examples/dockers/`](https://github.com/pin-gou/celer-route/tree/master/examples/dockers):
+
+```bash
+cd examples/dockers
+docker compose up -d
+```
+
+Use Compose when you need to orchestrate the gateway with other sidecar
+services (for example, a future pg / redis). For a single-node trial,
+`docker run` above is the simpler path.
+
+</TabItem>
+<TabItem value="binary" label="Binary">
+
+Use this when you want to debug locally or build a custom binary:
+
+```bash
+# 1. Build the binary (artifact at transports/celer-route-http/)
+make build
+
+# 2. Prepare a data directory
+mkdir -p ~/celer-route-data
+
+# 3. Prepare config.json (see the example below)
+
+# 4. Launch
+./main -app-dir ~/celer-route-data -port 8080
+```
+
+</TabItem>
+</Tabs>
+
+## Configuration example
+
+A complete `config.json` (lives at `${app-dir}/config.json`):
+
+```json
+{
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/config.db"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/logs.db"
+    }
+  },
+  "client": {
+    "drop_excess_requests": false,
+    "initial_pool_size": 5000,
+    "enable_logging": true,
+    "log_retention_days": 365
+  },
+  "framework": {
+    "pricing": {
+      "pricing_url": "https://getbifrost.ai/datasheet",
+      "pricing_sync_interval": 86400
+    }
+  }
+}
+```
+
+## Data persistence
+
+SQLite is a single-file database. **You must mount the data directory to the host**
+to survive container restarts — the `docker run` command above already does this
+via `-v ~/celer-route-data:/app/data`, so the data lives in `~/celer-route-data/`
+on the host.
+
+To relocate the data, change only the host path; for example
+`-v /srv/celer-route-data:/app/data`. The container-side `/app/data` is fixed by
+the image and **must not be changed**.
+
+File permissions:
+
+```bash
+# The container runs as UID:GID=1000:0; it needs GID 1000 to write /app/data
+chown -R 1000:1000 ~/celer-route-data
+```
+
+## Backup
+
+```bash
+# Recommended: online hot backup (no lock)
+sqlite3 /app/data/config.db ".backup '/backup/config.db.$(date +%Y%m%d)'"
+sqlite3 /app/data/logs.db   ".backup '/backup/logs.db.$(date +%Y%m%d)'"
+
+# Container scenario
+docker exec celer-route sqlite3 /app/data/config.db \
+  ".backup '/backup/config.db.$(date +%Y%m%d)'"
+```
+
+See [Data Storage Backends — Backup & Restore](../features/data-storage#backup--restore)
+for the full procedure.
+
+## Limitations
+
+- **Single-writer lock** — SQLite allows only one writer at a time and becomes the
+  bottleneck under heavy concurrent writes
+- **No horizontal scaling** — Multi-replica SQLite deployments will diverge
+  (use only for single-instance)
+- **Not suitable as shared storage** — SQLite on NFS does not meet production
+  performance or reliability standards
+- For large log volumes (> 10 GB), switch to PostgreSQL or ClickHouse
+
+## Upgrade to PostgreSQL
+
+When a single-node deployment no longer meets your needs, you can migrate smoothly
+to PostgreSQL:
+
+1. Stop the current celer-route container
+2. Edit `config.json` and change both stores' `type` to `"postgres"`, filling in the
+   connection parameters
+3. Start the new backend; celer-route will create the schema in the new database
+   automatically
+4. (Optional) Restore historical log data from your SQLite backups
+
+See [Data Storage Backends — PostgreSQL](../features/data-storage#postgresql).
