@@ -3,9 +3,44 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createGzip } from "node:zlib";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Plugin } from "vite";
 import { defineConfig } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Dev-server gzip compression (Vite's dev server doesn't gzip by default).
+// Compress any response that asks for gzip and isn't already compressed.
+function gzipDevCompression(): Plugin {
+	return {
+		name: "dev-gzip-compression",
+		configureServer(server) {
+			server.middlewares.use((req: IncomingMessage, res: ServerResponse, next) => {
+				const accept = req.headers["accept-encoding"];
+				if (!accept || !accept.includes("gzip")) {
+					next();
+					return;
+				}
+				const doCompress = () => {
+					if (res.getHeader("Content-Encoding") || !res.hasHeader("Content-Length")) {
+						return;
+					}
+					const bodyLength = Number(res.getHeader("Content-Length") ?? 0);
+					if (bodyLength < 1024) {
+						return;
+					}
+					res.setHeader("Content-Encoding", "gzip");
+					res.setHeader("Vary", "Accept-Encoding");
+					res.removeHeader("Content-Length");
+					res.pipe(createGzip());
+				};
+				res.on("pipe", doCompress);
+				next();
+			});
+		},
+	};
+}
 
 export default defineConfig({
 	plugins: [
@@ -25,6 +60,7 @@ export default defineConfig({
 		}),
 		react(),
 		tailwindcss(),
+		gzipDevCompression(),
 	],
 	resolve: {
 		alias: {
