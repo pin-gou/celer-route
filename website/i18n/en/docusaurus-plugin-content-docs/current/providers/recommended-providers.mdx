@@ -1,0 +1,166 @@
+---
+title: "Free-tier recommendations"
+description: "Home-page 'Free-tier recommendations' card — at-a-glance free providers and one-click onboarding entry points"
+sidebar_position: 2
+---
+
+# Free-tier recommendations
+
+The **Free-tier recommendations** card at the top of the home page groups the
+LLM / multimodal providers that still have free quotas by use case. Click a
+card to **onboard in one click** — no need to dig through each provider's
+registration docs.
+
+The card's source is an operator-maintained free-provider catalog (two JSON
+files hosted on GitHub). The gateway fetches the latest snapshot on startup
+and refreshes periodically, rendering the home page in the current UI
+language. You don't need to configure anything locally — as long as the
+gateway can reach the external catalog source, updates appear on the home
+page automatically.
+
+## What you see on the home page
+
+Cards are shown by **bundle (use-case grouping)**, common stable groupings
+include Coding, Data Science, Image Generation, etc. Each bundle holds a
+group of **provider cards** carrying:
+
+| Field | Meaning (from the user's perspective) |
+|-------|---------------------------------------|
+| Provider name | The vendor for this entry; when it matches a provider you already have, the card shows "Configured" and links straight to its detail page |
+| Model tags | The free models recommended for this entry — see at a glance whether it fits your need |
+| Validity | Time-limited free offers are tagged "Free until yyyy-mm-dd"; perpetual free offers show no such label |
+| Protocol badge | Non-built-in entries show "Based on the openai / anthropic … protocol" (configured as a custom provider) |
+| Description | A short description of quota, rate limits, application tips |
+
+The top-right corner of each card has a **Limited-time free** badge, with
+the timestamp "Updated at yyyy-MM-dd HH:mm:ss" underneath.
+
+![Free-tier card on the home page](./recommended-providers.assets/free-tier-card.png)
+
+Each bundle header shows the count of providers under it (`{{count}}
+providers`); the grid is 1/2/3/4-column responsive on desktop.
+
+## Three states of a provider card
+
+Click a card and it shows different states depending on the relationship
+between the entry and your current instance:
+
+- **Unconfigured**: orange-toned card with a **Apply** outbound link (to the
+  provider's registration page) and a **One-click configure** button
+- **Configured**: card turns into a link to the provider's detail page,
+  showing a **Configured** badge and a health indicator dot; click to view
+  the provider's current status
+- **Unsupported**: when the current gateway version can't onboard the
+  provider (not in the built-in list, no legitimate compatibility-protocol
+  fallback), the card is greyed out, only the apply link remains, the
+  one-click configure entry is removed, and it is labeled
+  **Currently not supported by this version**
+
+For keyless entries (e.g. OpenCode Free), the button label becomes
+**Keyless — add directly**, and clicking adds the provider without pasting
+an API key.
+
+## How to use: one-click onboarding
+
+For an unconfigured free entry:
+
+1. Find the target provider card on the home page and click **One-click
+   configure** (or **Keyless — add directly** for keyless entries)
+2. In the configuration dialog, confirm:
+   - **Apply**: jump to the provider's registration page (an external icon
+     indicates the new tab opens), follow the "Application steps" in the
+     catalog, complete registration, and obtain an API key
+   - **API key**: paste the obtained key into the input; this step is
+     skipped for keyless entries
+   - **Models**: the dialog shows the models recommended for this entry as
+     a reference
+3. Click **Add provider** to submit; a "Provider configured successfully"
+   toast appears in the top-right on completion
+
+After submission, the card flips from orange "One-click configure" to blue
+**Configured**, and links directly to that provider's detail page so you can
+immediately inspect key status and health.
+
+## What if I don't see any recommendations?
+
+If the home page shows only an empty-state card that says **"No free tier
+available right now — please try again later."** with a **Retry** button,
+there is no bundle list available right now (catalog fetch failed, upstream
+catalog empty, or remote-catalog module disabled on the gateway).
+
+Two common scenarios:
+
+- **Network or upstream catalog temporarily unreachable**: wait a few minutes
+  and click **Retry**, or check in the browser dev tools that the
+  `/api/catalog/bundles` request returns 200
+- **Gateway has disabled the remote-catalog module**: that module is turned
+  off in the gateway's config; please report to the gateway admin for your
+  environment
+
+## Maintaining the free catalog (for operators / repo maintainers)
+
+> This section is for repo maintainers and catalog operators — regular
+> users don't need to read this far.
+
+The free-catalog source lives in two JSON files in the repo (one Chinese,
+one English; structures must match exactly):
+
+```
+website/static/recommended-providers/
+├── zh-CN.json
+└── en.json
+```
+
+The catalog is hosted on the project's GitHub Pages and is the single
+source of truth for the running gateway — after a catalog update, every
+running gateway (that hasn't disabled the remote-catalog module) will pick
+up the new entries on its next refresh.
+
+### Bundle classification convention
+
+A bundle's `id` is a stable slug; the home page, i18n, UI tests, and GitHub
+Pages URLs all anchor on these ids. **Renaming / merging / splitting is not
+allowed.** Current stable groupings:
+
+| `id` | Chinese label | English label | User scenario |
+|------|--------------|---------------|---------------|
+| `coding` | 编程开发 | Coding & Development | Code completion, bug hunting, code review, scripting |
+| `data-science` | 数据科学 | Data Science | Data analysis, NL→SQL/Pandas, reports, charts |
+| `image-generation` | 图像生成 | Image Generation | Text-to-image, illustration, icons, posters, avatars |
+| `speech` (opt-in) | 语音 / TTS STT | Speech | Voiceover, meeting notes, subtitles, audiobooks |
+| `video` (opt-in) | 视频生成 | Video Generation | Promos, product demos, text-to-video |
+
+Classification reflects **user scenario** ("when does a user open this
+catalog"), not vendor capability or price tier. Each vendor sits in a
+single bundle by primary use case — **never duplicated across bundles**.
+
+Add a bundle when that scenario has **≥ 2 real usable free providers**;
+delete a bundle when every provider in that scenario is offline — no empty
+shells.
+
+### Per-entry field rules
+
+- Non-built-in entries must fill in the custom-provider fallback protocol
+  and base URL, otherwise the server flags `supported=false` and the
+  one-click configure entry disappears
+- Keep `provider` keys stable — renaming will misalign clients that
+  already cached the row
+- Don't flip the "keyless" flag arbitrarily (it decides whether the API
+  key input shows in the dialog)
+- Bilingual files must stay structurally consistent: every `bundle.id` and
+  every `provider` exists in both `zh-CN.json` and `en.json` with matching
+  shapes (the runtime picks one file per request locale)
+
+### Validation
+
+After editing, run the validation script to ensure invalid entries are not
+accepted by the running gateway:
+
+```bash
+python3 .opencode/skills/refresh-free-tier-catalog/scripts/validate_catalog.py
+```
+
+The script mirrors all rules from the Go-side catalog receiver: allowlisted
+protocols, http(s) URLs, no duplicate bundles / providers, bilingual parity.
+The output must be `OK:` before pushing, otherwise the running gateway will
+reject the catalog.

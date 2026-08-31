@@ -1,0 +1,246 @@
+---
+title: "Supported providers"
+description: "List of 40+ LLM / multimodal providers built into celer-route"
+sidebar_position: 1
+---
+
+# Supported providers
+
+celer-route ships built-in support for 40+ providers, covering international
+mainstream LLMs, Chinese-domestic large models, local self-hosted inference
+servers, and multimodal generation models. Every provider is consumed via the
+OpenAI-compatible API — the same interface, any model or provider.
+
+For per-provider details, configuration steps, and FAQ, see the corresponding
+`/workspace/providers` pages or the GitHub repo docs. Below is the list of
+built-in providers by category.
+
+## International LLM providers
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>OpenAI</h3>
+    <p><code>openai</code> — GPT family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Anthropic</h3>
+    <p><code>anthropic</code> — Claude family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Azure</h3>
+    <p><code>azure</code> — Azure OpenAI Service</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>AWS Bedrock</h3>
+    <p><code>bedrock</code> — AWS-managed inference (Claude / Llama, etc.)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>AWS Bedrock Mantle</h3>
+    <p><code>bedrock_mantle</code> — Mantle inference on Bedrock</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Gemini</h3>
+    <p><code>gemini</code> — Google Gemini family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Vertex AI</h3>
+    <p><code>vertex</code> — Gemini on Google Cloud Vertex AI</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Cohere</h3>
+    <p><code>cohere</code> — Command family and RAG</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Mistral AI</h3>
+    <p><code>mistral</code> — Mistral open-source family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Groq</h3>
+    <p><code>groq</code> — LPU ultra-fast inference (Llama / Mixtral, etc.)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Cerebras</h3>
+    <p><code>cerebras</code> — Cerebras high-speed inference</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>DeepSeek</h3>
+    <p><code>deepseek</code> — DeepSeek family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenRouter</h3>
+    <p><code>openrouter</code> — Aggregated gateway for 100+ models</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Perplexity</h3>
+    <p><code>perplexity</code> — Perplexity Sonar family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>xAI</h3>
+    <p><code>xai</code> — Grok family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Nebius Token Factory</h3>
+    <p><code>nebius</code> — Managed inference for open-source models</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Parasail</h3>
+    <p><code>parasail</code> — Low-latency inference platform</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Fireworks AI</h3>
+    <p><code>fireworks</code> — Fast inference for F1 / Llama, etc.</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>HuggingFace</h3>
+    <p><code>huggingface</code> — HF Inference Endpoints / Serverless</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Replicate</h3>
+    <p><code>replicate</code> — Community-model hosting</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Sarvam AI</h3>
+    <p><code>sarvam</code> — Indian multilingual models</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Wafer</h3>
+    <p><code>wafer</code> — Wafer inference service</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>GMI Cloud</h3>
+    <p><code>gmicloud</code> — GMI Cloud managed inference (e.g. MiniMax)</p>
+  </div>
+</div>
+
+## Chinese-domestic LLM providers
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>Alibaba Bailian</h3>
+    <p><code>alibaba</code> — Qwen (通义千问) family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Alibaba Bailian Token Plan</h3>
+    <p><code>alibaba_tokenplan</code> — Bailian Token Plan package</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Zhipu AI</h3>
+    <p><code>zhipu</code> — GLM family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Moonshot Kimi</h3>
+    <p><code>moonshot</code> — Kimi family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>MiniMax</h3>
+    <p><code>minimax</code> — MiniMax family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Tencent Hunyuan</h3>
+    <p><code>tencent</code> — Tencent Hunyuan models</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Baidu Qianfan</h3>
+    <p><code>baidu</code> — ERNIE / 文心一言 family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>SiliconFlow</h3>
+    <p><code>siliconflow</code> — Aggregator for Chinese open-source models</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Volcano Engine</h3>
+    <p><code>volcengine</code> — Doubao (豆包) family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>SenseTime SenseNova</h3>
+    <p><code>sensenova</code> — SenseNova family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Baichuan Intelligence</h3>
+    <p><code>baichuan</code> — Baichuan family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>iFlytek Spark</h3>
+    <p><code>iflytek</code> — Spark cognitive model</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>StepFun</h3>
+    <p><code>stepfun</code> — Step series</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Xiaomi MiMo</h3>
+    <p><code>xiaomi_mimo</code> — Xiaomi MiMo family</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>ModelScope</h3>
+    <p><code>modelscope</code> — Alibaba ModelScope community inference</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Coze</h3>
+    <p><code>coze</code> — Coze (international) Bot API</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Coze (China)</h3>
+    <p><code>coze_cn</code> — Coze (China) Bot API</p>
+  </div>
+</div>
+
+## Local / self-hosted inference
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>Ollama</h3>
+    <p><code>ollama</code> — Local Ollama service (no API key)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>vLLM</h3>
+    <p><code>vllm</code> — Self-hosted vLLM inference (no API key)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>SGLang</h3>
+    <p><code>sgl</code> — Self-hosted SGLang inference (no API key)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenCode Free</h3>
+    <p><code>opencode</code> — OpenCode free tier (no API key)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenCode Go</h3>
+    <p><code>opencode-go</code> — OpenCode Go service</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>OpenCode Zen</h3>
+    <p><code>opencode-zen</code> — OpenCode Zen service</p>
+  </div>
+</div>
+
+## Multimodal generation
+
+<div className="pg-feature-grid">
+  <div className="pg-feature-card">
+    <h3>ElevenLabs</h3>
+    <p><code>elevenlabs</code> — Speech synthesis and cloning (TTS)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Runway</h3>
+    <p><code>runway</code> — Video generation (Gen-3 / Gen-4)</p>
+  </div>
+  <div className="pg-feature-card">
+    <h3>Runware</h3>
+    <p><code>runware</code> — Image generation (FLUX, etc.)</p>
+  </div>
+</div>
+
+:::info More info
+
+- Each provider's model list, whether an API key is required, and
+  configuration steps can be viewed and configured under **Model Providers
+  → Add Provider** in the Web UI
+- In addition to built-in providers, celer-route supports **custom
+  providers** (OpenAI-compatible, derived from a base provider) and custom
+  models
+- The list above is sourced from `StandardProviders` in
+  `core/schemas/bifrost.go`; for the latest list please defer to the
+  provider catalog in the Web UI
+
+:::

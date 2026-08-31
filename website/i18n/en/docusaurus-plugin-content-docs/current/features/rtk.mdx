@@ -1,0 +1,187 @@
+---
+title: "RTK compression"
+description: "RTK automatically compresses tool outputs and code blocks around LLM requests, cutting token usage and latency, with recoverable links so no information is lost"
+sidebar_position: 3
+---
+
+# RTK compression
+
+**RTK (Rule-based Tool-output Kompression)** is a context-compression plugin
+built into celer-route. Before every LLM request, it automatically compresses
+tool outputs (`tool_result`) and code blocks, shrinking verbose execution
+results to cut token usage and reduce latency; after the response comes back,
+it also corrects the response's token usage to the post-compression real
+value, so billing and stats stay accurate.
+
+No client-side changes are needed — compression is transparent to the model,
+and **fails open**: any compression error falls back to the original text,
+never breaking the request.
+
+## How it works
+
+| Aspect | Description |
+|--------|-------------|
+| **Pre-request compression** | Before the request is sent to the model, scan messages for tool outputs and code blocks and apply the compression pipeline (deduplication, smart truncation, near-line grouping, semantic rendering) to reduce size |
+| **Post-request correction** | After the model responds, rewrite the response's prompt token count to the post-compression value, and write both raw and compressed counts so billing and logs read the right number |
+| **Fails open** | Any compression step that errors falls back to the original text and the request still goes out; compression never breaks a request |
+| **Original output recoverable** | Compressed tool outputs end with an auth-free recovery link (`GET /api/context/rtk/raw-output/<id>`); the LLM can fetch the original itself when needed |
+
+## Enable / disable
+
+Open **left sidebar → Plugins** and select **RTK**:
+
+1. Find the **Enable RTK compression** toggle and turn it on (it is on by
+   default)
+2. Turning it off disables the compression pipeline for all requests — handy
+   for A/B testing cost and quality before vs. after compression
+
+![RTK compression config page](./rtk.assets/rtk-config.png)
+
+## Start fast with a preset
+
+At the top of the config page, **Quick presets** cover 80% of cases with a
+single click:
+
+| Preset | Trade-off | When to use |
+|--------|-----------|-------------|
+| **Minimal** | Keep more context, save fewer tokens | When you're worried about losing key information |
+| **Standard** (recommended starting point) | Balanced for general scenarios | Default value |
+| **Aggressive** | Maximum compression, sacrifices some context for the lowest tokens | Long tool outputs where the model only needs the highlights |
+
+Clicking a preset auto-fills a sensible set of parameters (line/char limits,
+dedup threshold, whether to group, minimum compressed token count, etc.).
+You can still fine-tune each value below, then click **Save config**. If you
+mess it up, click **Revert preset** to roll the preset-managed fields back
+to the last saved value.
+
+## Monitor compression effect
+
+The plugin page **Monitoring** panel refreshes every 5 seconds with four
+metrics:
+
+- **Total requests** — number of LLM requests passing through the gateway
+- **Compressed requests** — number of requests that actually triggered
+  compression
+- **Cumulative tokens saved** — cumulative difference between pre- and
+  post-compression prompt tokens
+- **Compression ratio** — savings as a fraction of the original volume
+
+:::note
+The counters live **in process memory** — **restarting the gateway resets
+them to zero**. A freshly-started gateway will show "No compression activity
+yet" — that is normal.
+:::
+
+## Fine-tune the configuration
+
+The preset manages the seven most common fields. There is also a set of
+independent advanced settings (folded under **Scope**, **Log detail snapshot**,
+**Semantic renderer**, **Debug: raw output**, **Filters & custom**, and
+**Advanced: pipeline & thresholds**).
+
+### Preset-managed fields
+
+| Field | Meaning | When to adjust |
+|-------|---------|----------------|
+| **Compression strength** | Controls aggressiveness, scaling the line/char limits proportionally (Minimal ×1.5, Standard ×1.0, Aggressive ×0.5) | Long tool outputs where the model only needs highlights → raise; afraid of losing context → lower |
+| **Max lines per result** | Max lines retained per tool result after compression (the page shows "Effective N lines" with the scaled preview) | Model frequently misses mid-block key info → raise; don't need that much detail → lower |
+| **Max chars per result** | Same idea, by character count — a safety net against a single result filling the context window | Same as above |
+| **Dedup threshold** | Triggers deduplication when consecutive identical lines reach this count | Lots of repeated lines (consecutive failures, looped prints) → lower to 2 or 3 |
+| **Enable grouping / Group threshold** | Merges "nearly identical" consecutive lines that differ only in timestamp/number/version | Time-series logs, build artifact lists → enable; default threshold of 3 is usually enough |
+
+### Independent advanced settings
+
+| Section | Key fields | Description |
+|---------|-----------|-------------|
+| **Scope** | Apply to tool results / code blocks / assistant messages | Tool results should almost always be on (the biggest token saver); assistant messages usually off unless long-conversation context is tight |
+| **Log detail snapshot** | Snapshot mode (per-message / merged / off) + snapshot byte limit | Want to compare pre- vs. post-compression per message → "Per-message"; large log volume → "Off" to save storage |
+| **Semantic renderer** | Enable semantic renderer + renderer allowlist | Lots of git diff / pytest / terraform plan etc. structured output → enable (fails open, safe); want to disable a type → uncheck it in the allowlist |
+| **Debug: raw output** | Raw output retention (never / on failure / always) + max bytes + directory + TTL | See **Raw output recovery** below |
+| **Filters & custom** | Enable custom filters / trust project filters | Team maintains extra filters in `.rtk/filters.json` → enable; turn "trust project filters" off in production to avoid poisoning |
+| **Advanced: pipeline & thresholds** | Pipeline (JSON) + min compressed tokens + preserve cache_control | Pipeline defaults to `[{ id: "rtk" }]`, leave alone; Anthropic prompt caching users must enable "preserve cache_control blocks" |
+
+## Validate & debug
+
+At the bottom of the config page, "Want to see the effect?" provides several
+verification entry points — no need to change runtime config to compare
+pre- and post-compression:
+
+- **Test runner** (`/workspace/plugins/rtk/test`) — run the compression
+  pipeline over any output and compare the original and compressed text
+  side by side
+- **Preview** (`/workspace/plugins/rtk/preview`) — preview how different
+  compression strengths would affect output without changing runtime config
+- **Filters** (`/workspace/plugins/rtk/filters`) — browse the loaded
+  built-in + project + global filter list and load diagnostics
+
+![RTK filters catalog](./rtk.assets/rtk-filters.png)
+
+The priority is **project > global > built-in**. The built-in filters cover
+common tool outputs (compilers, type checkers, test suites, helm, shellcheck,
+etc.) and take effect with zero configuration.
+
+![RTK test runner](./rtk.assets/rtk-test-runner.png)
+
+## Raw output recovery
+
+When a tool output is compressed, RTK embeds a recovery marker at the end,
+of the form:
+
+```
+[rtk:raw_output_id=<24-char hex ID>; orig=<original size>; ttl=24h; redacted=true; fetch=GET /api/context/rtk/raw-output/<id>]
+```
+
+- The **24-char hex ID is the access credential** (96 bits of entropy); its
+  holder can `GET` the truncated original without an Authorization header
+- RTK also injects a **byte-stable** recovery hint into the request's system
+  message, telling the model how to fetch the original (the hint is content-
+  stable across requests and does not break Anthropic / OpenAI prompt-cache
+  prefixes)
+- The original is kept on disk until the **TTL expires** (default 24 hours),
+  after which a janitor cleans it up
+
+**Retention policy** ("Debug: raw output → Raw output retention") decides when
+to persist the original:
+
+| Mode | Behavior | Recommended |
+|------|----------|-------------|
+| **Never** | Don't persist; minimal disk usage | Day-to-day stable runtime |
+| **On failure** | Only persist when compression fails (falls back to original) | While troubleshooting |
+| **Always** (default) | Persist on every compression, with recovery link | Debugging / want the LLM to self-fetch the original |
+
+:::note
+The default is "Always", so every truncation is recoverable. When disk space
+is tight, switch to "Never" or "On failure", and lower the **Max raw output
+bytes** (default 1 MB). Remember to switch back when you're done debugging.
+:::
+
+## Default behavior
+
+RTK works out of the box — no configuration needed:
+
+- The plugin is **enabled by default** (auto-enabled when no configuration
+  exists in storage)
+- Default strength **Standard**, retains 120 lines / 12000 chars per result,
+  dedup threshold 3
+- **Apply to tool results** is on by default
+- Pipeline defaults to `[{ id: "rtk" }]`, with dozens of built-in filters
+  active automatically
+- Raw output defaults to **Always**, TTL 24 hours, per-entry cap 1 MB
+- Log detail snapshot defaults to **Off** (save storage); switch to
+  "Per-message" for side-by-side comparison when needed
+
+## Common scenarios
+
+- **Token usage spikes in agent workflows** → confirm "Apply to tool
+  results" is on, set strength to "Aggressive", turn on "Enable grouping" to
+  merge similar log lines
+- **The model misses key info after compression** → drop strength back to
+  "Standard" or "Minimal"; raise "Max lines per result"
+- **Investigating what a particular compression dropped** → switch "Log
+  detail snapshot mode" to "Per-message", then go to the RTK compression
+  tab in the LLM log detail to see pre- and post-compression; or reproduce
+  with the same input in "Test runner"
+- **The LLM needs some truncated original** → as long as retention policy is
+  not "Never", let the model `GET` the recovery link appended to the result
+- **Using Anthropic prompt caching** → make sure "Preserve cache_control
+  blocks" is on; otherwise compression will break cache hits

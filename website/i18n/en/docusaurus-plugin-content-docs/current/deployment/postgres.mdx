@@ -1,0 +1,202 @@
+---
+title: "Deployment: PostgreSQL (production / multi-node)"
+description: "Production deployment guide for using PostgreSQL as the config_store and logs_store"
+sidebar_position: 2
+---
+
+# Deployment: PostgreSQL
+
+The PostgreSQL mode is built for **production deployments, cross-node HA, and
+high-write-volume scenarios**. celer-route will light up several capabilities that
+SQLite cannot match: materialized views, GIN indexes, advisory locks for
+cross-node serialization, and more.
+
+## When to use
+
+- Production / cross-node HA deployments
+- High-write-volume log scenarios
+- Large data volumes (> 10 GB of logs)
+- You need the PostgreSQL ops toolchain (monitoring, backup, HA clusters)
+
+## Prerequisites
+
+:::caution Version requirement
+celer-route requires **PostgreSQL 16 or higher**. On startup it hard-checks
+`server_version_num >= 160000` and refuses to start below that.
+:::
+
+```bash
+# Check the version
+psql -h <host> -U <user> -c "SELECT current_setting('server_version_num');"
+# Must be >= 160000
+```
+
+**You will also need**:
+
+- An existing database (celer-route creates the tables automatically but **does not
+  create the database itself**)
+- The database user needs at least `CREATE TABLE` / `CREATE INDEX` / `SELECT` /
+  `INSERT` / `UPDATE` / `DELETE` privileges
+- Recommended: grant temporary `CREATE EXTENSION` during migration (celer-route
+  will try to enable `pg_trgm`)
+
+## Quick start
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs>
+<TabItem value="docker" label="Docker Compose (recommended)" default>
+
+[`examples/dockers-postgres/`](https://github.com/pin-gou/celer-route/tree/master/examples/dockers-postgres)
+ships a turnkey celer-route + PostgreSQL orchestration example:
+
+```bash
+cd examples/dockers-postgres
+cp example.env .env
+# Edit .env to set POSTGRES_PASSWORD etc.
+
+docker compose up -d
+```
+
+This brings up two containers — `postgres` and `celer-route` — with the latter
+connecting to the former via the Docker network service name `postgres`.
+
+</TabItem>
+<TabItem value="k8s" label="Kubernetes">
+
+:::warning Coming soon
+A Kubernetes Helm Chart and detailed example are coming in a future PR. Until
+then, please reference
+[examples/dockers-postgres/](https://github.com/pin-gou/celer-route/tree/master/examples/dockers-postgres)
+and orchestrate yourself.
+:::
+
+</TabItem>
+</Tabs>
+
+## Configuration example
+
+A complete `config.json`:
+
+```json
+{
+  "config_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "postgres",
+      "port": "5432",
+      "user": "pg_gateway",
+      "password": "${POSTGRES_PASSWORD}",
+      "db_name": "pg_gateway",
+      "ssl_mode": "require",
+      "max_idle_conns": 10,
+      "max_open_conns": 100,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "10m"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "postgres",
+      "port": "5432",
+      "user": "pg_gateway_logs",
+      "password": "${POSTGRES_PASSWORD}",
+      "db_name": "pg_gateway_logs",
+      "ssl_mode": "require",
+      "max_idle_conns": 10,
+      "max_open_conns": 100,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "10m"
+    }
+  }
+}
+```
+
+:::tip Separate databases
+We recommend running `config_store` and `logs_store` against different databases
+(or even different PostgreSQL instances) so they can be backed up, permissioned,
+and scaled independently.
+:::
+
+## Networking & connectivity
+
+### Docker networking (service name vs. fixed IP)
+
+- **Docker Compose**: use the service name `postgres` as the host — Docker's
+  built-in DNS resolves it
+- **Kubernetes**: use the Service name `postgres.default.svc.cluster.local`
+- **CI test environments** (e.g. GitHub Actions + harden-runner): DNS is hijacked
+  so you must use a **fixed IP** (`tests/docker-compose.yml` pins `172.28.0.16`)
+
+### SSL/TLS
+
+In production, `ssl_mode: "require"` or `"verify-full"` is strongly recommended.
+For self-signed certificates, configure `sslrootcert` accordingly.
+
+## Tuning
+
+See [Data Storage Backends — Connection Pool Tuning](../features/data-storage#connection-pool-tuning).
+
+**Common anti-patterns**:
+
+- `conn_max_lifetime` set too short (< 5 minutes): triggers `SQLSTATE 0A000`
+  "cached plan must not change result type"
+- `max_open_conns` set too high (> PostgreSQL `max_connections`): causes queueing
+- `ssl_mode: "disable"` over public networks: passwords and log data travel in
+  cleartext
+
+### Dynamic passwords (`password_command`)
+
+You can fetch passwords dynamically via an external command (IAM temp credentials,
+Vault dynamic keys, etc.):
+
+```json
+{
+  "host": "...",
+  "user": "...",
+  "password_command": "vault read -field=password secret/celer-route",
+  "db_name": "..."
+}
+```
+
+## Backup
+
+```bash
+# Logical backup (recommended)
+pg_dump -h <host> -U pg_gateway -d pg_gateway \
+  -F c -f pg_gateway_$(date +%Y%m%d).dump
+
+# Restore
+pg_restore -h <host> -U pg_gateway -d pg_gateway \
+  --clean --if-exists pg_gateway_20240101.dump
+```
+
+## Upgrading celer-route
+
+celer-route's PostgreSQL implementation uses a **two-pool lifecycle** to avoid
+pgx cached-plan errors:
+
+1. **At startup**: open a temporary pool to run the schema migration (DDL), then
+   close it immediately
+2. **At runtime**: open a fresh pool for query traffic
+
+This means celer-route upgrades **do not require you to run migrations manually** —
+as long as the new code includes the necessary migrations, they are applied
+automatically on startup. We still recommend backing up the database before
+upgrading, just in case.
+
+## Monitoring
+
+celer-route records the following PostgreSQL-related metrics (visible after the
+Prometheus plugin is enabled):
+
+- Connection-pool utilization (`max_idle_conns` / `max_open_conns`)
+- Materialized-view refresh duration
+- GIN index build status
+- Advisory-lock wait duration
+
+Slow queries (> 1 s) are also written to the log.

@@ -1,0 +1,144 @@
+---
+title: "Data storage backends"
+description: "config_store and logs_store support SQLite (single-node) and PostgreSQL (production); switch at deploy time"
+sidebar_position: 1
+---
+
+# Data storage backends
+
+celer-route configures its persistence backends via the `config_store` and
+`logs_store` sections in `config.json`. **The same Docker image ships both the
+SQLite and PostgreSQL drivers** — at deploy time you don't need to change
+images, only the `type` field in `config.json`.
+
+## Default behavior
+
+- If `config.json` has no `config_store` section, celer-route **defaults to
+  SQLite**, with the database file at `${app-dir}/config.db`
+- If `config.json` has no `logs_store` section, celer-route **defaults to
+  SQLite**, with the database file at `${app-dir}/logs.db`
+
+## SQLite
+
+### When to use
+
+- Single-node deployment, trial, PoC
+- Low write volume
+- You don't want to introduce an external database dependency
+
+### Minimal configuration
+
+```json
+{
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/config.db"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/logs.db"
+    }
+  }
+}
+```
+
+See [Deployment: SQLite](../deployment/sqlite) for the full guide.
+
+## PostgreSQL
+
+### When to use
+
+- Production deployments
+- Cross-node HA / clustered deployments
+- High-write-volume / large log storage
+
+### Prerequisites
+
+- **PostgreSQL 16 or higher** (celer-route hard-checks
+  `server_version_num >= 160000` on startup)
+- An existing database (celer-route creates tables automatically, but does not
+  create the database itself)
+
+### Configuration example
+
+```json
+{
+  "config_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "postgres",
+      "port": "5432",
+      "user": "pg_gateway",
+      "password": "${POSTGRES_PASSWORD}",
+      "db_name": "pg_gateway",
+      "ssl_mode": "require",
+      "max_idle_conns": 10,
+      "max_open_conns": 100,
+      "conn_max_lifetime": "1h",
+      "conn_max_idle_time": "10m"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": { "...": "same as above" }
+  }
+}
+```
+
+See [Deployment: PostgreSQL](../deployment/postgres) for the full guide.
+
+### PostgreSQL-only advantages
+
+When you switch to PostgreSQL, celer-route lights up several capabilities that
+SQLite cannot match:
+
+- **Materialized views (matview)** — dashboard and stats endpoints are
+  accelerated via matview
+- **GIN indexes** — efficient filtering on metadata JSONB
+- **Advisory locks** — cross-node migration serialization to avoid concurrent
+  DDL
+- **Optimized batch updates** — efficient bulk writes via `UPDATE ... FROM (VALUES ...)`
+- **Full-text search** — built on `to_tsvector` / `plainto_tsquery`
+
+## Connection pool tuning
+
+| Field | Role | Recommended (low / mid / high concurrency) |
+|-------|------|-------------------------------------------|
+| `max_idle_conns` | Number of idle connections kept in the pool | 5 / 10 / 25 |
+| `max_open_conns` | Max concurrent connections in the pool | 50 / 100 / 200 |
+| `conn_max_lifetime` | Max lifetime of a single connection | `1h` / `30m` / `15m` |
+| `conn_max_idle_time` | Max idle retention for a connection | `10m` / `5m` / `2m` |
+| `password_command` | Command to fetch dynamic passwords (IAM / Vault) | — |
+
+Don't set `conn_max_lifetime` too short — pgx will throw `SQLSTATE 0A000`
+"cached plan must not change result type". We recommend no shorter than `15m`.
+
+## Backup & restore
+
+### SQLite
+
+```bash
+# Online backup (no lock)
+sqlite3 /app/data/config.db ".backup '/backup/config.db.$(date +%Y%m%d)'"
+sqlite3 /app/data/logs.db   ".backup '/backup/logs.db.$(date +%Y%m%d)'"
+```
+
+Or use `VACUUM INTO` (brief lock):
+
+```bash
+sqlite3 /app/data/config.db "VACUUM INTO '/backup/config.db.$(date +%Y%m%d)'"
+```
+
+### PostgreSQL
+
+```bash
+pg_dump -h <host> -U <user> -d pg_gateway -F c -f pg_gateway_$(date +%Y%m%d).dump
+pg_restore -h <host> -U <user> -d pg_gateway pg_gateway_20240101.dump
+```

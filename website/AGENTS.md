@@ -63,6 +63,14 @@ docs/features/
 - 通过 hooks 协议启动 celer-route（`pg-invoke-hook.py`，见根 AGENTS.md §环境生命周期），**不要**直接 `make dev`。
 - 用 Chrome DevTools MCP 截图；截图前**先把界面切到简体中文**（侧边栏语言开关 → 简体中文）。
 - 截图前必须先**关闭 Dev Profiler**：点击 Dev Profiler 面板的 **Dismiss** 按钮（收起/Minimize 不算完成，面板仍会显示一行 CPU/Heap/Goroutines 摘要，会污染截图），确认页面上不再出现「Dev Profiler」字样后再截图。
+- 截图前必须先**关闭 Setup Checklist 浮窗**：在任意 workspace 页面右下角找到 Setup Checklist 卡片（标题「Setup checklist」，列出 SECURITY / PROVIDER SETUP 等待办项），点击其中的 **「I accept the risk - hide for everyone」** 按钮永久隐藏整个浮窗。**不要**用 **Minimize** 或 **Close for now**——前者只是收起成悬浮球，仍会在右下角显示一个进度徽章；后者只在当前会话关闭，下次启动会重新出现。确认 DOM 里再也找不到 `Setup checklist` 文本节点后再截图。可用以下脚本快速核验：
+
+  ```js
+  () => !!Array.from(document.querySelectorAll('*'))
+    .find(el => /^Setup checklist$/.test(el.textContent || '') && el.children.length === 0)
+    ? 'STILL VISIBLE' : 'hidden'
+  ```
+
 - 截图存入该文档的 `.assets/` 目录（见上文「图片存放约定」），mdx 用相对路径引用。
 
 ### 6. 结构模板
