@@ -101,7 +101,10 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
 
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
-			result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
+			result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
+			if p.metrics != nil {
+				p.metrics.RecordEngineBreakdown(breakdown)
+			}
 			if err != nil || result == "" || result == text {
 				compressedTotal += origTokens
 				continue
@@ -161,7 +164,10 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
 
 				// Compress through the PipelineRunner.
-				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
+				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
+				if p.metrics != nil {
+					p.metrics.RecordEngineBreakdown(breakdown)
+				}
 				if err != nil || result == "" || result == text {
 					compressedTotal += origTokens
 					continue
@@ -204,7 +210,10 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						originalTotal += origTokens
 						appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
 						// Assistant messages go through the pipeline runner too.
-						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "assistant"), text, defaultCfg)
+						result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "assistant"), text, defaultCfg)
+						if p.metrics != nil {
+							p.metrics.RecordEngineBreakdown(breakdown)
+						}
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -248,7 +257,10 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						origTokens := estimateTokens(text)
 						originalTotal += origTokens
 						appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
-						result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "assistant"), text, defaultCfg)
+						result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "assistant"), text, defaultCfg)
+						if p.metrics != nil {
+							p.metrics.RecordEngineBreakdown(breakdown)
+						}
 						if err == nil && result != "" && result != text {
 							if len(ptrs) > 0 {
 								state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -292,7 +304,10 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
 				appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
-				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, string(schemas.ChatMessageRoleUser)), text, defaultCfg)
+				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, string(schemas.ChatMessageRoleUser)), text, defaultCfg)
+				if p.metrics != nil {
+					p.metrics.RecordEngineBreakdown(breakdown)
+				}
 				if err == nil && result != "" && result != text {
 					if len(ptrs) > 0 {
 						state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -429,7 +444,10 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
 				appendSnapshot(state, i, "user", "", text)
-				result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "user"), text, defaultCfg)
+				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "user"), text, defaultCfg)
+				if p.metrics != nil {
+					p.metrics.RecordEngineBreakdown(breakdown)
+				}
 				if err == nil && result != "" && result != text {
 					if len(ptrs) > 0 {
 						state.RawOutputPointers = append(state.RawOutputPointers, ptrs...)
@@ -505,7 +523,10 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 
 		// Compress through the PipelineRunner (tool-role filtered so a
 		// stacked pipeline only runs its RTK-scoped engines here).
-		result, _, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
+		result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
+		if p.metrics != nil {
+			p.metrics.RecordEngineBreakdown(breakdown)
+		}
 		if err != nil || result == "" || result == text {
 			compressedTotal += origTokens
 			continue

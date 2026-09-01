@@ -95,19 +95,52 @@ type CompressionMetrics struct {
 
 	bucketOnce   sync.Once
 	bucketMetric *compressionBucketMetrics // lazy init on first RecordInvocationAt
+
+	engineOnce sync.Once              // lazy init of engineStats
+	engineMap  map[string]*engineStat // per-engine lifetime counters (protected by engineMu)
+	engineMu   sync.Mutex             // guards engineMap; engine count is small (~2-3) so mutex contention is negligible vs the atomic aggregate counters
+}
+
+// engineStat is the per-engine accumulator. Plain integers under the
+// parent mutex — the atomic aggregate counters on CompressionMetrics are
+// the atomics boundary.
+type engineStat struct {
+	invocations uint64
+	inputBytes  uint64
+	outputBytes uint64
 }
 
 // MetricsSnapshot is the JSON-shaped read-only view returned to the UI.
 // Token savings are pre-computed because atomic counters can't be diffed
 // after the fact; the compression ratio is also derived here so callers
 // don't have to guard against a divide-by-zero on the first request.
+//
+// EngineBreakdown carries lifetime per-engine stats aggregated from the
+// per-attempt EngineBreakdown returned by PipelineRunner.Run. Each entry
+// reports the engine ID, total invocations, total bytes in/out and the
+// aggregate compression ratio. Counters accumulate over the lifetime of
+// the running gateway and reset only on process restart — the same
+// semantics as the aggregate counters above. Nil when no pipeline has
+// run yet (so the UI can short-circuit rendering).
 type MetricsSnapshot struct {
-	Invocations      uint64  `json:"invocations"`
-	CompressedCount  uint64  `json:"compressed_count"`
-	OriginalTokens   uint64  `json:"original_tokens"`
-	CompressedTokens uint64  `json:"compressed_tokens"`
-	TokensSaved      uint64  `json:"tokens_saved"`
-	CompressionRatio float64 `json:"compression_ratio"`
+	Invocations      uint64             `json:"invocations"`
+	CompressedCount  uint64             `json:"compressed_count"`
+	OriginalTokens   uint64             `json:"original_tokens"`
+	CompressedTokens uint64             `json:"compressed_tokens"`
+	TokensSaved      uint64             `json:"tokens_saved"`
+	CompressionRatio float64            `json:"compression_ratio"`
+	EngineBreakdown  []EngineEngineStat `json:"engine_breakdown,omitempty"`
+}
+
+// EngineEngineStat is one engine's lifetime stats. The lifetime compression
+// ratio is derived in Snapshot so the UI never sees NaN/Inf on a freshly
+// registered engine that hasn't run yet.
+type EngineEngineStat struct {
+	ID           string  `json:"id"`
+	Invocations  uint64  `json:"invocations"`
+	InputBytes   uint64  `json:"input_bytes"`
+	OutputBytes  uint64  `json:"output_bytes"`
+	CompressedBy float64 `json:"compressed_by"`
 }
 
 // RecordInvocation logs one pass through the compression entry point.
@@ -159,9 +192,54 @@ func (m *CompressionMetrics) RecordRawOutput() {
 	// intentionally a no-op for v1 — kept for API stability
 }
 
+// RecordEngineBreakdown accumulates one per-attempt PipelineRunner.Run
+// result into the per-engine lifetime counters. Each entry's input/output
+// bytes are summed into the matching engine bucket; invocations
+// increment by 1 per entry so a 3-engine pipeline run bumps three
+// counters (one per engine that actually executed). Entries with an
+// empty ID are ignored — pipelineRun.go guards against it but the
+// public surface accepts arbitrary slices.
+//
+// Safe for concurrent callers via engineMu. Engine count is small (rtk,
+// caveman today; future engines a handful at most) so a single mutex is
+// cheaper than a sharded map and keeps the implementation trivial. The
+// aggregate atomic counters above remain the high-throughput path for
+// the request-level numbers; this method only fires once per pipeline
+// run, not per tool_result.
+func (m *CompressionMetrics) RecordEngineBreakdown(breakdown []EngineBreakdown) {
+	if m == nil || len(breakdown) == 0 {
+		return
+	}
+	m.engineOnce.Do(func() {
+		m.engineMap = make(map[string]*engineStat, 4)
+	})
+	m.engineMu.Lock()
+	defer m.engineMu.Unlock()
+	for _, e := range breakdown {
+		if e.Id == "" {
+			continue
+		}
+		stat, ok := m.engineMap[e.Id]
+		if !ok {
+			stat = &engineStat{}
+			m.engineMap[e.Id] = stat
+		}
+		stat.invocations++
+		if e.InputBytes > 0 {
+			stat.inputBytes += uint64(e.InputBytes)
+		}
+		if e.OutputBytes > 0 {
+			stat.outputBytes += uint64(e.OutputBytes)
+		}
+	}
+}
+
 // Snapshot reads all counters atomically and returns a derived view.
 // CompressionRatio is 0 when there is nothing to compress so callers don't
-// see NaN/Inf on a freshly-started gateway.
+// see NaN/Inf on a freshly-started gateway. EngineBreakdown is built from
+// the per-engine map when at least one engine has executed; nil otherwise
+// so the UI can detect "no pipeline activity yet" without inspecting the
+// array length.
 func (m *CompressionMetrics) Snapshot() MetricsSnapshot {
 	if m == nil {
 		return MetricsSnapshot{}
@@ -176,7 +254,7 @@ func (m *CompressionMetrics) Snapshot() MetricsSnapshot {
 	if orig > 0 {
 		ratio = float64(saved) / float64(orig)
 	}
-	return MetricsSnapshot{
+	snap := MetricsSnapshot{
 		Invocations:      m.invocations.Load(),
 		CompressedCount:  m.compressed.Load(),
 		OriginalTokens:   orig,
@@ -184,6 +262,33 @@ func (m *CompressionMetrics) Snapshot() MetricsSnapshot {
 		TokensSaved:      saved,
 		CompressionRatio: ratio,
 	}
+	if len(m.engineMap) > 0 {
+		m.engineMu.Lock()
+		stats := make([]EngineEngineStat, 0, len(m.engineMap))
+		for id, st := range m.engineMap {
+			var engineRatio float64
+			if st.inputBytes > 0 {
+				var saved uint64
+				if st.inputBytes > st.outputBytes {
+					saved = st.inputBytes - st.outputBytes
+				}
+				engineRatio = float64(saved) / float64(st.inputBytes)
+			}
+			stats = append(stats, EngineEngineStat{
+				ID:           id,
+				Invocations:  st.invocations,
+				InputBytes:   st.inputBytes,
+				OutputBytes:  st.outputBytes,
+				CompressedBy: engineRatio,
+			})
+		}
+		m.engineMu.Unlock()
+		// Stable ordering for the UI — sort by engine id so rtk precedes
+		// caveman deterministically.
+		sort.Slice(stats, func(i, j int) bool { return stats[i].ID < stats[j].ID })
+		snap.EngineBreakdown = stats
+	}
+	return snap
 }
 
 // Histogram returns buckets within [start, end) aligned to the requested

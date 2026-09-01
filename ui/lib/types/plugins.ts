@@ -397,6 +397,11 @@ export interface UnfreezeCooldownResponse {
 // /api/context/rtk/stats. Token savings and compression ratio are derived
 // server-side so the UI never has to guard against divide-by-zero on a
 // freshly-started instance.
+//
+// engineBreakdown carries the per-engine lifetime view when at least one
+// pipeline engine has executed; omitted when empty so the UI can detect
+// "no engine activity yet" without inspecting the array length. The
+// entries are sorted server-side by engine id for stable rendering.
 export interface RtkStats {
 	invocations: number;
 	compressedCount: number;
@@ -404,6 +409,18 @@ export interface RtkStats {
 	compressedTokens: number;
 	tokensSaved: number;
 	compressionRatio: number;
+	engineBreakdown?: RtkEngineStat[];
+}
+
+// RtkEngineStat mirrors Go plugins/rtk/metrics.go EngineEngineStat. The
+// lifetime compression ratio is derived server-side so a freshly registered
+// engine never surfaces NaN/Inf on the wire.
+export interface RtkEngineStat {
+	id: string;
+	invocations: number;
+	inputBytes: number;
+	outputBytes: number;
+	compressedBy: number;
 }
 
 export interface RtkStatsResponse {

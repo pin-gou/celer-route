@@ -65,12 +65,15 @@ type stubRtkAccessor struct {
 	histogramReq struct{ start, end, bucketSize int64 }
 }
 
-func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog    { return s.catalog }
-func (s *stubRtkAccessor) RunTest(p rtk.TestPayload) rtk.TestResult { s.lastTest = p; return rtk.TestResult{
-	OriginalText: p.Output, CompressedText: "COMPRESSED:" + p.Output,
-	OriginalTokens: len(p.Output) / 4, CompressedTokens: len("COMPRESSED:"+p.Output) / 4,
-	FilterMatched: "stub", Techniques: []string{"linefilter"},
-} }
+func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog { return s.catalog }
+func (s *stubRtkAccessor) RunTest(p rtk.TestPayload) rtk.TestResult {
+	s.lastTest = p
+	return rtk.TestResult{
+		OriginalText: p.Output, CompressedText: "COMPRESSED:" + p.Output,
+		OriginalTokens: len(p.Output) / 4, CompressedTokens: len("COMPRESSED:"+p.Output) / 4,
+		FilterMatched: "stub", Techniques: []string{"linefilter"},
+	}
+}
 func (s *stubRtkAccessor) PreviewCompression(r rtk.PreviewRequest) rtk.PreviewResponse {
 	s.lastPrev = r
 	return rtk.PreviewResponse{Mode: r.Mode, Result: rtk.TestResult{
@@ -608,6 +611,10 @@ func TestRtkHandler_GetStats(t *testing.T) {
 				CompressedTokens: 2000,
 				TokensSaved:      6000,
 				CompressionRatio: 0.75,
+				EngineBreakdown: []rtk.EngineEngineStat{
+					{ID: "caveman", Invocations: 5, InputBytes: 800, OutputBytes: 300, CompressedBy: 0.625},
+					{ID: "rtk", Invocations: 20, InputBytes: 4000, OutputBytes: 1200, CompressedBy: 0.7},
+				},
 			},
 		},
 	}
@@ -618,13 +625,14 @@ func TestRtkHandler_GetStats(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", status, string(body))
 	}
 	var got struct {
-		Plugin           string  `json:"plugin"`
-		Invocations      uint64  `json:"invocations"`
-		CompressedCount  uint64  `json:"compressed_count"`
-		OriginalTokens   uint64  `json:"original_tokens"`
-		CompressedTokens uint64  `json:"compressed_tokens"`
-		TokensSaved      uint64  `json:"tokens_saved"`
-		CompressionRatio float64 `json:"compression_ratio"`
+		Plugin           string                 `json:"plugin"`
+		Invocations      uint64                 `json:"invocations"`
+		CompressedCount  uint64                 `json:"compressed_count"`
+		OriginalTokens   uint64                 `json:"original_tokens"`
+		CompressedTokens uint64                 `json:"compressed_tokens"`
+		TokensSaved      uint64                 `json:"tokens_saved"`
+		CompressionRatio float64                `json:"compression_ratio"`
+		EngineBreakdown  []rtk.EngineEngineStat `json:"engine_breakdown"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode body: %v; body=%s", err, string(body))
@@ -638,9 +646,44 @@ func TestRtkHandler_GetStats(t *testing.T) {
 	if got.TokensSaved != 6000 || got.CompressionRatio != 0.75 {
 		t.Errorf("derived fields mismatch: saved=%d ratio=%f", got.TokensSaved, got.CompressionRatio)
 	}
+	if len(got.EngineBreakdown) != 2 {
+		t.Fatalf("engine_breakdown len = %d, want 2", len(got.EngineBreakdown))
+	}
+	if got.EngineBreakdown[0].ID != "caveman" || got.EngineBreakdown[0].Invocations != 5 {
+		t.Errorf("engine_breakdown[0] = %+v, want caveman with 5 invocations", got.EngineBreakdown[0])
+	}
+	if got.EngineBreakdown[1].ID != "rtk" || got.EngineBreakdown[1].CompressedBy != 0.7 {
+		t.Errorf("engine_breakdown[1] = %+v, want rtk with ratio 0.7", got.EngineBreakdown[1])
+	}
 
 	if acc := resolver.accessor.(*stubRtkAccessor); acc.statsCalls != 1 {
 		t.Errorf("Stats() should be called exactly once per request, got %d", acc.statsCalls)
+	}
+}
+
+// TestRtkHandler_GetStats_OmitsEngineBreakdownWhenEmpty verifies that an
+// idle plugin (no pipeline runs yet) suppresses the engine_breakdown field
+// from the wire response. The UI relies on the absence of the key (rather
+// than an empty array) to detect "no engine activity yet".
+func TestRtkHandler_GetStats_OmitsEngineBreakdownWhenEmpty(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{
+		found: true,
+		accessor: &stubRtkAccessor{
+			stats: rtk.MetricsSnapshot{
+				Invocations:     3,
+				CompressedCount: 0,
+			},
+		},
+	}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/stats")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, string(body))
+	}
+	if strings.Contains(string(body), "engine_breakdown") {
+		t.Errorf("engine_breakdown must be omitted when empty, got body=%s", string(body))
 	}
 }
 
@@ -689,9 +732,9 @@ func TestRtkHandler_GetStatsHistogram(t *testing.T) {
 	}
 
 	var got struct {
-		Plugin            string `json:"plugin"`
+		Plugin            string                   `json:"plugin"`
 		Buckets           []rtk.RtkHistogramBucket `json:"buckets"`
-		BucketSizeSeconds int64  `json:"bucket_size_seconds"`
+		BucketSizeSeconds int64                    `json:"bucket_size_seconds"`
 		Totals            rtk.RtkHistogramBucket   `json:"totals"`
 		LifetimeTotals    rtk.MetricsSnapshot      `json:"lifetime_totals"`
 	}
