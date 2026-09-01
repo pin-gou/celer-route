@@ -11,6 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Save } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
@@ -30,6 +31,7 @@ const providerKeyFormSchema = z.object({
 type ProviderKeyFormValues = z.infer<typeof modelProviderKeySchema>;
 
 export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: Props) {
+	const { t } = useTranslation("providers");
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [createProviderKey, { isLoading: isCreatingProviderKey }] = useCreateProviderKeyMutation();
 	const [updateProviderKey, { isLoading: isUpdatingProviderKey }] = useUpdateProviderKeyMutation();
@@ -69,16 +71,16 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
 
 	const getTooltipContent = useCallback(() => {
 		if (!hasUpdateProviderAccess) {
-			return "You do not have permission to modify provider keys";
+			return t("providers2.keyForm.tooltip.noPermission");
 		}
 		if (!form.formState.isValid && form.formState.errors.root?.message) {
 			return form.formState.errors.root?.message;
 		}
 		if (!form.formState.isDirty) {
-			return "No changes made";
+			return t("providers2.keyForm.tooltip.noChanges");
 		}
 		return null;
-	}, [form?.formState.errors, form?.formState.isValid, form?.formState.isDirty, hasUpdateProviderAccess]);
+	}, [form?.formState.errors, form?.formState.isValid, form?.formState.isDirty, hasUpdateProviderAccess, t]);
 
 	const onSubmit = (value: any) => {
 		if (isEditing && !currentKey) return;
@@ -121,7 +123,7 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
 					form.setError("key.name", { message: getErrorMessage(err) });
 					return;
 				}
-				toast.error(isEditing ? "Error updating key" : "Error creating key", {
+				toast.error(isEditing ? t("providers2.keyForm.toast.keyUpdateFailed") : t("providers2.keyForm.toast.keyAddFailed"), {
 					description: getErrorMessage(err),
 				});
 			});
@@ -142,7 +144,7 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
 				<div className="bg-card sticky bottom-0 border-t px-8 py-4">
 					<div className="flex justify-end space-x-3">
 						<Button type="button" variant="outline" onClick={onCancel} data-testid="key-cancel-btn">
-							Cancel
+							{t("providers2.keyForm.cancel")}
 						</Button>
 						<TooltipProvider>
 							<Tooltip>
@@ -155,7 +157,7 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
 											data-testid="key-save-btn"
 										>
 											<Save className="h-4 w-4 shrink-0" />
-											Save
+											{t("providers2.keyForm.save")}
 										</Button>
 									</span>
 								</TooltipTrigger>

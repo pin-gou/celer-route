@@ -1,6 +1,7 @@
 import Provider from "@/components/provider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ModelProvider } from "@/lib/types/config";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import ProviderKeyForm from "../views/providerKeyForm";
 
@@ -13,14 +14,24 @@ interface Props {
 }
 
 export default function AddNewKeySheet({ show, onCancel, provider, keyId, providerName }: Props) {
+	const { t } = useTranslation("providers");
 	const isEditing = keyId !== null;
 	const resolvedProviderName = (providerName ?? provider.name).toLowerCase();
 	const isVLLM = resolvedProviderName === "vllm";
 	const isOllamaOrSGL = resolvedProviderName === "ollama" || resolvedProviderName === "sgl";
 	const entityLabel = isVLLM ? "model" : isOllamaOrSGL ? "server" : "key";
-	const EntityLabel = entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1);
-	const dialogTitle = isEditing ? `Edit ${entityLabel}` : `Add new ${entityLabel}`;
-	const successMessage = isEditing ? `${EntityLabel} updated successfully` : `${EntityLabel} added successfully`;
+	const titleKey = isEditing
+		? entityLabel === "model"
+			? "providers2.keyForm.sheet.editModelTitle"
+			: entityLabel === "server"
+				? "providers2.keyForm.sheet.editServerTitle"
+				: "providers2.keyForm.sheet.editTitle"
+		: entityLabel === "model"
+			? "providers2.keyForm.sheet.addModelTitle"
+			: entityLabel === "server"
+				? "providers2.keyForm.sheet.addServerTitle"
+				: "providers2.keyForm.sheet.addTitle";
+	const toastKey = isEditing ? "providers2.keyForm.toast.keyUpdated" : "providers2.keyForm.toast.keyAdded";
 
 	return (
 		<Sheet
@@ -36,7 +47,7 @@ export default function AddNewKeySheet({ show, onCancel, provider, keyId, provid
 							<div className={"flex items-center"}>
 								<Provider provider={provider.name} size={24} />:
 							</div>
-							{dialogTitle}
+							{t(titleKey)}
 						</div>
 					</SheetTitle>
 				</SheetHeader>
@@ -45,7 +56,7 @@ export default function AddNewKeySheet({ show, onCancel, provider, keyId, provid
 					keyId={keyId}
 					onCancel={onCancel}
 					onSave={() => {
-						toast.success(successMessage);
+						toast.success(t(toastKey));
 						onCancel();
 					}}
 				/>

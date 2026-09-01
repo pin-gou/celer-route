@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import FreeTierOneKeyConfigDialog from "./freeTierOneKeyConfigDialog";
 import { DefaultNetworkConfig } from "@/lib/constants/config";
-import { useCreateProviderMutation, useCreateProviderKeyMutation, catalogApi } from "@/lib/store/apis/catalogApi";
+import { useOneClickCreateProviderMutation, useOneClickCreateProviderKeyMutation, catalogApi } from "@/lib/store/apis/catalogApi";
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -32,15 +32,15 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("@/lib/store/apis/catalogApi", () => ({
-	useCreateProviderMutation: vi.fn(),
-	useCreateProviderKeyMutation: vi.fn(),
+	useOneClickCreateProviderMutation: vi.fn(),
+	useOneClickCreateProviderKeyMutation: vi.fn(),
 	catalogApi: { util: { invalidateTags: vi.fn() } },
 }));
 
 import { toast } from "sonner";
 
-const mockCreateProvider = vi.mocked(useCreateProviderMutation);
-const mockCreateKey = vi.mocked(useCreateProviderKeyMutation);
+const mockCreateProvider = vi.mocked(useOneClickCreateProviderMutation);
+const mockCreateKey = vi.mocked(useOneClickCreateProviderKeyMutation);
 const mockInvalidateTags = vi.mocked(catalogApi.util.invalidateTags);
 const mockToastSuccess = vi.mocked(toast.success);
 
@@ -92,10 +92,10 @@ const pollinationsProvider = {
 // RTK Query mutation trigger mocks. The component awaits `trigger(args).unwrap()`,
 // so each trigger must return a real Promise augmented with the action-creator
 // fields (unwrap/reset/abort/arg/requestId) expected by MutationActionCreatorResult.
-type ProviderTrigger = ReturnType<typeof useCreateProviderMutation>[0];
-type ProviderKeyTrigger = ReturnType<typeof useCreateProviderKeyMutation>[0];
-type ProviderState = ReturnType<typeof useCreateProviderMutation>[1];
-type KeyState = ReturnType<typeof useCreateProviderKeyMutation>[1];
+type ProviderTrigger = ReturnType<typeof useOneClickCreateProviderMutation>[0];
+type ProviderKeyTrigger = ReturnType<typeof useOneClickCreateProviderKeyMutation>[0];
+type ProviderState = ReturnType<typeof useOneClickCreateProviderMutation>[1];
+type KeyState = ReturnType<typeof useOneClickCreateProviderKeyMutation>[1];
 
 const triggerBase = (unwrap: () => Promise<unknown>) =>
 	Object.assign(Promise.resolve({ data: null, error: undefined }), {

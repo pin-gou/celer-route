@@ -256,6 +256,28 @@
 				"failedToDeleteKey": "删除密钥失败"
 			}
 		},
+		"keyForm": {
+			"sheet": {
+				"addTitle": "添加密钥",
+				"editTitle": "编辑密钥",
+				"addModelTitle": "添加模型",
+				"editModelTitle": "编辑模型",
+				"addServerTitle": "添加服务",
+				"editServerTitle": "编辑服务"
+			},
+			"toast": {
+				"keyAdded": "密钥已添加",
+				"keyUpdated": "密钥已更新",
+				"keyAddFailed": "添加密钥失败",
+				"keyUpdateFailed": "更新密钥失败"
+			},
+			"cancel": "取消",
+			"save": "保存",
+			"tooltip": {
+				"noChanges": "未做任何修改",
+				"noPermission": "您没有修改提供商密钥的权限"
+			}
+		},
 		"modelsTab": {
 			"searchPlaceholder": "搜索模型...",
 			"loading": "加载模型中...",

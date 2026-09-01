@@ -256,6 +256,28 @@
 				"failedToDeleteKey": "Failed to delete key"
 			}
 		},
+		"keyForm": {
+			"sheet": {
+				"addTitle": "Add new key",
+				"editTitle": "Edit key",
+				"addModelTitle": "Add new model",
+				"editModelTitle": "Edit model",
+				"addServerTitle": "Add new server",
+				"editServerTitle": "Edit server"
+			},
+			"toast": {
+				"keyAdded": "Key added successfully",
+				"keyUpdated": "Key updated successfully",
+				"keyAddFailed": "Failed to add key",
+				"keyUpdateFailed": "Failed to update key"
+			},
+			"cancel": "Cancel",
+			"save": "Save",
+			"tooltip": {
+				"noChanges": "No changes made",
+				"noPermission": "You do not have permission to modify provider keys"
+			}
+		},
 		"modelsTab": {
 			"searchPlaceholder": "Search models...",
 			"loading": "Loading models...",
