@@ -127,5 +127,60 @@
 			</div>
 		</div>
 		<script type="module" src="/app/main.tsx"></script>
+		<noscript>
+			<div
+				style="
+					font-family:
+						ui-sans-serif,
+						system-ui,
+						-apple-system,
+						&quot;Segoe UI&quot;,
+						Roboto,
+						sans-serif;
+					padding: 48px 24px;
+					max-width: 640px;
+					margin: 64px auto;
+					color: #18181b;
+					background: #ffffff;
+					border: 1px solid #e4e4e7;
+					border-radius: 12px;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+				"
+			>
+				<h1 style="font-size: 24px; font-weight: 700; margin: 0 0 12px 0; color: #18181b">celer-route 需要启用 JavaScript</h1>
+				<p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; color: #3f3f46">
+					当前页面是一个单页应用（SPA），依赖 JavaScript 才能正常显示菜单、内容与交互。
+				</p>
+				<p style="font-size: 15px; line-height: 1.6; margin: 0 0 8px 0; color: #3f3f46">请按以下方式之一解决：</p>
+				<ol style="font-size: 15px; line-height: 1.7; margin: 0 0 16px 0; padding-left: 20px; color: #3f3f46">
+					<li>关闭浏览器的"阅读模式 / 无障碍模式 / 老人模式 / 极速模式"。</li>
+					<li>关闭可能拦截脚本的扩展（如广告净化、省流、护眼插件）。</li>
+					<li>在浏览器设置里启用 JavaScript 与 ES Module（&lt;script type="module"&gt;）。</li>
+					<li>改用 Chrome / Edge / Firefox / Safari 等现代浏览器访问。</li>
+				</ol>
+				<p style="font-size: 13px; line-height: 1.5; margin: 16px 0 0 0; color: #71717a">
+					如需直接调用 API（无需网页界面），请使用
+					<code
+						style="
+							font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+							background: #f4f4f5;
+							padding: 2px 6px;
+							border-radius: 4px;
+							font-size: 13px;
+						"
+						>http://localhost:20128/v1</code
+					>
+					OpenAI 兼容端点。
+				</p>
+			</div>
+			<style>
+				body {
+					background: #fafafa;
+				}
+				#bifrost-shell {
+					display: none !important;
+				}
+			</style>
+		</noscript>
 	</body>
 </html>
