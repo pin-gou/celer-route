@@ -316,6 +316,17 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		expect(screen.queryByTestId("engine-panel-caveman")).toBeNull();
 	});
 
+	it("keeps the effect-verification nudge inside the RTK tab, not the shared tab", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		// Default shared tab: no nudge.
+		expect(screen.queryByTestId("rtk-after-save-preview")).toBeNull();
+		// RTK tab: the nudge card with its three links is present.
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
+		expect(screen.getByTestId("rtk-after-save-preview")).toBeTruthy();
+		expect(screen.getByTestId("rtk-after-save-test")).toBeTruthy();
+		expect(screen.getByTestId("rtk-after-save-raw")).toBeTruthy();
+	});
+
 	it("shows the Caveman tab only when caveman.enabled is true", () => {
 		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
 		render(<RtkFragment plugin={plugin} />);

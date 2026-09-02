@@ -1344,15 +1344,48 @@ function ConfigForm({
 				</TabsContent>
 
 				<TabsContent value="rtk" className="mt-4">
-					<RtkEnginePanel
-						form={form}
-						intensity={intensity}
-						maxLines={maxLines}
-						effectiveLines={effectiveLines}
-						hasUpdateAccess={hasUpdateAccess}
-						onPickPreset={applyPreset}
-						onRevertPreset={revertPreset}
-					/>
+					<div className="space-y-4">
+						<RtkEnginePanel
+							form={form}
+							intensity={intensity}
+							maxLines={maxLines}
+							effectiveLines={effectiveLines}
+							hasUpdateAccess={hasUpdateAccess}
+							onPickPreset={applyPreset}
+							onRevertPreset={revertPreset}
+						/>
+
+						{/* ── Effect-verification nudge ─────────────────────────────── */}
+						<div className="bg-muted/30 text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
+							<div className="flex items-start gap-2">
+								<Beaker className="mt-0.5 h-4 w-4 shrink-0" />
+								<div className="space-y-1.5">
+									<div className="text-foreground text-sm font-medium">{t("rtk.afterSaveTitle")}</div>
+									<div>{t("rtk.afterSaveBody")}</div>
+									<div className="flex flex-wrap gap-2 pt-1">
+										<Button variant="outline" size="sm" asChild>
+											<Link to="/workspace/plugins/rtk/preview" data-testid="rtk-after-save-preview">
+												<ImageIcon className="h-3.5 w-3.5" />
+												{t("rtk.admin.tabs.preview")}
+											</Link>
+										</Button>
+										<Button variant="outline" size="sm" asChild>
+											<Link to="/workspace/plugins/rtk/test" data-testid="rtk-after-save-test">
+												<Beaker className="h-3.5 w-3.5" />
+												{t("rtk.admin.tabs.test")}
+											</Link>
+										</Button>
+										<Button variant="outline" size="sm" asChild>
+											<Link to="/workspace/plugins/rtk/raw-output" data-testid="rtk-after-save-raw">
+												<FileSearchIcon />
+												{t("rtk.admin.tabs.rawOutput")}
+											</Link>
+										</Button>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
 				</TabsContent>
 
 				{cavemanEnabled && (
@@ -1361,37 +1394,6 @@ function ConfigForm({
 					</TabsContent>
 				)}
 			</Tabs>
-
-			{/* ── Effect-verification nudge ─────────────────────────────────── */}
-			<div className="bg-muted/30 text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
-				<div className="flex items-start gap-2">
-					<Beaker className="mt-0.5 h-4 w-4 shrink-0" />
-					<div className="space-y-1.5">
-						<div className="text-foreground text-sm font-medium">{t("rtk.afterSaveTitle")}</div>
-						<div>{t("rtk.afterSaveBody")}</div>
-						<div className="flex flex-wrap gap-2 pt-1">
-							<Button variant="outline" size="sm" asChild>
-								<Link to="/workspace/plugins/rtk/preview" data-testid="rtk-after-save-preview">
-									<ImageIcon className="h-3.5 w-3.5" />
-									{t("rtk.admin.tabs.preview")}
-								</Link>
-							</Button>
-							<Button variant="outline" size="sm" asChild>
-								<Link to="/workspace/plugins/rtk/test" data-testid="rtk-after-save-test">
-									<Beaker className="h-3.5 w-3.5" />
-									{t("rtk.admin.tabs.test")}
-								</Link>
-							</Button>
-							<Button variant="outline" size="sm" asChild>
-								<Link to="/workspace/plugins/rtk/raw-output" data-testid="rtk-after-save-raw">
-									<FileSearchIcon />
-									{t("rtk.admin.tabs.rawOutput")}
-								</Link>
-							</Button>
-						</div>
-					</div>
-				</div>
-			</div>
 
 			{/* Save bar */}
 			<div className="bg-background sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-2 border-t px-4 pt-4 pb-2">
