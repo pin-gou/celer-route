@@ -85,7 +85,7 @@ function toActiveEntryFromEvent(update: ActiveLogStreamEvent): ActiveLogEntry {
 
 // isTerminalStatus reports whether the status represents a settled (non-running)
 // state. In addition to success/error, "cancelled" covers requests that were
-// abandoned before reaching the provider (e.g. the synthetic 503 no_eligible_keys
+// abandoned before reaching the provider (e.g. the synthetic 429 no_eligible_keys
 // key-pool veto), which the logging backend records as cancelled.
 function isTerminalStatus(status: string): boolean {
 	return status === "success" || status === "error" || status === "cancelled";

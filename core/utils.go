@@ -366,6 +366,11 @@ func clearCtxForFallback(ctx *schemas.BifrostContext) {
 	// and the SSE "success" notification, leaving the fallback request without a
 	// persisted log row.
 	ctx.ClearValue(schemas.BifrostContextKeySilentLog)
+	// RetryAfterSeconds (stamped by a KeyPoolFilter like provider-cooldown when
+	// it suppressed every key) belongs to the primary attempt's suppression. Each
+	// fallback attempt re-runs the filter against its own provider's pool and
+	// must not inherit the primary provider's retry hint.
+	ctx.ClearValue(schemas.BifrostContextKeyRetryAfterSeconds)
 }
 
 // ClearContextForInternalRequest clears context state that is specific to the

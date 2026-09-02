@@ -436,7 +436,7 @@
 			"triggerTitle": "What triggers a cooldown",
 			"triggerBody": "After a provider request fails, the error's message, code, and type are matched (case-insensitively) against the built-in patterns (insufficient_quota, quota exceeded, quota_exceeded, billing, usage limit) plus any custom quota_patterns. Status codes gate the scan: HTTP 429 and other 4xx qualify when the text matches; HTTP 402 (permanent billing failure) and 5xx errors never trigger a cooldown.",
 			"effectTitle": "What happens while a key is cooling down",
-			"effectBody": "The failing (provider, key) pair is temporarily removed from the key pool for the configured TTL (default 300 seconds). At key selection the cooled key is skipped, so requests fall through to other healthy keys of the same provider, then to fallback providers. If every eligible key is suppressed, the request fails with a synthetic 503 no_eligible_keys error.",
+			"effectBody": "The failing (provider, key) pair is temporarily removed from the key pool for the configured TTL (default 300 seconds). At key selection the cooled key is skipped, so requests fall through to other healthy keys of the same provider, then to fallback providers. If every eligible key is suppressed, the request fails with a synthetic 429 no_eligible_keys error and a Retry-After response header hinting when the soonest cooldown lapses so clients can retry.",
 			"recoveryTitle": "Recovery",
 			"recoveryBody": "The key is automatically re-enabled when its TTL expires. Cooldown state lives in process memory, so restarting celer-route clears all cooldowns."
 		}

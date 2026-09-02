@@ -27,7 +27,7 @@ Web UI:
 | Aspect | Description |
 |--------|-------------|
 | **What triggers cooldown** | After a failed request, the plugin matches the error's **message, code, and type** case-insensitively (built-in patterns: `insufficient_quota`, `quota exceeded`, `quota_exceeded`, `billing`, `usage limit`), gated by status code: HTTP 429 and other 4xx trigger when text matches; **HTTP 402 and 5xx never trigger**. |
-| **Effect during cooldown** | The failing `(provider, key)` is skipped in key selection for the cooldown duration (default 300 s); requests fall through to other healthy keys under the same provider, then in order to other providers. If every available key is cooling, requests get a synthetic error `503 no_eligible_keys`. |
+| **Effect during cooldown** | The failing `(provider, key)` is skipped in key selection for the cooldown duration (default 300 s); requests fall through to other healthy keys under the same provider, then in order to other providers. If every available key is cooling, requests get a synthetic error `429 no_eligible_keys` with a `Retry-After` response header hinting the soonest time a retry could succeed. |
 | **Recovery** | TTL expiry restores the key automatically — no manual intervention. Cooldown state lives **in process memory**; restarting celer-route clears every cooldown record. |
 
 ## Enable / disable cooldown

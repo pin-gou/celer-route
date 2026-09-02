@@ -381,7 +381,7 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 		});
 		expect(result.current.activeLogs).toHaveLength(1);
 
-		// A key-pool veto (synthetic 503 no_eligible_keys) is recorded as cancelled.
+		// A key-pool veto (synthetic 429 no_eligible_keys) is recorded as cancelled.
 		act(() => {
 			eventSource._dispatch("log_updated", {
 				id: "active-1",

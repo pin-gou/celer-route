@@ -313,4 +313,14 @@ func TestApplyBifrostErrorResponseHeaders(t *testing.T) {
 		assert.Empty(t, string(ctx.Response.Header.Peek(HeaderBifrostRequestType)))
 		assert.Empty(t, string(ctx.Response.Header.Peek(HeaderBifrostRoutingInfoProvider)))
 	})
+
+	t.Run("retry-after hint is emitted as Retry-After header", func(t *testing.T) {
+		ctx := &fasthttp.RequestCtx{}
+
+		ApplyBifrostErrorResponseHeaders(ctx, nil, schemas.BifrostErrorExtraFields{
+			RetryAfterSeconds: 37,
+		})
+
+		assert.Equal(t, "37", string(ctx.Response.Header.Peek("Retry-After")))
+	})
 }

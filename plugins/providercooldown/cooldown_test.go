@@ -147,6 +147,109 @@ func TestAsFilterSkipsCooledKeys(t *testing.T) {
 	}
 }
 
+// TestShortestRemainingCooldown covers the retry-hint source: the shortest
+// remaining cooldown across the given keys for (provider, model), 0 when none
+// are suppressed.
+func TestShortestRemainingCooldown(t *testing.T) {
+	s := NewCooldownState(10 * time.Minute)
+	provider := schemas.OpenAI
+
+	if got := s.ShortestRemainingCooldown(provider, "gpt-4o", []schemas.Key{{ID: "k1"}}); got != 0 {
+		t.Fatalf("expected 0 when nothing is cooled, got %v", got)
+	}
+
+	// Mark k1 with a short TTL and k3 with a long TTL so the earliest lapse is k1.
+	s.MarkWithTTL(provider, "k1", "", time.Minute, CooldownKindRateLimit, schemas.CooldownScopeKey)
+	s.MarkWithTTL(provider, "k3", "", 10*time.Minute, CooldownKindQuota, schemas.CooldownScopeKey)
+	keys := []schemas.Key{{ID: "k1"}, {ID: "k2"}, {ID: "k3"}}
+	short := s.ShortestRemainingCooldown(provider, "gpt-4o", keys)
+	if short <= 0 || short > time.Minute {
+		t.Fatalf("expected shortest remaining to be ~1m (k1), got %v", short)
+	}
+	// A healthy key in the set must not pull the min to zero.
+	if min := s.ShortestRemainingCooldown(provider, "gpt-4o", []schemas.Key{{ID: "k2"}}); min != 0 {
+		t.Fatalf("k2 is not cooled, want 0, got %v", min)
+	}
+}
+
+// TestShortestRemainingCooldownModelScope ensures a model-granularity mark is
+// only counted against matching (key, model) queries.
+func TestShortestRemainingCooldownModelScope(t *testing.T) {
+	s := NewCooldownState(10 * time.Minute)
+	provider := schemas.OpenAI
+	s.MarkWithTTL(provider, "k1", "gpt-4o", time.Minute, CooldownKindRateLimit, schemas.CooldownScopeModel)
+
+	if got := s.ShortestRemainingCooldown(provider, "gpt-4o", []schemas.Key{{ID: "k1"}}); got <= 0 || got > time.Minute {
+		t.Fatalf("expected model-scoped cooldown to be visible for gpt-4o, got %v", got)
+	}
+	if got := s.ShortestRemainingCooldown(provider, "claude", []schemas.Key{{ID: "k1"}}); got != 0 {
+		t.Fatalf("model-scoped cooldown must not match a different model, got %v", got)
+	}
+}
+
+// TestAsFilterStampsRetryHintOnContext verifies the Retry-After wiring: when
+// every key is vetoed, AsFilter stamps the shortest remaining cooldown (in
+// whole seconds) on the context so core can attach it to the synthetic 429
+// no_eligible_keys error. When at least one key survives, no stamp is needed.
+func TestAsFilterStampsRetryHintOnContext(t *testing.T) {
+	s := NewCooldownState(2 * time.Minute)
+	provider := schemas.OpenAI
+	s.Mark(provider, "k1")
+	s.Mark(provider, "k2")
+	filter := s.AsFilter(nil)
+	keys := []schemas.Key{{ID: "k1"}, {ID: "k2"}}
+
+	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	out, err := filter(ctx, provider, "gpt-4o", keys)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("expected every key to be vetoed, got %+v", out)
+	}
+	v, ok := ctx.Value(schemas.BifrostContextKeyRetryAfterSeconds).(int64)
+	if !ok || v <= 0 {
+		t.Fatalf("expected a positive retry-after stamp on ctx when all keys are suppressed, got %v", v)
+	}
+	if v > 120 {
+		t.Fatalf("retry-after must not exceed the cooldown TTL (120s), got %d", v)
+	}
+
+	// Partial suppression must NOT stamp the hint (a viable key exists).
+	ctx2 := schemas.NewBifrostContext(nil, time.Time{})
+	_, err = filter(ctx2, provider, "gpt-4o", []schemas.Key{{ID: "k1"}, {ID: "k3"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v, ok := ctx2.Value(schemas.BifrostContextKeyRetryAfterSeconds).(int64); ok {
+		t.Fatalf("no retry stamp expected when a key survives, got %d", v)
+	}
+}
+
+// TestRetryAfterSecondsHint pins the rounding rule: fractional remaining
+// cooldowns round UP to whole seconds, floored at 1, and non-positive input
+// yields 0 (no hint).
+func TestRetryAfterSecondsHint(t *testing.T) {
+	cases := []struct {
+		name string
+		in   time.Duration
+		want int64
+	}{
+		{name: "zero", in: 0, want: 0},
+		{name: "negative", in: -time.Second, want: 0},
+		{name: "exact second", in: 30 * time.Second, want: 30},
+		{name: "fraction rounds up", in: 30*time.Second + 100*time.Millisecond, want: 31},
+		{name: "sub-second floors to 1", in: 100 * time.Millisecond, want: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := retryAfterSecondsHint(tc.in); got != tc.want {
+				t.Fatalf("retryAfterSecondsHint(%v) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestAsMarkerMarksOnRateLimit covers the central reason the marker exists:
 // the retry loop rotates past a 429 on key A and succeeds on key B, but A
 // is the one that actually failed and we want A — not B — marked in cooldown.
@@ -1100,9 +1203,9 @@ func TestAsFilterLogsSuppressedKeysAtInfo(t *testing.T) {
 // TestPreProviderHookShortCircuitOnAllKeysCooled verifies the new silent
 // short-circuit contract: when every key for the targeted provider is in
 // cooldown, PreProviderHook returns an LLMPluginShortCircuit with a synthetic
-// 503 "no_eligible_keys" BifrostError and Silent=true so the framework can
-// skip the worker queue (and the logging plugin can skip the spurious
-// "cancelled" row).
+// 429 "no_eligible_keys" BifrostError (carrying a Retry-After hint for the
+// soonest cooldown lapse) and Silent=true so the framework can skip the worker
+// queue (and the logging plugin can skip the spurious "cancelled" row).
 func TestPreProviderHookShortCircuitOnAllKeysCooled(t *testing.T) {
 	p := NewPlugin(nil)
 	defer p.Cleanup()
@@ -1134,13 +1237,21 @@ func TestPreProviderHookShortCircuitOnAllKeysCooled(t *testing.T) {
 		t.Fatal("silent short-circuit must be set so logging skips the spurious cancelled row")
 	}
 	if sc.Error == nil {
-		t.Fatal("short-circuit must carry the synthetic 503 BifrostError")
+		t.Fatal("short-circuit must carry the synthetic 429 BifrostError")
 	}
-	if sc.Error.StatusCode == nil || *sc.Error.StatusCode != 503 {
-		t.Fatalf("expected 503 status code, got %+v", sc.Error.StatusCode)
+	if sc.Error.StatusCode == nil || *sc.Error.StatusCode != 429 {
+		t.Fatalf("expected 429 status code, got %+v", sc.Error.StatusCode)
 	}
 	if sc.Error.Type == nil || *sc.Error.Type != "no_eligible_keys" {
 		t.Fatalf("expected no_eligible_keys error type, got %+v", sc.Error.Type)
+	}
+	// Both keys share the same expiry (set together above), so the retry hint
+	// must equal the full cooldown TTL in seconds — the soonest lapse.
+	if sc.Error.ExtraFields.RetryAfterSeconds == 0 {
+		t.Fatal("expected a Retry-After hint on the all-keys-cooled short-circuit")
+	}
+	if v, ok := ctx.Value(schemas.BifrostContextKeyRetryAfterSeconds).(int64); !ok || v != sc.Error.ExtraFields.RetryAfterSeconds {
+		t.Fatalf("expected ctx retry-after stamp to match the error hint, got %v (error=%d)", v, sc.Error.ExtraFields.RetryAfterSeconds)
 	}
 	if gotReq != req {
 		t.Fatal("PreProviderHook must return the SAME request pointer")
@@ -1343,7 +1454,7 @@ func TestAsFilter_AttributesSuppressionToKind(t *testing.T) {
 // payload compact for the UI's per-provider listing.
 func TestStats_PerProviderOmitsUnseenProviders(t *testing.T) {
 	s := NewCooldownState(time.Minute)
-	s.MarkWithTTL(schemas.OpenAI, "k1", "", 60*time.Second, CooldownKindRateLimit, schemas.CooldownScopeKey)	// sensenova never gets a classified event.
+	s.MarkWithTTL(schemas.OpenAI, "k1", "", 60*time.Second, CooldownKindRateLimit, schemas.CooldownScopeKey) // sensenova never gets a classified event.
 
 	stats := s.Stats()
 	if _, ok := stats.PerProvider[schemas.OpenAI]; !ok {
@@ -1689,8 +1800,8 @@ func TestPreProviderHook_KeylessProviderSynthesizesSentinelKey(t *testing.T) {
 	if !sc.Silent {
 		t.Fatal("short-circuit must be Silent=true (logging plugin skips the spurious cancelled row)")
 	}
-	if sc.Error == nil || sc.Error.StatusCode == nil || *sc.Error.StatusCode != 503 {
-		t.Fatalf("expected 503 short-circuit error, got %+v", sc.Error)
+	if sc.Error == nil || sc.Error.StatusCode == nil || *sc.Error.StatusCode != 429 {
+		t.Fatalf("expected 429 short-circuit error, got %+v", sc.Error)
 	}
 	if sc.Error.Type == nil || *sc.Error.Type != "no_eligible_keys" {
 		t.Fatalf("expected no_eligible_keys type, got %+v", sc.Error.Type)

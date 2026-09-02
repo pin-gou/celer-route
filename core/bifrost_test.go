@@ -3468,7 +3468,7 @@ func TestExecuteRequestWithRetries_EmptyStreamReturnsClosedChannel(t *testing.T)
 //
 // Red-phase contract: when a KeyPoolFilter is installed and vetoes the
 // fixed key, the keyProvider closure returns errAllKeysFiltered. The
-// caller (executeRequestWithRetries) translates that into a 503
+// caller (executeRequestWithRetries) translates that into a 429
 // no_eligible_keys response rather than retrying the same dead
 // credential.
 func TestFixedKeyProviderRespectsKeyPoolFilter(t *testing.T) {
@@ -3489,7 +3489,7 @@ func TestFixedKeyProviderRespectsKeyPoolFilter(t *testing.T) {
 		t.Fatalf("expected keyProvider to surface filter veto as an error, got nil")
 	}
 	if !errors.Is(err, errAllKeysFiltered) {
-		t.Fatalf("expected errAllKeysFiltered so the caller maps it to 503 no_eligible_keys, got %v", err)
+		t.Fatalf("expected errAllKeysFiltered so the caller maps it to 429 no_eligible_keys, got %v", err)
 	}
 	if atomic.LoadInt32(&filterCalls) != 1 {
 		t.Fatalf("filter must have been invoked exactly once on the fixed-key path, got %d", filterCalls)
@@ -3569,12 +3569,15 @@ func TestFixedKeyProviderHonoursDeadKeyIDs(t *testing.T) {
 }
 
 // TestIsSyntheticNoEligibleKeysError pins the exact predicate that
-// distinguishes the synthetic 503 "no_eligible_keys" error (raised when the
-// KeyPoolFilter suppresses every eligible key before any provider call) from a
-// real provider 503 (which did reach the provider). Callers use it to decide
-// whether the request reached the provider; it does not gate PostLLMHooks
-// anymore — those always run so the logging plugin records the terminal status.
+// distinguishes the synthetic "no_eligible_keys" error (raised when the
+// KeyPoolFilter suppresses every eligible key before any provider call, now
+// surfaced as 429 with a Retry-After hint; 503 accepted for backward
+// compatibility) from a real provider 429/503 (which did reach the provider).
+// Callers use it to decide whether the request reached the provider; it does
+// not gate PostLLMHooks anymore — those always run so the logging plugin
+// records the terminal status.
 func TestIsSyntheticNoEligibleKeysError(t *testing.T) {
+	status429 := 429
 	status503 := 503
 	status500 := 500
 	noEligible := "no_eligible_keys"
@@ -3586,7 +3589,12 @@ func TestIsSyntheticNoEligibleKeysError(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "genuine synthetic no_eligible_keys 503",
+			name: "genuine synthetic no_eligible_keys 429",
+			err:  &schemas.BifrostError{StatusCode: &status429, Type: &noEligible},
+			want: true,
+		},
+		{
+			name: "legacy synthetic no_eligible_keys 503",
 			err:  &schemas.BifrostError{StatusCode: &status503, Type: &noEligible},
 			want: true,
 		},
@@ -3601,12 +3609,12 @@ func TestIsSyntheticNoEligibleKeysError(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "503 with unrelated type is not synthetic",
-			err:  &schemas.BifrostError{StatusCode: &status503, Type: &upstream},
+			name: "429 with unrelated type is not synthetic",
+			err:  &schemas.BifrostError{StatusCode: &status429, Type: &upstream},
 			want: false,
 		},
 		{
-			name: "no_eligible_keys on non-503 is not synthetic",
+			name: "no_eligible_keys on non-429/503 is not synthetic",
 			err:  &schemas.BifrostError{StatusCode: &status500, Type: &noEligible},
 			want: false,
 		},
@@ -3620,25 +3628,28 @@ func TestIsSyntheticNoEligibleKeysError(t *testing.T) {
 	}
 }
 
-// TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys is
+// TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces429NoEligibleKeys is
 // the streaming regression test for the key-pool veto path.
 //
 // When the KeyPoolFilter vetoes every eligible key on a STREAMING request
 // (canRotate=false single-key provider), executeRequestWithRetries must:
-//   - surface exactly the synthetic 503 "no_eligible_keys" error that
-//     isSyntheticNoEligibleKeysError matches, AND
+//   - surface exactly the synthetic 429 "no_eligible_keys" error that
+//     isSyntheticNoEligibleKeysError matches (a real HTTP 429 so OpenAI-
+//     compatible clients like opencode retry), AND
 //   - never invoke the provider requestHandler — no provider call happened.
 //
-// The synthetic 503 is still passed through PostLLMHooks by the caller
+// When the filter stamped BifrostContextKeyRetryAfterSeconds (shortest
+// remaining cooldown), the error's ExtraFields.RetryAfterSeconds must carry it
+// so the transport can emit a Retry-After header.
+//
+// The synthetic 429 is still passed through PostLLMHooks by the caller
 // (tryStreamRequest / tryRequest) so the logging plugin records the terminal
-// "error" status; this test only pins the error-shape returned from
+// status; this test only pins the error-shape returned from
 // executeRequestWithRetries (which opts out of the provider round-trip), not
 // whether PostLLMHooks run afterwards.
-func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys(t *testing.T) {
+func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces429NoEligibleKeys(t *testing.T) {
 	config := createTestConfig(1, 10*time.Millisecond, 100*time.Millisecond)
-	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	logger := NewDefaultLogger(schemas.LogLevelError)
-	ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
 
 	// requestHandler must NOT be reached when every key is vetoed.
 	handlerCalls := int32(0)
@@ -3653,40 +3664,58 @@ func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces503NoEligibleKeys(
 		return schemas.Key{}, fmt.Errorf("%w: provider %s", errAllKeysFiltered, schemas.OpenAI)
 	}
 
-	stream, err := executeRequestWithRetries(
-		ctx,
-		config,
-		handler,
-		keyProvider,
-		nil,
-		schemas.ChatCompletionStreamRequest,
-		schemas.OpenAI,
-		"gpt-4",
-		nil,
-		logger,
-	)
+	run := func(t *testing.T, ctx *schemas.BifrostContext) *schemas.BifrostError {
+		stream, err := executeRequestWithRetries(
+			ctx,
+			config,
+			handler,
+			keyProvider,
+			nil,
+			schemas.ChatCompletionStreamRequest,
+			schemas.OpenAI,
+			"gpt-4",
+			nil,
+			logger,
+		)
+		if err == nil {
+			t.Fatal("expected a 429 no_eligible_keys error when every key is vetoed, got nil")
+		}
+		if err.StatusCode == nil || *err.StatusCode != 429 {
+			t.Fatalf("expected status 429, got %v", err.StatusCode)
+		}
+		if err.Type == nil || *err.Type != noEligibleKeysErrorType {
+			t.Fatalf("expected type %q, got %v", noEligibleKeysErrorType, err.Type)
+		}
+		if !isSyntheticNoEligibleKeysError(err) {
+			t.Fatal("expected isSyntheticNoEligibleKeysError to be true for the returned error")
+		}
+		if stream != nil {
+			t.Fatal("expected nil stream when every key is vetoed; no provider was called")
+		}
+		if got := atomic.LoadInt32(&handlerCalls); got != 0 {
+			t.Fatalf("provider requestHandler must not be invoked when every key is vetoed, called %d time(s)", got)
+		}
+		return err
+	}
 
-	if err == nil {
-		t.Fatal("expected a 503 no_eligible_keys error when every key is vetoed, got nil")
-	}
-	// Assert the exact shape isSyntheticNoEligibleKeysError relies on — if this
-	// is not a genuine match, callers cannot distinguish a key-pool veto from a
-	// real provider 503 and may treat it as a logged provider failure.
-	if err.StatusCode == nil || *err.StatusCode != 503 {
-		t.Fatalf("expected status 503, got %v", err.StatusCode)
-	}
-	if err.Type == nil || *err.Type != noEligibleKeysErrorType {
-		t.Fatalf("expected type %q, got %v", noEligibleKeysErrorType, err.Type)
-	}
-	if !isSyntheticNoEligibleKeysError(err) {
-		t.Fatal("expected isSyntheticNoEligibleKeysError to be true for the returned error")
-	}
-	if stream != nil {
-		t.Fatal("expected nil stream when every key is vetoed; no provider was called")
-	}
-	if got := atomic.LoadInt32(&handlerCalls); got != 0 {
-		t.Fatalf("provider requestHandler must not be invoked when every key is vetoed, called %d time(s)", got)
-	}
+	t.Run("no retry hint stamped", func(t *testing.T) {
+		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+		ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
+		err := run(t, ctx)
+		if err.ExtraFields.RetryAfterSeconds != 0 {
+			t.Fatalf("expected no retry hint when the filter did not stamp one, got %d", err.ExtraFields.RetryAfterSeconds)
+		}
+	})
+
+	t.Run("retry hint propagated from ctx", func(t *testing.T) {
+		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+		ctx.SetValue(schemas.BifrostContextKeyTracer, &schemas.NoOpTracer{})
+		ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, int64(37))
+		err := run(t, ctx)
+		if err.ExtraFields.RetryAfterSeconds != 37 {
+			t.Fatalf("expected RetryAfterSeconds 37 from ctx, got %d", err.ExtraFields.RetryAfterSeconds)
+		}
+	})
 }
 
 // recordingSilentLogPlugin is a minimal LLMPlugin that records whether
@@ -3737,7 +3766,7 @@ func (p *recordingSilentLogPlugin) snapshot() (preRan, postRan, postSilent bool)
 // TestWorkerNoEligibleKeysSetsSilentLog is the regression test for the
 // worker-side key-pool veto path. When PreProviderHook does NOT short-circuit
 // (some keys looked available) but the worker's KeyPoolFilter then suppresses
-// every key, the synthetic 503 "no_eligible_keys" flows back through msg.Err.
+// every key, the synthetic 429 "no_eligible_keys" flows back through msg.Err.
 // Core must set BifrostContextKeySilentLog before running PostLLMHooks so
 // presentation plugins (logging) suppress the spurious entry — matching the
 // PreProviderHook short-circuit path.
@@ -3786,10 +3815,10 @@ func TestWorkerNoEligibleKeysSetsSilentLog(t *testing.T) {
 			if tc.streaming {
 				stream, bifrostErr := client.ChatCompletionStreamRequest(ctx, req)
 				if bifrostErr == nil {
-					t.Fatal("expected 503 no_eligible_keys error for streaming request, got nil")
+					t.Fatal("expected 429 no_eligible_keys error for streaming request, got nil")
 				}
 				if !isSyntheticNoEligibleKeysError(bifrostErr) {
-					t.Fatalf("expected synthetic 503 no_eligible_keys, got %v", bifrostErr)
+					t.Fatalf("expected synthetic 429 no_eligible_keys, got %v", bifrostErr)
 				}
 				if stream != nil {
 					t.Fatal("expected nil stream when every key is vetoed")
@@ -3797,10 +3826,10 @@ func TestWorkerNoEligibleKeysSetsSilentLog(t *testing.T) {
 			} else {
 				_, bifrostErr := client.ChatCompletionRequest(ctx, req)
 				if bifrostErr == nil {
-					t.Fatal("expected 503 no_eligible_keys error, got nil")
+					t.Fatal("expected 429 no_eligible_keys error, got nil")
 				}
 				if !isSyntheticNoEligibleKeysError(bifrostErr) {
-					t.Fatalf("expected synthetic 503 no_eligible_keys, got %v", bifrostErr)
+					t.Fatalf("expected synthetic 429 no_eligible_keys, got %v", bifrostErr)
 				}
 			}
 
@@ -3839,6 +3868,7 @@ func TestClearCtxForFallbackClearsSilentLog(t *testing.T) {
 	ctx.SetValue(schemas.BifrostContextKeyConnectionClosed, true)
 	ctx.SetValue(schemas.BifrostContextKeySupportsAssistantPrefill, true)
 	ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
+	ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, int64(37))
 
 	clearCtxForFallback(ctx)
 
@@ -3855,6 +3885,7 @@ func TestClearCtxForFallbackClearsSilentLog(t *testing.T) {
 		{"ConnectionClosed", schemas.BifrostContextKeyConnectionClosed},
 		{"SupportsAssistantPrefill", schemas.BifrostContextKeySupportsAssistantPrefill},
 		{"SilentLog", schemas.BifrostContextKeySilentLog},
+		{"RetryAfterSeconds", schemas.BifrostContextKeyRetryAfterSeconds},
 	}
 	for _, k := range mustBeCleared {
 		if v := ctx.Value(k); v != nil {

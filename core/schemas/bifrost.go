@@ -366,8 +366,8 @@ const (
 	BifrostContextKeySpanID                              BifrostContextKey = "bifrost-span-id"                                  // string (current span ID for child span creation - set by tracer)
 	BifrostContextKeyParentSpanID                        BifrostContextKey = "bifrost-parent-span-id"                           // string (parent span ID from W3C traceparent header - set by tracing middleware)
 	BifrostContextKeyStreamStartTime                     BifrostContextKey = "bifrost-stream-start-time"                        // time.Time (start time for streaming TTFT calculation - set by bifrost)
-	BifrostContextKeyRequestStart                        BifrostContextKey = "bifrost-request-start"                           // time.Time (anchor for timeline offsets: written by the logging plugin in PreLLMHook, read by core/upstreamspan.go when computing per-attempt time_offset_ms; absent if logging plugin is disabled — recordUpstreamSpan degrades to time_offset_ms=0)
-	BifrostContextKeyUpstreamSpans                       BifrostContextKey = "bifrost-upstream-spans"                          // []schemas.TimelineEvent (per-attempt upstream HTTP spans appended by core/upstreamspan.go from inside handleProviderRequest / handleProviderStreamRequest; consumed by the logging plugin's PostLLMHook when it writes the final timeline_events batch so spans persist in the same write cycle as pre/post_llm markers)
+	BifrostContextKeyRequestStart                        BifrostContextKey = "bifrost-request-start"                            // time.Time (anchor for timeline offsets: written by the logging plugin in PreLLMHook, read by core/upstreamspan.go when computing per-attempt time_offset_ms; absent if logging plugin is disabled — recordUpstreamSpan degrades to time_offset_ms=0)
+	BifrostContextKeyUpstreamSpans                       BifrostContextKey = "bifrost-upstream-spans"                           // []schemas.TimelineEvent (per-attempt upstream HTTP spans appended by core/upstreamspan.go from inside handleProviderRequest / handleProviderStreamRequest; consumed by the logging plugin's PostLLMHook when it writes the final timeline_events batch so spans persist in the same write cycle as pre/post_llm markers)
 	BifrostContextKeyTracer                              BifrostContextKey = "bifrost-tracer"                                   // Tracer (tracer instance for completing deferred spans - set by bifrost)
 	BifrostContextKeyModelCatalog                        BifrostContextKey = "bifrost-model-catalog"                            // ModelInfoProvider (model pricing/capability catalog backing ctx.GetModelInfo and ctx.CalculateCost - set by bifrost)
 	BifrostContextKeyDeferTraceCompletion                BifrostContextKey = "bifrost-defer-trace-completion"                   // bool (signals trace completion should be deferred for streaming - set by streaming handlers)
@@ -469,10 +469,11 @@ const (
 	BifrostContextKeyRTKOriginalSnapshot                 BifrostContextKey = "x-bf-rtk-original-snapshot"     // json.RawMessage (set by compression plugin - JSON snapshot of pre-compression tool message contents, for log detail diff view)
 	BifrostContextKeyRTKSnapshotMode                     BifrostContextKey = "x-bf-rtk-snapshot-mode"         // string (set by compression plugin - "split" | "merged" | "off")
 	BifrostContextKeyRTKRawOutputID                      BifrostContextKey = "x-bf-rtk-raw-output-id"         // string (set by compression plugin - 24-char SHA256 prefix of the persisted raw output file, when RawOutputRetention is not "never")
-	BifrostContextKeyRTKRawOutputHintInjected            BifrostContextKey = "x-bf-rtk-hint-injected"        // bool (set by compression plugin - dedupe marker so the system message hint is only prepended once per hook chain even if the plugin runs multiple times)
-	BifrostContextKeyRTKSentinelStripped                  BifrostContextKey = "x-bf-rtk-sentinel-stripped"    // int (set by compression plugin - count of tool messages whose RTK raw-output sentinel was stripped at the PreLLMHook boundary so the model never sees the wire protocol prefix; consumed by processRtkTextWithCommand to short-circuit its own internal sentinel check on the same request and avoid double-strip; cleared in PostLLMHook)
+	BifrostContextKeyRTKRawOutputHintInjected            BifrostContextKey = "x-bf-rtk-hint-injected"         // bool (set by compression plugin - dedupe marker so the system message hint is only prepended once per hook chain even if the plugin runs multiple times)
+	BifrostContextKeyRTKSentinelStripped                 BifrostContextKey = "x-bf-rtk-sentinel-stripped"     // int (set by compression plugin - count of tool messages whose RTK raw-output sentinel was stripped at the PreLLMHook boundary so the model never sees the wire protocol prefix; consumed by processRtkTextWithCommand to short-circuit its own internal sentinel check on the same request and avoid double-strip; cleared in PostLLMHook)
 	BifrostContextKeyProviderKeys                        BifrostContextKey = "bifrost-provider-keys"          // map[ModelProvider][]Key (set by bifrost - DO NOT SET THIS MANUALLY) - current provider's key pool stamped before PreProviderHook so plugins like provider-cooldown can decide whether to short-circuit before the request enters the worker queue; only the provider being routed is present (the sole consumer reads providerKeys[req.Provider])
 	BifrostContextKeySilentLog                           BifrostContextKey = "bifrost-silent-log"             // bool (set by bifrost - DO NOT SET THIS MANUALLY) - when true, presentation plugins (e.g. logging) suppress end-user-visible side effects for the current attempt; the framework still runs PostLLMHook so the plugin pipeline contract holds
+	BifrostContextKeyRetryAfterSeconds                   BifrostContextKey = "bifrost-retry-after-seconds"    // int64 (set by KeyPoolFilter plugins, e.g. provider-cooldown - the filter stamps the shortest remaining cooldown in seconds when it suppresses every eligible key; core reads it to attach RetryAfterSeconds to the synthetic 429 no_eligible_keys error so clients know when to retry)
 )
 
 const (
@@ -2104,4 +2105,10 @@ type BifrostErrorExtraFields struct {
 	// the provider actually billed us for. Nil when the failure consumed no
 	// tokens (e.g. 401/403/429 before the model ran).
 	BilledUsage *BifrostLLMUsage `json:"billed_usage,omitempty"`
+	// RetryAfterSeconds hints how long the caller should wait before retrying.
+	// Populated on the synthetic 429 "no_eligible_keys" error (all eligible
+	// keys suppressed by a KeyPoolFilter) with the shortest remaining cooldown
+	// among the suppressed keys. The transport emits it as the HTTP
+	// "Retry-After" header. 0 means no hint is available.
+	RetryAfterSeconds int64 `json:"retry_after_seconds,omitempty"`
 }

@@ -334,7 +334,7 @@ func TestPostLLMHookSilentShortCircuitNoPending(t *testing.T) {
 	ctx.SetValue(schemas.BifrostContextKeyRequestID, "req-silent-no-pending")
 	ctx.SetValue(schemas.BifrostContextKeySilentLog, true)
 
-	statusCode := 503
+	statusCode := 429
 	errType := "no_eligible_keys"
 	noEligible := &schemas.BifrostError{
 		IsBifrostError: false,

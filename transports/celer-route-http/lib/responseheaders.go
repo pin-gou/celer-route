@@ -88,6 +88,12 @@ func ApplyBifrostErrorResponseHeaders(ctx *fasthttp.RequestCtx, bifrostCtx *sche
 		OriginalModelRequested: extra.OriginalModelRequested,
 		ResolvedModelUsed:      extra.ResolvedModelUsed,
 	})
+	// Emit the Retry-After hint carried by synthetic 429 no_eligible_keys errors
+	// (shortest remaining cooldown in seconds) so OpenAI-compatible clients and
+	// SDKs back off until the suppressed key pool starts to un-suppress.
+	if extra.RetryAfterSeconds > 0 {
+		ctx.Response.Header.Set("Retry-After", strconv.FormatInt(extra.RetryAfterSeconds, 10))
+	}
 }
 
 // ApplyBifrostResponseHeaders writes both the upstream provider response

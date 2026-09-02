@@ -33,18 +33,24 @@ func logStatusForError(err *schemas.BifrostError) string {
 	return logStatusError
 }
 
-// isNoEligibleKeysError reports whether the error is the synthetic 503
-// "no_eligible_keys" raised when the KeyPoolFilter suppresses every eligible key
-// before any provider call. Such requests never reached the provider, so they
-// are logged with the terminal "cancelled" status instead of "error": this
-// terminates the timeline block (processing → grey) without inflating the
-// error rate or cost/latency aggregates, since cancelled is counted separately
-// and costs are only ever non-zero on successful provider responses.
+// isNoEligibleKeysError reports whether the error is the synthetic 429
+// "no_eligible_keys" (503 accepted for backward compatibility) raised when the
+// KeyPoolFilter suppresses every eligible key before any provider call. Such
+// requests never reached the provider, so they are logged with the terminal
+// "cancelled" status instead of "error": this terminates the timeline block
+// (processing → grey) without inflating the error rate or cost/latency
+// aggregates, since cancelled is counted separately and costs are only ever
+// non-zero on successful provider responses.
 func isNoEligibleKeysError(err *schemas.BifrostError) bool {
 	if err == nil {
 		return false
 	}
-	if err.StatusCode == nil || *err.StatusCode != 503 {
+	if err.StatusCode == nil {
+		return false
+	}
+	switch *err.StatusCode {
+	case 429, 503:
+	default:
 		return false
 	}
 	if err.Error != nil && err.Error.Type != nil && *err.Error.Type == "no_eligible_keys" {

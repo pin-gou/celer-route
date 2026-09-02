@@ -447,7 +447,7 @@ func (bifrost *Bifrost) SetPerKeyFailureMarker(f schemas.PerKeyFailureMarker) {
 //     retries on the same bad credential.
 //
 //   - The KeyPoolFilter hook (e.g. provider-cooldown) vetoes the key.
-//     Surface errAllKeysFiltered so the caller emits 503 no_eligible_keys,
+//     Surface errAllKeysFiltered so the caller emits 429 no_eligible_keys,
 //     which lets the configured Fallbacks chain (or governance plugin)
 //     route to another provider rather than retrying the same dead key.
 //
@@ -5831,7 +5831,7 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 	case bifrostErrVal := <-msg.Err:
 		// The key pool filter may prevent all keys from being selected (e.g.
 		// provider-cooldown plugin suppressing the only key), producing a
-		// synthetic 503 "no_eligible_keys" before any provider call. Previously
+		// synthetic 429 "no_eligible_keys" before any provider call. Previously
 		// this branch skipped PostLLMHooks to avoid logging a "spurious" 0ms
 		// failure, but doing so left the request stuck in "processing" forever
 		// in the timeline because PreLLMHook already pushed a processing event.
@@ -6203,7 +6203,7 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 		}
 		// The key pool filter may prevent all keys from being selected (e.g.
 		// provider-cooldown plugin suppressing the only key), producing a
-		// synthetic 503 "no_eligible_keys" before any provider call. Previously
+		// synthetic 429 "no_eligible_keys" before any provider call. Previously
 		// this branch skipped PostLLMHooks to avoid logging a "spurious" 0ms
 		// failure, but doing so left the request stuck in "processing" forever
 		// in the timeline because PreLLMHook already pushed a processing event.
@@ -6250,26 +6250,34 @@ var errAllKeysDead = errors.New("all configured keys returned permanent per-key 
 
 // errAllKeysFiltered is returned by a keyProvider closure when healthy (non-dead) keys exist but
 // the KeyPoolFilter hook suppressed all of them. Unlike errAllKeysDead this is a transient
-// condition (the filter/circuit breaker self-heals), so it surfaces as a 503 rather than a 502.
+// condition (the filter/circuit breaker self-heals), so it surfaces as a 429 (with a
+// Retry-After hint) rather than a 502.
 var errAllKeysFiltered = errors.New("all eligible keys are temporarily suppressed by the key pool filter")
 
 // noEligibleKeysErrorType is the BifrostError.Type value attached to the synthetic
-// 503 error raised by executeRequestWithRetries when the KeyPoolFilter (e.g.
-// provider-cooldown) suppresses every eligible key.
+// 429 error (503 accepted for backward compatibility) raised by
+// executeRequestWithRetries when the KeyPoolFilter (e.g. provider-cooldown)
+// suppresses every eligible key.
 const noEligibleKeysErrorType = "no_eligible_keys"
 
 // isSyntheticNoEligibleKeysError reports whether the error is the synthetic
-// 503 "no_eligible_keys" BifrostError raised by executeRequestWithRetries when
-// the KeyPoolFilter vetoes every key for the request. PostLLMHooks are still run
-// for this case so the logging plugin records the terminal "error" status and
-// the timeline does not leave the request stuck in "processing"; this predicate
-// is retained primarily for tests and for any caller that wants to distinguish
-// a key-pool veto from a genuine provider failure.
+// "no_eligible_keys" BifrostError raised by executeRequestWithRetries when
+// the KeyPoolFilter vetoes every key for the request. The status is 429 (with
+// a Retry-After hint); 503 is still accepted for backward compatibility with
+// pre-429 responses. PostLLMHooks are still run for this case so the logging
+// plugin records the terminal "error" status and the timeline does not leave
+// the request stuck in "processing"; this predicate is retained primarily for
+// tests and for any caller that wants to distinguish a key-pool veto from a
+// genuine provider failure.
 func isSyntheticNoEligibleKeysError(err *schemas.BifrostError) bool {
 	if err == nil {
 		return false
 	}
-	if err.StatusCode == nil || *err.StatusCode != 503 {
+	if err.StatusCode == nil {
+		return false
+	}
+	status := *err.StatusCode
+	if status != 429 && status != 503 {
 		return false
 	}
 	if err.Type == nil || *err.Type != noEligibleKeysErrorType {
@@ -6419,8 +6427,12 @@ func executeRequestWithRetries[T any](
 				// that a stray selector error doesn't get misreported as exhausted just
 				// because *some* keys happened to be dead.
 				if errors.Is(err, errAllKeysFiltered) {
-					statusCode := 503
+					statusCode := 429
 					errType := noEligibleKeysErrorType
+					retryAfter := int64(0)
+					if v, ok := ctx.Value(schemas.BifrostContextKeyRetryAfterSeconds).(int64); ok && v > 0 {
+						retryAfter = v
+					}
 					return zero, &schemas.BifrostError{
 						IsBifrostError: false,
 						StatusCode:     &statusCode,
@@ -6428,6 +6440,9 @@ func executeRequestWithRetries[T any](
 						Error: &schemas.ErrorField{
 							Type:    &errType,
 							Message: err.Error(),
+						},
+						ExtraFields: schemas.BifrostErrorExtraFields{
+							RetryAfterSeconds: retryAfter,
 						},
 					}
 				}
@@ -7133,7 +7148,7 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 						// Fixed key (single-key pool, explicit ID/name, session stickiness).
 						// Always return the same key — *unless* it has been marked
 						// permanently dead this request (errAllKeysDead → 502), *or* the
-						// KeyPoolFilter hook vetoes it (errAllKeysFiltered → 503
+						// KeyPoolFilter hook vetoes it (errAllKeysFiltered → 429
 						// no_eligible_keys). The filter call is what lets
 						// provider-cooldown actually take effect on single-key
 						// providers — without it, the filter would never run for
@@ -7317,10 +7332,10 @@ func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas
 					}
 					return resp, nil
 				}
-// Store a finalizer callback to create aggregated post-hook spans at stream end.
-// Wrapped in sync.Once so the normal end-of-stream invocation and a deferred
-// safety-net invocation (e.g. from a provider goroutine's panic path) cannot
-// double-release the pipeline.
+				// Store a finalizer callback to create aggregated post-hook spans at stream end.
+				// Wrapped in sync.Once so the normal end-of-stream invocation and a deferred
+				// safety-net invocation (e.g. from a provider goroutine's panic path) cannot
+				// double-release the pipeline.
 				var finalizerOnce sync.Once
 				postHookSpanFinalizer := func(ctx context.Context) {
 					finalizerOnce.Do(func() {

@@ -196,12 +196,12 @@ func NewCooldownState(ttl time.Duration) *CooldownState {
 		ttl = DefaultCooldownTTL
 	}
 	return &CooldownState{
-		cooldowns:           make(map[string]CooldownRecord),
-		ttl:                 ttl,
-		ttlOverrides:        make(map[schemas.ModelProvider]time.Duration),
-		perProvider:         make(map[schemas.ModelProvider]*ProviderKindCounters),
-		perProviderModel:    make(map[string]*ProviderKindCounters),
-		perProviderScopeKey: make(map[schemas.ModelProvider]*ProviderKindCounters),
+		cooldowns:             make(map[string]CooldownRecord),
+		ttl:                   ttl,
+		ttlOverrides:          make(map[schemas.ModelProvider]time.Duration),
+		perProvider:           make(map[schemas.ModelProvider]*ProviderKindCounters),
+		perProviderModel:      make(map[string]*ProviderKindCounters),
+		perProviderScopeKey:   make(map[schemas.ModelProvider]*ProviderKindCounters),
 		perProviderScopeModel: make(map[schemas.ModelProvider]*ProviderKindCounters),
 	}
 }
@@ -360,6 +360,51 @@ func (c *CooldownState) lookupSuppressed(provider schemas.ModelProvider, keyID s
 		return t, k, schemas.CooldownScopeModel, true
 	}
 	return time.Time{}, "", schemas.CooldownScopeKey, false
+}
+
+// ShortestRemainingCooldown returns the shortest remaining cooldown across the
+// given keys for (provider, model) — the earliest moment any of them could
+// become eligible again. Returns 0 when none of the keys is currently
+// suppressed. Used to derive the Retry-After hint on the synthetic 429
+// "no_eligible_keys" response so clients know when to retry.
+func (c *CooldownState) ShortestRemainingCooldown(provider schemas.ModelProvider, model string, keys []schemas.Key) time.Duration {
+	now := time.Now()
+	var shortest time.Duration
+	found := false
+	for _, k := range keys {
+		expiresAt, _, _, suppressed := c.lookupSuppressed(provider, k.ID, model)
+		if !suppressed {
+			continue
+		}
+		remaining := expiresAt.Sub(now)
+		if remaining < 0 {
+			remaining = 0
+		}
+		if !found || remaining < shortest {
+			shortest = remaining
+			found = true
+		}
+	}
+	if !found {
+		return 0
+	}
+	return shortest
+}
+
+// retryAfterSecondsHint rounds a remaining cooldown up to a whole number of
+// seconds (minimum 1) for the Retry-After hint / ctx stamp.
+func retryAfterSecondsHint(remaining time.Duration) int64 {
+	if remaining <= 0 {
+		return 0
+	}
+	secs := int64(remaining / time.Second)
+	if remaining%time.Second != 0 {
+		secs++
+	}
+	if secs < 1 {
+		secs = 1
+	}
+	return secs
 }
 
 // Mark records a cooldown for the given (provider, keyID) with no classified
@@ -720,7 +765,7 @@ func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
 // practice this is uncontended because filter calls are not concurrent
 // with each other for the same provider.
 func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
-	return func(_ *schemas.BifrostContext, provider schemas.ModelProvider, model string, keys []schemas.Key) ([]schemas.Key, error) {
+	return func(ctx *schemas.BifrostContext, provider schemas.ModelProvider, model string, keys []schemas.Key) ([]schemas.Key, error) {
 		if len(keys) == 0 {
 			return keys, nil
 		}
@@ -773,6 +818,16 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 			}
 			if logger != nil {
 				logger.Info("[provider-cooldown] suppressed key %s/%s (name=%s, model=%s, kind=%s)", provider, k.ID, k.Name, model, kind)
+			}
+		}
+		// When every key was vetoed, stamp the shortest remaining cooldown on
+		// the context so core's executeRequestWithRetries can attach the
+		// Retry-After hint to the synthetic 429 no_eligible_keys response.
+		// Guard ctx: the filter may be invoked with a nil context by callers
+		// that only need the key filtering behaviour (e.g. tests).
+		if len(out) == 0 && ctx != nil {
+			if rem := c.ShortestRemainingCooldown(provider, model, keys); rem > 0 {
+				ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, retryAfterSecondsHint(rem))
 			}
 		}
 		return out, nil
@@ -1023,8 +1078,9 @@ func (p *CooldownPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.Bi
 }
 
 // PreProviderHook inspects the targeted provider's key pool against the cooldown
-// state and short-circuits the attempt with a synthetic 503 "no_eligible_keys"
-// BifrostError when every key is in cooldown. The framework stamps
+// state and short-circuits the attempt with a synthetic 429 "no_eligible_keys"
+// BifrostError (carrying a Retry-After hint for the soonest cooldown lapse)
+// when every key is in cooldown. The framework stamps
 // ctx[BifrostContextKeyProviderKeys] with the per-provider key snapshot before
 // calling this hook, so we never have to round-trip through bifrost.account.
 //
@@ -1033,7 +1089,7 @@ func (p *CooldownPlugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.Bi
 // propagates to the caller so the fallback chain can proceed (and the cooldown
 // timeline updates cleanly). Without this hook, the request would otherwise
 // reach the worker queue, have every key vetoed by AsFilter, surface a
-// "no_eligible_keys" 503 there, and force a "spurious" status=cancelled log
+// "no_eligible_keys" 429 there, and force a "spurious" status=cancelled log
 // row before the fallback attempt ran.
 //
 // PreProviderHook is also called for each fallback attempt, so cooldown re-
@@ -1093,14 +1149,20 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 		return req, nil, nil
 	}
 
-	// All keys are in cooldown — synthesize the same 503 that the worker would
+	// All keys are in cooldown — synthesize the same 429 that the worker would
 	// have produced via AsFilter, but surface it here so logging sees the
-	// SilentLog flag and skips the spurious "cancelled" row.
-	statusCode := 503
+	// SilentLog flag and skips the spurious "cancelled" row. The Retry-After
+	// hint tells the caller when the soonest of these cooldowns lapses.
+	statusCode := 429
 	errType := "no_eligible_keys"
 	message := fmt.Sprintf("no eligible keys for provider %s (all in cooldown)", provider)
+	var retryAfter int64
+	if rem := p.State.ShortestRemainingCooldown(provider, model, keys); rem > 0 {
+		retryAfter = retryAfterSecondsHint(rem)
+		ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, retryAfter)
+	}
 	if p.logger != nil {
-		p.logger.Info("[provider-cooldown] short-circuit on %s/%s — all %d key(s) in cooldown", provider, model, len(keys))
+		p.logger.Info("[provider-cooldown] short-circuit on %s/%s — all %d key(s) in cooldown (retry-after %ds)", provider, model, len(keys), retryAfter)
 	}
 	return req, &schemas.LLMPluginShortCircuit{
 		Error: &schemas.BifrostError{
@@ -1110,6 +1172,9 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 			Error: &schemas.ErrorField{
 				Type:    &errType,
 				Message: message,
+			},
+			ExtraFields: schemas.BifrostErrorExtraFields{
+				RetryAfterSeconds: retryAfter,
 			},
 			// AllowFallbacks stays nil (= allow) so the configured fallback chain
 			// can pick up the request, matching the worker's errAllKeysFiltered path.
