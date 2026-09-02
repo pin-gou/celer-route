@@ -23,9 +23,6 @@ type Config struct {
 	// DedupThreshold is the number of consecutive identical lines before deduplication kicks in.
 	DedupThreshold int `json:"dedup_threshold"`
 
-	// PreserveCacheControl preserves cache_control blocks during compression (Anthropic prompt caching).
-	PreserveCacheControl bool `json:"preserve_cache_control"`
-
 	// EnableGrouping enables fuzzy grouping of near-equivalent consecutive lines
 	// (lines that differ only by timestamps/hex IDs/numbers/versions).
 	EnableGrouping bool `json:"enable_grouping"`
@@ -93,11 +90,11 @@ type Config struct {
 	// Aligned with OmniRoute's RtkConfig.enableRenderers.
 	EnableRenderers bool `json:"enable_renderers"`
 
-	// Renderers is an optional whitelist of detection types whose renderers
-	// may run. Empty (the default) enables every registered renderer. When
-	// non-empty, renderers for detection types NOT in this list pass through
-	// unchanged. Aligned with OmniRoute's RtkConfig.renderers.
-	Renderers []string `json:"renderers,omitempty"`
+	// DisabledRenderers is an optional blacklist of detection types whose
+	// renderers should be skipped. Empty (the default) means every registered
+	// renderer may run. When non-empty, renderers whose detection Type appears
+	// in this list pass through unchanged.
+	DisabledRenderers []string `json:"disabled_renderers,omitempty"`
 
 // SnapshotMode controls how compression snapshots are persisted for the
 		// log detail view:
@@ -214,7 +211,6 @@ func looksLikeAllZero(c *Config) bool {
 		c.MaxCharsPerResult == 0 &&
 		c.DedupThreshold == 0 &&
 		c.GroupingThreshold == 0 &&
-		!c.PreserveCacheControl &&
 		!c.EnableGrouping &&
 		!c.CustomFiltersEnabled &&
 		!c.TrustProjectFilters &&

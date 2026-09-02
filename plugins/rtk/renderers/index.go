@@ -1,7 +1,6 @@
 package renderers
 
-import (
-)
+import ()
 
 // registry maps detection types to their Renderer implementations.
 // Detection types are produced by rtk/CommandDetection.Type. Each renderer
@@ -32,18 +31,19 @@ var registry = map[string]Renderer{
 	"json-output": renderStructuredTable,
 }
 
-// RenderConfig controls optional renderer filtering. When AllowedRenderers
-// is non-empty, only those detection types are rendered; everything else
-// passes through unchanged. This mirrors OmniRoute's `config.renderers`.
+// RenderConfig controls optional renderer filtering. When BlockedRenderers
+// is non-empty, detection types in the list are skipped; everything else
+// passes through to its renderer (and ultimately through unchanged if no
+// renderer is registered). This mirrors `config.disabled_renderers`.
 type RenderConfig struct {
-	// AllowedRenderers is a whitelist of detection types whose renderers
-	// are allowed to run. Empty means "all registered renderers allowed".
-	AllowedRenderers []string
+	// BlockedRenderers is a blacklist of detection types whose renderers
+	// should be skipped. Empty means "all registered renderers allowed".
+	BlockedRenderers []string
 }
 
 // ApplyRenderer dispatches to the registered renderer for the given
-// detection type. When no renderer is registered, the type is not in the
-// whitelist, or the renderer returns a no-op, the original text is
+// detection type. When no renderer is registered, the type is in the
+// blacklist, or the renderer returns a no-op, the original text is
 // returned with Changed=false.
 //
 // The dispatcher wraps the renderer call in a recover() guard so a panic
@@ -54,7 +54,7 @@ func ApplyRenderer(text string, det DetectionInfo, cfg RenderConfig) (result Ren
 	if !ok {
 		return RenderResult{Text: text, Changed: false, Renderer: ""}
 	}
-	if len(cfg.AllowedRenderers) > 0 && !containsString(cfg.AllowedRenderers, det.Type) {
+	if len(cfg.BlockedRenderers) > 0 && containsString(cfg.BlockedRenderers, det.Type) {
 		return RenderResult{Text: text, Changed: false, Renderer: ""}
 	}
 

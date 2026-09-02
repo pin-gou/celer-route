@@ -105,6 +105,19 @@ export interface TestResult {
 }
 
 // ---------------------------------------------------------------------------
+// /api/context/rtk/renderers
+// ---------------------------------------------------------------------------
+
+export interface RendererCatalogEntry {
+	name: string;
+	category?: string;
+}
+
+export interface RendererCatalog {
+	renderers: RendererCatalogEntry[];
+}
+
+// ---------------------------------------------------------------------------
 // /api/compression/preview
 // ---------------------------------------------------------------------------
 

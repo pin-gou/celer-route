@@ -39,16 +39,16 @@ Changes not staged for commit:
 	}
 
 	tests := []struct {
-		name          string
-		blocks        []schemas.ChatContentBlock
+		name            string
+		blocks          []schemas.ChatContentBlock
 		wantCCPreserved bool
 	}{
 		{
 			name: "cache_control_on_tool_result_preserved",
 			blocks: []schemas.ChatContentBlock{
 				{
-					Type:        "tool_result",
-					Text:        &gitOutput,
+					Type:         "tool_result",
+					Text:         &gitOutput,
 					CacheControl: cc,
 				},
 			},
@@ -58,8 +58,8 @@ Changes not staged for commit:
 			name: "cache_control_on_text_block_preserved",
 			blocks: []schemas.ChatContentBlock{
 				{
-					Type:        "text",
-					Text:        &gitOutput,
+					Type:         "text",
+					Text:         &gitOutput,
 					CacheControl: cc,
 				},
 			},
@@ -73,8 +73,8 @@ Changes not staged for commit:
 					Text: strPtr("System instructions that should be cached"),
 				},
 				{
-					Type:        "tool_result",
-					Text:        &gitOutput,
+					Type:         "tool_result",
+					Text:         &gitOutput,
 					CacheControl: cc,
 				},
 				{
@@ -102,9 +102,8 @@ Changes not staged for commit:
 			}
 
 			state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, &Config{
-				Enabled:              true,
-				Intensity:            "standard",
-				PreserveCacheControl: true,
+				Enabled:   true,
+				Intensity: "standard",
 			}))
 			if state == nil {
 				t.Fatal("applyRtkCompression returned nil state")
@@ -140,67 +139,6 @@ Changes not staged for commit:
 				}
 			}
 		})
-	}
-}
-
-// TestCacheControlDisabled verifies that when PreserveCacheControl is false,
-// cache_control blocks may be compressed (the preservation is opt-out).
-func TestCacheControlDisabled(t *testing.T) {
-	gitOutput := `On branch main
-Changes not staged for commit:
-  modified:   src/main.go
-  modified:   src/utils.go
-  modified:   go.mod
-  modified:   go.sum
-  modified:   Makefile
-  modified:   README.md
-  modified:   .gitignore
-  modified:   docker-compose.yml
-  modified:   config.json
-  modified:   tests/test_main.go
-  modified:   docs/README.md
-  modified:   scripts/build.sh
-  modified:   internal/parser.go
-  modified:   internal/tokenizer.go
-`
-
-	req := &schemas.BifrostRequest{
-		ChatRequest: &schemas.BifrostChatRequest{
-			Input: []schemas.ChatMessage{
-				{
-					Role: schemas.ChatMessageRoleUser,
-					Content: &schemas.ChatMessageContent{
-						ContentBlocks: []schemas.ChatContentBlock{
-							{
-								Type: "tool_result",
-								Text: &gitOutput,
-								CacheControl: &schemas.CacheControl{
-									Type: "ephemeral",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, &Config{
-		Enabled:              true,
-		Intensity:            "standard",
-		PreserveCacheControl: false, // disabled: can compress
-	}))
-	if state == nil {
-		t.Fatal("applyRtkCompression returned nil state")
-	}
-
-	// The tool_result text may have been compressed since cache_control preserve is off
-	outBlocks := req.ChatRequest.Input[0].Content.ContentBlocks
-	if len(outBlocks) != 1 {
-		t.Fatalf("expected 1 output block, got %d", len(outBlocks))
-	}
-	if outBlocks[0].CacheControl == nil {
-		t.Error("cache_control should still be present on the block even if text is compressed")
 	}
 }
 
@@ -297,15 +235,15 @@ Changes not staged for commit:
 // TestCacheControlBlockTypeFunctions verifies detection of cache-controlled blocks.
 func TestCacheControlBlockTypeFunctions(t *testing.T) {
 	tests := []struct {
-		name     string
-		block    schemas.ChatContentBlock
+		name          string
+		block         schemas.ChatContentBlock
 		wantPreserved bool
 	}{
 		{
 			name: "with_cache_control",
 			block: schemas.ChatContentBlock{
-				Type:        "text",
-				Text:        strPtr("some content"),
+				Type:         "text",
+				Text:         strPtr("some content"),
 				CacheControl: &schemas.CacheControl{Type: "ephemeral"},
 			},
 			wantPreserved: true,
@@ -319,8 +257,8 @@ func TestCacheControlBlockTypeFunctions(t *testing.T) {
 			wantPreserved: false,
 		},
 		{
-			name: "nil_block",
-			block: schemas.ChatContentBlock{},
+			name:          "nil_block",
+			block:         schemas.ChatContentBlock{},
 			wantPreserved: false,
 		},
 	}

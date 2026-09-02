@@ -48,6 +48,7 @@ import (
 type RtkPluginAccessor interface {
 	GetFilterCatalog() rtk.FilterCatalog
 	GetCavemanRuleCatalog() rtk.CavemanRuleCatalog
+	GetRendererCatalog() rtk.RendererCatalog
 	RunTest(payload rtk.TestPayload) rtk.TestResult
 	PreviewCompression(req rtk.PreviewRequest) rtk.PreviewResponse
 	ReadRawOutput(id string) (string, bool)
@@ -117,6 +118,7 @@ func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.Bif
 	r.PUT("/api/context/rtk/config", lib.ChainMiddlewares(h.putConfig, middlewares...))
 	r.GET("/api/context/rtk/filters", lib.ChainMiddlewares(h.getFilters, middlewares...))
 	r.GET("/api/context/rtk/caveman/rules", lib.ChainMiddlewares(h.getCavemanRules, middlewares...))
+	r.GET("/api/context/rtk/renderers", lib.ChainMiddlewares(h.getRenderers, middlewares...))
 	r.POST("/api/context/rtk/test", lib.ChainMiddlewares(h.postTest, middlewares...))
 	r.GET("/api/context/rtk/raw-output/{id}", h.getRawOutput)
 	r.GET("/api/context/rtk/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
@@ -309,12 +311,29 @@ func (h *RtkHandler) getCavemanRules(ctx *fasthttp.RequestCtx) {
 	accessor, ok := h.resolver.ResolveRtkPlugin()
 	if !ok || accessor == nil {
 		SendJSON(ctx, rtk.CavemanRuleCatalog{
-			Rules:                  []rtk.CavemanRuleCatalogEntry{},
+			Rules:                   []rtk.CavemanRuleCatalogEntry{},
 			BuiltInPreservePatterns: []string{},
 		})
 		return
 	}
 	SendJSON(ctx, accessor.GetCavemanRuleCatalog())
+}
+
+// getRenderers returns the static renderer catalog (detection Types
+// mapped to a renderer + a static category label) so the RTK admin UI
+// can render disabled_renderers as a multi-select with search, grouping
+// and per-renderer descriptions. Mirrors getCavemanRules' degradation:
+// when the plugin is missing we still return a well-shaped empty
+// catalog so the multi-select falls back to its text-input path.
+func (h *RtkHandler) getRenderers(ctx *fasthttp.RequestCtx) {
+	accessor, ok := h.resolver.ResolveRtkPlugin()
+	if !ok || accessor == nil {
+		SendJSON(ctx, rtk.RendererCatalog{
+			Renderers: []rtk.RendererCatalogEntry{},
+		})
+		return
+	}
+	SendJSON(ctx, accessor.GetRendererCatalog())
 }
 
 // ---------------------------------------------------------------------------

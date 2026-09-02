@@ -141,7 +141,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 					continue
 				}
 				// Preserve cache_control blocks verbatim.
-				if config.PreserveCacheControl && shouldPreserveCacheControl(block) {
+				if shouldPreserveCacheControl(block) {
 					blockIndex++
 					continue
 				}
@@ -303,7 +303,9 @@ func applyRtkCompressionResponsesWithDefaults(req *schemas.BifrostRequest, p *Pl
 //
 // cache_control protection is honoured: function_call_output items carrying a
 // CacheControl (Anthropic tool_result with cache_control) are preserved
-// verbatim when config.PreserveCacheControl is enabled.
+// verbatim. Cache_control preservation is unconditional — breaking the
+// Anthropic prompt-cache hit by compressing a cache_control-marked block is
+// never safe, so this is not a configurable knob.
 func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.BifrostRequest, p *Plugin, runner *PipelineRunner, pipeline *Pipeline, defaultCfg EngineConfig) *CompressionState {
 	state := NewCompressionState()
 	if req == nil || p == nil || p.config == nil || !p.config.Enabled {
@@ -391,7 +393,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		out := msg.ResponsesToolMessage.Output
 
 		// Preserve cache_control-marked tool outputs verbatim.
-		if config.PreserveCacheControl && msg.CacheControl != nil {
+		if msg.CacheControl != nil {
 			callIdx++
 			continue
 		}
@@ -527,7 +529,7 @@ func applyResponsesToolOutput(out *schemas.ResponsesToolMessageOutputStruct, con
 		for i := range out.ResponsesFunctionToolCallOutputBlocks {
 			block := &out.ResponsesFunctionToolCallOutputBlocks[i]
 			if block.Type == schemas.ResponsesInputMessageContentBlockTypeText && block.Text != nil {
-				if config.PreserveCacheControl && block.CacheControl != nil {
+				if block.CacheControl != nil {
 					continue
 				}
 				block.Text = &text
@@ -703,7 +705,7 @@ func processRtkTextWithCommand(ctx *schemas.BifrostContext, input string, config
 				Command:  detection.Command,
 				Category: detection.Category,
 			}, renderers.RenderConfig{
-				AllowedRenderers: config.Renderers,
+				BlockedRenderers: config.DisabledRenderers,
 			})
 			if res.Changed {
 				result = res.Text
@@ -775,7 +777,7 @@ func processRtkTextWithCommand(ctx *schemas.BifrostContext, input string, config
 			Command:  detection.Command,
 			Category: detection.Category,
 		}, renderers.RenderConfig{
-			AllowedRenderers: config.Renderers,
+			BlockedRenderers: config.DisabledRenderers,
 		})
 		if res.Changed {
 			stripped = res.Text

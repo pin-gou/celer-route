@@ -72,20 +72,11 @@ export const rtkConfigSchema = z.object({
 	// DedupThreshold is the number of consecutive identical lines before deduplication.
 	dedup_threshold: z.number().int().min(0).optional(),
 
-	// PreserveCacheControl preserves cache_control blocks during compression.
-	preserve_cache_control: z.boolean().optional(),
-
 	// EnableGrouping enables fuzzy grouping of near-equivalent consecutive lines.
 	enable_grouping: z.boolean().optional(),
 
 	// GroupingThreshold is the minimum run length of near-equivalent lines before grouping.
 	grouping_threshold: z.number().int().min(0).optional(),
-
-	// CustomFiltersEnabled enables loading of project/global custom filters.
-	custom_filters_enabled: z.boolean().optional(),
-
-	// TrustProjectFilters bypasses the trust.json SHA256 check for project-level filters.
-	trust_project_filters: z.boolean().optional(),
 
 	// EnabledFilters whitelists filter IDs to load.
 	enabled_filters: z.array(z.string()).optional(),
@@ -130,10 +121,10 @@ export const rtkConfigSchema = z.object({
 	// Renderers are fail-open — a panic or no-op leaves the original text unchanged.
 	enable_renderers: z.boolean().default(true),
 
-	// Renderers is an optional whitelist of detection types whose renderers
-	// may run. Empty (default) enables every registered renderer. Aligned
-	// with OmniRoute's RtkConfig.renderers.
-	renderers: z.array(z.string()).optional(),
+	// DisabledRenderers is an optional blacklist of detection types whose
+	// renderers should be skipped. Empty (default) enables every registered
+	// renderer when enable_renderers is true.
+	disabled_renderers: z.array(z.string()).optional(),
 
 	// SnapshotMode controls how compression snapshots are persisted for the
 	// log detail view. "off" disables snapshots entirely (default, saves log

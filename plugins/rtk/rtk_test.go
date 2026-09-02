@@ -983,11 +983,10 @@ func containsStr(s, substr string) bool {
 func DefaultConfig() *Config {
 	return &Config{
 		Enabled:              true,
-		Intensity:            "standard",
-		MaxLinesPerResult:    120,
-		MaxCharsPerResult:    12000,
-		DedupThreshold:       3,
-		PreserveCacheControl: true,
+		Intensity:         "standard",
+		MaxLinesPerResult: 120,
+		MaxCharsPerResult: 12000,
+		DedupThreshold:    3,
 	}
 }
 

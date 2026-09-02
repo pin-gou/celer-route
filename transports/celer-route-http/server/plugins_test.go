@@ -192,14 +192,13 @@ func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
 
 	// The rtk plugin config matches the schema contract from design.md:
 	// enabled / intensity / max_lines_per_result / max_chars_per_result /
-	// dedup_threshold / preserve_cache_control.
+	// dedup_threshold.
 	rtkConfig := map[string]any{
-		"enabled":                true,
-		"intensity":              "standard",
-		"max_lines_per_result":   120,
-		"max_chars_per_result":   12000,
-		"dedup_threshold":        3,
-		"preserve_cache_control": true,
+		"enabled":              true,
+		"intensity":            "standard",
+		"max_lines_per_result": 120,
+		"max_chars_per_result": 12000,
+		"dedup_threshold":      3,
 	}
 
 	plugin, err := InstantiatePlugin(context.Background(), "rtk", nil, rtkConfig, config)
@@ -444,8 +443,7 @@ func TestRTKPluginConfig_SchemaContract(t *testing.T) {
 		"intensity": "standard",
 		"max_lines_per_result": 120,
 		"max_chars_per_result": 12000,
-		"dedup_threshold": 3,
-		"preserve_cache_control": true
+		"dedup_threshold": 3
 	}`)
 	if err := lib.ValidateConfigSchema([]byte(validConfig), schemaBytes); err != nil {
 		t.Fatalf("valid rtk config should pass schema validation, got: %v", err)
@@ -522,7 +520,6 @@ func TestRTKPluginConfig_SchemaContract(t *testing.T) {
 		"max_lines_per_result",
 		"max_chars_per_result",
 		"dedup_threshold",
-		"preserve_cache_control",
 	}
 	for _, field := range expectedFields {
 		if _, exists := configProps[field]; !exists {

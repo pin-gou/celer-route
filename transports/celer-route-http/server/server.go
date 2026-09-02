@@ -2073,6 +2073,9 @@ func (a *rtkAccessor) GetFilterCatalog() rtk.FilterCatalog { return a.p.GetFilte
 func (a *rtkAccessor) GetCavemanRuleCatalog() rtk.CavemanRuleCatalog {
 	return a.p.GetCavemanRuleCatalog()
 }
+func (a *rtkAccessor) GetRendererCatalog() rtk.RendererCatalog {
+	return a.p.GetRendererCatalog()
+}
 func (a *rtkAccessor) RunTest(payload rtk.TestPayload) rtk.TestResult {
 	return a.p.RunTest(payload)
 }

@@ -9,7 +9,6 @@ import { expect, test } from '../../core/fixtures/base.fixture'
  *     max_chars_per_result (Number input), dedup_threshold (Number input),
  *     raw_output_retention (Select), apply_to_tool_results (Checkbox),
  *     apply_to_code_blocks (Checkbox), apply_to_assistant_messages (Checkbox),
- *     custom_filters_enabled (Switch), trust_project_filters (Switch),
  *     enable_grouping (Switch), grouping_threshold (Number input),
  *     pipeline (JSON textarea), min_tokens_to_compress (Number input)
  *   - Enabled switch toggle → Save Changes → PATCH /api/plugins/rtk → 200
@@ -104,15 +103,11 @@ test.describe('RTK Plugin Configuration', () => {
       const groupingLabel = page.getByText(/grouping/i).first()
       await expect(groupingLabel).toBeVisible()
 
-      // 5. 过滤器: custom_filters_enabled, trust_project_filters
-      const filtersLabel = page.getByText(/filter/i).first()
-      await expect(filtersLabel).toBeVisible()
-
-      // 6. 原始输出: raw_output_retention, raw_output_max_bytes
+      // 5. 原始输出: raw_output_retention, raw_output_max_bytes
       const rawOutputLabel = page.getByText(/raw output/i).first()
       await expect(rawOutputLabel).toBeVisible()
 
-      // 7. 高级: pipeline (JSON textarea), min_tokens_to_compress
+      // 6. 高级: pipeline (JSON textarea), min_tokens_to_compress
       const pipelineLabel = page.getByText(/pipeline/i).first()
       const minTokensLabel = page.getByText(/min.*tokens/i).first()
       await expect(pipelineLabel.or(minTokensLabel)).toBeVisible()

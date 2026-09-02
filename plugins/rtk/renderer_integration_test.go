@@ -111,9 +111,9 @@ index 111..222 100644
 	t.Errorf("expected rtk-render:* technique, got %v", stateOn.Techniques)
 }
 
-// TestEnableRenderers_RendererWhitelist verifies that the Renderers
-// whitelist restricts which renderers run.
-func TestEnableRenderers_RendererWhitelist(t *testing.T) {
+// TestEnableRenderers_RendererBlacklist verifies that the
+// DisabledRenderers blacklist restricts which renderers run.
+func TestEnableRenderers_RendererBlacklist(t *testing.T) {
 	gitDiffInput := `diff --git a/x.ts b/x.ts
 index 111..222 100644
 @@ -1,3 +1,3 @@
@@ -134,15 +134,15 @@ index 111..222 100644
 		},
 	}
 
-	// Whitelist that excludes git-diff → renderer should not run.
+	// Blacklist that includes git-diff → renderer should not run.
 	cfg := DefaultConfig()
 	cfg.EnableRenderers = true
-	cfg.Renderers = []string{"test-pytest", "aws"}
+	cfg.DisabledRenderers = []string{"git-diff"}
 	state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, cfg))
 
 	for _, tech := range state.Techniques {
 		if strings.HasPrefix(tech, "rtk-render:") {
-			t.Errorf("renderer should have been filtered by whitelist, got %v", state.Techniques)
+			t.Errorf("renderer should have been skipped by blacklist, got %v", state.Techniques)
 		}
 	}
 }

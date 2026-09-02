@@ -36,7 +36,6 @@ func TestRTKPluginConfig_Schema_GroupingFields(t *testing.T) {
 		"max_lines_per_result": 120,
 		"max_chars_per_result": 12000,
 		"dedup_threshold": 3,
-		"preserve_cache_control": true,
 		"enable_grouping": true,
 		"grouping_threshold": 3
 	}`)

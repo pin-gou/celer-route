@@ -16,19 +16,19 @@ func TestApplyRenderer_UnknownType(t *testing.T) {
 	}
 }
 
-// TestApplyRenderer_AllowedRenderersWhitelist verifies that the whitelist
-// restricts renderers to the listed detection types.
-func TestApplyRenderer_AllowedRenderersWhitelist(t *testing.T) {
+// TestApplyRenderer_BlockedRenderersBlacklist verifies that the blacklist
+// skips renderers for the listed detection types.
+func TestApplyRenderer_BlockedRenderersBlacklist(t *testing.T) {
 	input := `diff --git a/x b/x
 @@ -1 +1 @@
 -old
 +new`
-	// type=git-diff but not in whitelist → no-op.
+	// type=git-diff IS in blacklist → renderer skipped, text unchanged.
 	res := ApplyRenderer(input, DetectionInfo{Type: "git-diff"}, RenderConfig{
-		AllowedRenderers: []string{"test-pytest"},
+		BlockedRenderers: []string{"git-diff"},
 	})
 	if res.Changed {
-		t.Error("renderer should have been filtered out by whitelist")
+		t.Error("renderer should have been skipped by blacklist")
 	}
 	if res.Text != input {
 		t.Error("text should be unchanged")
@@ -84,10 +84,10 @@ func TestRegisteredRenderers(t *testing.T) {
 		t.Fatal("RegisteredRenderers returned empty slice")
 	}
 	want := map[string]bool{
-		"git-diff":        true,
-		"test-pytest":     true,
-		"terraform-plan":  true,
-		"aws":             true,
+		"git-diff":       true,
+		"test-pytest":    true,
+		"terraform-plan": true,
+		"aws":            true,
 	}
 	for _, k := range keys {
 		if want[k] {

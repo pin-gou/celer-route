@@ -3307,11 +3307,6 @@
                       "minimum": 1,
                       "default": 3
                     },
-                    "preserve_cache_control": {
-                      "type": "boolean",
-                      "description": "Preserve cache_control blocks during compression (Anthropic prompt caching)",
-                      "default": true
-                    },
                     "enable_grouping": {
                       "type": "boolean",
                       "description": "Enable fuzzy grouping of similar consecutive lines (runLength >= threshold)",
@@ -3406,9 +3401,9 @@
                       "description": "Enable semantic renderers (opt-in). When true, structured outputs (git diff, test suites, terraform plan, JSON tables) are rewritten to a more compact form after line filtering. Renderers are fail-open — a panic or no-op leaves the original text unchanged",
                       "default": false
                     },
-                    "renderers": {
+                    "disabled_renderers": {
                       "type": "array",
-                      "description": "Whitelist of detection types whose renderers are allowed to run. Empty (default) means every registered renderer is enabled when enable_renderers is true. Detection types with no registered renderer pass through unchanged",
+                      "description": "Blacklist of detection types whose renderers should be skipped. Empty (default) means every registered renderer may run when enable_renderers is true. Listed detection types pass through unchanged",
                       "items": {
                         "type": "string"
                       },

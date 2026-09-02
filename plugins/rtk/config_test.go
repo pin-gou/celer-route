@@ -16,12 +16,11 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name: "valid standard config",
 			config: Config{
-				Enabled:              true,
-				Intensity:            "standard",
-				MaxLinesPerResult:    120,
-				MaxCharsPerResult:    12000,
-				DedupThreshold:       3,
-				PreserveCacheControl: true,
+				Enabled:           true,
+				Intensity:         "standard",
+				MaxLinesPerResult: 120,
+				MaxCharsPerResult: 12000,
+				DedupThreshold:    3,
 			},
 			wantErr: false,
 		},
@@ -555,14 +554,13 @@ func TestLooksLikeAllZero(t *testing.T) {
 	}{
 		{name: "literal zero value", cfg: Config{}, want: true},
 		{name: "all booleans false, all ints zero, all strings empty", cfg: Config{
-			Enabled: false, PreserveCacheControl: false, EnableGrouping: false,
+			Enabled: false, EnableGrouping: false,
 			CustomFiltersEnabled: false,
 			TrustProjectFilters: false, EnableRenderers: false,
 		}, want: true},
 		{name: "operator set Intensity", cfg: Config{Intensity: "aggressive"}, want: false},
 		{name: "operator set MaxLinesPerResult", cfg: Config{MaxLinesPerResult: 50}, want: false},
 		{name: "operator set MinTokensToCompress", cfg: Config{MinTokensToCompress: 1024}, want: false},
-		{name: "operator enabled PreserveCacheControl", cfg: Config{PreserveCacheControl: true}, want: false},
 		{name: "operator enabled EnableGrouping", cfg: Config{EnableGrouping: true}, want: false},
 		{name: "operator enabled EnableRenderers", cfg: Config{EnableRenderers: true}, want: false},
 		{name: "operator enabled CustomFiltersEnabled", cfg: Config{CustomFiltersEnabled: true}, want: false},

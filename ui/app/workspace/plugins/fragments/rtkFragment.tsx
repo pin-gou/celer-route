@@ -13,10 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGetRtkStatsQuery, useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
-import { useGetRtkCavemanRulesQuery } from "@/lib/store/apis/rtkAdminApi";
+import { useGetRtkCavemanRulesQuery, useGetRtkRenderersQuery } from "@/lib/store/apis/rtkAdminApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { RTK_PLUGIN, rtkConfigSchema, type Plugin, type RtkEngineStat } from "@/lib/types/plugins";
-import { type CavemanRuleCatalogEntry } from "@/lib/types/rtk";
+import { type CavemanRuleCatalogEntry, type RendererCatalogEntry } from "@/lib/types/rtk";
 import { Link } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Activity, Beaker, ExternalLink, FlaskConical, HelpCircle, Image as ImageIcon, Info, RotateCcw, Undo2 } from "lucide-react";
@@ -477,10 +477,10 @@ export function EnabledSwitchPanel({ plugin, form }: { plugin: Plugin; form: Ret
 // ---------------------------------------------------------------------------
 // RtkEnginePanel — per-engine configuration card for the RTK compression
 // engine (the default engine, targeting tool/assistant content). All
-// fields and their data-testids match the legacy "preset-managed" +
-// "preserve_cache_control" sections so existing rtkFragment.test.tsx
-// assertions (raw_output_dir / raw_output_ttl_hours, intensity, max_lines)
-// keep working without changes.
+// fields and their data-testids match the legacy "preset-managed"
+// sections so existing rtkFragment.test.tsx assertions (raw_output_dir /
+// raw_output_ttl_hours, intensity, max_lines) keep working without
+// changes.
 // ---------------------------------------------------------------------------
 
 function RtkEnginePanel({
@@ -734,135 +734,116 @@ function RtkEnginePanel({
 					</div>
 				</fieldset>
 
-				{/* ── Cache control preservation (per-engine, even though global today) ── */}
-				<FormField
-					control={form.control}
-					name="preserve_cache_control"
-					render={({ field }) => (
-						<FormItem className="flex flex-row items-start space-y-0 space-x-3 rounded-lg border p-3">
-							<FormControl>
-								<Checkbox data-testid="rtk-field-preserve-cache-control" checked={field.value} onCheckedChange={field.onChange} />
-							</FormControl>
-							<div className="space-y-1 leading-none">
-								<div className="flex items-center gap-1.5">
-									<FormLabel>{t("rtk.preserveCacheControlLabel")}</FormLabel>
-									<HelpHint>{t("rtk.preserveCacheControlWhen")}</HelpHint>
-								</div>
-								<FormDescription>{t("rtk.preserveCacheControlDescription")}</FormDescription>
-							</div>
-						</FormItem>
-					)}
-				/>
-
-				{/* ── RTK-specific advanced steps: semantic renderers + filters ──
-					Both are RTK-engine-only (Caveman is pure rules and never runs the
-					renderer or filter pipeline), so they live under the RTK tab rather
+				{/* ── Semantic compression ──
+					RTK-engine-only (Caveman is pure rules and never runs the
+					renderer pipeline), so this lives under the RTK tab rather
 					than the cross-engine shared settings. */}
-				<Accordion type="multiple" className="rounded-lg border">
-					{/* Semantic renderers */}
-					<AccordionItem value="renderers" className="px-4">
-						<AccordionTrigger data-testid="rtk-section-renderers-trigger">{t("rtk.renderersSection")}</AccordionTrigger>
-						<AccordionContent className="space-y-3">
-							<FormField
-								control={form.control}
-								name="enable_renderers"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-										<FormControl>
-											<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
-										</FormControl>
-										<div className="space-y-1 leading-none">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
-												<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
+				<fieldset className="rounded-lg border p-4">
+					<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.renderersSection")}</legend>
+					<div className="mt-2 space-y-3">
+						<FormField
+							control={form.control}
+							name="enable_renderers"
+							render={({ field }) => (
+								<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+									<FormControl>
+										<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
+									</FormControl>
+									<div className="space-y-1 leading-none">
+										<div className="flex items-center gap-1.5">
+											<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
+											<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
 										</div>
-									</FormItem>
-								)}
-							/>
-							{form.watch("enable_renderers") && (
-								<FormField
-									control={form.control}
-									name="renderers"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
-												<HelpHint>{t("rtk.renderersWhen")}</HelpHint>
-											</div>
-											<FormControl>
-												<Input
-													data-testid="rtk-field-renderers"
-													placeholder="e.g. git-diff, test-green, terraform-plan"
-													{...field}
-													value={Array.isArray(field.value) ? field.value.join(", ") : ""}
-													onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
-												/>
-											</FormControl>
-											<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
+										<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
+									</div>
+								</FormItem>
 							)}
-						</AccordionContent>
-					</AccordionItem>
-
-					{/* Filters & custom */}
-					<AccordionItem value="filters" className="px-4">
-						<AccordionTrigger data-testid="rtk-section-filters-trigger">{t("rtk.filtersSection")}</AccordionTrigger>
-						<AccordionContent className="space-y-3">
-							<FormField
-								control={form.control}
-								name="custom_filters_enabled"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-										<div className="space-y-0.5">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.customFiltersEnabledLabel")}</FormLabel>
-												<HelpHint>{t("rtk.customFiltersEnabledWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
-										</div>
-										<FormControl>
-											<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
-										</FormControl>
-									</FormItem>
-								)}
-							/>
-							{form.watch("custom_filters_enabled") && (
-								<FormField
-									control={form.control}
-									name="trust_project_filters"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-											<div className="space-y-0.5">
-												<div className="flex items-center gap-1.5">
-													<FormLabel>{t("rtk.trustProjectFiltersLabel")}</FormLabel>
-													<HelpHint>{t("rtk.trustProjectFiltersWhen")}</HelpHint>
-												</div>
-												<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
-											</div>
-											<FormControl>
-												<Switch data-testid="rtk-field-trust-project-filters" checked={field.value} onCheckedChange={field.onChange} />
-											</FormControl>
-										</FormItem>
-									)}
-								/>
-							)}
-							<div className="text-muted-foreground text-xs">
-								{t("rtk.filterCatalogHint")}{" "}
-								<Link to="/workspace/plugins/rtk/filters" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-									{t("rtk.admin.tabs.filters")}
-									<ExternalLink className="ml-0.5 inline h-3 w-3" />
-								</Link>
-							</div>
-						</AccordionContent>
-					</AccordionItem>
-				</Accordion>
+						/>
+						{form.watch("enable_renderers") && <DisabledRenderersField form={form} hasUpdateAccess={hasUpdateAccess} />}
+					</div>
+				</fieldset>
 			</div>
 		</fieldset>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// DisabledRenderersField — multi-select dropdown for disabled_renderers.
+// Mirrors the caveman skip_rules UX: group options by category so the
+// dropdown reads naturally; unknown names (hand-typed in older configs)
+// flow through as a warning row rather than being silently dropped.
+// ---------------------------------------------------------------------------
+
+function DisabledRenderersField({ form, hasUpdateAccess }: { form: ReturnType<typeof useForm<RTKFormValues>>; hasUpdateAccess: boolean }) {
+	const { t } = useTranslation("plugins");
+	const renderersQuery = useGetRtkRenderersQuery();
+	const renderers = renderersQuery.data?.renderers ?? [];
+
+	const groups = useMemo<MultiSelectGroup[]>(() => {
+		if (renderers.length === 0) return [];
+		const byCategory = new Map<string, RendererCatalogEntry[]>();
+		for (const r of renderers) {
+			const cat = r.category || "other";
+			if (!byCategory.has(cat)) byCategory.set(cat, []);
+			byCategory.get(cat)!.push(r);
+		}
+		const groupOrder = ["git", "test", "terraform", "structured"];
+		const out: MultiSelectGroup[] = [];
+		for (const cat of groupOrder) {
+			const items = byCategory.get(cat);
+			if (!items || items.length === 0) continue;
+			out.push({
+				heading: t(`rtk.disabledRenderersGroup${cat.charAt(0).toUpperCase()}${cat.slice(1)}`),
+				options: items.map((r) => ({
+					value: r.name,
+					label: r.name,
+				})),
+			});
+		}
+		return out;
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- groups close over t
+	}, [renderers, t]);
+
+	return (
+		<FormField
+			control={form.control}
+			name="disabled_renderers"
+			render={({ field }) => {
+				const knownNames = new Set(renderers.map((r) => r.name));
+				const fieldValue = Array.isArray(field.value) ? field.value : [];
+				const unknownNames = fieldValue.filter((n) => n && !knownNames.has(n));
+				return (
+					<FormItem>
+						<div className="flex items-center gap-1.5">
+							<FormLabel>{t("rtk.disabledRenderersLabel")}</FormLabel>
+							<HelpHint>{t("rtk.disabledRenderersWhen")}</HelpHint>
+						</div>
+						<FormControl>
+							<MultiSelect
+								options={groups}
+								value={fieldValue}
+								resetOnDefaultValueChange={false}
+								onValueChange={(vals) => field.onChange(vals)}
+								placeholder={renderersQuery.isError ? t("rtk.disabledRenderersLoadError") : t("rtk.disabledRenderersPlaceholder")}
+								emptyIndicator={t("rtk.disabledRenderersEmpty")}
+								hideSelectAll
+								maxCount={3}
+								className="border-input text-foreground bg-background hover:bg-accent hover:text-accent-foreground rounded-sm font-normal"
+								data-testid="rtk-field-disabled-renderers"
+								disabled={!hasUpdateAccess}
+							/>
+						</FormControl>
+						<FormDescription>{t("rtk.disabledRenderersDescription")}</FormDescription>
+						{unknownNames.length > 0 && (
+							<p className="text-muted-foreground mt-1 text-xs">
+								{t("rtk.disabledRenderersUnknownWarning", { names: unknownNames.join(", ") })}
+							</p>
+						)}
+						<FormMessage />
+					</FormItem>
+				);
+			}}
+		/>
 	);
 }
 
@@ -1284,11 +1265,8 @@ function ConfigForm({
 			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
 			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
 			dedup_threshold: pluginConfig.dedup_threshold ?? 3,
-			preserve_cache_control: pluginConfig.preserve_cache_control ?? false,
 			enable_grouping: pluginConfig.enable_grouping ?? false,
 			grouping_threshold: pluginConfig.grouping_threshold ?? 3,
-			custom_filters_enabled: pluginConfig.custom_filters_enabled ?? true,
-			trust_project_filters: pluginConfig.trust_project_filters ?? false,
 			enabled_filters: pluginConfig.enabled_filters ?? [],
 			disabled_filters: pluginConfig.disabled_filters ?? [],
 			raw_output_retention: pluginConfig.raw_output_retention ?? "always",
@@ -1298,7 +1276,7 @@ function ConfigForm({
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
-			renderers: pluginConfig.renderers ?? [],
+			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
 			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
 			caveman: {
@@ -1594,11 +1572,8 @@ function FormFieldsHost({
 			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
 			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
 			dedup_threshold: pluginConfig.dedup_threshold ?? 3,
-			preserve_cache_control: pluginConfig.preserve_cache_control ?? false,
 			enable_grouping: pluginConfig.enable_grouping ?? false,
 			grouping_threshold: pluginConfig.grouping_threshold ?? 3,
-			custom_filters_enabled: pluginConfig.custom_filters_enabled ?? true,
-			trust_project_filters: pluginConfig.trust_project_filters ?? false,
 			enabled_filters: pluginConfig.enabled_filters ?? [],
 			disabled_filters: pluginConfig.disabled_filters ?? [],
 			raw_output_retention: pluginConfig.raw_output_retention ?? "always",
@@ -1608,7 +1583,7 @@ function FormFieldsHost({
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
-			renderers: pluginConfig.renderers ?? [],
+			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
 			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
 			caveman: {

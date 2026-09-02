@@ -161,9 +161,8 @@ Changes not staged for commit:
 			}
 
 			state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, &Config{
-				Enabled:              true,
-				Intensity:            "standard",
-				PreserveCacheControl: true,
+				Enabled:   true,
+				Intensity: "standard",
 			}))
 
 			if state == nil {
@@ -401,4 +400,3 @@ func TestAnthropicToolResultBlockNilSafety(t *testing.T) {
 		t.Error("isToolResultBlock(nil) should return false")
 	}
 }
-

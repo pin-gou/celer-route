@@ -126,9 +126,6 @@ function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
 			dedup_threshold: 3,
 			enable_grouping: false,
 			grouping_threshold: 3,
-			preserve_cache_control: false,
-			custom_filters_enabled: true,
-			trust_project_filters: false,
 			enabled_filters: [],
 			disabled_filters: [],
 			raw_output_retention: "never",
@@ -138,6 +135,7 @@ function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
 			pipeline: [{ id: "rtk" }],
 			min_tokens_to_compress: 0,
 			enable_renderers: true,
+			disabled_renderers: [],
 			snapshot_mode: "off",
 			snapshot_max_bytes: 30720,
 		} as any,
@@ -326,24 +324,22 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		const rtkPanel = screen.getByTestId("engine-panel-rtk");
 		expect(rtkPanel.contains(screen.getByTestId("rtk-field-intensity"))).toBe(true);
 		expect(rtkPanel.contains(screen.getByTestId("rtk-field-max-lines"))).toBe(true);
-		expect(rtkPanel.contains(screen.getByTestId("rtk-field-preserve-cache-control"))).toBe(true);
 	});
 
-	it("moves renderers & filters into the RTK tab (RTK-only steps), not the shared tab", () => {
+	it("moves the semantic-compression controls into the RTK tab (RTK-only step), not the shared tab", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
-		// Default shared tab: the RTK-only accordions must NOT be present.
-		expect(screen.queryByTestId("rtk-section-renderers-trigger")).toBeNull();
-		expect(screen.queryByTestId("rtk-section-filters-trigger")).toBeNull();
+		// Default shared tab: the RTK-only enable_renderers switch must NOT be present.
+		expect(screen.queryByTestId("rtk-field-enable-renderers")).toBeNull();
 		// Raw output (cross-engine) stays visible as a plain card in the shared tab.
 		expect(screen.getByTestId("rtk-field-raw-output-retention")).toBeTruthy();
 
-		// Switch to the RTK tab: renderers + filters now live there.
+		// Switch to the RTK tab: semantic compression controls now live there.
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
-		expect(screen.getByTestId("rtk-section-renderers-trigger")).toBeTruthy();
-		expect(screen.getByTestId("rtk-section-filters-trigger")).toBeTruthy();
+		expect(screen.getByTestId("rtk-field-enable-renderers")).toBeTruthy();
+		expect(screen.getByTestId("rtk-field-disabled-renderers")).toBeTruthy();
 		const rtkPanel = screen.getByTestId("engine-panel-rtk");
-		expect(rtkPanel.contains(screen.getByTestId("rtk-section-renderers-trigger"))).toBe(true);
-		expect(rtkPanel.contains(screen.getByTestId("rtk-section-filters-trigger"))).toBe(true);
+		expect(rtkPanel.contains(screen.getByTestId("rtk-field-enable-renderers"))).toBe(true);
+		expect(rtkPanel.contains(screen.getByTestId("rtk-field-disabled-renderers"))).toBe(true);
 		// Raw output is NOT duplicated inside the RTK panel.
 		expect(rtkPanel.contains(screen.queryByTestId("rtk-field-raw-output-retention"))).toBe(false);
 	});
@@ -436,9 +432,9 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		render(<RtkFragment plugin={makePlugin()} />);
 		// Force a save by touching a tunable then submitting. Toggling caveman
 		// off when it's already off is a no-op, so we open the RTK tab and flip
-		// the preserve_cache_control checkbox to make the form dirty.
+		// the enable_renderers switch to make the form dirty.
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
-		fireEvent.click(screen.getByTestId("rtk-field-preserve-cache-control"));
+		fireEvent.click(screen.getByTestId("rtk-field-enable-renderers"));
 		fireEvent.click(screen.getByTestId("rtk-save-btn"));
 
 		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
@@ -451,9 +447,9 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 	it("writes pipeline=[{id:'rtk'},{id:'caveman'}] on submit when caveman is enabled", async () => {
 		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
 		render(<RtkFragment plugin={plugin} />);
-		// Open the RTK tab and flip a checkbox so Save is enabled.
+		// Open the RTK tab and flip a switch so Save is enabled.
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
-		fireEvent.click(screen.getByTestId("rtk-field-preserve-cache-control"));
+		fireEvent.click(screen.getByTestId("rtk-field-enable-renderers"));
 		fireEvent.click(screen.getByTestId("rtk-save-btn"));
 
 		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
@@ -524,11 +520,11 @@ describe("RtkFragment — Caveman skip_rules / preserve_patterns", () => {
 	it("dispatches a mutation whose skip_rules value matches the MultiSelect selection", async () => {
 		render(<RtkFragment plugin={cavemanPlugin()} />);
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
-		// Flip the preserve_cache_control checkbox on the RTK tab so Save
-		// becomes enabled; the actual skip_rules change goes through the
+		// Flip the enable_renderers switch on the RTK tab so Save becomes
+		// enabled; the actual skip_rules change goes through the
 		// multi-select, but for save-flow we only need a dirty form.
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
-		fireEvent.click(screen.getByTestId("rtk-field-preserve-cache-control"));
+		fireEvent.click(screen.getByTestId("rtk-field-enable-renderers"));
 		fireEvent.click(screen.getByTestId("rtk-save-btn"));
 
 		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));

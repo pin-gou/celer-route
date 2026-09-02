@@ -56,6 +56,7 @@ func (s *stubRtkResolver) ReloadRtkPlugin(_ *fasthttp.RequestCtx, name string, _
 type stubRtkAccessor struct {
 	catalog      rtk.FilterCatalog
 	cavemanRules rtk.CavemanRuleCatalog
+	rendererCat  rtk.RendererCatalog
 	rawOutput    string
 	rawFound     bool
 	lastTest     rtk.TestPayload
@@ -66,8 +67,9 @@ type stubRtkAccessor struct {
 	histogramReq struct{ start, end, bucketSize int64 }
 }
 
-func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog { return s.catalog }
+func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog           { return s.catalog }
 func (s *stubRtkAccessor) GetCavemanRuleCatalog() rtk.CavemanRuleCatalog { return s.cavemanRules }
+func (s *stubRtkAccessor) GetRendererCatalog() rtk.RendererCatalog       { return s.rendererCat }
 func (s *stubRtkAccessor) RunTest(p rtk.TestPayload) rtk.TestResult {
 	s.lastTest = p
 	return rtk.TestResult{
@@ -903,5 +905,60 @@ func TestRtkGetCavemanRules_PluginNotLoaded_ReturnsEmpty(t *testing.T) {
 	}
 	if strings.Contains(string(body), "null") {
 		t.Errorf("body must not contain 'null' for any field; got %s", string(body))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/context/rtk/renderers
+// ---------------------------------------------------------------------------
+
+func TestRtkGetRenderers_LoadedPlugin(t *testing.T) {
+	cs := newMemoryConfigStore()
+	accessor := &stubRtkAccessor{
+		rendererCat: rtk.RendererCatalog{
+			Renderers: []rtk.RendererCatalogEntry{
+				{Name: "git-diff", Category: "git"},
+				{Name: "test-pytest", Category: "test"},
+				{Name: "aws", Category: "structured"},
+			},
+		},
+	}
+	resolver := &stubRtkResolver{accessor: accessor, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/renderers")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var cat rtk.RendererCatalog
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode body: %v; body=%s", err, body)
+	}
+	if len(cat.Renderers) != 3 {
+		t.Fatalf("len(Renderers) = %d, want 3", len(cat.Renderers))
+	}
+	if cat.Renderers[0].Name != "git-diff" || cat.Renderers[0].Category != "git" {
+		t.Errorf("Renderers[0] = %+v, want {git-diff, git}", cat.Renderers[0])
+	}
+}
+
+func TestRtkGetRenderers_PluginNotLoaded_ReturnsEmpty(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/renderers")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var cat rtk.RendererCatalog
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if cat.Renderers == nil {
+		t.Error("Renderers should be a non-nil empty slice, not null")
+	}
+	if len(cat.Renderers) != 0 {
+		t.Errorf("len(Renderers) = %d, want 0", len(cat.Renderers))
 	}
 }

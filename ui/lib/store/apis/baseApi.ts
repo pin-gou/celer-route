@@ -203,6 +203,7 @@ export const baseApi = createApi({
 		"RtkConfig",
 		"RtkFilters",
 		"RtkCavemanRules",
+		"RtkRenderers",
 		"CatalogBundles",
 	],
 	endpoints: () => ({}),

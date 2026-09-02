@@ -4,6 +4,7 @@ import {
 	PreviewRequest,
 	PreviewResponse,
 	PutRtkConfigRequest,
+	RendererCatalog,
 	RtkConfigResponse,
 	TestPayload,
 	TestResult,
@@ -44,6 +45,15 @@ export const rtkAdminApi = baseApi.injectEndpoints({
 			providesTags: ["RtkCavemanRules"],
 		}),
 
+		// GET /api/context/rtk/renderers
+		// Static renderer catalog (detection Types + category labels) used
+		// by the disabled_renderers multi-select. Package-static data; long
+		// cache lifetime.
+		getRtkRenderers: builder.query<RendererCatalog, void>({
+			query: () => ({ url: "/context/rtk/renderers" }),
+			providesTags: ["RtkRenderers"],
+		}),
+
 		// POST /api/context/rtk/test
 		runRtkTest: builder.mutation<TestResult, TestPayload>({
 			query: (body) => ({ url: "/context/rtk/test", method: "POST", body }),
@@ -75,6 +85,7 @@ export const {
 	useUpdateRtkConfigMutation,
 	useGetRtkFiltersQuery,
 	useGetRtkCavemanRulesQuery,
+	useGetRtkRenderersQuery,
 	useRunRtkTestMutation,
 	usePreviewCompressionMutation,
 	useGetRtkRawOutputQuery,
