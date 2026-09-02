@@ -341,6 +341,26 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		expect(screen.queryByTestId("engine-panel-caveman")).toBeNull();
 	});
 
+	it("auto-jumps to the Caveman tab when Caveman is enabled from the pipeline checkbox", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		// Defaults to the shared tab with no Caveman tab.
+		expect(screen.queryByTestId("rtk-tab-caveman")).toBeNull();
+		expect(screen.queryByTestId("engine-panel-caveman")).toBeNull();
+		// Enabling Caveman reveals its tab AND activates it automatically.
+		fireEvent.click(screen.getByTestId("pipeline-caveman-checkbox"));
+		expect(screen.getByTestId("rtk-tab-caveman")).toBeTruthy();
+		expect(screen.getByTestId("engine-panel-caveman")).toBeTruthy();
+	});
+
+	it("does not auto-jump on mount when the persisted config already has Caveman enabled", () => {
+		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
+		render(<RtkFragment plugin={plugin} />);
+		// The Caveman tab exists but the shared tab stays active — no jump.
+		expect(screen.getByTestId("rtk-tab-caveman")).toBeTruthy();
+		const sharedTrigger = screen.getByTestId("rtk-tab-shared");
+		expect(sharedTrigger.getAttribute("data-state")).toBe("active");
+	});
+
 	it("exposes the caveman sub-fields when caveman.enabled is true", () => {
 		const plugin = makePlugin({
 			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },

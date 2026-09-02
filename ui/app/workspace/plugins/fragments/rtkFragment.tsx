@@ -1373,15 +1373,21 @@ function ConfigForm({
 
 	// Caveman is opt-in via the pipeline checkbox in EnabledSwitchPanel. When it
 	// is disabled, the whole "Caveman config" tab (and its only toggle, which
-	// duplicates the pipeline checkbox) is hidden. If the operator disables
-	// Caveman while on its tab, bounce back to the shared tab so the active tab
-	// never points at a hidden panel.
+	// duplicates the pipeline checkbox) is hidden. Enabling Caveman auto-jumps
+	// to its tab (so the operator lands straight on the freshly-relevant fields);
+	// disabling it while on its tab bounces back to the shared tab so the active
+	// tab never points at a hidden panel. The previous-value ref keeps a freshly
+	// loaded config that already has Caveman enabled from auto-jumping on mount.
 	const cavemanEnabled = !!form.watch("caveman.enabled");
 	const [activeTab, setActiveTab] = useState<string>("shared");
+	const prevCavemanEnabled = useRef(cavemanEnabled);
 	useEffect(() => {
-		if (!cavemanEnabled && activeTab === "caveman") {
+		if (cavemanEnabled && !prevCavemanEnabled.current) {
+			setActiveTab("caveman");
+		} else if (!cavemanEnabled && activeTab === "caveman") {
 			setActiveTab("shared");
 		}
+		prevCavemanEnabled.current = cavemanEnabled;
 	}, [cavemanEnabled, activeTab]);
 
 	return (
