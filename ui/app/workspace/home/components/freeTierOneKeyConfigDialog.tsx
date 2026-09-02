@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DefaultNetworkConfig } from "@/lib/constants/config";
-import { catalogApi, useCreateProviderKeyMutation, useCreateProviderMutation } from "@/lib/store/apis/catalogApi";
+import { catalogApi, useOneClickCreateProviderKeyMutation, useOneClickCreateProviderMutation } from "@/lib/store/apis/catalogApi";
 import { BundleProviderEntry } from "@/lib/types/catalog";
 import { KnownProvider } from "@/lib/types/config";
 import { ExternalLink, Info, KeyRound, ListChecks, Plus, Sparkles, X } from "lucide-react";
@@ -26,8 +26,8 @@ interface Props {
  */
 export default function FreeTierOneKeyConfigDialog({ open, provider, onOpenChange }: Props) {
 	const { t } = useTranslation("home");
-	const [createProvider, { isLoading: isCreatingProvider }] = useCreateProviderMutation();
-	const [createKey, { isLoading: isCreatingKey }] = useCreateProviderKeyMutation();
+	const [createProvider, { isLoading: isCreatingProvider }] = useOneClickCreateProviderMutation();
+	const [createKey, { isLoading: isCreatingKey }] = useOneClickCreateProviderKeyMutation();
 	const [apiKey, setApiKey] = useState("");
 
 	const isKeyless = provider?.is_keyless ?? false;

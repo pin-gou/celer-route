@@ -94,8 +94,11 @@ func TestCompressionMetrics_NegativeTokensClamped(t *testing.T) {
 func TestCompressionMetrics_NilReceiverSafe(t *testing.T) {
 	var m *CompressionMetrics
 	m.RecordInvocation(true, 100, 50)
+	m.RecordEngineBreakdown([]EngineBreakdown{{Id: "rtk", InputBytes: 100, OutputBytes: 50}})
 	snap := m.Snapshot()
-	if snap != (MetricsSnapshot{}) {
+	if snap.Invocations != 0 || snap.CompressedCount != 0 || snap.OriginalTokens != 0 ||
+		snap.CompressedTokens != 0 || snap.TokensSaved != 0 || snap.CompressionRatio != 0 ||
+		snap.EngineBreakdown != nil {
 		t.Errorf("nil Snapshot() = %+v, want zero value", snap)
 	}
 }
@@ -149,14 +152,18 @@ func TestCompressionMetrics_ConcurrentRecordInvocation(t *testing.T) {
 func TestPlugin_StatsReturnsZeroOnUninitialised(t *testing.T) {
 	var p *Plugin
 	snap := p.Stats()
-	if snap != (MetricsSnapshot{}) {
-		t.Errorf("nil Plugin.Stats() = %+v, want zero", snap)
+	if snap.Invocations != 0 || snap.CompressedCount != 0 || snap.OriginalTokens != 0 ||
+		snap.CompressedTokens != 0 || snap.TokensSaved != 0 || snap.CompressionRatio != 0 ||
+		snap.EngineBreakdown != nil {
+		t.Errorf("nil Plugin.Stats() = %+v, want zero value", snap)
 	}
 
 	q := &Plugin{}
 	snap = q.Stats()
-	if snap != (MetricsSnapshot{}) {
-		t.Errorf("uninitialised Plugin.Stats() = %+v, want zero", snap)
+	if snap.Invocations != 0 || snap.CompressedCount != 0 || snap.OriginalTokens != 0 ||
+		snap.CompressedTokens != 0 || snap.TokensSaved != 0 || snap.CompressionRatio != 0 ||
+		snap.EngineBreakdown != nil {
+		t.Errorf("uninitialised Plugin.Stats() = %+v, want zero value", snap)
 	}
 }
 
@@ -293,5 +300,148 @@ func TestCompressionMetrics_HistogramConcurrent(t *testing.T) {
 	// Lifetime must match too.
 	if snap := m.Snapshot(); snap.Invocations != goroutines*each {
 		t.Errorf("lifetime Invocations = %d, want %d", snap.Invocations, goroutines*each)
+	}
+}
+
+// TestCompressionMetrics_RecordEngineBreakdownHappyPath verifies the
+// per-engine accumulator surfaces in Snapshot.EngineBreakdown with the
+// derived compressed_by ratio.
+func TestCompressionMetrics_RecordEngineBreakdownHappyPath(t *testing.T) {
+	m := &CompressionMetrics{}
+	m.RecordEngineBreakdown([]EngineBreakdown{
+		{Id: "rtk", InputBytes: 1000, OutputBytes: 400},
+	})
+	m.RecordEngineBreakdown([]EngineBreakdown{
+		{Id: "rtk", InputBytes: 2000, OutputBytes: 500},
+		{Id: "caveman", InputBytes: 500, OutputBytes: 100},
+	})
+
+	snap := m.Snapshot()
+	if len(snap.EngineBreakdown) != 2 {
+		t.Fatalf("EngineBreakdown len = %d, want 2", len(snap.EngineBreakdown))
+	}
+	// Stable ordering: by ID ascending — caveman precedes rtk.
+	if snap.EngineBreakdown[0].ID != "caveman" {
+		t.Errorf("EngineBreakdown[0].ID = %q, want caveman (sorted)", snap.EngineBreakdown[0].ID)
+	}
+	if snap.EngineBreakdown[1].ID != "rtk" {
+		t.Errorf("EngineBreakdown[1].ID = %q, want rtk (sorted)", snap.EngineBreakdown[1].ID)
+	}
+	caveman := snap.EngineBreakdown[0]
+	if caveman.Invocations != 1 {
+		t.Errorf("caveman Invocations = %d, want 1", caveman.Invocations)
+	}
+	if caveman.InputBytes != 500 || caveman.OutputBytes != 100 {
+		t.Errorf("caveman bytes = %d/%d, want 500/100", caveman.InputBytes, caveman.OutputBytes)
+	}
+	wantRatio := 400.0 / 500.0
+	if caveman.CompressedBy < wantRatio-0.001 || caveman.CompressedBy > wantRatio+0.001 {
+		t.Errorf("caveman CompressedBy = %f, want ~%f", caveman.CompressedBy, wantRatio)
+	}
+	rtk := snap.EngineBreakdown[1]
+	if rtk.Invocations != 2 {
+		t.Errorf("rtk Invocations = %d, want 2", rtk.Invocations)
+	}
+	if rtk.InputBytes != 3000 || rtk.OutputBytes != 900 {
+		t.Errorf("rtk bytes = %d/%d, want 3000/900", rtk.InputBytes, rtk.OutputBytes)
+	}
+	wantRatio = 2100.0 / 3000.0
+	if rtk.CompressedBy < wantRatio-0.001 || rtk.CompressedBy > wantRatio+0.001 {
+		t.Errorf("rtk CompressedBy = %f, want ~%f", rtk.CompressedBy, wantRatio)
+	}
+}
+
+// TestCompressionMetrics_RecordEngineBreakdownEmptyGuards covers the
+// nil/empty fast-path: both the receiver guard and the empty-slice guard
+// must no-op so callers don't need to check before invoking.
+func TestCompressionMetrics_RecordEngineBreakdownEmptyGuards(t *testing.T) {
+	var m *CompressionMetrics
+	m.RecordEngineBreakdown([]EngineBreakdown{{Id: "rtk", InputBytes: 100, OutputBytes: 50}}) // nil receiver
+	snap := m.Snapshot()
+	if snap.EngineBreakdown != nil {
+		t.Errorf("nil receiver Snapshot.EngineBreakdown = %+v, want nil", snap.EngineBreakdown)
+	}
+
+	live := &CompressionMetrics{}
+	live.RecordEngineBreakdown(nil)
+	live.RecordEngineBreakdown([]EngineBreakdown{}) // explicit empty
+	snap = live.Snapshot()
+	if snap.EngineBreakdown != nil {
+		t.Errorf("empty RecordEngineBreakdown produced %+v, want nil", snap.EngineBreakdown)
+	}
+}
+
+// TestCompressionMetrics_RecordEngineBreakdownIgnoresEmptyID guards against
+// a pipeline returning an entry with no engine id (defensive — the runner
+// already filters these but the public surface accepts arbitrary slices).
+func TestCompressionMetrics_RecordEngineBreakdownIgnoresEmptyID(t *testing.T) {
+	m := &CompressionMetrics{}
+	m.RecordEngineBreakdown([]EngineBreakdown{
+		{Id: "", InputBytes: 999, OutputBytes: 999},
+		{Id: "rtk", InputBytes: 100, OutputBytes: 50},
+	})
+	snap := m.Snapshot()
+	if len(snap.EngineBreakdown) != 1 {
+		t.Fatalf("EngineBreakdown len = %d, want 1 (empty id ignored)", len(snap.EngineBreakdown))
+	}
+	if snap.EngineBreakdown[0].ID != "rtk" {
+		t.Errorf("EngineBreakdown[0].ID = %q, want rtk", snap.EngineBreakdown[0].ID)
+	}
+	if snap.EngineBreakdown[0].InputBytes != 100 {
+		t.Errorf("InputBytes = %d, want 100 (empty-id entry must not leak)", snap.EngineBreakdown[0].InputBytes)
+	}
+}
+
+// TestCompressionMetrics_SnapshotEngineBreakdownNilWhenNoActivity keeps
+// the contract that an idle gateway returns nil (not an empty slice) so
+// the UI can short-circuit rendering without inspecting the array.
+func TestCompressionMetrics_SnapshotEngineBreakdownNilWhenNoActivity(t *testing.T) {
+	m := &CompressionMetrics{}
+	snap := m.Snapshot()
+	if snap.EngineBreakdown != nil {
+		t.Errorf("Snapshot().EngineBreakdown = %+v on idle metrics, want nil", snap.EngineBreakdown)
+	}
+}
+
+// TestCompressionMetrics_ConcurrentRecordEngineBreakdown stresses the
+// engineMu path under parallel callers — every entry must be accounted
+// for in the final snapshot, mirroring the aggregate atomic-counter
+// concurrency contract.
+func TestCompressionMetrics_ConcurrentRecordEngineBreakdown(t *testing.T) {
+	m := &CompressionMetrics{}
+	const goroutines = 16
+	const each = 500
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(n int) {
+			defer wg.Done()
+			for j := 0; j < each; j++ {
+				// Alternate engine id so both buckets get hit.
+				id := "rtk"
+				if (n+j)%2 == 0 {
+					id = "caveman"
+				}
+				m.RecordEngineBreakdown([]EngineBreakdown{{
+					Id:          id,
+					InputBytes:  100,
+					OutputBytes: 40,
+				}})
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	snap := m.Snapshot()
+	if len(snap.EngineBreakdown) != 2 {
+		t.Fatalf("EngineBreakdown len = %d, want 2", len(snap.EngineBreakdown))
+	}
+	total := uint64(0)
+	for _, e := range snap.EngineBreakdown {
+		total += e.Invocations
+	}
+	if total != goroutines*each {
+		t.Errorf("sum of engine Invocations = %d, want %d", total, goroutines*each)
 	}
 }

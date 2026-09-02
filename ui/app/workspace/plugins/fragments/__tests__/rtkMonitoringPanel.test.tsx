@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => ({
 		compressedTokens: number;
 		tokensSaved: number;
 		compressionRatio: number;
+		engineBreakdown?: import("@/lib/types/plugins").RtkEngineStat[];
 	},
 	loading: false,
 }));
@@ -172,5 +173,67 @@ describe("RTK MonitoringPanel — loading state", () => {
 		render(<MonitoringPanel />);
 		expect(screen.getByText(/loading monitoring/i)).toBeTruthy();
 		expect(screen.queryByTestId("rtk-stats-invocations")).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Tests — per-engine breakdown (V-pipeline-engine-stats)
+// ---------------------------------------------------------------------------
+
+describe("RTK MonitoringPanel — per-engine breakdown", () => {
+	beforeEach(() => {
+		mocks.loading = false;
+		mocks.statsData = {
+			invocations: 25,
+			compressedCount: 22,
+			originalTokens: 8000,
+			compressedTokens: 2000,
+			tokensSaved: 6000,
+			compressionRatio: 0.75,
+			engineBreakdown: [
+				{ id: "caveman", invocations: 5, inputBytes: 800, outputBytes: 300, compressedBy: 0.625 },
+				{ id: "rtk", invocations: 20, inputBytes: 4000, outputBytes: 1200, compressedBy: 0.7 },
+			],
+		};
+	});
+
+	it("renders the per-engine stats group when the server reports engine activity", () => {
+		render(<MonitoringPanel />);
+		expect(screen.getByTestId("rtk-engine-stats-group")).toBeTruthy();
+	});
+
+	it("renders one row per engine id with rtk-engine-stats-<id> testids", () => {
+		render(<MonitoringPanel />);
+		expect(screen.getByTestId("rtk-engine-stats-rtk")).toBeTruthy();
+		expect(screen.getByTestId("rtk-engine-stats-caveman")).toBeTruthy();
+	});
+
+	it("renders the engine invocations and bytes inside each row", () => {
+		render(<MonitoringPanel />);
+		// rtk row: 20 invocations, 4 kB in, 1.2 kB out, 70% ratio.
+		const rtkRow = screen.getByTestId("rtk-engine-stats-rtk");
+		expect(rtkRow.textContent).toContain("20");
+		expect(rtkRow.textContent).toContain("4.0 kB");
+		expect(rtkRow.textContent).toContain("70%");
+		// caveman row: 5 invocations, 800 B in, 300 B out, 62.5% ratio.
+		const cavemanRow = screen.getByTestId("rtk-engine-stats-caveman");
+		expect(cavemanRow.textContent).toContain("5");
+		expect(cavemanRow.textContent).toContain("800");
+		expect(cavemanRow.textContent).toContain("300");
+	});
+
+	it("hides the per-engine group when the server reports no engine activity", () => {
+		mocks.statsData = {
+			invocations: 0,
+			compressedCount: 0,
+			originalTokens: 0,
+			compressedTokens: 0,
+			tokensSaved: 0,
+			compressionRatio: 0,
+			// engineBreakdown absent (server omits the key when nothing has run).
+		};
+		render(<MonitoringPanel />);
+		expect(screen.queryByTestId("rtk-engine-stats-group")).toBeNull();
+		expect(screen.queryByTestId("rtk-engine-stats-rtk")).toBeNull();
 	});
 });

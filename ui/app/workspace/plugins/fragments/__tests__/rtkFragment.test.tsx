@@ -222,3 +222,63 @@ describe("RtkFragment — raw_output_dir / raw_output_ttl_hours fields", () => {
 		});
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Pipeline-centric layout (V-pipeline-engine-panels)
+// ---------------------------------------------------------------------------
+
+describe("RtkFragment — pipeline-centric layout", () => {
+	beforeEach(() => {
+		mocks.updatePlugin.mockReset();
+	});
+
+	it("renders the pipeline section as the first config zone", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		expect(screen.getByTestId("pipeline-section")).toBeTruthy();
+		// The pipeline JSON editor lives inside the section.
+		const section = screen.getByTestId("pipeline-section");
+		expect(section.contains(screen.getByTestId("rtk-field-pipeline"))).toBe(true);
+	});
+
+	it("renders the RTK and Caveman engine panels as separate first-class cards", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		expect(screen.getByTestId("engine-panel-rtk")).toBeTruthy();
+		expect(screen.getByTestId("engine-panel-caveman")).toBeTruthy();
+	});
+
+	it("keeps the existing RTK field testids inside the RTK engine panel", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		const rtkPanel = screen.getByTestId("engine-panel-rtk");
+		expect(rtkPanel.contains(screen.getByTestId("rtk-field-intensity"))).toBe(true);
+		expect(rtkPanel.contains(screen.getByTestId("rtk-field-max-lines"))).toBe(true);
+		expect(rtkPanel.contains(screen.getByTestId("rtk-field-preserve-cache-control"))).toBe(true);
+	});
+
+	it("keeps the existing Caveman field testids inside the Caveman engine panel", () => {
+		const plugin = makePlugin({
+			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },
+		});
+		render(<RtkFragment plugin={plugin} />);
+		const cavemanPanel = screen.getByTestId("engine-panel-caveman");
+		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-enabled"))).toBe(true);
+		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-intensity"))).toBe(true);
+		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-language"))).toBe(true);
+		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-roles"))).toBe(true);
+	});
+
+	it("hides Caveman sub-fields when caveman.enabled is false (default)", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		// Only the enabled toggle is visible; the sub-fields appear conditionally.
+		expect(screen.queryByTestId("caveman-field-intensity")).toBeNull();
+		expect(screen.queryByTestId("caveman-field-roles")).toBeNull();
+	});
+
+	it("exposes the caveman sub-fields when caveman.enabled is true", () => {
+		const plugin = makePlugin({
+			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },
+		});
+		render(<RtkFragment plugin={plugin} />);
+		expect(screen.getByTestId("caveman-field-intensity")).toBeTruthy();
+		expect(screen.getByTestId("caveman-field-language")).toBeTruthy();
+	});
+});

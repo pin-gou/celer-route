@@ -3,14 +3,14 @@
 // This file implements the six admin endpoints that OmniRoute exposes for
 // its RTK engine, aligned to the same path layout operators are used to:
 //
-//   GET  /api/context/rtk/config           — read the active RTK config
-//   PUT  /api/context/rtk/config           — replace the active RTK config
-//   GET  /api/context/rtk/filters          — list the loaded filter catalog
-//   POST /api/context/rtk/test             — dry-run compression against a payload
-//   GET  /api/context/rtk/raw-output/{id}  — read a persisted raw-output file
-//   GET  /api/context/rtk/stats            — process-lifetime compression counters
-//   GET  /api/context/rtk/stats/histogram — time-bucketed histogram of compression stats
-//   POST /api/compression/preview          — preview rtk / stacked / off modes
+//	GET  /api/context/rtk/config           — read the active RTK config
+//	PUT  /api/context/rtk/config           — replace the active RTK config
+//	GET  /api/context/rtk/filters          — list the loaded filter catalog
+//	POST /api/context/rtk/test             — dry-run compression against a payload
+//	GET  /api/context/rtk/raw-output/{id}  — read a persisted raw-output file
+//	GET  /api/context/rtk/stats            — process-lifetime compression counters
+//	GET  /api/context/rtk/stats/histogram — time-bucketed histogram of compression stats
+//	POST /api/compression/preview          — preview rtk / stacked / off modes
 //
 // The handler relies on the existing plugins loader for persistence and
 // reload, so /api/context/rtk/config and /api/plugins/rtk share the same
@@ -129,7 +129,7 @@ func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.Bif
 // It is the typed RTK config plus the boolean the UI needs to know whether
 // the plugin is currently active in the runtime registry.
 type RtkConfigResponse struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool       `json:"enabled"`
 	Config  rtk.Config `json:"config"`
 }
 
@@ -158,7 +158,7 @@ func (h *RtkHandler) getConfig(ctx *fasthttp.RequestCtx) {
 				if uErr := json.Unmarshal(raw, &resp.Config); uErr != nil {
 					logger.Warn("rtk: stored config did not round-trip cleanly: %v", uErr)
 				}
-		}
+			}
 		}
 	} else if accessor, ok := h.resolver.ResolveRtkPlugin(); ok && accessor != nil {
 		// Fall back to the live plugin's existence when the row is missing —
@@ -176,8 +176,8 @@ func (h *RtkHandler) getConfig(ctx *fasthttp.RequestCtx) {
 // putConfig replaces the active RTK config. The body shape matches the
 // typed rtk.Config (no wrapper envelope); enabled defaults to true.
 type PutRtkConfigRequest struct {
-	Enabled *bool         `json:"enabled,omitempty"`
-	Config  rtk.Config    `json:"config"`
+	Enabled *bool      `json:"enabled,omitempty"`
+	Config  rtk.Config `json:"config"`
 }
 
 func (h *RtkHandler) putConfig(ctx *fasthttp.RequestCtx) {
@@ -394,14 +394,19 @@ func (h *RtkHandler) getRawOutput(ctx *fasthttp.RequestCtx) {
 // It pairs the lifetime counters with a pre-computed compression ratio so
 // the UI doesn't have to handle the "nothing compressed yet → divide by
 // zero" edge case itself.
+//
+// EngineBreakdown carries the per-engine lifetime view when at least one
+// pipeline engine has executed; omitted when empty so the UI can detect
+// "no engine activity yet" without inspecting the array length.
 type rtkStatsResponse struct {
-	Plugin           string  `json:"plugin"`
-	Invocations      uint64  `json:"invocations"`
-	CompressedCount  uint64  `json:"compressed_count"`
-	OriginalTokens   uint64  `json:"original_tokens"`
-	CompressedTokens uint64  `json:"compressed_tokens"`
-	TokensSaved      uint64  `json:"tokens_saved"`
-	CompressionRatio float64 `json:"compression_ratio"`
+	Plugin           string                 `json:"plugin"`
+	Invocations      uint64                 `json:"invocations"`
+	CompressedCount  uint64                 `json:"compressed_count"`
+	OriginalTokens   uint64                 `json:"original_tokens"`
+	CompressedTokens uint64                 `json:"compressed_tokens"`
+	TokensSaved      uint64                 `json:"tokens_saved"`
+	CompressionRatio float64                `json:"compression_ratio"`
+	EngineBreakdown  []rtk.EngineEngineStat `json:"engine_breakdown,omitempty"`
 }
 
 // getStats returns the RTK plugin's process-lifetime compression counters.
@@ -424,6 +429,7 @@ func (h *RtkHandler) getStats(ctx *fasthttp.RequestCtx) {
 		CompressedTokens: snap.CompressedTokens,
 		TokensSaved:      snap.TokensSaved,
 		CompressionRatio: snap.CompressionRatio,
+		EngineBreakdown:  snap.EngineBreakdown,
 	})
 }
 
@@ -436,11 +442,11 @@ func (h *RtkHandler) getStats(ctx *fasthttp.RequestCtx) {
 // alongside the lifetime totals (same shape as /stats) so the UI can render
 // both the time series and the "since startup" figures in one request.
 type rtkStatsHistogramResponse struct {
-	Plugin           string               `json:"plugin"`
-	Buckets          []rtk.RtkHistogramBucket `json:"buckets"`
-	BucketSizeSeconds int64                `json:"bucket_size_seconds"`
-	Totals           rtk.RtkHistogramBucket   `json:"totals"`
-	LifetimeTotals   rtk.MetricsSnapshot      `json:"lifetime_totals"`
+	Plugin            string                   `json:"plugin"`
+	Buckets           []rtk.RtkHistogramBucket `json:"buckets"`
+	BucketSizeSeconds int64                    `json:"bucket_size_seconds"`
+	Totals            rtk.RtkHistogramBucket   `json:"totals"`
+	LifetimeTotals    rtk.MetricsSnapshot      `json:"lifetime_totals"`
 }
 
 // getStatsHistogram handles GET /api/context/rtk/stats/histogram.
@@ -510,7 +516,7 @@ func (h *RtkHandler) getStatsHistogram(ctx *fasthttp.RequestCtx) {
 	SendJSON(ctx, rtkStatsHistogramResponse{
 		Plugin:            rtk.PluginName,
 		Buckets:           buckets,
-		BucketSizeSeconds:  bucketSize,
+		BucketSizeSeconds: bucketSize,
 		Totals:            totals,
 		LifetimeTotals:    accessor.Stats(),
 	})
@@ -589,11 +595,11 @@ func noopPreviewResponse(req rtk.PreviewRequest) rtk.PreviewResponse {
 	return rtk.PreviewResponse{
 		Mode: mode,
 		Result: rtk.TestResult{
-			OriginalText:    req.Payload.Output,
-			CompressedText:  req.Payload.Output,
-			OriginalTokens:  estimateTokens(req.Payload.Output),
+			OriginalText:     req.Payload.Output,
+			CompressedText:   req.Payload.Output,
+			OriginalTokens:   estimateTokens(req.Payload.Output),
 			CompressedTokens: estimateTokens(req.Payload.Output),
-			Techniques:      []string{},
+			Techniques:       []string{},
 		},
 	}
 }

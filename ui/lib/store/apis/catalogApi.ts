@@ -28,7 +28,16 @@ export const catalogApi = baseApi.injectEndpoints({
 		// is not built into this gateway build additionally carry the
 		// custom-provider fallback (custom_provider_config + network_config),
 		// which the server annotated into the catalog snapshot.
-		createProvider: builder.mutation<
+		//
+		// NOTE: The endpoint is intentionally named `oneClickCreateProvider` (not
+		// `createProvider`) so it does not collide with the `createProvider`
+		// endpoint registered by `providersApi` on the same `baseApi`. Both APIs
+		// happen to dispatch from hooks named `useCreateProviderMutation`, but
+		// RTK Query's `injectEndpoints` overrides the prior endpoint definition
+		// when names collide — sharing the name caused the provider-detail form
+		// to send `providersApi`-shaped payloads through the `catalogApi`
+		// body wrapper.
+		oneClickCreateProvider: builder.mutation<
 			ModelProvider,
 			{
 				provider: string;
@@ -47,7 +56,10 @@ export const catalogApi = baseApi.injectEndpoints({
 		// One-click API key registration for an already-known provider.
 		// `key` is the raw API key string; the request body adapts it to the
 		// provider-keys contract (value/secret-var, wildcard models).
-		createProviderKey: builder.mutation<ModelProviderKey, { provider: string; key: string }>({
+		//
+		// See `oneClickCreateProvider` above for why this endpoint is named
+		// distinctly from `providersApi.createProviderKey`.
+		oneClickCreateProviderKey: builder.mutation<ModelProviderKey, { provider: string; key: string }>({
 			query: ({ provider, key }) => ({
 				url: `/providers/${encodeURIComponent(provider)}/keys`,
 				method: "POST",
@@ -64,4 +76,13 @@ export const catalogApi = baseApi.injectEndpoints({
 	}),
 });
 
-export const { useGetBundlesQuery, useCreateProviderMutation, useCreateProviderKeyMutation } = catalogApi;
+// Re-export under the legacy hook names so the home-page call sites
+// (`freeTierOneKeyConfigDialog.tsx` / its test) keep importing
+// `useCreateProviderMutation` / `useCreateProviderKeyMutation` from this
+// module. The underlying endpoints were renamed to `oneClickCreateProvider` /
+// `oneClickCreateProviderKey` (see comments above) to stop colliding with the
+// matching endpoints registered by `providersApi` on the same `baseApi` —
+// RTK Query's `injectEndpoints` overrides the prior endpoint definition when
+// names collide, which used to make the provider-detail form dispatch its
+// full Key shape through the catalogApi's body wrapper.
+export const { useGetBundlesQuery, useOneClickCreateProviderMutation, useOneClickCreateProviderKeyMutation } = catalogApi;
