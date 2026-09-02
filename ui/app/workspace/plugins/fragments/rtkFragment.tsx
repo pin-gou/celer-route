@@ -860,62 +860,34 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 			</legend>
 			<div className="mt-2 space-y-4">
 				<p className="text-muted-foreground text-xs">{t("rtk.cavemanIntro")}</p>
-				<div className="grid gap-4 sm:grid-cols-2">
-					<FormField
-						control={form.control}
-						name="caveman.intensity"
-						render={({ field }) => (
-							<FormItem>
-								<div className="flex items-center gap-1.5">
-									<FormLabel>{t("rtk.cavemanIntensityLabel")}</FormLabel>
-									<HelpHint>{t("rtk.cavemanIntensityWhen")}</HelpHint>
-								</div>
-								<Select value={field.value} onValueChange={field.onChange} disabled={!hasUpdateAccess}>
-									<FormControl>
-										<SelectTrigger data-testid="caveman-field-intensity">
-											<SelectValue placeholder={t("rtk.cavemanIntensityPlaceholder")} />
-										</SelectTrigger>
-									</FormControl>
-									<SelectContent>
-										{(["lite", "full", "ultra"] as const).map((v) => (
-											<SelectItem key={v} value={v}>
-												{t(`rtk.cavemanIntensity${v.charAt(0).toUpperCase()}${v.slice(1)}`)}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-								<FormDescription>{t("rtk.cavemanIntensityDescription")}</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
-					<FormField
-						control={form.control}
-						name="caveman.language"
-						render={({ field }) => (
-							<FormItem>
-								<div className="flex items-center gap-1.5">
-									<FormLabel>{t("rtk.cavemanLanguageLabel")}</FormLabel>
-									<HelpHint>{t("rtk.cavemanLanguageWhen")}</HelpHint>
-								</div>
-								<Select value={field.value} onValueChange={field.onChange} disabled={!hasUpdateAccess}>
-									<FormControl>
-										<SelectTrigger data-testid="caveman-field-language">
-											<SelectValue placeholder={t("rtk.cavemanLanguagePlaceholder")} />
-										</SelectTrigger>
-									</FormControl>
-									<SelectContent>
-										<SelectItem value="auto">{t("rtk.cavemanLanguageAuto")}</SelectItem>
-										<SelectItem value="en">{t("rtk.cavemanLanguageEn")}</SelectItem>
-										<SelectItem value="zh">{t("rtk.cavemanLanguageZh")}</SelectItem>
-									</SelectContent>
-								</Select>
-								<FormDescription>{t("rtk.cavemanLanguageDescription")}</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
-				</div>
+				<FormField
+					control={form.control}
+					name="caveman.intensity"
+					render={({ field }) => (
+						<FormItem>
+							<div className="flex items-center gap-1.5">
+								<FormLabel>{t("rtk.cavemanIntensityLabel")}</FormLabel>
+								<HelpHint>{t("rtk.cavemanIntensityWhen")}</HelpHint>
+							</div>
+							<Select value={field.value} onValueChange={field.onChange} disabled={!hasUpdateAccess}>
+								<FormControl>
+									<SelectTrigger data-testid="caveman-field-intensity">
+										<SelectValue placeholder={t("rtk.cavemanIntensityPlaceholder")} />
+									</SelectTrigger>
+								</FormControl>
+								<SelectContent>
+									{(["lite", "full", "ultra"] as const).map((v) => (
+										<SelectItem key={v} value={v}>
+											{t(`rtk.cavemanIntensity${v.charAt(0).toUpperCase()}${v.slice(1)}`)}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							<FormDescription>{t("rtk.cavemanIntensityDescription")}</FormDescription>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
 				<FormField
 					control={form.control}
 					name="caveman.min_message_length"
@@ -935,37 +907,6 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 								/>
 							</FormControl>
 							<FormDescription>{t("rtk.cavemanMinLengthDescription")}</FormDescription>
-							<FormMessage />
-						</FormItem>
-					)}
-				/>
-				<FormField
-					control={form.control}
-					name="caveman.compress_roles"
-					render={({ field }) => (
-						<FormItem>
-							<div className="flex items-center gap-1.5">
-								<FormLabel>{t("rtk.cavemanRolesLabel")}</FormLabel>
-								<HelpHint>{t("rtk.cavemanRolesWhen")}</HelpHint>
-							</div>
-							<FormControl>
-								<Textarea
-									data-testid="caveman-field-roles"
-									className="font-mono text-xs"
-									rows={2}
-									placeholder={JSON.stringify(["user"])}
-									{...field}
-									value={Array.isArray(field.value) ? JSON.stringify(field.value) : ""}
-									onChange={(e) => {
-										try {
-											field.onChange(JSON.parse(e.target.value));
-										} catch {
-											field.onChange(e.target.value);
-										}
-									}}
-								/>
-							</FormControl>
-							<FormDescription>{t("rtk.cavemanRolesDescription")}</FormDescription>
 							<FormMessage />
 						</FormItem>
 					)}
@@ -1257,9 +1198,7 @@ function ConfigForm({
 			caveman: {
 				enabled: pluginConfig.caveman?.enabled ?? false,
 				intensity: pluginConfig.caveman?.intensity ?? "lite",
-				language: pluginConfig.caveman?.language ?? "auto",
 				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
-				compress_roles: pluginConfig.caveman?.compress_roles ?? ["user"],
 				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
 				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
 			},
@@ -1569,9 +1508,7 @@ function FormFieldsHost({
 			caveman: {
 				enabled: pluginConfig.caveman?.enabled ?? false,
 				intensity: pluginConfig.caveman?.intensity ?? "lite",
-				language: pluginConfig.caveman?.language ?? "auto",
 				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
-				compress_roles: pluginConfig.caveman?.compress_roles ?? ["user"],
 				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
 				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
 			},

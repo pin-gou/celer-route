@@ -335,16 +335,19 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		expect(screen.getByTestId("engine-panel-caveman")).toBeTruthy();
 	});
 
-	it("keeps the existing Caveman field testids inside the Caveman engine panel (no duplicate enable toggle)", () => {
+	it("keeps the existing Caveman field testids inside the Caveman engine panel (no duplicate enable toggle, no language/roles)", () => {
 		const plugin = makePlugin({
-			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },
+			config: { caveman: { enabled: true, intensity: "full", min_message_length: 80 } },
 		});
 		render(<RtkFragment plugin={plugin} />);
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
 		const cavemanPanel = screen.getByTestId("engine-panel-caveman");
 		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-intensity"))).toBe(true);
-		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-language"))).toBe(true);
-		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-roles"))).toBe(true);
+		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-min-length"))).toBe(true);
+		// Language and roles were removed from the UI — the server picks
+		// "auto" / ["user"] via normalizeCavemanConfig defaults.
+		expect(cavemanPanel.contains(screen.queryByTestId("caveman-field-language"))).toBe(false);
+		expect(cavemanPanel.contains(screen.queryByTestId("caveman-field-roles"))).toBe(false);
 		// The enable switch was removed from this panel — the pipeline checkbox
 		// in the enablement card is the single toggle.
 		expect(cavemanPanel.contains(screen.queryByTestId("caveman-field-enabled"))).toBe(false);
@@ -383,12 +386,12 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 
 	it("exposes the caveman sub-fields when caveman.enabled is true", () => {
 		const plugin = makePlugin({
-			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },
+			config: { caveman: { enabled: true, intensity: "full", min_message_length: 80 } },
 		});
 		render(<RtkFragment plugin={plugin} />);
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
 		expect(screen.getByTestId("caveman-field-intensity")).toBeTruthy();
-		expect(screen.getByTestId("caveman-field-language")).toBeTruthy();
+		expect(screen.getByTestId("caveman-field-min-length")).toBeTruthy();
 	});
 
 	it("writes pipeline=[{id:'rtk'}] on submit when caveman is disabled", async () => {

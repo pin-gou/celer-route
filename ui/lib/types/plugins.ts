@@ -157,9 +157,7 @@ export const rtkConfigSchema = z.object({
 		.object({
 			enabled: z.boolean().optional(),
 			intensity: z.enum(["lite", "full", "ultra"]).optional(),
-			language: z.enum(["auto", "en", "zh"]).optional(),
 			min_message_length: z.number().int().min(0).optional(),
-			compress_roles: z.array(z.enum(["user", "assistant", "system"])).optional(),
 			skip_rules: z.array(z.string()).optional(),
 			preserve_patterns: z.array(z.string()).optional(),
 		})

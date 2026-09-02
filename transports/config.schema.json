@@ -3429,26 +3429,11 @@
                           "enum": ["lite", "full", "ultra"],
                           "default": "lite"
                         },
-                        "language": {
-                          "type": "string",
-                          "description": "Rule pack selection: auto (detect per message) | en | zh",
-                          "enum": ["auto", "en", "zh"],
-                          "default": "auto"
-                        },
                         "min_message_length": {
                           "type": "integer",
                           "description": "Minimum message length (runes) before a user message is eligible for compression. Shorter messages pass through unchanged",
                           "minimum": 0,
                           "default": 50
-                        },
-                        "compress_roles": {
-                          "type": "array",
-                          "description": "Message roles Caveman may compress. Default [\"user\"] (system is never touched to protect prompt-cache prefix stability)",
-                          "items": {
-                            "type": "string",
-                            "enum": ["user", "assistant", "system"]
-                          },
-                          "default": ["user"]
                         },
                         "skip_rules": {
                           "type": "array",
