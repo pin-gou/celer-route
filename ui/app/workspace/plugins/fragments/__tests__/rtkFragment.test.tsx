@@ -227,28 +227,29 @@ describe("RtkFragment — raw_output_dir / raw_output_ttl_hours fields", () => {
 // Pipeline-centric layout (V-pipeline-engine-panels)
 // ---------------------------------------------------------------------------
 
-describe("RtkFragment — pipeline-centric layout", () => {
+describe("RtkFragment — pipeline checkboxes inside the enablement card", () => {
 	beforeEach(() => {
 		mocks.updatePlugin.mockReset();
 	});
 
-	it("renders the pipeline section as the first config zone", () => {
+	it("renders the enablement card with the pipeline checkboxes beneath the on/off switch", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
-		expect(screen.getByTestId("pipeline-section")).toBeTruthy();
-		// The legacy JSON pipeline editor was replaced by two checkboxes; the
-		// textarea testid must be gone so we never regress to the operator-facing
-		// raw JSON input.
+		const section = screen.getByTestId("rtk-enabled-section");
+		expect(section).toBeTruthy();
+		// The top-level enable switch sits in the same card.
+		expect(section.contains(screen.getByTestId("rtk-enabled-switch"))).toBe(true);
+		// And the two pipeline checkboxes live beneath it.
+		expect(section.contains(screen.getByTestId("pipeline-rtk-checkbox"))).toBe(true);
+		expect(section.contains(screen.getByTestId("pipeline-caveman-checkbox"))).toBe(true);
+		// Legacy JSON textarea testid is gone so the raw editor never regresses.
 		expect(screen.queryByTestId("rtk-field-pipeline")).toBeNull();
+		expect(screen.queryByTestId("pipeline-section")).toBeNull();
 	});
 
-	it("exposes two engine checkboxes in the pipeline section in fixed order (rtk → caveman)", () => {
+	it("keeps the two pipeline checkboxes in fixed order (rtk → caveman)", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
-		const section = screen.getByTestId("pipeline-section");
 		const rtk = screen.getByTestId("pipeline-rtk-checkbox");
 		const caveman = screen.getByTestId("pipeline-caveman-checkbox");
-		expect(section.contains(rtk)).toBe(true);
-		expect(section.contains(caveman)).toBe(true);
-		// RTK must come first in the DOM (fixed pipeline order).
 		expect(rtk.compareDocumentPosition(caveman) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
@@ -257,6 +258,14 @@ describe("RtkFragment — pipeline-centric layout", () => {
 		const rtk = screen.getByTestId("pipeline-rtk-checkbox") as HTMLButtonElement;
 		expect(rtk.getAttribute("data-state")).toBe("checked");
 		expect(rtk.hasAttribute("disabled")).toBe(true);
+	});
+
+	it("disables both pipeline checkboxes when the plugin is off", () => {
+		render(<RtkFragment plugin={makePlugin({ enabled: false })} />);
+		const rtk = screen.getByTestId("pipeline-rtk-checkbox") as HTMLButtonElement;
+		const caveman = screen.getByTestId("pipeline-caveman-checkbox") as HTMLButtonElement;
+		expect(rtk.hasAttribute("disabled")).toBe(true);
+		expect(caveman.hasAttribute("disabled")).toBe(true);
 	});
 
 	it("reflects caveman.enabled on the Caveman pipeline checkbox", () => {

@@ -122,7 +122,7 @@
 		"enginePanelsTitle": "Engine configuration",
 		"engineRoleScope": "roles: {{role}}",
 		"engineStatsTitle": "Per-engine breakdown",
-		"pipelineSectionIntro": "Engines run in this fixed order (RTK → Caveman). Toggle each engine to enable or disable it.",
+		"pipelineSectionIntro": "Engines run in this fixed order (RTK → Caveman). Pick which engines are part of the pipeline; RTK is always on while the plugin is enabled.",
 		"pipelineSectionTitle": "Pipeline",
 		"pipelineRtkLabel": "RTK (tool / assistant)",
 		"pipelineRtkHint": "The default engine. Targets tool result and assistant text. Always on while the plugin itself is enabled — turn the plugin off at the top-level switch.",

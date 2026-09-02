@@ -122,7 +122,7 @@
 		"enginePanelsTitle": "引擎配置",
 		"engineRoleScope": "角色：{{role}}",
 		"engineStatsTitle": "分引擎累计指标",
-		"pipelineSectionIntro": "按固定顺序（RTK → Caveman）依次运行的压缩引擎，勾选即启用。",
+		"pipelineSectionIntro": "按固定顺序（RTK → Caveman）运行的压缩引擎，勾选即加入管线；插件启用时 RTK 始终开启。",
 		"pipelineSectionTitle": "管线",
 		"pipelineRtkLabel": "RTK（工具输出 / assistant）",
 		"pipelineRtkHint": "默认引擎，作用于工具结果与 assistant 文本。插件启用时始终开启——关闭请用顶部总开关。",

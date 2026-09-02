@@ -346,21 +346,27 @@ function IntensityPresetButtons({
 }
 
 // ---------------------------------------------------------------------------
-// EnabledSwitch — top-level on/off toggle with RBAC gating. Mirrors the
-// ProvidercooldownFragment.EnabledSwitch UX: clicking flips the boolean
-// immediately and toasts success without a separate Save step. Only the
-// outer plugin.enabled flag is sent; the inner Config.Enabled is recovered
-// on the server by applyConfigDefaults' zero-detect (see plugins/rtk/
-// config.go), so a config_json=null/{} row still boots RTK enabled.
+// EnabledSwitchPanel — top-level on/off toggle plus the pipeline checkboxes
+// in one card. The on/off toggle mirrors ProvidercooldownFragment.EnabledSwitch
+// UX: clicking flips plugin.enabled immediately and toasts success without a
+// separate Save step. The pipeline checkboxes (RTK always-on, Caveman opt-in)
+// live beneath the toggle because they describe *which* engines run when the
+// plugin is on — collapsing them into the enablement zone keeps the "what gets
+// executed" decision in one place.
 //
-// We deliberately do NOT round-trip the existing config payload here —
-// doing so would force the operator's untuned toggles (intensity,
-// thresholds, renderers whitelist, etc.) to be persisted as part of a
-// pure enable/disable action, which is surprising. If those knobs need to
-// move, the operator edits them via ConfigForm and clicks Save.
+// The Caveman checkbox is bound to form.caveman.enabled via the shared
+// ConfigForm form instance; flipping it dirties the form but does not persist
+// until the operator clicks Save (consistent with every other ConfigForm
+// field). When the plugin is disabled, both checkboxes are visually disabled
+// so the operator doesn't tune engines that won't run.
+//
+// We deliberately do NOT round-trip the existing config payload in the toggle
+// handler — doing so would force the operator's untuned knobs (intensity,
+// thresholds, renderers whitelist, etc.) to be persisted as part of a pure
+// enable/disable action, which is surprising.
 // ---------------------------------------------------------------------------
 
-export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
+export function EnabledSwitchPanel({ plugin, form }: { plugin: Plugin; form: ReturnType<typeof useForm<RTKFormValues>> }) {
 	const { t } = useTranslation("plugins");
 	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
 	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
@@ -378,8 +384,12 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 		}
 	};
 
+	const cavemanChecked = !!form.watch("caveman.enabled");
+	const setCavemanEnabled = (v: boolean) => form.setValue("caveman.enabled", v, { shouldDirty: true });
+	const checkboxesDisabled = !hasUpdateAccess || !plugin.enabled;
+
 	return (
-		<div className="rounded-lg border p-4">
+		<div className="rounded-lg border p-4" data-testid="rtk-enabled-section">
 			<div className="flex flex-row items-center justify-between">
 				<div className="space-y-0.5">
 					<label className="text-sm font-medium">{t("rtk.enableTitle")}</label>
@@ -391,6 +401,45 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 					onCheckedChange={handleToggle}
 					disabled={isLoading || !hasUpdateAccess}
 				/>
+			</div>
+
+			<div className="mt-4 space-y-1 border-t pt-4">
+				<div className="flex items-center gap-1.5">
+					<span className="text-sm font-semibold">{t("rtk.pipelineSectionTitle")}</span>
+					<HelpHint>{t("rtk.pipelineSectionIntro")}</HelpHint>
+				</div>
+				<div className="space-y-3" data-testid="pipeline-engines">
+					<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+						<FormControl>
+							<Checkbox data-testid="pipeline-rtk-checkbox" checked disabled className="mt-1" />
+						</FormControl>
+						<div className="space-y-1 leading-none">
+							<div className="flex items-center gap-1.5">
+								<FormLabel>{t("rtk.pipelineRtkLabel")}</FormLabel>
+								<HelpHint>{t("rtk.pipelineRtkHint")}</HelpHint>
+							</div>
+							<FormDescription>{t("rtk.pipelineRtkDescription")}</FormDescription>
+						</div>
+					</FormItem>
+					<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+						<FormControl>
+							<Checkbox
+								data-testid="pipeline-caveman-checkbox"
+								checked={cavemanChecked}
+								onCheckedChange={(v) => setCavemanEnabled(v === true)}
+								disabled={checkboxesDisabled}
+								className="mt-1"
+							/>
+						</FormControl>
+						<div className="space-y-1 leading-none">
+							<div className="flex items-center gap-1.5">
+								<FormLabel>{t("rtk.pipelineCavemanLabel")}</FormLabel>
+								<HelpHint>{t("rtk.pipelineCavemanHint")}</HelpHint>
+							</div>
+							<FormDescription>{t("rtk.pipelineCavemanDescription")}</FormDescription>
+						</div>
+					</FormItem>
+				</div>
 			</div>
 		</div>
 	);
@@ -895,453 +944,370 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 // pipeline + engine + shared concerns in distinct zones so the
 // operator's eye finds them in one consistent order.
 // ---------------------------------------------------------------------------
+// SharedSettingsSection — cross-engine settings (scope, snapshot, renderers,
+// raw output, filters). The pipeline checkboxes used to live here at the top;
+// they have since been moved into EnabledSwitchPanel so the operator decides
+// "which engines run when the plugin is on" in a single place next to the
+// top-level on/off toggle.
+// ---------------------------------------------------------------------------
 
-function PipelineSection({ form, hasUpdateAccess }: { form: ReturnType<typeof useForm<RTKFormValues>>; hasUpdateAccess: boolean }) {
+function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFormValues>> }) {
 	const { t } = useTranslation("plugins");
-	// RTK is always-on (its off state lives at the top-level EnabledSwitch);
-	// the Caveman checkbox is bound to caveman.enabled so toggling it stays in
-	// sync with the per-engine configuration card below. The order is fixed
-	// (rtk → caveman) — see ConfigForm.onSubmit for the wire-format writer.
-	const rtkChecked = true;
-	const cavemanChecked = !!form.watch("caveman.enabled");
-	const setCavemanEnabled = (v: boolean) => form.setValue("caveman.enabled", v, { shouldDirty: true });
 	return (
-		<fieldset className="rounded-lg border p-4" data-testid="pipeline-section">
-			<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.pipelineSectionTitle")}</legend>
-			<div className="mt-2 space-y-4">
-				<p className="text-muted-foreground text-xs">{t("rtk.pipelineSectionIntro")}</p>
+		<div className="space-y-4">
+			<div className="flex items-center gap-2">
+				<span className="text-sm font-semibold">{t("rtk.sharedSettingsTitle")}</span>
+				<HelpHint>{t("rtk.sharedSettingsHelp")}</HelpHint>
+			</div>
 
-				<div className="space-y-3" data-testid="pipeline-engines">
-					<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-						<FormControl>
-							<Checkbox data-testid="pipeline-rtk-checkbox" checked={rtkChecked} disabled className="mt-1" />
-						</FormControl>
-						<div className="space-y-1 leading-none">
-							<div className="flex items-center gap-1.5">
-								<FormLabel>{t("rtk.pipelineRtkLabel")}</FormLabel>
-								<HelpHint>{t("rtk.pipelineRtkHint")}</HelpHint>
-							</div>
-							<FormDescription>{t("rtk.pipelineRtkDescription")}</FormDescription>
-						</div>
-					</FormItem>
-					<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-						<FormControl>
-							<Checkbox
-								data-testid="pipeline-caveman-checkbox"
-								checked={cavemanChecked}
-								onCheckedChange={(v) => setCavemanEnabled(v === true)}
-								disabled={!hasUpdateAccess}
-								className="mt-1"
-							/>
-						</FormControl>
-						<div className="space-y-1 leading-none">
-							<div className="flex items-center gap-1.5">
-								<FormLabel>{t("rtk.pipelineCavemanLabel")}</FormLabel>
-								<HelpHint>{t("rtk.pipelineCavemanHint")}</HelpHint>
-							</div>
-							<FormDescription>{t("rtk.pipelineCavemanDescription")}</FormDescription>
-						</div>
-					</FormItem>
+			{/* Scope: 3 checkboxes */}
+			<fieldset className="rounded-lg border p-4">
+				<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.scopeSection")}</legend>
+				<div className="mt-2 space-y-3">
+					<FormField
+						control={form.control}
+						name="apply_to_tool_results"
+						render={({ field }) => (
+							<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+								<FormControl>
+									<Checkbox data-testid="rtk-field-apply-to-tool-results" checked={field.value} onCheckedChange={field.onChange} />
+								</FormControl>
+								<div className="space-y-1 leading-none">
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.applyToToolResultsLabel")}</FormLabel>
+										<HelpHint>{t("rtk.applyToToolResultsWhen")}</HelpHint>
+									</div>
+									<FormDescription>{t("rtk.applyToToolResultsDescription")}</FormDescription>
+								</div>
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={form.control}
+						name="apply_to_code_blocks"
+						render={({ field }) => (
+							<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+								<FormControl>
+									<Checkbox data-testid="rtk-field-apply-to-code-blocks" checked={field.value} onCheckedChange={field.onChange} />
+								</FormControl>
+								<div className="space-y-1 leading-none">
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.applyToCodeBlocksLabel")}</FormLabel>
+										<HelpHint>{t("rtk.applyToCodeBlocksWhen")}</HelpHint>
+									</div>
+									<FormDescription>{t("rtk.applyToCodeBlocksDescription")}</FormDescription>
+								</div>
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={form.control}
+						name="apply_to_assistant_messages"
+						render={({ field }) => (
+							<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+								<FormControl>
+									<Checkbox data-testid="rtk-field-apply-to-assistant-messages" checked={field.value} onCheckedChange={field.onChange} />
+								</FormControl>
+								<div className="space-y-1 leading-none">
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.applyToAssistantMessagesLabel")}</FormLabel>
+										<HelpHint>{t("rtk.applyToAssistantMessagesWhen")}</HelpHint>
+									</div>
+									<FormDescription>{t("rtk.applyToAssistantMessagesDescription")}</FormDescription>
+								</div>
+							</FormItem>
+						)}
+					/>
 				</div>
+			</fieldset>
 
-				<Separator />
+			{/* Snapshot: mode + max bytes */}
+			<fieldset className="rounded-lg border p-4">
+				<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.snapshotSection")}</legend>
+				<div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+					<FormField
+						control={form.control}
+						name="snapshot_mode"
+						render={({ field }) => (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.snapshotModeLabel")}</FormLabel>
+									<HelpHint>{t("rtk.snapshotModeWhen")}</HelpHint>
+								</div>
+								<Select value={field.value} onValueChange={field.onChange}>
+									<FormControl>
+										<SelectTrigger data-testid="rtk-field-snapshot-mode">
+											<SelectValue />
+										</SelectTrigger>
+									</FormControl>
+									<SelectContent>
+										<SelectItem value="off">{t("rtk.snapshotModeOff")}</SelectItem>
+										<SelectItem value="split">{t("rtk.snapshotModeSplit")}</SelectItem>
+										<SelectItem value="merged">{t("rtk.snapshotModeMerged")}</SelectItem>
+									</SelectContent>
+								</Select>
+								<FormDescription>{t("rtk.snapshotModeDescription")}</FormDescription>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={form.control}
+						name="snapshot_max_bytes"
+						render={({ field }) => (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.snapshotMaxBytesLabel")}</FormLabel>
+									<HelpHint>{t("rtk.snapshotMaxBytesWhen")}</HelpHint>
+								</div>
+								<FormControl>
+									<Input
+										data-testid="rtk-field-snapshot-max-bytes"
+										type="number"
+										min={0}
+										step={1024}
+										{...field}
+										onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+									/>
+								</FormControl>
+								<FormDescription>{t("rtk.snapshotMaxBytesHelp")}</FormDescription>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+				</div>
+			</fieldset>
 
-				{/* ── Shared settings (cross-engine) ────────────────────────────── */}
-				<div className="space-y-4">
-					<div className="flex items-center gap-2">
-						<span className="text-sm font-semibold">{t("rtk.sharedSettingsTitle")}</span>
-						<HelpHint>{t("rtk.sharedSettingsHelp")}</HelpHint>
-					</div>
-
-					{/* Scope: 3 checkboxes */}
-					<fieldset className="rounded-lg border p-4">
-						<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.scopeSection")}</legend>
-						<div className="mt-2 space-y-3">
-							<FormField
-								control={form.control}
-								name="apply_to_tool_results"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-										<FormControl>
-											<Checkbox data-testid="rtk-field-apply-to-tool-results" checked={field.value} onCheckedChange={field.onChange} />
-										</FormControl>
-										<div className="space-y-1 leading-none">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.applyToToolResultsLabel")}</FormLabel>
-												<HelpHint>{t("rtk.applyToToolResultsWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.applyToToolResultsDescription")}</FormDescription>
+			{/* Collapsible advanced shared settings */}
+			<Accordion type="multiple" className="rounded-lg border">
+				{/* Semantic renderers */}
+				<AccordionItem value="renderers" className="px-4">
+					<AccordionTrigger data-testid="rtk-section-renderers-trigger">{t("rtk.renderersSection")}</AccordionTrigger>
+					<AccordionContent className="space-y-3">
+						<FormField
+							control={form.control}
+							name="enable_renderers"
+							render={({ field }) => (
+								<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+									<FormControl>
+										<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
+									</FormControl>
+									<div className="space-y-1 leading-none">
+										<div className="flex items-center gap-1.5">
+											<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
+											<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
 										</div>
-									</FormItem>
-								)}
-							/>
+										<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
+									</div>
+								</FormItem>
+							)}
+						/>
+						{form.watch("enable_renderers") && (
 							<FormField
 								control={form.control}
-								name="apply_to_code_blocks"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-										<FormControl>
-											<Checkbox data-testid="rtk-field-apply-to-code-blocks" checked={field.value} onCheckedChange={field.onChange} />
-										</FormControl>
-										<div className="space-y-1 leading-none">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.applyToCodeBlocksLabel")}</FormLabel>
-												<HelpHint>{t("rtk.applyToCodeBlocksWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.applyToCodeBlocksDescription")}</FormDescription>
-										</div>
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="apply_to_assistant_messages"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-										<FormControl>
-											<Checkbox
-												data-testid="rtk-field-apply-to-assistant-messages"
-												checked={field.value}
-												onCheckedChange={field.onChange}
-											/>
-										</FormControl>
-										<div className="space-y-1 leading-none">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.applyToAssistantMessagesLabel")}</FormLabel>
-												<HelpHint>{t("rtk.applyToAssistantMessagesWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.applyToAssistantMessagesDescription")}</FormDescription>
-										</div>
-									</FormItem>
-								)}
-							/>
-						</div>
-					</fieldset>
-
-					{/* Snapshot: mode + max bytes */}
-					<fieldset className="rounded-lg border p-4">
-						<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.snapshotSection")}</legend>
-						<div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
-							<FormField
-								control={form.control}
-								name="snapshot_mode"
+								name="renderers"
 								render={({ field }) => (
 									<FormItem>
 										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.snapshotModeLabel")}</FormLabel>
-											<HelpHint>{t("rtk.snapshotModeWhen")}</HelpHint>
-										</div>
-										<Select value={field.value} onValueChange={field.onChange}>
-											<FormControl>
-												<SelectTrigger data-testid="rtk-field-snapshot-mode">
-													<SelectValue />
-												</SelectTrigger>
-											</FormControl>
-											<SelectContent>
-												<SelectItem value="off">{t("rtk.snapshotModeOff")}</SelectItem>
-												<SelectItem value="split">{t("rtk.snapshotModeSplit")}</SelectItem>
-												<SelectItem value="merged">{t("rtk.snapshotModeMerged")}</SelectItem>
-											</SelectContent>
-										</Select>
-										<FormDescription>{t("rtk.snapshotModeDescription")}</FormDescription>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="snapshot_max_bytes"
-								render={({ field }) => (
-									<FormItem>
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.snapshotMaxBytesLabel")}</FormLabel>
-											<HelpHint>{t("rtk.snapshotMaxBytesWhen")}</HelpHint>
+											<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
+											<HelpHint>{t("rtk.renderersWhen")}</HelpHint>
 										</div>
 										<FormControl>
 											<Input
-												data-testid="rtk-field-snapshot-max-bytes"
-												type="number"
-												min={0}
-												step={1024}
+												data-testid="rtk-field-renderers"
+												placeholder="e.g. git-diff, test-green, terraform-plan"
 												{...field}
-												onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+												value={Array.isArray(field.value) ? field.value.join(", ") : ""}
+												onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
 											/>
 										</FormControl>
-										<FormDescription>{t("rtk.snapshotMaxBytesHelp")}</FormDescription>
+										<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
 										<FormMessage />
 									</FormItem>
 								)}
 							/>
+						)}
+					</AccordionContent>
+				</AccordionItem>
+
+				{/* Debug / raw output */}
+				<AccordionItem value="rawOutput" className="px-4">
+					<AccordionTrigger data-testid="rtk-section-raw-output-trigger">{t("rtk.rawOutputSection")}</AccordionTrigger>
+					<AccordionContent className="space-y-3">
+						<FormField
+							control={form.control}
+							name="raw_output_retention"
+							render={({ field }) => (
+								<FormItem>
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.rawOutputRetentionLabel")}</FormLabel>
+										<HelpHint>{t("rtk.rawOutputRetentionWhen")}</HelpHint>
+									</div>
+									<Select value={field.value} onValueChange={field.onChange}>
+										<FormControl>
+											<SelectTrigger data-testid="rtk-field-raw-output-retention">
+												<SelectValue placeholder={t("rtk.rawOutputRetentionPlaceholder")} />
+											</SelectTrigger>
+										</FormControl>
+										<SelectContent>
+											<SelectItem value="never">{t("rtk.rawOutputRetentionNever")}</SelectItem>
+											<SelectItem value="failures">{t("rtk.rawOutputRetentionFailures")}</SelectItem>
+											<SelectItem value="always">{t("rtk.rawOutputRetentionAlways")}</SelectItem>
+										</SelectContent>
+									</Select>
+									<FormDescription>{t("rtk.rawOutputRetentionDescription")}</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+						<FormField
+							control={form.control}
+							name="raw_output_max_bytes"
+							render={({ field }) => (
+								<FormItem>
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
+										<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
+									</div>
+									<FormControl>
+										<Input
+											data-testid="rtk-field-raw-output-max-bytes"
+											type="number"
+											min={0}
+											{...field}
+											onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+										/>
+									</FormControl>
+									<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+						<FormField
+							control={form.control}
+							name="raw_output_dir"
+							render={({ field }) => (
+								<FormItem>
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.rawOutputDirLabel")}</FormLabel>
+										<HelpHint>{t("rtk.rawOutputDirWhen")}</HelpHint>
+									</div>
+									<FormControl>
+										<Input data-testid="rtk-field-raw-output-dir" type="text" placeholder={t("rtk.rawOutputDirPlaceholder")} {...field} />
+									</FormControl>
+									<FormDescription>{t("rtk.rawOutputDirDescription")}</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+						<FormField
+							control={form.control}
+							name="raw_output_ttl_hours"
+							render={({ field }) => (
+								<FormItem>
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.rawOutputTTLLabel")}</FormLabel>
+										<HelpHint>{t("rtk.rawOutputTTLWhen")}</HelpHint>
+									</div>
+									<FormControl>
+										<Input
+											data-testid="rtk-field-raw-output-ttl-hours"
+											type="number"
+											min={0}
+											max={168}
+											{...field}
+											onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+										/>
+									</FormControl>
+									<FormDescription>{t("rtk.rawOutputTTLDescription")}</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+					</AccordionContent>
+				</AccordionItem>
+
+				{/* Filters & custom */}
+				<AccordionItem value="filters" className="px-4">
+					<AccordionTrigger data-testid="rtk-section-filters-trigger">{t("rtk.filtersSection")}</AccordionTrigger>
+					<AccordionContent className="space-y-3">
+						<FormField
+							control={form.control}
+							name="custom_filters_enabled"
+							render={({ field }) => (
+								<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+									<div className="space-y-0.5">
+										<div className="flex items-center gap-1.5">
+											<FormLabel>{t("rtk.customFiltersEnabledLabel")}</FormLabel>
+											<HelpHint>{t("rtk.customFiltersEnabledWhen")}</HelpHint>
+										</div>
+										<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
+									</div>
+									<FormControl>
+										<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
+									</FormControl>
+								</FormItem>
+							)}
+						/>
+						{form.watch("custom_filters_enabled") && (
+							<FormField
+								control={form.control}
+								name="trust_project_filters"
+								render={({ field }) => (
+									<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+										<div className="space-y-0.5">
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.trustProjectFiltersLabel")}</FormLabel>
+												<HelpHint>{t("rtk.trustProjectFiltersWhen")}</HelpHint>
+											</div>
+											<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
+										</div>
+										<FormControl>
+											<Switch data-testid="rtk-field-trust-project-filters" checked={field.value} onCheckedChange={field.onChange} />
+										</FormControl>
+									</FormItem>
+								)}
+							/>
+						)}
+						<div className="text-muted-foreground text-xs">
+							{t("rtk.filterCatalogHint")}{" "}
+							<Link to="/workspace/plugins/rtk/filters" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
+								{t("rtk.admin.tabs.filters")}
+								<ExternalLink className="ml-0.5 inline h-3 w-3" />
+							</Link>
 						</div>
-					</fieldset>
-
-					{/* Collapsible advanced shared settings */}
-					<Accordion type="multiple" className="rounded-lg border">
-						{/* Semantic renderers */}
-						<AccordionItem value="renderers" className="px-4">
-							<AccordionTrigger data-testid="rtk-section-renderers-trigger">{t("rtk.renderersSection")}</AccordionTrigger>
-							<AccordionContent className="space-y-3">
-								<FormField
-									control={form.control}
-									name="enable_renderers"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-											<FormControl>
-												<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
-											</FormControl>
-											<div className="space-y-1 leading-none">
-												<div className="flex items-center gap-1.5">
-													<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
-													<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
-												</div>
-												<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
-											</div>
-										</FormItem>
-									)}
-								/>
-								{form.watch("enable_renderers") && (
-									<FormField
-										control={form.control}
-										name="renderers"
-										render={({ field }) => (
-											<FormItem>
-												<div className="flex items-center gap-1.5">
-													<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
-													<HelpHint>{t("rtk.renderersWhen")}</HelpHint>
-												</div>
-												<FormControl>
-													<Input
-														data-testid="rtk-field-renderers"
-														placeholder="e.g. git-diff, test-green, terraform-plan"
-														{...field}
-														value={Array.isArray(field.value) ? field.value.join(", ") : ""}
-														onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
-													/>
-												</FormControl>
-												<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
-												<FormMessage />
-											</FormItem>
-										)}
-									/>
-								)}
-							</AccordionContent>
-						</AccordionItem>
-
-						{/* Debug / raw output */}
-						<AccordionItem value="rawOutput" className="px-4">
-							<AccordionTrigger data-testid="rtk-section-raw-output-trigger">{t("rtk.rawOutputSection")}</AccordionTrigger>
-							<AccordionContent className="space-y-3">
-								<FormField
-									control={form.control}
-									name="raw_output_retention"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.rawOutputRetentionLabel")}</FormLabel>
-												<HelpHint>{t("rtk.rawOutputRetentionWhen")}</HelpHint>
-											</div>
-											<Select value={field.value} onValueChange={field.onChange}>
-												<FormControl>
-													<SelectTrigger data-testid="rtk-field-raw-output-retention">
-														<SelectValue placeholder={t("rtk.rawOutputRetentionPlaceholder")} />
-													</SelectTrigger>
-												</FormControl>
-												<SelectContent>
-													<SelectItem value="never">{t("rtk.rawOutputRetentionNever")}</SelectItem>
-													<SelectItem value="failures">{t("rtk.rawOutputRetentionFailures")}</SelectItem>
-													<SelectItem value="always">{t("rtk.rawOutputRetentionAlways")}</SelectItem>
-												</SelectContent>
-											</Select>
-											<FormDescription>{t("rtk.rawOutputRetentionDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="raw_output_max_bytes"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
-												<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
-											</div>
-											<FormControl>
-												<Input
-													data-testid="rtk-field-raw-output-max-bytes"
-													type="number"
-													min={0}
-													{...field}
-													onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-												/>
-											</FormControl>
-											<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="raw_output_dir"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.rawOutputDirLabel")}</FormLabel>
-												<HelpHint>{t("rtk.rawOutputDirWhen")}</HelpHint>
-											</div>
-											<FormControl>
-												<Input
-													data-testid="rtk-field-raw-output-dir"
-													type="text"
-													placeholder={t("rtk.rawOutputDirPlaceholder")}
-													{...field}
-												/>
-											</FormControl>
-											<FormDescription>{t("rtk.rawOutputDirDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="raw_output_ttl_hours"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.rawOutputTTLLabel")}</FormLabel>
-												<HelpHint>{t("rtk.rawOutputTTLWhen")}</HelpHint>
-											</div>
-											<FormControl>
-												<Input
-													data-testid="rtk-field-raw-output-ttl-hours"
-													type="number"
-													min={0}
-													max={168}
-													{...field}
-													onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-												/>
-											</FormControl>
-											<FormDescription>{t("rtk.rawOutputTTLDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-							</AccordionContent>
-						</AccordionItem>
-
-						{/* Filters & custom */}
-						<AccordionItem value="filters" className="px-4">
-							<AccordionTrigger data-testid="rtk-section-filters-trigger">{t("rtk.filtersSection")}</AccordionTrigger>
-							<AccordionContent className="space-y-3">
-								<FormField
-									control={form.control}
-									name="custom_filters_enabled"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-											<div className="space-y-0.5">
-												<div className="flex items-center gap-1.5">
-													<FormLabel>{t("rtk.customFiltersEnabledLabel")}</FormLabel>
-													<HelpHint>{t("rtk.customFiltersEnabledWhen")}</HelpHint>
-												</div>
-												<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
-											</div>
-											<FormControl>
-												<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
-											</FormControl>
-										</FormItem>
-									)}
-								/>
-								{form.watch("custom_filters_enabled") && (
-									<FormField
-										control={form.control}
-										name="trust_project_filters"
-										render={({ field }) => (
-											<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-												<div className="space-y-0.5">
-													<div className="flex items-center gap-1.5">
-														<FormLabel>{t("rtk.trustProjectFiltersLabel")}</FormLabel>
-														<HelpHint>{t("rtk.trustProjectFiltersWhen")}</HelpHint>
-													</div>
-													<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
-												</div>
-												<FormControl>
-													<Switch data-testid="rtk-field-trust-project-filters" checked={field.value} onCheckedChange={field.onChange} />
-												</FormControl>
-											</FormItem>
-										)}
-									/>
-								)}
-								<div className="text-muted-foreground text-xs">
-									{t("rtk.filterCatalogHint")}{" "}
-									<Link to="/workspace/plugins/rtk/filters" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-										{t("rtk.admin.tabs.filters")}
-										<ExternalLink className="ml-0.5 inline h-3 w-3" />
-									</Link>
-								</div>
-							</AccordionContent>
-						</AccordionItem>
-					</Accordion>
-				</div>
-			</div>
-		</fieldset>
+					</AccordionContent>
+				</AccordionItem>
+			</Accordion>
+		</div>
 	);
 }
 
 // ---------------------------------------------------------------------------
-// ConfigForm — react-hook-form + zod wrapper that stitches the
-// pipeline-centric layout together. All RTK config fields live here, but
-// their rendering is delegated to PipelineSection / RtkEnginePanel /
-// CavemanEnginePanel for clarity. The form schema and submit payload are
-// unchanged so the persisted config.json shape stays wire-compatible.
+// ConfigForm — react-hook-form + zod wrapper that renders the cross-engine
+// settings (SharedSettingsSection) and per-engine configuration panels
+// (RtkEnginePanel / CavemanEnginePanel). The form instance is owned by
+// RtkFragment and shared with EnabledSwitchPanel so the pipeline / caveman
+// checkboxes and the per-engine card below stay in sync. The form schema
+// and submit payload are unchanged so the persisted config.json shape stays
+// wire-compatible.
 // ---------------------------------------------------------------------------
 
-export function ConfigForm({ plugin }: { plugin: Plugin }) {
+function ConfigForm({
+	plugin,
+	form,
+	isSaving,
+	lastSavedRef,
+}: {
+	plugin: Plugin;
+	form: ReturnType<typeof useForm<RTKFormValues>>;
+	isSaving: boolean;
+	lastSavedRef: React.MutableRefObject<Partial<RTKFormValues>>;
+}) {
 	const { t } = useTranslation("plugins");
 	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
-	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
 
 	const pluginConfig = (plugin.config || {}) as Record<string, any>;
-
-	const defaultFormValues = (): RTKFormValues => ({
-		intensity: pluginConfig.intensity ?? "standard",
-		apply_to_tool_results: pluginConfig.apply_to_tool_results ?? true,
-		apply_to_code_blocks: pluginConfig.apply_to_code_blocks ?? false,
-		apply_to_assistant_messages: pluginConfig.apply_to_assistant_messages ?? false,
-		max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
-		max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
-		dedup_threshold: pluginConfig.dedup_threshold ?? 3,
-		preserve_cache_control: pluginConfig.preserve_cache_control ?? false,
-		enable_grouping: pluginConfig.enable_grouping ?? false,
-		grouping_threshold: pluginConfig.grouping_threshold ?? 3,
-		custom_filters_enabled: pluginConfig.custom_filters_enabled ?? true,
-		trust_project_filters: pluginConfig.trust_project_filters ?? false,
-		enabled_filters: pluginConfig.enabled_filters ?? [],
-		disabled_filters: pluginConfig.disabled_filters ?? [],
-		raw_output_retention: pluginConfig.raw_output_retention ?? "always",
-		raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
-		raw_output_dir: pluginConfig.raw_output_dir ?? "",
-		raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
-		pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
-		min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
-		enable_renderers: pluginConfig.enable_renderers ?? true,
-		renderers: pluginConfig.renderers ?? [],
-		snapshot_mode: pluginConfig.snapshot_mode ?? "off",
-		snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
-		caveman: {
-			enabled: pluginConfig.caveman?.enabled ?? false,
-			intensity: pluginConfig.caveman?.intensity ?? "lite",
-			language: pluginConfig.caveman?.language ?? "auto",
-			min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
-			compress_roles: pluginConfig.caveman?.compress_roles ?? ["user"],
-			skip_rules: pluginConfig.caveman?.skip_rules ?? [],
-			preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
-		},
-	});
-
-	const form = useForm<RTKFormValues>({
-		resolver: zodResolver(rtkConfigSchema),
-		defaultValues: defaultFormValues(),
-	});
 
 	// Keep the form in sync if the underlying plugin/config changes (e.g. after
 	// an admin edit or reload from server). Without this, switching between
@@ -1354,44 +1320,53 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 	// enabled toggle). Stringifying gives a stable signal that only fires
 	// when the operator-visible config actually moves.
 	useEffect(() => {
-		form.reset(defaultFormValues());
+		form.reset({
+			intensity: pluginConfig.intensity ?? "standard",
+			apply_to_tool_results: pluginConfig.apply_to_tool_results ?? true,
+			apply_to_code_blocks: pluginConfig.apply_to_code_blocks ?? false,
+			apply_to_assistant_messages: pluginConfig.apply_to_assistant_messages ?? false,
+			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
+			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
+			dedup_threshold: pluginConfig.dedup_threshold ?? 3,
+			preserve_cache_control: pluginConfig.preserve_cache_control ?? false,
+			enable_grouping: pluginConfig.enable_grouping ?? false,
+			grouping_threshold: pluginConfig.grouping_threshold ?? 3,
+			custom_filters_enabled: pluginConfig.custom_filters_enabled ?? true,
+			trust_project_filters: pluginConfig.trust_project_filters ?? false,
+			enabled_filters: pluginConfig.enabled_filters ?? [],
+			disabled_filters: pluginConfig.disabled_filters ?? [],
+			raw_output_retention: pluginConfig.raw_output_retention ?? "always",
+			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
+			raw_output_dir: pluginConfig.raw_output_dir ?? "",
+			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
+			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
+			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
+			enable_renderers: pluginConfig.enable_renderers ?? true,
+			renderers: pluginConfig.renderers ?? [],
+			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
+			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
+			caveman: {
+				enabled: pluginConfig.caveman?.enabled ?? false,
+				intensity: pluginConfig.caveman?.intensity ?? "lite",
+				language: pluginConfig.caveman?.language ?? "auto",
+				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
+				compress_roles: pluginConfig.caveman?.compress_roles ?? ["user"],
+				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
+				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
+			},
+		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [JSON.stringify(pluginConfig)]);
 
 	// lastSavedRef tracks the most recently saved values so revertPreset can
 	// reset only the 7 preset-managed fields without touching independent ones.
-	const lastSavedRef = useRef<Partial<RTKFormValues>>({});
+	// The ref itself is owned by RtkFragment (so the save success path there
+	// can refresh it), but the initial-sync fingerprint effect lives here so
+	// it stays close to the form values it observes.
 	useEffect(() => {
 		lastSavedRef.current = form.formState.defaultValues as Partial<RTKFormValues>;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [JSON.stringify(pluginConfig)]);
-
-	const onSubmit = async (values: RTKFormValues) => {
-		if (!hasUpdateAccess) return;
-		// Pipeline is derived from the per-engine toggles in the PipelineSection
-		// — RTK is always-on and listed first, Caveman trails when enabled.
-		// This keeps the wire format stable (pluginConfig.pipeline) while the
-		// UI no longer exposes the raw JSON array.
-		const pipeline = values.caveman?.enabled ? [{ id: "rtk" }, { id: "caveman" }] : [{ id: "rtk" }];
-		values.pipeline = pipeline;
-		try {
-			await updatePlugin({
-				name: RTK_PLUGIN,
-				data: {
-					enabled: plugin.enabled,
-					config: values,
-				},
-			}).unwrap();
-			lastSavedRef.current = values;
-			toast.success(t("rtk.savedToast"));
-		} catch {
-			toast.error(t("rtk.saveFailedToast"));
-		}
-	};
-
-	const onError = () => {
-		toast.error(t("rtk.formErrorToast"));
-	};
 
 	// Watch intensity + max_lines to display the live "effective value" hint.
 	const intensity = form.watch("intensity") ?? "standard";
@@ -1419,95 +1394,89 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 	};
 
 	return (
-		<Form {...form}>
-			<form onSubmit={form.handleSubmit(onSubmit, onError)}>
-				<div className="space-y-6">
-					{/* ── Pipeline orchestrator (top) ──────────────────────────────── */}
-					<PipelineSection form={form} hasUpdateAccess={hasUpdateAccess} />
+		<div className="space-y-6">
+			<SharedSettingsSection form={form} />
 
-					{/* ── Per-engine configuration panels ──────────────────────────── */}
-					<div className="space-y-4">
-						<div className="flex items-center gap-2">
-							<span className="text-sm font-semibold">{t("rtk.enginePanelsTitle")}</span>
-							<HelpHint>{t("rtk.enginePanelsHelp")}</HelpHint>
-						</div>
-						<RtkEnginePanel
-							form={form}
-							intensity={intensity}
-							maxLines={maxLines}
-							effectiveLines={effectiveLines}
-							hasUpdateAccess={hasUpdateAccess}
-							onPickPreset={applyPreset}
-							onRevertPreset={revertPreset}
-						/>
-						<CavemanEnginePanel form={form} hasUpdateAccess={hasUpdateAccess} />
-					</div>
+			<div className="space-y-4">
+				<div className="flex items-center gap-2">
+					<span className="text-sm font-semibold">{t("rtk.enginePanelsTitle")}</span>
+					<HelpHint>{t("rtk.enginePanelsHelp")}</HelpHint>
+				</div>
+				<RtkEnginePanel
+					form={form}
+					intensity={intensity}
+					maxLines={maxLines}
+					effectiveLines={effectiveLines}
+					hasUpdateAccess={hasUpdateAccess}
+					onPickPreset={applyPreset}
+					onRevertPreset={revertPreset}
+				/>
+				<CavemanEnginePanel form={form} hasUpdateAccess={hasUpdateAccess} />
+			</div>
 
-					{/* ── Effect-verification nudge ─────────────────────────────────── */}
-					<div className="bg-muted/30 text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
-						<div className="flex items-start gap-2">
-							<Beaker className="mt-0.5 h-4 w-4 shrink-0" />
-							<div className="space-y-1.5">
-								<div className="text-foreground text-sm font-medium">{t("rtk.afterSaveTitle")}</div>
-								<div>{t("rtk.afterSaveBody")}</div>
-								<div className="flex flex-wrap gap-2 pt-1">
-									<Button variant="outline" size="sm" asChild>
-										<Link to="/workspace/plugins/rtk/preview" data-testid="rtk-after-save-preview">
-											<ImageIcon className="h-3.5 w-3.5" />
-											{t("rtk.admin.tabs.preview")}
-										</Link>
-									</Button>
-									<Button variant="outline" size="sm" asChild>
-										<Link to="/workspace/plugins/rtk/test" data-testid="rtk-after-save-test">
-											<Beaker className="h-3.5 w-3.5" />
-											{t("rtk.admin.tabs.test")}
-										</Link>
-									</Button>
-									<Button variant="outline" size="sm" asChild>
-										<Link to="/workspace/plugins/rtk/raw-output" data-testid="rtk-after-save-raw">
-											<FileSearchIcon />
-											{t("rtk.admin.tabs.rawOutput")}
-										</Link>
-									</Button>
-								</div>
-							</div>
+			{/* ── Effect-verification nudge ─────────────────────────────────── */}
+			<div className="bg-muted/30 text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
+				<div className="flex items-start gap-2">
+					<Beaker className="mt-0.5 h-4 w-4 shrink-0" />
+					<div className="space-y-1.5">
+						<div className="text-foreground text-sm font-medium">{t("rtk.afterSaveTitle")}</div>
+						<div>{t("rtk.afterSaveBody")}</div>
+						<div className="flex flex-wrap gap-2 pt-1">
+							<Button variant="outline" size="sm" asChild>
+								<Link to="/workspace/plugins/rtk/preview" data-testid="rtk-after-save-preview">
+									<ImageIcon className="h-3.5 w-3.5" />
+									{t("rtk.admin.tabs.preview")}
+								</Link>
+							</Button>
+							<Button variant="outline" size="sm" asChild>
+								<Link to="/workspace/plugins/rtk/test" data-testid="rtk-after-save-test">
+									<Beaker className="h-3.5 w-3.5" />
+									{t("rtk.admin.tabs.test")}
+								</Link>
+							</Button>
+							<Button variant="outline" size="sm" asChild>
+								<Link to="/workspace/plugins/rtk/raw-output" data-testid="rtk-after-save-raw">
+									<FileSearchIcon />
+									{t("rtk.admin.tabs.rawOutput")}
+								</Link>
+							</Button>
 						</div>
 					</div>
 				</div>
+			</div>
 
-				{/* Save bar */}
-				<div className="bg-background sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-2 border-t px-4 pt-4 pb-2">
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						onClick={() => form.reset()}
-						disabled={!form.formState.isDirty || !hasUpdateAccess}
-						data-testid="rtk-reset-btn"
-					>
-						<RotateCcw className="h-4 w-4" />
-						{t("rtk.reset")}
+			{/* Save bar */}
+			<div className="bg-background sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-2 border-t px-4 pt-4 pb-2">
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					onClick={() => form.reset()}
+					disabled={!form.formState.isDirty || !hasUpdateAccess}
+					data-testid="rtk-reset-btn"
+				>
+					<RotateCcw className="h-4 w-4" />
+					{t("rtk.reset")}
+				</Button>
+				<div className="flex flex-wrap items-center gap-2">
+					<Button variant="outline" size="sm" asChild data-testid="rtk-admin-link-filters">
+						<Link to="/workspace/plugins/rtk/filters">
+							<FlaskConical className="h-4 w-4" />
+							{t("rtk.admin.tabs.filters")}
+						</Link>
 					</Button>
-					<div className="flex flex-wrap items-center gap-2">
-						<Button variant="outline" size="sm" asChild data-testid="rtk-admin-link-filters">
-							<Link to="/workspace/plugins/rtk/filters">
-								<FlaskConical className="h-4 w-4" />
-								{t("rtk.admin.tabs.filters")}
-							</Link>
-						</Button>
-						<Button variant="outline" size="sm" asChild data-testid="rtk-admin-link-test">
-							<Link to="/workspace/plugins/rtk/test">
-								<Beaker className="h-4 w-4" />
-								{t("rtk.admin.tabs.test")}
-							</Link>
-						</Button>
-						<Button type="submit" disabled={isLoading || !form.formState.isDirty || !hasUpdateAccess} data-testid="rtk-save-btn">
-							{isLoading ? t("rtk.saving") : t("rtk.saveConfiguration")}
-						</Button>
-					</div>
+					<Button variant="outline" size="sm" asChild data-testid="rtk-admin-link-test">
+						<Link to="/workspace/plugins/rtk/test">
+							<Beaker className="h-4 w-4" />
+							{t("rtk.admin.tabs.test")}
+						</Link>
+					</Button>
+					<Button type="submit" disabled={isSaving || !form.formState.isDirty || !hasUpdateAccess} data-testid="rtk-save-btn">
+						{isSaving ? t("rtk.saving") : t("rtk.saveConfiguration")}
+					</Button>
 				</div>
-			</form>
-		</Form>
+			</div>
+		</div>
 	);
 }
 
@@ -1533,21 +1502,54 @@ function FileSearchIcon() {
 }
 
 // ---------------------------------------------------------------------------
-// RtkFragment — MonitoringPanel + EnabledSwitch + ConfigForm. The on/off
-// toggle is a dedicated switch (mirrors ProvidercooldownFragment.EnabledSwitch)
-// so flipping it takes effect immediately without a separate Save click.
+// RtkFragment — MonitoringPanel + Settings card. The Settings card hosts
+// EnabledSwitchPanel (top-level on/off toggle + the two pipeline checkboxes)
+// and ConfigForm (shared settings + per-engine configuration panels). The
+// react-hook-form instance lives here so both children stay in sync — flipping
+// the Caveman checkbox in EnabledSwitchPanel is visible to CavemanEnginePanel
+// immediately. Flipping plugin.enabled is still an immediate mutation
+// (mirrors ProvidercooldownFragment) without touching the inner config
+// payload.
+//
 // Server-side, plugins/rtk/config.go's applyConfigDefaults zero-detect
 // safeguard keeps RTK enabled even when the persisted config_json is null
 // or all-zero — the inner Config.Enabled flag never gets a chance to silently
 // turn the plugin into a no-op.
-//
-// The new pipeline-centric layout (PipelineSection + RtkEnginePanel +
-// CavemanEnginePanel) is delegated to ConfigForm, which composes them in a
-// consistent order: pipeline / shared settings → per-engine cards.
 // ---------------------------------------------------------------------------
 
 export function RtkFragment({ plugin }: { plugin: Plugin }) {
 	const { t } = useTranslation("plugins");
+	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
+	const [updatePlugin, { isLoading: isSaving }] = useUpdatePluginMutation();
+	const lastSavedRef = useRef<Partial<RTKFormValues>>({});
+
+	const onSubmit = async (values: RTKFormValues) => {
+		if (!hasUpdateAccess) return;
+		// Pipeline is derived from the per-engine toggles in the EnabledSwitchPanel
+		// — RTK is always-on and listed first, Caveman trails when enabled.
+		// This keeps the wire format stable (pluginConfig.pipeline) while the
+		// UI no longer exposes the raw JSON array.
+		const pipeline = values.caveman?.enabled ? [{ id: "rtk" }, { id: "caveman" }] : [{ id: "rtk" }];
+		values.pipeline = pipeline;
+		try {
+			await updatePlugin({
+				name: RTK_PLUGIN,
+				data: {
+					enabled: plugin.enabled,
+					config: values,
+				},
+			}).unwrap();
+			lastSavedRef.current = values;
+			toast.success(t("rtk.savedToast"));
+		} catch {
+			toast.error(t("rtk.saveFailedToast"));
+		}
+	};
+
+	const onError = () => {
+		toast.error(t("rtk.formErrorToast"));
+	};
+
 	return (
 		<div data-testid="rtk-fragment" className="space-y-6">
 			<div className="space-y-1">
@@ -1563,13 +1565,78 @@ export function RtkFragment({ plugin }: { plugin: Plugin }) {
 				<MonitoringPanel />
 			</div>
 
-			<EnabledSwitch plugin={plugin} />
-
 			<div className="rounded-lg border p-4">
 				<h4 className="mb-4 text-sm font-medium">{t("rtk.settingsTitle")}</h4>
-				<ConfigForm plugin={plugin} />
+				<FormFieldsHost plugin={plugin} isSaving={isSaving} lastSavedRef={lastSavedRef} onSubmit={onSubmit} onError={onError} />
 			</div>
 		</div>
+	);
+}
+
+// FormFieldsHost — wraps the Settings card's two halves in a single
+// react-hook-form context so the Caveman checkbox in EnabledSwitchPanel and
+// the Caveman configuration panel below share one form instance. Saves are
+// triggered by ConfigForm's submit button; the onSubmit callback derives the
+// pipeline array from form.caveman.enabled and persists.
+function FormFieldsHost({
+	plugin,
+	isSaving,
+	lastSavedRef,
+	onSubmit,
+	onError,
+}: {
+	plugin: Plugin;
+	isSaving: boolean;
+	lastSavedRef: React.MutableRefObject<Partial<RTKFormValues>>;
+	onSubmit: (values: RTKFormValues) => Promise<void>;
+	onError: () => void;
+}) {
+	const pluginConfig = (plugin.config || {}) as Record<string, any>;
+	const form = useForm<RTKFormValues>({
+		resolver: zodResolver(rtkConfigSchema),
+		defaultValues: {
+			intensity: pluginConfig.intensity ?? "standard",
+			apply_to_tool_results: pluginConfig.apply_to_tool_results ?? true,
+			apply_to_code_blocks: pluginConfig.apply_to_code_blocks ?? false,
+			apply_to_assistant_messages: pluginConfig.apply_to_assistant_messages ?? false,
+			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
+			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
+			dedup_threshold: pluginConfig.dedup_threshold ?? 3,
+			preserve_cache_control: pluginConfig.preserve_cache_control ?? false,
+			enable_grouping: pluginConfig.enable_grouping ?? false,
+			grouping_threshold: pluginConfig.grouping_threshold ?? 3,
+			custom_filters_enabled: pluginConfig.custom_filters_enabled ?? true,
+			trust_project_filters: pluginConfig.trust_project_filters ?? false,
+			enabled_filters: pluginConfig.enabled_filters ?? [],
+			disabled_filters: pluginConfig.disabled_filters ?? [],
+			raw_output_retention: pluginConfig.raw_output_retention ?? "always",
+			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
+			raw_output_dir: pluginConfig.raw_output_dir ?? "",
+			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
+			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
+			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
+			enable_renderers: pluginConfig.enable_renderers ?? true,
+			renderers: pluginConfig.renderers ?? [],
+			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
+			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
+			caveman: {
+				enabled: pluginConfig.caveman?.enabled ?? false,
+				intensity: pluginConfig.caveman?.intensity ?? "lite",
+				language: pluginConfig.caveman?.language ?? "auto",
+				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
+				compress_roles: pluginConfig.caveman?.compress_roles ?? ["user"],
+				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
+				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
+			},
+		},
+	});
+	return (
+		<Form {...form}>
+			<form onSubmit={form.handleSubmit(onSubmit, onError)} className="space-y-6">
+				<EnabledSwitchPanel plugin={plugin} form={form} />
+				<ConfigForm plugin={plugin} form={form} isSaving={isSaving} lastSavedRef={lastSavedRef} />
+			</form>
+		</Form>
 	);
 }
 
