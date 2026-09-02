@@ -725,6 +725,114 @@ function RtkEnginePanel({
 						</FormItem>
 					)}
 				/>
+
+				{/* ── RTK-specific advanced steps: semantic renderers + filters ──
+					Both are RTK-engine-only (Caveman is pure rules and never runs the
+					renderer or filter pipeline), so they live under the RTK tab rather
+					than the cross-engine shared settings. */}
+				<Accordion type="multiple" className="rounded-lg border">
+					{/* Semantic renderers */}
+					<AccordionItem value="renderers" className="px-4">
+						<AccordionTrigger data-testid="rtk-section-renderers-trigger">{t("rtk.renderersSection")}</AccordionTrigger>
+						<AccordionContent className="space-y-3">
+							<FormField
+								control={form.control}
+								name="enable_renderers"
+								render={({ field }) => (
+									<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+										<FormControl>
+											<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
+										</FormControl>
+										<div className="space-y-1 leading-none">
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
+												<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
+											</div>
+											<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
+										</div>
+									</FormItem>
+								)}
+							/>
+							{form.watch("enable_renderers") && (
+								<FormField
+									control={form.control}
+									name="renderers"
+									render={({ field }) => (
+										<FormItem>
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
+												<HelpHint>{t("rtk.renderersWhen")}</HelpHint>
+											</div>
+											<FormControl>
+												<Input
+													data-testid="rtk-field-renderers"
+													placeholder="e.g. git-diff, test-green, terraform-plan"
+													{...field}
+													value={Array.isArray(field.value) ? field.value.join(", ") : ""}
+													onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
+												/>
+											</FormControl>
+											<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							)}
+						</AccordionContent>
+					</AccordionItem>
+
+					{/* Filters & custom */}
+					<AccordionItem value="filters" className="px-4">
+						<AccordionTrigger data-testid="rtk-section-filters-trigger">{t("rtk.filtersSection")}</AccordionTrigger>
+						<AccordionContent className="space-y-3">
+							<FormField
+								control={form.control}
+								name="custom_filters_enabled"
+								render={({ field }) => (
+									<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+										<div className="space-y-0.5">
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.customFiltersEnabledLabel")}</FormLabel>
+												<HelpHint>{t("rtk.customFiltersEnabledWhen")}</HelpHint>
+											</div>
+											<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
+										</div>
+										<FormControl>
+											<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
+										</FormControl>
+									</FormItem>
+								)}
+							/>
+							{form.watch("custom_filters_enabled") && (
+								<FormField
+									control={form.control}
+									name="trust_project_filters"
+									render={({ field }) => (
+										<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+											<div className="space-y-0.5">
+												<div className="flex items-center gap-1.5">
+													<FormLabel>{t("rtk.trustProjectFiltersLabel")}</FormLabel>
+													<HelpHint>{t("rtk.trustProjectFiltersWhen")}</HelpHint>
+												</div>
+												<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
+											</div>
+											<FormControl>
+												<Switch data-testid="rtk-field-trust-project-filters" checked={field.value} onCheckedChange={field.onChange} />
+											</FormControl>
+										</FormItem>
+									)}
+								/>
+							)}
+							<div className="text-muted-foreground text-xs">
+								{t("rtk.filterCatalogHint")}{" "}
+								<Link to="/workspace/plugins/rtk/filters" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
+									{t("rtk.admin.tabs.filters")}
+									<ExternalLink className="ml-0.5 inline h-3 w-3" />
+								</Link>
+							</div>
+						</AccordionContent>
+					</AccordionItem>
+				</Accordion>
 			</div>
 		</fieldset>
 	);
@@ -997,56 +1105,6 @@ function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFo
 
 			{/* Collapsible advanced shared settings */}
 			<Accordion type="multiple" className="rounded-lg border">
-				{/* Semantic renderers */}
-				<AccordionItem value="renderers" className="px-4">
-					<AccordionTrigger data-testid="rtk-section-renderers-trigger">{t("rtk.renderersSection")}</AccordionTrigger>
-					<AccordionContent className="space-y-3">
-						<FormField
-							control={form.control}
-							name="enable_renderers"
-							render={({ field }) => (
-								<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-									<FormControl>
-										<Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} data-testid="rtk-field-enable-renderers" />
-									</FormControl>
-									<div className="space-y-1 leading-none">
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.enableRenderersLabel")}</FormLabel>
-											<HelpHint>{t("rtk.enableRenderersWhen")}</HelpHint>
-										</div>
-										<FormDescription>{t("rtk.enableRenderersDescription")}</FormDescription>
-									</div>
-								</FormItem>
-							)}
-						/>
-						{form.watch("enable_renderers") && (
-							<FormField
-								control={form.control}
-								name="renderers"
-								render={({ field }) => (
-									<FormItem>
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.renderersLabel")}</FormLabel>
-											<HelpHint>{t("rtk.renderersWhen")}</HelpHint>
-										</div>
-										<FormControl>
-											<Input
-												data-testid="rtk-field-renderers"
-												placeholder="e.g. git-diff, test-green, terraform-plan"
-												{...field}
-												value={Array.isArray(field.value) ? field.value.join(", ") : ""}
-												onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
-											/>
-										</FormControl>
-										<FormDescription>{t("rtk.renderersDescription")}</FormDescription>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						)}
-					</AccordionContent>
-				</AccordionItem>
-
 				{/* Debug / raw output */}
 				<AccordionItem value="rawOutput" className="px-4">
 					<AccordionTrigger data-testid="rtk-section-raw-output-trigger">{t("rtk.rawOutputSection")}</AccordionTrigger>
@@ -1141,58 +1199,6 @@ function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFo
 								</FormItem>
 							)}
 						/>
-					</AccordionContent>
-				</AccordionItem>
-
-				{/* Filters & custom */}
-				<AccordionItem value="filters" className="px-4">
-					<AccordionTrigger data-testid="rtk-section-filters-trigger">{t("rtk.filtersSection")}</AccordionTrigger>
-					<AccordionContent className="space-y-3">
-						<FormField
-							control={form.control}
-							name="custom_filters_enabled"
-							render={({ field }) => (
-								<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-									<div className="space-y-0.5">
-										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.customFiltersEnabledLabel")}</FormLabel>
-											<HelpHint>{t("rtk.customFiltersEnabledWhen")}</HelpHint>
-										</div>
-										<FormDescription>{t("rtk.customFiltersEnabledDescription")}</FormDescription>
-									</div>
-									<FormControl>
-										<Switch data-testid="rtk-field-custom-filters-enabled" checked={field.value} onCheckedChange={field.onChange} />
-									</FormControl>
-								</FormItem>
-							)}
-						/>
-						{form.watch("custom_filters_enabled") && (
-							<FormField
-								control={form.control}
-								name="trust_project_filters"
-								render={({ field }) => (
-									<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-										<div className="space-y-0.5">
-											<div className="flex items-center gap-1.5">
-												<FormLabel>{t("rtk.trustProjectFiltersLabel")}</FormLabel>
-												<HelpHint>{t("rtk.trustProjectFiltersWhen")}</HelpHint>
-											</div>
-											<FormDescription>{t("rtk.trustProjectFiltersDescription")}</FormDescription>
-										</div>
-										<FormControl>
-											<Switch data-testid="rtk-field-trust-project-filters" checked={field.value} onCheckedChange={field.onChange} />
-										</FormControl>
-									</FormItem>
-								)}
-							/>
-						)}
-						<div className="text-muted-foreground text-xs">
-							{t("rtk.filterCatalogHint")}{" "}
-							<Link to="/workspace/plugins/rtk/filters" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-								{t("rtk.admin.tabs.filters")}
-								<ExternalLink className="ml-0.5 inline h-3 w-3" />
-							</Link>
-						</div>
 					</AccordionContent>
 				</AccordionItem>
 			</Accordion>

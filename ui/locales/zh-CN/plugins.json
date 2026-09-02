@@ -135,7 +135,7 @@
 		"pipelineCavemanDescription": "开启后，user 消息会按管线顺序经 Caveman 规则引擎处理。",
 		"rtkEngineIntro": "默认压缩引擎，针对工具结果与 assistant 消息。",
 		"rtkEngineTitle": "RTK 引擎（tool / assistant）",
-		"sharedSettingsHelp": "以下设置对管线中的所有引擎生效（范围、快照、renderers、raw output、filters）。",
+		"sharedSettingsHelp": "对 RTK 与 Caveman 两个引擎都生效的设置：快照与原始输出持久化。",
 		"sharedSettingsTitle": "共享设置",
 		"title": "RTK 压缩配置",
 		"subtitle": "自动压缩工具输出与代码块，减少 token 用量与延迟",

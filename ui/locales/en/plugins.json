@@ -135,7 +135,7 @@
 		"pipelineCavemanDescription": "When enabled, user messages are compressed by the Caveman rule engine in pipeline order.",
 		"rtkEngineIntro": "Default compression engine. Targets tool result and assistant messages.",
 		"rtkEngineTitle": "RTK engine (tool / assistant)",
-		"sharedSettingsHelp": "These settings apply to every engine in the pipeline (scope, snapshot, renderers, raw output, filters).",
+		"sharedSettingsHelp": "Settings that apply to both engines: snapshot diff logging and raw-output persistence.",
 		"sharedSettingsTitle": "Shared settings",
 		"title": "RTK Compression Configuration",
 		"subtitle": "Automatically compress tool outputs and code blocks to reduce token usage and latency",

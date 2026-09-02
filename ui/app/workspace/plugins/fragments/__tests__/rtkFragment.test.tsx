@@ -298,6 +298,25 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		expect(rtkPanel.contains(screen.getByTestId("rtk-field-preserve-cache-control"))).toBe(true);
 	});
 
+	it("moves renderers & filters into the RTK tab (RTK-only steps), not the shared tab", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		// Default shared tab: the RTK-only accordions must NOT be present.
+		expect(screen.queryByTestId("rtk-section-renderers-trigger")).toBeNull();
+		expect(screen.queryByTestId("rtk-section-filters-trigger")).toBeNull();
+		// Raw output (cross-engine) stays in the shared tab.
+		expect(screen.getByTestId("rtk-section-raw-output-trigger")).toBeTruthy();
+
+		// Switch to the RTK tab: renderers + filters now live there.
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
+		expect(screen.getByTestId("rtk-section-renderers-trigger")).toBeTruthy();
+		expect(screen.getByTestId("rtk-section-filters-trigger")).toBeTruthy();
+		const rtkPanel = screen.getByTestId("engine-panel-rtk");
+		expect(rtkPanel.contains(screen.getByTestId("rtk-section-renderers-trigger"))).toBe(true);
+		expect(rtkPanel.contains(screen.getByTestId("rtk-section-filters-trigger"))).toBe(true);
+		// Raw output is NOT duplicated inside the RTK panel.
+		expect(rtkPanel.contains(screen.queryByTestId("rtk-section-raw-output-trigger"))).toBe(false);
+	});
+
 	it("hides the Caveman tab while caveman.enabled is false (default)", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
 		expect(screen.queryByTestId("rtk-tab-caveman")).toBeNull();
