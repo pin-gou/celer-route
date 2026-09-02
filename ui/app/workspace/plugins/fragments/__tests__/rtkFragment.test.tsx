@@ -83,9 +83,6 @@ function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
 		isCustom: false,
 		config: {
 			intensity: "standard",
-			apply_to_tool_results: true,
-			apply_to_code_blocks: false,
-			apply_to_assistant_messages: false,
 			max_lines_per_result: 120,
 			max_chars_per_result: 12000,
 			dedup_threshold: 3,
@@ -374,9 +371,10 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 	it("writes pipeline=[{id:'rtk'}] on submit when caveman is disabled", async () => {
 		render(<RtkFragment plugin={makePlugin()} />);
 		// Force a save by touching a tunable then submitting. Toggling caveman
-		// off when it's already off is a no-op, so we flip the apply_to_tool_results
-		// switch to make the form dirty.
-		fireEvent.click(screen.getByTestId("rtk-field-apply-to-tool-results"));
+		// off when it's already off is a no-op, so we open the RTK tab and flip
+		// the preserve_cache_control checkbox to make the form dirty.
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
+		fireEvent.click(screen.getByTestId("rtk-field-preserve-cache-control"));
 		fireEvent.click(screen.getByTestId("rtk-save-btn"));
 
 		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
@@ -389,8 +387,9 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 	it("writes pipeline=[{id:'rtk'},{id:'caveman'}] on submit when caveman is enabled", async () => {
 		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
 		render(<RtkFragment plugin={plugin} />);
-		// Flip a tunable to dirty the form so Save is enabled.
-		fireEvent.click(screen.getByTestId("rtk-field-apply-to-tool-results"));
+		// Open the RTK tab and flip a checkbox so Save is enabled.
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
+		fireEvent.click(screen.getByTestId("rtk-field-preserve-cache-control"));
 		fireEvent.click(screen.getByTestId("rtk-save-btn"));
 
 		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));

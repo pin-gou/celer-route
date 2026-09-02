@@ -104,7 +104,6 @@ Changes not staged for commit:
 			state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, &Config{
 				Enabled:              true,
 				Intensity:            "standard",
-				ApplyToToolResults:   true,
 				PreserveCacheControl: true,
 			}))
 			if state == nil {
@@ -189,7 +188,6 @@ Changes not staged for commit:
 	state := applyRtkCompressionWithDefaults(req, newTestPluginWithConfig(t, &Config{
 		Enabled:              true,
 		Intensity:            "standard",
-		ApplyToToolResults:   true,
 		PreserveCacheControl: false, // disabled: can compress
 	}))
 	if state == nil {

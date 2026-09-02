@@ -938,67 +938,6 @@ function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFo
 				<HelpHint>{t("rtk.sharedSettingsHelp")}</HelpHint>
 			</div>
 
-			{/* Scope: 3 checkboxes */}
-			<fieldset className="rounded-lg border p-4">
-				<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.scopeSection")}</legend>
-				<div className="mt-2 space-y-3">
-					<FormField
-						control={form.control}
-						name="apply_to_tool_results"
-						render={({ field }) => (
-							<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-								<FormControl>
-									<Checkbox data-testid="rtk-field-apply-to-tool-results" checked={field.value} onCheckedChange={field.onChange} />
-								</FormControl>
-								<div className="space-y-1 leading-none">
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.applyToToolResultsLabel")}</FormLabel>
-										<HelpHint>{t("rtk.applyToToolResultsWhen")}</HelpHint>
-									</div>
-									<FormDescription>{t("rtk.applyToToolResultsDescription")}</FormDescription>
-								</div>
-							</FormItem>
-						)}
-					/>
-					<FormField
-						control={form.control}
-						name="apply_to_code_blocks"
-						render={({ field }) => (
-							<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-								<FormControl>
-									<Checkbox data-testid="rtk-field-apply-to-code-blocks" checked={field.value} onCheckedChange={field.onChange} />
-								</FormControl>
-								<div className="space-y-1 leading-none">
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.applyToCodeBlocksLabel")}</FormLabel>
-										<HelpHint>{t("rtk.applyToCodeBlocksWhen")}</HelpHint>
-									</div>
-									<FormDescription>{t("rtk.applyToCodeBlocksDescription")}</FormDescription>
-								</div>
-							</FormItem>
-						)}
-					/>
-					<FormField
-						control={form.control}
-						name="apply_to_assistant_messages"
-						render={({ field }) => (
-							<FormItem className="flex flex-row items-start space-y-0 space-x-3">
-								<FormControl>
-									<Checkbox data-testid="rtk-field-apply-to-assistant-messages" checked={field.value} onCheckedChange={field.onChange} />
-								</FormControl>
-								<div className="space-y-1 leading-none">
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.applyToAssistantMessagesLabel")}</FormLabel>
-										<HelpHint>{t("rtk.applyToAssistantMessagesWhen")}</HelpHint>
-									</div>
-									<FormDescription>{t("rtk.applyToAssistantMessagesDescription")}</FormDescription>
-								</div>
-							</FormItem>
-						)}
-					/>
-				</div>
-			</fieldset>
-
 			{/* Snapshot: mode + max bytes */}
 			<fieldset className="rounded-lg border p-4">
 				<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.snapshotSection")}</legend>
@@ -1300,9 +1239,6 @@ function ConfigForm({
 	useEffect(() => {
 		form.reset({
 			intensity: pluginConfig.intensity ?? "standard",
-			apply_to_tool_results: pluginConfig.apply_to_tool_results ?? true,
-			apply_to_code_blocks: pluginConfig.apply_to_code_blocks ?? false,
-			apply_to_assistant_messages: pluginConfig.apply_to_assistant_messages ?? false,
 			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
 			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
 			dedup_threshold: pluginConfig.dedup_threshold ?? 3,
@@ -1613,9 +1549,6 @@ function FormFieldsHost({
 		resolver: zodResolver(rtkConfigSchema),
 		defaultValues: {
 			intensity: pluginConfig.intensity ?? "standard",
-			apply_to_tool_results: pluginConfig.apply_to_tool_results ?? true,
-			apply_to_code_blocks: pluginConfig.apply_to_code_blocks ?? false,
-			apply_to_assistant_messages: pluginConfig.apply_to_assistant_messages ?? false,
 			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
 			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
 			dedup_threshold: pluginConfig.dedup_threshold ?? 3,

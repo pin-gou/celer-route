@@ -136,7 +136,6 @@ func TestInitValidatesConfig(t *testing.T) {
 //
 //	enable_grouping          → false
 //	grouping_threshold       → 3
-//	apply_to_assistant_messages → false
 //
 // and that only truly-zero values are defaulted (explicit true values are
 // preserved). TDD red phase: the fields do not exist yet (compile error
@@ -151,18 +150,14 @@ func TestConfigGroupingDefaults(t *testing.T) {
 	if cfg.GroupingThreshold != 3 {
 		t.Errorf("applyConfigDefaults() GroupingThreshold = %d, want 3 (default)", cfg.GroupingThreshold)
 	}
-	if cfg.ApplyToAssistantMessages {
-		t.Errorf("applyConfigDefaults() ApplyToAssistantMessages = true, want false (default off)")
-	}
 }
 
 // TestConfigGroupingExplicitValuesPreserved verifies that explicitly-set
 // grouping fields are NOT overwritten by applyConfigDefaults.
 func TestConfigGroupingExplicitValuesPreserved(t *testing.T) {
 	cfg := &Config{
-		EnableGrouping:           true,
-		GroupingThreshold:        5,
-		ApplyToAssistantMessages: true,
+		EnableGrouping:    true,
+		GroupingThreshold: 5,
 	}
 	applyConfigDefaults(cfg)
 
@@ -171,9 +166,6 @@ func TestConfigGroupingExplicitValuesPreserved(t *testing.T) {
 	}
 	if cfg.GroupingThreshold != 5 {
 		t.Errorf("applyConfigDefaults() GroupingThreshold = %d, want 5 (explicit)", cfg.GroupingThreshold)
-	}
-	if !cfg.ApplyToAssistantMessages {
-		t.Error("applyConfigDefaults() should preserve explicit ApplyToAssistantMessages=true")
 	}
 }
 
@@ -222,11 +214,10 @@ func TestConfigGroupingFieldsValidates(t *testing.T) {
 	}
 
 	valid := &Config{
-		Enabled:                  true,
-		EnableGrouping:           true,
-		GroupingThreshold:        3,
-		ApplyToAssistantMessages: true,
-		Intensity:                "standard",
+		Enabled:          true,
+		EnableGrouping:   true,
+		GroupingThreshold: 3,
+		Intensity:        "standard",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Errorf("Config.Validate() unexpected error for valid grouping config: %v", err)
@@ -564,17 +555,13 @@ func TestLooksLikeAllZero(t *testing.T) {
 	}{
 		{name: "literal zero value", cfg: Config{}, want: true},
 		{name: "all booleans false, all ints zero, all strings empty", cfg: Config{
-			Enabled: false, ApplyToToolResults: false, ApplyToCodeBlocks: false,
-			PreserveCacheControl: false, EnableGrouping: false,
-			ApplyToAssistantMessages: false, CustomFiltersEnabled: false,
+			Enabled: false, PreserveCacheControl: false, EnableGrouping: false,
+			CustomFiltersEnabled: false,
 			TrustProjectFilters: false, EnableRenderers: false,
 		}, want: true},
 		{name: "operator set Intensity", cfg: Config{Intensity: "aggressive"}, want: false},
 		{name: "operator set MaxLinesPerResult", cfg: Config{MaxLinesPerResult: 50}, want: false},
 		{name: "operator set MinTokensToCompress", cfg: Config{MinTokensToCompress: 1024}, want: false},
-		{name: "operator enabled ApplyToToolResults", cfg: Config{ApplyToToolResults: true}, want: false},
-		{name: "operator enabled ApplyToCodeBlocks", cfg: Config{ApplyToCodeBlocks: true}, want: false},
-		{name: "operator enabled ApplyToAssistantMessages", cfg: Config{ApplyToAssistantMessages: true}, want: false},
 		{name: "operator enabled PreserveCacheControl", cfg: Config{PreserveCacheControl: true}, want: false},
 		{name: "operator enabled EnableGrouping", cfg: Config{EnableGrouping: true}, want: false},
 		{name: "operator enabled EnableRenderers", cfg: Config{EnableRenderers: true}, want: false},

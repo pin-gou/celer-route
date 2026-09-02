@@ -14,12 +14,6 @@ type Config struct {
 	// Intensity controls the compression aggressiveness: minimal | standard | aggressive.
 	Intensity string `json:"intensity"`
 
-	// ApplyToToolResults controls whether tool result messages are compressed.
-	ApplyToToolResults bool `json:"apply_to_tool_results"`
-
-	// ApplyToCodeBlocks controls whether code blocks within messages are compressed.
-	ApplyToCodeBlocks bool `json:"apply_to_code_blocks"`
-
 	// MaxLinesPerResult is the maximum number of lines to keep per tool result after compression.
 	MaxLinesPerResult int `json:"max_lines_per_result"`
 
@@ -39,12 +33,6 @@ type Config struct {
 	// GroupingThreshold is the minimum run length of near-equivalent lines before
 	// grouping kicks in. Values below 2 are clamped to 2 at runtime.
 	GroupingThreshold int `json:"grouping_threshold"`
-
-	// ApplyToAssistantMessages controls whether assistant messages are compressed.
-	// When true (and ApplyToCodeBlocks is false), assistant message text is fully
-	// compressed. When ApplyToCodeBlocks is true and ApplyToAssistantMessages is
-	// false, only the inside of code fences in assistant messages is compressed.
-	ApplyToAssistantMessages bool `json:"apply_to_assistant_messages"`
 
 	// CustomFiltersEnabled enables loading of project/global custom filters from
 	// the filesystem (default true). When false, only builtin filters are used.
@@ -215,7 +203,7 @@ func (c *Config) Validate() error {
 // stored config deserialises to Enabled=false and silently turns RTK into a
 // no-op. Promoting it to Enabled=true here closes that hole without changing
 // the semantics of explicit configurations (an operator who sets Intensity,
-// MaxLinesPerResult, ApplyToToolResults or any other tunable will have at
+// MaxLinesPerResult or any other tunable will have at
 // least one non-zero field and therefore opt out of this guard).
 func looksLikeAllZero(c *Config) bool {
 	if c == nil {
@@ -226,9 +214,6 @@ func looksLikeAllZero(c *Config) bool {
 		c.MaxCharsPerResult == 0 &&
 		c.DedupThreshold == 0 &&
 		c.GroupingThreshold == 0 &&
-		!c.ApplyToToolResults &&
-		!c.ApplyToCodeBlocks &&
-		!c.ApplyToAssistantMessages &&
 		!c.PreserveCacheControl &&
 		!c.EnableGrouping &&
 		!c.CustomFiltersEnabled &&
@@ -262,9 +247,6 @@ func applyConfigDefaults(c *Config) {
 	}
 	if c.DedupThreshold == 0 {
 		c.DedupThreshold = 3
-	}
-	if !c.ApplyToToolResults && !c.ApplyToCodeBlocks {
-		c.ApplyToToolResults = true
 	}
 	// Grouping defaults: zero value → 3 (default off for EnableGrouping).
 	if c.GroupingThreshold == 0 {

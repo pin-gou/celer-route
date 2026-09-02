@@ -459,16 +459,13 @@ func TestUpdatePlugin_RTKConfigPassThrough(t *testing.T) {
 	SetLogger(&mockLogger{})
 
 	existingConfig := map[string]any{
-		"enabled":                     true,
-		"intensity":                   "standard",
-		"max_lines_per_result":        120,
-		"max_chars_per_result":        12000,
-		"dedup_threshold":             3,
-		"apply_to_tool_results":       true,
-		"apply_to_code_blocks":        false,
-		"apply_to_assistant_messages": false,
-		"raw_output_retention":        "never",
-		"raw_output_max_bytes":        1048576,
+		"enabled":              true,
+		"intensity":            "standard",
+		"max_lines_per_result": 120,
+		"max_chars_per_result": 12000,
+		"dedup_threshold":      3,
+		"raw_output_retention": "never",
+		"raw_output_max_bytes": 1048576,
 	}
 
 	store := &capturePluginsStore{
@@ -488,16 +485,13 @@ func TestUpdatePlugin_RTKConfigPassThrough(t *testing.T) {
 	reqBody := map[string]any{
 		"enabled": true,
 		"config": map[string]any{
-			"enabled":                     true,
-			"intensity":                   "standard",
-			"max_lines_per_result":        120,
-			"max_chars_per_result":        12000,
-			"dedup_threshold":             3,
-			"apply_to_tool_results":       true,
-			"apply_to_code_blocks":        false,
-			"apply_to_assistant_messages": false,
-			"raw_output_retention":        "never",
-			"raw_output_max_bytes":        1048576,
+			"enabled":              true,
+			"intensity":            "standard",
+			"max_lines_per_result": 120,
+			"max_chars_per_result": 12000,
+			"dedup_threshold":      3,
+			"raw_output_retention": "never",
+			"raw_output_max_bytes": 1048576,
 			"pipeline": []any{
 				map[string]any{
 					"id": "rtk",

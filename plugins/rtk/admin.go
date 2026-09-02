@@ -239,25 +239,9 @@ func (p *Plugin) RunTest(payload TestPayload) TestResult {
 		return res
 	}
 
-	// Build a shallow copy of the config so we can disable ApplyRules
-	// without mutating the live plugin config. We restore it via defer.
+	// Build a shallow copy of the config so the test run never mutates the
+	// live plugin config.
 	cfgCopy := *p.config
-	savedApplyToolResults := cfgCopy.ApplyToToolResults
-	savedApplyCode := cfgCopy.ApplyToCodeBlocks
-	savedApplyAssistant := cfgCopy.ApplyToAssistantMessages
-	if !payload.ApplyRules {
-		// ApplyRules=false means "no line filters"; we still run the rest of
-		// the pipeline (dedup/grouping/smart-truncate/char limit) by
-		// clearing any filter-driven config fields that would otherwise
-		// cause the loader to skip the filter step. We do this by routing
-		// through processRtkTextWithCommand with a nil loader, which makes
-		// it fall back to "no filter" and apply only the safe steps.
-		defer func() {
-			cfgCopy.ApplyToToolResults = savedApplyToolResults
-			cfgCopy.ApplyToCodeBlocks = savedApplyCode
-			cfgCopy.ApplyToAssistantMessages = savedApplyAssistant
-		}()
-	}
 
 	res.OriginalTokens = estimateTokens(payload.Output)
 	compressed, stats := processRtkTextWithCommand(nil, payload.Output, &cfgCopy, p.loader, payload.Command, "")

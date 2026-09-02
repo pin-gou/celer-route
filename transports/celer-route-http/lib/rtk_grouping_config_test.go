@@ -19,34 +19,26 @@ func rtkGroupingPluginConfig(configBlock string) string {
 }
 
 // TestRTKPluginConfig_Schema_GroupingFields pins the phase-2 grouping config
-// contract (V-transports-1): enable_grouping (bool), grouping_threshold
-// (int, minimum 2) and apply_to_assistant_messages (bool) must be accepted by
-// the schema; grouping_threshold below 2 must be rejected; and the
-// additionalProperties: false semantics must be preserved.
+// contract (V-transports-1): enable_grouping (bool) and grouping_threshold
+// (int, minimum 2) must be accepted by the schema; grouping_threshold below 2
+// must be rejected; and the additionalProperties: false semantics must be
+// preserved.
 //
 // TDD red phase: the first sub-test (valid config with new fields) will fail
-// because the config.schema.json rtk block does not yet declare these three
-// fields — unknown keys are rejected by additionalProperties: false. This is
-// the expected red signal.
+// because the config.schema.json rtk block does not yet declare these fields —
+// unknown keys are rejected by additionalProperties: false. This is the
+// expected red signal.
 func TestRTKPluginConfig_Schema_GroupingFields(t *testing.T) {
-	// 1. A config carrying all three phase-2 fields must pass schema validation.
-	// TDD red phase: this assertion FAILS today because config.schema.json does
-	// not yet declare enable_grouping / grouping_threshold /
-	// apply_to_assistant_messages, so additionalProperties: false rejects them.
-	// The dev phase must add the three fields to the rtk config block, after
-	// which this test turns green.
+	// 1. A config carrying the grouping fields must pass schema validation.
 	validConfig := rtkGroupingPluginConfig(`{
 		"enabled": true,
 		"intensity": "standard",
-		"apply_to_tool_results": true,
-		"apply_to_code_blocks": false,
 		"max_lines_per_result": 120,
 		"max_chars_per_result": 12000,
 		"dedup_threshold": 3,
 		"preserve_cache_control": true,
 		"enable_grouping": true,
-		"grouping_threshold": 3,
-		"apply_to_assistant_messages": false
+		"grouping_threshold": 3
 	}`)
 	if err := ValidateConfigSchema([]byte(validConfig), loadLocalSchema(t)); err != nil {
 		t.Errorf("valid rtk config with grouping fields should pass schema validation, got: %v", err)
@@ -84,7 +76,7 @@ func TestRTKPluginConfig_Schema_GroupingFields(t *testing.T) {
 	}
 }
 
-// TestRTKConfigSchema_GroupingFieldDefinitions verifies the three phase-2 fields
+// TestRTKConfigSchema_GroupingFieldDefinitions verifies the grouping fields
 // are actually declared in the rtk config block of config.schema.json with the
 // required types and constraints (V-transports-1).
 //
@@ -174,19 +166,6 @@ func TestRTKConfigSchema_GroupingFieldDefinitions(t *testing.T) {
 			} else if minVal, ok := min.(float64); !ok || minVal != 2 {
 				t.Errorf("grouping_threshold schema minimum = %v, want 2", min)
 			}
-		}
-	}
-
-	// Check apply_to_assistant_messages: type boolean
-	aamProp, exists := configProps["apply_to_assistant_messages"]
-	if !exists {
-		t.Error("rtk config schema missing field 'apply_to_assistant_messages' — schema field name must match Config struct JSON tag")
-	} else {
-		aamObj, ok := aamProp.(map[string]interface{})
-		if !ok {
-			t.Error("apply_to_assistant_messages schema definition is not an object")
-		} else if aamObj["type"] != "boolean" {
-			t.Errorf("apply_to_assistant_messages schema type = %v, want 'boolean'", aamObj["type"])
 		}
 	}
 

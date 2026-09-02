@@ -191,14 +191,11 @@ func TestInstantiatePlugin_RTK_Loads(t *testing.T) {
 	}
 
 	// The rtk plugin config matches the schema contract from design.md:
-	// enabled / intensity / apply_to_tool_results / apply_to_code_blocks /
-	// max_lines_per_result / max_chars_per_result / dedup_threshold /
-	// preserve_cache_control.
+	// enabled / intensity / max_lines_per_result / max_chars_per_result /
+	// dedup_threshold / preserve_cache_control.
 	rtkConfig := map[string]any{
 		"enabled":                true,
 		"intensity":              "standard",
-		"apply_to_tool_results":  true,
-		"apply_to_code_blocks":   false,
 		"max_lines_per_result":   120,
 		"max_chars_per_result":   12000,
 		"dedup_threshold":        3,
@@ -260,7 +257,7 @@ func TestInstantiatePlugin_RTK_AppDirPropagates(t *testing.T) {
 // TestLoadBuiltinPlugins_RTK_DefaultsOn_WhenUnconfigured verifies that when no
 // PluginConfigs entry exists for RTK, the fresh-install seed config is applied:
 //   - RTK is active (not disabled)
-//   - The seed config (EnableRenderers=true, ApplyToToolResults=true, SnapshotMode="off")
+//   - The seed config (EnableRenderers=true, SnapshotMode="off")
 //     is applied via rtk.Init → applyConfigDefaults
 func TestLoadBuiltinPlugins_RTK_DefaultsOn_WhenUnconfigured(t *testing.T) {
 	prevLogger := logger
@@ -290,8 +287,8 @@ func TestLoadBuiltinPlugins_RTK_DefaultsOn_WhenUnconfigured(t *testing.T) {
 
 // TestInstantiatePlugin_RTK_FreshInstallSeed verifies that when InstantiatePlugin
 // receives a nil config (fresh install), the seed config from loadBuiltinPlugins
-// is correctly applied — specifically EnableRenderers=true, SnapshotMode="off",
-// ApplyToToolResults=true — via the rtk.Init → applyConfigDefaults path.
+// is correctly applied — specifically EnableRenderers=true, SnapshotMode="off"
+// — via the rtk.Init → applyConfigDefaults path.
 func TestInstantiatePlugin_RTK_FreshInstallSeed(t *testing.T) {
 	prevLogger := logger
 	logger = noopTestLogger{}
@@ -303,10 +300,9 @@ func TestInstantiatePlugin_RTK_FreshInstallSeed(t *testing.T) {
 
 	// Simulate the fresh-install seed config that loadBuiltinPlugins creates.
 	seedConfig := map[string]any{
-		"enabled":               true,
-		"enable_renderers":      true,
-		"apply_to_tool_results": true,
-		"snapshot_mode":         "off",
+		"enabled":          true,
+		"enable_renderers": true,
+		"snapshot_mode":    "off",
 	}
 
 	plugin, err := InstantiatePlugin(context.Background(), "rtk", nil, seedConfig, config)
@@ -446,8 +442,6 @@ func TestRTKPluginConfig_SchemaContract(t *testing.T) {
 	validConfig := rtkPluginConfig(`{
 		"enabled": true,
 		"intensity": "standard",
-		"apply_to_tool_results": true,
-		"apply_to_code_blocks": false,
 		"max_lines_per_result": 120,
 		"max_chars_per_result": 12000,
 		"dedup_threshold": 3,
@@ -525,8 +519,6 @@ func TestRTKPluginConfig_SchemaContract(t *testing.T) {
 	expectedFields := []string{
 		"enabled",
 		"intensity",
-		"apply_to_tool_results",
-		"apply_to_code_blocks",
 		"max_lines_per_result",
 		"max_chars_per_result",
 		"dedup_threshold",

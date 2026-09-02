@@ -3289,16 +3289,6 @@
                       "enum": ["minimal", "standard", "aggressive"],
                       "default": "standard"
                     },
-                    "apply_to_tool_results": {
-                      "type": "boolean",
-                      "description": "Apply compression to tool result messages",
-                      "default": true
-                    },
-                    "apply_to_code_blocks": {
-                      "type": "boolean",
-                      "description": "Apply compression to code blocks within messages",
-                      "default": false
-                    },
                     "max_lines_per_result": {
                       "type": "integer",
                       "description": "Maximum number of lines to keep per tool result after compression",
@@ -3332,11 +3322,6 @@
                       "description": "Number of consecutive similar lines required to trigger grouping",
                       "minimum": 2,
                       "default": 3
-                    },
-                    "apply_to_assistant_messages": {
-                      "type": "boolean",
-                      "description": "Apply compression to assistant messages (full text mode)",
-                      "default": false
                     },
                     "custom_filters_enabled": {
                       "type": "boolean",

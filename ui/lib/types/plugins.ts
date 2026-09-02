@@ -63,12 +63,6 @@ export const rtkConfigSchema = z.object({
 	// Intensity controls the compression aggressiveness.
 	intensity: z.enum(["minimal", "standard", "aggressive"]).optional(),
 
-	// ApplyToToolResults controls whether tool result messages are compressed.
-	apply_to_tool_results: z.boolean().optional(),
-
-	// ApplyToCodeBlocks controls whether code blocks within messages are compressed.
-	apply_to_code_blocks: z.boolean().optional(),
-
 	// MaxLinesPerResult is the maximum number of lines to keep per tool result.
 	max_lines_per_result: z.number().int().min(0).optional(),
 
@@ -86,9 +80,6 @@ export const rtkConfigSchema = z.object({
 
 	// GroupingThreshold is the minimum run length of near-equivalent lines before grouping.
 	grouping_threshold: z.number().int().min(0).optional(),
-
-	// ApplyToAssistantMessages controls whether assistant messages are compressed.
-	apply_to_assistant_messages: z.boolean().optional(),
 
 	// CustomFiltersEnabled enables loading of project/global custom filters.
 	custom_filters_enabled: z.boolean().optional(),
