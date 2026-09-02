@@ -992,6 +992,7 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 										emptyIndicator={t("rtk.cavemanSkipRulesEmpty")}
 										hideSelectAll
 										maxCount={3}
+										className="border-input text-foreground bg-background hover:bg-accent hover:text-accent-foreground rounded-sm font-normal"
 										data-testid="caveman-field-skip-rules"
 										disabled={!hasUpdateAccess}
 									/>
