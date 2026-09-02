@@ -252,6 +252,7 @@ bifrost-migration-cli
 tests/e2e/clis/reports
 
 .codegraph
+deploy-k3s.sh
 deploy-yinyue.sh
 deploy-yinyue.md
 WORK_IN_PROGRESS.md
