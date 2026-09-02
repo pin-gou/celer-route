@@ -279,7 +279,8 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 	});
 
 	it("renders the RTK and Caveman engine panels as separate first-class cards", () => {
-		render(<RtkFragment plugin={makePlugin()} />);
+		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
+		render(<RtkFragment plugin={plugin} />);
 		// Both panels are mounted under their own config tabs; only the active
 		// one is visible, but the tab list exposes three configuration entries.
 		expect(screen.getByTestId("rtk-tab-shared")).toBeTruthy();
@@ -300,25 +301,44 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		expect(rtkPanel.contains(screen.getByTestId("rtk-field-preserve-cache-control"))).toBe(true);
 	});
 
-	it("keeps the existing Caveman field testids inside the Caveman engine panel", () => {
+	it("hides the Caveman tab while caveman.enabled is false (default)", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		expect(screen.queryByTestId("rtk-tab-caveman")).toBeNull();
+		expect(screen.queryByTestId("engine-panel-caveman")).toBeNull();
+	});
+
+	it("shows the Caveman tab only when caveman.enabled is true", () => {
+		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
+		render(<RtkFragment plugin={plugin} />);
+		expect(screen.getByTestId("rtk-tab-caveman")).toBeTruthy();
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
+		expect(screen.getByTestId("engine-panel-caveman")).toBeTruthy();
+	});
+
+	it("keeps the existing Caveman field testids inside the Caveman engine panel (no duplicate enable toggle)", () => {
 		const plugin = makePlugin({
 			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },
 		});
 		render(<RtkFragment plugin={plugin} />);
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
 		const cavemanPanel = screen.getByTestId("engine-panel-caveman");
-		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-enabled"))).toBe(true);
 		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-intensity"))).toBe(true);
 		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-language"))).toBe(true);
 		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-roles"))).toBe(true);
+		// The enable switch was removed from this panel — the pipeline checkbox
+		// in the enablement card is the single toggle.
+		expect(cavemanPanel.contains(screen.queryByTestId("caveman-field-enabled"))).toBe(false);
 	});
 
-	it("hides Caveman sub-fields when caveman.enabled is false (default)", () => {
-		render(<RtkFragment plugin={makePlugin()} />);
+	it("bounces back to the shared tab when Caveman is disabled while on its tab", () => {
+		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
+		render(<RtkFragment plugin={plugin} />);
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
-		// Only the enabled toggle is visible; the sub-fields appear conditionally.
-		expect(screen.queryByTestId("caveman-field-intensity")).toBeNull();
-		expect(screen.queryByTestId("caveman-field-roles")).toBeNull();
+		expect(screen.getByTestId("engine-panel-caveman")).toBeTruthy();
+		// Uncheck Caveman in the pipeline checkbox.
+		fireEvent.click(screen.getByTestId("pipeline-caveman-checkbox"));
+		expect(screen.queryByTestId("rtk-tab-caveman")).toBeNull();
+		expect(screen.queryByTestId("engine-panel-caveman")).toBeNull();
 	});
 
 	it("exposes the caveman sub-fields when caveman.enabled is true", () => {
