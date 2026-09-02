@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGetRtkStatsQuery, useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
@@ -1395,24 +1396,40 @@ function ConfigForm({
 
 	return (
 		<div className="space-y-6">
-			<SharedSettingsSection form={form} />
+			{/* ── Three configuration tabs: shared / RTK / Caveman ─────────────── */}
+			<Tabs defaultValue="shared" data-testid="rtk-config-tabs">
+				<TabsList className="gap-2">
+					<TabsTrigger value="shared" data-testid="rtk-tab-shared">
+						{t("rtk.tabShared")}
+					</TabsTrigger>
+					<TabsTrigger value="rtk" data-testid="rtk-tab-rtk">
+						{t("rtk.tabRtk")}
+					</TabsTrigger>
+					<TabsTrigger value="caveman" data-testid="rtk-tab-caveman">
+						{t("rtk.tabCaveman")}
+					</TabsTrigger>
+				</TabsList>
 
-			<div className="space-y-4">
-				<div className="flex items-center gap-2">
-					<span className="text-sm font-semibold">{t("rtk.enginePanelsTitle")}</span>
-					<HelpHint>{t("rtk.enginePanelsHelp")}</HelpHint>
-				</div>
-				<RtkEnginePanel
-					form={form}
-					intensity={intensity}
-					maxLines={maxLines}
-					effectiveLines={effectiveLines}
-					hasUpdateAccess={hasUpdateAccess}
-					onPickPreset={applyPreset}
-					onRevertPreset={revertPreset}
-				/>
-				<CavemanEnginePanel form={form} hasUpdateAccess={hasUpdateAccess} />
-			</div>
+				<TabsContent value="shared" className="mt-4">
+					<SharedSettingsSection form={form} />
+				</TabsContent>
+
+				<TabsContent value="rtk" className="mt-4">
+					<RtkEnginePanel
+						form={form}
+						intensity={intensity}
+						maxLines={maxLines}
+						effectiveLines={effectiveLines}
+						hasUpdateAccess={hasUpdateAccess}
+						onPickPreset={applyPreset}
+						onRevertPreset={revertPreset}
+					/>
+				</TabsContent>
+
+				<TabsContent value="caveman" className="mt-4">
+					<CavemanEnginePanel form={form} hasUpdateAccess={hasUpdateAccess} />
+				</TabsContent>
+			</Tabs>
 
 			{/* ── Effect-verification nudge ─────────────────────────────────── */}
 			<div className="bg-muted/30 text-muted-foreground rounded-lg border border-dashed p-3 text-xs">

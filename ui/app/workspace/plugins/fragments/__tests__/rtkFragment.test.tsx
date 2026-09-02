@@ -280,12 +280,20 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 
 	it("renders the RTK and Caveman engine panels as separate first-class cards", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
+		// Both panels are mounted under their own config tabs; only the active
+		// one is visible, but the tab list exposes three configuration entries.
+		expect(screen.getByTestId("rtk-tab-shared")).toBeTruthy();
+		expect(screen.getByTestId("rtk-tab-rtk")).toBeTruthy();
+		expect(screen.getByTestId("rtk-tab-caveman")).toBeTruthy();
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
 		expect(screen.getByTestId("engine-panel-rtk")).toBeTruthy();
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
 		expect(screen.getByTestId("engine-panel-caveman")).toBeTruthy();
 	});
 
 	it("keeps the existing RTK field testids inside the RTK engine panel", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
 		const rtkPanel = screen.getByTestId("engine-panel-rtk");
 		expect(rtkPanel.contains(screen.getByTestId("rtk-field-intensity"))).toBe(true);
 		expect(rtkPanel.contains(screen.getByTestId("rtk-field-max-lines"))).toBe(true);
@@ -297,6 +305,7 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },
 		});
 		render(<RtkFragment plugin={plugin} />);
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
 		const cavemanPanel = screen.getByTestId("engine-panel-caveman");
 		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-enabled"))).toBe(true);
 		expect(cavemanPanel.contains(screen.getByTestId("caveman-field-intensity"))).toBe(true);
@@ -306,6 +315,7 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 
 	it("hides Caveman sub-fields when caveman.enabled is false (default)", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
 		// Only the enabled toggle is visible; the sub-fields appear conditionally.
 		expect(screen.queryByTestId("caveman-field-intensity")).toBeNull();
 		expect(screen.queryByTestId("caveman-field-roles")).toBeNull();
@@ -316,6 +326,7 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 			config: { caveman: { enabled: true, intensity: "full", language: "en", min_message_length: 80 } },
 		});
 		render(<RtkFragment plugin={plugin} />);
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-caveman"));
 		expect(screen.getByTestId("caveman-field-intensity")).toBeTruthy();
 		expect(screen.getByTestId("caveman-field-language")).toBeTruthy();
 	});

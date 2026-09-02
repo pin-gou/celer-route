@@ -114,6 +114,9 @@
 	},
 	"rtk": {
 		"cavemanEngineTitle": "Caveman engine (user prose)",
+		"tabShared": "Shared config",
+		"tabRtk": "RTK config",
+		"tabCaveman": "Caveman config",
 		"engineCompressedBy": "Ratio",
 		"engineInputBytes": "In",
 		"engineInvocations": "Invocations",

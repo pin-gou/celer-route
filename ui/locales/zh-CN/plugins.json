@@ -114,6 +114,9 @@
 	},
 	"rtk": {
 		"cavemanEngineTitle": "Caveman 引擎（用户散文）",
+		"tabShared": "共享配置",
+		"tabRtk": "RTK 配置",
+		"tabCaveman": "Caveman 配置",
 		"engineCompressedBy": "压缩率",
 		"engineInputBytes": "输入",
 		"engineInvocations": "调用次数",
