@@ -96,6 +96,35 @@ export const routingRulesApi = baseApi.injectEndpoints({
 			},
 		}),
 
+		// Reorder routing rules atomically (batch priority update)
+		reorderRoutingRules: builder.mutation<RoutingRule[], { rules: Array<{ id: string; priority: number }> }>({
+			query: (body) => ({
+				url: `/governance/routing-rules/reorder`,
+				method: "POST",
+				body,
+			}),
+			transformResponse: (response: { rules: RoutingRule[] }) => response.rules,
+			async onQueryStarted(_, { dispatch, getState, queryFulfilled }) {
+				try {
+					const { data: updatedRules } = await queryFulfilled;
+					const byId = new Map(updatedRules.map((rule) => [rule.id, rule]));
+					const queries = (getState() as any).api.queries;
+					for (const entry of Object.values(queries) as any[]) {
+						if (entry?.endpointName !== "getRoutingRules" || entry?.status !== "fulfilled") continue;
+						dispatch(
+							routingRulesApi.util.updateQueryData("getRoutingRules", entry.originalArgs, (draft) => {
+								if (!draft.rules) return;
+								draft.rules = draft.rules.map((r) => byId.get(r.id) ?? r);
+							}),
+						);
+					}
+					for (const rule of updatedRules) {
+						dispatch(routingRulesApi.util.updateQueryData("getRoutingRule", rule.id, () => rule));
+					}
+				} catch {}
+			},
+		}),
+
 		// Delete a routing rule
 		deleteRoutingRule: builder.mutation<void, string>({
 			query: (id) => ({
@@ -131,6 +160,7 @@ export const {
 	useGetRoutingRuleQuery,
 	useCreateRoutingRuleMutation,
 	useUpdateRoutingRuleMutation,
+	useReorderRoutingRulesMutation,
 	useDeleteRoutingRuleMutation,
 	useLazyGetRoutingRulesQuery,
 } = routingRulesApi;

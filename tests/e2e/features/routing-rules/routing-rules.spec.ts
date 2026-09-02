@@ -1,8 +1,23 @@
 import { expect, test } from '../../core/fixtures/base.fixture'
 import { createRoutingRuleData } from './routing-rules.data'
+import type { RoutingRulesPage } from './pages/routing-rules.page'
 
 // Track created rules for cleanup
 const createdRules: string[] = []
+
+// Returns true when `upper` appears before `lower` in the routing rules table.
+async function rememberRuleOrder(page: RoutingRulesPage, upper: string, lower: string): Promise<boolean> {
+  const names = await page.getAllRuleNames()
+  const upperIdx = names.findIndex((n) => n.includes(upper))
+  const lowerIdx = names.findIndex((n) => n.includes(lower))
+  if (upperIdx === -1 || lowerIdx === -1) return false
+  return upperIdx < lowerIdx
+}
+
+// Returns true when rule2 appears before rule1 in the table (rule2 outranks rule1).
+async function rule2BeforeRule1(page: RoutingRulesPage, rule1: string, rule2: string): Promise<boolean> {
+  return rememberRuleOrder(page, rule2, rule1)
+}
 
 test.describe('Routing Rules', () => {
   test.beforeEach(async ({ routingRulesPage }) => {
@@ -262,6 +277,9 @@ test.describe('Routing Rules', () => {
     })
 
     test('should reorder rules by changing priority', async ({ routingRulesPage }) => {
+      // Creating and editing two rules through the 3-step sheet exceeds the
+      // default 60s test budget (2s save arming per save), so widen it.
+      test.setTimeout(120000)
       // Create two rules with unique priorities (avoid fixed 500/600 so parallel workers don't collide)
       const rule1 = createRoutingRuleData({ name: `Reorder Test Rule 1 ${Date.now()}` })
       const rule2 = createRoutingRuleData({ name: `Reorder Test Rule 2 ${Date.now()}` })
@@ -277,6 +295,50 @@ test.describe('Routing Rules', () => {
       // Verify priority was saved and displayed
       const displayedPriority = await routingRulesPage.getRulePriority(rule1.name)
       expect(displayedPriority).toBe(newPriority)
+    })
+
+    test('should reorder rules by dragging the row handle', async ({ routingRulesPage }) => {
+      // Create two rules with distinct priorities; dragging rule2's handle onto
+      // rule1's row swaps their relative order (source takes target's position).
+      const rule1 = createRoutingRuleData({ name: `Drag Reorder A ${Date.now()}` })
+      const rule2 = createRoutingRuleData({ name: `Drag Reorder B ${Date.now()}` })
+      createdRules.push(rule1.name, rule2.name)
+
+      await routingRulesPage.createRoutingRule(rule1)
+      await routingRulesPage.createRoutingRule(rule2)
+
+      const before = await rule2BeforeRule1(routingRulesPage, rule1.name, rule2.name)
+
+      // Drag rule2's handle onto rule1's row.
+      await routingRulesPage.reorderRuleByDrag(rule2.name, rule1.name)
+
+      // The relative order of the two rules must flip.
+      await expect
+        .poll(async () => (await rule2BeforeRule1(routingRulesPage, rule1.name, rule2.name)) !== before, { timeout: 5000 })
+        .toBe(true)
+    })
+
+    test('should reorder rules with the up/down buttons', async ({ routingRulesPage }) => {
+      // Create two rules; moving the lower one up (and the upper one down) must
+      // swap their relative order just like dragging does.
+      const rule1 = createRoutingRuleData({ name: `Button Reorder A ${Date.now()}` })
+      const rule2 = createRoutingRuleData({ name: `Button Reorder B ${Date.now()}` })
+      createdRules.push(rule1.name, rule2.name)
+
+      await routingRulesPage.createRoutingRule(rule1)
+      await routingRulesPage.createRoutingRule(rule2)
+
+      const before = await rule2BeforeRule1(routingRulesPage, rule1.name, rule2.name)
+
+      // Click the opposite-direction arrow on one rule: if rule2 sits above
+      // rule1, move rule2 down; otherwise move rule2 up. Either way the pair
+      // must flip.
+      const direction = before ? 'down' : 'up'
+      await routingRulesPage.reorderRuleByButton(rule2.name, direction)
+
+      await expect
+        .poll(async () => (await rule2BeforeRule1(routingRulesPage, rule1.name, rule2.name)) !== before, { timeout: 5000 })
+        .toBe(true)
     })
 
     test('should create rule with virtual key scope', async ({ routingRulesPage }) => {

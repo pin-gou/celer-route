@@ -85,7 +85,7 @@ export class RoutingRulesPage extends BasePage {
       page.locator('button').filter({ hasText: /Model/i })
     )
     this.priorityInput = page.locator('[data-testid="rule-priority-input"]').or(
-      page.getByLabel(/Priority/i)
+      page.getByRole('spinbutton', { name: /Priority/ })
     )
     this.enabledToggle = page.locator('[data-testid="rule-enabled-toggle"]').or(
       page.locator('[role="dialog"] button[role="switch"]').first()
@@ -96,7 +96,7 @@ export class RoutingRulesPage extends BasePage {
     )
     // Use exact button names to avoid matching wrong buttons
     // Match both "Save Rule" (create) and "Update Rule" (edit)
-    this.saveBtn = page.locator('[data-testid="save-rule-btn"]').or(
+    this.saveBtn = page.locator('[data-testid="save-rule-btn"], [data-testid="routing-rule-save-button"]').or(
       page.locator('[role="dialog"]').getByRole('button', { name: /Save Rule|Update Rule/i })
     )
     // Cancel button specifically (not the Close/X button in header)
@@ -157,6 +157,21 @@ export class RoutingRulesPage extends BasePage {
   }
 
   /**
+   * Advance through the stepper until the save button is reachable.
+   * The create/edit sheet is a 3-step flow (basics → conditions → targets); the
+   * Save button only renders on the final step.
+   */
+  async goToFinalStep(): Promise<void> {
+    await this.sheet.getByTestId('routing-rule-tab-next').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+    while (await this.sheet.getByTestId('routing-rule-tab-next').isVisible().catch(() => false)) {
+      await this.sheet.getByTestId('routing-rule-tab-next').click()
+      // Allow tab panels / stepper to settle between clicks.
+      await this.sheet.getByTestId('routing-rule-tab-next').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {})
+    }
+    await this.sheet.getByTestId('routing-rule-save-button').waitFor({ state: 'visible', timeout: 5000 })
+  }
+
+  /**
    * Create a new routing rule
    */
   async createRoutingRule(config: RoutingRuleConfig): Promise<void> {
@@ -175,25 +190,6 @@ export class RoutingRulesPage extends BasePage {
       await this.descriptionInput.fill(config.description)
     }
 
-    // Select provider if provided (in the Routing Target section)
-    if (config.provider) {
-      const providerCombo = this.sheet.getByRole('combobox').filter({ hasText: /Select provider/i }).first()
-      if (await providerCombo.isVisible().catch(() => false)) {
-        await providerCombo.click()
-        await this.page.waitForSelector('[role="listbox"]', { timeout: 5000 })
-        const option = this.page.getByRole('option', { name: new RegExp(config.provider, 'i') }).first()
-        await option.scrollIntoViewIfNeeded()
-        await option.click({ force: true })
-        // Wait for dropdown to close
-        await this.page.waitForSelector('[role="listbox"]', { state: 'hidden', timeout: 5000 }).catch(() => {})
-      }
-    }
-
-    // Note: CEL expression is auto-generated from the Rule Builder (visual query builder)
-    // The UI doesn't have a direct CEL input field - it shows a read-only preview
-    // To add conditions, use the "Add Rule" button in the Rule Builder section
-    // For basic tests, leaving the builder empty applies the rule to all requests
-
     // Set priority if provided - clear first then fill
     if (config.priority !== undefined) {
       await this.priorityInput.waitFor({ state: 'visible' })
@@ -208,6 +204,26 @@ export class RoutingRulesPage extends BasePage {
         await this.enabledToggle.click()
       } else if (!config.enabled && isChecked) {
         await this.enabledToggle.click()
+      }
+    }
+
+    // Advance through the stepper to the targets/save step.
+    await this.goToFinalStep()
+
+    // Note: CEL expression is auto-generated from the Rule Builder (visual query builder)
+    // For basic tests, leaving the builder empty applies the rule to all requests.
+
+    // Select provider if provided (in the Routing Target section on the final step)
+    if (config.provider) {
+      const providerCombo = this.sheet.getByRole('combobox').filter({ hasText: /Select provider/i }).first()
+      if (await providerCombo.isVisible().catch(() => false)) {
+        await providerCombo.click()
+        await this.page.waitForSelector('[role="listbox"]', { timeout: 5000 })
+        const option = this.page.getByRole('option', { name: new RegExp(config.provider, 'i') }).first()
+        await option.scrollIntoViewIfNeeded()
+        await option.click({ force: true })
+        // Wait for dropdown to close
+        await this.page.waitForSelector('[role="listbox"]', { state: 'hidden', timeout: 5000 }).catch(() => {})
       }
     }
 
@@ -291,6 +307,9 @@ export class RoutingRulesPage extends BasePage {
       await this.priorityInput.clear()
       await this.priorityInput.fill(String(updates.priority))
     }
+
+    // Advance through the stepper to the targets/save step.
+    await this.goToFinalStep()
 
     // Save
     await this.saveBtn.waitFor({ state: 'visible' })
@@ -678,6 +697,47 @@ export class RoutingRulesPage extends BasePage {
   }
 
   /**
+   * Rules table row drag handle locator.
+   */
+  ruleRowDragHandle(name: string): Locator {
+    const row = this.getRuleRow(name)
+    return row.locator('[data-testid^="routing-rule-drag-"]').first()
+  }
+
+  /**
+   * Rules table row move (priority) button locator.
+   */
+  ruleRowMoveButton(name: string, direction: 'up' | 'down'): Locator {
+    const row = this.getRuleRow(name)
+    const label = direction === 'up' ? /Move rule up/i : /Move rule down/i
+    return row.getByRole('button', { name: label }).first()
+  }
+
+  /**
+   * Move a rule up/down one position via its arrow button and wait for the
+   * rows to settle into the new order.
+   */
+  async reorderRuleByButton(name: string, direction: 'up' | 'down'): Promise<void> {
+    const button = this.ruleRowMoveButton(name, direction)
+    await button.waitFor({ state: 'visible', timeout: 5000 })
+    await button.click()
+  }
+
+  /**
+   * Reorder rules by dragging the row's handle onto another rule's row.
+   * Returns the handle locator so callers can assert on drag state if needed.
+   */
+  async reorderRuleByDrag(sourceName: string, targetName: string): Promise<void> {
+    const sourceHandle = this.ruleRowDragHandle(sourceName)
+    await sourceHandle.waitFor({ state: 'visible', timeout: 5000 })
+    const targetRow = this.getRuleRow(targetName)
+    await targetRow.waitFor({ state: 'visible', timeout: 5000 })
+    // Playwright's dragTo issues a proper pointer drag sequence that dnd-kit's
+    // PointerSensor recognizes (manual step-by-step mouse is unreliable here).
+    await sourceHandle.dragTo(targetRow)
+  }
+
+  /**
    * Get rule's description from the table (first column contains name + description)
    */
   async getRuleDescription(name: string): Promise<string> {
@@ -694,16 +754,20 @@ export class RoutingRulesPage extends BasePage {
   async getRulePriority(name: string): Promise<number | null> {
     const row = this.getRuleRow(name)
 
-    // Table columns: Name(0), Provider(1), Model(2), Scope(3), Priority(4), Expression(5), Status(6), Actions(7)
+    // Table columns: Name(0), Targets(1), Scope(2), Priority(3), Expression(4), Status(5), Actions(6)
     const cells = row.locator('td')
     const count = await cells.count()
 
-    // Priority is in the 5th column (index 4)
-    if (count > 4) {
-      const text = await cells.nth(4).textContent()
-      const num = parseInt(text || '', 10)
-      if (!isNaN(num) && num > 0) {
-        return num
+    // Priority is in the 4th column (index 3). The cell also holds the drag
+    // handle, so extract the numeric badge value rather than relying on layout.
+    if (count > 3) {
+      const text = await cells.nth(3).textContent()
+      const match = text?.match(/\d+/)
+      if (match) {
+        const num = parseInt(match[0], 10)
+        if (!isNaN(num) && num > 0) {
+          return num
+        }
       }
     }
 

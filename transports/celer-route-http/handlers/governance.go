@@ -1251,6 +1251,7 @@ func (h *GovernanceHandler) RegisterRoutesWithOverrides(r *router.Router, overri
 	// Routing Rules CRUD operations
 	r.GET("/api/governance/routing-rules", lib.ChainMiddlewares(h.getRoutingRules, middlewares...))
 	r.POST("/api/governance/routing-rules", lib.ChainMiddlewares(h.createRoutingRule, middlewares...))
+	r.POST("/api/governance/routing-rules/reorder", lib.ChainMiddlewares(h.reorderRoutingRules, middlewares...))
 	r.GET("/api/governance/routing-rules/{rule_id}", lib.ChainMiddlewares(h.getRoutingRule, middlewares...))
 	r.PUT("/api/governance/routing-rules/{rule_id}", lib.ChainMiddlewares(h.updateRoutingRule, middlewares...))
 	r.DELETE("/api/governance/routing-rules/{rule_id}", lib.ChainMiddlewares(h.deleteRoutingRule, middlewares...))
@@ -4662,6 +4663,89 @@ func (h *GovernanceHandler) updateRoutingRule(ctx *fasthttp.RequestCtx) {
 	SendJSON(ctx, map[string]interface{}{
 		"message": "Routing rule updated successfully",
 		"rule":    rule,
+	})
+}
+
+// ReorderRoutingRuleItem is a single priority assignment in a reorder request
+type ReorderRoutingRuleItem struct {
+	ID       string `json:"id"`       // Routing rule ID
+	Priority int    `json:"priority"` // New priority value (0-1000)
+}
+
+// ReorderRoutingRulesRequest represents the request body for reordering routing rules
+type ReorderRoutingRulesRequest struct {
+	Rules []ReorderRoutingRuleItem `json:"rules"`
+}
+
+// reorderRoutingRules applies a batch of priority changes atomically.
+//
+// The uniqueness invariant (one priority per scope) makes a drag-reorder impossible
+// via per-rule updates: reassigning the same block of priorities is a rotation, so
+// any single-rule PUT transiently collides with a rule that still holds the old value.
+// SyncRoutingRules (used by config-file reloads) defers that check until every rule is
+// written, so a valid permutation succeeds despite the transient collision.
+func (h *GovernanceHandler) reorderRoutingRules(ctx *fasthttp.RequestCtx) {
+	var req ReorderRoutingRulesRequest
+	if err := sonic.Unmarshal(ctx.PostBody(), &req); err != nil {
+		SendError(ctx, 400, "Invalid JSON")
+		return
+	}
+	if len(req.Rules) < 2 {
+		SendError(ctx, 400, "at least two rules are required to reorder")
+		return
+	}
+
+	seenIDs := make(map[string]struct{}, len(req.Rules))
+	toUpdate := make([]configstoreTables.TableRoutingRule, 0, len(req.Rules))
+	for _, item := range req.Rules {
+		if item.ID == "" {
+			SendError(ctx, 400, "rule id is required")
+			return
+		}
+		if item.Priority < 0 || item.Priority > 1000 {
+			SendError(ctx, 400, "priority must be between 0 and 1000")
+			return
+		}
+		if _, dup := seenIDs[item.ID]; dup {
+			SendError(ctx, 400, fmt.Sprintf("duplicate rule id %s in reorder request", item.ID))
+			return
+		}
+		seenIDs[item.ID] = struct{}{}
+
+		rule, err := h.configStore.GetRoutingRule(ctx, item.ID)
+		if err != nil {
+			if errors.Is(err, configstore.ErrNotFound) {
+				SendError(ctx, 404, "Routing rule not found")
+				return
+			}
+			logger.Error("failed to get routing rule: %v", err)
+			SendError(ctx, 500, "Failed to retrieve routing rule")
+			return
+		}
+		rule.Priority = item.Priority
+		toUpdate = append(toUpdate, *rule)
+	}
+
+	// Persist all priority changes atomically with the uniqueness check deferred.
+	if err := h.configStore.SyncRoutingRules(ctx, nil, toUpdate); err != nil {
+		SendError(ctx, 500, fmt.Sprintf("Failed to reorder routing rules: %v", err))
+		return
+	}
+
+	// Update in-memory store so live evaluation picks up the new order.
+	updated := make([]configstoreTables.TableRoutingRule, 0, len(toUpdate))
+	for i := range toUpdate {
+		rule := &toUpdate[i]
+		if err := h.governanceManager.ReloadRoutingRule(ctx, rule.ID); err != nil {
+			SendError(ctx, 500, fmt.Sprintf("Failed to reload routing rule in memory: %v", err))
+			return
+		}
+		updated = append(updated, *rule)
+	}
+
+	SendJSON(ctx, map[string]interface{}{
+		"message": "Routing rules reordered successfully",
+		"rules":   updated,
 	})
 }
 

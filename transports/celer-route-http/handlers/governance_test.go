@@ -3901,3 +3901,78 @@ func TestBudgetLastResetUsesBudgetQuarterStart(t *testing.T) {
 	assert.False(t, budgetLastReset(false, nil).IsZero())
 	assert.False(t, budgetLastReset(true, nil).IsZero())
 }
+
+// TestReorderRoutingRules_AtomicallySwapsPriorities verifies that a drag-style
+// priority rotation (reassigning the same block of values) succeeds through the
+// handler, something per-rule PUTs cannot do because each intermediate write
+// transiently collides with a rule still holding the old value.
+func TestReorderRoutingRules_AtomicallySwapsPriorities(t *testing.T) {
+	SetLogger(&mockLogger{})
+	store := setupPricingOverrideHandlerStore(t)
+	handler := &GovernanceHandler{
+		configStore:       store,
+		governanceManager: pricingOverrideTestGovernanceManager{},
+	}
+	ctx := context.Background()
+
+	// Seed three global rules with unique priorities (pg-expert < pg-master < pg-associate).
+	enabled := true
+	provider := "openai"
+	model := "gpt-test"
+	for i, id := range []string{"rule-a", "rule-b", "rule-c"} {
+		rule := configstoreTables.TableRoutingRule{
+			ID:            id,
+			Name:          id,
+			Enabled:       &enabled,
+			CelExpression: "true",
+			Scope:         "global",
+			Priority:      i,
+			Targets: []configstoreTables.TableRoutingTarget{
+				{Provider: &provider, Model: &model, Weight: 1.0},
+			},
+		}
+		require.NoError(t, store.CreateRoutingRule(ctx, &rule))
+	}
+
+	// Rotate: rule-c (priority 2) moves to the front, taking rule-a's slot; the
+	// rest shift down. This is the exact request the drag-reorder endpoint serves.
+	reqBody := `{"rules":[
+		{"id":"rule-c","priority":0},
+		{"id":"rule-a","priority":1},
+		{"id":"rule-b","priority":2}
+	]}`
+	reqCtx := newTestRequestCtx(reqBody)
+	handler.reorderRoutingRules(reqCtx)
+
+	require.Equal(t, fasthttp.StatusOK, reqCtx.Response.StatusCode(),
+		"unexpected response: %s", string(reqCtx.Response.Body()))
+
+	// Verify the persisted priorities match the new order.
+	for _, tc := range []struct {
+		id   string
+		want int
+	}{
+		{"rule-c", 0},
+		{"rule-a", 1},
+		{"rule-b", 2},
+	} {
+		rule, err := store.GetRoutingRule(ctx, tc.id)
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, rule.Priority, "priority for %s", tc.id)
+	}
+
+	// A genuine end-state duplicate must still be rejected (deferred check).
+	reqCtx = newTestRequestCtx(`{"rules":[{"id":"rule-a","priority":0},{"id":"rule-b","priority":0}]}`)
+	handler.reorderRoutingRules(reqCtx)
+	assert.Equal(t, fasthttp.StatusInternalServerError, reqCtx.Response.StatusCode(),
+		"expected rejection: %s", string(reqCtx.Response.Body()))
+
+	// Invalid payloads: fewer than two rules and out-of-range priority.
+	reqCtx = newTestRequestCtx(`{"rules":[{"id":"rule-a","priority":0}]}`)
+	handler.reorderRoutingRules(reqCtx)
+	assert.Equal(t, fasthttp.StatusBadRequest, reqCtx.Response.StatusCode())
+
+	reqCtx = newTestRequestCtx(`{"rules":[{"id":"rule-a","priority":1001},{"id":"rule-b","priority":0}]}`)
+	handler.reorderRoutingRules(reqCtx)
+	assert.Equal(t, fasthttp.StatusBadRequest, reqCtx.Response.StatusCode())
+}

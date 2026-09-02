@@ -198,6 +198,9 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 	}));
 
 	useEffect(() => {
+		// Always start on the first step when the drawer opens, even when it was
+		// left on a later step by a previous create/edit.
+		setActiveStep(STEPS_ORDER[0]);
 		if (editingRule) {
 			setValue("id", editingRule.id);
 			setValue("name", editingRule.name);
@@ -229,6 +232,8 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 			setCelError(null);
 		} else {
 			reset();
+			const maxPriority = (rulesData?.rules ?? []).reduce((max, rule) => Math.max(max, rule.priority), 0);
+			setValue("priority", maxPriority + 1);
 			setFallbackIds([]);
 			setTargets([{ ...DEFAULT_ROUTING_TARGET }]);
 			setQuery(defaultQuery);
@@ -236,7 +241,7 @@ export function RoutingRuleSheet({ open, onOpenChange, editingRule, onSuccess }:
 			setBuilderKey((prev) => prev + 1);
 			setCelError(null);
 		}
-	}, [editingRule, open, setValue, reset]);
+	}, [editingRule, open, setValue, reset, rulesData]);
 
 	const handleQueryChange = useCallback(
 		(expression: string, newQuery: RuleGroupType) => {
@@ -1059,14 +1064,6 @@ function FallbackRow({ id, index, total, fallback, providerOptions, onUpdate, on
 			className={cn("flex items-center gap-2 rounded-md border border-transparent px-1 py-1", isDragging && "opacity-50")}
 			data-testid={`routing-rule-fallback-${index}`}
 		>
-			<div
-				ref={handleRef}
-				className="text-muted-foreground hover:text-foreground flex shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
-				aria-label={t("sheet.fallbacksDragHandle", { index: index + 1 })}
-				data-testid={`routing-rule-fallback-handle-${index}`}
-			>
-				<GripVertical className="h-4 w-4" />
-			</div>
 			<Badge variant="secondary" className="w-7 shrink-0 justify-center" data-testid={`routing-rule-fallback-position-${index}`}>
 				#{index + 1}
 			</Badge>
@@ -1091,26 +1088,34 @@ function FallbackRow({ id, index, total, fallback, providerOptions, onUpdate, on
 					className="!h-9 !min-h-9 w-full"
 				/>
 			</div>
-			<div className="flex shrink-0 flex-col items-center" data-testid={`routing-rule-fallback-reorder-${index}`}>
+			<div className="flex shrink-0 items-center gap-0.5" data-testid={`routing-rule-fallback-reorder-${index}`}>
 				<Button
 					type="button"
 					variant="ghost"
 					size="sm"
 					onClick={onMoveUp}
 					disabled={index === 0}
-					className="text-muted-foreground hover:text-foreground h-5 w-6 p-0"
+					className="text-muted-foreground hover:text-foreground h-5 w-6 !cursor-n-resize p-0"
 					aria-label={t("sheet.fallbacksReorderUp", { index: index + 1 })}
 					data-testid={`routing-rule-fallback-up-${index}`}
 				>
 					<ArrowUp className="h-3.5 w-3.5" />
 				</Button>
+				<div
+					ref={handleRef}
+					className="text-muted-foreground hover:text-foreground flex shrink-0 cursor-ns-resize items-center justify-center"
+					aria-label={t("sheet.fallbacksDragHandle", { index: index + 1 })}
+					data-testid={`routing-rule-fallback-handle-${index}`}
+				>
+					<GripVertical className="h-4 w-4" />
+				</div>
 				<Button
 					type="button"
 					variant="ghost"
 					size="sm"
 					onClick={onMoveDown}
 					disabled={index >= total - 1}
-					className="text-muted-foreground hover:text-foreground h-5 w-6 p-0"
+					className="text-muted-foreground hover:text-foreground h-5 w-6 !cursor-s-resize p-0"
 					aria-label={t("sheet.fallbacksReorderDown", { index: index + 1 })}
 					data-testid={`routing-rule-fallback-down-${index}`}
 				>
