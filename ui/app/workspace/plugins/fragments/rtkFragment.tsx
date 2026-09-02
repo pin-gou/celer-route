@@ -1022,19 +1022,9 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 }
 
 // ---------------------------------------------------------------------------
-// PipelineSection — pipeline orchestrator container. Surfaces the two
-// per-engine toggles (RTK always-on, Caveman opt-in) at the top, then
-// the cross-engine shared settings (scope, snapshot, renderers, raw
-// output, filters) underneath. Per-engine configuration lives in the
-// RtkEnginePanel / CavemanEnginePanel components below — keeping
-// pipeline + engine + shared concerns in distinct zones so the
-// operator's eye finds them in one consistent order.
-// ---------------------------------------------------------------------------
-// SharedSettingsSection — cross-engine settings (scope, snapshot, renderers,
-// raw output, filters). The pipeline checkboxes used to live here at the top;
-// they have since been moved into EnabledSwitchPanel so the operator decides
-// "which engines run when the plugin is on" in a single place next to the
-// top-level on/off toggle.
+// SharedSettingsSection — cross-engine settings that apply to BOTH engines:
+// snapshot (log detail diff) and raw-output persistence. RTK-only steps
+// (renderers, filters, grouping, presets) live under the RTK tab.
 // ---------------------------------------------------------------------------
 
 function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFormValues>> }) {
@@ -1103,105 +1093,104 @@ function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFo
 				</div>
 			</fieldset>
 
-			{/* Collapsible advanced shared settings */}
-			<Accordion type="multiple" className="rounded-lg border">
-				{/* Debug / raw output */}
-				<AccordionItem value="rawOutput" className="px-4">
-					<AccordionTrigger data-testid="rtk-section-raw-output-trigger">{t("rtk.rawOutputSection")}</AccordionTrigger>
-					<AccordionContent className="space-y-3">
-						<FormField
-							control={form.control}
-							name="raw_output_retention"
-							render={({ field }) => (
-								<FormItem>
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.rawOutputRetentionLabel")}</FormLabel>
-										<HelpHint>{t("rtk.rawOutputRetentionWhen")}</HelpHint>
-									</div>
-									<Select value={field.value} onValueChange={field.onChange}>
-										<FormControl>
-											<SelectTrigger data-testid="rtk-field-raw-output-retention">
-												<SelectValue placeholder={t("rtk.rawOutputRetentionPlaceholder")} />
-											</SelectTrigger>
-										</FormControl>
-										<SelectContent>
-											<SelectItem value="never">{t("rtk.rawOutputRetentionNever")}</SelectItem>
-											<SelectItem value="failures">{t("rtk.rawOutputRetentionFailures")}</SelectItem>
-											<SelectItem value="always">{t("rtk.rawOutputRetentionAlways")}</SelectItem>
-										</SelectContent>
-									</Select>
-									<FormDescription>{t("rtk.rawOutputRetentionDescription")}</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<FormField
-							control={form.control}
-							name="raw_output_max_bytes"
-							render={({ field }) => (
-								<FormItem>
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
-										<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
-									</div>
+			{/* Debug / raw output — cross-engine persistence (rtk embeds a recovery
+				hint, caveman only persists for the log audit trail). Plain card, no
+				collapse, since both engines share it. */}
+			<fieldset className="rounded-lg border p-4">
+				<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.rawOutputSection")}</legend>
+				<div className="mt-2 space-y-4">
+					<FormField
+						control={form.control}
+						name="raw_output_retention"
+						render={({ field }) => (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.rawOutputRetentionLabel")}</FormLabel>
+									<HelpHint>{t("rtk.rawOutputRetentionWhen")}</HelpHint>
+								</div>
+								<Select value={field.value} onValueChange={field.onChange}>
 									<FormControl>
-										<Input
-											data-testid="rtk-field-raw-output-max-bytes"
-											type="number"
-											min={0}
-											{...field}
-											onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-										/>
+										<SelectTrigger data-testid="rtk-field-raw-output-retention">
+											<SelectValue placeholder={t("rtk.rawOutputRetentionPlaceholder")} />
+										</SelectTrigger>
 									</FormControl>
-									<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<FormField
-							control={form.control}
-							name="raw_output_dir"
-							render={({ field }) => (
-								<FormItem>
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.rawOutputDirLabel")}</FormLabel>
-										<HelpHint>{t("rtk.rawOutputDirWhen")}</HelpHint>
-									</div>
-									<FormControl>
-										<Input data-testid="rtk-field-raw-output-dir" type="text" placeholder={t("rtk.rawOutputDirPlaceholder")} {...field} />
-									</FormControl>
-									<FormDescription>{t("rtk.rawOutputDirDescription")}</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<FormField
-							control={form.control}
-							name="raw_output_ttl_hours"
-							render={({ field }) => (
-								<FormItem>
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.rawOutputTTLLabel")}</FormLabel>
-										<HelpHint>{t("rtk.rawOutputTTLWhen")}</HelpHint>
-									</div>
-									<FormControl>
-										<Input
-											data-testid="rtk-field-raw-output-ttl-hours"
-											type="number"
-											min={0}
-											max={168}
-											{...field}
-											onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-										/>
-									</FormControl>
-									<FormDescription>{t("rtk.rawOutputTTLDescription")}</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-					</AccordionContent>
-				</AccordionItem>
-			</Accordion>
+									<SelectContent>
+										<SelectItem value="never">{t("rtk.rawOutputRetentionNever")}</SelectItem>
+										<SelectItem value="failures">{t("rtk.rawOutputRetentionFailures")}</SelectItem>
+										<SelectItem value="always">{t("rtk.rawOutputRetentionAlways")}</SelectItem>
+									</SelectContent>
+								</Select>
+								<FormDescription>{t("rtk.rawOutputRetentionDescription")}</FormDescription>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={form.control}
+						name="raw_output_max_bytes"
+						render={({ field }) => (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
+									<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
+								</div>
+								<FormControl>
+									<Input
+										data-testid="rtk-field-raw-output-max-bytes"
+										type="number"
+										min={0}
+										{...field}
+										onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+									/>
+								</FormControl>
+								<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={form.control}
+						name="raw_output_dir"
+						render={({ field }) => (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.rawOutputDirLabel")}</FormLabel>
+									<HelpHint>{t("rtk.rawOutputDirWhen")}</HelpHint>
+								</div>
+								<FormControl>
+									<Input data-testid="rtk-field-raw-output-dir" type="text" placeholder={t("rtk.rawOutputDirPlaceholder")} {...field} />
+								</FormControl>
+								<FormDescription>{t("rtk.rawOutputDirDescription")}</FormDescription>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={form.control}
+						name="raw_output_ttl_hours"
+						render={({ field }) => (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.rawOutputTTLLabel")}</FormLabel>
+									<HelpHint>{t("rtk.rawOutputTTLWhen")}</HelpHint>
+								</div>
+								<FormControl>
+									<Input
+										data-testid="rtk-field-raw-output-ttl-hours"
+										type="number"
+										min={0}
+										max={168}
+										{...field}
+										onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+									/>
+								</FormControl>
+								<FormDescription>{t("rtk.rawOutputTTLDescription")}</FormDescription>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+				</div>
+			</fieldset>
 		</div>
 	);
 }

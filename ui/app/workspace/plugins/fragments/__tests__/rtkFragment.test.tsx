@@ -156,16 +156,11 @@ describe("RtkFragment — EnabledSwitch mirrors provider-cooldown UX", () => {
 	});
 });
 describe("RtkFragment — raw_output_dir / raw_output_ttl_hours fields", () => {
-	// The new fields live inside the "Debug / raw output" AccordionItem, which
-	// is collapsed by default. The helper expands it so getByTestId can find
-	// the inputs the same way the operator would after clicking the section.
-	function expandRawOutputSection() {
-		fireEvent.click(screen.getByTestId("rtk-section-raw-output-trigger"));
-	}
+	// The raw-output settings are a plain card in the shared tab (no collapse),
+	// so the inputs are always visible without expanding anything.
 
 	it("renders the new fields with default empty dir and TTL=24", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
-		expandRawOutputSection();
 
 		const dirInput = screen.getByTestId("rtk-field-raw-output-dir") as HTMLInputElement;
 		expect(dirInput.type).toBe("text");
@@ -187,7 +182,6 @@ describe("RtkFragment — raw_output_dir / raw_output_ttl_hours fields", () => {
 				})}
 			/>,
 		);
-		expandRawOutputSection();
 
 		const dirInput = screen.getByTestId("rtk-field-raw-output-dir") as HTMLInputElement;
 		expect(dirInput.value).toBe("/var/log/celer-route-raw");
@@ -198,7 +192,6 @@ describe("RtkFragment — raw_output_dir / raw_output_ttl_hours fields", () => {
 
 	it("persists both values on save (PUT /api/plugins/rtk)", async () => {
 		render(<RtkFragment plugin={makePlugin()} />);
-		expandRawOutputSection();
 
 		fireEvent.change(screen.getByTestId("rtk-field-raw-output-dir"), {
 			target: { value: "/srv/celer-route/raw" },
@@ -303,8 +296,8 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		// Default shared tab: the RTK-only accordions must NOT be present.
 		expect(screen.queryByTestId("rtk-section-renderers-trigger")).toBeNull();
 		expect(screen.queryByTestId("rtk-section-filters-trigger")).toBeNull();
-		// Raw output (cross-engine) stays in the shared tab.
-		expect(screen.getByTestId("rtk-section-raw-output-trigger")).toBeTruthy();
+		// Raw output (cross-engine) stays visible as a plain card in the shared tab.
+		expect(screen.getByTestId("rtk-field-raw-output-retention")).toBeTruthy();
 
 		// Switch to the RTK tab: renderers + filters now live there.
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
@@ -314,7 +307,7 @@ describe("RtkFragment — pipeline checkboxes inside the enablement card", () =>
 		expect(rtkPanel.contains(screen.getByTestId("rtk-section-renderers-trigger"))).toBe(true);
 		expect(rtkPanel.contains(screen.getByTestId("rtk-section-filters-trigger"))).toBe(true);
 		// Raw output is NOT duplicated inside the RTK panel.
-		expect(rtkPanel.contains(screen.queryByTestId("rtk-section-raw-output-trigger"))).toBe(false);
+		expect(rtkPanel.contains(screen.queryByTestId("rtk-field-raw-output-retention"))).toBe(false);
 	});
 
 	it("hides the Caveman tab while caveman.enabled is false (default)", () => {
