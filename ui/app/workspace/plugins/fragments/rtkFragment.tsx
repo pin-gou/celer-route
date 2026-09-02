@@ -1170,29 +1170,55 @@ function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFo
 							</FormItem>
 						)}
 					/>
-					<FormField
-						control={form.control}
-						name="raw_output_max_bytes"
-						render={({ field }) => (
-							<FormItem>
-								<div className="flex items-center gap-1.5">
-									<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
-									<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
-								</div>
-								<FormControl>
-									<Input
-										data-testid="rtk-field-raw-output-max-bytes"
-										type="number"
-										min={0}
-										{...field}
-										onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-									/>
-								</FormControl>
-								<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<FormField
+							control={form.control}
+							name="raw_output_max_bytes"
+							render={({ field }) => (
+								<FormItem>
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.rawOutputMaxBytesLabel")}</FormLabel>
+										<HelpHint>{t("rtk.rawOutputMaxBytesWhen")}</HelpHint>
+									</div>
+									<FormControl>
+										<Input
+											data-testid="rtk-field-raw-output-max-bytes"
+											type="number"
+											min={0}
+											{...field}
+											onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+										/>
+									</FormControl>
+									<FormDescription>{t("rtk.rawOutputMaxBytesDescription")}</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+						<FormField
+							control={form.control}
+							name="raw_output_ttl_hours"
+							render={({ field }) => (
+								<FormItem>
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.rawOutputTTLLabel")}</FormLabel>
+										<HelpHint>{t("rtk.rawOutputTTLWhen")}</HelpHint>
+									</div>
+									<FormControl>
+										<Input
+											data-testid="rtk-field-raw-output-ttl-hours"
+											type="number"
+											min={0}
+											max={168}
+											{...field}
+											onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
+										/>
+									</FormControl>
+									<FormDescription>{t("rtk.rawOutputTTLDescription")}</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+					</div>
 					<FormField
 						control={form.control}
 						name="raw_output_dir"
@@ -1206,30 +1232,6 @@ function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFo
 									<Input data-testid="rtk-field-raw-output-dir" type="text" placeholder={t("rtk.rawOutputDirPlaceholder")} {...field} />
 								</FormControl>
 								<FormDescription>{t("rtk.rawOutputDirDescription")}</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
-					<FormField
-						control={form.control}
-						name="raw_output_ttl_hours"
-						render={({ field }) => (
-							<FormItem>
-								<div className="flex items-center gap-1.5">
-									<FormLabel>{t("rtk.rawOutputTTLLabel")}</FormLabel>
-									<HelpHint>{t("rtk.rawOutputTTLWhen")}</HelpHint>
-								</div>
-								<FormControl>
-									<Input
-										data-testid="rtk-field-raw-output-ttl-hours"
-										type="number"
-										min={0}
-										max={168}
-										{...field}
-										onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-									/>
-								</FormControl>
-								<FormDescription>{t("rtk.rawOutputTTLDescription")}</FormDescription>
 								<FormMessage />
 							</FormItem>
 						)}
