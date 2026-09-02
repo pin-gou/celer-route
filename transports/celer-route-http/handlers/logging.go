@@ -572,10 +572,10 @@ func (t *recentRoutingRuleTime) scanString(s string) error {
 
 // recentRoutingRulesRow mirrors one aggregated output row of the SQL below.
 type recentRoutingRulesRow struct {
-	RoutingRuleID   string               `gorm:"column:routing_rule_id"`
-	RoutingRuleName string               `gorm:"column:routing_rule_name"`
+	RoutingRuleID   string                `gorm:"column:routing_rule_id"`
+	RoutingRuleName string                `gorm:"column:routing_rule_name"`
 	LastUsedAt      recentRoutingRuleTime `gorm:"column:last_used_at"`
-	UseCount        int64                `gorm:"column:use_count"`
+	UseCount        int64                 `gorm:"column:use_count"`
 }
 
 // RecentRoutingRules runs the single SQL aggregation against the logs table.
@@ -3521,10 +3521,24 @@ func buildActiveLogEntry(l *logstore.Log) activeLogEntry {
 	return entry
 }
 
+// activeLogResyncInterval controls how often an established
+// /api/logs/active/stream connection re-sends the full active_logs snapshot.
+// notifyActiveLogSubscribers is lossy by design (non-blocking send; a full
+// subscriber channel drops the update), so a terminal log_updated can be lost
+// when the producer is briefly blocked writing to a slow client. The client
+// treats active_logs as an authoritative full snapshot, so a periodic resync
+// converges the UI back to server truth within one interval instead of pinning
+// a completed request as "processing" until the next connection or the long
+// client-side TTL ellapses.
+//
+// Package-level var (not const) so tests can shorten it.
+var activeLogResyncInterval = 30 * time.Second
+
 // getActiveLogStream handles GET /api/logs/active/stream (SSE) - Pushes log
 // status changes to clients using Server-Sent Events.
 // The stream sends:
-//  1. active_logs — initial snapshot of currently processing logs
+//  1. active_logs — initial snapshot of currently processing logs, re-sent
+//     periodically as an authoritative resync
 //  2. recent_logs — recently completed logs (last 30 s) for quick reconciliation
 //  3. log_updated — incremental updates for every log write/transition
 //
@@ -3564,6 +3578,11 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 	ctx.Response.SetBodyStream(reader, -1)
 
 	go func() {
+		// Heartbeat handles are declared up front (Go scoping) so the deferred
+		// stop can reference them; they are assigned after the initial snapshot.
+		var heartbeatDone chan struct{}
+		var heartbeatExited <-chan struct{}
+
 		// Unsubscribe when the goroutine exits (client disconnect or server shutdown).
 		// NOTE: This must NOT be a defer on the outer handler function — the handler
 		// returns immediately after spawning this goroutine, so a handler-level defer
@@ -3571,10 +3590,32 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 		// Moving it here ensures the subscription lives for the duration of the SSE stream.
 		defer h.logManager.UnsubscribeActiveLogStream(ctx, ch)
 		defer reader.Done()
+		// Heartbeat must be stopped (and thus reader closed) before Done() closes
+		// the event channel; see lib.StopSSEHeartbeat. LIFO order below guarantees it.
+		defer func() {
+			if heartbeatDone != nil {
+				lib.StopSSEHeartbeat(reader, heartbeatDone, heartbeatExited)
+			}
+		}()
+
+		// Send the full active_logs snapshot built from the live active set.
+		// Reused by the periodic resync so batches of events ride a single code path.
+		sendActiveLogs := func() bool {
+			active, err := h.logManager.GetActiveLogs(ctx)
+			if err != nil {
+				logger.Warn("active log resync failed: %v", err)
+				return true
+			}
+			snapshot := make([]activeLogEntry, 0, len(active))
+			for _, l := range active {
+				snapshot = append(snapshot, buildActiveLogEntry(l))
+			}
+			data, _ := sonic.Marshal(snapshot)
+			return reader.SendEvent("active_logs", data)
+		}
 
 		// Send initial handshake event (processing logs)
-		handshakeData, _ := sonic.Marshal(entries)
-		if !reader.SendEvent("active_logs", handshakeData) {
+		if !sendActiveLogs() {
 			return
 		}
 
@@ -3598,6 +3639,23 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 			}
 		}
 
+		// Periodic resync: re-send the authoritative active_logs snapshot so a
+		// client that missed a terminal log_updated (dropped when its subscriber
+		// channel filled while the producer was blocked) converges back to server
+		// truth instead of pinning a completed request as "processing" until the
+		// next connection or the client-side TTL ellapses.
+		resyncTicker := time.NewTicker(activeLogResyncInterval)
+		defer resyncTicker.Stop()
+
+		// Heartbeat: force a write attempt every second so a dead client is
+		// discovered (fasthttp fails the write and closes the reader) even while
+		// the producer is idle between events. Without it, a half-open connection
+		// keeps the subscriber channel full forever and terminal log_updated
+		// events for this client are dropped silently.
+		heartbeatDone, heartbeatExited = lib.StartSSEHeartbeat(lib.DefaultSSEHeartbeatInterval, reader.SendHeartbeat, func() {
+			reader.Close()
+		})
+
 		// Loop: push incremental log_updated events until client disconnects
 		for {
 			select {
@@ -3609,6 +3667,10 @@ func (h *LoggingHandler) getActiveLogStream(ctx *fasthttp.RequestCtx) {
 				updateEntry.Timestamp = updatedLog.Timestamp.Format(time.RFC3339Nano)
 				updateData, _ := sonic.Marshal(updateEntry)
 				if !reader.SendEvent("log_updated", updateData) {
+					return
+				}
+			case <-resyncTicker.C:
+				if !sendActiveLogs() {
 					return
 				}
 			case <-reader.CloseNotify():

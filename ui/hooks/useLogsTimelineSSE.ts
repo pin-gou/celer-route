@@ -119,6 +119,7 @@ function mergeActiveEntry(existing: ActiveLogEntry, fresh: ActiveLogEntry): Acti
 	return {
 		...existing,
 		...fresh,
+		timestamp: fresh.timestamp ?? existing.timestamp,
 		latency: fresh.latency ?? existing.latency,
 		provider: fresh.provider ?? existing.provider,
 		model: fresh.model ?? existing.model,
@@ -208,7 +209,37 @@ export function useLogsTimelineSSE(options?: UseLogsTimelineSSEOptions): UseLogs
 				clearTimeout(flushTimerRef.current);
 				flushTimerRef.current = null;
 			}
-			setActiveLogs(entries);
+			setActiveLogs((prev) => {
+				if (prev.length === 0) return entries;
+				// The snapshot is the authoritative *membership* list: ids absent
+				// from it (a request that finished while events were dropped, or
+				// between a reconnect) must leave activeLogs. But it is not the
+				// richest field source — in-flight rows already carry latency /
+				// usage that the snapshot omits. Merge each snapshot entry over its
+				// existing counterpart so membership converges to server truth
+				// without degrading already-known fields.
+				const prevById = new Map(prev.map((e) => [e.id, e]));
+				const merged = entries.map((entry) => {
+					const existing = prevById.get(entry.id);
+					return existing ? mergeActiveEntry(existing, entry) : entry;
+				});
+				// Skip the state update when the snapshot is identical to what we
+				// already have: the server re-sends it every activeLogResyncInterval
+				// even when nothing changed, and a no-op re-render of every consumer
+				// (Logs table, Timeline) is exactly the storm these hooks throttle.
+				if (merged.length === prev.length) {
+					let unchanged = true;
+					for (const entry of merged) {
+						const existing = prevById.get(entry.id);
+						if (!existing || JSON.stringify(entry) !== JSON.stringify(existing)) {
+							unchanged = false;
+							break;
+						}
+					}
+					if (unchanged) return prev;
+				}
+				return merged;
+			});
 		} catch {
 			// Silently ignore malformed data
 		}

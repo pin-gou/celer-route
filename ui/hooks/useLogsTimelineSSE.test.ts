@@ -129,6 +129,85 @@ describe("useLogsTimelineSSE — SSE hook", () => {
 	});
 
 	// -----------------------------------------------------------------------
+	// Periodic authoritative resync (backend re-sends active_logs every
+	// activeLogResyncInterval). The snapshot governs membership — rows it omits
+	// (a request finished while its terminal log_updated was dropped) must leave
+	// activeLogs — but it is not the richest field source, so richer fields that
+	// log_updated already surfaced (latency, cost) survive the merge.
+	// -----------------------------------------------------------------------
+
+	it("should drop a processing row absent from a fresh resync handshake", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		act(() => {
+			eventSource._dispatch("active_logs", [{ id: "active-1", status: "processing", provider: "openai", model: "gpt-4" }]);
+		});
+		expect(result.current.activeLogs).toHaveLength(1);
+
+		// The request finished server-side but its terminal log_updated was
+		// dropped; the periodic authoritative resync omits it. Membership must
+		// converge so the table stops rendering it as a blue "processing" row.
+		act(() => {
+			eventSource._dispatch("active_logs", []);
+		});
+		expect(result.current.activeLogs).toHaveLength(0);
+	});
+
+	it("should preserve richer fields across a resync handshake that omits them", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		// Snapshot wire shape carries only lightweight dimensions (no latency/cost).
+		const snapshot = [
+			{ id: "active-1", status: "processing", provider: "openai", model: "gpt-4", object: "chat.completion", stream: true },
+		];
+
+		act(() => {
+			eventSource._dispatch("active_logs", snapshot);
+		});
+
+		// Streaming progress arrives with latency + cost.
+		act(() => {
+			eventSource._dispatch("log_updated", { id: "active-1", status: "processing", latency_ms: 4321, cost: 0.05 });
+		});
+		act(() => {
+			vi.advanceTimersByTime(FLUSH_MS);
+		});
+		expect(result.current.activeLogs[0].latency).toBe(4321);
+		expect(result.current.activeLogs[0].cost).toBe(0.05);
+
+		// Periodic resync re-sends the bare snapshot. The merge keeps the richer
+		// fields instead of wiping them back to null every interval.
+		act(() => {
+			eventSource._dispatch("active_logs", snapshot);
+		});
+		expect(result.current.activeLogs).toHaveLength(1);
+		expect(result.current.activeLogs[0].latency).toBe(4321);
+		expect(result.current.activeLogs[0].cost).toBe(0.05);
+	});
+
+	it("should keep the state reference stable when a resync snapshot is unchanged", () => {
+		const { result } = renderHook(() => useLogsTimelineSSE());
+
+		const eventSource = (globalThis as any).EventSource.mock.results[0].value;
+		const snapshot = [{ id: "active-1", status: "processing", provider: "openai", model: "gpt-4" }];
+
+		act(() => {
+			eventSource._dispatch("active_logs", snapshot);
+		});
+		const first = result.current.activeLogs;
+
+		// The resync fires every resync interval even when nothing changed; it
+		// must not replace the array reference (which would re-render every
+		// consumer — the very storm these hooks throttle).
+		act(() => {
+			eventSource._dispatch("active_logs", snapshot);
+		});
+		expect(result.current.activeLogs).toBe(first);
+	});
+
+	// -----------------------------------------------------------------------
 	// recent_logs reconciliation
 	// -----------------------------------------------------------------------
 

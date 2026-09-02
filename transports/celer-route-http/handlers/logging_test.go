@@ -583,7 +583,11 @@ type dashboardLogManager struct {
 	log            *logstore.Log
 	timelineEvents []logstore.TimelineEvent
 	failGetLog     bool
-	activeLogs     []*logstore.Log
+	// activeLogs is the snapshot returned by GetActiveLogs. Guarded by
+	// activeLogsMu because the SSE handler reads it concurrently from the
+	// producer goroutine while a test mutates it (periodic resync tests).
+	activeLogsMu sync.Mutex
+	activeLogs   []*logstore.Log
 	// activeLogStreamCh receives Log status updates for SSE streaming
 	activeLogStreamCh chan *logstore.Log
 	// sseSubscribed is set to true when an SSE subscriber connects
@@ -802,7 +806,17 @@ func (m *dashboardLogManager) ListTimelineEventsByLogID(ctx context.Context, log
 }
 
 func (m *dashboardLogManager) GetActiveLogs(ctx context.Context) ([]*logstore.Log, error) {
+	m.activeLogsMu.Lock()
+	defer m.activeLogsMu.Unlock()
 	return m.activeLogs, nil
+}
+
+// setActiveLogs replaces the snapshot returned by GetActiveLogs. Tests call it
+// while the SSE producer goroutine may be reading the old value concurrently.
+func (m *dashboardLogManager) setActiveLogs(logs []*logstore.Log) {
+	m.activeLogsMu.Lock()
+	m.activeLogs = logs
+	m.activeLogsMu.Unlock()
 }
 
 func (m *dashboardLogManager) SubscribeActiveLogStream(ctx context.Context) (<-chan *logstore.Log, error) {
@@ -1581,11 +1595,11 @@ func TestGetLogTimeline_UpstreamSpanFailed(t *testing.T) {
 
 	var response struct {
 		Events []struct {
-			Phase    string `json:"phase"`
-			Source   string `json:"source"`
-			Status   string `json:"status"`
-			Level    string `json:"level"`
-			Message  string `json:"message"`
+			Phase    string  `json:"phase"`
+			Source   string  `json:"source"`
+			Status   string  `json:"status"`
+			Level    string  `json:"level"`
+			Message  string  `json:"message"`
 			Duration float64 `json:"duration_ms"`
 		} `json:"events"`
 	}
@@ -1795,25 +1809,32 @@ func TestGetActiveLogStream_Handshake(t *testing.T) {
 		t.Fatalf("failed to write request: %v", err)
 	}
 
-	// Read response — the body is chunked transfer-encoded.
+	// Read response — the body is chunked transfer-encoded. Heartbeat comment
+	// frames (": heartbeat\n") are skipped so a keep-alive probe arriving between
+	// the events under test cannot be mistaken for them.
 	readChunk := func(br *bufio.Reader) ([]byte, error) {
-		sizeLine, err := br.ReadString('\n')
-		if err != nil {
-			return nil, err
+		for {
+			sizeLine, err := br.ReadString('\n')
+			if err != nil {
+				return nil, err
+			}
+			sizeLine = strings.TrimSpace(sizeLine)
+			var chunkSize int
+			if _, err := fmt.Sscanf(sizeLine, "%x", &chunkSize); err != nil {
+				return nil, fmt.Errorf("parse chunk size %q: %w", sizeLine, err)
+			}
+			if chunkSize == 0 {
+				return nil, nil
+			}
+			chunkData := make([]byte, chunkSize+2)
+			if _, err := io.ReadFull(br, chunkData); err != nil {
+				return nil, err
+			}
+			if bytes.Contains(chunkData[:chunkSize], []byte(": heartbeat")) {
+				continue
+			}
+			return chunkData[:chunkSize], nil
 		}
-		sizeLine = strings.TrimSpace(sizeLine)
-		var chunkSize int
-		if _, err := fmt.Sscanf(sizeLine, "%x", &chunkSize); err != nil {
-			return nil, fmt.Errorf("parse chunk size %q: %w", sizeLine, err)
-		}
-		if chunkSize == 0 {
-			return nil, nil
-		}
-		chunkData := make([]byte, chunkSize+2)
-		if _, err := io.ReadFull(br, chunkData); err != nil {
-			return nil, err
-		}
-		return chunkData[:chunkSize], nil
 	}
 
 	br := bufio.NewReader(clientConn)
@@ -1881,6 +1902,205 @@ func TestGetActiveLogStream_Handshake(t *testing.T) {
 
 	// Close the client connection to terminate the streaming
 	clientConn.Close()
+}
+
+// ---------------------------------------------------------------------------
+// Active-log stream: periodic authoritative resync + heartbeat
+// ---------------------------------------------------------------------------
+
+// startActiveLogStreamSSE dials getActiveLogStream over an in-process net.Pipe,
+// sends the HTTP request, and returns the client connection plus a buffered
+// reader positioned after the response headers. The handler goroutine and the
+// connection are cleaned up when the test returns.
+func startActiveLogStreamSSE(t *testing.T, mgr *dashboardLogManager) (net.Conn, *bufio.Reader) {
+	t.Helper()
+	SetLogger(&mockLogger{})
+	h := &LoggingHandler{logManager: mgr}
+
+	serverConn, clientConn := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		_ = fasthttp.ServeConn(serverConn, func(ctx *fasthttp.RequestCtx) {
+			h.getActiveLogStream(ctx)
+		})
+		close(done)
+	}()
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("SSE handler did not exit after client close")
+		}
+	})
+
+	if _, err := clientConn.Write([]byte("GET /api/logs/active/stream HTTP/1.1\r\nHost: test\r\n\r\n")); err != nil {
+		t.Fatalf("failed to write request: %v", err)
+	}
+	br := bufio.NewReader(clientConn)
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("failed to read response header: %v", err)
+		}
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+	}
+	return clientConn, br
+}
+
+// readChunkWithDeadline reads one chunked-transfer-encoded body chunk from br,
+// applying the given absolute read deadline on the underlying connection.
+func readChunkWithDeadline(conn net.Conn, br *bufio.Reader, deadline time.Time) ([]byte, error) {
+	_ = conn.SetReadDeadline(deadline)
+	sizeLine, err := br.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	sizeLine = strings.TrimSpace(sizeLine)
+	var chunkSize int
+	if _, err := fmt.Sscanf(sizeLine, "%x", &chunkSize); err != nil {
+		return nil, fmt.Errorf("parse chunk size %q: %w", sizeLine, err)
+	}
+	if chunkSize == 0 {
+		return nil, nil
+	}
+	chunkData := make([]byte, chunkSize+2)
+	if _, err := io.ReadFull(br, chunkData); err != nil {
+		return nil, err
+	}
+	return chunkData[:chunkSize], nil
+}
+
+// readNextActiveLogEvent reads chunks until it finds a real event frame,
+// skipping heartbeat comment frames (": heartbeat"), and fails the test if none
+// arrives before the (absolute) deadline.
+func readNextActiveLogEvent(t *testing.T, conn net.Conn, br *bufio.Reader, timeout time.Duration) []byte {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		chunk, err := readChunkWithDeadline(conn, br, deadline)
+		if err != nil {
+			t.Fatalf("failed to read SSE event within %v: %v", timeout, err)
+		}
+		if chunk == nil {
+			t.Fatalf("SSE stream ended before an event arrived")
+		}
+		if bytes.Contains(chunk, []byte(": heartbeat")) {
+			continue
+		}
+		return chunk
+	}
+}
+
+// TestGetActiveLogStream_PeriodicResync_DropsCompletedLog reproduces the
+// "completed request pinned as processing" bug: a log finishes while the client
+// misses its terminal log_updated (notifyActiveLogSubscribers drops updates when
+// the subscriber channel is full), so the row would otherwise stay blue until
+// the next connection or the long client-side TTL. The periodic authoritative
+// resync must remove it from the next active_logs snapshot.
+//
+// RED BEFORE FIX: without the periodic resync the producer never sends a second
+// active_logs event, so readNextActiveLogEvent times out.
+func TestGetActiveLogStream_PeriodicResync_DropsCompletedLog(t *testing.T) {
+	prevInterval := activeLogResyncInterval
+	activeLogResyncInterval = 150 * time.Millisecond
+	defer func() { activeLogResyncInterval = prevInterval }()
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		activeLogs: []*logstore.Log{
+			{ID: "log-processing-1", Status: "processing", Provider: "openai", Model: "gpt-4", Timestamp: now},
+		},
+		activeLogStreamCh: make(chan *logstore.Log, 10),
+	}
+	conn, br := startActiveLogStreamSSE(t, mgr)
+	defer conn.Close()
+
+	// Handshake lists the processing log.
+	handshake := readNextActiveLogEvent(t, conn, br, 2*time.Second)
+	if !strings.Contains(string(handshake), "event: active_logs") || !strings.Contains(string(handshake), "log-processing-1") {
+		t.Fatalf("expected handshake with log-processing-1, got: %q", handshake)
+	}
+
+	// The request completes, but no terminal log_updated is pushed through the
+	// channel — exactly what the client sees when the event is dropped. The
+	// server's authoritative active set no longer lists it.
+	mgr.setActiveLogs([]*logstore.Log{})
+
+	// Within one resync interval the snapshot is re-sent without the row.
+	chunk := readNextActiveLogEvent(t, conn, br, 2*time.Second)
+	if !strings.Contains(string(chunk), "event: active_logs") {
+		t.Fatalf("expected a periodic active_logs resync event, got: %q", chunk)
+	}
+	if strings.Contains(string(chunk), "log-processing-1") {
+		t.Fatalf("resync snapshot should drop the completed log, got: %q", chunk)
+	}
+}
+
+// TestGetActiveLogStream_PeriodicResync_PicksUpNewLog verifies the resync is a
+// live snapshot, not a static echo: a request that starts after the connection
+// was established appears in the next active_logs event without needing any
+// log_updated broadcast.
+func TestGetActiveLogStream_PeriodicResync_PicksUpNewLog(t *testing.T) {
+	prevInterval := activeLogResyncInterval
+	activeLogResyncInterval = 150 * time.Millisecond
+	defer func() { activeLogResyncInterval = prevInterval }()
+
+	now := time.Now()
+	mgr := &dashboardLogManager{
+		activeLogs:        []*logstore.Log{},
+		activeLogStreamCh: make(chan *logstore.Log, 10),
+	}
+	conn, br := startActiveLogStreamSSE(t, mgr)
+	defer conn.Close()
+
+	handshake := readNextActiveLogEvent(t, conn, br, 2*time.Second)
+	if !strings.Contains(string(handshake), "event: active_logs") {
+		t.Fatalf("expected active_logs handshake, got: %q", handshake)
+	}
+
+	mgr.setActiveLogs([]*logstore.Log{
+		{ID: "log-new-1", Status: "processing", Provider: "anthropic", Model: "claude-3", Timestamp: now},
+	})
+
+	chunk := readNextActiveLogEvent(t, conn, br, 2*time.Second)
+	if !strings.Contains(string(chunk), "event: active_logs") {
+		t.Fatalf("expected a periodic active_logs resync event, got: %q", chunk)
+	}
+	if !strings.Contains(string(chunk), "log-new-1") {
+		t.Fatalf("resync snapshot should include the newly processing log, got: %q", chunk)
+	}
+}
+
+// TestGetActiveLogStream_Heartbeat verifies the stream emits a keep-alive
+// heartbeat frame on an otherwise idle connection. The heartbeat forces a write
+// attempt so a dead client is discovered (and its subscriber unsubscribed) even
+// when no log events are flowing — without it a half-open connection would keep
+// the subscriber channel full and silently drop terminal log_updated events.
+func TestGetActiveLogStream_Heartbeat(t *testing.T) {
+	// Resync stays at its default 30s here so it cannot fire in the window.
+	mgr := &dashboardLogManager{
+		activeLogs:        []*logstore.Log{},
+		activeLogStreamCh: make(chan *logstore.Log, 10),
+	}
+	conn, br := startActiveLogStreamSSE(t, mgr)
+	defer conn.Close()
+
+	handshake := readNextActiveLogEvent(t, conn, br, 2*time.Second)
+	if !strings.Contains(string(handshake), "event: active_logs") {
+		t.Fatalf("expected active_logs handshake, got: %q", handshake)
+	}
+
+	// The next frame on an idle connection should be a heartbeat (1s interval).
+	chunk, err := readChunkWithDeadline(conn, br, time.Now().Add(3*time.Second))
+	if err != nil {
+		t.Fatalf("failed to read heartbeat frame: %v", err)
+	}
+	if !strings.Contains(string(chunk), ": heartbeat") {
+		t.Fatalf("expected a heartbeat frame, got: %q", chunk)
+	}
 }
 
 // TestGetActiveLogStream_DisconnectCleanup verifies that when the SSE client
