@@ -235,9 +235,38 @@ describe("RtkFragment — pipeline-centric layout", () => {
 	it("renders the pipeline section as the first config zone", () => {
 		render(<RtkFragment plugin={makePlugin()} />);
 		expect(screen.getByTestId("pipeline-section")).toBeTruthy();
-		// The pipeline JSON editor lives inside the section.
+		// The legacy JSON pipeline editor was replaced by two checkboxes; the
+		// textarea testid must be gone so we never regress to the operator-facing
+		// raw JSON input.
+		expect(screen.queryByTestId("rtk-field-pipeline")).toBeNull();
+	});
+
+	it("exposes two engine checkboxes in the pipeline section in fixed order (rtk → caveman)", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
 		const section = screen.getByTestId("pipeline-section");
-		expect(section.contains(screen.getByTestId("rtk-field-pipeline"))).toBe(true);
+		const rtk = screen.getByTestId("pipeline-rtk-checkbox");
+		const caveman = screen.getByTestId("pipeline-caveman-checkbox");
+		expect(section.contains(rtk)).toBe(true);
+		expect(section.contains(caveman)).toBe(true);
+		// RTK must come first in the DOM (fixed pipeline order).
+		expect(rtk.compareDocumentPosition(caveman) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it("keeps the RTK checkbox checked-and-disabled (always-on, controlled by EnabledSwitch)", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		const rtk = screen.getByTestId("pipeline-rtk-checkbox") as HTMLButtonElement;
+		expect(rtk.getAttribute("data-state")).toBe("checked");
+		expect(rtk.hasAttribute("disabled")).toBe(true);
+	});
+
+	it("reflects caveman.enabled on the Caveman pipeline checkbox", () => {
+		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
+		render(<RtkFragment plugin={plugin} />);
+		const caveman = screen.getByTestId("pipeline-caveman-checkbox") as HTMLButtonElement;
+		expect(caveman.getAttribute("data-state")).toBe("checked");
+
+		fireEvent.click(caveman);
+		expect(caveman.getAttribute("data-state")).toBe("unchecked");
 	});
 
 	it("renders the RTK and Caveman engine panels as separate first-class cards", () => {
@@ -280,5 +309,34 @@ describe("RtkFragment — pipeline-centric layout", () => {
 		render(<RtkFragment plugin={plugin} />);
 		expect(screen.getByTestId("caveman-field-intensity")).toBeTruthy();
 		expect(screen.getByTestId("caveman-field-language")).toBeTruthy();
+	});
+
+	it("writes pipeline=[{id:'rtk'}] on submit when caveman is disabled", async () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		// Force a save by touching a tunable then submitting. Toggling caveman
+		// off when it's already off is a no-op, so we flip the apply_to_tool_results
+		// switch to make the form dirty.
+		fireEvent.click(screen.getByTestId("rtk-field-apply-to-tool-results"));
+		fireEvent.click(screen.getByTestId("rtk-save-btn"));
+
+		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
+		const call = mocks.updatePlugin.mock.calls.find((c: any) => c[0]?.name === "rtk");
+		expect(call).toBeDefined();
+		const cfg = (call as any)[0].data.config as any;
+		expect(cfg.pipeline).toEqual([{ id: "rtk" }]);
+	});
+
+	it("writes pipeline=[{id:'rtk'},{id:'caveman'}] on submit when caveman is enabled", async () => {
+		const plugin = makePlugin({ config: { caveman: { enabled: true } } as any });
+		render(<RtkFragment plugin={plugin} />);
+		// Flip a tunable to dirty the form so Save is enabled.
+		fireEvent.click(screen.getByTestId("rtk-field-apply-to-tool-results"));
+		fireEvent.click(screen.getByTestId("rtk-save-btn"));
+
+		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
+		const call = mocks.updatePlugin.mock.calls.find((c: any) => c[0]?.name === "rtk");
+		expect(call).toBeDefined();
+		const cfg = (call as any)[0].data.config as any;
+		expect(cfg.pipeline).toEqual([{ id: "rtk" }, { id: "caveman" }]);
 	});
 });

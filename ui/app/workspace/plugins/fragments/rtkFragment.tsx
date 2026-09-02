@@ -887,54 +887,62 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 }
 
 // ---------------------------------------------------------------------------
-// PipelineSection — pipeline orchestrator container. Houses the pipeline
-// JSON editor at the top and the cross-engine shared settings (scope,
-// snapshot, renderers, raw output, filters) underneath. Per-engine
-// configuration lives in the RtkEnginePanel / CavemanEnginePanel
-// components below — keeping pipeline + engine + shared concerns in
-// distinct zones so the operator's eye finds them in one consistent order.
+// PipelineSection — pipeline orchestrator container. Surfaces the two
+// per-engine toggles (RTK always-on, Caveman opt-in) at the top, then
+// the cross-engine shared settings (scope, snapshot, renderers, raw
+// output, filters) underneath. Per-engine configuration lives in the
+// RtkEnginePanel / CavemanEnginePanel components below — keeping
+// pipeline + engine + shared concerns in distinct zones so the
+// operator's eye finds them in one consistent order.
 // ---------------------------------------------------------------------------
 
 function PipelineSection({ form, hasUpdateAccess }: { form: ReturnType<typeof useForm<RTKFormValues>>; hasUpdateAccess: boolean }) {
 	const { t } = useTranslation("plugins");
+	// RTK is always-on (its off state lives at the top-level EnabledSwitch);
+	// the Caveman checkbox is bound to caveman.enabled so toggling it stays in
+	// sync with the per-engine configuration card below. The order is fixed
+	// (rtk → caveman) — see ConfigForm.onSubmit for the wire-format writer.
+	const rtkChecked = true;
+	const cavemanChecked = !!form.watch("caveman.enabled");
+	const setCavemanEnabled = (v: boolean) => form.setValue("caveman.enabled", v, { shouldDirty: true });
 	return (
 		<fieldset className="rounded-lg border p-4" data-testid="pipeline-section">
 			<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.pipelineSectionTitle")}</legend>
 			<div className="mt-2 space-y-4">
 				<p className="text-muted-foreground text-xs">{t("rtk.pipelineSectionIntro")}</p>
 
-				{/* Pipeline JSON editor (replaces the legacy raw textarea) */}
-				<FormField
-					control={form.control}
-					name="pipeline"
-					render={({ field }) => (
-						<FormItem>
+				<div className="space-y-3" data-testid="pipeline-engines">
+					<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+						<FormControl>
+							<Checkbox data-testid="pipeline-rtk-checkbox" checked={rtkChecked} disabled className="mt-1" />
+						</FormControl>
+						<div className="space-y-1 leading-none">
 							<div className="flex items-center gap-1.5">
-								<FormLabel>{t("rtk.pipelineLabel")}</FormLabel>
-								<HelpHint>{t("rtk.pipelineWhen")}</HelpHint>
+								<FormLabel>{t("rtk.pipelineRtkLabel")}</FormLabel>
+								<HelpHint>{t("rtk.pipelineRtkHint")}</HelpHint>
 							</div>
-							<FormControl>
-								<Textarea
-									data-testid="rtk-field-pipeline"
-									className="font-mono text-xs"
-									rows={4}
-									{...field}
-									value={typeof field.value === "string" ? field.value : JSON.stringify(field.value, null, 2)}
-									onChange={(e) => {
-										try {
-											const parsed = JSON.parse(e.target.value);
-											field.onChange(parsed);
-										} catch {
-											field.onChange(e.target.value);
-										}
-									}}
-								/>
-							</FormControl>
-							<FormDescription>{t("rtk.pipelineDescription")}</FormDescription>
-							<FormMessage />
-						</FormItem>
-					)}
-				/>
+							<FormDescription>{t("rtk.pipelineRtkDescription")}</FormDescription>
+						</div>
+					</FormItem>
+					<FormItem className="flex flex-row items-start space-y-0 space-x-3">
+						<FormControl>
+							<Checkbox
+								data-testid="pipeline-caveman-checkbox"
+								checked={cavemanChecked}
+								onCheckedChange={(v) => setCavemanEnabled(v === true)}
+								disabled={!hasUpdateAccess}
+								className="mt-1"
+							/>
+						</FormControl>
+						<div className="space-y-1 leading-none">
+							<div className="flex items-center gap-1.5">
+								<FormLabel>{t("rtk.pipelineCavemanLabel")}</FormLabel>
+								<HelpHint>{t("rtk.pipelineCavemanHint")}</HelpHint>
+							</div>
+							<FormDescription>{t("rtk.pipelineCavemanDescription")}</FormDescription>
+						</div>
+					</FormItem>
+				</div>
 
 				<Separator />
 
@@ -1360,6 +1368,12 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 
 	const onSubmit = async (values: RTKFormValues) => {
 		if (!hasUpdateAccess) return;
+		// Pipeline is derived from the per-engine toggles in the PipelineSection
+		// — RTK is always-on and listed first, Caveman trails when enabled.
+		// This keeps the wire format stable (pluginConfig.pipeline) while the
+		// UI no longer exposes the raw JSON array.
+		const pipeline = values.caveman?.enabled ? [{ id: "rtk" }, { id: "caveman" }] : [{ id: "rtk" }];
+		values.pipeline = pipeline;
 		try {
 			await updatePlugin({
 				name: RTK_PLUGIN,

@@ -116,7 +116,11 @@ export const rtkConfigSchema = z.object({
 	// the janitor reaps them. 0 disables the janitor. Default 24, range [0, 168].
 	raw_output_ttl_hours: z.number().int().min(0).max(168).optional(),
 
-	// Pipeline defines the ordered list of compression engines to run.
+	// Pipeline defines the ordered list of compression engines to run. The UI
+	// no longer exposes this as an editor — PipelineSection in rtkFragment
+	// surfaces two fixed-order checkboxes (RTK + Caveman) and ConfigForm
+	// derives the array on submit. The wire shape is preserved so persisted
+	// configs and server-side defaults stay compatible.
 	pipeline: z
 		.array(
 			z.object({
