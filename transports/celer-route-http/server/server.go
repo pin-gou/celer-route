@@ -2070,6 +2070,9 @@ type rtkAccessor struct {
 }
 
 func (a *rtkAccessor) GetFilterCatalog() rtk.FilterCatalog { return a.p.GetFilterCatalog() }
+func (a *rtkAccessor) GetCavemanRuleCatalog() rtk.CavemanRuleCatalog {
+	return a.p.GetCavemanRuleCatalog()
+}
 func (a *rtkAccessor) RunTest(payload rtk.TestPayload) rtk.TestResult {
 	return a.p.RunTest(payload)
 }

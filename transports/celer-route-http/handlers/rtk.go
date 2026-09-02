@@ -6,6 +6,7 @@
 //	GET  /api/context/rtk/config           — read the active RTK config
 //	PUT  /api/context/rtk/config           — replace the active RTK config
 //	GET  /api/context/rtk/filters          — list the loaded filter catalog
+//	GET  /api/context/rtk/caveman/rules    — built-in Caveman rule catalog (for skip_rules multi-select)
 //	POST /api/context/rtk/test             — dry-run compression against a payload
 //	GET  /api/context/rtk/raw-output/{id}  — read a persisted raw-output file
 //	GET  /api/context/rtk/stats            — process-lifetime compression counters
@@ -46,6 +47,7 @@ import (
 // adapter that resolves the live plugin instance on each call.
 type RtkPluginAccessor interface {
 	GetFilterCatalog() rtk.FilterCatalog
+	GetCavemanRuleCatalog() rtk.CavemanRuleCatalog
 	RunTest(payload rtk.TestPayload) rtk.TestResult
 	PreviewCompression(req rtk.PreviewRequest) rtk.PreviewResponse
 	ReadRawOutput(id string) (string, bool)
@@ -114,6 +116,7 @@ func (h *RtkHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.Bif
 	r.GET("/api/context/rtk/config", lib.ChainMiddlewares(h.getConfig, middlewares...))
 	r.PUT("/api/context/rtk/config", lib.ChainMiddlewares(h.putConfig, middlewares...))
 	r.GET("/api/context/rtk/filters", lib.ChainMiddlewares(h.getFilters, middlewares...))
+	r.GET("/api/context/rtk/caveman/rules", lib.ChainMiddlewares(h.getCavemanRules, middlewares...))
 	r.POST("/api/context/rtk/test", lib.ChainMiddlewares(h.postTest, middlewares...))
 	r.GET("/api/context/rtk/raw-output/{id}", h.getRawOutput)
 	r.GET("/api/context/rtk/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
@@ -293,6 +296,25 @@ func (h *RtkHandler) getFilters(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	SendJSON(ctx, accessor.GetFilterCatalog())
+}
+
+// getCavemanRules returns the built-in Caveman rule catalog so the RTK
+// admin UI can render skip_rules as a multi-select with search, grouping
+// and per-rule descriptions. The catalog is package-static, so the
+// endpoint is safe to call even before the plugin is fully initialised;
+// when the plugin is missing we still return a well-shaped empty catalog
+// so the UI can degrade gracefully (the multi-select falls back to its
+// text-input path).
+func (h *RtkHandler) getCavemanRules(ctx *fasthttp.RequestCtx) {
+	accessor, ok := h.resolver.ResolveRtkPlugin()
+	if !ok || accessor == nil {
+		SendJSON(ctx, rtk.CavemanRuleCatalog{
+			Rules:                  []rtk.CavemanRuleCatalogEntry{},
+			BuiltInPreservePatterns: []string{},
+		})
+		return
+	}
+	SendJSON(ctx, accessor.GetCavemanRuleCatalog())
 }
 
 // ---------------------------------------------------------------------------

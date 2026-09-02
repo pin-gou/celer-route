@@ -55,6 +55,7 @@ func (s *stubRtkResolver) ReloadRtkPlugin(_ *fasthttp.RequestCtx, name string, _
 // served on the wire.
 type stubRtkAccessor struct {
 	catalog      rtk.FilterCatalog
+	cavemanRules rtk.CavemanRuleCatalog
 	rawOutput    string
 	rawFound     bool
 	lastTest     rtk.TestPayload
@@ -66,6 +67,7 @@ type stubRtkAccessor struct {
 }
 
 func (s *stubRtkAccessor) GetFilterCatalog() rtk.FilterCatalog { return s.catalog }
+func (s *stubRtkAccessor) GetCavemanRuleCatalog() rtk.CavemanRuleCatalog { return s.cavemanRules }
 func (s *stubRtkAccessor) RunTest(p rtk.TestPayload) rtk.TestResult {
 	s.lastTest = p
 	return rtk.TestResult{
@@ -829,5 +831,77 @@ func TestRtkHandler_GetStatsHistogram_PluginNotLoaded(t *testing.T) {
 	status, _ := callGET(t, r, "/api/context/rtk/stats/histogram?start_time=2020-09-13T12:26:40Z&end_time=2020-09-13T14:26:40Z")
 	if status != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/context/rtk/caveman/rules
+// ---------------------------------------------------------------------------
+
+func TestRtkGetCavemanRules_LoadedPlugin(t *testing.T) {
+	cs := newMemoryConfigStore()
+	accessor := &stubRtkAccessor{
+		cavemanRules: rtk.CavemanRuleCatalog{
+			Rules: []rtk.CavemanRuleCatalogEntry{
+				{Name: "pleasantries", Label: "Strip conversational openers.", Category: "filler", Context: "all", Language: "en", MinIntensity: "lite"},
+				{Name: "articles", Label: "Drop a/an/the.", Category: "terse", Context: "all", Language: "en", MinIntensity: "full"},
+				{Name: "zh_filler_please", Label: "Strip Chinese 请…", Category: "filler", Context: "user", Language: "zh", MinIntensity: "lite"},
+			},
+			BuiltInPreservePatterns: []string{"frontmatter", "fenced-code", "url"},
+		},
+	}
+	resolver := &stubRtkResolver{accessor: accessor, found: true}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/caveman/rules")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var cat rtk.CavemanRuleCatalog
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode body: %v; body=%s", err, body)
+	}
+	if len(cat.Rules) != 3 {
+		t.Fatalf("len(Rules) = %d, want 3", len(cat.Rules))
+	}
+	if cat.Rules[0].Name != "pleasantries" {
+		t.Errorf("Rules[0].Name = %q, want pleasantries", cat.Rules[0].Name)
+	}
+	if cat.Rules[2].Language != "zh" {
+		t.Errorf("Rules[2].Language = %q, want zh", cat.Rules[2].Language)
+	}
+	if len(cat.BuiltInPreservePatterns) != 3 {
+		t.Fatalf("len(BuiltInPreservePatterns) = %d, want 3", len(cat.BuiltInPreservePatterns))
+	}
+	if cat.BuiltInPreservePatterns[0] != "frontmatter" {
+		t.Errorf("BuiltInPreservePatterns[0] = %q, want frontmatter", cat.BuiltInPreservePatterns[0])
+	}
+}
+
+func TestRtkGetCavemanRules_PluginNotLoaded_ReturnsEmpty(t *testing.T) {
+	cs := newMemoryConfigStore()
+	resolver := &stubRtkResolver{found: false}
+	r, _ := newRtkTestServer(t, cs, resolver)
+
+	status, body := callGET(t, r, "/api/context/rtk/caveman/rules")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", status, body)
+	}
+	var cat rtk.CavemanRuleCatalog
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	// Empty catalog (well-shaped, not null) so the UI can degrade gracefully.
+	if cat.Rules == nil {
+		t.Error("Rules should be a non-nil empty slice, not null")
+	}
+	if len(cat.Rules) != 0 {
+		t.Errorf("len(Rules) = %d, want 0", len(cat.Rules))
+	}
+	if cat.BuiltInPreservePatterns == nil {
+		t.Error("BuiltInPreservePatterns should be a non-nil empty slice, not null")
+	}
+	if strings.Contains(string(body), "null") {
+		t.Errorf("body must not contain 'null' for any field; got %s", string(body))
 	}
 }

@@ -1,4 +1,5 @@
 import {
+	CavemanRuleCatalog,
 	FilterCatalog,
 	PreviewRequest,
 	PreviewResponse,
@@ -33,6 +34,16 @@ export const rtkAdminApi = baseApi.injectEndpoints({
 			providesTags: ["RtkFilters"],
 		}),
 
+		// GET /api/context/rtk/caveman/rules
+		// Built-in Caveman rule catalog used by skip_rules multi-select and
+		// the preserve_patterns hint list. The data is static (plugin
+		// package-level constants), so the cache lifetime is long; reload
+		// only happens when the operator explicitly invalidates the tag.
+		getRtkCavemanRules: builder.query<CavemanRuleCatalog, void>({
+			query: () => ({ url: "/context/rtk/caveman/rules" }),
+			providesTags: ["RtkCavemanRules"],
+		}),
+
 		// POST /api/context/rtk/test
 		runRtkTest: builder.mutation<TestResult, TestPayload>({
 			query: (body) => ({ url: "/context/rtk/test", method: "POST", body }),
@@ -63,6 +74,7 @@ export const {
 	useGetRtkConfigQuery,
 	useUpdateRtkConfigMutation,
 	useGetRtkFiltersQuery,
+	useGetRtkCavemanRulesQuery,
 	useRunRtkTestMutation,
 	usePreviewCompressionMutation,
 	useGetRtkRawOutputQuery,

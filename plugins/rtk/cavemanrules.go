@@ -59,6 +59,7 @@ type cavemanRule struct {
 	afterRe      *regexp.Regexp
 	context      CavemanRuleContext
 	category     string
+	description  string
 	minIntensity CavemanIntensity
 }
 
@@ -98,6 +99,7 @@ func compileCavemanRule(r CavemanRule) *cavemanRule {
 		staticRepl:   r.Replacement,
 		context:      r.Context,
 		category:     r.Category,
+		description:  r.Description,
 		minIntensity: r.MinIntensity,
 	}
 	if c.minIntensity == "" {

@@ -145,3 +145,24 @@ export const RTK_RAW_OUTPUT_ID_PATTERN = /^[0-9a-fA-F]{24}$/;
 export function isValidRawOutputID(id: string): boolean {
 	return RTK_RAW_OUTPUT_ID_PATTERN.test(id);
 }
+
+// ---------------------------------------------------------------------------
+// /api/context/rtk/caveman/rules
+// ---------------------------------------------------------------------------
+
+// CavemanRuleCatalogEntry mirrors the Go struct at
+// plugins/rtk/cavemancatalog.go. The shape is consumed by the skip_rules
+// multi-select and the preserve_patterns hint list in rtkFragment.tsx.
+export interface CavemanRuleCatalogEntry {
+	name: string;
+	label: string;
+	category?: string;
+	context: "all" | "user" | "system" | "assistant";
+	language: "en" | "zh";
+	minIntensity: "lite" | "full" | "ultra";
+}
+
+export interface CavemanRuleCatalog {
+	rules: CavemanRuleCatalogEntry[];
+	builtInPreservePatterns: string[];
+}

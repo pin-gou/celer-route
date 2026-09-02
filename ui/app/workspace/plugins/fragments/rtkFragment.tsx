@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { MultiSelect, type MultiSelectGroup, type MultiSelectOption } from "@/components/ui/multiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -12,8 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGetRtkStatsQuery, useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
+import { useGetRtkCavemanRulesQuery } from "@/lib/store/apis/rtkAdminApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { RTK_PLUGIN, rtkConfigSchema, type Plugin, type RtkEngineStat } from "@/lib/types/plugins";
+import { type CavemanRuleCatalogEntry } from "@/lib/types/rtk";
 import { Link } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Activity, Beaker, ExternalLink, FlaskConical, HelpCircle, Image as ImageIcon, Info, RotateCcw, Undo2 } from "lucide-react";
@@ -51,6 +54,31 @@ function effectiveMaxLines(base: number, intensity: string): number {
 		default:
 			return Math.max(1, Math.round(v));
 	}
+}
+
+// ---------------------------------------------------------------------------
+// toSkipRulesOption — projects one catalog row into the shape MultiSelect
+// expects. The i18n key rtk.cavemanRule.<name> is consulted for the
+// description so the label follows the active language; when the key is
+// missing the catalog-provided label (English) is the fallback.
+// ---------------------------------------------------------------------------
+
+function toSkipRulesOption(rule: CavemanRuleCatalogEntry, description: string): MultiSelectOption {
+	return {
+		value: rule.name,
+		label: rule.name,
+		description,
+	};
+}
+
+// splitCommaList is the shared parser used by the legacy comma-separated
+// fields (preserve_patterns). Empty entries are dropped.
+function splitCommaList(raw: string): string[] {
+	if (!raw) return [];
+	return raw
+		.split(/\s*,\s*/)
+		.map((s) => s.trim())
+		.filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------
@@ -846,6 +874,36 @@ function RtkEnginePanel({
 
 function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof useForm<RTKFormValues>>; hasUpdateAccess: boolean }) {
 	const { t } = useTranslation("plugins");
+	const cavemanRulesQuery = useGetRtkCavemanRulesQuery();
+	const cavemanRules = cavemanRulesQuery.data?.rules ?? [];
+	const builtInPreservePatterns = cavemanRulesQuery.data?.builtInPreservePatterns ?? [];
+
+	// skip_rules → group rules by category so the dropdown reads naturally.
+	// Each option's secondary text shows the canonical description; unknown
+	// names (from older hand-typed configs) flow through as a warning row
+	// rather than being silently dropped.
+	const skipRulesGroups = useMemo<MultiSelectGroup[]>(() => {
+		if (cavemanRules.length === 0) return [];
+		const byCategory = new Map<string, CavemanRuleCatalogEntry[]>();
+		for (const r of cavemanRules) {
+			const cat = r.category || "other";
+			if (!byCategory.has(cat)) byCategory.set(cat, []);
+			byCategory.get(cat)!.push(r);
+		}
+		const groupOrder = ["filler", "terse", "context", "structural", "dedup", "ultra"];
+		const groups: MultiSelectGroup[] = [];
+		for (const cat of groupOrder) {
+			const rules = byCategory.get(cat);
+			if (!rules || rules.length === 0) continue;
+			groups.push({
+				heading: t(`rtk.cavemanSkipRulesGroup${cat.charAt(0).toUpperCase()}${cat.slice(1)}`),
+				options: rules.map((r) => toSkipRulesOption(r, t(`rtk.cavemanRule.${r.name}`, { defaultValue: r.label }))),
+			});
+		}
+		return groups;
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- toSkipRulesOption closes over t
+	}, [cavemanRules, t]);
+
 	// The Caveman tab is only rendered while caveman.enabled is true (the
 	// pipeline checkbox in EnabledSwitchPanel is the single source of truth for
 	// toggling the engine), so the sub-fields below render unconditionally here
@@ -914,48 +972,93 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 				<FormField
 					control={form.control}
 					name="caveman.skip_rules"
-					render={({ field }) => (
-						<FormItem>
-							<div className="flex items-center gap-1.5">
-								<FormLabel>{t("rtk.cavemanSkipRulesLabel")}</FormLabel>
-								<HelpHint>{t("rtk.cavemanSkipRulesWhen")}</HelpHint>
-							</div>
-							<FormControl>
-								<Input
-									data-testid="caveman-field-skip-rules"
-									placeholder="e.g. pleasantries, articles"
-									{...field}
-									value={Array.isArray(field.value) ? field.value.join(", ") : ""}
-									onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
-								/>
-							</FormControl>
-							<FormDescription>{t("rtk.cavemanSkipRulesDescription")}</FormDescription>
-							<FormMessage />
-						</FormItem>
-					)}
+					render={({ field }) => {
+						const knownNames = new Set(cavemanRules.map((r) => r.name));
+						const fieldValue = Array.isArray(field.value) ? field.value : [];
+						const unknownNames = fieldValue.filter((n) => n && !knownNames.has(n));
+						return (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.cavemanSkipRulesLabel")}</FormLabel>
+									<HelpHint>{t("rtk.cavemanSkipRulesWhen")}</HelpHint>
+								</div>
+								<FormControl>
+									<MultiSelect
+										options={skipRulesGroups}
+										value={fieldValue}
+										resetOnDefaultValueChange={false}
+										onValueChange={(vals) => field.onChange(vals)}
+										placeholder={cavemanRulesQuery.isError ? t("rtk.cavemanSkipRulesLoadError") : t("rtk.cavemanSkipRulesPlaceholder")}
+										emptyIndicator={t("rtk.cavemanSkipRulesEmpty")}
+										hideSelectAll
+										maxCount={3}
+										data-testid="caveman-field-skip-rules"
+										disabled={!hasUpdateAccess}
+									/>
+								</FormControl>
+								<FormDescription>{t("rtk.cavemanSkipRulesDescription")}</FormDescription>
+								{unknownNames.length > 0 && (
+									<p className="text-muted-foreground mt-1 text-xs">
+										{t("rtk.cavemanSkipRulesUnknownWarning", { names: unknownNames.join(", ") })}
+									</p>
+								)}
+								<FormMessage />
+							</FormItem>
+						);
+					}}
 				/>
 				<FormField
 					control={form.control}
 					name="caveman.preserve_patterns"
-					render={({ field }) => (
-						<FormItem>
-							<div className="flex items-center gap-1.5">
-								<FormLabel>{t("rtk.cavemanPreserveLabel")}</FormLabel>
-								<HelpHint>{t("rtk.cavemanPreserveWhen")}</HelpHint>
-							</div>
-							<FormControl>
-								<Input
-									data-testid="caveman-field-preserve-patterns"
-									placeholder="e.g. THE_BRAND_NAME"
-									{...field}
-									value={Array.isArray(field.value) ? field.value.join(", ") : ""}
-									onChange={(e) => field.onChange(e.target.value ? e.target.value.split(/\s*,\s*/).filter(Boolean) : [])}
-								/>
-							</FormControl>
-							<FormDescription>{t("rtk.cavemanPreserveDescription")}</FormDescription>
-							<FormMessage />
-						</FormItem>
-					)}
+					render={({ field }) => {
+						const fieldValue = Array.isArray(field.value) ? field.value : [];
+						const invalid = fieldValue.filter((p) => {
+							if (!p) return false;
+							try {
+								// eslint-disable-next-line no-new -- RegExp constructor throws on bad patterns
+								new RegExp(p);
+								return false;
+							} catch {
+								return true;
+							}
+						});
+						return (
+							<FormItem>
+								<div className="flex items-center gap-1.5">
+									<FormLabel>{t("rtk.cavemanPreserveLabel")}</FormLabel>
+									<HelpHint>{t("rtk.cavemanPreserveWhen")}</HelpHint>
+								</div>
+								<FormControl>
+									<Textarea
+										data-testid="caveman-field-preserve-patterns"
+										placeholder={t("rtk.cavemanPreservePlaceholder")}
+										rows={3}
+										value={fieldValue.join(", ")}
+										onChange={(e) => field.onChange(splitCommaList(e.target.value))}
+										onBlur={(e) => field.onChange(splitCommaList(e.target.value))}
+									/>
+								</FormControl>
+								<FormDescription>{t("rtk.cavemanPreserveDescription")}</FormDescription>
+								{invalid.length > 0 && (
+									<p className="text-muted-foreground mt-1 text-xs">{t("rtk.cavemanPreserveUnknownWarning", { count: invalid.length })}</p>
+								)}
+								{builtInPreservePatterns.length > 0 && (
+									<details className="text-muted-foreground mt-2 text-xs">
+										<summary className="cursor-pointer select-none">{t("rtk.cavemanPreserveBuiltInTitle")}</summary>
+										<p className="mt-1">{t("rtk.cavemanPreserveBuiltInHint")}</p>
+										<ul className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 pl-4 sm:grid-cols-3">
+											{builtInPreservePatterns.map((name) => (
+												<li key={name} className="font-mono">
+													{name}
+												</li>
+											))}
+										</ul>
+									</details>
+								)}
+								<FormMessage />
+							</FormItem>
+						);
+					}}
 				/>
 			</div>
 		</fieldset>
