@@ -10,6 +10,13 @@
     "shell"
   ],
   "stripAnsi": true,
+  "stripPatterns": [
+    "^\\s*$",
+    "^Destroying \\(",
+    "^View in Browser",
+    "^\\s*Type\\s+Name\\s+Status",
+    "^Duration:"
+  ],
   "onEmpty": "pulumi destroy: nothing to destroy",
   "tests": [
     {

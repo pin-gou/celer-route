@@ -10,6 +10,13 @@
     "shell"
   ],
   "stripAnsi": true,
+  "stripPatterns": [
+    "^\\s*$",
+    "^Previewing ",
+    "^View in Browser",
+    "^\\s*Type\\s+Name\\s+Plan",
+    "^Duration:"
+  ],
   "onEmpty": "pulumi preview: no changes",
   "tests": [
     {

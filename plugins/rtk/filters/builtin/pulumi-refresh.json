@@ -10,6 +10,13 @@
     "shell"
   ],
   "stripAnsi": true,
+  "stripPatterns": [
+    "^\\s*$",
+    "^Refreshing \\(",
+    "^View in Browser",
+    "^\\s*Type\\s+Name\\s+Status",
+    "^Duration:"
+  ],
   "onEmpty": "pulumi refresh: no drift",
   "tests": [
     {

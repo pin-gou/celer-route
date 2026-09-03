@@ -6,7 +6,8 @@
     {"type": "strip", "pattern": "^Test Suites:"},
     {"type": "strip", "pattern": "^Snapshots:\\s+\\d+"},
     {"type": "strip", "pattern": "^Time:\\s+"},
-    {"type": "strip", "pattern": "^Ran all test suites"}
+    {"type": "strip", "pattern": "^Ran all test suites"},
+    {"type": "strip", "pattern": "^\\s*[✕✗×]\\s+"}
   ],
   "head": 5,
   "tail": 5,

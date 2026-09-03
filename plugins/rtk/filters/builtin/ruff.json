@@ -1,9 +1,6 @@
 {
   "name": "ruff",
   "command": "ruff",
-  "rules": [
-    {"type": "strip", "pattern": "^Found \\d+ errors?\\.$"}
-  ],
   "head": 30,
   "tail": 5,
   "priority_patterns": ["error", "warning"],

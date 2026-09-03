@@ -5,7 +5,9 @@
     {"type": "strip", "pattern": "^={3,}\\s+test session starts\\s+={3,}.*$"},
     {"type": "strip", "pattern": "^={3,}\\s+warnings summary\\s+={3,}.*$"},
     {"type": "strip", "pattern": "^\\.\\.\\.+\\s*$"},
-    {"type": "strip", "pattern": "^tests/[\\w/_.-]+\\.py:\\d+:"}
+    {"type": "strip", "pattern": "^tests/[\\w/_.-]+\\.py"},
+    {"type": "strip", "pattern": "^collected \\d+ items"},
+    {"type": "strip", "pattern": "^\\s*$"}
   ],
   "head": 3,
   "tail": 3,

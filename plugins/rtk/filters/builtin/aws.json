@@ -2,7 +2,8 @@
   "name": "aws",
   "command": "aws",
   "rules": [
-    {"type": "strip", "pattern": "^\\s*$"}
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^HTTP \\d{3}\\s*$"}
   ],
   "head": 20,
   "tail": 10,

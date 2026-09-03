@@ -3,6 +3,9 @@
   "command": "wget",
   "rules": [
     {"type": "strip", "pattern": "^--\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}--\\s+\\S+\\s*$"},
+    {"type": "strip", "pattern": "^Resolving "},
+    {"type": "strip", "pattern": "^Connecting to "},
+    {"type": "strip", "pattern": "^Length: "},
     {"type": "strip", "pattern": "^Saving to: '[^']+'$"},
     {"type": "strip", "pattern": "^\\d+[K\\s]\\s+\\d+[K\\s]"},
     {"type": "strip", "pattern": "^\\d+[K\\s]\\s+\\d+[K\\s].*in \\S+"}

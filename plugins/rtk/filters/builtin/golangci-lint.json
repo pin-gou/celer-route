@@ -2,7 +2,9 @@
   "name": "golangci-lint",
   "command": "golangci-lint",
   "rules": [
-    {"type": "strip", "pattern": "^level=info"}
+    {"type": "strip", "pattern": "^level=info"},
+    {"type": "strip", "pattern": "^\\d+ issues?:"},
+    {"type": "strip", "pattern": "^ \\* "}
   ],
   "head": 20,
   "tail": 5,

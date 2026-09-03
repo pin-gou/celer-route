@@ -2,7 +2,7 @@
   "name": "build-eslint",
   "command": "eslint",
   "rules": [
-    {"type": "strip", "pattern": "^\\s*$"}
+    {"type": "strip", "pattern": "^\\s+\\d+:\\d+\\s+warning\\s"}
   ],
   "head": 20,
   "tail": 5,

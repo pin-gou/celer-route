@@ -3,7 +3,8 @@
   "command": "poetry install",
   "rules": [
     {"type": "strip", "pattern": "^Installing dependencies from lock file$"},
-    {"type": "strip", "pattern": "^Package operations:"}
+    {"type": "strip", "pattern": "^Package operations:"},
+    {"type": "strip", "pattern": "^\\s*$"}
   ],
   "head": 5,
   "tail": 10,

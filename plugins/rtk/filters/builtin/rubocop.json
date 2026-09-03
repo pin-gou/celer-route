@@ -3,7 +3,11 @@
   "command": "rubocop",
   "rules": [
     {"type": "strip", "pattern": "^Inspecting \\d+ files"},
-    {"type": "strip", "pattern": "^\\d+ files? inspected, no offenses detected$"}
+    {"type": "strip", "pattern": "^\\d+ files? inspected, no offenses detected$"},
+    {"type": "strip", "pattern": "^\\.+$"},
+    {"type": "strip", "pattern": "^Offenses:\\s*$"},
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^\\d+ files? inspected"}
   ],
   "head": 20,
   "tail": 5,

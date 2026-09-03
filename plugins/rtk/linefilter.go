@@ -266,7 +266,20 @@ func applyLineFilter(input string, filter *Filter) string {
 		kept[i] = true
 	}
 
-	// Compile and apply each rule in order.
+	// Compile and apply each rule in order. All "keep" rules are collected
+	// first and applied as a single OR pass (a line survives if it matches
+	// ANY keep pattern), matching the canonical keepPatterns contract of
+	// multi-pattern filters (e.g. spring-boot's 11 entry keep list). Applying
+	// each keep rule sequentially would AND them together and drop every line.
+	var keepREs []*regexp.Regexp
+	for _, rule := range filter.Rules {
+		if rule.Type == "keep" && rule.Pattern != "" {
+			if re, err := regexp.Compile(rule.Pattern); err == nil {
+				keepREs = append(keepREs, re)
+			}
+		}
+	}
+
 	for _, rule := range filter.Rules {
 		if rule.Pattern == "" {
 			continue
@@ -285,11 +298,7 @@ func applyLineFilter(input string, filter *Filter) string {
 			}
 
 		case "keep":
-			for i, line := range content {
-				if kept[i] && !re.MatchString(line) {
-					kept[i] = false
-				}
-			}
+			// Applied as a single OR pass after all non-keep rules run.
 
 		case "collapse":
 			prevBlank := false
@@ -313,6 +322,27 @@ func applyLineFilter(input string, filter *Filter) string {
 		}
 	}
 
+	// Apply the keep pass (OR semantics): a line that is still alive survives
+	// iff it matches at least one keep pattern. Lines already dropped by a
+	// strip rule are never resurrected.
+	if len(keepREs) > 0 {
+		for i, line := range content {
+			if !kept[i] {
+				continue
+			}
+			matched := false
+			for _, kre := range keepREs {
+				if kre.MatchString(line) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				kept[i] = false
+			}
+		}
+	}
+
 	// Build result. When TruncateLineAt is set, cap each surviving line to
 	// that many runes (rune-safe so multi-byte characters are never split).
 	// This mirrors rtk TOML's truncate_lines_at for wide outputs (ps, jq,
@@ -328,6 +358,19 @@ func applyLineFilter(input string, filter *Filter) string {
 		}
 	}
 
+	if len(result) == 0 {
+		return ""
+	}
+
+	// Drop leading blank lines: stripping a filter's first line (e.g. a
+	// "Checked N files..." banner) leaves its trailing blank line as the new
+	// head of the result. A leading blank is pure noise — the pipeline's
+	// strip rules cannot express "blank that follows a removed header" —
+	// so trim blank lines from the front before joining. Internal blanks
+	// (section separators) are preserved.
+	for len(result) > 0 && strings.TrimSpace(result[0]) == "" {
+		result = result[1:]
+	}
 	if len(result) == 0 {
 		return ""
 	}

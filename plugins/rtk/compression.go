@@ -834,6 +834,17 @@ func processRtkTextWithCommand(ctx *schemas.BifrostContext, input string, config
 		stats.Techniques = append(stats.Techniques, "charlimit")
 	}
 
+	// 10b. OnEmpty fallback: when the filter pipeline reduces the output to
+	// nothing (all noise stripped, empty input, or smart truncation dropped
+	// every line), a filter that declares an onEmpty message replaces the
+	// empty result with that single summary line (e.g. "gcc: ok"). The
+	// replacement is best-effort — input is never expanded, only swapped
+	// when we would otherwise emit an empty tool result.
+	if strings.TrimSpace(result) == "" && filter.OnEmpty != "" {
+		result = filter.OnEmpty
+		stats.Techniques = append(stats.Techniques, "onEmpty")
+	}
+
 	stats.CompressedTokens = estimateTokens(result)
 	maybePersistRawOutput(stats, text, config, loader, cmd)
 	result = appendRawOutputHint(result, stats, recoveryBaseURL)

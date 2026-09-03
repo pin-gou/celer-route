@@ -3,7 +3,8 @@
   "command": "composer",
   "rules": [
     {"type": "strip", "pattern": "^Loading composer repositories"},
-    {"type": "strip", "pattern": "^Updating dependencies"}
+    {"type": "strip", "pattern": "^Updating dependencies"},
+    {"type": "strip", "pattern": "^Installing dependencies from lock file"}
   ],
   "head": 10,
   "tail": 10,

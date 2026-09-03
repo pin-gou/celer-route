@@ -3,7 +3,6 @@
   "command": "vitest",
   "rules": [
     {"type": "strip", "pattern": "^\\(node:\\d+\\)"},
-    {"type": "strip", "pattern": "^Test Files\\s+\\d+"},
     {"type": "strip", "pattern": "^Snapshots\\s+"},
     {"type": "strip", "pattern": "^Time\\s+"},
     {"type": "strip", "pattern": "^Duration\\s+"},

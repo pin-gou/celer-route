@@ -17,7 +17,6 @@
     {"type": "strip", "pattern": "^Refreshing state"},
     {"type": "strip", "pattern": "^\\s*#.*unchanged"},
     {"type": "strip", "pattern": "^\\s*$"},
-    {"type": "strip", "pattern": "^Acquiring state lock"},
     {"type": "strip", "pattern": "^Releasing state lock"}
   ],
   "head": 20,

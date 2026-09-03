@@ -4,7 +4,10 @@
   "description": "Compact systemctl status output — strip ANSI colors and blank lines.",
   "stripAnsi": true,
   "rules": [
-    {"type": "strip", "pattern": "^\\s*$"}
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^\\s*Main PID:"},
+    {"type": "strip", "pattern": "^\\s*Tasks:"},
+    {"type": "strip", "pattern": "^\\s*Memory:"}
   ],
   "head": 30,
   "tail": 20,

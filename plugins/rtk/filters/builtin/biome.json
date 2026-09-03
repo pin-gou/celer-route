@@ -7,7 +7,8 @@
     {"type": "strip", "pattern": "^Checked \\d+ files? in"},
     {"type": "strip", "pattern": "^Fixed \\d+ files?"},
     {"type": "strip", "pattern": "^The following command"},
-    {"type": "strip", "pattern": "^Run it with"}
+    {"type": "strip", "pattern": "^Run it with"},
+    {"type": "strip", "pattern": "^  Suppressed lint reason:"}
   ],
   "head": 10,
   "tail": 5,

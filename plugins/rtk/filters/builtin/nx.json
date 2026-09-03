@@ -3,7 +3,9 @@
   "command": "nx",
   "rules": [
     {"type": "strip", "pattern": "^NX\\s+"},
-    {"type": "strip", "pattern": "^>\\s*nx\\s+run"}
+    {"type": "strip", "pattern": "^>\\s*nx\\s+run"},
+    {"type": "strip", "pattern": "^\\s*$"},
+    {"type": "strip", "pattern": "^See logs and run details"}
   ],
   "head": 10,
   "tail": 10,
