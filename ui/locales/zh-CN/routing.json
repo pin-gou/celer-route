@@ -121,6 +121,7 @@
 		"celPlaceholder": "e.g. model == \"claude-sonnet-4-6\"",
 		"emptyExpressionPreview": "暂无规则",
 		"emptyExpressionHelper": "留空以匹配所有请求。",
+		"virtualModelHint": "对 model 字段使用 \"==\" 或 \"in [ ... ]\" 才能让此虚拟模型出现在 /v1/models 中；其他运算符仍可在请求时匹配，但不会出现在模型列表里。",
 		"switchToBuilderTitle": "切换到可视化构建器？",
 		"switchToBuilderDesc": "可视化构建器无法导入手写的表达式，当前表达式将丢失，构建器将重新开始。如需保留，请先复制。",
 		"switchToBuilderAction": "放弃并切换",

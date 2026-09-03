@@ -878,6 +878,7 @@ func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 	}
 
 	enrichListModelsResponse(resp, h.config.ModelCatalog)
+	h.enrichListModelsWithRoutingRuleBackfill(resp, bifrostCtx)
 	if resp != nil {
 		lib.ApplyBifrostResponseHeaders(ctx, bifrostCtx, resp.ExtraFields)
 	}

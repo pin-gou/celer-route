@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { RuleGroupType } from "react-querybuilder";
 import { RoutingRule } from "@/lib/types/routingRules";
 import {
+	detectNonLiteralModelOperator,
 	generateRoutingTestCommandCurl,
 	generateRoutingTestCommandGo,
 	generateRoutingTestCommandNode,
@@ -111,5 +113,68 @@ describe("routing test command snippets", () => {
 			const out = generateRoutingTestCommandGo(rule, opts);
 			expect(out).toContain('"sk-real"');
 		});
+	});
+});
+
+describe("detectNonLiteralModelOperator", () => {
+	it("returns false for empty input", () => {
+		expect(detectNonLiteralModelOperator({})).toBe(false);
+	});
+
+	it("returns false for model == literal in CEL", () => {
+		expect(detectNonLiteralModelOperator({ celExpression: 'model == "pg-expert"' })).toBe(false);
+	});
+
+	it("returns false for model in list in CEL", () => {
+		expect(
+			detectNonLiteralModelOperator({
+				celExpression: 'model in ["pg-expert", "pg-associate"]',
+			}),
+		).toBe(false);
+	});
+
+	it("returns true for model != literal in CEL", () => {
+		expect(detectNonLiteralModelOperator({ celExpression: 'model != "pg-expert"' })).toBe(true);
+	});
+
+	it("returns true for model.startsWith in CEL", () => {
+		expect(detectNonLiteralModelOperator({ celExpression: 'model.startsWith("pg-")' })).toBe(true);
+	});
+
+	it("returns false for query builder with operator ==", () => {
+		const q: RuleGroupType = {
+			combinator: "and",
+			rules: [{ field: "model", operator: "=", value: "pg-expert" }],
+		};
+		expect(detectNonLiteralModelOperator({ query: q })).toBe(false);
+	});
+
+	it("returns true for query builder with startsWith", () => {
+		const q: RuleGroupType = {
+			combinator: "and",
+			rules: [{ field: "model", operator: "startsWith", value: "pg-" }],
+		};
+		expect(detectNonLiteralModelOperator({ query: q })).toBe(true);
+	});
+
+	it("returns true for query builder with !=", () => {
+		const q: RuleGroupType = {
+			combinator: "and",
+			rules: [{ field: "model", operator: "!=", value: "x" }],
+		};
+		expect(detectNonLiteralModelOperator({ query: q })).toBe(true);
+	});
+
+	it("walks nested groups", () => {
+		const q: RuleGroupType = {
+			combinator: "and",
+			rules: [
+				{
+					combinator: "or",
+					rules: [{ field: "model", operator: "contains", value: "x" }],
+				},
+			],
+		};
+		expect(detectNonLiteralModelOperator({ query: q })).toBe(true);
 	});
 });

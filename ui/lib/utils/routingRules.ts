@@ -7,6 +7,58 @@ import { RuleGroupType, RuleType } from "react-querybuilder";
 import { RoutingRule } from "@/lib/types/routingRules";
 
 /**
+ * Returns true when a routing rule's model field uses an operator that does
+ * NOT expose a literal name to /v1/models. Backed by the server-side
+ * framework/routing.ExtractModelLiterals — only model == "x" and model in [...]
+ * produce virtual-model entries on the wire, so any other operator should
+ * warn the user at edit time.
+ *
+ * Used by the routing-rule sheet to surface a hint when the user picks a
+ * non-literal model predicate. The function is informational — the editor
+ * never blocks save, because dynamic rules still work at request time, they
+ * just don't show up in the model catalog.
+ */
+export function detectNonLiteralModelOperator(input: { celExpression?: string; query?: RuleGroupType | null }): boolean {
+	const cel = input.celExpression ?? "";
+	if (cel) {
+		if (hasNonLiteralModelPredicateInCEL(cel)) return true;
+	}
+	const query = input.query;
+	if (query) {
+		if (hasNonLiteralModelPredicateInQuery(query)) return true;
+	}
+	return false;
+}
+
+function hasNonLiteralModelPredicateInCEL(expr: string): boolean {
+	// Find any `model OP ...` predicate and check whether OP exposes a
+	// literal we can backfill into /v1/models.
+	//
+	// Only `model == "x"` and `model in ["x","y"]` produce literals; every
+	// other operator (including != which is a reverse predicate) cannot be
+	// enumerated.
+	const m = expr.match(/\bmodel\s*(\.startsWith\(|\.endsWith\(|\.contains\(|\.matches\(|==|!=|!in|in\b)/);
+	if (!m) return false;
+	const op = m[1];
+	if (op === "==" || op === "in") return false;
+	return true;
+}
+
+function hasNonLiteralModelPredicateInQuery(rule: RuleGroupType): boolean {
+	for (const child of rule.rules || []) {
+		if ("rules" in child) {
+			if (hasNonLiteralModelPredicateInQuery(child as RuleGroupType)) return true;
+			continue;
+		}
+		const r = child as RuleType;
+		if (r.field !== "model") continue;
+		const op = r.operator;
+		if (op !== "=" && op !== "==" && op !== "in") return true;
+	}
+	return false;
+}
+
+/**
  * Validates if a CEL expression has basic correct syntax
  * @param expression - The CEL expression to validate
  * @returns true if expression appears syntactically valid

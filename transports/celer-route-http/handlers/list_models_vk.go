@@ -7,9 +7,21 @@ import (
 
 	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/pin-gou/celer-route/framework/configstore"
+	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
 	governanceplugin "github.com/pin-gou/celer-route/plugins/governance"
 	"github.com/valyala/fasthttp"
 )
+
+// listModelsResolvedVKKey is the bifrost context key under which
+// applyListModelsVirtualKeyProviderFilter stashes the resolved *TableVirtualKey
+// for the duration of a single GET /v1/models call. The backfill stage reads
+// it to compute the routing-rule scope chain without re-querying the config
+// store.
+//
+// Kept handler-local (not on schemas.BifrostContextKey) because the value
+// type is a concrete configstore row and core/schemas must stay free of that
+// dependency.
+var listModelsResolvedVKKey schemas.BifrostContextKey = "list-models-resolved-virtual-key"
 
 // applyListModelsVirtualKeyProviderFilter narrows provider fan-out for GET /v1/models
 // when the request is made with a virtual key. Without this, ListAllModels asks every
@@ -53,5 +65,23 @@ func (h *CompletionHandler) applyListModelsVirtualKeyProviderFilter(ctx *fasthtt
 	}
 
 	bifrostCtx.SetValue(schemas.BifrostContextKeyAvailableProviders, availableProviders)
+	// Stash the resolved VK for the backfill stage below. We hand the caller
+	// back a copy of the pointer so any later state mutation on the store's
+	// in-memory copy doesn't desync the snapshot we recorded here.
+	if vk != nil {
+		bifrostCtx.SetValue(listModelsResolvedVKKey, vk)
+	}
 	return true
+}
+
+// resolvedVKFromBifrostContext returns the *TableVirtualKey that
+// applyListModelsVirtualKeyProviderFilter stashed on bifrostCtx, or nil
+// when the request did not carry a virtual key. Returns a typed *TableVirtualKey
+// to avoid an interface{} assertion site at every caller.
+func resolvedVKFromBifrostContext(bifrostCtx *schemas.BifrostContext) *configstoreTables.TableVirtualKey {
+	if bifrostCtx == nil {
+		return nil
+	}
+	v, _ := bifrostCtx.Value(listModelsResolvedVKKey).(*configstoreTables.TableVirtualKey)
+	return v
 }

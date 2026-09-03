@@ -121,6 +121,7 @@
 		"celPlaceholder": "e.g. model == \"claude-sonnet-4-6\"",
 		"emptyExpressionPreview": "No rules defined yet",
 		"emptyExpressionHelper": "Leave empty to match all requests.",
+		"virtualModelHint": "Use \"==\" or \"in [ ... ]\" for the model field so this virtual model appears in /v1/models. Other operators still match at request time, but won't show up in the model catalog.",
 		"switchToBuilderTitle": "Switch to the visual builder?",
 		"switchToBuilderDesc": "The visual builder can't import a hand-written expression, so your current expression will be discarded and the builder will start empty. Copy it first if you want to keep it.",
 		"switchToBuilderAction": "Discard & switch",

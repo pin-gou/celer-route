@@ -13,17 +13,19 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alertDialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, Copy, Info, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Field, QueryBuilder, RuleGroupType } from "react-querybuilder";
 import "react-querybuilder/dist/query-builder.css";
 import { normalizeRoutingRuleGroupQuery } from "@/lib/utils/routingRuleGroupQuery";
+import { detectNonLiteralModelOperator } from "@/lib/utils/routingRules";
 import { ActionButton } from "./actionButton";
 import { CombinatorSelector } from "./combinatorSelector";
 import { FieldSelector } from "./fieldSelector";
@@ -190,6 +192,18 @@ export function CELRuleBuilder({
 		applySwitchToBuilder();
 	};
 
+	// /v1/models only surfaces rules whose model predicate is a literal
+	// ("==" or "in [...]"). Surface a hint when the user picks any other
+	// operator — informational only, never blocks save.
+	const nonLiteralDetected = useMemo(
+		() =>
+			detectNonLiteralModelOperator({
+				celExpression: mode === "cel" ? celText : celExpression,
+				query: mode === "builder" ? query : null,
+			}),
+		[mode, celText, celExpression, query],
+	);
+
 	// Show loading state
 	if (isLoading) {
 		return (
@@ -270,6 +284,13 @@ export function CELRuleBuilder({
 						</QueryBuilderWrapper>
 					</div>
 				</div>
+			)}
+
+			{nonLiteralDetected && (
+				<Alert variant="info" data-testid="cel-builder-virtual-model-hint">
+					<Info className="h-4 w-4" />
+					<AlertDescription>{t("sheet.virtualModelHint")}</AlertDescription>
+				</Alert>
 			)}
 
 			{(mode === "cel" || !options.hideCELExpression) && (

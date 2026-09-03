@@ -171,3 +171,14 @@ sidebar_position: 1
 - **按请求头路由** → 条件设为 `headers["x-route-to"] == "canary"`，金丝雀流量走指定提供商
 - **按复杂度路由** → 先在复杂度路由页调好阈值和关键词，再在路由规则里用 `complexity_tier == "reasoning"`
   把推理类请求路由到推理模型
+
+## 虚拟模型与 `/v1/models`
+
+当路由规则的匹配条件使用 `model == "pg-expert"` 或 `model in ["pg-expert", "pg-associate"]` 这类**字面量等值**时，celer-route 会把这些虚拟模型名合并到 `GET /v1/models` 的返回中，客户端 SDK 调用 `model: "pg-expert"` 即可命中规则并由网关改写到真实后端模型。
+
+- **作用域合并**：虚拟模型按 `virtual_key → team → customer → global` 的作用域链 union 合并；同一虚拟名在多个作用域出现时只返回一条，元数据取首个匹配规则。
+- **`owned_by` 标记**：虚拟模型条目的 `owned_by` 字段为 `"celer-route"`，`alias` 指向规则目标模型（如有），`canonical_slug` 为规则 ID，便于在 UI 跳转。
+- **字面量要求**：仅 `==` 和 `in [...]` 产生虚拟模型条目；`!=`、`startsWith`、`contains`、`matches` 等动态谓词不参与 backfill——这些规则仍能在请求时匹配，但不会出现在 `/v1/models` 里。规则编辑器在检测到非字面量运算符时会显示提示。
+- **真实模型优先**：若后端 provider 已返回同名模型，backfill 跳过该项，以 provider 模型为准。
+- **OSS 支持**：OSS 版本支持 `virtual_key → team → customer → global` 合并；`user` 作用域为企业版功能，待后续接入后自动生效。
+

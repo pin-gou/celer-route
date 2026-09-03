@@ -3,6 +3,7 @@ package governance
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -20,6 +21,18 @@ import (
 
 type EntityWiseBudgets map[string][]*configstoreTables.TableBudget
 type EntityWiseRateLimits map[string][]*configstoreTables.TableRateLimit
+
+// RoutingRuleModelLiteral describes a single model-name literal that a
+// routing rule exposes via a forward equality test (model == "x" or
+// model in [...]). It is the unit of work the /v1/models backfill path
+// aggregates per rule, then unions across scopes.
+type RoutingRuleModelLiteral struct {
+	ModelID        string   // the bare virtual model name (e.g. "pg-expert")
+	Alias          *string  // first target.model from the source rule, if any
+	RuleID         string   // id of the source rule (for UI "jump to rule" links)
+	RuleName       string   // display name of the source rule
+	TargetProvider *string  // first target.provider from the source rule, if any
+}
 
 // LocalGovernanceStore provides in-memory cache for governance data with fast, non-blocking access
 type LocalGovernanceStore struct {
@@ -229,6 +242,16 @@ type GovernanceStore interface {
 	GetScopedRoutingRules(ctx context.Context, scope string, scopeID string) []*configstoreTables.TableRoutingRule
 	UpdateRoutingRuleInMemory(ctx context.Context, rule *configstoreTables.TableRoutingRule) error
 	DeleteRoutingRuleInMemory(ctx context.Context, id string) error
+	// GetScopedRoutingRuleModelLiterals returns the union of model-name literals
+	// (model == "x" / model in [...]) declared by enabled routing rules in the
+	// given scope. Backed by the same in-memory cache as GetScopedRoutingRules,
+	// so it returns the current view without compiling CEL programs.
+	//
+	// Used by GET /v1/models to surface gateway-level virtual model names to
+	// OpenAI-compatible clients. Reverse or dynamic predicates
+	// (model != "x", model.startsWith(...), model.contains(...)) are not
+	// matched — see framework/routing.ExtractModelLiterals.
+	GetScopedRoutingRuleModelLiterals(ctx context.Context, scope string, scopeID string) []RoutingRuleModelLiteral
 	// CollectApplicableGovernanceIDs returns every budget and rate-limit ID this node charges for the given (virtualKey, userID, provider, model).
 	// The IDs are stamped on the log row so ghost-node reconciliation can re-attribute cost and tokens;
 	// missing any ID here means that usage vanishes from cluster baselines when the node ghosts.
@@ -4582,6 +4605,66 @@ func (gs *LocalGovernanceStore) GetScopedRoutingRules(ctx context.Context, scope
 	}
 
 	return enabledRules
+}
+
+// GetScopedRoutingRuleModelLiterals returns the union of model-name literals
+// declared by enabled routing rules in the given scope. Per rule we keep the
+// first target's (Provider, Model) as a hint of where the literal would
+// route; multiple targets on one rule are not modeled here — the rule will
+// only ever rewrite to one target at request time, and exposing just the
+// first keeps the wire payload small and stable.
+//
+// The literals are extracted by framework/routing.ExtractModelLiterals, so
+// dynamic predicates (model.startsWith, model.contains, model != "x") are
+// ignored — only forward == / in lists surface.
+func (gs *LocalGovernanceStore) GetScopedRoutingRuleModelLiterals(ctx context.Context, scope string, scopeID string) []RoutingRuleModelLiteral {
+	rules := gs.GetScopedRoutingRules(ctx, scope, scopeID)
+	if len(rules) == 0 {
+		return nil
+	}
+
+	var out []RoutingRuleModelLiteral
+	for _, rule := range rules {
+		if rule == nil {
+			continue
+		}
+		queryJSON := ""
+		if len(rule.ParsedQuery) > 0 {
+			// ParsedQuery is a generic map after JSON round-trip; re-encode it
+			// for the canonical walker in framework/routing. Key order is not
+			// load-bearing — the walker inspects field/operator/value only.
+			if data, err := json.Marshal(rule.ParsedQuery); err == nil {
+				queryJSON = string(data)
+			}
+		}
+		literals := routing.ExtractModelLiterals(rule.CelExpression, queryJSON)
+		if len(literals) == 0 {
+			continue
+		}
+		var alias, targetProvider *string
+		for i := range rule.Targets {
+			t := &rule.Targets[i]
+			if t.Model != nil && *t.Model != "" {
+				cp := *t.Model
+				alias = &cp
+				if t.Provider != nil && *t.Provider != "" {
+					cp2 := *t.Provider
+					targetProvider = &cp2
+				}
+				break
+			}
+		}
+		for _, lit := range literals {
+			out = append(out, RoutingRuleModelLiteral{
+				ModelID:        lit,
+				Alias:          alias,
+				RuleID:         rule.ID,
+				RuleName:       rule.Name,
+				TargetProvider: targetProvider,
+			})
+		}
+	}
+	return out
 }
 
 // GetRoutingProgram compiles a CEL expression and caches the resulting program
