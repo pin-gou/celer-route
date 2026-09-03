@@ -15,6 +15,8 @@ export default {
       type: 'category',
       label: '功能',
       items: [
+        'features/routing',
+        'features/routing-example',
         'features/dashboard-auth',
         'features/provider-cooldown',
         'features/rtk',
