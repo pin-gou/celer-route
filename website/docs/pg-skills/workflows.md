@@ -18,15 +18,15 @@
 适用于新能力、跨模块改动、接口变化、环境相关功能和需要团队审查的任务。
 
 ```text
-/pg-1-define
+/1-pg-define
       ↓
-/pg-2-propose <change-id>
+/2-pg-propose <change-id>
       ↓
 人工审查 proposal/design/tasks/manifest
       ↓
-/pg-3-build <change-id>
+/3-pg-build <change-id>
       ↓
-verify-and-merge → archive
+archive → verify-and-merge
 ```
 
 > **Git 副作用：** 标准 build 的成功链路会调用 `pg-verify-and-merge`。它可能提交功能分支、rebase、使用 `--force-with-lease` 推送功能分支、切换到默认分支、squash merge、提交并推送默认分支。运行前必须确认工作树干净、分支和 `git.default_branch` 正确，并且远端写入符合团队流程。
@@ -41,27 +41,24 @@ verify-and-merge → archive
 
 ## 先定界再决定
 
-如果你知道问题但不知道最佳方案，只运行 `/pg-1-define`。它是探索和定界过程，不要求立即进入 propose。
+如果你知道问题但不知道最佳方案，只运行 `/1-pg-define`。它是探索和定界过程，不要求立即进入 propose。
 
 ```text
-AI CHAT  /pg-1-define
-AI CHAT  调查当前服务的请求 fallback 流程，比较两个实现方向，先不要修改代码。
+AI CHAT  /1-pg-define 调查当前服务的请求 fallback 流程，比较两个实现方向，先不要修改代码。
 ```
 
-定界后可以继续标准流，也可以因为范围太小转入 quick-build，或者决定暂不实施。
+定界后的环境验证通过后，工具会先询问是否继续细化验证方法，再询问下一步流向。选择推荐的 propose 路径会直接加载 `pg-propose`，不需要再次输入命令；如果希望手动进入该阶段，也可以输入 `/2-pg-propose <change-id>`。范围很小时可以转入 quick-build，也可以决定暂不实施。
 
 ## 快速构建
 
 适用于范围小、边界清楚、可以通过现有测试直接验收的任务：
 
 ```text
-AI CHAT  /pg-2b-quick-build
+AI CHAT  /2b-pg-quick-build
 AI CHAT  修正健康检查响应中的错误字段名，并补充单元测试。
 ```
 
 quick-build 不生成标准的 `proposal.md`、`design.md` 和 `tasks.md`。不要用于以下情况：
-
-quick-build 会为完成的任务创建本地 Git commit，但按当前工作流不会执行 push 或创建 PR。
 
 - 需求仍有歧义。
 - 涉及公共协议或迁移。
@@ -69,12 +66,14 @@ quick-build 会为完成的任务创建本地 Git commit，但按当前工作流
 - 需要复杂真实环境验收。
 - 团队要求先审方案再写代码。
 
+quick-build 会为完成的任务创建本地 Git commit，但按当前工作流不会执行 push 或创建 PR。
+
 ## 回归测试
 
 适用于项目已有 regression suite，需要执行并处理失败：
 
 ```text
-AI CHAT  /pg-4-regression framework
+AI CHAT  /4-pg-regression framework
 ```
 
 回归流程会根据 `.pg/project.yaml` 中的 `regression.suite` 找到模块、测试键、环境和输出格式。失败一般分为：
@@ -92,7 +91,7 @@ AI CHAT  /pg-4-regression framework
 适用于已有 Issue、明确报错或可复现缺陷：
 
 ```text
-AI CHAT  /pg-5-fix-issue
+AI CHAT  /5-pg-fix-issue
 AI CHAT  修复 provider fallback 超时问题；现象、期望和复现步骤如下……
 ```
 
@@ -107,7 +106,7 @@ fix-issue 会围绕问题证据、复现、根因、修复和验证开展工作�
 - 已通过其他方式完成，需要整理残留变更目录。
 
 ```text
-AI CHAT  /pg-6-archive <change-id>
+AI CHAT  /6-pg-archive <change-id>
 ```
 
 归档只处理变更记录，不替你执行 Git commit、push 或 PR。
@@ -116,13 +115,13 @@ AI CHAT  /pg-6-archive <change-id>
 
 ```text
 需求是否清楚？
-├─ 否 → pg-1-define
+├─ 否 → 1-pg-define
 └─ 是
    ├─ 是否只是小而明确的局部任务？
-   │  ├─ 是 → pg-2b-quick-build
-   │  └─ 否 → pg-1-define → pg-2-propose → pg-3-build
-   ├─ 是否已有明确缺陷？ → pg-5-fix-issue
-   └─ 是否在运行既有测试套件？ → pg-4-regression
+   │  ├─ 是 → 2b-pg-quick-build
+   │  └─ 否 → 1-pg-define → 2-pg-propose → 3-pg-build
+   ├─ 是否已有明确缺陷？ → 5-pg-fix-issue
+   └─ 是否在运行既有测试套件？ → 4-pg-regression
 ```
 
 ## 最佳实践
@@ -138,4 +137,3 @@ AI CHAT  /pg-6-archive <change-id>
 - 查看可复制场景：[示例与教程](examples.md)。
 - 查询命令参数：[命令参考](commands.md)。
 - 理解变更产物：[核心概念概览](overview.md)。
-

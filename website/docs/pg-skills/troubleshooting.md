@@ -155,7 +155,7 @@ bootstrap 失败时工作流按约束终止，不应让 AI 擅自修改 pg-skill
 
 ### 会话中断后不知道从哪里继续
 
-保留 change 下的 `2-build/`、`pipeline.events`、`pipeline.snapshot.json` 和阶段产物，然后再次调用同一个 `/pg-3-build <change-id>`。Runner 会依据持久化状态继续或给出明确恢复要求。当前 `.pg/runs/` 是预留目录，不是恢复依据。
+保留 change 下的 `2-build/`、`pipeline.events`、`pipeline.snapshot.json` 和阶段产物，然后再次调用同一个 `/3-pg-build <change-id>`。Runner 会依据持久化状态继续或给出明确恢复要求。当前 `.pg/runs/` 是预留目录，不是恢复依据。
 
 ## 升级问题
 
@@ -188,4 +188,3 @@ git status --short
 ```
 
 同时说明操作系统、开发工具、调用位置、完整命令和未裁剪错误输出。不要提交 API Key、Token、Cookie 或私有地址。
-
