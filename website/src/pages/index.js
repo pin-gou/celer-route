@@ -181,12 +181,12 @@ function StepCard({ num, title, children }) {
 const LOCALES = {
   'zh-CN': {
     metaTitle: 'celer-route · 高性能个人 LLM 网关',
-    metaDesc: 'celer-route 是一个高性能的个人 LLM 接口网关，将 20+ 主流 LLM 提供商统一为 OpenAI 兼容 API',
-    tagline: '高性能个人 LLM 网关 · 一套 API 串联 30+ 模型',
+    metaDesc: 'celer-route 是一个高性能的个人 LLM 接口网关，将主流 LLM 提供商统一为 OpenAI 兼容 API',
+    tagline: '高性能个人 LLM 网关 · 一套 API 串联主流提供商/模型',
     cta: '快速开始 →',
     sec1: '1. 这是什么',
     sec1Lead: '',
-    sec1Intro: 'celer-route 是一个高性能的个人 LLM 接口网关，将 20+ 主流 LLM 提供商统一为 OpenAI 兼容 API。你只需学会一套 API，就能在 30+ 模型间自由切换、组合、路由。',
+    sec1Intro: 'celer-route 是一个高性能的个人 LLM 接口网关，将主流 LLM 提供商统一为 OpenAI 兼容 API。你只需学会一套 API，就能在不同提供商/模型间自由切换、组合、路由。',
     features1: [
       ['multi', '多提供商统一接入', '一套 API 访问 OpenAI、Anthropic、AWS Bedrock、Google Gemini、Azure、Cohere、Mistral、Ollama、Groq、DeepSeek、Fireworks 等 30+ 提供商'],
       ['grid', 'Web 管理界面', '仪表盘实时监控请求量 / 延迟 / Token 用量，提供请求日志查询与详情追溯，支持中文 / 英文界面'],
@@ -213,17 +213,16 @@ const LOCALES = {
     archCore: '核心原则',
     archCoreDesc: '提供商隔离——每个提供商独立 worker 池和队列，一个提供商故障不会级联到其他。通道基异步，Go 通道 + 原子标志，零锁争用。',
     sec3: '3. 快速开始',
-    step1: '获取代码',
     step2: '启动服务',
     dockerRec: '推荐',
     docker: 'Docker（推荐）',
-    srcBuild: '源码构建',
-    srcAlt: '备选',
-    step3: '首次调用',
+    step3: '登录 Web 界面',
     step3Desc: '浏览器打开 ',
-    step3Desc2: ' 进入 Web 管理界面，配置 Provider Key 后即可调用 API：',
+    step3Desc2: ' 登录 Web 界面，按引导完成配置和 API 调用：',
     tip: '提示',
     tipDesc: '首次启动后先到 Web UI 配置你的 Provider API Key，再调用路由。',
+    step4: '给项目点亮 Star',
+    step4Desc: '如果 celer-route 对你有帮助，欢迎到 GitHub 给项目点亮 Star：',
     sec4: '4. 核心能力深潜',
     features4: [
       ['sdk', '多 SDK 兼容', 'OpenAI / Anthropic / Bedrock / GenAI / LangChain / Cohere / LiteLLM / PydanticAI / Cursor 全兼容，drop-in 替换，无需改一行客户端代码'],
@@ -267,12 +266,12 @@ const LOCALES = {
   },
   en: {
     metaTitle: 'celer-route · High-Performance Personal LLM Gateway',
-    metaDesc: 'celer-route is a high-performance personal LLM gateway that unifies 20+ mainstream LLM providers behind one OpenAI-compatible API.',
-    tagline: 'High-performance personal LLM gateway · one API, 30+ models',
+    metaDesc: 'celer-route is a high-performance personal LLM gateway that unifies mainstream LLM providers behind one OpenAI-compatible API.',
+    tagline: 'High-performance personal LLM gateway · one API for mainstream providers/models',
     cta: 'Get Started →',
     sec1: '1. What is it',
     sec1Lead: '',
-    sec1Intro: 'celer-route is a high-performance personal LLM gateway that unifies 20+ mainstream LLM providers behind one OpenAI-compatible API. Learn one API and switch, compose, and route freely across 30+ models.',
+    sec1Intro: 'celer-route is a high-performance personal LLM gateway that unifies mainstream LLM providers behind one OpenAI-compatible API. Learn one API and switch, compose, and route freely across different providers/models.',
     features1: [
       ['multi', 'Multi-provider unified access', 'One API to reach OpenAI, Anthropic, AWS Bedrock, Google Gemini, Azure, Cohere, Mistral, Ollama, Groq, DeepSeek, Fireworks and 20+ more providers'],
       ['grid', 'Web admin dashboard', 'Real-time monitoring of request volume, latency, and token usage; full request log query and traceback; bilingual UI (Chinese / English)'],
@@ -299,17 +298,16 @@ const LOCALES = {
     archCore: 'Core principle',
     archCoreDesc: 'Provider isolation — each provider has its own worker pool and queue, so one provider going down never cascades to others. Channel-based async via Go channels + atomic flags, zero lock contention.',
     sec3: '3. Quick Start',
-    step1: 'Get the code',
     step2: 'Launch the service',
     dockerRec: 'Recommended',
     docker: 'Docker (recommended)',
-    srcBuild: 'Build from source',
-    srcAlt: 'Alternative',
-    step3: 'First call',
+    step3: 'Log in to the Web UI',
     step3Desc: 'Open ',
-    step3Desc2: ' in your browser for the Web admin, configure a provider key, and you are ready to call the API:',
+    step3Desc2: ' and log in to the Web admin, follow the guide to configure providers and call the API:',
     tip: 'Tip',
     tipDesc: 'On first launch, configure your provider API keys in the Web UI before invoking the gateway.',
+    step4: 'Star the project',
+    step4Desc: 'If celer-route helps you, give us a star on GitHub: ',
     sec4: '4. Capabilities in Depth',
     features4: [
       ['sdk', 'Multi-SDK compatibility', 'Drop-in compatible with OpenAI / Anthropic / Bedrock / GenAI / LangChain / Cohere / LiteLLM / PydanticAI / Cursor — no client-side code changes'],
@@ -405,16 +403,7 @@ export default function Home() {
 
         {/* Section 3 */}
         <Section id="sec3" title={L.sec3}>
-          <StepCard num="1" title={L.step1}>
-            <pre>
-              <code>
-                git clone https://github.com/pin-gou/celer-route.git{'\n'}
-                cd celer-route
-              </code>
-            </pre>
-          </StepCard>
-
-          <StepCard num="2" title={L.step2}>
+          <StepCard num="1" title={L.step2}>
             <div className="pg-info-card">
               <p>
                 <strong>Docker</strong>
@@ -433,22 +422,9 @@ export default function Home() {
                 {'  '}ghcr.io/pin-gou/celer-route:latest
               </code>
             </pre>
-            <div className="pg-info-card">
-              <p>
-                <strong>{L.srcBuild}</strong>
-                <span className="pg-tag pg-tag-blue">{L.srcAlt}</span>
-              </p>
-            </div>
-            <pre>
-              <code>
-                # Go 1.26.1+ required{'\n'}
-                make build     # build binary{'\n'}
-                make dev       # start dev environment (with hot reload)
-              </code>
-            </pre>
           </StepCard>
 
-          <StepCard num="3" title={L.step3}>
+          <StepCard num="2" title={L.step3}>
             <p>
               {L.step3Desc}<a href="http://localhost:8080">http://localhost:8080</a>{L.step3Desc2}
             </p>
@@ -467,6 +443,15 @@ export default function Home() {
                 💡 <strong>{L.tip}</strong>: {L.tipDesc}
               </p>
             </div>
+          </StepCard>
+
+          <StepCard num="3" title={L.step4}>
+            <p>
+              {L.step4Desc}
+              <a href="https://github.com/pin-gou/celer-route" target="_blank" rel="noopener noreferrer">
+                github.com/pin-gou/celer-route
+              </a>
+            </p>
           </StepCard>
         </Section>
 

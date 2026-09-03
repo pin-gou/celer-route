@@ -664,7 +664,7 @@ html[data-theme='dark'] .pg-feature-card .icon {
   height: 26px;
   border-radius: 8px;
   background: var(--pg-primary);
-  color: var(--ifm-color-primary-contrast-foreground);
+  color: #ffffff;
   font-size: 0.85rem;
   display: inline-flex;
   align-items: center;
