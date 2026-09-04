@@ -632,13 +632,6 @@ export default function AppSidebar() {
 						description: "Log connectors",
 						hasAccess: false, // hidden
 					},
-					{
-						title: t("nav.logsSettings"),
-						url: "/workspace/config/logging",
-						icon: Settings,
-						description: "Logs configuration",
-						hasAccess: hasSettingsAccess,
-					},
 				],
 			},
 			{
@@ -761,6 +754,13 @@ export default function AppSidebar() {
 						icon: KeyRound,
 						description: "Manage virtual keys & access",
 						hasAccess: hasVirtualKeysAccess,
+					},
+					{
+						title: t("nav.logsSettings"),
+						url: "/workspace/config/logging",
+						icon: Settings,
+						description: "Logs configuration",
+						hasAccess: hasSettingsAccess,
 					},
 					{
 						title: t("nav.clientSettings"),
