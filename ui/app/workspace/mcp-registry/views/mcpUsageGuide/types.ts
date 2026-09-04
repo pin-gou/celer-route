@@ -1,4 +1,5 @@
 import type { SearchSelectOption } from "@/components/ui/searchSelect";
+import type { ClientPlatform } from "@/lib/types/platform";
 import type { CoreConfig } from "@/lib/types/config";
 import type { VirtualKey } from "@/lib/types/governance";
 import type { MCPClient } from "@/lib/types/mcp";
@@ -8,7 +9,7 @@ export type HarnessID = "claude-code" | "codex" | "cursor" | "windsurf" | "antig
 export type ClaudeScope = "local" | "project" | "user";
 export type CodexConfigScope = "user" | "project";
 export type CursorConfigScope = "global" | "project";
-export type HarnessPlatform = "macos" | "windows" | "linux";
+export type HarnessPlatform = ClientPlatform;
 export type VSCodeConfigScope = "workspace" | "user";
 export type ServerScope = "all" | "selected";
 

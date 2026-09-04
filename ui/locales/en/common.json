@@ -294,7 +294,7 @@
 			"vkLabel": "Virtual key",
 			"vkPlaceholder": "Select a virtual key",
 			"vkEmpty": "No API keys yet. Create one in Governance → API Keys.",
-			"agentSetupLink": "Connect a coding agent →",
+			"agentSetupLink": "Connect an AI client →",
 			"examples": {
 				"curlLabel": "curl",
 				"pythonLabel": "Python (openai)",

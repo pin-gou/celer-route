@@ -15,13 +15,18 @@ func RenderCursor(in Input) (Output, error) {
 	baseURL := OpenAISurface(in.BaseURL)
 	defaultID := pickDefaultModel(in.Models, in.DefaultModelID)
 
+	settingsShortcut := "Ctrl+,"
+	if platformOrDefault(in) == PlatformMacOS {
+		settingsShortcut = "⌘,"
+	}
+
 	apiLine := fmt.Sprintf("API Key 填 %s", in.APIKey)
 	if in.APIKey == "" {
 		apiLine = "API Key 留空（celer-route 未开启强制鉴权）"
 	}
 
 	steps := []string{
-		"打开 Cursor → Settings（⌘,）→ Models",
+		fmt.Sprintf("打开 Cursor → Settings（%s）→ Models", settingsShortcut),
 		"在 \"Model Provider\" 下点击 \"+ Add\" → 选择 \"OpenAI\"",
 		fmt.Sprintf("Name 填 %s", ProviderKey),
 		fmt.Sprintf("Base URL 填 %s", baseURL),

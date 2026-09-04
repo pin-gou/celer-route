@@ -1,3 +1,5 @@
+import type { ClientPlatform } from "@/lib/types/platform";
+
 export function defaultEndpoint(): string {
 	if (typeof window === "undefined") return "http://localhost:8080/v1";
 	return `${window.location.origin}/v1`;
@@ -17,15 +19,29 @@ export interface TestCommandSnippets {
 
 // Side effect-free examples builder shared by onboarding's DoneStep and the
 // home endpoint card so the two surfaces generate byte-identical snippets.
-export function buildExamples(baseUrl: string, model: string, vkValue: string | null): TestCommandSnippets {
+// `platform` is optional and only affects the curl flavor: agent-setup passes
+// it so Windows users get a curl.exe / PowerShell continuation, while the
+// onboarding + home surfaces keep the POSIX form.
+export function buildExamples(baseUrl: string, model: string, vkValue: string | null, platform?: ClientPlatform): TestCommandSnippets {
 	const url = baseUrl.replace(/\/$/, "");
 
-	const curlLines = [`curl ${url}/chat/completions \\`, `  -H "Content-Type: application/json" \\`];
-	if (vkValue) {
-		curlLines.push(`  -H "Authorization: Bearer ${vkValue}" \\`);
+	let curl: string;
+	if (platform === "windows") {
+		const lines = [`curl.exe ${url}/chat/completions \``];
+		lines.push(`  -H "Content-Type: application/json" \``);
+		if (vkValue) {
+			lines.push(`  -H "Authorization: Bearer ${vkValue}" \``);
+		}
+		lines.push(`  -d '{`, `    "model": "${model}",`, `    "messages": [{"role": "user", "content": "Hello!"}]`, `  }'`);
+		curl = lines.join("\n");
+	} else {
+		const curlLines = [`curl ${url}/chat/completions \\`, `  -H "Content-Type: application/json" \\`];
+		if (vkValue) {
+			curlLines.push(`  -H "Authorization: Bearer ${vkValue}" \\`);
+		}
+		curlLines.push(`  -d '{`, `    "model": "${model}",`, `    "messages": [{"role": "user", "content": "Hello!"}]`, `  }'`);
+		curl = curlLines.join("\n");
 	}
-	curlLines.push(`  -d '{`, `    "model": "${model}",`, `    "messages": [{"role": "user", "content": "Hello!"}]`, `  }'`);
-	const curl = curlLines.join("\n");
 
 	const apiKeyLine = vkValue ? `    api_key="${vkValue}",` : null;
 	const nodeApiKey = vkValue ? `  apiKey: "${vkValue}",` : null;

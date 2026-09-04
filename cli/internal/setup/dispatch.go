@@ -20,6 +20,18 @@ func Dispatch(agent Agent, in Input) (Output, error) {
 		return RenderOpenAICompatible(in)
 	case Cursor:
 		return RenderCursor(in)
+	case WorkBuddy:
+		return RenderWorkBuddy(in)
+	case CodeBuddy:
+		return RenderCodeBuddy(in)
+	case Trae:
+		return RenderTrae(in)
+	case ZCode:
+		return RenderZCode(in)
+	case MarsCode:
+		return RenderMarsCode(in)
+	case Lingma:
+		return RenderLingma(in)
 	}
 	return Output{}, fmt.Errorf("%w: %q", ErrUnknownAgent, agent)
 }

@@ -2,7 +2,6 @@ package setup
 
 import (
 	"path/filepath"
-	"strings"
 )
 
 // ClaudeCodePath returns the absolute path the CLI writes to by default.
@@ -23,36 +22,28 @@ func RenderClaudeCode(in Input) (Output, error) {
 	baseURL := AnthropicSurface(in.BaseURL)
 	defaultID := pickDefaultModel(in.Models, in.DefaultModelID)
 
-	env := []string{
-		"export ANTHROPIC_BASE_URL=" + baseURL,
-	}
+	var entries [][2]string
+	entries = append(entries, [2]string{"ANTHROPIC_BASE_URL", baseURL})
 	if in.APIKey != "" {
-		env = append(env, "export ANTHROPIC_AUTH_TOKEN="+in.APIKey)
+		entries = append(entries, [2]string{"ANTHROPIC_AUTH_TOKEN", in.APIKey})
 	}
 	if defaultID != "" {
-		env = append(env, "export ANTHROPIC_MODEL="+defaultID)
+		entries = append(entries, [2]string{"ANTHROPIC_MODEL", defaultID})
 	}
+	env := BuildEnv(entries)
 
+	// settings.json embeds the same values; on every platform it is the same
+	// JSON (Claude Code reads env from it regardless of host OS).
 	envMap := map[string]string{}
-	for _, line := range env {
-		const prefix = "export "
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		body := line[len(prefix):]
-		eq := strings.IndexByte(body, '=')
-		if eq < 0 {
-			continue
-		}
-		envMap[body[:eq]] = body[eq+1:]
+	for _, kv := range entries {
+		envMap[kv[0]] = kv[1]
 	}
-
 	cfg := map[string]any{"env": envMap}
 	content := JSONMarshalIndent(cfg)
 
 	return Output{
 		Files: []File{
-			{Path: "~/.claude/settings.json", Content: content},
+			{Path: DisplayPath(platformOrDefault(in), ".claude", "settings.json"), Content: content},
 		},
 		Env:          env,
 		DefaultModel: defaultID,

@@ -1,6 +1,7 @@
 import type { CoreConfig } from "@/lib/types/config";
 import type { VirtualKey } from "@/lib/types/governance";
 import type { MCPClient } from "@/lib/types/mcp";
+import { userHomePrefix } from "@/lib/utils/platform";
 import type { HarnessPlatform, ServerScope } from "./types";
 
 /** Default port celer-route serves on; used when guessing the gateway URL in local dev. */
@@ -98,5 +99,5 @@ export function getIncludeClients(selectedServers?: MCPClient[]): string | undef
 }
 
 export function getUserHomePrefix(platform: HarnessPlatform): string {
-	return platform === "windows" ? "%USERPROFILE%" : "~";
+	return userHomePrefix(platform);
 }

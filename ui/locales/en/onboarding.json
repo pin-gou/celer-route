@@ -106,6 +106,6 @@
 		"pickDate": "Pick a date…",
 		"acceptRisk": "I accept the risk - hide for everyone"
 	},
-	"connectAgent": "Connect a coding agent →",
-	"connectAgentDesc": "Connect opencode, Claude Code, Codex, or Cursor to this endpoint."
+	"connectAgent": "Connect an AI client →",
+	"connectAgentDesc": "Connect opencode, Claude Code, WorkBuddy, Trae, and other LLM clients to this endpoint."
 }

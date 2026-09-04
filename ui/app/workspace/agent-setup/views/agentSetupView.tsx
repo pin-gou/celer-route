@@ -4,23 +4,31 @@ import { Link } from "@tanstack/react-router";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PlatformSelect } from "@/components/ui/platformSelect";
 import { ScrollArea } from "@/components/ui/scrollArea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TestCommandTabs, type TestCommandTab } from "@/components/testCommandPanel";
 import { Button } from "@/components/ui/button";
+import type { ClientPlatform } from "@/lib/types/platform";
 import { useGetCoreConfigQuery } from "@/lib/store";
 import { useGetVirtualKeysQuery } from "@/lib/store/apis/governanceApi";
 import { useV1Models, type V1Model } from "@/lib/hooks/useV1Models";
 import {
-	CODING_AGENTS,
+	AGENT_GROUPS,
+	envTabCode,
 	generateAgentConfig,
 	toOpenAISurface,
 	type AgentConfigOutput,
+	type AgentGroupId,
 	type AgentModelInput,
 	type CodingAgentId,
 } from "@/lib/utils/agentConfigs";
+import { detectPlatform } from "@/lib/utils/platform";
 import { buildExamples, resolveEndpointUrl } from "@/lib/utils/testCommandSnippets";
+import { parseAsStringLiteral, useQueryStates } from "nuqs";
 import { Search, TerminalSquare, WandSparkles } from "lucide-react";
+
+const PLATFORMS = ["macos", "windows", "linux"] as const;
 
 const AGENT_LABEL_KEY: Record<CodingAgentId, string> = {
 	opencode: "agent.opencode",
@@ -28,14 +36,28 @@ const AGENT_LABEL_KEY: Record<CodingAgentId, string> = {
 	codex: "agent.codex",
 	"openai-compatible": "agent.openaiCompatible",
 	cursor: "agent.cursor",
+	workbuddy: "agent.workbuddy",
+	codebuddy: "agent.codebuddy",
+	trae: "agent.trae",
+	zcode: "agent.zcode",
+	marscode: "agent.marscode",
+	lingma: "agent.lingma",
+};
+
+const AGENT_GROUP_LABEL_KEY: Record<AgentGroupId, string> = {
+	coding: "agent.group.coding",
+	domestic: "agent.group.domestic",
+	ide: "agent.group.ide",
+	generic: "agent.group.generic",
 };
 
 // requiresModelSubset is the set of agents whose config embeds an explicit
-// list of models (opencode writes a `models` block under `provider`). The
+// list of models. opencode writes a `models` block under `provider`;
+// WorkBuddy / CodeBuddy write the `models[]` array into models.json. The
 // other agents only carry a single default-model reference (ANTHROPIC_MODEL,
-// codex `model`, OPENAI_MODEL, Cursor in-app step), so the picker collapses
-// to a single dropdown sourced from the live /v1/models catalog.
-const REQUIRES_MODEL_SUBSET: ReadonlySet<CodingAgentId> = new Set(["opencode"]);
+// codex `model`, OPENAI_MODEL, in-app step), so the picker collapses to a
+// single dropdown sourced from the live /v1/models catalog.
+const REQUIRES_MODEL_SUBSET: ReadonlySet<CodingAgentId> = new Set(["opencode", "workbuddy", "codebuddy"]);
 
 function requiresModelSubset(agent: CodingAgentId): boolean {
 	return REQUIRES_MODEL_SUBSET.has(agent);
@@ -63,6 +85,12 @@ export default function AgentSetupView() {
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 	const [defaultModelId, setDefaultModelId] = useState<string>("");
 	const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
+
+	// Target OS: auto-detected first, overridable, persisted in the URL so a
+	// shared link keeps the same shell/path conventions.
+	const [urlPlatform, setUrlPlatform] = useQueryStates({ platform: parseAsStringLiteral(PLATFORMS) }, { history: "replace" });
+	const platform: ClientPlatform = urlPlatform.platform ?? detectPlatform();
+	const setPlatform = (p: ClientPlatform) => setUrlPlatform({ platform: p });
 
 	const showModelSubset = requiresModelSubset(agent);
 
@@ -159,8 +187,9 @@ export default function AgentSetupView() {
 			models: showModelSubset ? selectedModelInputs : v1Models.map(toAgentModel),
 			defaultModelId: effectiveDefaultModelId,
 			protocol: agent === "opencode" ? protocol : undefined,
+			platform,
 		});
-	}, [agent, baseUrl, apiKey, selectedModelInputs, v1Models, showModelSubset, effectiveDefaultModelId, protocol]);
+	}, [agent, baseUrl, apiKey, selectedModelInputs, v1Models, showModelSubset, effectiveDefaultModelId, protocol, platform]);
 
 	const tabs = useMemo(() => {
 		if (!output) return [];
@@ -173,11 +202,12 @@ export default function AgentSetupView() {
 			copyText: t("copy"),
 			copySuccessMessage: t("copySuccess"),
 		}));
-		if (output.env && output.env.length > 0 && !output.files.some((f) => f.content === output.env!.join("\n"))) {
+		const envCode = output.env ? envTabCode(output.env, platform) : "";
+		if (envCode.length > 0 && !output.files.some((f) => f.content === envCode)) {
 			result.push({
 				id: "env",
 				label: t("envTab"),
-				code: output.env.join("\n"),
+				code: envCode,
 				copyLabel: t("copy"),
 				copiedLabel: t("copied"),
 				copyText: t("copy"),
@@ -185,7 +215,7 @@ export default function AgentSetupView() {
 			});
 		}
 		if (effectiveDefaultModelId) {
-			const probe = buildExamples(toOpenAISurface(baseUrl), effectiveDefaultModelId, apiKey);
+			const probe = buildExamples(toOpenAISurface(baseUrl), effectiveDefaultModelId, apiKey, platform);
 			result.push({
 				id: "test",
 				label: t("testTab"),
@@ -197,7 +227,7 @@ export default function AgentSetupView() {
 			});
 		}
 		return result;
-	}, [output, t, effectiveDefaultModelId, baseUrl, apiKey]);
+	}, [output, t, effectiveDefaultModelId, baseUrl, apiKey, platform]);
 
 	const noModelPickedError = showModelSubset && selectedModelInputs.length === 0;
 
@@ -212,8 +242,14 @@ export default function AgentSetupView() {
 			</div>
 
 			<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				{/* Left column: agent + endpoint + key */}
+				{/* Left column: platform + agent + endpoint + key */}
 				<div className="space-y-6">
+					<section className="space-y-3">
+						<Label>{t("platformLabel")}</Label>
+						<PlatformSelect platform={platform} onPlatformChange={setPlatform} testIdPrefix="agent-setup" />
+						<p className="text-muted-foreground text-xs">{t("platformHint")}</p>
+					</section>
+
 					<section className="space-y-3">
 						<Label>{t("agentLabel")}</Label>
 						<Select value={agent} onValueChange={(v) => setAgent(v as CodingAgentId)}>
@@ -221,10 +257,15 @@ export default function AgentSetupView() {
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{CODING_AGENTS.map((id) => (
-									<SelectItem key={id} value={id} data-testid={`agent-setup-agent-${id}`}>
-										{t(AGENT_LABEL_KEY[id])}
-									</SelectItem>
+								{AGENT_GROUPS.map((group) => (
+									<SelectGroup key={group.id}>
+										<SelectLabel className="text-muted-foreground px-2 py-1 text-xs">{t(AGENT_GROUP_LABEL_KEY[group.id])}</SelectLabel>
+										{group.agents.map((id) => (
+											<SelectItem key={id} value={id} data-testid={`agent-setup-agent-${id}`}>
+												{t(AGENT_LABEL_KEY[id])}
+											</SelectItem>
+										))}
+									</SelectGroup>
 								))}
 							</SelectContent>
 						</Select>

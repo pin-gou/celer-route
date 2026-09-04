@@ -39,13 +39,13 @@ func RenderCodex(in Input) (Output, error) {
 
 	out := Output{
 		Files: []File{
-			{Path: "~/.codex/config.toml", Content: b.String()},
+			{Path: DisplayPath(platformOrDefault(in), ".codex", "config.toml"), Content: b.String()},
 		},
 		DefaultModel: defaultID,
 		Agent:        Codex,
 	}
 	if in.APIKey != "" {
-		out.Env = []string{"export " + CodexEnvKey + "=" + in.APIKey}
+		out.Env = BuildEnv([][2]string{{CodexEnvKey, in.APIKey}})
 	}
 	return out, nil
 }

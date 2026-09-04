@@ -70,7 +70,7 @@ func RenderOpencode(in Input) (Output, error) {
 
 	out := Output{
 		Files: []File{
-			{Path: "~/.config/opencode/opencode.json", Content: JSONMarshalIndent(cfg)},
+			{Path: DisplayPath(platformOrDefault(in), ".config", "opencode", "opencode.json"), Content: JSONMarshalIndent(cfg)},
 		},
 		Agent: Opencode,
 	}

@@ -1,10 +1,10 @@
 package setup
 
-// RenderOpenAICompatible emits an env recipe for any AI client that follows
-// the OpenAI CLI convention (hermes, openclaw, aider, goose, qwen, …). The
-// file content adapts to the target platform: POSIX exports on macOS/Linux,
-// a PowerShell + cmd block on Windows.
-func RenderOpenAICompatible(in Input) (Output, error) {
+// RenderMarsCode emits the same OPENAI_* env recipe the generic
+// OpenAI-compatible template uses, under the MarsCode name so the product is
+// identifiable in the client picker. MarsCode CLI reads OpenAI-compatible
+// environment variables from the shell it launches under.
+func RenderMarsCode(in Input) (Output, error) {
 	if len(in.Models) == 0 {
 		return Output{}, ErrNoModels
 	}
@@ -24,6 +24,6 @@ func RenderOpenAICompatible(in Input) (Output, error) {
 		},
 		Env:          env,
 		DefaultModel: defaultID,
-		Agent:        OpenAICompatible,
+		Agent:        MarsCode,
 	}, nil
 }

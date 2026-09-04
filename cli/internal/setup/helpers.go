@@ -26,6 +26,70 @@ func AnthropicSurface(baseURL string) string {
 	return StripV1Suffix(baseURL) + "/anthropic"
 }
 
+// HomePrefix returns the display prefix for a platform's home directory:
+// %USERPROFILE% on Windows, ~ elsewhere. Mirrors ui/lib/utils/platform.ts.
+func HomePrefix(p Platform) string {
+	if p == PlatformWindows {
+		return "%USERPROFILE%"
+	}
+	return "~"
+}
+
+// DisplayPath joins parts under the platform's home prefix with the correct
+// separators. Mirrors the Web UI's displayPath helper.
+func DisplayPath(p Platform, parts ...string) string {
+	sep := "/"
+	if p == PlatformWindows {
+		sep = "\\"
+	}
+	return HomePrefix(p) + sep + strings.Join(parts, sep)
+}
+
+// PosixEnvLine returns "export KEY=value".
+func PosixEnvLine(key, value string) string {
+	return "export " + key + "=" + value
+}
+
+// PowerShellEnvLine returns '$env:KEY = "value"'.
+func PowerShellEnvLine(key, value string) string {
+	return `$env:` + key + ` = "` + value + `"`
+}
+
+// CmdEnvLine returns "set KEY=value".
+func CmdEnvLine(key, value string) string {
+	return "set " + key + "=" + value
+}
+
+// BuildEnv renders an env recipe into the three shell dialects from
+// (key, value) pairs. Mirrors agentConfigs.ts buildEnv.
+func BuildEnv(entries [][2]string) *Env {
+	env := &Env{}
+	for _, kv := range entries {
+		key, value := kv[0], kv[1]
+		env.Posix = append(env.Posix, PosixEnvLine(key, value))
+		env.PowerShell = append(env.PowerShell, PowerShellEnvLine(key, value))
+		env.Cmd = append(env.Cmd, CmdEnvLine(key, value))
+	}
+	return env
+}
+
+// EnvTabCode renders the human-facing env recipe for a platform. Windows
+// layers both the PowerShell and the cmd block (with comment headers);
+// POSIX shows the export lines. Mirrors agentConfigs.ts envTabCode.
+func EnvTabCode(env *Env, p Platform) string {
+	if p == PlatformWindows {
+		var blocks []string
+		if len(env.PowerShell) > 0 {
+			blocks = append(blocks, "# PowerShell:\n"+strings.Join(env.PowerShell, "\n"))
+		}
+		if len(env.Cmd) > 0 {
+			blocks = append(blocks, "# cmd:\n"+strings.Join(env.Cmd, "\n"))
+		}
+		return strings.Join(blocks, "\n\n")
+	}
+	return strings.Join(env.Posix, "\n")
+}
+
 // pickDefaultModel returns the requested default ID when present in models,
 // otherwise models[0].ID. Returns "" when models is empty.
 func pickDefaultModel(models []Model, requested string) string {

@@ -107,6 +107,6 @@
 		"pickDate": "选择日期…",
 		"acceptRisk": "我接受风险 - 对所有人隐藏"
 	},
-	"connectAgent": "接入 Coding Agent →",
-	"connectAgentDesc": "将 opencode、Claude Code、Codex、Cursor 等接入此端点。"
+	"connectAgent": "接入 AI 客户端 →",
+	"connectAgentDesc": "将 opencode、Claude Code、WorkBuddy、Trae 等各类 LLM 客户端接入此端点。"
 }

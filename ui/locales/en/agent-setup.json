@@ -1,17 +1,31 @@
 {
-	"title": "Connect a coding agent",
-	"subtitle": "Point opencode, Claude Code, Codex, Cursor, or any OpenAI-compatible agent at celer-route. Pick an agent and model set — we generate the ready-to-paste config.",
-	"agentLabel": "Coding agent",
+	"title": "Connect AI clients",
+	"subtitle": "Point coding agents, desktop AI agents, IDE extensions, or any OpenAI-compatible LLM client at celer-route. Pick a client and model set — we generate the ready-to-paste config.",
+	"agentLabel": "AI client",
+	"platformLabel": "Operating system",
+	"platformHint": "The generated config paths, environment-variable syntax, and setup steps adapt to the OS you pick.",
 	"agent": {
 		"opencode": "opencode",
 		"claudeCode": "Claude Code",
 		"codex": "Codex CLI",
-		"openaiCompatible": "OpenAI-compatible (hermes / openclaw / aider / goose)",
-		"cursor": "Cursor / Windsurf"
+		"openaiCompatible": "Other OpenAI-compatible client (hermes / openclaw / aider / goose / …)",
+		"cursor": "Cursor / Windsurf",
+		"workbuddy": "WorkBuddy (Tencent)",
+		"codebuddy": "CodeBuddy (Tencent)",
+		"trae": "Trae (ByteDance)",
+		"zcode": "ZCode (Zhipu)",
+		"marscode": "MarsCode (ByteDance)",
+		"lingma": "Tongyi Lingma (Alibaba)",
+		"group": {
+			"coding": "Coding agents",
+			"domestic": "Domestic desktop agents",
+			"ide": "IDE & extensions",
+			"generic": "Generic OpenAI-compatible"
+		}
 	},
 	"responsesProtocol": "Use Responses API (@ai-sdk/openai) instead of Chat API",
 	"baseUrlLabel": "Base URL",
-	"baseUrlHint": "Origin of your celer-route instance. The correct surface (/v1 or /anthropic) is appended automatically per agent.",
+	"baseUrlHint": "Origin of your celer-route instance. The correct surface (/v1 or /anthropic) is appended automatically per client.",
 	"apiKeyLabel": "API Key",
 	"apiKeyCreateLink": "Create an API key",
 	"apiKeyPlaceholder": "Select an API key",

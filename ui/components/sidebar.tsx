@@ -563,7 +563,7 @@ export default function AppSidebar() {
 						title: t("nav.agentSetup"),
 						url: "/workspace/agent-setup",
 						icon: Terminal,
-						description: "Connect a coding agent",
+						description: "Connect an AI client",
 						hasAccess: hasModelProvidersAccess,
 					},
 				],

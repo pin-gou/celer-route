@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -31,7 +32,7 @@ import (
 	"github.com/pin-gou/celer-route/cli/internal/setup"
 )
 
-const usage = `celer-route-setup — generate ready-to-paste config for coding agents.
+const usage = `celer-route-setup — generate ready-to-paste config for AI clients.
 
 Subcommands:
   models                            List the live model catalog from the gateway.
@@ -40,6 +41,12 @@ Subcommands:
   setup-codex                       Write ~/.codex/config.toml.
   setup-openai-compat                Print OPENAI_* env recipe.
   setup-cursor                       Print Cursor / Windsurf in-app steps.
+  setup-workbuddy                    Write ~/.workbuddy/models.json (Tencent).
+  setup-codebuddy                    Write ~/.codebuddy/models.json (Tencent).
+  setup-trae                         Print Trae in-app steps (ByteDance).
+  setup-zcode                        Print ZCode in-app steps (Zhipu).
+  setup-marscode                     Print OPENAI_* env recipe (ByteDance).
+  setup-lingma                       Print Tongyi Lingma in-app steps (Alibaba).
 
 Common flags (after the subcommand):
   --remote <url>     Target celer-route base URL. Default http://localhost:8080.
@@ -59,6 +66,7 @@ Examples:
   celer-route-setup setup-claude --remote http://192.168.0.15:8080 --api-key sk-bf-…
   celer-route-setup setup-codex --only minimax,glm --dry-run
   celer-route-setup setup-cursor
+  celer-route-setup setup-workbuddy --only minimax
 `
 
 func main() {
@@ -86,6 +94,18 @@ func main() {
 		err = runSetup(ctx, setup.OpenAICompatible, args)
 	case "setup-cursor":
 		err = runSetup(ctx, setup.Cursor, args)
+	case "setup-workbuddy":
+		err = runSetup(ctx, setup.WorkBuddy, args)
+	case "setup-codebuddy":
+		err = runSetup(ctx, setup.CodeBuddy, args)
+	case "setup-trae":
+		err = runSetup(ctx, setup.Trae, args)
+	case "setup-zcode":
+		err = runSetup(ctx, setup.ZCode, args)
+	case "setup-marscode":
+		err = runSetup(ctx, setup.MarsCode, args)
+	case "setup-lingma":
+		err = runSetup(ctx, setup.Lingma, args)
 	case "-h", "--help", "help":
 		fmt.Fprint(os.Stderr, usage)
 		return
@@ -106,14 +126,14 @@ func main() {
 // Each flag is parsed exactly once; subcommand-specific behavior (e.g.
 // --responses) is layered on top by setupFlags().
 type commonFlags struct {
-	Remote  string
-	Port    int
-	APIKey  string
-	Only    string
-	Model   string
-	DryRun  bool
-	Home    string
-	Help    bool
+	Remote string
+	Port   int
+	APIKey string
+	Only   string
+	Model  string
+	DryRun bool
+	Home   string
+	Help   bool
 }
 
 func registerCommon(fs *flag.FlagSet) *commonFlags {
@@ -231,6 +251,7 @@ func runSetup(ctx context.Context, agent setup.Agent, args []string) error {
 		APIKey:         f.resolveAPIKey(),
 		Models:         toSetupModels(models),
 		DefaultModelID: f.Model,
+		Platform:       setup.PlatformFromGOOS(runtime.GOOS),
 	}
 	if agent == setup.Opencode {
 		if useResponses {
@@ -256,12 +277,10 @@ func runSetup(ctx context.Context, agent setup.Agent, args []string) error {
 		}
 		fmt.Fprintf(os.Stdout, "wrote %s\n", expanded)
 	}
-	if len(out.Env) > 0 {
+	if out.Env != nil {
 		fmt.Fprintln(os.Stdout, "")
-		fmt.Fprintln(os.Stdout, "# Also export these in your shell before launching the agent:")
-		for _, line := range out.Env {
-			fmt.Fprintf(os.Stdout, "# %s\n", line)
-		}
+		fmt.Fprintln(os.Stdout, "# Set these environment variables before launching the client:")
+		printEnv(out, os.Stdout, "# ")
 	}
 	if out.DefaultModel != "" {
 		fmt.Fprintf(os.Stdout, "\n# Default model reference: %s\n", out.DefaultModel)
@@ -278,11 +297,9 @@ func writeDryRun(out setup.Output) error {
 		}
 		fmt.Fprintf(os.Stdout, "==> %s <==\n%s", f.Path, f.Content)
 	}
-	if len(out.Env) > 0 {
+	if out.Env != nil {
 		fmt.Fprintln(os.Stdout, "\n# Environment:")
-		for _, line := range out.Env {
-			fmt.Fprintf(os.Stdout, "# %s\n", line)
-		}
+		printEnv(out, os.Stdout, "# ")
 	}
 	if out.DefaultModel != "" {
 		fmt.Fprintf(os.Stdout, "\n# Default model: %s\n", out.DefaultModel)
@@ -290,17 +307,57 @@ func writeDryRun(out setup.Output) error {
 	return nil
 }
 
-// expandHome turns a "~"-prefixed path into an absolute one. The
-// template's path strings always start with "~/.…" so the CLI can
-// write into a real $HOME; --home lets operators override for tests.
+// printEnv writes the platform-appropriate env recipe. On Windows both the
+// PowerShell and the cmd block are printed so either shell has a runnable
+// snippet; on macOS/Linux the POSIX export lines are shown. Every line is
+// prefixed with `prefix` (a comment marker) since these are instructions,
+// not something the CLI executes.
+func printEnv(out setup.Output, w io.Writer, prefix string) {
+	env := out.Env
+	if env == nil {
+		return
+	}
+	if runtime.GOOS == "windows" {
+		if len(env.PowerShell) > 0 {
+			fmt.Fprintf(w, "%s# PowerShell:\n", prefix)
+			for _, line := range env.PowerShell {
+				fmt.Fprintf(w, "%s%s\n", prefix, line)
+			}
+		}
+		if len(env.Cmd) > 0 {
+			fmt.Fprintf(w, "%s# cmd:\n", prefix)
+			for _, line := range env.Cmd {
+				fmt.Fprintf(w, "%s%s\n", prefix, line)
+			}
+		}
+		return
+	}
+	for _, line := range env.Posix {
+		fmt.Fprintf(w, "%s%s\n", prefix, line)
+	}
+}
+
+// expandHome turns a "~"- or "%USERPROFILE%"-prefixed path into an absolute
+// one. The template's path strings start with "~/.…" (POSIX) or
+// "%USERPROFILE%\…" (Windows); the CLI resolves them against the real home
+// dir, with --home as an override for tests.
 func expandHome(path, home string) string {
-	if !strings.HasPrefix(path, "~/") {
+	rest := ""
+	switch {
+	case strings.HasPrefix(path, "~/"):
+		rest = path[2:]
+	case strings.HasPrefix(path, "%USERPROFILE%\\"):
+		rest = strings.ReplaceAll(path[len("%USERPROFILE%\\"):], "\\", "/")
+	default:
 		return path
+	}
+	if home == "" {
+		home, _ = os.UserHomeDir()
 	}
 	if home == "" {
 		return path
 	}
-	return filepath.Join(home, path[2:])
+	return filepath.Join(home, rest)
 }
 
 // writeFile creates the parent directory if needed, refuses to follow a
