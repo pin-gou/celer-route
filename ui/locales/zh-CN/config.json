@@ -394,7 +394,7 @@
 		"requiresLogsStore": "需要在 config.json 中配置并启用日志存储。",
 		"section": {
 			"basic": "基础设置",
-			"retention": "内容与保存",
+			"retention": "内容保存",
 			"backup": "数据归档",
 			"advanced": "高级选项",
 			"display": "日志显示"

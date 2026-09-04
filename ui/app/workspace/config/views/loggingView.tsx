@@ -94,7 +94,7 @@ export default function LoggingView() {
 			</div>
 
 			<div className="space-y-6">
-				{/* Basic */}
+				{/* Basic — only the master enable switch */}
 				<section className="space-y-4">
 					<SectionTitle>{t("logging.section.basic")}</SectionTitle>
 					<div>
@@ -124,8 +124,13 @@ export default function LoggingView() {
 						</div>
 						{needsRestart && <RestartWarning />}
 					</div>
+				</section>
 
-					{loggingEnabled && (
+				{/* Content & Retention — "记录请求与响应的内容" plus the two retention day fields,
+					hiding the retention fields when content logging is off (per user example). */}
+				{loggingEnabled && (
+					<section className="space-y-4">
+						<SectionTitle>{t("logging.section.retention")}</SectionTitle>
 						<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 							<div className="space-y-0.5">
 								<label htmlFor="record-content-logging" className="text-sm font-medium">
@@ -141,53 +146,51 @@ export default function LoggingView() {
 								onCheckedChange={(checked) => handleConfigChange("disable_content_logging", !checked)}
 							/>
 						</div>
-					)}
-				</section>
 
-				{/* Content & Retention — only when content logging is on */}
-				{loggingEnabled && contentLoggingOn && (
-					<section className="space-y-4">
-						<SectionTitle>{t("logging.section.retention")}</SectionTitle>
-						<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-							<div className="space-y-0.5">
-								<Label htmlFor="log-retention-days" className="text-sm font-medium">
-									{t("logging.logRetentionDays")}
-								</Label>
-								<p className="text-muted-foreground text-sm">{t("logging.logRetentionDaysDesc")}</p>
-							</div>
-							<Input
-								id="log-retention-days"
-								type="number"
-								min="1"
-								value={localConfig.log_retention_days}
-								onChange={(e) => {
-									const value = parseInt(e.target.value) || 1;
-									handleConfigChange("log_retention_days", Math.max(1, value));
-								}}
-								className="w-24"
-							/>
-						</div>
+						{contentLoggingOn && (
+							<>
+								<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
+									<div className="space-y-0.5">
+										<Label htmlFor="log-retention-days" className="text-sm font-medium">
+											{t("logging.logRetentionDays")}
+										</Label>
+										<p className="text-muted-foreground text-sm">{t("logging.logRetentionDaysDesc")}</p>
+									</div>
+									<Input
+										id="log-retention-days"
+										type="number"
+										min="1"
+										value={localConfig.log_retention_days}
+										onChange={(e) => {
+											const value = parseInt(e.target.value) || 1;
+											handleConfigChange("log_retention_days", Math.max(1, value));
+										}}
+										className="w-24"
+									/>
+								</div>
 
-						<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-							<div className="space-y-0.5">
-								<Label htmlFor="payload-retention-days" className="text-sm font-medium">
-									{t("logging.payloadRetentionDays")}
-								</Label>
-								<p className="text-muted-foreground text-sm">{t("logging.payloadRetentionDaysDesc")}</p>
-							</div>
-							<Input
-								id="payload-retention-days"
-								data-testid="workspace-payload-retention-days-input"
-								type="number"
-								min="0"
-								value={localConfig.payload_retention_days}
-								onChange={(e) => {
-									const value = parseInt(e.target.value) || 0;
-									handleConfigChange("payload_retention_days", Math.max(0, value));
-								}}
-								className="w-24"
-							/>
-						</div>
+								<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
+									<div className="space-y-0.5">
+										<Label htmlFor="payload-retention-days" className="text-sm font-medium">
+											{t("logging.payloadRetentionDays")}
+										</Label>
+										<p className="text-muted-foreground text-sm">{t("logging.payloadRetentionDaysDesc")}</p>
+									</div>
+									<Input
+										id="payload-retention-days"
+										data-testid="workspace-payload-retention-days-input"
+										type="number"
+										min="0"
+										value={localConfig.payload_retention_days}
+										onChange={(e) => {
+											const value = parseInt(e.target.value) || 0;
+											handleConfigChange("payload_retention_days", Math.max(0, value));
+										}}
+										className="w-24"
+									/>
+								</div>
+							</>
+						)}
 					</section>
 				)}
 
