@@ -1,0 +1,237 @@
+---
+title: "接入 Coding Agent"
+description: "在 Web UI 中为 opencode、Claude Code、Codex、Cursor、hermes / openclaw 等编码工具生成可直接粘贴的配置：自动从网关模型目录拉取、勾选要暴露的模型、复制对应格式的配置文件"
+sidebar_position: 5
+---
+
+# 接入 Coding Agent
+
+**接入 Coding Agent** 帮助你在安装并配置好 celer-route 后，把常用的编码工具（opencode、Claude
+Code、Codex、Cursor、hermes / openclaw 等）接到同一套 API 上。所有工具都从 Web UI 上的「接入 Coding Agent」页面拿到一份可粘贴的配置文件——选 agent、勾选要暴露的模型、复制对应格式即可，不需要手写 JSON 或 TOML。
+
+celer-route 网关暴露多套协议 surface：
+
+- **OpenAI 兼容**：`{origin}/v1`（用于 opencode、Codex、hermes、openclaw、aider、goose 等）
+- **Anthropic 兼容**：`{origin}/anthropic`（用于 Claude Code，会自动拼 `/v1/messages`）
+
+**编码工具不会自动发现模型**：每个工具都要求把模型列表显式写到自己的配置里。本页的核心价值就是
+从 celer-route 网关拉取实时模型目录（`/v1/models`），按你勾选的子集生成各工具所需的格式。
+
+![接入 Coding Agent — opencode（英文）](./agent-setup.assets/agent-setup-opencode.png)
+
+## 进入页面
+
+- 完成 [快速启动](../intro)（已部署 celer-route 并能调用一次 `chat/completions`）
+- 左侧边栏 **模型 → 接入 Coding Agent**
+- 或从完成 onboarding 后看到的那张「接入 Coding Agent」卡片点进去
+
+![接入 Coding Agent — opencode（简体中文）](./agent-setup.assets/agent-setup-opencode-zh.png)
+
+## 三步生成配置
+
+页面左侧是输入区，右侧是模型选择区，下方是实时生成的配置。
+
+### 第 1 步：选择 Coding Agent
+
+在下拉里选你要接入的工具：
+
+| Agent | 走哪个协议 | 生成的配置文件 | 模型子集 |
+|---|---|---|---|
+| opencode | `/v1`（Chat 或 Responses） | `~/.config/opencode/opencode.json` | 必选（写入 `provider.models`） |
+| Claude Code | `/anthropic` | `~/.claude/settings.json` + 环境变量 | 隐藏，只需选默认模型 |
+| Codex CLI | `/v1` | `~/.codex/config.toml` + 环境变量 | 隐藏，只需选默认模型 |
+| OpenAI 兼容 | `/v1` | 环境变量配方（hermes / openclaw / aider / goose） | 隐藏，只需选默认模型 |
+| Cursor / Windsurf | `/v1` | 应用内操作步骤（无配置文件） | 隐藏，只需选默认模型 |
+
+其余 4 个 agent 的配置里只写一个默认模型（`ANTHROPIC_MODEL` / `model` / `OPENAI_MODEL` /
+应用内步骤里的"默认模型"），不需要把模型清单写进配置。所以右侧不暴露多选列表，
+只保留「默认模型」下拉（候选项来自所选 API Key 在 `/v1/models` 上看到的全部模型）。
+
+opencode 还有一个「使用 Responses API」勾选项：勾上后会把 `npm` 切到
+`@ai-sdk/openai`，调用 `/v1/responses`；不勾则用 `@ai-sdk/openai-compatible`，调用
+`/v1/chat/completions`。不确定就保留默认（Chat API，兼容性最好）。
+
+### 第 2 步：填端点与凭证
+
+- **Base URL**：自动填入当前访问的 origin（如 `http://localhost:8080` 或 `http://192.168.x.x:8080`）。如果你想指向远端网关，改这里即可，引擎会按 agent 自动拼 `/v1` 或 `/anthropic`
+- **API Key**：
+  - 如果 `enforce_auth_on_inference` 打开，下拉里只能选已有 API Key（治理 → API Key 页面里管理的虚拟 Key）；没有时页面会提示去那里创建
+  - 如果鉴权关闭，生成的配置里会省略 `apiKey`，方便纯本地/内网试用
+
+### 第 3 步：选择模型
+
+- 只在选择 **opencode** 时才会出现「要暴露的模型」多选列表，候选项就是所选 API Key 在
+  `/v1/models` 上能看到的全部模型。默认全选；点击「全选/清空」可一键切换当前筛选范围内的选择；用搜索框筛模型
+- 不论选哪个 agent，下方都有一个「默认模型」下拉：
+  - **opencode**：候选项是你的勾选子集；agent 启动时默认启用的模型
+  - **其他 agent**：候选项是 `/v1/models` 上能看到的全部模型（提示语会说明这一点）；agent 启动时默认启用的模型
+- 选完后，下方「生成的配置」立刻出现
+
+## 生成的配置长什么样
+
+下方是各 agent 的实际产物（Base URL = `http://localhost:8080`，API Key 已创建）。
+
+### opencode
+
+写入 `~/.config/opencode/opencode.json`：
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "celer-route/minimax/MiniMax-M2.1",
+  "provider": {
+    "celer-route": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "celer-route",
+      "options": {
+        "baseURL": "http://localhost:8080/v1",
+        "apiKey": "sk-bf-…"
+      },
+      "models": {
+        "minimax/MiniMax-M2.1": {
+          "name": "MiniMax-M2.1",
+          "limit": { "output": 8192 }
+        }
+      }
+    }
+  }
+}
+```
+
+`npm` 切到 `@ai-sdk/openai` 后会改用 `/v1/responses`，适合对 Responses API 兼容性有信心时切换。
+
+### Claude Code
+
+写入 `~/.claude/settings.json`，或直接 source 下面的环境变量：
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:8080/anthropic
+export ANTHROPIC_AUTH_TOKEN=sk-bf-…
+export ANTHROPIC_MODEL=minimax/MiniMax-M2.1
+```
+
+`ANTHROPIC_BASE_URL` 故意只填到 `/anthropic`，Claude Code 会自动拼 `/v1/messages`
+指向网关的 Anthropic 兼容 surface。
+
+### Codex CLI
+
+写入 `~/.codex/config.toml`：
+
+```toml
+model = "minimax/MiniMax-M2.1"
+model_provider = "celer-route"
+
+[model_providers.celer-route]
+name = "celer-route"
+base_url = "http://localhost:8080/v1"
+wire_api = "chat"
+env_key = "CELER_ROUTE_API_KEY"
+```
+
+并补一行 `export CELER_ROUTE_API_KEY=sk-bf-…`（页面里也会给）。
+
+### 通用 OpenAI 兼容（hermes / openclaw / aider / goose）
+
+直接给环境变量：
+
+```bash
+export OPENAI_BASE_URL=http://localhost:8080/v1
+export OPENAI_API_KEY=sk-bf-…
+export OPENAI_MODEL=minimax/MiniMax-M2.1
+```
+
+各工具按自家约定读 `OPENAI_*` 即可。
+
+### Cursor / Windsurf
+
+这两款 IDE 的配置文件是 SQLite，没有可写的明文文件，页面里改为「应用内操作步骤」：
+
+1. 打开 Cursor → Settings（⌘,）→ Models
+2. 在「Model Provider」下点 + Add → 选择 OpenAI
+3. Name 填 `celer-route`，Base URL 填 `http://localhost:8080/v1`，API Key 填 `sk-bf-…`
+4. 点击 Verify，选择默认模型 `minimax/MiniMax-M2.1`
+5. 模型下拉里就能切换到任意已配置模型
+
+Windsurf 在 Settings → Models 里走同套 OpenAI-compatible 流程。
+
+## 验证连通性
+
+「生成的配置」标签页的最右侧有一个「用 curl 测试」标签页，里面是一行即用的 curl 请求：
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "minimax/MiniMax-M2.1",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+如果嫌短，可以把首页 onboarding 完成后那张「Your endpoint」卡片里的 curl/python/node/go 示例
+当作更完整模板。
+
+## 手动配置（不通过 Web UI）
+
+如果你想直接写文件而不打开 UI，请按上面的代码块照抄，并在每处替换：
+
+- `{origin}` → 你的 celer-route 地址（不要带尾部 `/v1`；引擎会按 agent 自动拼）
+- `sk-bf-…` → 治理 → API Key 里复制（鉴权开启时必填）
+
+模型 ID 一律用 `/v1/models` 返回的 `id` 字段（即 `provider/model` 形式，如
+`minimax/MiniMax-M2.1`），不是显示名 `MiniMax-M2.1`。
+
+## 注意事项
+
+- **不会自动发现**：每次新增/废弃模型后，记得回来刷新本页、重新生成配置、再粘贴到工具里
+- **模型 ID 是 `provider/model`**：引擎里写错的常见原因是把显示名 `MiniMax-M2.1` 当成模型 ID
+- **API Key 明文展示**：UI 在你选择 Key 后会展示明文 `value`，仅本页可见，便于复制；不要截图外发
+- **Responses API**：opencode 勾上后网关会走 `/v1/responses`；部分上游 provider 可能还没适配，遇到兼容问题就关掉
+- **Claude Code 的 ANTHROPIC_BASE_URL**：一定不要带 `/v1`，否则会变成 `{origin}/anthropic/v1`，多出一段路径
+
+## 命令行工具 `celer-route-setup`
+
+如果不想打开 Web UI，或者要给 CI/远程机器一次性写入配置，仓库自带一个 Go
+CLI（`cli/` 模块）。它从运行中的 celer-route 拉取同一份 `/v1/models`，把
+Web UI 的生成逻辑用 Go 重写一份，保证两边产出的字节完全一致。
+
+构建：
+
+```bash
+make build-setup                    # 输出到 tmp/celer-route-setup
+```
+
+子命令：
+
+| 子命令 | 写入目标 |
+|---|---|
+| `celer-route-setup models` | 把当前模型目录以 JSON 打到 stdout |
+| `celer-route-setup setup-opencode` | 写 `~/.config/opencode/opencode.json` |
+| `celer-route-setup setup-claude` | 写 `~/.claude/settings.json` |
+| `celer-route-setup setup-codex` | 写 `~/.codex/config.toml` |
+| `celer-route-setup setup-openai-compat` | 输出 `OPENAI_*` 环境变量配方（hermes / openclaw / aider / goose） |
+| `celer-route-setup setup-cursor` | 打印 Cursor / Windsurf 的应用内操作步骤 |
+
+公共参数：
+
+```bash
+# 拉取当前网关（默认 localhost:8080）的模型目录
+celer-route-setup models
+
+# 写 opencode.json，默认接 localhost:8080
+celer-route-setup setup-opencode
+
+# 指向远端 VPS，自带 API Key，过滤模型
+celer-route-setup setup-claude --remote http://192.168.0.15:8080 \
+    --api-key sk-bf-… --only minimax,glm
+
+# 只想看会写什么，不动磁盘
+celer-route-setup setup-codex --only minimax --dry-run
+
+# opencode 切到 Responses API
+celer-route-setup setup-opencode --responses
+```
+
+`--dry-run` 会把每个文件的最终内容按 `==> <path> <==` 分隔打到 stdout，方便你
+和已有配置 diff，或者用 `tee` 备份后再落盘。API Key 优先取 `--api-key`，其次取环境变量
+`CELER_ROUTE_API_KEY`；都不填时按网关是否启用鉴权决定是否写入。
+

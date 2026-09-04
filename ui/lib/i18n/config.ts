@@ -20,6 +20,7 @@ import modelCatalog_en from "@/locales/en/model-catalog.json";
 import onboarding_en from "@/locales/en/onboarding.json";
 import login_en from "@/locales/en/login.json";
 import home_en from "@/locales/en/home.json";
+import agentSetup_en from "@/locales/en/agent-setup.json";
 
 import common_zh from "@/locales/zh-CN/common.json";
 import logs_zh from "@/locales/zh-CN/logs.json";
@@ -39,6 +40,7 @@ import modelCatalog_zh from "@/locales/zh-CN/model-catalog.json";
 import onboarding_zh from "@/locales/zh-CN/onboarding.json";
 import login_zh from "@/locales/zh-CN/login.json";
 import home_zh from "@/locales/zh-CN/home.json";
+import agentSetup_zh from "@/locales/zh-CN/agent-setup.json";
 
 const NS = [
 	"common",
@@ -59,6 +61,7 @@ const NS = [
 	"onboarding",
 	"login",
 	"home",
+	"agent-setup",
 ] as const;
 
 export const SUPPORTED_LOCALES = ["en", "zh-CN"] as const;
@@ -91,6 +94,7 @@ export const resources = {
 		onboarding: onboarding_en,
 		login: login_en,
 		home: home_en,
+		"agent-setup": agentSetup_en,
 	},
 	"zh-CN": {
 		common: common_zh,
@@ -111,6 +115,7 @@ export const resources = {
 		onboarding: onboarding_zh,
 		login: login_zh,
 		home: home_zh,
+		"agent-setup": agentSetup_zh,
 	},
 } as const;
 

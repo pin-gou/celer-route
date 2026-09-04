@@ -28,6 +28,7 @@ import {
 	ShieldCheck,
 	SlidersHorizontal,
 	Telescope,
+	Terminal,
 	Wallet,
 	Webhook,
 } from "lucide-react";
@@ -564,6 +565,13 @@ export default function AppSidebar() {
 						icon: Settings,
 						description: "Model and routing configuration",
 						hasAccess: hasSettingsAccess,
+					},
+					{
+						title: t("nav.agentSetup"),
+						url: "/workspace/agent-setup",
+						icon: Terminal,
+						description: "Connect a coding agent",
+						hasAccess: hasModelProvidersAccess,
 					},
 				],
 			},

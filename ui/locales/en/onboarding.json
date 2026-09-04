@@ -105,5 +105,7 @@
 		"inAWeek": "In a week",
 		"pickDate": "Pick a date…",
 		"acceptRisk": "I accept the risk - hide for everyone"
-	}
+	},
+	"connectAgent": "Connect a coding agent →",
+	"connectAgentDesc": "Connect opencode, Claude Code, Codex, or Cursor to this endpoint."
 }

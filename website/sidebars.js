@@ -19,6 +19,7 @@ export default {
         'features/routing-example',
         'features/dashboard-auth',
         'features/provider-cooldown',
+        'features/agent-setup',
         'features/rtk',
       ],
     },

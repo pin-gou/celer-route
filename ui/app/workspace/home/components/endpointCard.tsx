@@ -9,7 +9,8 @@ import { useGetCoreConfigQuery } from "@/lib/store";
 import { RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
 import { buildExamples, resolveEndpointUrl } from "@/lib/utils/testCommandSnippets";
-import { Copy, KeyRound } from "lucide-react";
+import { Copy, KeyRound, Terminal } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -202,6 +203,15 @@ export default function EndpointCard({ endpointUrl }: Props) {
 				)}
 
 				<TestCommandTabs tabs={tabs} />
+
+				<Link
+					to="/workspace/agent-setup"
+					className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs underline-offset-2 hover:underline"
+					data-testid="home-endpoint-agent-setup-link"
+				>
+					<Terminal className="h-3.5 w-3.5" />
+					{t("home.endpointCard.agentSetupLink")}
+				</Link>
 			</CardContent>
 		</Card>
 	);

@@ -8,7 +8,8 @@ import { useGetCoreConfigQuery } from "@/lib/store";
 import { RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
 import { buildExamples, resolveEndpointUrl } from "@/lib/utils/testCommandSnippets";
-import { Copy, KeyRound } from "lucide-react";
+import { Copy, KeyRound, Terminal } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -194,6 +195,18 @@ export default function DoneStep({ selectedProvider, onProviderChange, selectedM
 			)}
 
 			<TestCommandTabs tabs={tabs} />
+
+			<Link
+				to="/workspace/agent-setup"
+				className="hover:bg-muted/50 flex items-center gap-2 rounded-md border border-dashed px-4 py-3 text-sm transition-colors"
+				data-testid="onboarding-connect-agent"
+			>
+				<Terminal className="text-muted-foreground h-4 w-4 shrink-0" />
+				<span className="flex flex-col gap-0.5">
+					<span className="font-medium">{t("connectAgent")}</span>
+					<span className="text-muted-foreground text-xs">{t("connectAgentDesc")}</span>
+				</span>
+			</Link>
 		</div>
 	);
 }

@@ -32,6 +32,7 @@
 		"complexityRouter": "Complexity Router",
 		"pricingOverrides": "Pricing Overrides",
 		"modelSettings": "Model Settings",
+		"agentSetup": "Agent Setup",
 		"routing": "Routing",
 		"mcpCatalog": "MCP Catalog",
 		"mcpLibrary": "MCP Library",
@@ -293,6 +294,7 @@
 			"vkLabel": "Virtual key",
 			"vkPlaceholder": "Select a virtual key",
 			"vkEmpty": "No API keys yet. Create one in Governance → API Keys.",
+			"agentSetupLink": "Connect a coding agent →",
 			"examples": {
 				"curlLabel": "curl",
 				"pythonLabel": "Python (openai)",

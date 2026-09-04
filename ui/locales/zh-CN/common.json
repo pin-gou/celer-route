@@ -32,6 +32,7 @@
 		"complexityRouter": "复杂度路由",
 		"pricingOverrides": "定价覆盖",
 		"modelSettings": "模型设置",
+		"agentSetup": "接入 Coding Agent",
 		"routing": "路由",
 		"mcpCatalog": "MCP 目录",
 		"mcpLibrary": "MCP 库",
@@ -293,6 +294,7 @@
 			"vkLabel": "虚拟 key",
 			"vkPlaceholder": "选择虚拟 key",
 			"vkEmpty": "暂无虚拟 key，请先在治理页面创建。",
+			"agentSetupLink": "接入 Coding Agent →",
 			"examples": {
 				"curlLabel": "curl",
 				"pythonLabel": "Python（openai）",
