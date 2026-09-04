@@ -132,7 +132,7 @@ export default function ModelSettingsView() {
 	};
 
 	return (
-		<div className="mx-auto w-full max-w-7xl space-y-4" data-testid="model-settings-view">
+		<div className="mx-auto w-full max-w-4xl space-y-4 py-6" data-testid="model-settings-view">
 			<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 				<div>
 					<h2 className="text-lg font-semibold tracking-tight">{t("modelSettings.title")}</h2>

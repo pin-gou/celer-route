@@ -560,13 +560,6 @@ export default function AppSidebar() {
 						hasAccess: hasModelProvidersAccess,
 					},
 					{
-						title: t("nav.modelSettings"),
-						url: "/workspace/custom-pricing",
-						icon: Settings,
-						description: "Model and routing configuration",
-						hasAccess: hasSettingsAccess,
-					},
-					{
 						title: t("nav.agentSetup"),
 						url: "/workspace/agent-setup",
 						icon: Terminal,
@@ -750,6 +743,13 @@ export default function AppSidebar() {
 				hasAccess: hasSettingsAccess,
 				subItems: [
 					{
+						title: t("nav.virtualKeys"),
+						url: "/workspace/config/api-keys",
+						icon: KeyRound,
+						description: "Manage virtual keys & access",
+						hasAccess: hasVirtualKeysAccess,
+					},
+					{
 						title: t("nav.security"),
 						url: "/workspace/config/security",
 						icon: ShieldCheck,
@@ -757,11 +757,11 @@ export default function AppSidebar() {
 						hasAccess: hasSettingsAccess,
 					},
 					{
-						title: t("nav.virtualKeys"),
-						url: "/workspace/config/api-keys",
-						icon: KeyRound,
-						description: "Manage virtual keys & access",
-						hasAccess: hasVirtualKeysAccess,
+						title: t("nav.modelSettings"),
+						url: "/workspace/custom-pricing",
+						icon: Settings,
+						description: "Model and routing configuration",
+						hasAccess: hasSettingsAccess,
 					},
 					{
 						title: t("nav.logsSettings"),
