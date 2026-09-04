@@ -260,8 +260,9 @@ type Log struct {
 	Metadata                *string   `gorm:"type:text" json:"-"`                                                                         // JSON serialized map[string]interface{}
 	IsLargePayloadRequest   bool      `gorm:"default:false" json:"is_large_payload_request"`
 	IsLargePayloadResponse  bool      `gorm:"default:false" json:"is_large_payload_response"`
-	HasObject               bool      `gorm:"default:false" json:"-"`              // True when payload is stored in object storage
-	ContentHidden           bool      `gorm:"default:false" json:"content_hidden"` // True when content logging was disabled for the request, so the payload must never be served back through the API/UI (whether it was retained in object storage or dropped entirely)
+	HasObject               bool      `gorm:"default:false" json:"-"`                // True when payload is stored in object storage
+	ContentHidden           bool      `gorm:"default:false" json:"content_hidden"`   // True when content logging was disabled for the request, so the payload must never be served back through the API/UI (whether it was retained in object storage or dropped entirely)
+	PayloadStripped         bool      `gorm:"default:false" json:"payload_stripped"` // True when the log's payload columns were stripped by the retention cleaner (content kept in object storage or dropped; summary/metadata/token usage retained)
 
 	// Aggregates over this log's child rows (rows whose parent_request_id equals
 	// this log's ID, i.e. fallback attempts). Populated only on roots_only list
@@ -2217,7 +2218,7 @@ type DashboardBucketMetric struct {
 	TotalTokens      int64     `gorm:"default:0" json:"total_tokens"`
 	Cost             float64   `gorm:"default:0" json:"cost"`
 	TotalLatencyMS   float64   `gorm:"default:0" json:"total_latency_ms"` // sum over successful rows; divide by LatencyCount for the bucket avg
-	LatencyCount     int64     `gorm:"default:0" json:"latency_count"`     // number of successful rows that contributed to TotalLatencyMS
+	LatencyCount     int64     `gorm:"default:0" json:"latency_count"`    // number of successful rows that contributed to TotalLatencyMS
 	UpdatedAt        time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 

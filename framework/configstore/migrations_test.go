@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -64,6 +65,29 @@ func captureLogOutput(fn func()) string {
 
 	fn()
 	return buf.String()
+}
+
+// TestMigrationAddPayloadRetentionDaysColumn verifies the config_client
+// payload_retention_days column is additive, idempotent, and preserves rows.
+func TestMigrationAddPayloadRetentionDaysColumn(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "migrations.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE config_client (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	)`).Error)
+	now := time.Now()
+	require.NoError(t, db.Exec(`INSERT INTO config_client (created_at, updated_at) VALUES (?, ?)`, now, now).Error)
+
+	ctx := context.Background()
+	require.NoError(t, migrationAddPayloadRetentionDaysColumn(ctx, db, testMigrationLogger))
+	require.True(t, db.Migrator().HasColumn(&tables.TableClientConfig{}, "payload_retention_days"))
+	require.NoError(t, migrationAddPayloadRetentionDaysColumn(ctx, db, testMigrationLogger))
+
+	var count int64
+	require.NoError(t, db.Table("config_client").Count(&count).Error)
+	assert.Equal(t, int64(1), count)
 }
 
 func TestNormalizeName(t *testing.T) {

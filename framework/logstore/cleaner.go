@@ -20,11 +20,20 @@ const (
 // LogRetentionManager defines the interface for managing log retention and deletion
 type LogRetentionManager interface {
 	DeleteLogsBatch(ctx context.Context, cutoff time.Time, batchSize int) (deletedCount int64, err error)
+	// StripPayloadsBatch clears the payload content columns of logs older than
+	// cutoff that have not been stripped yet. The rows themselves are kept, so
+	// list/search/analytics over summary, metadata, and token usage still work.
+	// Returns the number of rows stripped.
+	StripPayloadsBatch(ctx context.Context, cutoff time.Time, batchSize int) (strippedCount int64, err error)
 }
 
 // CleanerConfig holds configuration for the log cleaner
 type CleanerConfig struct {
 	RetentionDays int
+	// PayloadRetentionDays is the age (in days) after which a log's payload
+	// content columns are stripped while the row is kept. 0 (or any value below
+	// RetentionDays) disables stripping. Must be <= RetentionDays to have an effect.
+	PayloadRetentionDays int
 }
 
 // LogsCleaner manages the cleanup of old logs
@@ -102,14 +111,31 @@ func (c *LogsCleaner) StopCleanupRoutine() {
 	c.stopCleanup = nil
 }
 
-// cleanupOldLogs deletes logs older than the retention period in batches
+// cleanupOldLogs strips payloads older than the payload retention period (when
+// configured) and deletes logs older than the retention period in batches.
 func (c *LogsCleaner) cleanupOldLogs(ctx context.Context) {
 	retentionDays := c.config.RetentionDays
 	if retentionDays < 1 {
 		retentionDays = defaultRetentionDays
 	}
 
-	// Calculate cutoff time
+	// Phase 1: strip payload content columns from logs older than the payload
+	// retention period, keeping rows (summary/metadata/token usage) for
+	// list/search/analytics. Skipped when disabled (0 or >= retention).
+	if c.config.PayloadRetentionDays > 0 && c.config.PayloadRetentionDays < retentionDays {
+		stripCutoff := time.Now().UTC().AddDate(0, 0, -c.config.PayloadRetentionDays)
+		c.logger.Info("starting log payload stripping: stripping payloads older than %s (payload retention: %d days)",
+			stripCutoff.Format(time.RFC3339), c.config.PayloadRetentionDays)
+		stripped, err := c.stripOldPayloads(ctx, stripCutoff)
+		if err != nil {
+			c.logger.Error("log payload stripping failed: %v", err)
+		}
+		if stripped > 0 {
+			c.logger.Info("log payload stripping completed: stripped %d logs", stripped)
+		}
+	}
+
+	// Calculate cutoff time for deletion
 	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
 	c.logger.Info("starting log cleanup: deleting logs older than %s (retention: %d days)", cutoff.Format(time.RFC3339), retentionDays)
 
@@ -152,6 +178,35 @@ func (c *LogsCleaner) cleanupOldLogs(ctx context.Context) {
 	} else {
 		c.logger.Debug("log cleanup completed: no old logs to delete")
 	}
+}
+
+// stripOldPayloads strips payload columns in batches until no more eligible
+// rows remain, returning the total number of stripped rows.
+func (c *LogsCleaner) stripOldPayloads(ctx context.Context, cutoff time.Time) (int64, error) {
+	total := int64(0)
+	for {
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		default:
+		}
+
+		stripped, err := c.manager.StripPayloadsBatch(ctx, cutoff, batchSize)
+		if err != nil {
+			return total, err
+		}
+
+		if stripped == 0 {
+			break
+		}
+		total += stripped
+		c.logger.Debug("stripped batch: %d logs", stripped)
+
+		if stripped < int64(batchSize) {
+			break
+		}
+	}
+	return total, nil
 }
 
 // calculateNextRunDuration returns 24 hours plus a random jitter between 15-30 minutes

@@ -295,6 +295,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_tools_to_auto_execute_json_column"}, run: migrationAddToolsToAutoExecuteJSONColumn},
 	{IDs: []string{"add_is_code_mode_client_column"}, run: migrationAddIsCodeModeClientColumn},
 	{IDs: []string{"add_log_retention_days_column"}, run: migrationAddLogRetentionDaysColumn},
+	{IDs: []string{"add_payload_retention_days_column"}, run: migrationAddPayloadRetentionDaysColumn},
 	{IDs: []string{"add_enabled_column_to_key_table"}, run: migrationAddEnabledColumnToKeyTable},
 	{IDs: []string{"update_model_pricing_table_to_add_cache_and_batch_pricing"}, run: migrationAddBatchAndCachePricingColumns},
 	{IDs: []string{"add_mcp_agent_depth_and_mcp_tool_execution_timeout_columns"}, run: migrationAddMCPAgentDepthAndMCPToolExecutionTimeoutColumns},
@@ -1317,6 +1318,7 @@ func migrationDropAllowDirectKeysColumn(ctx context.Context, db *gorm.DB, logger
 					AllowPerRequestRawOverride:            cc.AllowPerRequestRawOverride,
 					DisableDBPingsInHealth:                cc.DisableDBPingsInHealth,
 					LogRetentionDays:                      cc.LogRetentionDays,
+					PayloadRetentionDays:                  cc.PayloadRetentionDays,
 					EnforceAuthOnInference:                cc.EnforceAuthOnInference,
 					AllowedOrigins:                        cc.AllowedOrigins,
 					AllowedHeaders:                        cc.AllowedHeaders,
@@ -2182,6 +2184,35 @@ func migrationAddLogRetentionDaysColumn(ctx context.Context, db *gorm.DB, logger
 	return nil
 }
 
+// migrationAddPayloadRetentionDaysColumn adds the payload_retention_days column to the client config table
+func migrationAddPayloadRetentionDaysColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_payload_retention_days_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableClientConfig{}, "payload_retention_days"); err != nil {
+				return err
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &tables.TableClientConfig{}, "payload_retention_days"); err != nil {
+				return err
+			}
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
 // migrationAddEnabledColumnToKeyTable adds the enabled column to the config_keys table
 func migrationAddEnabledColumnToKeyTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
 	migrationName := "add_enabled_column_to_key_table"
@@ -2835,6 +2866,7 @@ func migrationAddAdditionalConfigHashColumns(ctx context.Context, db *gorm.DB, l
 							EnableLogging:           cc.EnableLogging,
 							DisableContentLogging:   cc.DisableContentLogging,
 							LogRetentionDays:        cc.LogRetentionDays,
+							PayloadRetentionDays:    cc.PayloadRetentionDays,
 							EnforceGovernanceHeader: cc.EnforceGovernanceHeader,
 							AllowedOrigins:          cc.AllowedOrigins,
 							MaxRequestBodySizeMB:    cc.MaxRequestBodySizeMB,
@@ -7247,6 +7279,7 @@ func migrationAddRoutingChainMaxDepthColumn(ctx context.Context, db *gorm.DB, lo
 						DisableContentLogging:           cc.DisableContentLogging,
 						DisableDBPingsInHealth:          cc.DisableDBPingsInHealth,
 						LogRetentionDays:                cc.LogRetentionDays,
+						PayloadRetentionDays:            cc.PayloadRetentionDays,
 						EnforceAuthOnInference:          cc.EnforceAuthOnInference,
 						AllowedOrigins:                  cc.AllowedOrigins,
 						AllowedHeaders:                  cc.AllowedHeaders,
@@ -9575,6 +9608,7 @@ func migrationRefreshConfigHashAfterMCPExternalServerURLRemoval(ctx context.Cont
 					AllowPerRequestRawOverride:            cc.AllowPerRequestRawOverride,
 					DisableDBPingsInHealth:                cc.DisableDBPingsInHealth,
 					LogRetentionDays:                      cc.LogRetentionDays,
+					PayloadRetentionDays:                  cc.PayloadRetentionDays,
 					EnforceAuthOnInference:                cc.EnforceAuthOnInference,
 					AllowedOrigins:                        cc.AllowedOrigins,
 					AllowedHeaders:                        cc.AllowedHeaders,

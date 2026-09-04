@@ -693,6 +693,7 @@ export interface CoreConfig {
 	disable_db_pings_in_health: boolean;
 	dump_errors_in_console_logs: boolean;
 	log_retention_days: number;
+	payload_retention_days: number;
 	enforce_auth_on_inference: boolean;
 	dual_credential_conflict_behavior?: "error" | "prefer_vk" | "prefer_idp";
 	allowed_origins: string[];
@@ -736,6 +737,7 @@ export const DefaultCoreConfig: CoreConfig = {
 	disable_db_pings_in_health: false,
 	dump_errors_in_console_logs: false,
 	log_retention_days: 365,
+	payload_retention_days: 0,
 	enforce_auth_on_inference: false,
 	dual_credential_conflict_behavior: "prefer_idp",
 	allowed_origins: [],

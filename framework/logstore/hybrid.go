@@ -556,6 +556,16 @@ func (h *HybridLogStore) DeleteLogsBatch(ctx context.Context, cutoff time.Time, 
 	return h.inner.DeleteLogsBatch(ctx, cutoff, batchSize)
 }
 
+// StripPayloadsBatch delegates to the inner store. In hybrid mode the payload
+// columns are typically already blanked by the offload, so stripping mainly
+// marks the row as stripped for the retained (summary/metadata/token) columns.
+func (h *HybridLogStore) StripPayloadsBatch(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	if mgr, ok := h.inner.(LogRetentionManager); ok {
+		return mgr.StripPayloadsBatch(ctx, cutoff, batchSize)
+	}
+	return 0, nil
+}
+
 // Close shuts the store down cleanly: marks the store closed (so further
 // enqueues are dropped), closes the upload queue, waits for workers to drain
 // any in-flight uploads, then closes the object store and the inner store.

@@ -2603,6 +2603,7 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	if s.Config.LogsStore != nil {
 		// If log retention days remains 0, then we wont be initializing the log retention cleaner
 		logRetentionDays := 0
+		payloadRetentionDays := 0
 		if s.Config.ConfigStore != nil {
 			// Get logs store config from config store
 			clientConfig, err := s.Config.ConfigStore.GetClientConfig(ctx)
@@ -2612,22 +2613,25 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 			}
 			if clientConfig != nil {
 				logRetentionDays = clientConfig.LogRetentionDays
+				payloadRetentionDays = clientConfig.PayloadRetentionDays
 			}
 		} else {
 			// We will check if the config file has the log retention days set
 			logRetentionDays = s.Config.ClientConfig.LogRetentionDays
+			payloadRetentionDays = s.Config.ClientConfig.PayloadRetentionDays
 		}
-		logger.Info("log retention days: %d", logRetentionDays)
+		logger.Info("log retention days: %d, payload retention days: %d", logRetentionDays, payloadRetentionDays)
 		if logRetentionDays > 0 {
 			// Type assert to get RDBLogStore (which implements LogRetentionManager)
 			if rdbStore, ok := s.Config.LogsStore.(logstore.LogRetentionManager); ok {
 				cleanerConfig := logstore.CleanerConfig{
-					RetentionDays: logRetentionDays,
+					RetentionDays:        logRetentionDays,
+					PayloadRetentionDays: payloadRetentionDays,
 				}
 				s.LogsCleaner = logstore.NewLogsCleaner(rdbStore, cleanerConfig, logger)
 				s.LogsCleaner.StartCleanupRoutine()
-				logger.Info("log retention cleaner initialized with %d days retention",
-					logRetentionDays)
+				logger.Info("log retention cleaner initialized with %d days retention, %d days payload retention",
+					logRetentionDays, payloadRetentionDays)
 			}
 		}
 

@@ -302,14 +302,14 @@ test.describe('Config Settings', () => {
 
     test('should toggle content logging when available', async ({ configSettingsPage }) => {
       // Check if the switch is available (depends on logs being connected)
-      const disableContentLoggingVisible = await configSettingsPage.disableContentLoggingSwitch.isVisible().catch(() => false)
+      const recordContentLoggingVisible = await configSettingsPage.recordContentLoggingSwitch.isVisible().catch(() => false)
 
-      if (disableContentLoggingVisible) {
-        const initialState = await configSettingsPage.getSwitchState(configSettingsPage.disableContentLoggingSwitch)
+      if (recordContentLoggingVisible) {
+        const initialState = await configSettingsPage.getSwitchState(configSettingsPage.recordContentLoggingSwitch)
 
-        await configSettingsPage.toggleDisableContentLogging()
+        await configSettingsPage.toggleRecordContentLogging()
 
-        const newState = await configSettingsPage.getSwitchState(configSettingsPage.disableContentLoggingSwitch)
+        const newState = await configSettingsPage.getSwitchState(configSettingsPage.recordContentLoggingSwitch)
         expect(newState).toBe(!initialState)
       } else {
         // Skip if logging not available
@@ -319,13 +319,13 @@ test.describe('Config Settings', () => {
 
     test('should save and persist content logging toggle when available', async ({ configSettingsPage }) => {
       // Check if the switch is available (depends on logs being connected)
-      const disableContentLoggingVisible = await configSettingsPage.disableContentLoggingSwitch.isVisible().catch(() => false)
+      const recordContentLoggingVisible = await configSettingsPage.recordContentLoggingSwitch.isVisible().catch(() => false)
 
-      if (disableContentLoggingVisible) {
-        const initialState = await configSettingsPage.getSwitchState(configSettingsPage.disableContentLoggingSwitch)
+      if (recordContentLoggingVisible) {
+        const initialState = await configSettingsPage.getSwitchState(configSettingsPage.recordContentLoggingSwitch)
 
         // Toggle
-        await configSettingsPage.toggleDisableContentLogging()
+        await configSettingsPage.toggleRecordContentLogging()
 
         // Save
         await configSettingsPage.saveSettings()
@@ -334,7 +334,7 @@ test.describe('Config Settings', () => {
         await configSettingsPage.goto('logging')
 
         // Verify change persisted
-        const savedState = await configSettingsPage.getSwitchState(configSettingsPage.disableContentLoggingSwitch)
+        const savedState = await configSettingsPage.getSwitchState(configSettingsPage.recordContentLoggingSwitch)
         expect(savedState).toBe(!initialState)
       } else {
         // Skip if logging not available

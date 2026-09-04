@@ -78,6 +78,7 @@ type ClientConfig struct {
 	AllowDirectKeys                       bool                                  `json:"allow_direct_keys"`                          // Allow callers to bypass the registered key pool via x-bf-direct-key: true header
 	DisableDBPingsInHealth                bool                                  `json:"disable_db_pings_in_health"`
 	LogRetentionDays                      int                                   `json:"log_retention_days" validate:"min=1"`         // Number of days to retain logs (minimum 1 day)
+	PayloadRetentionDays                  int                                   `json:"payload_retention_days" validate:"min=0"`     // Number of days to keep full payload columns before stripping them (0 = disabled)
 	EnforceAuthOnInference                bool                                  `json:"enforce_auth_on_inference"`                   // Require auth (VK, API key, or user token) on inference endpoints
 	DualCredentialConflictBehavior        tables.DualCredentialConflictBehavior `json:"dual_credential_conflict_behavior,omitempty"` // Behavior when both an IDP token and a VK are present on an inference request
 	EnforceGovernanceHeader               bool                                  `json:"enforce_governance_header,omitempty"`         // Deprecated: use EnforceAuthOnInference
@@ -282,6 +283,12 @@ func (c *ClientConfig) GenerateClientConfigHash() (string, error) {
 	hash.Write(data)
 
 	data, err = sonic.Marshal(c.LogRetentionDays)
+	if err != nil {
+		return "", err
+	}
+	hash.Write(data)
+
+	data, err = sonic.Marshal(c.PayloadRetentionDays)
 	if err != nil {
 		return "", err
 	}

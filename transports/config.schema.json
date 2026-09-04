@@ -154,6 +154,12 @@
           "description": "Number of days to retain logs",
           "default": 365
         },
+        "payload_retention_days": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of days to keep full payload columns before stripping them. Logs older than this age keep their summary/metadata/usage but lose their message content to save space. 0 disables stripping (default). Should be <= log_retention_days.",
+          "default": 0
+        },
         "enforce_governance_header": {
           "type": "boolean",
           "description": "Deprecated: use enforce_auth_on_inference"

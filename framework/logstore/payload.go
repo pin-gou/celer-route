@@ -1055,6 +1055,30 @@ func PayloadFieldNames() []string {
 	return cp
 }
 
+// stripExemptPayloadFields are payload columns that the retention cleaner must NOT
+// strip when aging out a row. token_usage is needed for cost recomputation (the
+// denormalized integer token columns don't carry the full breakdown), and
+// error_details preserves error-diagnosis context.
+var stripExemptPayloadFields = map[string]struct{}{
+	"token_usage":   {},
+	"error_details": {},
+}
+
+// StripPayloadFieldNames returns the DB column names cleared by the retention
+// cleaner when a log is stripped: all payload fields except token_usage and
+// error_details. metadata and content_summary are not payload fields and are
+// always retained.
+func StripPayloadFieldNames() []string {
+	fields := make([]string, 0, len(payloadFields)-len(stripExemptPayloadFields))
+	for _, f := range payloadFields {
+		if _, exempt := stripExemptPayloadFields[f]; exempt {
+			continue
+		}
+		fields = append(fields, f)
+	}
+	return fields
+}
+
 // payloadFieldSet is a set for O(1) lookup of payload field names.
 var payloadFieldSet = func() map[string]struct{} {
 	s := make(map[string]struct{}, len(payloadFields))

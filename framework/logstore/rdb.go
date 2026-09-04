@@ -4834,6 +4834,41 @@ func (s *RDBLogStore) DeleteLogsBatch(ctx context.Context, cutoff time.Time, bat
 	return result.RowsAffected, nil
 }
 
+// StripPayloadsBatch clears the payload content columns of logs older than
+// cutoff that have not been stripped yet, leaving the row (summary, metadata,
+// scalar columns, token_usage, error_details) intact. Returns the number of
+// rows stripped.
+func (s *RDBLogStore) StripPayloadsBatch(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	// Select IDs of logs to strip, limited to the batch size.
+	var ids []string
+	if err := s.db.WithContext(ctx).
+		Model(&Log{}).
+		Select("id").
+		Where("created_at < ? AND payload_stripped = ?", cutoff, false).
+		Limit(batchSize).
+		Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	// Build the update map: clear every strip-eligible payload column and mark
+	// the row stripped. A map (rather than struct) is required so zero-value
+	// strings are written instead of skipped by GORM.
+	updates := map[string]interface{}{"payload_stripped": true}
+	for _, col := range StripPayloadFieldNames() {
+		updates[col] = ""
+	}
+
+	result := s.db.WithContext(ctx).Model(&Log{}).Where("id IN ?", ids).Updates(updates)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
 // Close closes the log store.
 func (s *RDBLogStore) Close(ctx context.Context) error {
 	sqlDB, err := s.db.WithContext(ctx).DB()

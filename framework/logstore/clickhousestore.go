@@ -540,6 +540,13 @@ func (s *ClickHouseLogStore) DeleteLogsBatch(ctx context.Context, cutoff time.Ti
 	return int64(len(ids)), nil
 }
 
+// StripPayloadsBatch is intentionally a no-op on ClickHouse: columnar storage
+// plus TTL-based retention already keep the footprint small, and re-inserting
+// stripped rows would cost more than it saves.
+func (s *ClickHouseLogStore) StripPayloadsBatch(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	return 0, nil
+}
+
 // DeleteExpiredAsyncJobs deletes async jobs whose expiry has passed.
 // Overridden for the same reason as DeleteLogsBatch: mutation deletes report
 // 0 rows affected, so ids are selected first and their count returned.

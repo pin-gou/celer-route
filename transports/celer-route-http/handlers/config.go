@@ -675,6 +675,17 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 	}
 	updatedConfig.LogRetentionDays = payload.ClientConfig.LogRetentionDays
 
+	// Validate PayloadRetentionDays
+	if payload.ClientConfig.PayloadRetentionDays < 0 {
+		logger.Warn("payload_retention_days must be at least 0")
+		SendError(ctx, fasthttp.StatusBadRequest, "payload_retention_days must be at least 0")
+		return
+	}
+	if payload.ClientConfig.PayloadRetentionDays > payload.ClientConfig.LogRetentionDays {
+		logger.Warn("payload_retention_days (%d) is greater than log_retention_days (%d); stripping will have no effect", payload.ClientConfig.PayloadRetentionDays, payload.ClientConfig.LogRetentionDays)
+	}
+	updatedConfig.PayloadRetentionDays = payload.ClientConfig.PayloadRetentionDays
+
 	if err := h.store.ConfigStore.UpdateClientConfig(ctx, updatedConfig); err != nil {
 		logger.Warn("failed to save configuration: %v", err)
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to save configuration: %v", err))

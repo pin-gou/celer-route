@@ -284,6 +284,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"async_jobs_add_request_id_column"}, run: migrationAddAsyncJobRequestIDColumn},
 	{IDs: []string{"webhook_deliveries_add_request_id_column"}, run: migrationAddWebhookDeliveryRequestIDColumn},
 	{IDs: []string{"logs_add_content_hidden_column"}, run: migrationAddContentHiddenColumn},
+	{IDs: []string{"logs_add_payload_stripped_column"}, run: migrationAddPayloadStrippedColumn},
 	{IDs: []string{"logs_add_server_side_fallback_model_column"}, run: migrationAddServerSideFallbackModelColumn},
 	{IDs: []string{"logs_add_billing_fidelity_columns"}, run: migrationAddBillingFidelityColumns},
 	{IDs: []string{"logs_recreate_matviews_with_user_agent_column"}, run: migrationRecreateMatViewsWithUserAgentColumn},
@@ -3311,6 +3312,39 @@ func migrationAddContentHiddenColumn(ctx context.Context, db *gorm.DB, logger sc
 	err := m.Migrate()
 	if err != nil {
 		return fmt.Errorf("error while adding content_hidden column: %w", err)
+	}
+	return nil
+}
+
+// migrationAddPayloadStrippedColumn adds the payload_stripped boolean column to the logs table.
+// Marks logs whose payload columns were stripped by the retention cleaner: the row keeps its
+// summary/metadata/token usage, but the full message content has been removed to save space.
+func migrationAddPayloadStrippedColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_add_payload_stripped_column"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &Log{}, "payload_stripped"); err != nil {
+				return err
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &Log{}, "payload_stripped"); err != nil {
+				return err
+			}
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while adding payload_stripped column: %w", err)
 	}
 	return nil
 }
