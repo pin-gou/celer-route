@@ -66,8 +66,12 @@ export default function AgentSetupView() {
 
 	const showModelSubset = requiresModelSubset(agent);
 
-	const { data: bifrostConfig } = useGetCoreConfigQuery({});
-	const enforceAuth = !!bifrostConfig?.client_config?.enforce_auth_on_inference;
+	const { data: bifrostConfig, isSuccess: configSettled, isError: configFailed } = useGetCoreConfigQuery({});
+	// The auth mode is only known once the core-config query resolves. Until
+	// then `enforce_auth_on_inference` reads as falsy and gating the models
+	// probe on it alone would still fire an unauthenticated request.
+	const authDecided = configSettled || configFailed;
+	const enforceAuth = authDecided && !!bifrostConfig?.client_config?.enforce_auth_on_inference;
 	const { data: vksResponse } = useGetVirtualKeysQuery(undefined, { skip: !enforceAuth });
 	const vks = useMemo(() => vksResponse?.virtual_keys ?? [], [vksResponse]);
 
@@ -77,7 +81,13 @@ export default function AgentSetupView() {
 	// header entirely so the result matches an unauthenticated `curl /v1/models`.
 	const apiKey = enforceAuth ? (selectedApiKey?.value ?? null) : null;
 
-	const { models: v1Models, isLoading: isLoadingModels, error: v1Error, refetch } = useV1Models(baseUrl, apiKey);
+	// Hold off on the /v1/models probe until the auth mode is settled AND, on
+	// enforce-auth gateways, a virtual key is actually available. Otherwise the
+	// hook fires an unauthenticated request, then a second authenticated one
+	// once the key resolves — two calls to /v1/models.
+	const modelsSkip = !authDecided || (enforceAuth && !selectedApiKey);
+
+	const { models: v1Models, isLoading: isLoadingModels, error: v1Error, refetch } = useV1Models(baseUrl, apiKey, modelsSkip);
 
 	// Reset the default model + selection when the catalog changes (e.g.
 	// user switched API key and the catalog no longer contains the picked id).

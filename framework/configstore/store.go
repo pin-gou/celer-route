@@ -258,6 +258,14 @@ type ConfigStore interface {
 	GetProvider(ctx context.Context, provider schemas.ModelProvider) (*tables.TableProvider, error)
 	UpdateStatus(ctx context.Context, provider schemas.ModelProvider, keyID string, status, errorMsg string) error
 
+	// Model list cache CRUD — DB-first fast path for GET /v1/models. The row
+	// (keyed by tables.ModelListCacheAll) holds the fully-aggregated response
+	// across all configured providers, so /v1/models reads it without fanning
+	// out to every provider. Any provider/key config write invalidates it.
+	GetCachedModelList(ctx context.Context, provider string) (*tables.TableModelListCache, error)
+	UpsertCachedModelList(ctx context.Context, entry *tables.TableModelListCache, tx ...*gorm.DB) error
+	DeleteCachedModelList(ctx context.Context, provider string, tx ...*gorm.DB) error
+
 	// MCP config CRUD
 	GetMCPConfig(ctx context.Context) (*schemas.MCPConfig, error)
 	GetMCPClientByID(ctx context.Context, id string) (*tables.TableMCPClient, error)

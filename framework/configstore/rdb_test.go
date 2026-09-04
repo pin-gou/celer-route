@@ -64,6 +64,7 @@ func setupRDBTestStore(t *testing.T) *RDBConfigStore {
 		&tables.TableOAuth2RefreshToken{},
 		&tables.TableWebhookEndpoint{},
 		&tables.TableWebhookJob{},
+		&tables.TableModelListCache{},
 	)
 	require.NoError(t, err, "Failed to migrate test database")
 

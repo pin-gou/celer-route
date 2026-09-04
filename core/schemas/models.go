@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // DefaultPageSize is the default page size for listing models
@@ -11,6 +12,13 @@ const DefaultPageSize = 1000
 
 // MaxPaginationRequests is the maximum number of pagination requests to make
 const MaxPaginationRequests = 20
+
+// DefaultListAllModelsTimeout bounds how long a single ListAllModels fan-out
+// may wait for every configured provider. Without it, the endpoint stalls for
+// the slowest provider's full request timeout (default 300s) whenever a single
+// upstream hangs. After this deadline the fan-out returns whatever has been
+// collected so far and drops the stragglers.
+const DefaultListAllModelsTimeout = 5 * time.Second
 
 // Structure to collect results from goroutines
 type ListModelsByKeyResult struct {

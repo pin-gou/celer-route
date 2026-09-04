@@ -472,6 +472,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_bedrock_endpoints_columns"}, run: migrationAddBedrockEndpointsColumns},
 	{IDs: []string{"add_cost_per_request_pricing_column"}, run: migrationAddCostPerRequestPricingColumn},
 	{IDs: []string{"add_provider_default_parameters_json_column"}, run: migrationAddProviderDefaultParametersJSONColumn},
+	{IDs: []string{"add_model_list_cache_table"}, run: migrationAddModelListCacheTable},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12042,6 +12043,41 @@ func migrationAddBedrockEndpointsColumns(ctx context.Context, db *gorm.DB, logge
 				if err := dropColumnIfExists(tx, logger, &tables.TableKey{}, column); err != nil {
 					return fmt.Errorf("failed to drop %s column: %w", column, err)
 				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddModelListCacheTable creates the config_model_list_cache table
+// backing the DB-first /v1/models fast path. The row is populated on a cache
+// miss (first full-list request after a provider/key config change) and is
+// invalidated by any provider or key write.
+func migrationAddModelListCacheTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_model_list_cache_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableModelListCache{}) {
+				logger.Info("[configstore] %s: creating table TableModelListCache", migrationName)
+				if err := migrator.CreateTable(&tables.TableModelListCache{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := tx.Migrator().DropTable(&tables.TableModelListCache{}); err != nil {
+				return err
 			}
 			return nil
 		},

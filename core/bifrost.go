@@ -647,6 +647,12 @@ func (bifrost *Bifrost) ListAllModels(ctx *schemas.BifrostContext, req *schemas.
 	results := make(chan providerResult, len(providerKeys))
 	var wg sync.WaitGroup
 
+	// Overall deadline for the whole fan-out. Without it, a single hung
+	// provider stalls /v1/models for its full request timeout (default 300s);
+	// with it, stragglers are dropped and the request returns within a bounded
+	// window with whatever models have been collected so far.
+	fanoutDeadline := time.Now().Add(schemas.DefaultListAllModelsTimeout)
+
 	// Launch concurrent requests for all providers
 	for _, providerKey := range providerKeys {
 		if strings.TrimSpace(string(providerKey)) == "" {
@@ -657,7 +663,7 @@ func (bifrost *Bifrost) ListAllModels(ctx *schemas.BifrostContext, req *schemas.
 		go func(providerKey schemas.ModelProvider) {
 			defer wg.Done()
 
-			providerCtx := schemas.NewBifrostContext(ctx, schemas.NoDeadline)
+			providerCtx := schemas.NewBifrostContext(ctx, fanoutDeadline)
 			providerCtx.SetValue(schemas.BifrostContextKeyRequestID, uuid.New().String())
 
 			providerModels := make([]schemas.Model, 0)

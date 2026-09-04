@@ -3,6 +3,7 @@ package rtk
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/pin-gou/celer-route/core/schemas"
 )
@@ -100,6 +101,7 @@ type PipelineStep struct {
 // Engines are registered by ID and can be retrieved, listed, or executed
 // by the PipelineRunner.
 type EngineCatalog struct {
+	mu      sync.RWMutex
 	engines map[string]CompressionEngine
 }
 
@@ -113,13 +115,24 @@ func NewEngineCatalog() *EngineCatalog {
 // RegisterEngine registers a compression engine under the given ID.
 // If an engine with the same ID already exists, the last-write-wins
 // (the previous engine is replaced).
+//
+// The catalog is a process-wide shared registry: engines are registered both
+// at plugin Init and defensively on every PreLLMHook. Requests run the full
+// plugin pipeline concurrently (e.g. ListAllModels fans out one goroutine per
+// provider), so writes must be serialized or Go's runtime aborts with
+// "fatal error: concurrent map writes". A write lock is correct because this
+// is last-write-wins replacement, not a mutation of an existing entry.
 func (c *EngineCatalog) RegisterEngine(id string, engine CompressionEngine) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.engines[id] = engine
 }
 
 // GetEngine retrieves a compression engine by ID. Returns ok=false
 // when the ID is not registered.
 func (c *EngineCatalog) GetEngine(id string) (CompressionEngine, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	e, ok := c.engines[id]
 	return e, ok
 }
@@ -127,6 +140,8 @@ func (c *EngineCatalog) GetEngine(id string) (CompressionEngine, bool) {
 // ListEngines returns all registered engine IDs. The order is not
 // guaranteed to be stable.
 func (c *EngineCatalog) ListEngines() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	ids := make([]string, 0, len(c.engines))
 	for id := range c.engines {
 		ids = append(ids, id)

@@ -862,7 +862,29 @@ func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 
 	// If provider is empty, list all models from all providers
 	if provider == "" {
-		resp, bifrostErr = h.client.ListAllModels(bifrostCtx, bifrostListModelsReq)
+		// DB-backed fast path: serve the cached aggregate list when it exists,
+		// so the endpoint does not fan out to every provider on every request.
+		// Only the unscoped aggregate is cached; VK-scoped requests always
+		// fan out live so provider narrowing keeps working.
+		if h.modelListCacheEnabled() && !listModelsRequestIsVKScoped(bifrostCtx) {
+			if h.tryServeListModelsFromCache(ctx, bifrostCtx, pageSize, pageToken) {
+				return
+			}
+			// Fetch the full unpaginated list so the cache holds everything,
+			// then apply the request's pagination below on the full result.
+			fullReq := *bifrostListModelsReq
+			fullReq.PageSize = 0
+			fullReq.PageToken = ""
+			resp, bifrostErr = h.client.ListAllModels(bifrostCtx, &fullReq)
+			if bifrostErr == nil {
+				h.persistListModelsCache(ctx, resp)
+				if resp != nil {
+					resp = resp.ApplyPagination(pageSize, pageToken)
+				}
+			}
+		} else {
+			resp, bifrostErr = h.client.ListAllModels(bifrostCtx, bifrostListModelsReq)
+		}
 	} else {
 		resp, bifrostErr = h.client.ListModelsRequest(bifrostCtx, bifrostListModelsReq)
 	}
@@ -873,17 +895,7 @@ func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if streamLargeResponseIfActive(ctx, bifrostCtx) {
-		return
-	}
-
-	enrichListModelsResponse(resp, h.config.ModelCatalog)
-	h.enrichListModelsWithRoutingRuleBackfill(resp, bifrostCtx)
-	if resp != nil {
-		lib.ApplyBifrostResponseHeaders(ctx, bifrostCtx, resp.ExtraFields)
-	}
-	// Send successful response
-	SendJSON(ctx, resp)
+	h.finishListModelsResponse(ctx, bifrostCtx, resp)
 }
 
 func enrichListModelsResponse(resp *schemas.BifrostListModelsResponse, catalog *modelcatalog.ModelCatalog) {

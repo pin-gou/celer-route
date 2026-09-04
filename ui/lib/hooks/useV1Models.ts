@@ -37,15 +37,32 @@ interface V1ModelDTO {
  * `enforce_auth_on_inference`-on gateways. Pass an empty apiKey to skip
  * the Authorization header (open-mode gateways).
  *
- * Refetches when baseUrl or apiKey change.
+ * Set `skip` true while the caller has not yet decided the auth mode / key:
+ * no request is issued (state stays "loading") until it flips false,
+ * preventing a wasted unauthenticated probe followed by an authenticated
+ * refetch on enforce-auth gateways.
+ *
+ * Refetches when baseUrl, apiKey, or skip changes (or via refetch()).
  */
-export function useV1Models(baseUrl: string, apiKey: string | null): V1ModelsState {
+export function useV1Models(baseUrl: string, apiKey: string | null, skip = false): V1ModelsState {
 	const [models, setModels] = useState<V1Model[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [nonce, setNonce] = useState(0);
 
 	useEffect(() => {
+		// Gate: when the caller has not yet decided the auth mode (e.g. the
+		// core-config query is still in flight), or an enforce-auth gateway has
+		// not yet selected a virtual key, hold off entirely. Otherwise the hook
+		// would fire an unauthenticated probe, then a second authenticated
+		// request once the key resolves — two calls to /v1/models. Keep the
+		// loading state on while gated so the model list renders "loading"
+		// rather than flashing an empty/error state.
+		if (skip) {
+			setIsLoading(true);
+			setError(null);
+			return;
+		}
 		let cancelled = false;
 		setIsLoading(true);
 		setError(null);
@@ -86,7 +103,7 @@ export function useV1Models(baseUrl: string, apiKey: string | null): V1ModelsSta
 		return () => {
 			cancelled = true;
 		};
-	}, [baseUrl, apiKey, nonce]);
+	}, [baseUrl, apiKey, nonce, skip]);
 
 	return {
 		models,

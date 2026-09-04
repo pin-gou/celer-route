@@ -1215,6 +1215,19 @@ func (m *MockConfigStore) UpdateStatus(ctx context.Context, provider schemas.Mod
 	return nil
 }
 
+// Model list cache
+func (m *MockConfigStore) GetCachedModelList(ctx context.Context, provider string) (*tables.TableModelListCache, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) UpsertCachedModelList(ctx context.Context, entry *tables.TableModelListCache, tx ...*gorm.DB) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteCachedModelList(ctx context.Context, provider string, tx ...*gorm.DB) error {
+	return nil
+}
+
 // Session
 func (m *MockConfigStore) GetSession(ctx context.Context, token string) (*tables.SessionsTable, error) {
 	return nil, nil

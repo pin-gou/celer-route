@@ -850,6 +850,7 @@ func (s *RDBConfigStore) UpdateProvidersConfig(ctx context.Context, providers ma
 			}
 		}
 	}
+	s.invalidateModelListCache(ctx, txDB)
 	return nil
 }
 
@@ -1085,6 +1086,7 @@ func (s *RDBConfigStore) UpdateProvider(ctx context.Context, provider schemas.Mo
 		}
 	}
 
+	s.invalidateModelListCache(ctx, txDB)
 	return nil
 }
 
@@ -1200,6 +1202,7 @@ func (s *RDBConfigStore) AddProvider(ctx context.Context, provider schemas.Model
 		}
 	}
 
+	s.invalidateModelListCache(ctx, txDB)
 	return nil
 }
 
@@ -1256,6 +1259,7 @@ func (s *RDBConfigStore) DeleteProvider(ctx context.Context, provider schemas.Mo
 		return err
 	}
 
+	s.invalidateModelListCache(ctx, txDB)
 	return nil
 }
 
@@ -1415,6 +1419,7 @@ func (s *RDBConfigStore) CreateProviderKey(ctx context.Context, provider schemas
 	if err := txDB.WithContext(ctx).Create(&dbKey).Error; err != nil {
 		return s.parseGormError(err)
 	}
+	s.invalidateModelListCache(ctx, txDB)
 	return nil
 }
 
@@ -1452,6 +1457,7 @@ func (s *RDBConfigStore) UpdateProviderKey(ctx context.Context, provider schemas
 	if err := txDB.WithContext(ctx).Save(&dbKey).Error; err != nil {
 		return s.parseGormError(err)
 	}
+	s.invalidateModelListCache(ctx, txDB)
 
 	return nil
 }
@@ -1498,6 +1504,7 @@ func (s *RDBConfigStore) DeleteProviderKey(ctx context.Context, provider schemas
 		return ErrNotFound
 	}
 
+	s.invalidateModelListCache(ctx, txDB)
 	return nil
 }
 
@@ -1575,6 +1582,83 @@ func (s *RDBConfigStore) UpdateStatus(ctx context.Context, provider schemas.Mode
 	}
 
 	return fmt.Errorf("either keyID or provider must be non-empty")
+}
+
+// invalidateModelListCache drops the cached aggregate /v1/models row. Called
+// by every provider/key write so a config change can never be shadowed by a
+// stale model list. Best-effort: a failure to invalidate is logged, not
+// surfaced — the stale row, if any, is a performance concern, not a
+// correctness one, and the next provider/key write retries the invalidation.
+func (s *RDBConfigStore) invalidateModelListCache(ctx context.Context, txDB *gorm.DB) {
+	if txDB == nil {
+		txDB = s.DB()
+	}
+	if err := txDB.WithContext(ctx).
+		Where("provider = ?", tables.ModelListCacheAll).
+		Delete(&tables.TableModelListCache{}).Error; err != nil && s.logger != nil {
+		s.logger.Warn("failed to invalidate model list cache: %v", err)
+	}
+}
+
+// GetCachedModelList returns the cached aggregate model list row, or (nil, nil)
+// when no row exists (cache miss).
+func (s *RDBConfigStore) GetCachedModelList(ctx context.Context, provider string) (*tables.TableModelListCache, error) {
+	if provider == "" {
+		provider = tables.ModelListCacheAll
+	}
+	var entry tables.TableModelListCache
+	err := s.DB().WithContext(ctx).Where("provider = ?", provider).First(&entry).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+// UpsertCachedModelList writes (or rewrites) the cached aggregate model list
+// row. The provider key defaults to the aggregate sentinel when empty.
+func (s *RDBConfigStore) UpsertCachedModelList(ctx context.Context, entry *tables.TableModelListCache, tx ...*gorm.DB) error {
+	if entry == nil {
+		return errors.New("cached model list entry is required")
+	}
+	if entry.Provider == "" {
+		entry.Provider = tables.ModelListCacheAll
+	}
+	if entry.UpdatedAt.IsZero() {
+		entry.UpdatedAt = time.Now()
+	}
+
+	var txDB *gorm.DB
+	if len(tx) > 0 {
+		txDB = tx[0]
+	} else {
+		txDB = s.DB()
+	}
+	return txDB.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "provider"}},
+			UpdateAll: true,
+		}).
+		Create(entry).Error
+}
+
+// DeleteCachedModelList removes the cached aggregate model list row (used by
+// invalidation and for tests). provider "" maps to the aggregate sentinel.
+func (s *RDBConfigStore) DeleteCachedModelList(ctx context.Context, provider string, tx ...*gorm.DB) error {
+	if provider == "" {
+		provider = tables.ModelListCacheAll
+	}
+	var txDB *gorm.DB
+	if len(tx) > 0 {
+		txDB = tx[0]
+	} else {
+		txDB = s.DB()
+	}
+	return txDB.WithContext(ctx).
+		Where("provider = ?", provider).
+		Delete(&tables.TableModelListCache{}).Error
 }
 
 // GetMCPConfig retrieves the MCP configuration from the database.

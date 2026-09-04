@@ -3,6 +3,7 @@ package rtk
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/pin-gou/celer-route/core/schemas"
@@ -435,4 +436,43 @@ func (e *errorEngine) IsEnabled() bool {
 
 func (e *errorEngine) Schema() json.RawMessage {
 	return json.RawMessage(`{"type":"object"}`)
+}
+
+// TestEngineCatalogConcurrentAccess is a regression test for a production
+// crash: PreLLMHook calls RegisterEngine on every request while ListAllModels
+// runs one goroutine per provider, so many goroutines wrote the same
+// unsynchronized map and Go aborted the process with
+// "fatal error: concurrent map writes". The catalog must now be safe for
+// concurrent register/get/list access (run with -race to catch regressions).
+func TestEngineCatalogConcurrentAccess(t *testing.T) {
+	catalog := NewEngineCatalog()
+
+	const goroutines = 32
+	const iterations = 200
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				id := fmt.Sprintf("engine-%d", (g+i)%4)
+				// Mirrors hooks.go:120 — re-registering the same ID
+				// concurrently with readers.
+				catalog.RegisterEngine(id, &mockCompressionEngine{id: id})
+				_, _ = catalog.GetEngine(id)
+				_ = catalog.ListEngines()
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	// Last-write-wins: every ID used above must still resolve after the storm.
+	for i := 0; i < 4; i++ {
+		id := fmt.Sprintf("engine-%d", i)
+		_, ok := catalog.GetEngine(id)
+		if !ok {
+			t.Errorf("expected engine %q to be registered after concurrent access", id)
+		}
+	}
 }
