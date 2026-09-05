@@ -88,6 +88,12 @@ Available fields, grouped by category:
 | | **Provider** | Match the upstream provider handling the request |
 | | **Request type** | Filter by API request type (chat, text, embedding, image, audio, …). Streaming and non-streaming requests are different types |
 | | **Complexity tier** | Route by the tier assigned by the complexity router — Simple, Medium, Complex, or Reasoning (see *Complexity routing* below) |
+| Request content | **Has image** | The request body contains at least one image block (`image_url` in chat completions, `input_image` in the Responses API) |
+| | **Has audio** | The request body contains at least one audio block (`input_audio`) |
+| | **Has file** | The request body contains at least one file block (`file` / `input_file`) |
+| | **Image count** | Number of image content blocks |
+| | **Audio count** | Number of audio content blocks |
+| | **File count** | Number of file content blocks |
 | Metadata | **Request headers** | Match incoming HTTP headers; use lowercase header names |
 | | **URL query parameters** | Match the request URL's query string parameters |
 | Usage & budget | **Tokens used (%)** | Match the percentage of token usage against the model's and provider's configured limits |
@@ -191,6 +197,41 @@ Classification is based on two parts:
 The page lets you tune thresholds and keyword lists, with **Restore defaults**
 and **Discard changes** available. Saved changes apply to subsequent requests.
 
+## Multimodal content routing
+
+Routing rules can split traffic by whether the **request body contains images,
+audio, or files** (and by their counts). At evaluation time the gateway parses the
+user-message content blocks of chat completions (`/v1/chat/completions`) and the
+Responses API (`/v1/responses`) and exposes the following fields to match on:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `has_image` | boolean | The request body contains at least one image |
+| `has_audio` | boolean | The request body contains at least one audio clip |
+| `has_file` | boolean | The request body contains at least one file |
+| `image_count` | integer | Number of image content blocks |
+| `audio_count` | integer | Number of audio content blocks |
+| `file_count` | integer | Number of file content blocks |
+
+Image blocks are `image_url` in chat completions or `input_image` in the Responses
+API; audio blocks are `input_audio`; file blocks are `file` / `input_file`. A
+text-only request has all fields `false` / `0`, so conditions written against
+"no multimodal content" (e.g. `has_image == false`) match text-only requests as
+expected. The fields apply to both streaming and non-streaming requests.
+
+In the visual builder these fields live in the **Request content** group — pick
+`true` / `false` or enter a count; you can also write the CEL directly:
+
+```cel
+has_image == true                             // any image-bearing request
+has_image == true && image_count >= 3         // at least three images
+has_audio == true && !has_image               // audio only, no image
+file_count > 0                                // any file
+```
+
+A typical cost-control play: route image/audio-bearing requests to a multimodal
+vision/audio model, and leave text-only requests on a cheaper default model.
+
 ## Default behavior
 
 - When no routing rules are defined, requests are forwarded as-is to the
@@ -219,3 +260,6 @@ and **Discard changes** available. Saved changes apply to subsequent requests.
   router page first; then in routing rules, use
   `complexity_tier == "reasoning"` to send Reasoning requests to the reasoning
   model
+- **Route by multimodal content** — Set *Has image* to `true` and target a
+  vision-capable model (e.g. `gpt-4o`); text-only requests stay on the default
+  cheaper model, controlling cost by content

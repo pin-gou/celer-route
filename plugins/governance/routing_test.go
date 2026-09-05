@@ -1491,7 +1491,7 @@ func TestExtractRoutingVariables_BasicContext(t *testing.T) {
 		QueryParams: map[string]string{"key": "value"},
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "gpt-4o", variables["model"])
@@ -1513,7 +1513,7 @@ func TestExtractRoutingVariables_WithVirtualKey(t *testing.T) {
 		Model:      "gpt-4o",
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "vk-123", variables["virtual_key_id"])
@@ -1541,7 +1541,7 @@ func TestExtractRoutingVariables_WithTeam(t *testing.T) {
 		Model:      "gpt-4o",
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "vk-123", variables["virtual_key_id"])
@@ -1574,7 +1574,7 @@ func TestExtractRoutingVariables_WithCustomer(t *testing.T) {
 		Model:      "gpt-4o",
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "cust-789", variables["customer_id"])
@@ -1593,7 +1593,7 @@ func TestExtractRoutingVariables_WithRateLimits(t *testing.T) {
 		},
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	// Variables should contain budget and rate limit percentages
@@ -1614,7 +1614,7 @@ func TestExtractRoutingVariables_WithBudgets(t *testing.T) {
 		},
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	// Variables should contain budget percentage
@@ -1623,7 +1623,7 @@ func TestExtractRoutingVariables_WithBudgets(t *testing.T) {
 
 // TestExtractRoutingVariables_NilContext tests with nil context
 func TestExtractRoutingVariables_NilContext(t *testing.T) {
-	_, err := extractRoutingVariables(nil)
+	_, err := extractRoutingVariables(nil, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot be nil")
 }
@@ -1638,7 +1638,7 @@ func TestExtractRoutingVariables_NilMaps(t *testing.T) {
 		BudgetAndRateLimitStatus: nil,
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	assert.NotNil(t, variables["headers"])
@@ -1666,7 +1666,7 @@ func TestExtractRoutingVariables_MultipleProviders(t *testing.T) {
 		},
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	// Should contain budget and rate limit percentages
@@ -1733,7 +1733,7 @@ func TestExtractRoutingVariables_ComplexHierarchy(t *testing.T) {
 		},
 	}
 
-	variables, err := extractRoutingVariables(ctx)
+	variables, err := extractRoutingVariables(ctx, nil)
 	require.NoError(t, err)
 
 	// Verify all hierarchy levels

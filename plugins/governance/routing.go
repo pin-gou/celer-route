@@ -47,6 +47,7 @@ type RoutingContext struct {
 	Headers                  map[string]string                   // Request headers for dynamic routing
 	QueryParams              map[string]string                   // Query parameters for dynamic routing
 	BudgetAndRateLimitStatus *BudgetAndRateLimitStatus           // Budget and rate limit status by provider/model
+	Request                  *schemas.BifrostRequest             // Normalized request body; used to derive multimodal flags (has_image, image_count, ...). Nil for non-body request types.
 	computeComplexity        func() *complexity.ComplexityResult // Lazy complexity computation; called at most once when a rule references "complexity_tier"
 }
 
@@ -152,7 +153,7 @@ func (re *RoutingEngine) EvaluateRoutingRules(ctx *schemas.BifrostContext, routi
 		// rules that test budget_used, tokens_used, or request see fresh data.
 		iterCtx.BudgetAndRateLimitStatus = re.store.GetBudgetAndRateLimitStatus(ctx, currentModel, currentProvider, routingCtx.VirtualKey, nil, nil, nil)
 
-		variables, err := extractRoutingVariables(&iterCtx)
+		variables, err := extractRoutingVariables(&iterCtx, routingCtx.Request)
 		if err != nil {
 			re.logger.Error("[RoutingEngine] Failed to extract routing variables: %v", err)
 			ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelError, fmt.Sprintf("Failed to extract routing variables: %v", err))
@@ -450,7 +451,12 @@ func evaluateCELExpression(program cel.Program, variables map[string]any, unknow
 
 // extractRoutingVariables builds a map of CEL variables from routing context
 // This map is used to evaluate CEL expressions in routing rules
-func extractRoutingVariables(ctx *RoutingContext) (map[string]interface{}, error) {
+//
+// req is the normalized request body used to derive multimodal content flags
+// (has_image, image_count, ...). It may be nil for request types that do not
+// carry a scanned message body; the multimodal variables then report zero/empty
+// values so negative predicates do not accidentally match.
+func extractRoutingVariables(ctx *RoutingContext, req *schemas.BifrostRequest) (map[string]interface{}, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("routing context cannot be nil")
 	}
@@ -536,6 +542,18 @@ func extractRoutingVariables(ctx *RoutingContext) (map[string]interface{}, error
 	// actually references complexity_tier. If complexity is unavailable, it is
 	// evaluated as a CEL unknown so negative predicates do not accidentally match.
 	variables["complexity_tier"] = ""
+
+	// Multimodal content flags derived from the normalized request body. When
+	// req is nil (or the request type does not carry a scanned message body),
+	// all flags/counts report zero so has_image == false / image_count == 0
+	// predicates behave as expected for text-only and non-message requests.
+	flags := extractMultimodalFlags(req)
+	variables["has_image"] = flags.HasImage
+	variables["has_audio"] = flags.HasAudio
+	variables["has_file"] = flags.HasFile
+	variables["image_count"] = flags.ImageCount
+	variables["audio_count"] = flags.AudioCount
+	variables["file_count"] = flags.FileCount
 
 	return variables, nil
 }
@@ -681,5 +699,15 @@ func createCELEnvironment() (*cel.Env, error) {
 		// Complexity tier. When analysis is unavailable, evaluation marks this
 		// variable as CEL unknown so complexity-dependent predicates do not match.
 		cel.Variable("complexity_tier", cel.StringType),
+
+		// Multimodal content flags derived from the normalized request body.
+		// has_image / has_audio / has_file are booleans; image_count / audio_count /
+		// file_count are non-negative integers counting matching content blocks.
+		cel.Variable("has_image", cel.BoolType),
+		cel.Variable("has_audio", cel.BoolType),
+		cel.Variable("has_file", cel.BoolType),
+		cel.Variable("image_count", cel.IntType),
+		cel.Variable("audio_count", cel.IntType),
+		cel.Variable("file_count", cel.IntType),
 	)
 }

@@ -50806,6 +50806,192 @@
      }
     }
    ]
-  }
+  },
+    {
+      "name": "53. Multimodal Routing Rules (has_image / image_count)",
+      "description": "Wire-visible pin for multimodal-aware routing rules. Before this feature, routing-rule CEL could only reference model/provider/request_type/headers/params/governance scopes/budget-usage/complexity_tier; a rule like `has_image == true` was rejected at write time by the gateway (400 'invalid CEL expression: undeclared reference to has_image') and requests containing images/audio/files could not be routed by content. Production path: PreRequestHook -> applyRoutingRules -> RoutingEngine.EvaluateRoutingRules -> extractRoutingVariables derives has_image/has_audio/has_file/image_count/audio_count/file_count from the normalized BifrostRequest (chat message blocks + Responses input blocks), and createRoutingRule validates the CEL against createCELEnvironment. Case 1 pins the write-time acceptance (red before: 400; green after: 201). Cases 2-3 pin the routing observable: an image request to openai/gpt-4o-mini is rerouted to gpt-4o (vision target), a text-only request stays on gpt-4o-mini. Case 4 tears the rule down.",
+      "item": [
+        {
+          "name": "Create global routing rule has_image -> openai/gpt-4o - openai/gpt-4o-mini (multimodal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"harness-mm-image-{{$timestamp}}\",\n  \"description\": \"Multimodal routing harness rule: reroute image-bearing requests to a vision model\",\n  \"cel_expression\": \"has_image == true\",\n  \"targets\": [\n    {\n      \"provider\": \"openai\",\n      \"model\": \"gpt-4o\",\n      \"weight\": 1\n    }\n  ],\n  \"scope\": \"global\",\n  \"priority\": 100,\n  \"enabled\": true,\n  \"chain_rule\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/routing-rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "routing-rules"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Red-before-green pin: before the feature this 400s with",
+                  "// 'invalid CEL expression: undeclared reference to has_image'; after",
+                  "// the feature it is accepted (201) because createRoutingRule validates",
+                  "// against the routing CEL env that now declares the multimodal variables.",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'create failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "pm.expect(j && j.rule && j.rule.id, 'expected rule.id in create response: ' + pm.response.text()).to.be.ok;",
+                  "pm.collectionVariables.set('mmRuleId', j.rule.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat completion with image routes to vision model - openai/gpt-4o-mini (multimodal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Describe this image in one word.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The has_image == true rule (created in the prior case) must reroute an",
+                  "// image-bearing request from openai/gpt-4o-mini to openai/gpt-4o. The",
+                  "// response model swap is the observable: gpt-4o, not gpt-4o-mini.",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "pm.expect(j.choices && j.choices[0], 'expected a choice: ' + pm.response.text()).to.be.ok;",
+                  "var routedModel = (j.model || '').toLowerCase();",
+                  "pm.expect(routedModel, 'image request should route to gpt-4o (vision), got model=' + routedModel + ' body=' + pm.response.text()).to.include('gpt-4o');",
+                  "pm.expect(routedModel, 'image request must not stay on gpt-4o-mini, got model=' + routedModel).to.not.include('mini');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat completion text-only stays on requested model - openai/gpt-4o-mini (multimodal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Say hello\"\n    }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Negative control: a text-only request must NOT match has_image == true,",
+                  "// so it stays on the requested openai/gpt-4o-mini (the rule's target gpt-4o",
+                  "// must not appear).",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "pm.expect(j.choices && j.choices[0], 'expected a choice: ' + pm.response.text()).to.be.ok;",
+                  "var routedModel = (j.model || '').toLowerCase();",
+                  "pm.expect(routedModel, 'text-only request should stay on gpt-4o-mini, got model=' + routedModel + ' body=' + pm.response.text()).to.include('mini');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Teardown: delete created routing rule - openai (multimodal)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/routing-rules/{{mmRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "routing-rules",
+                "{{mmRuleId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Cleanup the rule created in the first case so re-runs stay hermetic.",
+                  "// 404 (rule already gone) is tolerated alongside auth/server noise.",
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'delete failed: ' + pm.response.text()).to.be.below(400);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
   ]
 }

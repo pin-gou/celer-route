@@ -224,6 +224,28 @@ function convertRuleToCEL(rule: RuleType): string {
 		}
 	}
 
+	// Handle multimodal boolean flags (has_image, has_audio, has_file)
+	// Structure: has_image == true or has_audio != false
+	// CEL declares these as booleans, so the value must be emitted unquoted.
+	const isMultimodalBoolField = field === "has_image" || field === "has_audio" || field === "has_file";
+	if (isMultimodalBoolField) {
+		const boolValue = String(value).trim().toLowerCase();
+		if (boolValue === "true" || boolValue === "false") {
+			return `${field} ${celOperator} ${boolValue}`;
+		}
+	}
+
+	// Handle multimodal content counts (image_count, audio_count, file_count)
+	// Structure: image_count >= 2
+	// CEL declares these as integers, so the value must be emitted as a bare number.
+	const isMultimodalCountField = field === "image_count" || field === "audio_count" || field === "file_count";
+	if (isMultimodalCountField) {
+		const intValue = parseInt(String(value).trim(), 10);
+		if (!isNaN(intValue)) {
+			return `${field} ${celOperator} ${intValue}`;
+		}
+	}
+
 	// Handle other keyValue fields (headers, params) for other operators
 	if (isKeyValueField) {
 		const keyValuePair = parseKeyValue(String(value));

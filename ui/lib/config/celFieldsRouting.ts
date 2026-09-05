@@ -6,9 +6,9 @@
 import { getProviderLabel } from "@/lib/constants/logs";
 import { COMPLEXITY_TIER_VALUES } from "@/lib/types/complexityRouter";
 
-export type FieldGroup = "request" | "metadata" | "usage";
+export type FieldGroup = "request" | "content" | "metadata" | "usage";
 
-export const FIELD_GROUP_ORDER: FieldGroup[] = ["request", "metadata", "usage"];
+export const FIELD_GROUP_ORDER: FieldGroup[] = ["request", "content", "metadata", "usage"];
 
 export interface CELFieldDefinition {
 	name: string;
@@ -98,6 +98,81 @@ export const baseRoutingFields: CELFieldDefinition[] = [
 		operators: ["=", "!=", "in", "notIn"],
 		defaultOperator: "=",
 		values: COMPLEXITY_TIER_VALUES.map((tier) => ({ name: tier, label: tier.charAt(0) + tier.slice(1).toLowerCase() })),
+	},
+	{
+		name: "has_image",
+		group: "content",
+		label: "Has Image",
+		placeholder: "true/false",
+		inputType: "select",
+		valueEditorType: "select",
+		operators: ["=", "!="],
+		defaultOperator: "=",
+		values: [
+			{ name: "true", label: "true" },
+			{ name: "false", label: "false" },
+		],
+	},
+	{
+		name: "has_audio",
+		group: "content",
+		label: "Has Audio",
+		placeholder: "true/false",
+		inputType: "select",
+		valueEditorType: "select",
+		operators: ["=", "!="],
+		defaultOperator: "=",
+		values: [
+			{ name: "true", label: "true" },
+			{ name: "false", label: "false" },
+		],
+	},
+	{
+		name: "has_file",
+		group: "content",
+		label: "Has File",
+		placeholder: "true/false",
+		inputType: "select",
+		valueEditorType: "select",
+		operators: ["=", "!="],
+		defaultOperator: "=",
+		values: [
+			{ name: "true", label: "true" },
+			{ name: "false", label: "false" },
+		],
+	},
+	{
+		name: "image_count",
+		group: "content",
+		label: "Image Count",
+		placeholder: "e.g., 1",
+		inputType: "text",
+		valueEditorType: "number",
+		operators: ["=", "!=", ">", "<", ">=", "<="],
+		defaultOperator: ">=",
+		defaultValue: 1,
+	},
+	{
+		name: "audio_count",
+		group: "content",
+		label: "Audio Count",
+		placeholder: "e.g., 1",
+		inputType: "text",
+		valueEditorType: "number",
+		operators: ["=", "!=", ">", "<", ">=", "<="],
+		defaultOperator: ">=",
+		defaultValue: 1,
+	},
+	{
+		name: "file_count",
+		group: "content",
+		label: "File Count",
+		placeholder: "e.g., 1",
+		inputType: "text",
+		valueEditorType: "number",
+		operators: ["=", "!=", ">", "<", ">=", "<="],
+		defaultOperator: ">=",
+		defaultValue: 1,
 	},
 	{
 		name: "headers",
