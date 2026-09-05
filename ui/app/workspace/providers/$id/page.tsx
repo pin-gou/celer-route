@@ -60,27 +60,6 @@ export default function ProviderDetailPage() {
 	const hasDeleteAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Delete);
 	const [deleteProvider] = useDeleteProviderMutation();
 
-	if (isLoading) {
-		return <FullPageLoader />;
-	}
-
-	if (!provider) {
-		return (
-			<div className="flex h-full items-center justify-center">
-				<div className="text-muted-foreground text-sm">{t("providers2.detail.providerNotFound")}</div>
-			</div>
-		);
-	}
-
-	const isCustom = !provider.name || !Object.keys(ProviderLabels).includes(provider.name);
-	const label = isCustom ? provider.name : (ProviderLabels[provider.name as keyof typeof ProviderLabels] ?? provider.name);
-
-	const linkProvider = (isCustom ? provider.custom_provider_config?.base_provider_type : provider.name) as ProviderName | undefined;
-	const websiteUrl = linkProvider ? ProviderWebsites[linkProvider] : undefined;
-	const apiKeyUrl = linkProvider ? ProviderApiKeyUrls[linkProvider] : undefined;
-	const showWebsiteLink = !!websiteUrl;
-	const showApiKeyLink = !!apiKeyUrl && provider.is_key_less !== true && isKeyRequiredByProvider[linkProvider as ProviderName] !== false;
-
 	const tabs: { id: TabId; label: string }[] = [
 		{ id: "overview", label: t("providers2.tabs.overview") },
 		{ id: "keys", label: t("providers2.tabs.keys") },
@@ -105,6 +84,27 @@ export default function ProviderDetailPage() {
 			setEditingParam(null);
 		}
 	}, [redirectTarget, activeTab, setTab, setEditingParam]);
+
+	if (isLoading) {
+		return <FullPageLoader />;
+	}
+
+	if (!provider) {
+		return (
+			<div className="flex h-full items-center justify-center">
+				<div className="text-muted-foreground text-sm">{t("providers2.detail.providerNotFound")}</div>
+			</div>
+		);
+	}
+
+	const isCustom = !provider.name || !Object.keys(ProviderLabels).includes(provider.name);
+	const label = isCustom ? provider.name : (ProviderLabels[provider.name as keyof typeof ProviderLabels] ?? provider.name);
+
+	const linkProvider = (isCustom ? provider.custom_provider_config?.base_provider_type : provider.name) as ProviderName | undefined;
+	const websiteUrl = linkProvider ? ProviderWebsites[linkProvider] : undefined;
+	const apiKeyUrl = linkProvider ? ProviderApiKeyUrls[linkProvider] : undefined;
+	const showWebsiteLink = !!websiteUrl;
+	const showApiKeyLink = !!apiKeyUrl && provider.is_key_less !== true && isKeyRequiredByProvider[linkProvider as ProviderName] !== false;
 
 	const handleTabChange = (value: string) => {
 		if (isTabId(value)) {
