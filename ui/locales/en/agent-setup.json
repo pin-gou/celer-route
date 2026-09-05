@@ -1,6 +1,21 @@
 {
 	"title": "Connect AI clients",
 	"subtitle": "Point coding agents, desktop AI agents, IDE extensions, or any OpenAI-compatible LLM client at celer-route. Pick a client and model set — we generate the ready-to-paste config.",
+	"step": {
+		"client": "Pick client & OS",
+		"endpoint": "Configure endpoint",
+		"models": "Pick models",
+		"output": "Generated config"
+	},
+	"stepHint": {
+		"client": "Confirm which client to wire in — the rest of the wizard adapts to it.",
+		"endpoint": "The base URL and API key become fixed inputs in every generated config; switching clients later won't lose them.",
+		"endpointProtocol": "opencode only: the generated config talks to the Responses API when checked, Chat Completions otherwise.",
+		"modelsSubset": "{{agent}} writes these models into the config. The list comes from the API key you selected.",
+		"modelsDefault": "If no default model is picked, the client will prompt for one on startup.",
+		"output": "Paste each tab into the matching place in your client. You can always jump back to revise earlier steps.",
+		"apiKey": "The model list and default model update with the visible scope of the API key you select."
+	},
 	"agentLabel": "AI client",
 	"platformLabel": "Operating system",
 	"platformHint": "The generated config paths, environment-variable syntax, and setup steps adapt to the OS you pick.",
@@ -31,6 +46,7 @@
 	"apiKeyPlaceholder": "Select an API key",
 	"apiKeyEmpty": "No API keys yet. Create one under Governance → API Keys.",
 	"apiKeyOptional": "Inference auth is disabled — the generated config omits the API key.",
+	"apiKeySummary": "Selected API key: {{name}}",
 	"modelsLabel": "Models to expose",
 	"modelsSelectAll": "Select all",
 	"modelsClear": "Clear",
@@ -45,11 +61,18 @@
 	"defaultModelHint": "Defaults to every model this API key can see (fetched from /v1/models).",
 	"outputTitle": "Generated config",
 	"applyTab": "Apply with one command",
+	"applyTabDescription": "Paste and run this in your terminal — it backs up the existing config (if any), merges the new values, and prints the path it wrote to. Only matching keys are overwritten; everything else is preserved.",
+	"fileTabDescription": "Final contents of {{path}}. Identical to what the apply command writes. Use this when you want to drop it into a script, dotfiles repo, or paste manually.",
 	"envTab": "Environment",
+	"envTabDescription": "`export` these before launching the client and the client talks to celer-route with no config file changes. Handy for quick tests, CI, and remote dev boxes.",
 	"testTab": "Test with curl",
+	"testTabDescription": "Paste into a terminal. A 200 response confirms the base URL, API key, and default model are wired through correctly; any 4xx/5xx surfaces verbatim so you can debug.",
 	"copy": "Copy",
 	"copied": "Copied",
 	"copySuccess": "Copied to clipboard",
 	"defaultModelRef": "Default model reference: {{ref}}",
-	"noOutput": "Select at least one model to generate a config."
+	"noOutput": "Select at least one model to generate a config.",
+	"back": "Back",
+	"next": "Next",
+	"edit": "Edit"
 }

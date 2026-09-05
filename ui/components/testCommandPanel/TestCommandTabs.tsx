@@ -7,6 +7,7 @@ export interface TestCommandTab extends Omit<CodeSnippetBlockProps, "code"> {
 	id: string;
 	label: string;
 	code: string;
+	description?: string;
 }
 
 export interface TestCommandTabsProps {
@@ -33,7 +34,15 @@ export function TestCommandTabs({ tabs, defaultTab, testIdPrefix, tabsListClassN
 				))}
 			</TabsList>
 			{tabs.map((tabItem) => (
-				<TabsContent key={tabItem.id} value={tabItem.id}>
+				<TabsContent key={tabItem.id} value={tabItem.id} className="space-y-3">
+					{tabItem.description && (
+						<p
+							className="text-muted-foreground text-sm"
+							{...(testIdPrefix ? { "data-testid": `${testIdPrefix}-${tabItem.id}-description` } : {})}
+						>
+							{tabItem.description}
+						</p>
+					)}
 					<CodeSnippetBlock
 						code={tabItem.code}
 						copyLabel={tabItem.copyLabel}

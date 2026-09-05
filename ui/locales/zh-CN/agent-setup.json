@@ -1,6 +1,21 @@
 {
 	"title": "接入 AI 客户端",
 	"subtitle": "让 coding agent、桌面 AI Agent、IDE 扩展或任意 OpenAI 兼容的 LLM 客户端接入 celer-route。选择客户端与模型集合，即可生成可直接粘贴的配置。",
+	"step": {
+		"client": "选择客户端与平台",
+		"endpoint": "配置接入端点",
+		"models": "选择模型",
+		"output": "生成配置"
+	},
+	"stepHint": {
+		"client": "选好后右侧会出现下一步，先确认要接入哪一类客户端。",
+		"endpoint": "Base URL 与 API Key 是后续生成配置的固定输入；切换客户端不会丢失这里的设置。",
+		"endpointProtocol": "opencode 专用：勾选后生成的配置走 Responses API，否则走 Chat Completions。",
+		"modelsSubset": "{{agent}} 会把所选模型写入配置。列表由已选 API Key 决定。",
+		"modelsDefault": "未列出默认模型时，客户端启动会要求显式传入 model。",
+		"output": "把生成内容粘贴到对应客户端的配置位置；可以随时回到上一步修改。",
+		"apiKey": "选中 API Key 后，列表与默认模型会按其可见范围更新。"
+	},
 	"agentLabel": "AI 客户端",
 	"platformLabel": "操作系统",
 	"platformHint": "生成的配置路径、环境变量语法与接入步骤会按所选系统适配。",
@@ -31,6 +46,7 @@
 	"apiKeyPlaceholder": "选择 API Key",
 	"apiKeyEmpty": "还没有 API Key，请先在「治理 → API Key」中创建一个，用于客户端鉴权。",
 	"apiKeyOptional": "推理鉴权已关闭，生成的配置将省略 API Key。",
+	"apiKeySummary": "已选 API Key：{{name}}",
 	"modelsLabel": "要暴露的模型",
 	"modelsSelectAll": "全选",
 	"modelsClear": "清空",
@@ -45,11 +61,18 @@
 	"defaultModelHint": "默认列出该 API Key 能看到的所有模型（来自 /v1/models）。",
 	"outputTitle": "生成的配置",
 	"applyTab": "一键应用",
+	"applyTabDescription": "把这条命令粘贴到终端运行即可一次性完成：自动备份 → 写入（或合并）配置文件 → 提示重载。已存在配置时只覆盖同名键，保留其它字段。",
+	"fileTabDescription": "这是将要写入 {{path}} 的最终内容（与「一键应用」展开后的结果一致）。需要手动复制或在自动化流程中使用时，复制下面这段。",
 	"envTab": "环境变量",
+	"envTabDescription": "在启动客户端前 `export` 这些变量即可走 celer-route，无需改动全局配置文件。适合临时调试、CI、远程开发。",
 	"testTab": "用 curl 测试",
+	"testTabDescription": "复制并在终端执行：返回 200 表示接入路径、API Key 与默认模型都已生效；4xx/5xx 错误会原样透传便于排查。",
 	"copy": "复制",
 	"copied": "已复制",
 	"copySuccess": "已复制到剪贴板",
 	"defaultModelRef": "默认模型引用：{{ref}}",
-	"noOutput": "请至少选择一个模型以生成配置。"
+	"noOutput": "请至少选择一个模型以生成配置。",
+	"back": "上一步",
+	"next": "下一步",
+	"edit": "重新编辑"
 }
