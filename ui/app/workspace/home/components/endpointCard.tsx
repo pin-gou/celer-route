@@ -9,7 +9,7 @@ import { useGetCoreConfigQuery } from "@/lib/store";
 import { RenderProviderIcon } from "@/lib/constants/icons";
 import { getProviderLabel } from "@/lib/constants/logs";
 import { buildExamples, resolveEndpointUrl } from "@/lib/utils/testCommandSnippets";
-import { Copy, KeyRound, Terminal } from "lucide-react";
+import { Copy, KeyRound, Sparkles, Terminal } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -104,11 +104,17 @@ export default function EndpointCard({ endpointUrl }: Props) {
 
 	return (
 		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-endpoint-card">
-			<CardHeader className="flex flex-row items-start justify-between gap-2 border-b px-6 py-4">
+			<CardHeader className="flex flex-row items-start justify-between gap-3 border-b px-6 py-4">
 				<div className="space-y-1">
 					<CardTitle className="text-base font-semibold">{t("home.endpointCard.title")}</CardTitle>
 					<p className="text-muted-foreground text-xs">{t("home.endpointCard.subtitle")}</p>
 				</div>
+				<Button asChild size="sm" className="shrink-0" data-testid="home-endpoint-connect-client-cta">
+					<Link to="/workspace/agent-setup">
+						<Sparkles className="mr-1 h-4 w-4" />
+						{t("home.endpointCard.connectClientCta")}
+					</Link>
+				</Button>
 			</CardHeader>
 			<CardContent className="space-y-4 px-6 py-4">
 				<div className="bg-muted/40 flex items-center gap-2 rounded-md border p-3 font-mono text-sm">

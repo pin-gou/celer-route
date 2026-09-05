@@ -295,6 +295,7 @@
 			"vkPlaceholder": "选择虚拟 key",
 			"vkEmpty": "暂无虚拟 key，请先在治理页面创建。",
 			"agentSetupLink": "接入 AI 客户端 →",
+			"connectClientCta": "接入 AI 客户端",
 			"examples": {
 				"curlLabel": "curl",
 				"pythonLabel": "Python（openai）",
