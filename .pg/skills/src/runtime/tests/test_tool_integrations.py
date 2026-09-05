@@ -244,8 +244,10 @@ class TestMobileCoderIntegration(unittest.TestCase):
 
         mobile = self.project / ".mobile-coder"
         self.assertTrue((mobile / "commands" / "pg-3-build.md").is_file())
+        self.assertTrue((mobile / "commands" / "pg-0-auto-pilot.md").is_file())
         self.assertTrue((mobile / "agents" / "pg-build" / "test.md").is_file())
         self.assertTrue((mobile / "skills" / "pg-build" / "SKILL.md").is_file())
+        self.assertTrue((mobile / "skills" / "pg-auto-pilot" / "SKILL.md").is_file())
         self.assertTrue(
             (mobile / "pg-skills" / "src" / "runtime" / "bin" / "pg-invoke-hook.py").is_file()
         )
@@ -288,6 +290,11 @@ class TestMobileCoderIntegration(unittest.TestCase):
         build_command = (mobile / "commands" / "pg-3-build.md").read_text(encoding="utf-8")
         self.assertIn(".mobile-coder/skills/pg-build", build_command)
         self.assertNotIn(".opencode/", build_command)
+        auto_pilot_command = (mobile / "commands" / "pg-0-auto-pilot.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("0-pg-auto-pilot", auto_pilot_command)
+        self.assertIn("`pg-auto-pilot` skill", auto_pilot_command)
         browser_skill = (
             mobile
             / "skills"
@@ -499,6 +506,32 @@ class TestOpenCodeIntegration(unittest.TestCase):
             (self.project / ".opencode" / ".pg-adapter-manifest.json").is_file()
         )
 
+    def test_install_renders_opencode_config_scaffold(self):
+        self._install()
+
+        config_path = self.project / ".opencode" / "opencode.json"
+        self.assertTrue(config_path.is_file())
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertEqual(config, {"$schema": "https://opencode.ai/config.json"})
+
+    def test_install_preserves_user_opencode_config(self):
+        user_config = self.project / ".opencode" / "opencode.json"
+        user_config.parent.mkdir(parents=True, exist_ok=True)
+        user_config.write_text(
+            '{"$schema": "https://opencode.ai/config.json", "autoupdate": false}\n',
+            encoding="utf-8",
+        )
+
+        result = self._install()
+
+        self.assertEqual(
+            json.loads(user_config.read_text(encoding="utf-8")),
+            {"$schema": "https://opencode.ai/config.json", "autoupdate": False},
+        )
+        self.assertTrue(
+            any("preserved untracked file" in warning for warning in result.warnings)
+        )
+
     def test_install_preserves_opencode_workflow_semantics(self):
         self._install()
 
@@ -514,6 +547,12 @@ class TestOpenCodeIntegration(unittest.TestCase):
         self.assertIn("task: allow", manager)
         self.assertIn("Skill tool", manager)
         self.assertIn("model: pg-router/pg-associate", manager)
+        auto_pilot_command = (
+            self.project / ".opencode" / "commands" / "pg-0-auto-pilot.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("0-pg-auto-pilot", auto_pilot_command)
+        self.assertIn("`pg-auto-pilot` skill", auto_pilot_command)
+        self.assertNotIn("{{pg:", auto_pilot_command)
         browser_skill = (
             self.project
             / ".opencode"
