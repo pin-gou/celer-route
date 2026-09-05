@@ -126,20 +126,6 @@ export const rtkConfigSchema = z.object({
 	// renderer when enable_renderers is true.
 	disabled_renderers: z.array(z.string()).optional(),
 
-	// SnapshotMode controls how compression snapshots are persisted for the
-	// log detail view. "off" disables snapshots entirely (default, saves log
-	// storage); "split" shows per-message diffs; "merged" concatenates
-	// everything into one block.
-	snapshot_mode: z.enum(["split", "merged", "off"]).default("off"),
-
-	// SnapshotMaxBytes caps the total bytes persisted per request across all
-	// snapshots. Default 30 KiB; clamped at the server to [1 KiB, 256 KiB].
-	snapshot_max_bytes: z
-		.number()
-		.int()
-		.min(0)
-		.default(30 * 1024),
-
 	// Caveman — the prose-compression engine. Opt-in (enabled defaults to
 	// false); when enabled it compresses user-role message text via
 	// rule-based transformations and participates in the pipeline as the

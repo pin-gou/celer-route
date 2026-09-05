@@ -2356,9 +2356,6 @@ export function LogDetailView({
 										{Object.entries(log.metadata)
 											.filter(([key]) => {
 												if (key === "isAsyncRequest") return false;
-												// rtk_original_snapshot is served in full by the RTK Compression tab —
-												// rendering the raw object here would just show "[object Object]".
-												if (key === "rtk_original_snapshot") return false;
 												if (
 													isRealtimeTurn &&
 													[

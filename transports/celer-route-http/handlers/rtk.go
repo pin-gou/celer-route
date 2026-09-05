@@ -175,6 +175,13 @@ func (h *RtkHandler) getConfig(ctx *fasthttp.RequestCtx) {
 		_ = accessor
 	}
 
+	// Apply the same defaults the runtime plugin uses (via Init →
+	// applyConfigDefaults). The persisted row stores raw zero-value fields
+	// (e.g. raw_output_retention=""), and without this the API would return
+	// the raw row rather than the effective config — so the UI (and any
+	// external consumer) would see "unset" instead of the default "always".
+	rtk.ApplyConfigDefaults(&resp.Config)
+
 	SendJSON(ctx, resp)
 }
 

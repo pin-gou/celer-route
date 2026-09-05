@@ -75,8 +75,8 @@ yet" — that is normal.
 ## Fine-tune the configuration
 
 The preset manages the seven most common fields. There is also a set of
-independent advanced settings (folded under **Scope**, **Log detail snapshot**,
-**Semantic renderer**, **Debug: raw output**, **Filters & custom**, and
+independent advanced settings (folded under **Scope**, **Semantic renderer**,
+**Debug: raw output**, **Filters & custom**, and
 **Advanced: pipeline & thresholds**).
 
 ### Preset-managed fields
@@ -94,9 +94,8 @@ independent advanced settings (folded under **Scope**, **Log detail snapshot**,
 | Section | Key fields | Description |
 |---------|-----------|-------------|
 | **Scope** | Apply to tool results / code blocks / assistant messages | Tool results should almost always be on (the biggest token saver); assistant messages usually off unless long-conversation context is tight |
-| **Log detail snapshot** | Snapshot mode (per-message / merged / off) + snapshot byte limit | Want to compare pre- vs. post-compression per message → "Per-message"; large log volume → "Off" to save storage |
 | **Semantic renderer** | Enable semantic renderer + renderer allowlist | Lots of git diff / pytest / terraform plan etc. structured output → enable (fails open, safe); want to disable a type → uncheck it in the allowlist |
-| **Debug: raw output** | Raw output retention (never / on failure / always) + max bytes + directory + TTL | See **Raw output recovery** below |
+| **Debug: raw output** | Raw output retention (never / on failure / always) + max bytes + directory + TTL | Also feeds the **Log detail → RTK Compression** tab's pre-compression text; switch to "On failure" or "Always" to enable per-message diffing |
 | **Filters & custom** | Enable custom filters / trust project filters | Team maintains extra filters in `.rtk/filters.json` → enable; turn "trust project filters" off in production to avoid poisoning |
 | **Advanced: pipeline & thresholds** | Pipeline (JSON) + min compressed tokens + preserve cache_control | Pipeline defaults to `[{ id: "rtk" }]`, leave alone; Anthropic prompt caching users must enable "preserve cache_control blocks" |
 
@@ -166,9 +165,9 @@ RTK works out of the box — no configuration needed:
 - **Apply to tool results** is on by default
 - Pipeline defaults to `[{ id: "rtk" }]`, with dozens of built-in filters
   active automatically
-- Raw output defaults to **Always**, TTL 24 hours, per-entry cap 1 MB
-- Log detail snapshot defaults to **Off** (save storage); switch to
-  "Per-message" for side-by-side comparison when needed
+- Raw output defaults to **Always**, TTL 24 hours, per-entry cap 1 MB. The
+  **Log detail → RTK Compression** tab also pulls pre-compression text from
+  here — switch to "On failure" or "Always" to enable per-message diffing
 
 ## Common scenarios
 
@@ -177,10 +176,11 @@ RTK works out of the box — no configuration needed:
   merge similar log lines
 - **The model misses key info after compression** → drop strength back to
   "Standard" or "Minimal"; raise "Max lines per result"
-- **Investigating what a particular compression dropped** → switch "Log
-  detail snapshot mode" to "Per-message", then go to the RTK compression
-  tab in the LLM log detail to see pre- and post-compression; or reproduce
-  with the same input in "Test runner"
+- **Investigating what a particular compression dropped** → set "Raw output
+  retention" to "On failure" or "Always", then go to the RTK compression
+  tab in the LLM log detail to see pre- and post-compression (the tab
+  fetches the original via the 24-hex id); or reproduce with the same
+  input in "Test runner"
 - **The LLM needs some truncated original** → as long as retention policy is
   not "Never", let the model `GET` the recovery link appended to the result
 - **Using Anthropic prompt caching** → make sure "Preserve cache_control

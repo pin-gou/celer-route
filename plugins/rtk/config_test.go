@@ -486,59 +486,7 @@ func TestConfigPipelineAndMinTokensValidate(t *testing.T) {
 	})
 }
 
-// TestConfigValidateSnapshot covers the SnapshotMode / SnapshotMaxBytes
-// validation rules. The full Validate method is also covered by
-// TestConfigValidate above; this test pins the exact error messages and
-// acceptance windows so future refactors do not silently relax them.
-func TestConfigValidateSnapshot(t *testing.T) {
-	t.Run("accepts_split_merged_off", func(t *testing.T) {
-		for _, mode := range []string{"split", "merged", "off", ""} {
-			cfg := Config{Enabled: true, SnapshotMode: mode}
-			if err := cfg.Validate(); err != nil {
-				t.Errorf("Validate() rejected %q: %v", mode, err)
-			}
-		}
-	})
-	t.Run("rejects_unknown_mode", func(t *testing.T) {
-		cfg := Config{Enabled: true, SnapshotMode: "bogus"}
-		if err := cfg.Validate(); err == nil {
-			t.Error("Validate() should reject unknown snapshot_mode")
-		}
-	})
-	t.Run("rejects_negative_max_bytes", func(t *testing.T) {
-		cfg := Config{Enabled: true, SnapshotMaxBytes: -1}
-		if err := cfg.Validate(); err == nil {
-			t.Error("Validate() should reject negative snapshot_max_bytes")
-		}
-	})
-	t.Run("accepts_zero_max_bytes_then_clamps", func(t *testing.T) {
-		cfg := Config{Enabled: true}
-		if err := cfg.Validate(); err != nil {
-			t.Fatalf("Validate() rejected zero max_bytes: %v", err)
-		}
-		applyConfigDefaults(&cfg)
-		if cfg.SnapshotMaxBytes != 30*1024 {
-			t.Errorf("default SnapshotMaxBytes = %d, want %d", cfg.SnapshotMaxBytes, 30*1024)
-		}
-		if cfg.SnapshotMode != "off" {
-			t.Errorf("default SnapshotMode = %q, want off", cfg.SnapshotMode)
-		}
-	})
-	t.Run("clamps_max_bytes_to_min_1kib", func(t *testing.T) {
-		cfg := Config{Enabled: true, SnapshotMaxBytes: 100}
-		applyConfigDefaults(&cfg)
-		if cfg.SnapshotMaxBytes != 1024 {
-			t.Errorf("SnapshotMaxBytes = %d, want 1024 (clamped)", cfg.SnapshotMaxBytes)
-		}
-	})
-	t.Run("clamps_max_bytes_to_max_256kib", func(t *testing.T) {
-		cfg := Config{Enabled: true, SnapshotMaxBytes: 1024 * 1024}
-		applyConfigDefaults(&cfg)
-		if cfg.SnapshotMaxBytes != 256*1024 {
-			t.Errorf("SnapshotMaxBytes = %d, want %d (clamped to 256 KiB)", cfg.SnapshotMaxBytes, 256*1024)
-		}
-	})
-}
+
 
 // TestLooksLikeAllZero exercises the heuristic that drives the all-zero
 // safeguard in applyConfigDefaults. The predicate is intentionally tight:
@@ -567,8 +515,6 @@ func TestLooksLikeAllZero(t *testing.T) {
 		{name: "operator enabled TrustProjectFilters", cfg: Config{TrustProjectFilters: true}, want: false},
 		{name: "operator set RawOutputRetention", cfg: Config{RawOutputRetention: "always"}, want: false},
 		{name: "operator set RawOutputMaxBytes", cfg: Config{RawOutputMaxBytes: 4096}, want: false},
-		{name: "operator set SnapshotMode", cfg: Config{SnapshotMode: "split"}, want: false},
-		{name: "operator set SnapshotMaxBytes", cfg: Config{SnapshotMaxBytes: 1024}, want: false},
 		{name: "operator set GroupingThreshold", cfg: Config{GroupingThreshold: 5}, want: false},
 		{name: "operator set DedupThreshold", cfg: Config{DedupThreshold: 5}, want: false},
 		{name: "operator set MaxCharsPerResult", cfg: Config{MaxCharsPerResult: 5000}, want: false},

@@ -313,7 +313,6 @@ func (s *BifrostHTTPServer) loadBuiltinPlugins(ctx context.Context) error {
 				Config: &rtk.Config{
 					Enabled:         true,
 					EnableRenderers: true,
-					SnapshotMode:    "off",
 				},
 			}
 		}

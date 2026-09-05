@@ -136,8 +136,6 @@ function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
 			min_tokens_to_compress: 0,
 			enable_renderers: true,
 			disabled_renderers: [],
-			snapshot_mode: "off",
-			snapshot_max_bytes: 30720,
 		} as any,
 		status: { name: "rtk", status: "active", logs: [], types: ["llm", "http"] },
 		...overrides,

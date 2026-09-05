@@ -96,9 +96,11 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			cfg := defaultCfg
 			cfg.CommandHint = cmd
 
-			// Capture pre-compression text for the log detail snapshot before
-			// the pipeline mutates the message.
-			appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
+			// Record that this message was scanned by the RTK pipeline.
+			// Per-message original text is not retained here; when compression
+			// actually fires, the original is recovered from the raw-output
+			// file referenced by rtk_raw_output_id in the log metadata.
+			appendScanned(state, i)
 
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
 			result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
@@ -159,9 +161,9 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				cfg.CommandHint = cmd
 				blockIndex++
 
-				// Capture the original block text so the snapshot survives
-				// the in-place mutation that follows.
-				appendSnapshot(state, i*100+j, string(msg.Role), extractToolName(msg), text)
+				// Record that this block was scanned by the RTK pipeline; per-block
+				// original text is recovered via rtk_raw_output_id when needed.
+				appendScanned(state, i*100+j)
 
 				// Compress through the PipelineRunner.
 				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
@@ -210,7 +212,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			if ok && text != "" {
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
-				appendSnapshot(state, i, string(msg.Role), extractToolName(msg), text)
+				appendScanned(state, i)
 				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, string(schemas.ChatMessageRoleUser)), text, defaultCfg)
 				if p.metrics != nil {
 					p.metrics.RecordEngineBreakdown(breakdown)
@@ -352,7 +354,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 			if ok && text != "" {
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
-				appendSnapshot(state, i, "user", "", text)
+				appendScanned(state, i)
 				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "user"), text, defaultCfg)
 				if p.metrics != nil {
 					p.metrics.RecordEngineBreakdown(breakdown)
@@ -423,12 +425,10 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		cfg.CommandHint = cmd
 		callIdx++
 
-		// Capture pre-compression text for the log detail snapshot.
-		name := ""
-		if msg.ResponsesToolMessage.Name != nil {
-			name = *msg.ResponsesToolMessage.Name
-		}
-		appendSnapshot(state, i, "tool", name, text)
+		// Record that this function_call_output was scanned by the RTK pipeline;
+		// per-message original text is recovered via rtk_raw_output_id when
+		// the pipeline actually compressed.
+		appendScanned(state, i)
 
 		// Compress through the PipelineRunner (tool-role filtered so a
 		// stacked pipeline only runs its RTK-scoped engines here).

@@ -237,17 +237,13 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostR
 		ctx.SetValue(schemas.BifrostContextKeyRTKRawOutputID, state.RawOutputPointers[0].ID)
 	}
 
-	// Build the per-message pre-compression snapshot so the log detail view
-	// can render a side-by-side diff. The compressed side is derived in the
-	// UI from the (now in-place-mutated) request body, so we don't store it
-	// here. Snapshot mode is configured per-plugin; "off" yields no
-	// snapshot at all.
-	if p.config != nil {
-		original := buildSnapshot(state, p.config.SnapshotMode, p.config.SnapshotMaxBytes)
-		if original != nil {
-			ctx.SetValue(schemas.BifrostContextKeyRTKOriginalSnapshot, original)
-			ctx.SetValue(schemas.BifrostContextKeyRTKSnapshotMode, p.config.SnapshotMode)
-		}
+	// Record which message indices the RTK pipeline scanned this request so the
+	// log detail diff view can distinguish "did not participate" from
+	// "participated but not compressed" without persisting any message text.
+	// Original text for compressed indices is recovered from the raw-output
+	// file referenced by rtk_raw_output_id (set above).
+	if len(state.ScannedIndices) > 0 {
+		ctx.SetValue(schemas.BifrostContextKeyRTKPipelineScanned, state.ScannedIndices)
 	}
 
 	// Clean up the per-request state to prevent memory leaks.

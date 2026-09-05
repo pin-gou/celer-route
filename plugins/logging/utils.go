@@ -995,19 +995,15 @@ func mergeRealtimeMetadata(metadata map[string]interface{}, ctx *schemas.Bifrost
 		}
 		metadata["rtk_raw_output_id"] = rawOutputID
 	}
-	if mode, ok := ctx.Value(schemas.BifrostContextKeyRTKSnapshotMode).(string); ok && mode != "" {
+	// PipelineScanned lets the log detail diff view distinguish "did not
+	// participate" from "participated but not compressed" without storing any
+	// message text. The original text for any compressed index is recovered
+	// via rtk_raw_output_id (set above).
+	if scanned, ok := ctx.Value(schemas.BifrostContextKeyRTKPipelineScanned).([]int); ok && len(scanned) > 0 {
 		if metadata == nil {
 			metadata = make(map[string]interface{})
 		}
-		metadata["rtk_snapshot_mode"] = mode
-	}
-	// Snapshots may be JSON-typed (map/slice) or json.RawMessage. Use a tiny
-	// helper to coerce before storing so the log store receives a stable shape.
-	if original, ok := coerceJSONForMetadata(ctx.Value(schemas.BifrostContextKeyRTKOriginalSnapshot)); ok {
-		if metadata == nil {
-			metadata = make(map[string]interface{})
-		}
-		metadata["rtk_original_snapshot"] = original
+		metadata["rtk_pipeline_scanned"] = scanned
 	}
 
 	return metadata

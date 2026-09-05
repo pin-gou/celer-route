@@ -11,11 +11,14 @@ type CompressionState struct {
 	Techniques        []string
 	FilterMatched     string
 	RawOutputPointers []*RtkRawOutputPointer
-	// OriginalSnapshot captures the pre-compression text for every tool
-	// message that the pipeline either compressed or considered compressing.
-	// It is not serialised — it lives only in the per-request state and is
-	// converted to JSON in PostLLMHook.
-	OriginalSnapshot []SnapshotEntry
+	// ScannedIndices records the message/block indices that the RTK pipeline
+	// actually evaluated for compression this request, regardless of whether
+	// the compressed output was smaller than the original. It powers the
+	// "participated but not compressed" state in the log detail diff view
+	// without persisting the message text itself — the original text for any
+	// index where the pipeline did compress is recovered from the raw-output
+	// file referenced by RawOutputPointers (rtk_raw_output_id).
+	ScannedIndices []int
 }
 
 // NewCompressionState creates a new CompressionState with default values.
@@ -23,7 +26,16 @@ func NewCompressionState() *CompressionState {
 	return &CompressionState{
 		Techniques:        make([]string, 0),
 		RawOutputPointers: make([]*RtkRawOutputPointer, 0),
+		ScannedIndices:    make([]int, 0),
 	}
+}
+
+// appendScanned records that the RTK pipeline evaluated the message/block at
+// the given index, regardless of whether the resulting compression saved any
+// tokens. Used by the log detail view to distinguish "did not participate"
+// from "participated but not compressed" without persisting the text itself.
+func appendScanned(state *CompressionState, index int) {
+	state.ScannedIndices = append(state.ScannedIndices, index)
 }
 
 // setState stores the compression state for the given context's request ID.

@@ -96,18 +96,6 @@ type Config struct {
 	// in this list pass through unchanged.
 	DisabledRenderers []string `json:"disabled_renderers,omitempty"`
 
-// SnapshotMode controls how compression snapshots are persisted for the
-		// log detail view:
-		//   "off"    — disable snapshot persistence entirely (default; saves log storage)
-		//   "split"  — per-message diff (recommended for tool output inspection)
-		//   "merged" — single combined diff
-		// Empty defaults to "off".
-	SnapshotMode string `json:"snapshot_mode"`
-
-	// SnapshotMaxBytes caps the total bytes persisted per request across all
-	// snapshots. Default 30 KiB, minimum 1 KiB, maximum 256 KiB.
-	SnapshotMaxBytes int `json:"snapshot_max_bytes"`
-
 	// Caveman configures the Caveman prose-compression engine. Default is
 	// disabled (opt-in); when enabled it compresses user-role message text
 	// via rule-based transformations. Runs as the "caveman" engine in the
@@ -171,18 +159,6 @@ func (c *Config) Validate() error {
 	if c.MinTokensToCompress < 0 {
 		return fmt.Errorf("rtk: min_tokens_to_compress must be >= 0, got %d", c.MinTokensToCompress)
 	}
-	// SnapshotMode validation: must be one of split, merged, off, or empty (defaults to off).
-	if c.SnapshotMode != "" {
-		switch c.SnapshotMode {
-		case "split", "merged", "off":
-		default:
-			return fmt.Errorf("rtk: invalid snapshot_mode %q: must be one of split, merged, off", c.SnapshotMode)
-		}
-	}
-	// SnapshotMaxBytes validation: clamp at apply time, here we only reject negative.
-	if c.SnapshotMaxBytes < 0 {
-		return fmt.Errorf("rtk: snapshot_max_bytes must be >= 0, got %d", c.SnapshotMaxBytes)
-	}
 	// Caveman sub-config validation — only meaningful when the Caveman engine
 	// is enabled, but always checked so misconfiguration fails fast.
 	if err := c.Caveman.Validate(); err != nil {
@@ -217,10 +193,20 @@ func looksLikeAllZero(c *Config) bool {
 		!c.EnableRenderers &&
 		c.RawOutputRetention == "" &&
 		c.RawOutputMaxBytes == 0 &&
-		c.SnapshotMode == "" &&
-		c.SnapshotMaxBytes == 0 &&
 		c.MinTokensToCompress == 0 &&
 		len(c.Pipeline) == 0
+}
+
+// ApplyConfigDefaults is the exported entry point for the defaulting logic.
+// The RTK runtime applies defaults during Init; HTTP handlers that surface
+// the persisted config (e.g. GET /api/context/rtk/config) call this so API
+// consumers see the same effective values as the running plugin instead of
+// raw zero-value fields from the config store.
+func ApplyConfigDefaults(c *Config) {
+	if c == nil {
+		return
+	}
+	applyConfigDefaults(c)
 }
 
 // applyConfigDefaults fills in zero-value fields with sensible defaults.
@@ -291,20 +277,6 @@ func applyConfigDefaults(c *Config) {
 
 	// EnableRenderers stays at false (opt-in). Renderers whitelist stays
 	// empty (== all registered renderers enabled when EnableRenderers=true).
-
-	// SnapshotMode defaults to "off" (no snapshot persistence). Opt-in to
-	// per-message ("split") or combined ("merged") diffs in the log detail view.
-	if c.SnapshotMode == "" {
-		c.SnapshotMode = "off"
-	}
-	// SnapshotMaxBytes default 30 KiB, clamp to [1 KiB, 256 KiB].
-	if c.SnapshotMaxBytes == 0 {
-		c.SnapshotMaxBytes = 30 * 1024
-	} else if c.SnapshotMaxBytes < 1024 {
-		c.SnapshotMaxBytes = 1024
-	} else if c.SnapshotMaxBytes > 256*1024 {
-		c.SnapshotMaxBytes = 256 * 1024
-	}
 
 	// Caveman defaults: Caveman stays opt-in (Enabled=false unless the
 	// operator sets it), but its tunables are defaulted so the engine

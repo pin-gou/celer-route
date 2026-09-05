@@ -1049,8 +1049,8 @@ function CavemanEnginePanel({ form, hasUpdateAccess }: { form: ReturnType<typeof
 
 // ---------------------------------------------------------------------------
 // SharedSettingsSection — cross-engine settings that apply to BOTH engines:
-// snapshot (log detail diff) and raw-output persistence. RTK-only steps
-// (renderers, filters, grouping, presets) live under the RTK tab.
+// raw-output persistence (also feeds the log detail diff view). RTK-only
+// steps (renderers, filters, grouping, presets) live under the RTK tab.
 // ---------------------------------------------------------------------------
 
 function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFormValues>> }) {
@@ -1062,66 +1062,11 @@ function SharedSettingsSection({ form }: { form: ReturnType<typeof useForm<RTKFo
 				<HelpHint>{t("rtk.sharedSettingsHelp")}</HelpHint>
 			</div>
 
-			{/* Snapshot: mode + max bytes */}
-			<fieldset className="rounded-lg border p-4">
-				<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.snapshotSection")}</legend>
-				<div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
-					<FormField
-						control={form.control}
-						name="snapshot_mode"
-						render={({ field }) => (
-							<FormItem>
-								<div className="flex items-center gap-1.5">
-									<FormLabel>{t("rtk.snapshotModeLabel")}</FormLabel>
-									<HelpHint>{t("rtk.snapshotModeWhen")}</HelpHint>
-								</div>
-								<Select value={field.value} onValueChange={field.onChange}>
-									<FormControl>
-										<SelectTrigger data-testid="rtk-field-snapshot-mode">
-											<SelectValue />
-										</SelectTrigger>
-									</FormControl>
-									<SelectContent>
-										<SelectItem value="off">{t("rtk.snapshotModeOff")}</SelectItem>
-										<SelectItem value="split">{t("rtk.snapshotModeSplit")}</SelectItem>
-										<SelectItem value="merged">{t("rtk.snapshotModeMerged")}</SelectItem>
-									</SelectContent>
-								</Select>
-								<FormDescription>{t("rtk.snapshotModeDescription")}</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
-					<FormField
-						control={form.control}
-						name="snapshot_max_bytes"
-						render={({ field }) => (
-							<FormItem>
-								<div className="flex items-center gap-1.5">
-									<FormLabel>{t("rtk.snapshotMaxBytesLabel")}</FormLabel>
-									<HelpHint>{t("rtk.snapshotMaxBytesWhen")}</HelpHint>
-								</div>
-								<FormControl>
-									<Input
-										data-testid="rtk-field-snapshot-max-bytes"
-										type="number"
-										min={0}
-										step={1024}
-										{...field}
-										onChange={(e) => field.onChange(e.target.valueAsNumber || e.target.value)}
-									/>
-								</FormControl>
-								<FormDescription>{t("rtk.snapshotMaxBytesHelp")}</FormDescription>
-								<FormMessage />
-							</FormItem>
-						)}
-					/>
-				</div>
-			</fieldset>
-
 			{/* Debug / raw output — cross-engine persistence (rtk embeds a recovery
-				hint, caveman only persists for the log audit trail). Plain card, no
-				collapse, since both engines share it. */}
+				hint, caveman only persists for the log audit trail). The persisted
+				raw output also feeds the log detail diff view, so this section is
+				the single source of truth for "view the pre-compression text".
+				Plain card, no collapse, since both engines share it. */}
 			<fieldset className="rounded-lg border p-4">
 				<legend className="bg-background px-2 text-xs font-semibold">{t("rtk.rawOutputSection")}</legend>
 				<div className="mt-2 space-y-4">
@@ -1261,27 +1206,27 @@ function ConfigForm({
 	// when the operator-visible config actually moves.
 	useEffect(() => {
 		form.reset({
-			intensity: pluginConfig.intensity ?? "standard",
-			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
-			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
-			dedup_threshold: pluginConfig.dedup_threshold ?? 3,
+			intensity: pluginConfig.intensity || "standard",
+			max_lines_per_result: pluginConfig.max_lines_per_result || 120,
+			max_chars_per_result: pluginConfig.max_chars_per_result || 12000,
+			dedup_threshold: pluginConfig.dedup_threshold || 3,
 			enable_grouping: pluginConfig.enable_grouping ?? false,
-			grouping_threshold: pluginConfig.grouping_threshold ?? 3,
+			grouping_threshold: pluginConfig.grouping_threshold || 3,
 			enabled_filters: pluginConfig.enabled_filters ?? [],
 			disabled_filters: pluginConfig.disabled_filters ?? [],
-			raw_output_retention: pluginConfig.raw_output_retention ?? "always",
-			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
+			// `||` (not `??`): the persisted config may carry an explicit empty
+			// string rather than a null field, and `??` would let "" through.
+			raw_output_retention: pluginConfig.raw_output_retention || "always",
+			raw_output_max_bytes: pluginConfig.raw_output_max_bytes || 1048576,
 			raw_output_dir: pluginConfig.raw_output_dir ?? "",
 			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
-			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
-			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
 			caveman: {
 				enabled: pluginConfig.caveman?.enabled ?? false,
-				intensity: pluginConfig.caveman?.intensity ?? "lite",
+				intensity: pluginConfig.caveman?.intensity || "lite",
 				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
 				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
 				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],
@@ -1568,27 +1513,27 @@ function FormFieldsHost({
 	const form = useForm<RTKFormValues>({
 		resolver: zodResolver(rtkConfigSchema),
 		defaultValues: {
-			intensity: pluginConfig.intensity ?? "standard",
-			max_lines_per_result: pluginConfig.max_lines_per_result ?? 120,
-			max_chars_per_result: pluginConfig.max_chars_per_result ?? 12000,
-			dedup_threshold: pluginConfig.dedup_threshold ?? 3,
+			intensity: pluginConfig.intensity || "standard",
+			max_lines_per_result: pluginConfig.max_lines_per_result || 120,
+			max_chars_per_result: pluginConfig.max_chars_per_result || 12000,
+			dedup_threshold: pluginConfig.dedup_threshold || 3,
 			enable_grouping: pluginConfig.enable_grouping ?? false,
-			grouping_threshold: pluginConfig.grouping_threshold ?? 3,
+			grouping_threshold: pluginConfig.grouping_threshold || 3,
 			enabled_filters: pluginConfig.enabled_filters ?? [],
 			disabled_filters: pluginConfig.disabled_filters ?? [],
-			raw_output_retention: pluginConfig.raw_output_retention ?? "always",
-			raw_output_max_bytes: pluginConfig.raw_output_max_bytes ?? 1048576,
+			// `||` (not `??`): the persisted config may carry an explicit empty
+			// string rather than a null field, and `??` would let "" through.
+			raw_output_retention: pluginConfig.raw_output_retention || "always",
+			raw_output_max_bytes: pluginConfig.raw_output_max_bytes || 1048576,
 			raw_output_dir: pluginConfig.raw_output_dir ?? "",
 			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
-			snapshot_mode: pluginConfig.snapshot_mode ?? "off",
-			snapshot_max_bytes: pluginConfig.snapshot_max_bytes ?? 30 * 1024,
 			caveman: {
 				enabled: pluginConfig.caveman?.enabled ?? false,
-				intensity: pluginConfig.caveman?.intensity ?? "lite",
+				intensity: pluginConfig.caveman?.intensity || "lite",
 				min_message_length: pluginConfig.caveman?.min_message_length ?? 50,
 				skip_rules: pluginConfig.caveman?.skip_rules ?? [],
 				preserve_patterns: pluginConfig.caveman?.preserve_patterns ?? [],

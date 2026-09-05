@@ -2,7 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 
-const RTK_METADATA_KEYS = new Set<string>(["rtk_compression_ratio", "rtk_techniques", "rtk_filter_matched", "rtk_raw_output_id"]);
+const RTK_METADATA_KEYS = new Set<string>([
+	"rtk_compression_ratio",
+	"rtk_techniques",
+	"rtk_filter_matched",
+	"rtk_raw_output_id",
+	"rtk_pipeline_scanned",
+]);
 
 interface Props {
 	keyName: string;
@@ -91,6 +97,24 @@ export default function RTKMetadataBadge({ keyName, value }: Props) {
 						>
 							{t("detailView.rtk_rawOutputLink")}
 						</Link>
+					</div>
+				</div>
+			);
+		}
+		case "rtk_pipeline_scanned": {
+			const indices = Array.isArray(value) ? value.map((v) => Number(v)).filter((n) => Number.isFinite(n)) : [];
+			if (indices.length === 0) return null;
+			return (
+				<div className="flex w-full flex-col gap-2">
+					<div className="text-muted-foreground text-xs font-medium">
+						{t("detailView.rtk_pipelineScanned").toUpperCase().replace(/_/g, " ")}
+					</div>
+					<div className="flex flex-wrap gap-1.5">
+						{indices.map((idx) => (
+							<Badge key={idx} variant="secondary" className="font-mono text-[10px]">
+								#{idx}
+							</Badge>
+						))}
 					</div>
 				</div>
 			);
