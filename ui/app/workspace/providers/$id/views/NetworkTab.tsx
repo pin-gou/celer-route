@@ -190,10 +190,11 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 		<div data-testid="providers2-network-tab" className="rounded-lg border p-4">
 			<Form {...form}>
 				<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-					<Accordion type="multiple" defaultValue={["basic"]}>
-						<AccordionItem value="basic">
-							<AccordionTrigger data-testid="providers2-network-basic-trigger">
-								<span className="text-sm font-medium">{t("providers2.networkTab.basic")}</span>
+					<Accordion type="multiple" defaultValue={["endpoint", "timeouts"]}>
+						{/* Section 1: Endpoint & Provider — "what am I connecting to" */}
+						<AccordionItem value="endpoint">
+							<AccordionTrigger data-testid="providers2-network-endpoint-trigger">
+								<span className="text-sm font-medium">{t("providers2.networkTab.endpoint")}</span>
 							</AccordionTrigger>
 							<AccordionContent className="space-y-4 pt-4">
 								{!hideBaseURL && (
@@ -222,6 +223,34 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 									/>
 								)}
 
+								<FormField
+									control={form.control}
+									name="network_config.extra_headers"
+									render={({ field }) => (
+										<FormItem>
+											<FormControl>
+												<HeadersTable
+													value={field.value || {}}
+													onChange={field.onChange}
+													keyPlaceholder={t("fragments.network.headerNamePlaceholder")}
+													valuePlaceholder={t("fragments.network.headerValuePlaceholder")}
+													label={t("fragments.network.extraHeaders")}
+													disabled={!hasUpdateProviderAccess}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</AccordionContent>
+						</AccordionItem>
+
+						{/* Section 2: Timeouts & Retry — "how long before I give up / try again" */}
+						<AccordionItem value="timeouts">
+							<AccordionTrigger data-testid="providers2-network-timeouts-trigger">
+								<span className="text-sm font-medium">{t("providers2.networkTab.timeouts")}</span>
+							</AccordionTrigger>
+							<AccordionContent className="space-y-4 pt-4">
 								<div className="flex w-full flex-row items-start gap-4">
 									<FormField
 										control={form.control}
@@ -287,66 +316,6 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 									/>
 								</div>
 
-								<FormField
-									control={form.control}
-									name="proxy_config.type"
-									render={({ field }) => (
-										<FormItem>
-											<FormLabel>{t("fragments.proxy.proxyType")}</FormLabel>
-											<Select
-												onValueChange={field.onChange}
-												value={field.value === "none" ? "" : (field.value as string)}
-												disabled={!hasUpdateProviderAccess}
-											>
-												<FormControl>
-													<SelectTrigger className="w-48" data-testid="env-var-proxy-type-trigger">
-														<SelectValue placeholder={t("fragments.proxy.selectType")} />
-													</SelectTrigger>
-												</FormControl>
-												<SelectContent>
-													<SelectItem value="http">{t("fragments.proxy.http")}</SelectItem>
-													<SelectItem value="socks5">{t("fragments.proxy.socks5")}</SelectItem>
-													<SelectItem value="environment">{t("fragments.proxy.environment")}</SelectItem>
-												</SelectContent>
-											</Select>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-
-								<div className={cn("block transition-all duration-200", !proxyRequiresUrl && "hidden")}>
-									<Alert>
-										<Info className="h-4 w-4" />
-										<AlertDescription>{t("fragments.proxy.alertDescription")}</AlertDescription>
-									</Alert>
-									<FormField
-										control={form.control}
-										name="proxy_config.url"
-										render={({ field }) => (
-											<FormItem>
-												<FormLabel>{t("fragments.proxy.proxyUrl")}</FormLabel>
-												<FormControl>
-													<SecretVarInput
-														placeholder={t("fragments.proxy.proxyUrlPlaceholder")}
-														{...field}
-														value={field.value}
-														disabled={!hasUpdateProviderAccess}
-														data-testid="env-var-proxy-url"
-													/>
-												</FormControl>
-												<FormMessage />
-											</FormItem>
-										)}
-									/>
-								</div>
-							</AccordionContent>
-						</AccordionItem>
-
-						<AccordionItem value="advanced">
-							<AccordionTrigger data-testid="providers2-network-advanced-trigger">
-								<span className="text-sm font-medium">{t("providers2.networkTab.advanced")}</span>
-							</AccordionTrigger>
-							<AccordionContent className="space-y-4 pt-4">
 								<div className="flex w-full flex-row items-start gap-4">
 									<FormField
 										control={form.control}
@@ -387,7 +356,15 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 										)}
 									/>
 								</div>
+							</AccordionContent>
+						</AccordionItem>
 
+						{/* Section 3: Connection Pool — "tune the transport layer" */}
+						<AccordionItem value="connection">
+							<AccordionTrigger data-testid="providers2-network-connection-trigger">
+								<span className="text-sm font-medium">{t("providers2.networkTab.connection")}</span>
+							</AccordionTrigger>
+							<AccordionContent className="space-y-4 pt-4">
 								<div className="flex w-full flex-row items-start gap-4">
 									<FormField
 										control={form.control}
@@ -455,94 +432,66 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 										</FormItem>
 									)}
 								/>
-								<FormField
-									control={form.control}
-									name="network_config.allow_private_network"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded border p-4">
-											<div className="space-y-0.5">
-												<FormLabel>{t("fragments.network.allowPrivateNetwork")}</FormLabel>
-												<FormDescription>{t("fragments.network.allowPrivateNetworkDescription")}</FormDescription>
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value ?? false}
-													onCheckedChange={field.onChange}
-													disabled={!hasUpdateProviderAccess}
-													data-testid="network-config-allow-private-network"
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
+							</AccordionContent>
+						</AccordionItem>
 
+						{/* Section 4: Proxy & Security — "trust boundary + outbound proxy" */}
+						<AccordionItem value="proxy">
+							<AccordionTrigger data-testid="providers2-network-proxy-trigger">
+								<span className="text-sm font-medium">{t("providers2.networkTab.proxySecurity")}</span>
+							</AccordionTrigger>
+							<AccordionContent className="space-y-4 pt-4">
 								<FormField
 									control={form.control}
-									name="network_config.extra_headers"
+									name="proxy_config.type"
 									render={({ field }) => (
 										<FormItem>
-											<FormControl>
-												<HeadersTable
-													value={field.value || {}}
-													onChange={field.onChange}
-													keyPlaceholder={t("fragments.network.headerNamePlaceholder")}
-													valuePlaceholder={t("fragments.network.headerValuePlaceholder")}
-													label={t("fragments.network.extraHeaders")}
-													disabled={!hasUpdateProviderAccess}
-												/>
-											</FormControl>
+											<FormLabel>{t("fragments.proxy.proxyType")}</FormLabel>
+											<Select
+												onValueChange={field.onChange}
+												value={field.value === "none" ? "" : (field.value as string)}
+												disabled={!hasUpdateProviderAccess}
+											>
+												<FormControl>
+													<SelectTrigger className="w-48" data-testid="env-var-proxy-type-trigger">
+														<SelectValue placeholder={t("fragments.proxy.selectType")} />
+													</SelectTrigger>
+												</FormControl>
+												<SelectContent>
+													<SelectItem value="http">{t("fragments.proxy.http")}</SelectItem>
+													<SelectItem value="socks5">{t("fragments.proxy.socks5")}</SelectItem>
+													<SelectItem value="environment">{t("fragments.proxy.environment")}</SelectItem>
+												</SelectContent>
+											</Select>
 											<FormMessage />
 										</FormItem>
 									)}
 								/>
 
-								<FormField
-									control={form.control}
-									name="network_config.insecure_skip_verify"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded border p-4">
-											<div className="space-y-0.5">
-												<FormLabel>{t("fragments.network.skipTlsVerification")}</FormLabel>
-												<FormDescription>{t("fragments.network.skipTlsVerificationDescription")}</FormDescription>
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value ?? false}
-													onCheckedChange={field.onChange}
-													disabled={!hasUpdateProviderAccess}
-													data-testid="network-config-insecure-skip-verify"
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="network_config.ca_cert_pem"
-									render={({ field }) => (
-										<FormItem>
-											<FormLabel>{t("fragments.network.caCertificate")}</FormLabel>
-											<FormControl>
-												<SecretVarInput
-													variant="textarea"
-													placeholder={t("fragments.network.caCertificatePlaceholder")}
-													className="font-mono text-xs"
-													rows={6}
-													hideValueWhenEnv
-													redactNonEnvValue
-													{...field}
-													value={field.value}
-													disabled={!hasUpdateProviderAccess}
-													data-testid="network-config-ca-cert-pem"
-												/>
-											</FormControl>
-											<FormDescription>{t("fragments.network.caCertificateDescription")}</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-
-								<div className={cn("block transition-all duration-200", !proxyRequiresUrl && "hidden")}>
+								<div className={cn("space-y-4 transition-all duration-200", !proxyRequiresUrl && "hidden")}>
+									<Alert>
+										<Info className="h-4 w-4" />
+										<AlertDescription>{t("fragments.proxy.alertDescription")}</AlertDescription>
+									</Alert>
+									<FormField
+										control={form.control}
+										name="proxy_config.url"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>{t("fragments.proxy.proxyUrl")}</FormLabel>
+												<FormControl>
+													<SecretVarInput
+														placeholder={t("fragments.proxy.proxyUrlPlaceholder")}
+														{...field}
+														value={field.value}
+														disabled={!hasUpdateProviderAccess}
+														data-testid="env-var-proxy-url"
+													/>
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
 									<div className="grid grid-cols-2 gap-4">
 										<FormField
 											control={form.control}
@@ -608,6 +557,74 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 												</FormControl>
 												<FormDescription>{t("fragments.proxy.caCertDescription")}</FormDescription>
 												<FormMessage />
+											</FormItem>
+										)}
+									/>
+								</div>
+
+								<div className="border-t pt-4">
+									<FormField
+										control={form.control}
+										name="network_config.insecure_skip_verify"
+										render={({ field }) => (
+											<FormItem className="flex flex-row items-center justify-between rounded border p-4">
+												<div className="space-y-0.5">
+													<FormLabel>{t("fragments.network.skipTlsVerification")}</FormLabel>
+													<FormDescription>{t("fragments.network.skipTlsVerificationDescription")}</FormDescription>
+												</div>
+												<FormControl>
+													<Switch
+														checked={field.value ?? false}
+														onCheckedChange={field.onChange}
+														disabled={!hasUpdateProviderAccess}
+														data-testid="network-config-insecure-skip-verify"
+													/>
+												</FormControl>
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="network_config.ca_cert_pem"
+										render={({ field }) => (
+											<FormItem className="mt-3">
+												<FormLabel>{t("fragments.network.caCertificate")}</FormLabel>
+												<FormControl>
+													<SecretVarInput
+														variant="textarea"
+														placeholder={t("fragments.network.caCertificatePlaceholder")}
+														className="font-mono text-xs"
+														rows={6}
+														hideValueWhenEnv
+														redactNonEnvValue
+														{...field}
+														value={field.value}
+														disabled={!hasUpdateProviderAccess}
+														data-testid="network-config-ca-cert-pem"
+													/>
+												</FormControl>
+												<FormDescription>{t("fragments.network.caCertificateDescription")}</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="network_config.allow_private_network"
+										render={({ field }) => (
+											<FormItem className="mt-3 flex flex-row items-center justify-between rounded border p-4">
+												<div className="space-y-0.5">
+													<FormLabel>{t("fragments.network.allowPrivateNetwork")}</FormLabel>
+													<FormDescription>{t("fragments.network.allowPrivateNetworkDescription")}</FormDescription>
+												</div>
+												<FormControl>
+													<Switch
+														checked={field.value ?? false}
+														onCheckedChange={field.onChange}
+														disabled={!hasUpdateProviderAccess}
+														data-testid="network-config-allow-private-network"
+													/>
+												</FormControl>
 											</FormItem>
 										)}
 									/>

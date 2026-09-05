@@ -167,8 +167,10 @@
 			"retryBackoff": "Backoff (initial / max)"
 		},
 		"networkTab": {
-			"basic": "Basic",
-			"advanced": "Advanced"
+			"endpoint": "Endpoint & Provider",
+			"timeouts": "Timeouts & Retry",
+			"connection": "Connection Pool",
+			"proxySecurity": "Proxy & Security"
 		},
 		"suggestions": {
 			"multipleKeysNoRetries": {

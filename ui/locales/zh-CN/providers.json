@@ -167,8 +167,10 @@
 			"retryBackoff": "退避（初始 / 最大）"
 		},
 		"networkTab": {
-			"basic": "基本",
-			"advanced": "高级"
+			"endpoint": "接入点",
+			"timeouts": "超时与重试",
+			"connection": "连接池",
+			"proxySecurity": "代理与安全"
 		},
 		"suggestions": {
 			"multipleKeysNoRetries": {
