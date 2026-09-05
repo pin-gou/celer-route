@@ -151,8 +151,10 @@ export default defineConfig({
 			"process.env.BUILD_TIME": JSON.stringify(new Date().toISOString()),
 		},
 	},
-	server: {
-		port: 3000,
+  server: {
+    host: "0.0.0.0",
+    port: 3000,
+		allowedHosts: true,
 		proxy: {
 			"/api": {
 				target: `http://localhost:${process.env.BIFROST_PORT ?? "8080"}`,
