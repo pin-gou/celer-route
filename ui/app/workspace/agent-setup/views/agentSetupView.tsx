@@ -15,6 +15,7 @@ import { useGetVirtualKeysQuery } from "@/lib/store/apis/governanceApi";
 import { useV1Models, type V1Model } from "@/lib/hooks/useV1Models";
 import {
 	AGENT_GROUPS,
+	buildApplyCommand,
 	envTabCode,
 	generateAgentConfig,
 	toOpenAISurface,
@@ -193,15 +194,30 @@ export default function AgentSetupView() {
 
 	const tabs = useMemo(() => {
 		if (!output) return [];
-		const result: TestCommandTab[] = output.files.map((f, i) => ({
-			id: `file-${i}`,
-			label: f.path,
-			code: f.content,
-			copyLabel: t("copy"),
-			copiedLabel: t("copied"),
-			copyText: t("copy"),
-			copySuccessMessage: t("copySuccess"),
-		}));
+		const result: TestCommandTab[] = [];
+		const apply = buildApplyCommand(output, platform);
+		if (apply) {
+			result.push({
+				id: "apply",
+				label: t("applyTab"),
+				code: apply,
+				copyLabel: t("copy"),
+				copiedLabel: t("copied"),
+				copyText: t("copy"),
+				copySuccessMessage: t("copySuccess"),
+			});
+		}
+		for (const [i, f] of output.files.entries()) {
+			result.push({
+				id: `file-${i}`,
+				label: f.path,
+				code: f.content,
+				copyLabel: t("copy"),
+				copiedLabel: t("copied"),
+				copyText: t("copy"),
+				copySuccessMessage: t("copySuccess"),
+			});
+		}
 		const envCode = output.env ? envTabCode(output.env, platform) : "";
 		if (envCode.length > 0 && !output.files.some((f) => f.content === envCode)) {
 			result.push({

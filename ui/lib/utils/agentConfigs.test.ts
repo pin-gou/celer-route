@@ -5,6 +5,7 @@ import {
 	AGENT_PROVIDER_KEY,
 	CODING_AGENTS,
 	CodingAgentId,
+	buildApplyCommand,
 	envTabCode,
 	generateAgentConfig,
 	toAnthropicSurface,
@@ -310,6 +311,99 @@ describe("platforms", () => {
 		expect(out.files[0].path).toBe("~/.codex/config.toml");
 		expect(out.env!.posix).toEqual(["export CELER_ROUTE_API_KEY=sk-bf-abc"]);
 		expect(out.env!.powershell).toEqual(['$env:CELER_ROUTE_API_KEY = "sk-bf-abc"']);
+	});
+});
+
+describe("buildApplyCommand", () => {
+	it("backs up and JSON-deep-merges opencode config on POSIX (never overwrites)", () => {
+		const out = generateAgentConfig({
+			agent: "opencode",
+			baseUrl: "http://localhost:8080",
+			apiKey: "sk-bf-abc",
+			models,
+			platform: "linux",
+		});
+		const cmd = buildApplyCommand(out, "linux")!;
+		expect(cmd).toContain(`mkdir -p "$HOME/.config/opencode"`);
+		expect(cmd).toContain(`if [ -f "$HOME/.config/opencode/opencode.json" ]; then`);
+		expect(cmd).toContain(`cp -p "$HOME/.config/opencode/opencode.json"`);
+		expect(cmd).toContain(`python3 - <<'PYEOF'`);
+		expect(cmd).toContain("json.loads(base64.b64decode(");
+		expect(cmd).toContain("json.dump(root,");
+		// Precise merge, not wholesale replacement.
+		expect(cmd).not.toContain("cat > ");
+		expect(cmd).not.toContain("CELER_ROUTE_EOF");
+	});
+
+	it("backs up and JSON-deep-merges on Windows via ConvertFrom-Json", () => {
+		const out = generateAgentConfig({
+			agent: "opencode",
+			baseUrl: "http://localhost:8080",
+			apiKey: "sk-bf-abc",
+			models,
+			platform: "windows",
+		});
+		const cmd = buildApplyCommand(out, "windows")!;
+		expect(cmd).toContain(`$__p = "$env:USERPROFILE\\.config\\opencode\\opencode.json"`);
+		expect(cmd).toContain("Copy-Item -LiteralPath $__p -Destination");
+		expect(cmd).toContain("ConvertFrom-Json");
+		expect(cmd).toContain("ConvertTo-Json -Depth 100");
+		expect(cmd).toContain("New-Object System.Text.UTF8Encoding($false)");
+	});
+
+	it("merges the codex TOML by replacing only the celer-route pieces", () => {
+		const out = generateAgentConfig({ agent: "codex", baseUrl: "http://localhost:8080", apiKey: "sk-bf-abc", models, platform: "windows" });
+		const cmd = buildApplyCommand(out, "windows")!;
+		expect(cmd).toContain(`$__mark = '[model_providers.celer-route]'`);
+		expect(cmd).toContain("$__composed.Add('model_provider = \"' + $__prov + '\"')");
+		expect(cmd).toContain("Copy-Item -LiteralPath $__p -Destination");
+	});
+
+	it("backs up and merges a workbuddy models.json on both platforms", () => {
+		const mac = generateAgentConfig({ agent: "workbuddy", baseUrl: "http://localhost:8080", apiKey: "k", models });
+		const cmdMac = buildApplyCommand(mac, "macos")!;
+		expect(cmdMac).toContain(`"$HOME/.workbuddy/models.json"`);
+		expect(cmdMac).toContain('root["models"] = models');
+		expect(cmdMac).toContain("availableModels");
+		const win = generateAgentConfig({ agent: "workbuddy", baseUrl: "http://localhost:8080", apiKey: "k", models, platform: "windows" });
+		const cmdWin = buildApplyCommand(win, "windows")!;
+		expect(cmdWin).toContain("$env:USERPROFILE\\.workbuddy\\models.json");
+		expect(cmdWin).toContain("$__root.models = @($__models)");
+	});
+
+	it("set-or-appends .env on POSIX and appends a source hint", () => {
+		const out = generateAgentConfig({
+			agent: "openai-compatible",
+			baseUrl: "http://localhost:8080",
+			apiKey: "sk-bf-abc",
+			models,
+			platform: "linux",
+		});
+		const cmd = buildApplyCommand(out, "linux")!;
+		expect(cmd).toContain(`("OPENAI_BASE_URL", "http://localhost:8080/v1")`);
+		expect(cmd).toContain('s.startswith(k + "=")');
+		expect(cmd).toContain("source .env");
+	});
+
+	it("returns null for in-app-steps-only clients", () => {
+		for (const agent of ["cursor", "trae", "zcode", "lingma"] as const) {
+			const out = generateAgentConfig({ agent, baseUrl: "http://localhost:8080", apiKey: "k", models, platform: "linux" });
+			expect(buildApplyCommand(out, "linux")).toBeNull();
+		}
+	});
+
+	it("embeds a payload that equals the rendered content for a fresh install", () => {
+		const out = generateAgentConfig({
+			agent: "opencode",
+			baseUrl: "http://localhost:8080",
+			apiKey: "sk-bf-abc",
+			models,
+			platform: "linux",
+		});
+		const cmd = buildApplyCommand(out, "linux")!;
+		const match = cmd.match(/base64\.b64decode\("([^"]+)"\)/);
+		expect(match).not.toBeNull();
+		expect(globalThis.atob(match![1])).toBe(out.files[0].content);
 	});
 });
 

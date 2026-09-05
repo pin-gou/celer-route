@@ -1,7 +1,6 @@
 // Package catalog fetches the live model catalog from a running celer-route
 // instance over HTTP. The CLI uses it to mirror what the Web UI does —
-// get the available models so it can write explicit `models` blocks into
-// each coding agent's config file (opencode, Claude Code, Codex…).
+// get the available models so it can print or filter them.
 //
 // Encoding for /v1/models matches the OpenAI "list models" surface:
 //
@@ -27,13 +26,12 @@ import (
 	"time"
 )
 
-// Model is the subset of /v1/models used by the CLI templates.
+// Model is the subset of /v1/models used by the CLI.
 type Model struct {
-	ID             string
-	Name           string
-	ContextLength  int
-	MaxOutput      int
-	AdditionalJSON map[string]any // reserved for future flags (e.g. modalities)
+	ID            string
+	Name          string
+	ContextLength int
+	MaxOutput     int
 }
 
 // List fetches models from baseURL (e.g. http://localhost:8080), optionally
@@ -71,7 +69,6 @@ func List(ctx context.Context, baseURL, apiKey string) ([]Model, error) {
 			ContextLength  int    `json:"context_length"`
 			MaxInputTokens int    `json:"max_input_tokens"`
 			MaxOutput      int    `json:"max_output_tokens"`
-			Additional     map[string]any
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -99,35 +96,13 @@ func List(ctx context.Context, baseURL, apiKey string) ([]Model, error) {
 			ctx = m.MaxInputTokens
 		}
 		out = append(out, Model{
-			ID:             id,
-			Name:           name,
-			ContextLength:  ctx,
-			MaxOutput:      m.MaxOutput,
-			AdditionalJSON: m.Additional,
+			ID:            id,
+			Name:          name,
+			ContextLength: ctx,
+			MaxOutput:     m.MaxOutput,
 		})
 	}
 	return out, nil
-}
-
-// Filter keeps only models whose id contains any of the substrings in
-// patterns. An empty patterns slice is a no-op (returns the input).
-func Filter(in []Model, patterns []string) []Model {
-	if len(patterns) == 0 {
-		return in
-	}
-	out := make([]Model, 0, len(in))
-	for _, m := range in {
-		for _, p := range patterns {
-			if p == "" {
-				continue
-			}
-			if strings.Contains(m.ID, p) {
-				out = append(out, m)
-				break
-			}
-		}
-	}
-	return out
 }
 
 func summarize(b []byte) string {

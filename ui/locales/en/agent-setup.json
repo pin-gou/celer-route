@@ -44,6 +44,7 @@
 	"defaultModelPlaceholder": "Select a default model",
 	"defaultModelHint": "Defaults to every model this API key can see (fetched from /v1/models).",
 	"outputTitle": "Generated config",
+	"applyTab": "Apply with one command",
 	"envTab": "Environment",
 	"testTab": "Test with curl",
 	"copy": "Copy",

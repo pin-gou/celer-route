@@ -92,7 +92,9 @@ opencode 还有一个「使用 Responses API」勾选项：勾上后会把 `npm`
 
 ## 生成的配置长什么样
 
-下方是各客户端的实际产物（Base URL = `http://localhost:8080`，API Key 已创建）。
+「生成的配置」区块按顺序给出标签页：**一键应用**（一条命令写入本机 → 见下文）、各
+配置文件的完整内容、「环境变量」配方，以及最右侧「用 curl 测试」。下方是各客户端的实际产物
+（Base URL = `http://localhost:8080`，API Key 已创建）。
 
 ### opencode
 
@@ -300,60 +302,81 @@ curl http://localhost:8080/v1/chat/completions \
 - **Claude Code 的 ANTHROPIC_BASE_URL**：一定不要带 `/v1`，否则会变成 `{origin}/anthropic/v1`，多出一段路径
 - **Trae 的 Base URL**：一定要带完整 `/v1` 路径，只填域名会连接失败
 
-## 命令行工具 `celer-route-setup`
+## 一键应用
 
-如果不想打开 Web UI，或者要给 CI/远程机器一次性写入配置，仓库自带一个 Go
-CLI（`cli/` 模块）。它从运行中的 celer-route 拉取同一份 `/v1/models`，把
-Web UI 的生成逻辑用 Go 重写一份，保证两边产出的字节完全一致。CLI 会**自动检测
-本机操作系统**（`runtime.GOOS`）：在 Windows 上写入 `%USERPROFILE%\…` 路径并打印
-PowerShell + cmd 两种环境变量写法，在 macOS/Linux 上使用 `~/…` 与 `export`。
+「生成的配置」区块最前面有一个「**一键应用**」标签页：里面是一条自包含命令（**bash** 用于
+macOS/Linux，**PowerShell** 用于 Windows），复制后在本地终端粘贴运行，即可把 celer-route 的配置
+并进对应路径——不需要下载任何二进制，也不依赖网关在线。
 
-构建：
+命令**不会覆盖你已有的配置**，而是先备份、再精准合并：
 
-```bash
-make build-setup                    # 输出到 tmp/celer-route-setup
-```
+1. **备份**：如果目标配置文件已存在，先复制一份 `*.bak-<时间戳>` 放在同目录
+2. **精准插入**（按客户端类型）：
+   - **JSON**（opencode、Claude Code、WorkBuddy、CodeBuddy）：深度合并——把 `celer-route` 的
+     provider / `env` / `models[]` 写进去，**已有字段、其他 provider、其他设置全部保留**
+   - **TOML**（Codex）：只替换 `model` / `model_provider` 与 `[model_providers.celer-route]` 段，
+     其他段落不动
+   - **`.env`**（通用 OpenAI 兼容、MarsCode）：按 KEY 设置或追加，其他行保留
+3. **安全失败**：如果已有配置损坏（不是合法 JSON/TOML），命令会**中止并保持原文件不动**（备份保留），
+   绝不拿新配置顶掉坏文件
 
-子命令：
+macOS/Linux 的合并用 `python3` 完成（开发机基本都自带）；没有 `python3` 时命令会明确报错而不是
+覆盖。Windows 用 PowerShell 内置的 JSON/cmd 函数，零额外依赖。如果你想对配置做临时调整，改
+「生成配置」标签页里的内容再重新复制即可。
 
-| 子命令 | 写入目标 |
-|---|---|
-| `celer-route-setup models` | 把当前模型目录以 JSON 打到 stdout |
-| `celer-route-setup setup-opencode` | 写 `~/.config/opencode/opencode.json` |
-| `celer-route-setup setup-claude` | 写 `~/.claude/settings.json` |
-| `celer-route-setup setup-codex` | 写 `~/.codex/config.toml` |
-| `celer-route-setup setup-openai-compat` | 输出 `OPENAI_*` 环境变量配方（hermes / openclaw / aider / goose） |
-| `celer-route-setup setup-cursor` | 打印 Cursor / Windsurf 的应用内操作步骤 |
-| `celer-route-setup setup-workbuddy` | 写 `~/.workbuddy/models.json`（腾讯 WorkBuddy） |
-| `celer-route-setup setup-codebuddy` | 写 `~/.codebuddy/models.json`（腾讯 CodeBuddy） |
-| `celer-route-setup setup-trae` | 打印 Trae 的应用内操作步骤 |
-| `celer-route-setup setup-zcode` | 打印 ZCode 的应用内操作步骤 |
-| `celer-route-setup setup-marscode` | 输出 `OPENAI_*` 环境变量配方（字节 MarsCode） |
-| `celer-route-setup setup-lingma` | 打印通义灵码的应用内操作步骤 |
+### macOS / Linux（bash）
 
-公共参数：
+以 opencode 为例（先备份，再合并 `provider.celer-route` 与 `model`，其余全保留）：
 
 ```bash
-# 拉取当前网关（默认 localhost:8080）的模型目录
-celer-route-setup models
-
-# 写 opencode.json，默认接 localhost:8080
-celer-route-setup setup-opencode
-
-# 指向远端 VPS，自带 API Key，过滤模型
-celer-route-setup setup-claude --remote http://192.168.0.15:8080 \
-    --api-key sk-bf-… --only minimax,glm
-
-# 只想看会写什么，不动磁盘
-celer-route-setup setup-codex --only minimax --dry-run
-
-# 给 WorkBuddy 写一份只含 minimax 模型的 models.json，并打印产物
-celer-route-setup setup-workbuddy --only minimax --dry-run
-
-# opencode 切到 Responses API
-celer-route-setup setup-opencode --responses
+mkdir -p "$HOME/.config/opencode"
+if [ -f "$HOME/.config/opencode/opencode.json" ]; then
+  cp -p "$HOME/.config/opencode/opencode.json" "$HOME/.config/opencode/opencode.json.bak-$(date +%Y%m%d-%H%M%S)" || exit 1
+fi
+command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
+python3 - <<'PYEOF'
+import os, sys, json, base64
+p = os.path.expanduser("~/.config/opencode/opencode.json")
+ours = json.loads(base64.b64decode("<页面生成的 base64>").decode("utf-8"))
+root = json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
+def deep(base, over):
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            deep(base[k], v)
+        else:
+            base[k] = v
+deep(root, ours)
+json.dump(root, open(p + ".tmp", "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+os.replace(p + ".tmp", p)
+PYEOF
 ```
 
-`--dry-run` 会把每个文件的最终内容按 `==> <path> <==` 分隔打到 stdout，方便你
-和已有配置 diff，或者用 `tee` 备份后再落盘。API Key 优先取 `--api-key`，其次取环境变量
-`CELER_ROUTE_API_KEY`；都不填时按网关是否启用鉴权决定是否写入。
+> 页面里是完整的可粘贴命令（含备份与解析失败保护），上面只是结构示意。
+
+### Windows（PowerShell）
+
+以 Codex 为例（`$env:USERPROFILE\.codex\config.toml`），先备份，再只替换
+`model` / `model_provider` 与 `[model_providers.celer-route]` 段：
+
+```powershell
+$__p = "$env:USERPROFILE\.codex\config.toml"
+if (Test-Path -LiteralPath $__p) {
+  Copy-Item -LiteralPath $__p -Destination "$__p.bak-$((Get-Date).ToString('yyyyMMdd-HHmmss'))" -Force
+}
+$__oursText = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("<页面生成的 base64>"))
+$__mark = '[model_providers.celer-route]'
+# ……合并逻辑见页面完整命令……
+[IO.File]::WriteAllText($__p, $__composedText, (New-Object System.Text.UTF8Encoding($false)))
+```
+
+### 覆盖范围
+
+- **写文件类**（opencode、Claude Code、Codex、WorkBuddy、CodeBuddy）：命令先备份再精准合并各自的配置文件
+- **环境变量类**（通用 OpenAI 兼容、MarsCode）：命令按 KEY 合并当前目录的 `.env`（其他行保留），并提示
+  `source .env`（Windows 下提示改用「环境变量」标签页里的 PowerShell / cmd 写法）
+- **应用内步骤类**（Cursor、Trae、ZCode、通义灵码）：这些客户端只能在应用内配置，不提供「一键应用」标签页
+
+### 手动/命令行场景
+
+想在不打开页面的场景（CI、远程机器）查看模型目录，仍可使用轻量命令：`celer-route-setup models`
+（源码在 `cli/`，无模板逻辑，不需要为各系统/架构分发多份配置生成二进制）。

@@ -1672,16 +1672,6 @@ test-admin: ## Run celer-route-admin CLI tests
 	@$(ECHO) "$(GREEN)Running celer-route-admin tests...$(NC)"
 	@cd cmd/admin && go test $(if $(TESTCASE),-run $(TESTCASE),./...)
 
-build-setup: ## Build the celer-route-setup CLI (output: tmp/celer-route-setup)
-	@$(ECHO) "$(GREEN)Building celer-route-setup CLI...$(NC)"
-	@mkdir -p tmp
-	@cd cli && CGO_ENABLED=1 go build $(if $(LOCAL),,-trimpath) -o ../tmp/celer-route-setup .
-	@$(ECHO) "$(GREEN)✓ celer-route-setup ready at tmp/celer-route-setup$(NC)"
-
-test-setup: ## Run celer-route-setup CLI tests
-	@$(ECHO) "$(GREEN)Running celer-route-setup tests...$(NC)"
-	@cd cli && go test $(if $(TESTCASE),-run $(TESTCASE),./...)
-
 run-e2e: install-playwright ## Run E2E tests (Usage: make run-e2e [FLOW=providers|virtual-keys|config])
 	@$(ECHO) "$(GREEN)Running Playwright E2E tests...$(NC)"
 	@if [ -n "$(FLOW)" ]; then \
