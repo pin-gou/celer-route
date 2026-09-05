@@ -1,58 +1,29 @@
-import { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { ModelProvider } from "@/lib/types/config";
-import { NetworkFormFragment } from "@/app/workspace/providers/fragments/networkFormFragment";
-import { ProxyFormFragment } from "@/app/workspace/providers/fragments/proxyFormFragment";
-import { PerformanceFormFragment } from "@/app/workspace/providers/fragments/performanceFormFragment";
-import { BetaHeadersFormFragment } from "@/app/workspace/providers/fragments/betaHeadersFormFragment";
-import { OpenAIConfigFormFragment } from "@/app/workspace/providers/fragments/openaiConfigFormFragment";
-import { CooldownPolicyFormFragment } from "@/app/workspace/providers/fragments/cooldownPolicyFormFragment";
-import { GovernanceFormFragment } from "@/app/workspace/providers/fragments/governanceFormFragment";
-import { DebuggingFormFragment } from "@/app/workspace/providers/fragments/debuggingFormFragment";
-import { ApiStructureFormFragment } from "@/app/workspace/providers/fragments/apiStructureFormFragment";
-import { parseAsString, useQueryState } from "nuqs";
+import { useTranslation } from "react-i18next";
+import { ConfigSuggestions } from "./ConfigSuggestions";
 
 export interface OverviewTabProps {
 	provider: ModelProvider;
-	onSave: () => void;
 }
 
-const ANTHROPIC_FAMILY_PROVIDERS = ["anthropic", "vertex", "bedrock", "bedrock_mantle", "azure"];
-
-type EditableSection =
-	| "network"
-	| "proxy"
-	| "performance"
-	| "governance"
-	| "beta-headers"
-	| "openai-config"
-	| "cooldown-policy"
-	| "debugging"
-	| "api-structure"
-	| null;
-
-function Section({
-	testId,
-	title,
-	editTestId,
-	onEdit,
-	children,
-}: {
+interface ReadOnlyCardProps {
 	testId: string;
 	title: string;
-	editTestId?: string;
-	onEdit?: () => void;
+	manageLabel?: string;
+	onManage?: () => void;
 	children: React.ReactNode;
-}) {
-	const { t } = useTranslation("providers");
+}
+
+function ReadOnlyCard({ testId, title, manageLabel, onManage, children }: ReadOnlyCardProps) {
 	return (
 		<div data-testid={testId} className="rounded-lg border p-4">
 			<div className="mb-3 flex items-center justify-between">
 				<h3 className="text-sm font-medium">{title}</h3>
-				{editTestId && onEdit && (
-					<button data-testid={editTestId} className="text-primary text-xs underline" onClick={onEdit}>
-						{t("providers2.overview.edit")}
-					</button>
+				{manageLabel && onManage && (
+					<Button variant="outline" size="sm" onClick={onManage} className="text-xs" data-testid={`${testId}-manage`}>
+						{manageLabel}
+					</Button>
 				)}
 			</div>
 			{children}
@@ -60,374 +31,113 @@ function Section({
 	);
 }
 
-export function OverviewTab({ provider }: OverviewTabProps) {
+function CooldownPolicySummary({ provider }: { provider: ModelProvider }) {
 	const { t } = useTranslation("providers");
-	const [editingSection, setEditingSection] = useState<EditableSection>(null);
-	const isAnthropicFamily = ANTHROPIC_FAMILY_PROVIDERS.includes(String(provider.name).toLowerCase());
-	const isOpenAI = String(provider.name) === "openai";
-
-	// Support deep-linking straight into the cooldown policy editor: the
-	// provider-cooldown plugin page navigates here with `?editing=cooldown-policy`,
-	// which auto-expands the section. The query param is intentionally not
-	// cleared on open — navigating again with a different value (or none) just
-	// re-evaluates; the user closing the editor returns to the overview list.
-	const [editingParam] = useQueryState("editing", parseAsString);
-
-	useEffect(() => {
-		if (editingParam === "cooldown-policy") {
-			setEditingSection("cooldown-policy");
+	const policy = provider.cooldown_policy;
+	const hasRateLimit = !!policy?.rate_limit && policy.rate_limit.enabled !== false;
+	const hasQuota = !!policy?.quota && policy.quota.enabled !== false;
+	const hasDisabledOnly = !!policy && !hasRateLimit && !hasQuota && (!!policy.rate_limit || !!policy.quota);
+	if (!hasRateLimit && !hasQuota) {
+		if (hasDisabledOnly) {
+			return (
+				<div className="text-muted-foreground space-y-1 text-xs">
+					<p>{t("providers2.overview.cooldownPolicyAllDisabled")}</p>
+					{policy && <p className="mt-1 text-xs italic">{t("providers2.overview.cooldownPolicyOverride")}</p>}
+				</div>
+			);
 		}
-	}, [editingParam]);
-
-	const nw = provider.network_config;
-	const perf = provider.concurrency_and_buffer_size;
-	const proxy = provider.proxy_config;
-
-	const handleCancelEdit = () => setEditingSection(null);
-
-	if (editingSection === "network") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.network")}</h3>
-					<button
-						data-testid="providers2-overview-network-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
+		return <p className="text-muted-foreground text-xs">{t("providers2.overview.cooldownPolicyUsingDefault")}</p>;
+	}
+	return (
+		<div className="text-muted-foreground space-y-1 text-xs">
+			{hasRateLimit && (
+				<div className="flex justify-between">
+					<span>{t("providers2.overview.cooldownPolicyRateLimitTtl")}</span>
+					<span className="font-mono">{policy!.rate_limit!.ttl_seconds}s</span>
 				</div>
-				<NetworkFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
-
-	if (editingSection === "proxy") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.proxy")}</h3>
-					<button
-						data-testid="providers2-overview-proxy-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
+			)}
+			{hasQuota && (
+				<div className="flex justify-between">
+					<span>{t("providers2.overview.cooldownPolicyQuotaTtl")}</span>
+					<span className="font-mono">{policy!.quota!.ttl_seconds}s</span>
 				</div>
-				<ProxyFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
+			)}
+			{policy && <p className="mt-2 text-xs italic">{t("providers2.overview.cooldownPolicyOverride")}</p>}
+		</div>
+	);
+}
 
-	if (editingSection === "performance") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.performance")}</h3>
-					<button
-						data-testid="providers2-overview-performance-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<PerformanceFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
+export function OverviewTab({ provider, onNavigateTab }: OverviewTabProps & { onNavigateTab?: (tabId: string) => void }) {
+	const { t } = useTranslation("providers");
+	const keysCount = provider.keys_count ?? 0;
+	const modelsCount = provider.models_count ?? 0;
+	const maxRetries = provider.network_config?.max_retries ?? 0;
+	const retryInitial = provider.network_config?.retry_backoff_initial ?? 0;
+	const retryMax = provider.network_config?.retry_backoff_max ?? 0;
 
-	if (editingSection === "beta-headers") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.betaHeaders")}</h3>
-					<button
-						data-testid="providers2-overview-beta-headers-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<BetaHeadersFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
-
-	if (editingSection === "openai-config") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.openaiConfig")}</h3>
-					<button
-						data-testid="providers2-overview-openai-config-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<OpenAIConfigFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
-
-	if (editingSection === "cooldown-policy") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.cooldownPolicy")}</h3>
-					<button
-						data-testid="providers2-overview-cooldown-policy-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<CooldownPolicyFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
-
-	if (editingSection === "governance") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.governance")}</h3>
-					<button
-						data-testid="providers2-overview-governance-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<GovernanceFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
-
-	function CooldownPolicySummary({ provider }: { provider: ModelProvider }) {
-		const { t } = useTranslation("providers");
-		const policy = provider.cooldown_policy;
-		const hasRateLimit = !!policy?.rate_limit && policy.rate_limit.enabled !== false;
-		const hasQuota = !!policy?.quota && policy.quota.enabled !== false;
-		const hasDisabledOnly = !!policy && !hasRateLimit && !hasQuota && (!!policy.rate_limit || !!policy.quota);
-		if (!hasRateLimit && !hasQuota) {
-			if (hasDisabledOnly) {
-				return (
-					<div className="text-muted-foreground space-y-1 text-xs">
-						<p>{t("providers2.overview.cooldownPolicyAllDisabled")}</p>
-						{policy && <p className="mt-1 text-xs italic">{t("providers2.overview.cooldownPolicyOverride")}</p>}
-					</div>
-				);
-			}
-			return <p className="text-muted-foreground text-xs">{t("providers2.overview.cooldownPolicyUsingDefault")}</p>;
-		}
-		return (
-			<div className="text-muted-foreground space-y-1 text-xs">
-				{hasRateLimit && (
-					<div className="flex justify-between">
-						<span>{t("providers2.overview.cooldownPolicyRateLimitTtl")}</span>
-						<span className="font-mono">{policy!.rate_limit!.ttl_seconds}s</span>
-					</div>
-				)}
-				{hasQuota && (
-					<div className="flex justify-between">
-						<span>{t("providers2.overview.cooldownPolicyQuotaTtl")}</span>
-						<span className="font-mono">{policy!.quota!.ttl_seconds}s</span>
-					</div>
-				)}
-				{policy && <p className="mt-2 text-xs italic">{t("providers2.overview.cooldownPolicyOverride")}</p>}
-			</div>
-		);
-	}
-
-	if (editingSection === "debugging") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.debugging")}</h3>
-					<button
-						data-testid="providers2-overview-debugging-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<DebuggingFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
-
-	if (editingSection === "api-structure") {
-		return (
-			<div className="rounded-lg border p-4">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium">{t("providers2.overview.apiStructure")}</h3>
-					<button
-						data-testid="providers2-overview-api-structure-cancel"
-						className="text-muted-foreground text-xs underline"
-						onClick={handleCancelEdit}
-					>
-						{t("providers2.overview.cancel")}
-					</button>
-				</div>
-				<ApiStructureFormFragment provider={provider} onCancel={handleCancelEdit} />
-			</div>
-		);
-	}
+	const goTo = (tabId: string) => () => onNavigateTab?.(tabId);
 
 	return (
-		<div className="space-y-6">
+		<div data-testid="providers2-overview-tab" className="space-y-6">
+			<ConfigSuggestions provider={provider} />
+
 			<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				<Section
-					testId="providers2-overview-network"
-					title={t("providers2.overview.network")}
-					editTestId="providers2-overview-network-edit"
-					onEdit={() => setEditingSection("network")}
+				<ReadOnlyCard
+					testId="providers2-overview-keys"
+					title={t("providers2.tabs.keys")}
+					manageLabel={t("providers2.overview.manage")}
+					onManage={goTo("keys")}
 				>
 					<div className="text-muted-foreground space-y-1 text-xs">
 						<div className="flex justify-between">
-							<span>{t("providers2.overview.baseUrl")}</span>
-							<span className="font-mono">{nw?.base_url || "—"}</span>
-						</div>
-						<div className="flex justify-between">
-							<span>{t("providers2.overview.maxConnections")}</span>
-							<span className="font-mono">{nw?.max_conns_per_host ?? "—"}</span>
-						</div>
-						<div className="flex justify-between">
-							<span>{t("providers2.overview.timeout")}</span>
-							<span className="font-mono">{nw?.default_request_timeout_in_seconds ?? "—"}s</span>
+							<span>{t("providers2.overview.apiKeysCount")}</span>
+							<span className="font-mono">{keysCount}</span>
 						</div>
 					</div>
-				</Section>
+				</ReadOnlyCard>
 
-				<Section
-					testId="providers2-overview-proxy"
-					title={t("providers2.overview.proxy")}
-					editTestId="providers2-overview-proxy-edit"
-					onEdit={() => setEditingSection("proxy")}
+				<ReadOnlyCard
+					testId="providers2-overview-models"
+					title={t("providers2.tabs.models")}
+					manageLabel={t("providers2.overview.manage")}
+					onManage={goTo("models")}
 				>
 					<div className="text-muted-foreground space-y-1 text-xs">
 						<div className="flex justify-between">
-							<span>{t("providers2.overview.type")}</span>
-							<span className="font-mono">{!proxy || proxy.type === "none" ? "none" : proxy.type}</span>
-						</div>
-						<div className="flex justify-between">
-							<span>{t("providers2.overview.url")}</span>
-							<span className="font-mono">{proxy?.url?.value || "—"}</span>
+							<span>{t("providers2.overview.modelsCount")}</span>
+							<span className="font-mono">{modelsCount}</span>
 						</div>
 					</div>
-				</Section>
+				</ReadOnlyCard>
 
-				<Section
-					testId="providers2-overview-performance"
-					title={t("providers2.overview.performance")}
-					editTestId="providers2-overview-performance-edit"
-					onEdit={() => setEditingSection("performance")}
-				>
-					<div className="text-muted-foreground space-y-1 text-xs">
-						<div className="flex justify-between">
-							<span>{t("providers2.overview.concurrency")}</span>
-							<span className="font-mono">{perf?.concurrency ?? "—"}</span>
-						</div>
-						<div className="flex justify-between">
-							<span>{t("providers2.overview.bufferSize")}</span>
-							<span className="font-mono">{perf?.buffer_size ?? "—"}</span>
-						</div>
-					</div>
-				</Section>
-
-				<Section
-					testId="providers2-overview-governance"
-					title={t("providers2.overview.governance")}
-					editTestId="providers2-overview-governance-edit"
-					onEdit={() => setEditingSection("governance")}
-				>
-					<p className="text-muted-foreground text-xs">
-						{t("providers2.overview.governanceDescription", { provider: String(provider.name) })}
-					</p>
-				</Section>
-
-				<Section
-					testId="providers2-overview-beta-headers"
-					title={t("providers2.overview.betaHeaders")}
-					editTestId="providers2-overview-beta-headers-edit"
-					onEdit={() => setEditingSection("beta-headers")}
-				>
-					{isAnthropicFamily ? (
-						<p className="text-muted-foreground text-xs">{t("providers2.overview.betaHeadersAnthropicDescription")}</p>
-					) : (
-						<p className="text-muted-foreground text-xs">{t("providers2.overview.betaHeadersGenericDescription")}</p>
-					)}
-				</Section>
-
-				<Section
-					testId="providers2-overview-openai-config"
-					title={t("providers2.overview.openaiConfig")}
-					editTestId="providers2-overview-openai-config-edit"
-					onEdit={() => setEditingSection("openai-config")}
-				>
-					{isOpenAI ? (
-						<p className="text-muted-foreground text-xs">{t("providers2.overview.openaiConfigDescription")}</p>
-					) : (
-						<p className="text-muted-foreground text-xs">{t("providers2.overview.openaiConfigGenericDescription")}</p>
-					)}
-				</Section>
-
-				<Section
+				<ReadOnlyCard
 					testId="providers2-overview-cooldown-policy"
 					title={t("providers2.overview.cooldownPolicy")}
-					editTestId="providers2-overview-cooldown-policy-edit"
-					onEdit={() => setEditingSection("cooldown-policy")}
+					manageLabel={t("providers2.overview.manage")}
+					onManage={goTo("cooldown")}
 				>
 					<CooldownPolicySummary provider={provider} />
-				</Section>
+				</ReadOnlyCard>
 
-				<Section
-					testId="providers2-overview-debugging"
-					title={t("providers2.overview.debugging")}
-					editTestId="providers2-overview-debugging-edit"
-					onEdit={() => setEditingSection("debugging")}
+				<ReadOnlyCard
+					testId="providers2-overview-retry"
+					title={t("providers2.overview.retryPolicy")}
+					manageLabel={t("providers2.overview.manage")}
+					onManage={goTo("network")}
 				>
 					<div className="text-muted-foreground space-y-1 text-xs">
 						<div className="flex justify-between">
-							<span>{t("providers2.overview.debuggingSendBackRawRequest")}</span>
-							<span className="font-mono">{provider.send_back_raw_request ? "ON" : "OFF"}</span>
+							<span>{t("providers2.overview.maxRetries")}</span>
+							<span className="font-mono">{maxRetries}</span>
 						</div>
 						<div className="flex justify-between">
-							<span>{t("providers2.overview.debuggingSendBackRawResponse")}</span>
-							<span className="font-mono">{provider.send_back_raw_response ? "ON" : "OFF"}</span>
-						</div>
-						<div className="flex justify-between">
-							<span>{t("providers2.overview.debuggingStoreRawRequestResponse")}</span>
-							<span className="font-mono">{provider.store_raw_request_response ? "ON" : "OFF"}</span>
+							<span>{t("providers2.overview.retryBackoff")}</span>
+							<span className="font-mono">
+								{retryInitial}ms / {retryMax}ms
+							</span>
 						</div>
 					</div>
-				</Section>
-
-				{provider.is_key_less && (
-					<Section testId="providers2-overview-keyless" title={t("providers2.overview.keyless")}>
-						<p className="text-muted-foreground text-xs">{t("providers2.overview.keylessDescription")}</p>
-					</Section>
-				)}
-
-				{provider.custom_provider_config && (
-					<Section
-						testId="providers2-overview-api-structure"
-						title={t("providers2.overview.apiStructure")}
-						editTestId="providers2-overview-api-structure-edit"
-						onEdit={() => setEditingSection("api-structure")}
-					>
-						<p className="text-muted-foreground text-xs">{t("providers2.overview.apiStructureDescription")}</p>
-					</Section>
-				)}
+				</ReadOnlyCard>
 			</div>
 		</div>
 	);

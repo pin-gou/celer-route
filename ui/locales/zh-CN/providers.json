@@ -113,6 +113,9 @@
 			"overview": "概览",
 			"keys": "密钥",
 			"models": "模型",
+			"cooldown": "冷却策略",
+			"network": "网络",
+			"advanced": "高级",
 			"usage": "用量",
 			"governance": "治理",
 			"logs": "日志"
@@ -155,7 +158,39 @@
 			"apiStructureDescription": "配置此自定义提供者的底层提供者类型、密钥要求和允许的请求类型。",
 			"apiStructureOnlyCustom": "API 结构仅适用于自定义提供者。",
 			"keyless": "无需 API 密钥",
-			"keylessDescription": "此提供商无需 API 密钥，密钥管理功能已禁用。"
+			"keylessDescription": "此提供商无需 API 密钥，密钥管理功能已禁用。",
+			"manage": "管理",
+			"apiKeysCount": "API 密钥",
+			"modelsCount": "模型",
+			"retryPolicy": "重试策略",
+			"maxRetries": "最大重试次数",
+			"retryBackoff": "退避（初始 / 最大）"
+		},
+		"networkTab": {
+			"basic": "基本",
+			"advanced": "高级"
+		},
+		"suggestions": {
+			"multipleKeysNoRetries": {
+				"title": "多密钥场景建议开启重试",
+				"description": "当前配置了 {{count}} 个 API Key，但 max_retries 为 0。建议将 max_retries 设为大于 0，单个 Key 失败时网关会自动切换到其他 Key。"
+			},
+			"multipleKeysNoCooldown": {
+				"title": "多密钥场景建议启用冷却",
+				"description": "当前有 {{count}} 个 API Key，建议启用 Rate Limit 冷却策略，自动隔离失败的 Key，将流量路由到健康的 Key。"
+			},
+			"noModels": {
+				"title": "尚未配置模型",
+				"description": "此提供商没有可用模型。请前往模型标签页添加或同步模型后再对外提供服务。"
+			},
+			"anthropicNoBetaHeaders": {
+				"title": "自定义 Beta 头部",
+				"description": "Anthropic 系列提供商默认开启一组 beta 功能。可在 高级 → Beta 头部 中按需启用或关闭特定 beta 能力。"
+			},
+			"customBaseUrlDefaultTimeout": {
+				"title": "建议复核默认超时",
+				"description": "你正在使用自定义 base_url，但请求超时仍为默认值 300 秒。建议在网络标签页根据 provider 的实际延迟调整超时与流式空闲超时。"
+			}
 		},
 		"detail": {
 			"delete": "删除",

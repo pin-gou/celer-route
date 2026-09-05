@@ -2285,7 +2285,150 @@
               ]
             }
           }
-        }
+        },
+                        {
+                          "name": "Update Provider Cooldown Policy",
+                          "event": [
+                            {
+                              "listen": "test",
+                              "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                                  "var body = null;",
+                                  "try { body = pm.response.json(); } catch (e) { body = null; }",
+                                  "pm.test('Update returns 2xx and the supplied cooldown policy', function () {",
+                                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(300);",
+                                  "  pm.expect(body, 'JSON body').to.not.equal(null);",
+                                  "  pm.expect(body.cooldown_policy, 'cooldown_policy should round-trip').to.be.an('object');",
+                                  "  pm.expect(body.cooldown_policy.rate_limit, 'rate_limit rule should be present').to.be.an('object');",
+                                  "  pm.expect(body.cooldown_policy.rate_limit.match[0].status_code, 'status_code should round-trip').to.eql(429);",
+                                  "  pm.expect(body.cooldown_policy.rate_limit.ttl_seconds, 'ttl_seconds should round-trip').to.eql(60);",
+                                  "});"
+                                ]
+                              }
+                            }
+                          ],
+                          "request": {
+                            "method": "PUT",
+                            "header": [
+                              {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                              }
+                            ],
+                            "body": {
+                              "mode": "raw",
+                              "raw": "{\"name\":\"custom-123\",\"keys\":[],\"network_config\":{\"base_url\":\"https://api.openai.com/\",\"default_request_timeout_in_seconds\":30,\"max_retries\":0,\"retry_backoff_initial\":500,\"retry_backoff_max\":5000},\"concurrency_and_buffer_size\":{\"concurrency\":1000,\"buffer_size\":5000},\"proxy_config\":null,\"cooldown_policy\":{\"rate_limit\":{\"match\":[{\"status_code\":429}],\"match_mode\":\"any\",\"ttl_seconds\":60,\"enabled\":true,\"scope\":\"key\"},\"quota\":null},\"send_back_raw_request\":false,\"send_back_raw_response\":false,\"custom_provider_config\":{\"is_key_less\":true,\"base_provider_type\":\"openai\"},\"provider_status\":\"active\"}"
+                            },
+                            "url": {
+                              "raw": "{{base_url}}/api/providers/custom-123",
+                              "host": [
+                                "{{base_url}}"
+                              ],
+                              "path": [
+                                "api",
+                                "providers",
+                                "custom-123"
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "name": "Update Provider Network+Proxy Combined",
+                          "event": [
+                            {
+                              "listen": "test",
+                              "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                                  "var body = null;",
+                                  "try { body = pm.response.json(); } catch (e) { body = null; }",
+                                  "pm.test('Single PUT preserves both network_config and proxy_config', function () {",
+                                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(300);",
+                                  "  pm.expect(body, 'JSON body').to.not.equal(null);",
+                                  "  pm.expect(body.network_config, 'network_config must round-trip').to.be.an('object');",
+                                  "  pm.expect(body.network_config.max_retries, 'max_retries must round-trip').to.eql(5);",
+                                  "  pm.expect(body.network_config.default_request_timeout_in_seconds, 'timeout must round-trip').to.eql(45);",
+                                  "  pm.expect(body.proxy_config, 'proxy_config must round-trip').to.be.an('object');",
+                                  "  pm.expect(body.proxy_config.type, 'proxy.type must round-trip').to.eql('http');",
+                                  "});"
+                                ]
+                              }
+                            }
+                          ],
+                          "request": {
+                            "method": "PUT",
+                            "header": [
+                              {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                              }
+                            ],
+                            "body": {
+                              "mode": "raw",
+                              "raw": "{\"name\":\"custom-123\",\"keys\":[],\"network_config\":{\"base_url\":\"https://api.openai.com/\",\"default_request_timeout_in_seconds\":45,\"stream_idle_timeout_in_seconds\":90,\"max_retries\":5,\"retry_backoff_initial\":500,\"retry_backoff_max\":5000,\"insecure_skip_verify\":false,\"allow_private_network\":false},\"concurrency_and_buffer_size\":{\"concurrency\":1000,\"buffer_size\":5000},\"proxy_config\":{\"type\":\"http\",\"url\":{\"value\":\"http://proxy.example.com:8080\",\"type\":\"plain_text\"}},\"cooldown_policy\":null,\"send_back_raw_request\":false,\"send_back_raw_response\":false,\"custom_provider_config\":{\"is_key_less\":true,\"base_provider_type\":\"openai\"},\"provider_status\":\"active\"}"
+                            },
+                            "url": {
+                              "raw": "{{base_url}}/api/providers/custom-123",
+                              "host": [
+                                "{{base_url}}"
+                              ],
+                              "path": [
+                                "api",
+                                "providers",
+                                "custom-123"
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "name": "Clear Provider Cooldown Policy",
+                          "event": [
+                            {
+                              "listen": "test",
+                              "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                                  "var body = null;",
+                                  "try { body = pm.response.json(); } catch (e) { body = null; }",
+                                  "pm.test('cooldown_policy: null clears the override', function () {",
+                                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(300);",
+                                  "  pm.expect(body, 'JSON body').to.not.equal(null);",
+                                  "  pm.expect(body.cooldown_policy === null || body.cooldown_policy === undefined, 'cooldown_policy must be cleared').to.be.true;",
+                                  "});"
+                                ]
+                              }
+                            }
+                          ],
+                          "request": {
+                            "method": "PUT",
+                            "header": [
+                              {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                              }
+                            ],
+                            "body": {
+                              "mode": "raw",
+                              "raw": "{\"name\":\"custom-123\",\"keys\":[],\"network_config\":{\"base_url\":\"https://api.openai.com/\",\"default_request_timeout_in_seconds\":30,\"max_retries\":0,\"retry_backoff_initial\":500,\"retry_backoff_max\":5000},\"concurrency_and_buffer_size\":{\"concurrency\":1000,\"buffer_size\":5000},\"proxy_config\":null,\"cooldown_policy\":null,\"send_back_raw_request\":false,\"send_back_raw_response\":false,\"custom_provider_config\":{\"is_key_less\":true,\"base_provider_type\":\"openai\"},\"provider_status\":\"active\"}"
+                            },
+                            "url": {
+                              "raw": "{{base_url}}/api/providers/custom-123",
+                              "host": [
+                                "{{base_url}}"
+                              ],
+                              "path": [
+                                "api",
+                                "providers",
+                                "custom-123"
+                              ]
+                            }
+                          }
+                        }
+         
       ]
     },
     {

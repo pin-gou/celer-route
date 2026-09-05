@@ -2,9 +2,9 @@
 /**
  * @file OverviewTab component tests
  *
- * These tests verify the OverviewTab component renders all inline-edit
- * fragments: Network, Proxy, Performance, Governance, Beta Headers,
- * OpenAI Config, Debugging, and API Structure.
+ * OverviewTab is now a read-only dashboard showing key counts, model counts,
+ * cooldown summary, retry policy, and configuration suggestions. Editing
+ * lives in dedicated tabs (Cooldown, Network, Advanced).
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -22,14 +22,8 @@ vi.mock("nuqs", () => ({
 	parseAsString: {},
 }));
 
-// The following import does not exist yet — this is TDD red phase.
-// Compilation will fail with "Cannot find module" error.
 import { OverviewTab } from "./OverviewTab";
 import type { OverviewTabProps } from "./OverviewTab";
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
 
 const mockProvider: OverviewTabProps["provider"] = {
 	name: "openai",
@@ -71,188 +65,94 @@ const mockProvider: OverviewTabProps["provider"] = {
 	avg_latency_ms: 312,
 };
 
-const mockOnSave = vi.fn();
+const providerWithManyKeys: OverviewTabProps["provider"] = {
+	...mockProvider,
+	keys_count: 5,
+	models_count: 0,
+	network_config: { ...(mockProvider.network_config as NonNullable<OverviewTabProps["provider"]["network_config"]>), max_retries: 0 },
+};
 
 describe("OverviewTab", () => {
-	// -----------------------------------------------------------------------
-	// 8 inline-edit fragment sections
-	// -----------------------------------------------------------------------
+	it("should render the four read-only cards", () => {
+		render(<OverviewTab provider={mockProvider} />);
 
-	it("should render Network fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		expect(screen.getByTestId("providers2-overview-network")).not.toBeNull();
+		expect(screen.getByTestId("providers2-overview-keys")).not.toBeNull();
+		expect(screen.getByTestId("providers2-overview-models")).not.toBeNull();
+		expect(screen.getByTestId("providers2-overview-cooldown-policy")).not.toBeNull();
+		expect(screen.getByTestId("providers2-overview-retry")).not.toBeNull();
 	});
 
-	it("should render Proxy fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should display API Key count", () => {
+		render(<OverviewTab provider={mockProvider} />);
 
-		expect(screen.getByTestId("providers2-overview-proxy")).not.toBeNull();
+		const keysSection = screen.getByTestId("providers2-overview-keys");
+		expect(keysSection.textContent).toContain("3");
 	});
 
-	it("should render Performance fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should display Models count", () => {
+		render(<OverviewTab provider={mockProvider} />);
 
-		expect(screen.getByTestId("providers2-overview-performance")).not.toBeNull();
+		const modelsSection = screen.getByTestId("providers2-overview-models");
+		expect(modelsSection.textContent).toContain("47");
 	});
 
-	it("should render Governance fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should display Retry Policy summary", () => {
+		render(<OverviewTab provider={mockProvider} />);
 
-		expect(screen.getByTestId("providers2-overview-governance")).not.toBeNull();
+		const retrySection = screen.getByTestId("providers2-overview-retry");
+		expect(retrySection.textContent).toContain("3");
+		expect(retrySection.textContent).toContain("1000ms");
+		expect(retrySection.textContent).toContain("30000ms");
 	});
 
-	it("should render Beta Headers fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should render Cooldown Policy summary using default copy when no policy is set", () => {
+		const noCooldown = { ...mockProvider, cooldown_policy: undefined };
+		render(<OverviewTab provider={noCooldown} />);
 
-		expect(screen.getByTestId("providers2-overview-beta-headers")).not.toBeNull();
+		const cooldownSection = screen.getByTestId("providers2-overview-cooldown-policy");
+		expect(cooldownSection.textContent).toContain("providers2.overview.cooldownPolicyUsingDefault");
 	});
 
-	it("should render OpenAI Config fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should show noModels suggestion when models_count is 0", () => {
+		render(<OverviewTab provider={providerWithManyKeys} />);
 
-		expect(screen.getByTestId("providers2-overview-openai-config")).not.toBeNull();
+		expect(screen.getByTestId("providers2-overview-suggestion-noModels")).not.toBeNull();
 	});
 
-	it("should render Debugging fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should show multipleKeysNoRetries suggestion when many keys and zero retries", () => {
+		render(<OverviewTab provider={providerWithManyKeys} />);
 
-		expect(screen.getByTestId("providers2-overview-debugging")).not.toBeNull();
+		expect(screen.getByTestId("providers2-overview-suggestion-multipleKeysNoRetries")).not.toBeNull();
 	});
 
-	it("should render API Structure fragment for custom providers", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should show multipleKeysNoCooldown suggestion when many keys and no cooldown", () => {
+		render(<OverviewTab provider={providerWithManyKeys} />);
 
-		expect(screen.getByTestId("providers2-overview-api-structure")).not.toBeNull();
+		expect(screen.getByTestId("providers2-overview-suggestion-multipleKeysNoCooldown")).not.toBeNull();
 	});
 
-	// -----------------------------------------------------------------------
-	// Fragment content verification
-	// -----------------------------------------------------------------------
-
-	it("should display Network fragment with base URL and max connections", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const networkSection = screen.getByTestId("providers2-overview-network");
-		expect(networkSection.textContent).toContain("providers2.overview.network");
-	});
-
-	it("should display Proxy fragment with proxy type info", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const proxySection = screen.getByTestId("providers2-overview-proxy");
-		expect(proxySection.textContent).toContain("providers2.overview.proxy");
-	});
-
-	it("should display Performance fragment with concurrency and buffer size", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const perfSection = screen.getByTestId("providers2-overview-performance");
-		expect(perfSection.textContent).toContain("providers2.overview.performance");
-	});
-
-	it("should display Governance fragment with budget and rate limit info", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const govSection = screen.getByTestId("providers2-overview-governance");
-		expect(govSection.textContent).toContain("providers2.overview.governance");
-	});
-
-	it("should display Beta Headers fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const betaSection = screen.getByTestId("providers2-overview-beta-headers");
-		expect(betaSection.textContent).toContain("providers2.overview.betaHeaders");
-	});
-
-	it("should display OpenAI Config fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const openaiSection = screen.getByTestId("providers2-overview-openai-config");
-		expect(openaiSection.textContent).toContain("providers2.overview.openaiConfig");
-	});
-
-	// -----------------------------------------------------------------------
-	// Edit buttons
-	// -----------------------------------------------------------------------
-
-	it("should have an edit button on Network fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const editBtn = screen.getByTestId("providers2-overview-network-edit");
-		expect(editBtn).not.toBeNull();
-	});
-
-	it("should have an edit button on Proxy fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const editBtn = screen.getByTestId("providers2-overview-proxy-edit");
-		expect(editBtn).not.toBeNull();
-	});
-
-	it("should have an edit button on Performance fragment", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const editBtn = screen.getByTestId("providers2-overview-performance-edit");
-		expect(editBtn).not.toBeNull();
-	});
-
-	// -----------------------------------------------------------------------
-	// Edge cases
-	// -----------------------------------------------------------------------
-
-	it("should render Governance fragment as visible even when governance data is empty", () => {
-		const providerWithoutGovernance = {
+	it("should not render any suggestions when the provider is well-configured", () => {
+		const wellConfigured: OverviewTabProps["provider"] = {
 			...mockProvider,
-			status: "unknown" as const,
+			keys_count: 3,
+			models_count: 47,
+			network_config: { ...(mockProvider.network_config as NonNullable<OverviewTabProps["provider"]["network_config"]>), max_retries: 3 },
+			cooldown_policy: {
+				rate_limit: { match: [{ status_code: 429 }], match_mode: "any", ttl_seconds: 60, enabled: true },
+			},
 		};
+		render(<OverviewTab provider={wellConfigured} />);
 
-		render(<OverviewTab provider={providerWithoutGovernance} onSave={mockOnSave} />);
-
-		// Governance fragment should still render (may show "not configured" state)
-		expect(screen.getByTestId("providers2-overview-governance")).not.toBeNull();
+		expect(screen.queryByTestId("providers2-overview-suggestions")).toBeNull();
 	});
 
-	it("should render without Beta Headers fragment when provider is not anthropic family", () => {
-		// Beta Headers is anthropic-family specific per design
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
+	it("should call onNavigateTab when a card's Manage button is clicked", () => {
+		const navigate = vi.fn();
+		render(<OverviewTab provider={mockProvider} onNavigateTab={navigate} />);
 
-		// For non-anthropic providers, Beta Headers fragment may render with a notice
-		const betaSection = screen.queryByTestId("providers2-overview-beta-headers");
-		// This is a conditional render — we just verify it doesn't crash
-		expect(betaSection).not.toBeNull();
-	});
+		const manageBtn = screen.getByTestId("providers2-overview-keys-manage");
+		manageBtn.click();
 
-	it("should render OpenAI Config fragment only for openai provider", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		// OpenAI Config should render for openai provider
-		expect(screen.getByTestId("providers2-overview-openai-config")).not.toBeNull();
-	});
-
-	it("should render all 8 fragment containers without crashing", () => {
-		render(<OverviewTab provider={mockProvider} onSave={mockOnSave} />);
-
-		const fragments = [
-			"providers2-overview-network",
-			"providers2-overview-proxy",
-			"providers2-overview-performance",
-			"providers2-overview-governance",
-			"providers2-overview-beta-headers",
-			"providers2-overview-openai-config",
-			"providers2-overview-debugging",
-			"providers2-overview-api-structure",
-		];
-
-		fragments.forEach((testId) => {
-			expect(screen.getByTestId(testId)).not.toBeNull();
-		});
-	});
-
-	it("should not render API Structure fragment for non-custom providers", () => {
-		const nonCustomProvider = { ...mockProvider, custom_provider_config: undefined };
-		render(<OverviewTab provider={nonCustomProvider} onSave={mockOnSave} />);
-
-		expect(screen.queryByTestId("providers2-overview-api-structure")).toBeNull();
+		expect(navigate).toHaveBeenCalledWith("keys");
 	});
 });

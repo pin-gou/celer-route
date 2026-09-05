@@ -113,6 +113,9 @@
 			"overview": "Overview",
 			"keys": "Keys",
 			"models": "Models",
+			"cooldown": "Cooldown Policy",
+			"network": "Network",
+			"advanced": "Advanced",
 			"usage": "Usage",
 			"governance": "Governance",
 			"logs": "Logs"
@@ -155,7 +158,39 @@
 			"apiStructureDescription": "Configure the underlying provider type, key requirements, and allowed request types for this custom provider.",
 			"apiStructureOnlyCustom": "API Structure is only available for custom providers.",
 			"keyless": "No API Key Required",
-			"keylessDescription": "This provider does not require an API key. Key management is disabled for this provider."
+			"keylessDescription": "This provider does not require an API key. Key management is disabled for this provider.",
+			"manage": "Manage",
+			"apiKeysCount": "API Keys",
+			"modelsCount": "Models",
+			"retryPolicy": "Retry Policy",
+			"maxRetries": "Max retries",
+			"retryBackoff": "Backoff (initial / max)"
+		},
+		"networkTab": {
+			"basic": "Basic",
+			"advanced": "Advanced"
+		},
+		"suggestions": {
+			"multipleKeysNoRetries": {
+				"title": "Configure retries for multi-key setups",
+				"description": "You have {{count}} API keys configured but max_retries is 0. Setting max_retries > 0 lets the gateway fail over to another key when one key fails."
+			},
+			"multipleKeysNoCooldown": {
+				"title": "Enable cooldown for multi-key setups",
+				"description": "With {{count}} API keys, enabling Rate Limit cooldown automatically isolates failing keys so traffic is routed away from them."
+			},
+			"noModels": {
+				"title": "No models configured",
+				"description": "This provider has no models. Go to the Models tab to add or sync models before serving traffic."
+			},
+			"anthropicNoBetaHeaders": {
+				"title": "Customize Beta Headers",
+				"description": "Anthropic-family providers ship with default beta features. Configure overrides in Advanced → Beta Headers to enable or disable specific beta capabilities."
+			},
+			"customBaseUrlDefaultTimeout": {
+				"title": "Review default timeout",
+				"description": "You are using a custom base_url with the default 300s request timeout. Adjust timeout and stream idle timeout under Network to match the provider's actual latency."
+			}
 		},
 		"detail": {
 			"delete": "Delete",
