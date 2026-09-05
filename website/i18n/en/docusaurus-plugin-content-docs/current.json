@@ -11,8 +11,12 @@
     "message": "Features",
     "description": "The label for category '功能' in sidebar 'docs'"
   },
-  "sidebar.docs.category.Provider 接入": {
+  "sidebar.docs.category.AI 客户端接入": {
+    "message": "AI client setup",
+    "description": "The label for category 'AI 客户端接入' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.提供商接入": {
     "message": "Provider Guides",
-    "description": "The label for category 'Provider 接入' in sidebar 'docs'"
+    "description": "The label for category '提供商接入' in sidebar 'docs'"
   }
 }
