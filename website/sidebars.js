@@ -30,7 +30,7 @@ export default {
     {
       type: 'category',
       label: '提供商接入',
-      items: ['providers/supported-providers', 'providers/recommended-providers'],
+      items: ['providers/supported-providers', 'providers/recommended-providers', 'providers/provider-detail'],
     },
   ],
 };
