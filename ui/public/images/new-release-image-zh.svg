@@ -1,0 +1,9 @@
+<svg width="280" height="95" xmlns="http://www.w3.org/2000/svg">
+  <rect width="280" height="95" rx="8" fill="#f8fafc"/>
+  <rect x="0" y="0" width="8" height="95" rx="4" fill="#3b82f6"/>
+  <text x="20" y="45" font-family="system-ui, sans-serif" font-size="22" font-weight="700" fill="#1e293b">新版本发布</text>
+  <text x="20" y="72" font-family="system-ui, sans-serif" font-size="13" fill="#64748b">查看更新内容 →</text>
+  <circle cx="245" cy="48" r="18" fill="#3b82f6" opacity="0.1"/>
+  <path d="M238 42l4-4 4 4-4 4-4-4z" fill="#3b82f6"/>
+  <path d="M238 46l4 4 4-4" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

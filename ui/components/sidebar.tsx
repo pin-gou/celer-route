@@ -475,7 +475,7 @@ const compareVersions = (v1: string, v2: string): number => {
 };
 
 export default function AppSidebar() {
-	const { t } = useTranslation("common");
+	const { t, i18n } = useTranslation("common");
 	const pathname = useLocation({ select: (l) => l.pathname });
 	const search = useLocation({ select: (l) => l.searchStr ?? "" });
 	const tsNavigate = useNavigate();
@@ -1046,8 +1046,18 @@ export default function AppSidebar() {
 
 	const { isConnected: isWebSocketConnected } = useWebSocket();
 
-	// New release image - based on theme
-	const newReleaseImage = mounted && resolvedTheme === "dark" ? "/images/new-release-image-dark.webp" : "/images/new-release-image.webp";
+	// New release image - based on theme and current UI language. Use the
+	// non-zh variant for every locale except zh-*; falls back to zh files only
+	// when the language prefix matches.
+	const isZh = i18n.language?.startsWith("zh");
+	const newReleaseImage =
+		mounted && resolvedTheme === "dark"
+			? isZh
+				? "/images/new-release-image-zh-dark.svg"
+				: "/images/new-release-image-dark.svg"
+			: isZh
+				? "/images/new-release-image-zh.svg"
+				: "/images/new-release-image.svg";
 
 	// Memoize promo cards array to prevent duplicates and unnecessary re-renders
 	const promoCards = useMemo(() => {
