@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TagInput } from "@/components/ui/tagInput";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGetRtkStatsQuery, useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
@@ -744,6 +745,29 @@ function RtkEnginePanel({
 								</FormItem>
 							)}
 						/>
+						<FormField
+							control={form.control}
+							name="skip_read_file_tools"
+							render={({ field }) => (
+								<FormItem>
+									<div className="flex items-center gap-1.5">
+										<FormLabel>{t("rtk.skipReadFileToolsLabel")}</FormLabel>
+										<HelpHint>{t("rtk.skipReadFileToolsWhen")}</HelpHint>
+									</div>
+									<FormControl>
+										<TagInput
+											data-testid="rtk-field-skip-read-file-tools"
+											value={Array.isArray(field.value) ? field.value : []}
+											onValueChange={field.onChange}
+											placeholder={t("rtk.skipReadFileToolsPlaceholder")}
+											collapsedTagLimit={5}
+										/>
+									</FormControl>
+									<FormDescription>{t("rtk.skipReadFileToolsDescription")}</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
 					</div>
 				</fieldset>
 
@@ -1235,6 +1259,7 @@ function ConfigForm({
 			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
+			skip_read_file_tools: pluginConfig.skip_read_file_tools ?? [],
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			caveman: {
@@ -1554,6 +1579,7 @@ function FormFieldsHost({
 			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
+			skip_read_file_tools: pluginConfig.skip_read_file_tools ?? [],
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			caveman: {

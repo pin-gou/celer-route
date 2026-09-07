@@ -7,6 +7,11 @@ import "github.com/pin-gou/celer-route/core/schemas"
 type ToolCallLookupEntry struct {
 	ToolName string
 	Command  string
+	// Args is the raw function-call arguments JSON. Stored verbatim so
+	// the read-file skip-list (see shouldSkipReadFileTool) can scan the
+	// top-level keys for path-like entries without re-serialising the
+	// chat input. Empty when the tool call carries no arguments.
+	Args string
 }
 
 // isToolResultBlock returns true if the content block is an Anthropic-style
@@ -37,6 +42,7 @@ func buildToolCallLookup(messages []schemas.ChatMessage) map[string]*ToolCallLoo
 			lookup[*tc.ID] = &ToolCallLookupEntry{
 				ToolName: name,
 				Command:  extractCommandFromArguments(tc.Function.Arguments),
+				Args:     tc.Function.Arguments,
 			}
 		}
 	}

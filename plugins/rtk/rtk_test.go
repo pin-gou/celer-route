@@ -1238,3 +1238,328 @@ func TestApplyRtkCompressionResponses_AccumulatesMetrics(t *testing.T) {
 		t.Errorf("expected positive tokensSaved from a compressed Responses pass")
 	}
 }
+
+// TestApplyRtkCompression_SkipReadFileTool_OpenAI verifies that a tool_result
+// for a whitelisted read-file tool (read_file with file_path arg) is skipped
+// entirely by the RTK pipeline — no compression, no ScannedIndices, no
+// raw-output pointer, no token accounting, and the original text is preserved
+// verbatim.
+func TestApplyRtkCompression_SkipReadFileTool_OpenAI(t *testing.T) {
+	bigText := strings.Repeat("line of file content\n", 200) // ~3800 bytes
+	toolName := "read_file"
+	args := `{"file_path":"/etc/hostname"}`
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{
+								ID: strPtr("call_1"),
+								Function: schemas.ChatAssistantMessageToolCallFunction{
+									Name:      &toolName,
+									Arguments: args,
+								},
+							},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: strContent(bigText),
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_1"),
+					},
+				},
+			},
+		},
+	}
+
+	cfg := DefaultConfig()
+	p := newTestPluginWithConfig(t, cfg)
+	state := applyRtkCompressionWithDefaults(req, p)
+
+	if state.Compressed {
+		t.Errorf("expected Compressed=false, got true")
+	}
+	if state.OriginalTokens != 0 {
+		t.Errorf("expected OriginalTokens=0 (skipped), got %d", state.OriginalTokens)
+	}
+	if len(state.ScannedIndices) != 0 {
+		t.Errorf("expected empty ScannedIndices, got %v", state.ScannedIndices)
+	}
+	if len(state.RawOutputPointers) != 0 {
+		t.Errorf("expected empty RawOutputPointers, got %v", state.RawOutputPointers)
+	}
+	text, _ := getToolContent(&req.ChatRequest.Input[1])
+	if text != bigText {
+		t.Errorf("tool_result text was modified (should be untouched)")
+	}
+}
+
+// TestApplyRtkCompression_SkipReadFileTool_Anthropic verifies the Anthropic
+// tool_result block path: assistant carries a read_file tool_use with
+// file_path args, and the following user message's tool_result block is
+// skipped entirely.
+func TestApplyRtkCompression_SkipReadFileTool_Anthropic(t *testing.T) {
+	bigText := strings.Repeat("line of file content\n", 200)
+	toolName := "read_file"
+	args := `{"file_path":"/etc/hostname"}`
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{
+								ID: strPtr("call_1"),
+								Function: schemas.ChatAssistantMessageToolCallFunction{
+									Name:      &toolName,
+									Arguments: args,
+								},
+							},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleUser,
+					Content: &schemas.ChatMessageContent{
+						ContentBlocks: []schemas.ChatContentBlock{
+							{
+								Type: "tool_result",
+								Text: &bigText,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cfg := DefaultConfig()
+	p := newTestPluginWithConfig(t, cfg)
+	state := applyRtkCompressionWithDefaults(req, p)
+
+	if state.Compressed {
+		t.Errorf("expected Compressed=false, got true")
+	}
+	if state.OriginalTokens != 0 {
+		t.Errorf("expected OriginalTokens=0 (skipped), got %d", state.OriginalTokens)
+	}
+	if len(state.ScannedIndices) != 0 {
+		t.Errorf("expected empty ScannedIndices, got %v", state.ScannedIndices)
+	}
+	// Verify the tool_result text block is unchanged.
+	block := req.ChatRequest.Input[1].Content.ContentBlocks[0]
+	if block.Text == nil || *block.Text != bigText {
+		t.Errorf("tool_result block text was modified (should be untouched)")
+	}
+}
+
+// TestApplyRtkCompression_SkipReadFileTool_Responses verifies the Responses
+// API path: a function_call with name=read_file and file_path args is followed
+// by a function_call_output whose content is skipped entirely.
+func TestApplyRtkCompression_SkipReadFileTool_Responses(t *testing.T) {
+	bigText := strings.Repeat("line of file content\n", 200)
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ResponsesRequest,
+		ResponsesRequest: &schemas.BifrostResponsesRequest{
+			Input: []schemas.ResponsesMessage{
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCall),
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID:    strPtr("call_1"),
+						Name:      strPtr("read_file"),
+						Arguments: strPtr(`{"file_path":"/etc/hostname"}`),
+					},
+				},
+				{
+					Type: schemas.Ptr(schemas.ResponsesMessageTypeFunctionCallOutput),
+					ResponsesToolMessage: &schemas.ResponsesToolMessage{
+						CallID: strPtr("call_1"),
+						Output: &schemas.ResponsesToolMessageOutputStruct{
+							ResponsesToolCallOutputStr: &bigText,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cfg := DefaultConfig()
+	p := newTestPluginWithConfig(t, cfg)
+	state := applyRtkCompressionResponsesWithDefaults(req, p)
+
+	if state.Compressed {
+		t.Errorf("expected Compressed=false, got true")
+	}
+	if state.OriginalTokens != 0 {
+		t.Errorf("expected OriginalTokens=0 (skipped), got %d", state.OriginalTokens)
+	}
+	if len(state.ScannedIndices) != 0 {
+		t.Errorf("expected empty ScannedIndices, got %v", state.ScannedIndices)
+	}
+	if len(state.RawOutputPointers) != 0 {
+		t.Errorf("expected empty RawOutputPointers, got %v", state.RawOutputPointers)
+	}
+	// Verify the function_call_output text is unchanged.
+	out := req.ResponsesRequest.Input[1].ResponsesToolMessage.Output
+	if out.ResponsesToolCallOutputStr == nil || *out.ResponsesToolCallOutputStr != bigText {
+		t.Errorf("function_call_output text was modified (should be untouched)")
+	}
+}
+
+// TestApplyRtkCompression_SkipReadFileTool_NonWhitelistedNotSkipped verifies
+// that a tool_result for a non-whitelisted tool (e.g. "bash") still goes
+// through the normal RTK pipeline — the skip list does not over-fire.
+func TestApplyRtkCompression_SkipReadFileTool_NonWhitelistedNotSkipped(t *testing.T) {
+	bigText := strings.Repeat("On branch main\nmodified: src/main.go\n", 100)
+	toolName := "bash"
+	args := `{"command":"git status"}`
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{
+								ID: strPtr("call_1"),
+								Function: schemas.ChatAssistantMessageToolCallFunction{
+									Name:      &toolName,
+									Arguments: args,
+								},
+							},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: strContent(bigText),
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_1"),
+					},
+				},
+			},
+		},
+	}
+
+	cfg := DefaultConfig()
+	p := newTestPluginWithConfig(t, cfg)
+	state := applyRtkCompressionWithDefaults(req, p)
+
+	// Non-whitelisted tool: OriginalTokens must be > 0 because the pipeline
+	// evaluated the message. (It may or may not compress depending on the
+	// filter, but it MUST participate.)
+	if state.OriginalTokens == 0 {
+		t.Errorf("expected OriginalTokens>0 for non-whitelisted tool, got 0 (skip list over-fired?)")
+	}
+	if len(state.ScannedIndices) == 0 {
+		t.Errorf("expected non-empty ScannedIndices for non-whitelisted tool")
+	}
+}
+
+// TestApplyRtkCompression_SkipReadFileTool_NoPathKeyNotSkipped verifies that
+// a whitelisted tool name without a path-like argument key is NOT skipped —
+// e.g. a hypothetical "Read" tool call with only {"query":"*.go"} still goes
+// through the normal pipeline.
+func TestApplyRtkCompression_SkipReadFileTool_NoPathKeyNotSkipped(t *testing.T) {
+	bigText := strings.Repeat("On branch main\nmodified: src/main.go\n", 100)
+	toolName := "Read"
+	args := `{"query":"*.go"}`
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{
+								ID: strPtr("call_1"),
+								Function: schemas.ChatAssistantMessageToolCallFunction{
+									Name:      &toolName,
+									Arguments: args,
+								},
+							},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: strContent(bigText),
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_1"),
+					},
+				},
+			},
+		},
+	}
+
+	cfg := DefaultConfig()
+	p := newTestPluginWithConfig(t, cfg)
+	state := applyRtkCompressionWithDefaults(req, p)
+
+	// Whitelisted name but no path key: must NOT skip.
+	if state.OriginalTokens == 0 {
+		t.Errorf("expected OriginalTokens>0 for whitelisted name without path key, got 0 (skip list over-fired?)")
+	}
+	if len(state.ScannedIndices) == 0 {
+		t.Errorf("expected non-empty ScannedIndices for whitelisted name without path key")
+	}
+}
+
+// TestApplyRtkCompression_SkipReadFileTool_DisabledByEmptyList verifies that
+// an explicit empty skip list ([]) disables the skip behavior — a read_file
+// tool_result with file_path goes through the normal pipeline.
+func TestApplyRtkCompression_SkipReadFileTool_DisabledByEmptyList(t *testing.T) {
+	bigText := strings.Repeat("On branch main\nmodified: src/main.go\n", 100)
+	toolName := "read_file"
+	args := `{"file_path":"/etc/hostname"}`
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role: schemas.ChatMessageRoleAssistant,
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{
+								ID: strPtr("call_1"),
+								Function: schemas.ChatAssistantMessageToolCallFunction{
+									Name:      &toolName,
+									Arguments: args,
+								},
+							},
+						},
+					},
+				},
+				{
+					Role: schemas.ChatMessageRoleTool,
+					Content: strContent(bigText),
+					ChatToolMessage: &schemas.ChatToolMessage{
+						ToolCallID: strPtr("call_1"),
+					},
+				},
+			},
+		},
+	}
+
+	cfg := DefaultConfig()
+	cfg.SkipReadFileTools = []string{} // explicit empty = disabled
+	p := newTestPluginWithConfig(t, cfg)
+	state := applyRtkCompressionWithDefaults(req, p)
+
+	// Skip list disabled: must participate in pipeline.
+	if state.OriginalTokens == 0 {
+		t.Errorf("expected OriginalTokens>0 when skip list disabled, got 0")
+	}
+	if len(state.ScannedIndices) == 0 {
+		t.Errorf("expected non-empty ScannedIndices when skip list disabled")
+	}
+}

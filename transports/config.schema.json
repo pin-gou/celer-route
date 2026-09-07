@@ -3390,6 +3390,14 @@
                       "minimum": 0,
                       "default": 0
                     },
+                    "skip_read_file_tools": {
+                      "type": "array",
+                      "description": "Tool-name whitelist whose results bypass the RTK pipeline entirely. A tool_result is skipped only when (1) the tool name matches case-insensitively AND (2) the call's arguments JSON carries a path-like key (file_path / filePath / filepath / path / target_path / offset_path / file) at the top level. Skipped results pass through unchanged — no compression, no raw-output persistence, no ScannedIndices entry, no token-count impact. Default list targets Read/Glob/Grep/list_dir/find_files family. Set to [] to disable",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": ["read_file", "Read", "Glob", "Grep", "get_file_info", "list_dir", "find_files", "read_file_range", "ReadFile", "ReadRange", "GetFileInfo", "ListDir", "FindFiles", "search_files", "read_pdf", "ReadPdf"]
+                    },
                     "enable_renderers": {
                       "type": "boolean",
                       "description": "Enable semantic renderers (opt-in). When true, structured outputs (git diff, test suites, terraform plan, JSON tables) are rewritten to a more compact form after line filtering. Renderers are fail-open — a panic or no-op leaves the original text unchanged",

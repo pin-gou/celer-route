@@ -94,6 +94,20 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			if !ok || text == "" {
 				continue
 			}
+
+			// Read-file skip-list: when the tool call is whitelisted and
+			// its arguments carry a path-like key, the tool_result is
+			// passed through untouched — no PipelineRunner.Run, no
+			// ScannedIndices entry, no raw-output pointer, no token
+			// accounting. See shouldSkipReadFileTool for the exact rule.
+			if msg.ChatToolMessage != nil && msg.ChatToolMessage.ToolCallID != nil {
+				if entry, ok := lookup[*msg.ChatToolMessage.ToolCallID]; ok && entry != nil {
+					if shouldSkipReadFileTool(entry.ToolName, entry.Args, p.config) {
+						continue
+					}
+				}
+			}
+
 			origTokens := estimateTokens(text)
 			originalTotal += origTokens
 
@@ -168,6 +182,25 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 					blockIndex++
 					continue
 				}
+
+				// Read-file skip-list (Anthropic path). The block's
+				// tool_use_id correlation to the preceding assistant's
+				// tool_use block gives us the tool name and arguments;
+				// when those match the skip whitelist, the block passes
+				// through untouched. blockIndex is the 0-based position
+				// among the most recent assistant's tool_use blocks.
+				if blockIndex < len(pendingToolCalls) {
+					pending := pendingToolCalls[blockIndex]
+					pendingName := ""
+					if pending.Function.Name != nil {
+						pendingName = *pending.Function.Name
+					}
+					if shouldSkipReadFileTool(pendingName, pending.Function.Arguments, p.config) {
+						blockIndex++
+						continue
+					}
+				}
+
 				text := *block.Text
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
@@ -370,6 +403,10 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 	// Build the command lookup from function_call messages for command hint
 	// resolution (positional correlation with function_call_output items).
 	commands := buildResponsesCommandLookup(input)
+	// Build the call-meta lookup (name + raw args) for the read-file
+	// skip-list. Same positional correlation as commands — one entry per
+	// function_call item, indexed by callIdx.
+	callMetas := buildResponsesCallMetaLookup(input)
 	callIdx := 0
 
 	for i := range input {
@@ -447,6 +484,22 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		if text == "" {
 			callIdx++
 			continue
+		}
+
+		// Read-file skip-list (Responses path). The callIdx gives us the
+		// positional correlation back to the function_call item that
+		// produced this output; when that call's name is whitelisted
+		// and its arguments carry a path-like key, the function_call_output
+		// passes through untouched — no PipelineRunner.Run, no
+		// ScannedIndices entry, no raw-output pointer, no token
+		// accounting. callIdx is advanced so subsequent correlations stay
+		// aligned.
+		if callIdx < len(callMetas) {
+			m := callMetas[callIdx]
+			if shouldSkipReadFileTool(m.Name, m.Args, config) {
+				callIdx++
+				continue
+			}
 		}
 
 		origTokens := estimateTokens(text)
@@ -545,6 +598,42 @@ func buildResponsesCommandLookup(input []schemas.ResponsesMessage) []string {
 		commands = append(commands, extractCommandFromArguments(*msg.ResponsesToolMessage.Arguments))
 	}
 	return commands
+}
+
+// responsesCallMeta holds the tool name and raw arguments JSON for a single
+// function_call item, used by the read-file skip-list (see
+// shouldSkipReadFileTool). One entry per function_call item, in order of
+// appearance — the same positional correlation buildResponsesCommandLookup
+// uses, so callIdx indexes both slices identically.
+type responsesCallMeta struct {
+	Name string
+	Args string
+}
+
+// buildResponsesCallMetaLookup scans input items for function_call messages
+// and returns a slice of call metadata (name + raw arguments JSON) keyed by
+// call index, in order. Unlike buildResponsesCommandLookup, this lookup does
+// NOT filter by isShellTool — the read-file skip-list applies to non-shell
+// tools (read_file, Glob, etc.) whose name and arguments are needed verbatim.
+func buildResponsesCallMetaLookup(input []schemas.ResponsesMessage) []responsesCallMeta {
+	var metas []responsesCallMeta
+	for i := range input {
+		msg := &input[i]
+		if msg.Type == nil || *msg.Type != schemas.ResponsesMessageTypeFunctionCall {
+			continue
+		}
+		meta := responsesCallMeta{}
+		if msg.ResponsesToolMessage != nil {
+			if msg.ResponsesToolMessage.Name != nil {
+				meta.Name = *msg.ResponsesToolMessage.Name
+			}
+			if msg.ResponsesToolMessage.Arguments != nil {
+				meta.Args = *msg.ResponsesToolMessage.Arguments
+			}
+		}
+		metas = append(metas, meta)
+	}
+	return metas
 }
 
 // responsesCommandAt returns the command at the given call index (positional

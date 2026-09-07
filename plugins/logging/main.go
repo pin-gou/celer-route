@@ -957,9 +957,15 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 	// so the two sides stay aligned. Only written when a hint is actually
 	// present (offset > 0) to keep non-RTK logs noise-free; absence means 0.
 	if chatOffset := rtkChatHintOffset(initialData.InputHistory); chatOffset > 0 {
+		if initialData.Metadata == nil {
+			initialData.Metadata = make(map[string]interface{})
+		}
 		initialData.Metadata["rtk_input_hint_offset"] = chatOffset
 	}
 	if responsesOffset := rtkResponsesHintOffset(initialData.ResponsesInputHistory); responsesOffset > 0 {
+		if initialData.Metadata == nil {
+			initialData.Metadata = make(map[string]interface{})
+		}
 		initialData.Metadata["rtk_responses_input_hint_offset"] = responsesOffset
 	}
 

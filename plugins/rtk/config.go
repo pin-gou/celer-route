@@ -101,6 +101,23 @@ type Config struct {
 	// via rule-based transformations. Runs as the "caveman" engine in the
 	// pipeline.
 	Caveman CavemanConfig `json:"caveman"`
+
+	// SkipReadFileTools is the tool-name whitelist whose results bypass
+	// the RTK pipeline entirely. A tool_result for a whitelisted tool is
+	// skipped only when its arguments JSON also carries a path-like key
+	// (file_path / filePath / filepath / path / target_path / offset_path
+	// / file) at the top level — see shouldSkipReadFileTool.
+	//
+	// Skip semantics: the message is passed through unchanged, no
+	// PipelineRunner.Run is called, no raw-output pointer is written, no
+	// ScannedIndices entry is recorded, and OriginalTokens /
+	// CompressedTokens are not perturbed. The intent is to keep
+	// large/read-noise-heavy tool results (read_file, Read, Glob, ...)
+	// intact so the LLM sees the verbatim content.
+	//
+	// Defaulting: nil → applyConfigDefaults fills in DefaultSkipReadFileTools.
+	// Explicit empty slice ([]) → skip list disabled.
+	SkipReadFileTools []string `json:"skip_read_file_tools,omitempty"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -164,6 +181,15 @@ func (c *Config) Validate() error {
 	if err := c.Caveman.Validate(); err != nil {
 		return fmt.Errorf("rtk: invalid caveman config: %w", err)
 	}
+	// SkipReadFileTools is a name whitelist — empty (nil or len==0) is
+	// valid and means "skip list disabled" / "use defaults via applyConfigDefaults".
+	// Each entry must be a non-empty string; we don't constrain characters
+	// here because tool naming is provider-specific (e.g. "Read", "Bash").
+	for i, name := range c.SkipReadFileTools {
+		if name == "" {
+			return fmt.Errorf("rtk: skip_read_file_tools[%d] must not be empty", i)
+		}
+	}
 	return nil
 }
 
@@ -194,7 +220,8 @@ func looksLikeAllZero(c *Config) bool {
 		c.RawOutputRetention == "" &&
 		c.RawOutputMaxBytes == 0 &&
 		c.MinTokensToCompress == 0 &&
-		len(c.Pipeline) == 0
+		len(c.Pipeline) == 0 &&
+		len(c.SkipReadFileTools) == 0
 }
 
 // ApplyConfigDefaults is the exported entry point for the defaulting logic.
@@ -282,4 +309,14 @@ func applyConfigDefaults(c *Config) {
 	// operator sets it), but its tunables are defaulted so the engine
 	// behaves predictably the moment it is switched on.
 	normalizeCavemanConfig(&c.Caveman)
+
+	// SkipReadFileTools defaults: nil → DefaultSkipReadFileTools.
+	// An explicit empty slice ([]) is preserved as "skip list disabled"
+	// because the JSON-tag `,omitempty` already collapses nil and [] to
+	// the same on-the-wire value, and operators use config.json presence
+	// to opt back in. The plain-slice zero value therefore stays empty
+	// when the field is explicitly set to [].
+	if c.SkipReadFileTools == nil {
+		c.SkipReadFileTools = append([]string{}, DefaultSkipReadFileTools...)
+	}
 }

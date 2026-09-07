@@ -115,6 +115,12 @@ export const rtkConfigSchema = z.object({
 	// MinTokensToCompress is the minimum estimated request token count required to trigger compression.
 	min_tokens_to_compress: z.number().int().min(0).default(0),
 
+	// SkipReadFileTools is a tool-name whitelist whose results bypass the RTK
+	// pipeline entirely when the call's arguments carry a path-like key
+	// (file_path / filePath / filepath / path / target_path / offset_path / file).
+	// Default list targets Read/Glob/Grep/list_dir/find_files family.
+	skip_read_file_tools: z.array(z.string()).optional(),
+
 	// EnableRenderers enables semantic renderers (opt-in, default true on fresh install).
 	// When true, structured outputs (git diff, test suites, terraform plan,
 	// JSON tables) are rewritten to a more compact form after line filtering.
