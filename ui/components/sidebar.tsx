@@ -1105,17 +1105,14 @@ export default function AppSidebar() {
 				id: "new-release",
 				title: t("sidebar.releaseAvailable", { name: latestRelease.name }),
 				description: (
-					<div className="flex h-full flex-col gap-2">
-						<img src={newReleaseImage} alt="celer-route" className="h-[95px] rounded-md object-cover" />
-						<a
-							href={latestRelease.changelogUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="text-primary mt-auto pb-1 font-medium underline"
-						>
-							{t("sidebar.viewReleaseNotes")}
-						</a>
-					</div>
+					<a
+						href={latestRelease.changelogUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="block cursor-pointer overflow-hidden rounded-md"
+					>
+						<img src={newReleaseImage} alt="celer-route" className="w-full" />
+					</a>
 				),
 				dismissible: true,
 			});

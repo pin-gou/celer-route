@@ -271,7 +271,6 @@
 		"setupIncomplete": "Setup checklist incomplete",
 		"setupStepsLeft": "{{n}} setup step(s) left. Not completing these steps keeps your celer-route setup vulnerable.",
 		"resumeSetup": "Resume setup",
-		"viewReleaseNotes": "View release notes",
 		"releaseAvailable": "{{name}} is now available."
 	},
 	"table": {

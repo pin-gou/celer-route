@@ -271,7 +271,6 @@
 		"setupIncomplete": "设置清单未完成",
 		"setupStepsLeft": "还剩 {{n}} 步设置未完成。不完成这些步骤将使您的 celer-route 设置存在风险。",
 		"resumeSetup": "继续设置",
-		"viewReleaseNotes": "查看发布说明",
 		"releaseAvailable": "{{name}} 现已可用。"
 	},
 	"table": {
