@@ -763,6 +763,43 @@ func (p *LoggerPlugin) extractInputHistory(request *schemas.BifrostRequest) ([]s
 	return []schemas.ChatMessage{}, []schemas.ResponsesMessage{}
 }
 
+// rtkChatHintOffset returns 1 when the first chat message is the RTK recovery
+// hint (prepended at input[0] by the RTK plugin's injectRtkRecoveryHint), else
+// 0. The logging plugin is the authoritative observer of the array it persists
+// as input_history — the RTK plugin itself cannot tell whether a plugin that
+// runs before it will capture a hint-shifted array, and fallback inheritance
+// varies. The frontend consumes this offset to number messages on the same
+// canonical (hint-free, client-sent) scale the RTK pipeline records indices
+// on, so the metadata badges and the "RTK 压缩" diff tab stay aligned.
+func rtkChatHintOffset(input []schemas.ChatMessage) int {
+	if len(input) == 0 ||
+		input[0].Role != schemas.ChatMessageRoleSystem ||
+		input[0].Content == nil ||
+		input[0].Content.ContentStr == nil {
+		return 0
+	}
+	if strings.HasPrefix(*input[0].Content.ContentStr, schemas.RTKRecoveryHintMarker) {
+		return 1
+	}
+	return 0
+}
+
+// rtkResponsesHintOffset mirrors rtkChatHintOffset for Responses-format input,
+// where the hint is a role=system "message" item (prependResponsesSystemMessage).
+func rtkResponsesHintOffset(input []schemas.ResponsesMessage) int {
+	if len(input) == 0 ||
+		input[0].Type == nil || *input[0].Type != schemas.ResponsesMessageTypeMessage ||
+		input[0].Role == nil || *input[0].Role != schemas.ResponsesInputMessageRoleSystem ||
+		input[0].Content == nil ||
+		input[0].Content.ContentStr == nil {
+		return 0
+	}
+	if strings.HasPrefix(*input[0].Content.ContentStr, schemas.RTKRecoveryHintMarker) {
+		return 1
+	}
+	return 0
+}
+
 func extractRealtimeInputHistory(input []schemas.ResponsesMessage) []schemas.ChatMessage {
 	messages := make([]schemas.ChatMessage, 0, len(input))
 	for _, item := range input {

@@ -65,6 +65,12 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 	compressedTotal := 0
 	anyCompressed := false
 
+	// Canonicalise recorded indices to the hint-free (client-sent) array: when
+	// a fallback inherits the primary's hint-injected input, input[0] is the
+	// RTK recovery hint and every scan position must shift back by one to stay
+	// aligned with the input_history the log detail diff view computes from.
+	hintOffset := chatHintScanOffset(req.ChatRequest.Input)
+
 	// Build the tool call lookup for command hint resolution.
 	lookup := buildToolCallLookup(req.ChatRequest.Input)
 	// pendingToolCalls tracks the tool calls from the most recent assistant
@@ -100,7 +106,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			// Per-message original text is not retained here; when compression
 			// actually fires, the original is recovered from the raw-output
 			// file referenced by rtk_raw_output_id in the log metadata.
-			appendScanned(state, i)
+			appendScanned(state, rtkCanonicalIndex(i, hintOffset))
 
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
 			result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
@@ -118,7 +124,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						continue
 					}
 					state.RawOutputEntries = append(state.RawOutputEntries, schemas.RTKRawOutputEntry{
-						Index:    i,
+						Index:    rtkCanonicalIndex(i, hintOffset),
 						ID:       ptr.ID,
 						Bytes:    ptr.Bytes,
 						Redacted: ptr.Redacted,
@@ -174,7 +180,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 
 				// Record that this block was scanned by the RTK pipeline; per-block
 				// original text is recovered via rtk_raw_output_id when needed.
-				appendScanned(state, i*100+j)
+				appendScanned(state, rtkCanonicalIndex(i, hintOffset)*100+j)
 
 				// Compress through the PipelineRunner.
 				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
@@ -192,7 +198,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 							continue
 						}
 						state.RawOutputEntries = append(state.RawOutputEntries, schemas.RTKRawOutputEntry{
-							Index:    i*100 + j,
+							Index:    rtkCanonicalIndex(i, hintOffset)*100 + j,
 							ID:       ptr.ID,
 							Bytes:    ptr.Bytes,
 							Redacted: ptr.Redacted,
@@ -234,7 +240,7 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			if ok && text != "" {
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
-				appendScanned(state, i)
+				appendScanned(state, rtkCanonicalIndex(i, hintOffset))
 				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, string(schemas.ChatMessageRoleUser)), text, defaultCfg)
 				if p.metrics != nil {
 					p.metrics.RecordEngineBreakdown(breakdown)
@@ -352,6 +358,11 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 
 	input := req.ResponsesRequest.Input
 
+	// Canonicalise recorded indices to the hint-free (client-sent) array — see
+	// chatHintScanOffset for the rationale (fallback inheritance + logging
+	// capture order both shift the raw scan positions by the hint prepend).
+	hintOffset := responsesHintScanOffset(input)
+
 	originalTotal := 0
 	compressedTotal := 0
 	anyCompressed := false
@@ -376,7 +387,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 			if ok && text != "" {
 				origTokens := estimateTokens(text)
 				originalTotal += origTokens
-				appendScanned(state, i)
+				appendScanned(state, rtkCanonicalIndex(i, hintOffset))
 				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "user"), text, defaultCfg)
 				if p.metrics != nil {
 					p.metrics.RecordEngineBreakdown(breakdown)
@@ -450,7 +461,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		// Record that this function_call_output was scanned by the RTK pipeline;
 		// per-message original text is recovered via rtk_raw_output_id when
 		// the pipeline actually compressed.
-		appendScanned(state, i)
+		appendScanned(state, rtkCanonicalIndex(i, hintOffset))
 
 		// Compress through the PipelineRunner (tool-role filtered so a
 		// stacked pipeline only runs its RTK-scoped engines here).
@@ -469,7 +480,7 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 					continue
 				}
 				state.RawOutputEntries = append(state.RawOutputEntries, schemas.RTKRawOutputEntry{
-					Index:    i,
+					Index:    rtkCanonicalIndex(i, hintOffset),
 					ID:       ptr.ID,
 					Bytes:    ptr.Bytes,
 					Redacted: ptr.Redacted,

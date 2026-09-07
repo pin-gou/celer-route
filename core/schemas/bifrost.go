@@ -468,13 +468,22 @@ const (
 	BifrostContextKeyRTKCompressionRatio                 BifrostContextKey = "x-bf-rtk-compression-ratio"     // float64 (set by compression plugin - ratio of bytes removed by compression, 0.0-1.0)
 	BifrostContextKeyRTKPipelineScanned                  BifrostContextKey = "x-bf-rtk-pipeline-scanned"      // []int (set by compression plugin - message/block indices the RTK pipeline evaluated this request; lets the log detail diff view distinguish "did not participate" from "participated but not compressed" without persisting any message text)
 	BifrostContextKeyRTKRawOutputID                      BifrostContextKey = "x-bf-rtk-raw-output-id"         // string (set by compression plugin - 24-char SHA256 prefix of the persisted raw output file, when RawOutputRetention is not "never")
-	BifrostContextKeyRTKRawOutputEntries                 BifrostContextKey = "x-bf-rtk-raw-output-entries"   // []RTKRawOutputEntry (set by compression plugin - per-message raw-output pointer entries carrying the scanned index and the pointer ID, so the log detail view can render one "View raw output" link per compressed message instead of only the first)
+	BifrostContextKeyRTKRawOutputEntries                 BifrostContextKey = "x-bf-rtk-raw-output-entries"    // []RTKRawOutputEntry (set by compression plugin - per-message raw-output pointer entries carrying the scanned index and the pointer ID, so the log detail view can render one "View raw output" link per compressed message instead of only the first)
 	BifrostContextKeyRTKRawOutputHintInjected            BifrostContextKey = "x-bf-rtk-hint-injected"         // bool (set by compression plugin - dedupe marker so the system message hint is only prepended once per hook chain even if the plugin runs multiple times)
 	BifrostContextKeyRTKSentinelStripped                 BifrostContextKey = "x-bf-rtk-sentinel-stripped"     // int (set by compression plugin - count of tool messages whose RTK raw-output sentinel was stripped at the PreLLMHook boundary so the model never sees the wire protocol prefix; consumed by processRtkTextWithCommand to short-circuit its own internal sentinel check on the same request and avoid double-strip; cleared in PostLLMHook)
 	BifrostContextKeyProviderKeys                        BifrostContextKey = "bifrost-provider-keys"          // map[ModelProvider][]Key (set by bifrost - DO NOT SET THIS MANUALLY) - current provider's key pool stamped before PreProviderHook so plugins like provider-cooldown can decide whether to short-circuit before the request enters the worker queue; only the provider being routed is present (the sole consumer reads providerKeys[req.Provider])
 	BifrostContextKeySilentLog                           BifrostContextKey = "bifrost-silent-log"             // bool (set by bifrost - DO NOT SET THIS MANUALLY) - when true, presentation plugins (e.g. logging) suppress end-user-visible side effects for the current attempt; the framework still runs PostLLMHook so the plugin pipeline contract holds
 	BifrostContextKeyRetryAfterSeconds                   BifrostContextKey = "bifrost-retry-after-seconds"    // int64 (set by KeyPoolFilter plugins, e.g. provider-cooldown - the filter stamps the shortest remaining cooldown in seconds when it suppresses every eligible key; core reads it to attach RetryAfterSeconds to the synthetic 429 no_eligible_keys error so clients know when to retry)
 )
+
+// RTKRecoveryHintMarker is the distinctive leading marker of the RTK recovery
+// hint message that the RTK plugin prepends at input[0] of every LLM request
+// once RTK is enabled (the full hint body lives in plugins/rtk/hint.go
+// rtkRecoveryHintText). It is shared so the logging plugin can record — and the
+// log detail UI can consume — whether the persisted input array carries the
+// gateway-injected hint at its head, without duplicating the byte-stable hint
+// body. U+2011 NON-BREAKING HYPHEN ("‑") matches the hint literal exactly.
+const RTKRecoveryHintMarker = "[rtk\u2011recovery]"
 
 // RTKRawOutputEntry pairs a scanned message/block index with the raw-output
 // pointer ID that holds its original (pre-compression) text. The compression
@@ -484,7 +493,8 @@ const (
 // directly into log metadata and consumed by the frontend without importing
 // the rtk plugin package.
 type RTKRawOutputEntry struct {
-	Index    int    `json:"index"`    // message/block index that was scanned and compressed (matches entries in rtk_pipeline_scanned)
+	Index int `json:"index"` // message/block index that was scanned and compressed (matches entries in rtk_pipeline_scanned)
+
 	ID       string `json:"id"`       // 24-char SHA256 prefix identifying the raw-output file on disk
 	Bytes    int    `json:"bytes"`    // UTF-8 byte count of the persisted (redacted) original text
 	Redacted bool   `json:"redacted"` // whether any secret-redaction pattern matched

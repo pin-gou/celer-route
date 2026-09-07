@@ -9,6 +9,11 @@ const RTK_METADATA_KEYS = new Set<string>([
 	"rtk_raw_output_id",
 	"rtk_raw_output_entries",
 	"rtk_pipeline_scanned",
+	// Internal alignment inputs consumed by extractCompressedToolContents; not
+	// rendered as badges. Kept in the set so isRTKMetadataKey hides them from
+	// the generic metadata renderer (the switch below has no case → null).
+	"rtk_input_hint_offset",
+	"rtk_responses_input_hint_offset",
 ]);
 
 interface Props {

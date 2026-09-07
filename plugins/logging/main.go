@@ -947,6 +947,22 @@ func (p *LoggerPlugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 		initialData.Metadata["isAsyncRequest"] = true
 	}
 
+	// Record whether the persisted input array carries the RTK recovery hint at
+	// its head. The logging plugin is the authoritative observer of the array
+	// it captures as input_history — plugin pre-hook order and fallback
+	// inheritance both decide whether that array is the hint-free (client-sent)
+	// one or the hint-shifted one. The RTK pipeline records its scanned
+	// indices on the hint-free scale (see plugins/rtk chatHintScanOffset); the
+	// frontend subtracts this offset when numbering messages from input_history
+	// so the two sides stay aligned. Only written when a hint is actually
+	// present (offset > 0) to keep non-RTK logs noise-free; absence means 0.
+	if chatOffset := rtkChatHintOffset(initialData.InputHistory); chatOffset > 0 {
+		initialData.Metadata["rtk_input_hint_offset"] = chatOffset
+	}
+	if responsesOffset := rtkResponsesHintOffset(initialData.ResponsesInputHistory); responsesOffset > 0 {
+		initialData.Metadata["rtk_responses_input_hint_offset"] = responsesOffset
+	}
+
 	// If fallback request ID is present, use it instead of the primary request ID
 	// Determine effective request ID (fallback override)
 	effectiveRequestID := requestID
