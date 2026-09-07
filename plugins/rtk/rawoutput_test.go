@@ -838,4 +838,59 @@ func TestStripSentinelFromResponsesToolMessages(t *testing.T) {
 	}
 }
 
+// TestRawOutputSentinelPrintableASCII pins the sentinel protocol to fully
+// printable ASCII. The wrapped response from GET /api/context/rtk/raw-output/{id}
+// is consumed by arbitrary LLM-agent harnesses (bash/webfetch tool results,
+// JSON serialization, display layers), several of which treat tool output as
+// a C string and truncate at the first NUL byte. A NUL-prefixed sentinel then
+// arrives at the compression pipeline as an EMPTY tool result and the
+// anti-recursion bypass never fires — the "取回为空" regression. Both tokens
+// must stay within 0x20..0x7E so the wrapped body survives any harness.
+func TestRawOutputSentinelPrintableASCII(t *testing.T) {
+	tokens := []struct {
+		name string
+		s    string
+	}{
+		{"magic", rawOutputSentinelMagic},
+		{"close", rawOutputSentinelClose},
+	}
+	for _, tc := range tokens {
+		t.Run(tc.name, func(t *testing.T) {
+			for i := 0; i < len(tc.s); i++ {
+				if tc.s[i] < 0x20 || tc.s[i] > 0x7E {
+					t.Fatalf("sentinel token %q contains non-printable byte 0x%02x at offset %d; NUL-fragile harnesses truncate here and the recovery fetch returns empty", tc.s, tc.s[i], i)
+				}
+			}
+		})
+	}
+}
+
+// TestWrappedBodySurvivesNULTruncatingHarness reproduces the reported
+// regression: GET /api/context/rtk/raw-output/{id} (no ?raw=1) responds with
+// the sentinel-wrapped body; when the consuming harness truncates the tool
+// result at the first NUL byte (C-string semantics), the whole wrapped body
+// collapses to zero bytes and the model sees an empty tool result. With the
+// printable-sentinel fix the truncation point never exists, so the harness
+// forwards the full wrapped body and the gateway's StripRawOutputSentinel
+// still recovers the original.
+func TestWrappedBodySurvivesNULTruncatingHarness(t *testing.T) {
+	const body = "<skill_content>给 LLM 的两条要求……</skill_content>"
+	wrapped := WrapRawOutputForHTTP(body, "a582d9e472a86615ad2153ca", len(body), "")
+
+	// Simulate a C-string harness: everything from the first NUL onward is dropped.
+	cut := strings.IndexByte(wrapped, 0)
+	truncated := wrapped
+	if cut >= 0 {
+		truncated = wrapped[:cut]
+	}
+	if truncated == "" {
+		t.Fatalf("sentinel-wrapped raw-output collapses to an EMPTY tool result after NUL truncation — the recovery fetch returns nothing to the LLM")
+	}
+	// The harness-surviving text must still carry the full body once the
+	// gateway strips the sentinel (the anti-recursion bypass contract).
+	if got, ok := StripRawOutputSentinel(truncated); !ok || got != body {
+		t.Fatalf("wrapped body must survive harness truncation and round-trip; ok=%v got=%q want=%q", ok, got, body)
+	}
+}
+
 func ptrString(s string) *string { return &s }

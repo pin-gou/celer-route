@@ -605,8 +605,8 @@ func TestRtkRawOutput(t *testing.T) {
 	if !strings.Contains(string(body), "hello raw") {
 		t.Errorf("body = %q, want it to contain 'hello raw'", body)
 	}
-	if !strings.HasPrefix(string(body), "\x00RTK_RAW_OUTPUT_BEGIN\x00") {
-		t.Errorf("body = %q, want it to start with the raw-output sentinel", body)
+	if want := rtk.WrapRawOutputForHTTP("hello raw", "0123456789abcdef01234567", len("hello raw"), ""); string(body) != want {
+		t.Errorf("body = %q, want exactly %q (sentinel-wrapped via WrapRawOutputForHTTP)", body, want)
 	}
 }
 

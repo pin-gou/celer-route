@@ -289,21 +289,30 @@ func IsValidRawOutputID(id string) bool {
 }
 
 const (
-	// rawOutputSentinelMagic / rawOutputSentinelClose are NUL-prefixed markers
-	// bracketing a server-injected metadata region on every response from
-	// /api/context/rtk/raw-output/{id}. They exist so the compression pipeline
-	// can recognise "this tool message is a recovery fetch, do not re-compress
-	// it" with zero heuristic guessing about tool name, message role, or
-	// content shape. NUL-prefixed because (a) the marker can never appear in
-	// legitimate UTF-8 prose by accident, and (b) HTTP body is byte-safe for
-	// any byte sequence including NUL.
+	// rawOutputSentinelMagic / rawOutputSentinelClose are printable-ASCII
+	// markers bracketing a server-injected metadata region on every response
+	// from /api/context/rtk/raw-output/{id}. They exist so the compression
+	// pipeline can recognise "this tool message is a recovery fetch, do not
+	// re-compress it" with zero heuristic guessing about tool name, message
+	// role, or content shape.
+	//
+	// Printable ASCII (no control bytes) by requirement: the wrapped body is
+	// consumed by arbitrary LLM-agent harnesses (bash/webfetch tool results,
+	// JSON serialization, display layers), and several of them treat tool
+	// output as a C string, truncating at the first NUL byte. A NUL-prefixed
+	// sentinel would collapse the entire recovery fetch into an empty tool
+	// result before the pipeline ever sees it (LLM sees "取回为空"), which is
+	// the exact regression these tokens were redesigned around. The
+	// distinctive bracketed tokens make accidental collision with legitimate
+	// UTF-8 prose practically impossible, and HTTP bodies are byte-safe for
+	// them as plain text.
 	//
 	// The closing token is intentionally a different string from the opening
 	// one so a truncated fetch response (network drop mid-stream) cannot be
 	// mistaken for a sentineled one: StripRawOutputSentinel requires both
 	// tokens to be present.
-	rawOutputSentinelMagic = "\x00RTK_RAW_OUTPUT_BEGIN\x00"
-	rawOutputSentinelClose = "\x00RTK_RAW_OUTPUT_BODY_FOLLOWS\x00"
+	rawOutputSentinelMagic = "[rtk:raw-output-begin]"
+	rawOutputSentinelClose = "[rtk:raw-output-body]"
 )
 
 // WrapRawOutputForHTTP attaches the sentinel prefix to a raw-output body
@@ -312,7 +321,7 @@ const (
 //
 // Layout:
 //
-//	\x00RTK_RAW_OUTPUT_BEGIN\x00<id>:<bytes>:<sha256-prefix-12>\x00RTK_RAW_OUTPUT_BODY_FOLLOWS\x00<body>
+//	[rtk:raw-output-begin]<id>:<bytes>:<sha256-prefix-12>[rtk:raw-output-body]<body>
 //
 // The metadata region (between Magic and Close) is opaque to the LLM and only
 // consumed by StripRawOutputSentinel when the body re-enters the compression
