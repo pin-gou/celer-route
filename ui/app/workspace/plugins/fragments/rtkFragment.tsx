@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useGetRtkStatsQuery, useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
 import { useGetRtkCavemanRulesQuery, useGetRtkRenderersQuery } from "@/lib/store/apis/rtkAdminApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
-import { RTK_PLUGIN, rtkConfigSchema, type Plugin, type RtkEngineStat } from "@/lib/types/plugins";
+import { RTK_PLUGIN, rtkConfigSchema, type Plugin, type RtkEngineStat, DEFAULT_SKIP_READ_FILE_TOOLS } from "@/lib/types/plugins";
 import { type CavemanRuleCatalogEntry, type RendererCatalogEntry } from "@/lib/types/rtk";
 import { Link } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -745,28 +745,55 @@ function RtkEnginePanel({
 								</FormItem>
 							)}
 						/>
+					</div>
+				</fieldset>
+
+				{/* ── Independent advanced settings (not touched by Quick Presets) ── */}
+				<fieldset className="rounded-lg border p-4" data-testid="rtk-independent-advanced-section">
+					<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.independentAdvancedSection")}</legend>
+					<div className="mt-2 space-y-4">
 						<FormField
 							control={form.control}
 							name="skip_read_file_tools"
-							render={({ field }) => (
-								<FormItem>
-									<div className="flex items-center gap-1.5">
-										<FormLabel>{t("rtk.skipReadFileToolsLabel")}</FormLabel>
-										<HelpHint>{t("rtk.skipReadFileToolsWhen")}</HelpHint>
-									</div>
-									<FormControl>
-										<TagInput
-											data-testid="rtk-field-skip-read-file-tools"
-											value={Array.isArray(field.value) ? field.value : []}
-											onValueChange={field.onChange}
-											placeholder={t("rtk.skipReadFileToolsPlaceholder")}
-											collapsedTagLimit={5}
-										/>
-									</FormControl>
-									<FormDescription>{t("rtk.skipReadFileToolsDescription")}</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
+							render={({ field }) => {
+								const current: string[] = Array.isArray(field.value) ? field.value : [];
+								const isDefaults =
+									current.length === DEFAULT_SKIP_READ_FILE_TOOLS.length &&
+									DEFAULT_SKIP_READ_FILE_TOOLS.every((name) => current.includes(name));
+								return (
+									<FormItem>
+										<div className="flex items-center gap-1.5">
+											<FormLabel>{t("rtk.skipReadFileToolsLabel")}</FormLabel>
+											<HelpHint>{t("rtk.skipReadFileToolsWhen")}</HelpHint>
+										</div>
+										<div className="flex items-center gap-2">
+											<FormControl className="min-w-0 flex-1">
+												<TagInput
+													data-testid="rtk-field-skip-read-file-tools"
+													value={current}
+													onValueChange={field.onChange}
+													placeholder={t("rtk.skipReadFileToolsPlaceholder")}
+													collapsedTagLimit={5}
+												/>
+											</FormControl>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												onClick={() => field.onChange([...DEFAULT_SKIP_READ_FILE_TOOLS])}
+												disabled={!hasUpdateAccess || isDefaults}
+												data-testid="rtk-field-skip-read-file-tools-reset"
+												className="shrink-0"
+											>
+												<RotateCcw className="h-4 w-4" />
+												{t("rtk.skipReadFileToolsReset")}
+											</Button>
+										</div>
+										<FormDescription>{t("rtk.skipReadFileToolsDescription")}</FormDescription>
+										<FormMessage />
+									</FormItem>
+								);
+							}}
 						/>
 					</div>
 				</fieldset>
@@ -1259,7 +1286,8 @@ function ConfigForm({
 			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
-			skip_read_file_tools: pluginConfig.skip_read_file_tools ?? [],
+			skip_read_file_tools:
+				pluginConfig.skip_read_file_tools === undefined ? [...DEFAULT_SKIP_READ_FILE_TOOLS] : pluginConfig.skip_read_file_tools,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			caveman: {
@@ -1579,7 +1607,8 @@ function FormFieldsHost({
 			raw_output_ttl_hours: pluginConfig.raw_output_ttl_hours ?? 24,
 			pipeline: pluginConfig.pipeline ?? [{ id: "rtk" }],
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
-			skip_read_file_tools: pluginConfig.skip_read_file_tools ?? [],
+			skip_read_file_tools:
+				pluginConfig.skip_read_file_tools === undefined ? [...DEFAULT_SKIP_READ_FILE_TOOLS] : pluginConfig.skip_read_file_tools,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			caveman: {

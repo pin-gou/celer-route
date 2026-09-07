@@ -15,7 +15,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RtkFragment } from "../rtkFragment";
-import type { Plugin } from "@/lib/types/plugins";
+import { DEFAULT_SKIP_READ_FILE_TOOLS, type Plugin } from "@/lib/types/plugins";
 
 // ---------------------------------------------------------------------------
 // Mocks — keep the network out of the picture. We only care that the form
@@ -600,5 +600,77 @@ describe("RtkFragment — Caveman skip_rules / preserve_patterns", () => {
 		// from defaultValues on mount). The post-mount visual state is
 		// covered separately in "renders skip_rules as a multi-select".
 		expect(cfg.caveman.skip_rules).toBeDefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// skip_read_file_tools — echoes the Go-side DefaultSkipReadFileTools when
+// the operator has not set the field, exposes a Reset-to-defaults button.
+// The bug this pins: prior versions collapsed `undefined` → `[]` and the
+// operator saw an empty input while the gateway was silently running the
+// 16-entry default whitelist. Editing then forced a complete re-entry.
+// ---------------------------------------------------------------------------
+
+describe("RtkFragment — skip_read_file_tools default-echo + reset", () => {
+	beforeEach(() => {
+		mocks.updatePlugin.mockReset();
+	});
+
+	const openRtkTab = () => {
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
+	};
+
+	it("echoes the 16-entry default list when pluginConfig.skip_read_file_tools is undefined", () => {
+		// makePlugin() does NOT include skip_read_file_tools → undefined on the wire.
+		render(<RtkFragment plugin={makePlugin()} />);
+		openRtkTab();
+
+		// TagInput collapses above 5; expand before asserting to cover all 16 names.
+		fireEvent.click(screen.getByRole("button", { name: /show \d+ more/i }));
+
+		for (const name of DEFAULT_SKIP_READ_FILE_TOOLS) {
+			expect(screen.getByText(name)).toBeTruthy();
+		}
+	});
+
+	it("disables the Reset-to-defaults button when the list already matches the defaults", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		openRtkTab();
+
+		const reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
+		expect(reset.disabled).toBe(true);
+	});
+
+	it("enables the Reset-to-defaults button when the operator diverges from the defaults", () => {
+		render(<RtkFragment plugin={makePlugin({ config: { skip_read_file_tools: ["only_one"] } as any })} />);
+		openRtkTab();
+
+		const reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
+		expect(reset.disabled).toBe(false);
+	});
+
+	it("honors an explicit empty list (operator opts out of the skip list)", () => {
+		render(<RtkFragment plugin={makePlugin({ config: { skip_read_file_tools: [] } as any })} />);
+		openRtkTab();
+
+		const input = screen.getByTestId("rtk-field-skip-read-file-tools");
+		// No chip text → field is empty, defaults are NOT auto-rendered.
+		expect(input.querySelectorAll('[aria-label^="Remove "]').length).toBe(0);
+
+		const reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
+		expect(reset.disabled).toBe(false);
+	});
+
+	it("clicking Reset-to-defaults restores the 16-entry default list", () => {
+		render(<RtkFragment plugin={makePlugin({ config: { skip_read_file_tools: ["only_one"] } as any })} />);
+		openRtkTab();
+
+		fireEvent.click(screen.getByTestId("rtk-field-skip-read-file-tools-reset"));
+
+		// TagInput collapses above 5; expand before asserting to cover all 16 names.
+		fireEvent.click(screen.getByRole("button", { name: /show \d+ more/i }));
+		for (const name of DEFAULT_SKIP_READ_FILE_TOOLS) {
+			expect(screen.getByText(name)).toBeTruthy();
+		}
 	});
 });

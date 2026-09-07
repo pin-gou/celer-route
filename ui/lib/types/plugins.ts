@@ -149,6 +149,34 @@ export const rtkConfigSchema = z.object({
 
 export type RTKConfig = z.infer<typeof rtkConfigSchema>;
 
+// DefaultSkipReadFileTools mirrors `DefaultSkipReadFileTools` in
+// `plugins/rtk/skipreadfile.go` (case-insensitive match covers both
+// PascalCase Claude Code names and snake_case OpenCode / generic MCP
+// server names). Mirror is required because the JSON schema only
+// describes the field; the gateway applies these defaults server-side
+// when the field is unset (`plugins/rtk/config.go` applyConfigDefaults).
+// An explicit `[]` from the operator disables the skip list; treat
+// `undefined` from the wire as "unset" and pre-fill with these names so
+// the UI surfaces what the gateway will actually run.
+export const DEFAULT_SKIP_READ_FILE_TOOLS = [
+	"read_file",
+	"Read",
+	"Glob",
+	"Grep",
+	"get_file_info",
+	"list_dir",
+	"find_files",
+	"read_file_range",
+	"ReadFile",
+	"ReadRange",
+	"GetFileInfo",
+	"ListDir",
+	"FindFiles",
+	"search_files",
+	"read_pdf",
+	"ReadPdf",
+] as const satisfies readonly string[];
+
 // ---------------------------------------------------------------------------
 // Governance (built-in plugin) — form schema
 // ---------------------------------------------------------------------------

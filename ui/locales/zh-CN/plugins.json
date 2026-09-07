@@ -245,6 +245,7 @@
 		"skipReadFileToolsDescription": "工具名白名单，其结果在参数含路径类 key（file_path、filePath、filepath、path、target_path、offset_path、file）时完全跳过 RTK（不压缩、不写 raw-output）。默认列表覆盖 Read/Glob/Grep/list_dir 等。设为空则关闭。",
 		"skipReadFileToolsWhen": "大文件读取（如 read_file 返回 50KB 源码）保持原文，让 LLM 看到完整内容。仅在调用参数含路径类 key 时才跳过，避免同名工具用于非文件场景时的误判。",
 		"skipReadFileToolsPlaceholder": "输入工具名后按回车",
+		"skipReadFileToolsReset": "恢复默认",
 		"cavemanSection": "Caveman（自然语言压缩）",
 		"cavemanIntro": "针对 user 角色的自然语言（聊天消息）做规则式压缩，与 RTK（面向工具输出）互补。由上方启用区块的管线勾选框开启。",
 		"cavemanIntensityLabel": "Caveman 强度",
