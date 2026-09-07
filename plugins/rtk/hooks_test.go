@@ -120,6 +120,104 @@ Changes not staged for commit:
 	}
 }
 
+// TestPreLLMHookIndicesAlignWithFinalInput verifies that the ScannedIndices /
+// RawOutputEntries indices recorded by the compression pipeline are positions
+// in the FINAL request array — the same array the logging plugin persists as
+// input_history.
+//
+// PreLLMHook prepends the RTK recovery hint as input[0] (injectRtkRecoveryHint).
+// Recording indices against the pre-injection array shifts every recorded index
+// by one relative to the stored input_history, so the log detail diff view
+// (rtkCompressionDiffView) can no longer align a compressed message with its
+// raw-output entry and the "original" pane renders empty. The recorded index
+// must match the position of the tool message in the post-hook array.
+func TestPreLLMHookIndicesAlignWithFinalInput(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.RawOutputRetention = "always"
+	plugin := newTestPluginWithConfig(t, cfg)
+	ctx := newTestCtx(t)
+
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Model: "gpt-4o",
+			Input: []schemas.ChatMessage{
+				{Role: schemas.ChatMessageRoleSystem, Content: &schemas.ChatMessageContent{ContentStr: strPtr("You are a helpful assistant")}},
+				{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: strPtr("Run the test suite")}},
+				{
+					Role:    schemas.ChatMessageRoleAssistant,
+					Content: &schemas.ChatMessageContent{ContentStr: strPtr("")},
+					ChatAssistantMessage: &schemas.ChatAssistantMessage{
+						ToolCalls: []schemas.ChatAssistantMessageToolCall{
+							{ID: strPtr("call_1"), Function: schemas.ChatAssistantMessageToolCallFunction{
+								Name:      strPtr("bash"),
+								Arguments: "git status",
+							}},
+						},
+					},
+				},
+				{
+					Role:            schemas.ChatMessageRoleTool,
+					Content:         &schemas.ChatMessageContent{ContentStr: strPtr(gitStatusFixture)},
+					ChatToolMessage: &schemas.ChatToolMessage{ToolCallID: strPtr("call_1")},
+				},
+			},
+		},
+	}
+
+	outReq, sc, err := plugin.PreLLMHook(ctx, req)
+	if err != nil {
+		t.Fatalf("PreLLMHook returned error: %v", err)
+	}
+	if sc != nil {
+		t.Fatalf("PreLLMHook returned unexpected short-circuit: %+v", sc)
+	}
+
+	// The recovery hint must be prepended at input[0]; everything shifts +1.
+	if len(outReq.ChatRequest.Input) == 0 || outReq.ChatRequest.Input[0].Role != schemas.ChatMessageRoleSystem {
+		t.Fatal("expected recovery hint system message prepended at input[0]")
+	}
+
+	// Locate the tool message in the final (post-hook) input array.
+	finalIndex := -1
+	for i, m := range outReq.ChatRequest.Input {
+		if m.Role == schemas.ChatMessageRoleTool {
+			finalIndex = i
+			break
+		}
+	}
+	if finalIndex < 0 {
+		t.Fatal("no tool message in final input")
+	}
+
+	state := plugin.getState(ctx)
+	if state == nil {
+		t.Fatal("compression state is nil")
+	}
+	if !state.Compressed {
+		t.Fatal("expected compression to fire on the git-status fixture")
+	}
+
+	// ScannedIndices must reference FINAL array positions (with the hint at
+	// input[0]). Before the fix they referenced the pre-injection array and
+	// were off by one vs the stored input_history.
+	if len(state.ScannedIndices) == 0 {
+		t.Fatalf("expected ScannedIndices to record the scanned tool message, got none")
+	}
+	if state.ScannedIndices[0] != finalIndex {
+		t.Errorf("ScannedIndices[0]=%d want %d (position of tool message in final input; hint shifts by +1)", state.ScannedIndices[0], finalIndex)
+	}
+
+	// RawOutputEntries must carry the same final-array position so the log
+	// detail diff view can align the raw-output pointer with the message.
+	if len(state.RawOutputEntries) == 0 {
+		t.Fatalf("expected raw-output entries with retention=always, got none")
+	}
+	if state.RawOutputEntries[0].Index != finalIndex {
+		t.Errorf("RawOutputEntries[0].Index=%d want %d (position of tool message in final input)", state.RawOutputEntries[0].Index, finalIndex)
+	}
+}
+
 // TestPreLLMHookNoCompressionWhenDisabled verifies that when the plugin is
 // disabled, PreLLMHook does not modify messages.
 func TestPreLLMHookNoCompressionWhenDisabled(t *testing.T) {

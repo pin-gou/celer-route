@@ -113,6 +113,22 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		}
 	}
 
+	// System-message hint: prepend the literal-constant recovery instruction
+	// to the request's leading system messages BEFORE the compression pipeline
+	// runs. The string is byte-stable across calls so Anthropic / OpenAI
+	// prompt caches still hit on the system prefix.
+	//
+	// Ordering matters: injectRtkRecoveryHint prepends a message at input[0],
+	// which shifts every later message index by one. The compression pipeline
+	// records ScannedIndices / RawOutputEntries as positions in the array it
+	// scans, and the logging plugin persists the final (post-injection) array
+	// as input_history. If compression ran before injection, the recorded
+	// indices referenced the pre-injection array and drifted by one from the
+	// stored input_history — the log detail diff view then failed to align a
+	// compressed message with its raw-output entry. Injecting first keeps the
+	// recorded indices identical to the positions the diff view computes.
+	injectRtkRecoveryHint(ctx, req)
+
 	// Build the pipeline runner from the global catalog and the config's pipeline.
 	// This is the production path that routes through EngineCatalog + PipelineRunner,
 	// ensuring the CompressionEngine interface is actually used at runtime.
@@ -142,15 +158,6 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		}
 		state := applyRtkCompressionResponses(ctx, req, p, runner, pipeline, defaultCfg)
 		p.setState(ctx, state)
-	}
-
-	// System-message hint: whenever RTK is enabled, prepend a literal-constant
-	// instruction to the request's leading system messages so the LLM knows
-	// how to recover a truncated tool_result via /api/context/rtk/raw-output.
-	// The string is byte-stable across calls so Anthropic / OpenAI prompt
-	// caches still hit on the system prefix.
-	if p.config.Enabled {
-		injectRtkRecoveryHint(ctx, req)
 	}
 
 	return req, nil, nil
