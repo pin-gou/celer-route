@@ -49,6 +49,22 @@ func isWordChar(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
+// isSpaceLessScriptRune reports whether r belongs to a script that does not
+// separate words with whitespace (CJK ideographs, Japanese kana, Thai, etc.).
+// Consecutive such characters are all word characters, so an English-style
+// "whole word" boundary cannot exist inside continuous text of these scripts.
+func isSpaceLessScriptRune(r rune) bool {
+	return unicode.Is(unicode.Han, r) ||
+		unicode.Is(unicode.Hiragana, r) ||
+		unicode.Is(unicode.Katakana, r) ||
+		unicode.Is(unicode.Hangul, r) ||
+		unicode.Is(unicode.Thai, r) ||
+		unicode.Is(unicode.Lao, r) ||
+		unicode.Is(unicode.Khmer, r) ||
+		unicode.Is(unicode.Myanmar, r) ||
+		unicode.Is(unicode.Tibetan, r)
+}
+
 func countWordsNoAlloc(text string) int {
 	count := 0
 	inWord := false

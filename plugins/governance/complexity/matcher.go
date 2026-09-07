@@ -167,6 +167,18 @@ func keywordMatchModeFor(keyword string) keywordMatchMode {
 			return matchModeBoundarySubstring
 		}
 	}
+	for _, r := range keyword {
+		if isSpaceLessScriptRune(r) {
+			// Scripts without whitespace-delimited words (CJK, Japanese kana,
+			// Thai, ...) have no natural "whole word" boundary: consecutive
+			// characters are all word characters, so the whole-word boundary
+			// check can never fire inside continuous text (e.g. keyword
+			// 提交并推送 inside 提交并推送代码). Treat such keywords as plain
+			// substrings; other scripts (Latin, etc.) keep whole-word
+			// boundary semantics.
+			return matchModePlainSubstring
+		}
+	}
 	return matchModeWholeWord
 }
 

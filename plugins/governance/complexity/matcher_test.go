@@ -98,3 +98,41 @@ func TestCompiledKeywordMatcher_PunctuationKeywordRemainsLiteral(t *testing.T) {
 		t.Fatalf("expected ci cd not to match literal ci/cd keyword, got codeCount=%d", tokenSignals.codeCount)
 	}
 }
+
+func TestCompiledKeywordMatcher_CJKKeywordMatchesWithinContinuousText(t *testing.T) {
+	matcher := newCompiledKeywordMatcher(KeywordConfig{
+		SimpleKeywords: []string{"提交并推送"},
+	})
+
+	signals := matcher.analyzeText("请提交并推送代码到仓库", lastTextBaseScanMask)
+	if signals.simpleCount != 1 {
+		t.Fatalf("expected CJK keyword 提交并推送 to match inside continuous Chinese text, got simpleCount=%d", signals.simpleCount)
+	}
+}
+
+func TestCompiledKeywordMatcher_CJKSuffixKeywordMatchesContinuousText(t *testing.T) {
+	matcher := newCompiledKeywordMatcher(KeywordConfig{
+		SimpleKeywords: []string{"推送代码", "提交代码", "提交并推送"},
+	})
+
+	signals := matcher.analyzeText("提交并推送代码", lastTextBaseScanMask)
+	if signals.simpleCount == 0 {
+		t.Fatalf("expected at least one CJK simple keyword to match 提交并推送代码, got simpleCount=%d", signals.simpleCount)
+	}
+}
+
+func TestCompiledKeywordMatcher_ASCIIWholeWordRemainsBoundarySensitive(t *testing.T) {
+	matcher := newCompiledKeywordMatcher(KeywordConfig{
+		CodeKeywords: []string{"code"},
+	})
+
+	insideSignals := matcher.analyzeText("the codepath is long", lastTextBaseScanMask)
+	if insideSignals.codeCount != 0 {
+		t.Fatalf("expected ASCII whole-word keyword code not to match inside codepath, got codeCount=%d", insideSignals.codeCount)
+	}
+
+	standaloneSignals := matcher.analyzeText("the code is short", lastTextBaseScanMask)
+	if standaloneSignals.codeCount != 1 {
+		t.Fatalf("expected ASCII keyword code to match as a standalone word, got codeCount=%d", standaloneSignals.codeCount)
+	}
+}
