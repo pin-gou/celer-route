@@ -56,6 +56,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n/config";
 import BlockHeader from "../views/blockHeader";
 import CollapsibleBox from "../views/collapsibleBox";
+import ErrorDetailsView from "../views/errorDetailsView";
 import ImageView from "../views/imageView";
 import { LazyJsonBlock } from "../views/lazyJsonBlock";
 import LogChatMessageView, { LogChatFileBlockView } from "../views/logChatMessageView";
@@ -1408,6 +1409,11 @@ export function LogDetailView({
 								</Badge>
 							)}
 						</div>
+						{log.status === "error" &&
+						log.error_details?.error &&
+						(log.error_details.error.message || log.error_details.error.error != null) ? (
+							<ErrorDetailsView errorDetails={log.error_details} compact className="mt-3" testId="logdetails-header-error-summary" />
+						) : null}
 						<div className="mt-3 flex items-center gap-2">
 							<div className="text-muted-foreground w-24 shrink-0 text-[10.5px] font-semibold tracking-wider uppercase">
 								{t("detailView.request")}
@@ -2401,6 +2407,15 @@ export function LogDetailView({
 									{log.input_history.length + (log.output_message ? 1 : 0)}
 								</span>
 							) : null}
+							{log.status === "error" &&
+								log.error_details?.error &&
+								(log.error_details.error.message || log.error_details.error.error != null) && (
+									<span
+										className="ml-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"
+										data-testid="logdetails-messages-tab-error-dot"
+										aria-label={t("detailView.error")}
+									/>
+								)}
 						</TabsTrigger>
 					)}
 
@@ -2508,6 +2523,9 @@ export function LogDetailView({
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</div>
+					{log.error_details?.error && (log.error_details.error.message || log.error_details.error.error != null) ? (
+						<ErrorDetailsView errorDetails={log.error_details} testId="logdetails-messages-tab-error" />
+					) : null}
 					{(log.ocr_input || log.ocr_output) && <OCRView ocrInput={log.ocr_input} ocrOutput={log.ocr_output} />}
 					{(log.speech_input || log.speech_output) && (
 						<SpeechView speechInput={log.speech_input} speechOutput={log.speech_output} isStreaming={log.stream} />
@@ -2711,31 +2729,7 @@ export function LogDetailView({
 					)}
 
 					{(log.error_details?.error.message || log.error_details?.error.error != null) && (
-						<div className="rounded-sm border border-red-200 bg-red-50/70 p-5 dark:border-red-900 dark:bg-red-950/30">
-							<div className="flex items-center gap-2 text-red-700 dark:text-red-400">
-								<AlertCircle className="h-4 w-4 shrink-0" />
-								<span className="text-[12.5px] font-semibold">{t("detailView.error")}</span>
-								{log.error_details?.error.message ? <CopyInlineButton text={log.error_details.error.message} /> : null}
-							</div>
-							{log.error_details?.error.message ? (
-								<div className="mt-2 text-[13px] leading-relaxed break-words whitespace-pre-wrap text-red-700 dark:text-red-400">
-									{log.error_details.error.message}
-								</div>
-							) : null}
-							{log.error_details?.error.error != null ? (
-								<details className="group mt-3 rounded-sm border border-red-200/70 bg-white/40 dark:border-red-900/70 dark:bg-red-950/40">
-									<summary className="flex cursor-pointer items-center justify-between px-3 py-2 text-[12px] text-red-700 hover:bg-red-50/80 dark:text-red-400 dark:hover:bg-red-950/60">
-										<span className="font-medium">{t("detailView.details")}</span>
-										<ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-									</summary>
-									<div className="custom-scrollbar max-h-[400px] overflow-y-auto border-t border-red-200/70 px-3 py-2 font-mono text-[11.5px] leading-[1.6] break-words whitespace-pre-wrap text-red-900 dark:border-red-900/70 dark:text-red-300">
-										{typeof log.error_details.error.error === "string"
-											? log.error_details.error.error
-											: JSON.stringify(log.error_details.error.error, null, 2)}
-									</div>
-								</details>
-							) : null}
-						</div>
+						<ErrorDetailsView errorDetails={log.error_details} />
 					)}
 				</TabsContent>
 
