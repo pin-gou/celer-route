@@ -50992,6 +50992,106 @@
           ]
         }
       ]
+    },
+    {
+      "name": "54. Keyless Opencode Free-Tier Wire Headers (x-opencode-session + Authorization)",
+      "description": "Pins the wire-visible behaviour of the bare `opencode` (free/no-auth OpenCode) provider after the free-tier header injection fix. Before the fix, ChatCompletion / ChatCompletionStream on a keyless opencode provider reached the upstream at https://opencode.ai/zen/v1/chat/completions without the `x-opencode-session` header (or `Authorization: Bearer public`), and the Console handler returned 400 `MissingSessionID` with body `Error from provider (Console): OpenCode's free tier can only be used in OpenCode`. Curl-confirmed: the Console gate requires ALL of `x-opencode-session` (missing → 400 MissingSessionID), `Authorization: Bearer public` (the anonymous-auth sentinel), and a `User-Agent` containing \"opencode\" (missing/foreign UA, e.g. the fasthttp default, → 429 FreeUsageLimitError; UA `opencode/1.0.0 (celer-route gateway)` → 200 on identical bodies). After the fix, the provider injects `Authorization: Bearer public`, `x-opencode-session: ses_<opencode-spec id>`, `x-opencode-client: celer-route`, and `User-Agent: opencode/1.0.0 (celer-route gateway)` when providerKey == bare Opencode and the model is in opencodeFreeModels (or ends with `-free`); Zen/Go paid tiers and paid models pass through untouched, and caller-set Authorization/session/UA values win. Cases here pin (1) the non-streaming happy path returning 200 with a chat completion payload (no `MissingSessionID` anywhere in the response) and (2) the streaming variant producing SSE rather than 400. Go-level tests in core/providers/opencode/sessionid_test.go and freetierheaders_test.go cover format / uniqueness / skip-rules in isolation.",
+      "item": [
+        {
+          "name": "keyless opencode free-tier chat without API key (opencode/big-pickle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 412, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('keyless opencode free-tier chat - not MissingSessionID', function () {",
+                  "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('MissingSessionID');",
+                  "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include(\"only be used in OpenCode\");",
+                  "});",
+                  "pm.test('keyless opencode free-tier chat - wire intact', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j.choices && j.choices[0] && j.choices[0].message, 'expected a chat completion response').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"opencode/big-pickle\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Hello\" }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "keyless opencode free-tier chat stream without API key (opencode/big-pickle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 412, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('keyless opencode free-tier stream - not MissingSessionID', function () {",
+                  "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('MissingSessionID');",
+                  "});",
+                  "pm.test('keyless opencode free-tier stream - SSE', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var ct = pm.response.headers.get('content-type') || '';",
+                  "  pm.expect(ct.toLowerCase(), 'expected SSE, got ' + ct).to.include('event-stream');",
+                  "  pm.expect(pm.response.text(), 'empty stream').to.be.ok;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"opencode/big-pickle\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Hello\" }\n  ],\n  \"max_tokens\": 16,\n  \"stream\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

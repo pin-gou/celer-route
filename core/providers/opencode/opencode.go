@@ -275,6 +275,97 @@ func (p *opencodeProvider) opencodeAnthropicHeaders(key schemas.Key) map[string]
 	return headers
 }
 
+// applyFreeTierHeaders injects the headers required by opencode's free tier
+// when the bare `opencode` (keyless) provider is hit and the requested model
+// is one of opencodeFreeModels. The upstream Console handler enforces the
+// "free tier can only be used in OpenCode" gate by requiring ALL of:
+//
+//  1. x-opencode-session — missing it returns 400 MissingSessionID.
+//  2. Authorization: Bearer public — the anonymous-auth sentinel that routes
+//     through allowAnonymous instead of missingApiKey.
+//  3. User-Agent containing "opencode" — without it (e.g. the fasthttp
+//     default) the same request comes back 429 FreeUsageLimitError, the
+//     message the Console surfaces when the caller does not look like an
+//     OpenCode client. Curl-confirmed: UA "fasthttp" → 429, UA
+//     "opencode/1.0.0 (celer-route gateway)" → 200 on identical bodies.
+//
+// x-opencode-client is informational only (matches the real client's header
+// set) and is not part of the gate.
+//
+// Caller-supplied values win: if the caller has already set Authorization,
+// x-opencode-session, x-opencode-client, or User-Agent via key.Value,
+// NetworkConfig.ExtraHeaders, or BifrostContextKeyExtraHeaders, those values
+// are preserved. We inject only into the per-request header map so the
+// ctx-level ExtraHeaders merge in providerUtils.SetExtraHeaders still wins on
+// top of us.
+func (p *opencodeProvider) applyFreeTierHeaders(ctx *schemas.BifrostContext, headers map[string]string, prepared *schemas.BifrostChatRequest) {
+	if p.providerKey != schemas.Opencode {
+		return
+	}
+	if prepared == nil || !isFreeOpencodeModel(prepared.Model) {
+		return
+	}
+	if _, ok := headers["Authorization"]; !ok {
+		headers["Authorization"] = "Bearer public"
+	}
+	if _, ok := headers["x-opencode-session"]; !ok {
+		headers["x-opencode-session"] = newSessionID()
+	}
+	if _, ok := headers["x-opencode-client"]; !ok {
+		headers["x-opencode-client"] = "celer-route"
+	}
+	// User-Agent is part of the free-tier gate (see function doc). Respect a
+	// caller-set value from the auth-header map, NetworkConfig.ExtraHeaders, or
+	// BifrostContextKeyExtraHeaders (matched case-insensitively); otherwise
+	// inject the OpenCode client UA so the request passes the gate instead of
+	// returning 429.
+	if !headerKeyPresent(headers, "User-Agent") &&
+		!headerKeyPresent(p.networkConfig.ExtraHeaders, "User-Agent") &&
+		!ctxHeaderKeyPresent(ctx, "User-Agent") {
+		headers["User-Agent"] = opencodeFreeTierUserAgent
+	}
+}
+
+// opencodeFreeTierUserAgent spoofs the OpenCode desktop/CLI client identity
+// the free-tier gate checks for. Confirmed working against
+// https://opencode.ai/zen/v1/chat/completions with Bearer public + a fresh
+// x-opencode-session.
+const opencodeFreeTierUserAgent = "opencode/1.0.0 (celer-route gateway)"
+
+// headerKeyPresent reports whether name exists in the map under any casing.
+// NetworkConfig.ExtraHeaders and the per-request header maps both use
+// arbitrary casing, so a plain map lookup on a canonical key misses "user-agent"
+// vs "User-Agent" and vice versa.
+func headerKeyPresent(m map[string]string, name string) bool {
+	for k := range m {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// ctxHeaderKeyPresent reports whether the caller-supplied extra headers on
+// the context (BifrostContextKeyExtraHeaders, keyed as map[string][]string)
+// contain name under any casing. These arrive via x-bf-eh-* / direct-allowlist
+// header forwarding and are merged by providerUtils.SetExtraHeaders AFTER the
+// per-request auth-header map, so they must count as "caller-set" too.
+func ctxHeaderKeyPresent(ctx *schemas.BifrostContext, name string) bool {
+	if ctx == nil {
+		return false
+	}
+	ctxHeaders, ok := ctx.Value(schemas.BifrostContextKeyExtraHeaders).(map[string][]string)
+	if !ok {
+		return false
+	}
+	for k := range ctxHeaders {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // ChatCompletion performs a chat completion request to the Opencode API.
 //
 // Models listed in claudeFormatModels (qwen3.7-*, minimax-m*, glm-5*, etc.)
@@ -302,12 +393,14 @@ func (p *opencodeProvider) ChatCompletion(ctx *schemas.BifrostContext, key schem
 		)
 	}
 
+	headers := openai.BearerAuthHeader(key)
+	p.applyFreeTierHeaders(ctx, headers, prepared)
 	return openai.HandleOpenAIChatCompletionRequest(
 		ctx,
 		p.client,
 		p.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/chat/completions"),
 		prepared,
-		openai.BearerAuthHeader(key),
+		headers,
 		p.networkConfig.ExtraHeaders,
 		providerUtils.ShouldSendBackRawRequest(ctx, p.sendBackRawRequest),
 		providerUtils.ShouldSendBackRawResponse(ctx, p.sendBackRawResponse),
@@ -356,12 +449,14 @@ func (p *opencodeProvider) ChatCompletionStream(ctx *schemas.BifrostContext, pos
 		)
 	}
 
+	headers := openai.BearerAuthHeader(key)
+	p.applyFreeTierHeaders(ctx, headers, prepared)
 	return openai.HandleOpenAIChatCompletionStreaming(
 		ctx,
 		p.streamingClient,
 		p.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/chat/completions"),
 		prepared,
-		openai.BearerAuthHeader(key),
+		headers,
 		p.networkConfig.ExtraHeaders,
 		p.networkConfig.StreamIdleTimeoutInSeconds,
 		providerUtils.ShouldSendBackRawRequest(ctx, p.sendBackRawRequest),
