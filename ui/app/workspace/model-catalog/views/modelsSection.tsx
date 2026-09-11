@@ -150,6 +150,7 @@ export function ModelsSection() {
 							<TableRow className="hover:bg-transparent">
 								<TableHead className="w-[116px] font-medium">{t("table.provider")}</TableHead>
 								<TableHead className="font-medium">{t("table.model")}</TableHead>
+								<TableHead className="w-[84px] font-medium">{t("table.source")}</TableHead>
 								<TableHead className="w-[72px] px-2 text-right font-medium">{t("table.input")}</TableHead>
 								<TableHead className="w-[76px] px-2 text-right font-medium">{t("table.output")}</TableHead>
 								<TableHead className="w-[86px] px-2 text-right font-medium">{t("table.cacheWrite")}</TableHead>
@@ -162,7 +163,7 @@ export function ModelsSection() {
 						<TableBody>
 							{models.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={9} className="h-24 text-center">
+									<TableCell colSpan={10} className="h-24 text-center">
 										<span className="text-muted-foreground text-sm">
 											{!debouncedSearch && !providerFilter ? t("modelsSection.noModels") : t("modelsSection.noMatching")}
 										</span>
@@ -183,6 +184,17 @@ export function ModelsSection() {
 											</TableCell>
 											<TableCell className="truncate py-3 font-mono text-sm" title={m.name}>
 												{m.name}
+											</TableCell>
+											<TableCell className="py-3">
+												{m.is_custom ? (
+													<Badge variant="secondary" className="bg-blue-100 text-blue-700">
+														{t("table.sourceManual")}
+													</Badge>
+												) : (
+													<Badge variant="outline" className="text-muted-foreground font-normal">
+														{t("table.sourceSynced")}
+													</Badge>
+												)}
 											</TableCell>
 											<TableCell className="px-2 py-3 text-right font-mono text-sm">
 												{formatTokenPriceCompact(m.input_cost_per_token)}

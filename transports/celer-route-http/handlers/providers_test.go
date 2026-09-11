@@ -35,6 +35,19 @@ type mockModelsManager struct {
 	refreshKeyCalls      []providerKeyRef
 	refreshProviderCalls []schemas.ModelProvider
 	refreshErr           error
+	deleteModelCalls     []modelDeleteRef
+	renameModelCalls     []modelRenameRef
+}
+
+type modelDeleteRef struct {
+	model    string
+	provider schemas.ModelProvider
+}
+
+type modelRenameRef struct {
+	model    string
+	provider schemas.ModelProvider
+	newModel string
 }
 
 func (m *mockModelsManager) ReloadProvider(_ context.Context, provider schemas.ModelProvider) (*configstoreTables.TableProvider, error) {
@@ -87,6 +100,16 @@ func (m *mockModelsManager) RefreshLiveModelsForKey(_ context.Context, provider 
 func (m *mockModelsManager) RefreshLiveModelsForAllKeys(_ context.Context, provider schemas.ModelProvider) error {
 	m.refreshProviderCalls = append(m.refreshProviderCalls, provider)
 	return m.refreshErr
+}
+
+func (m *mockModelsManager) DeleteModelPricing(_ context.Context, model string, provider schemas.ModelProvider) (int64, error) {
+	m.deleteModelCalls = append(m.deleteModelCalls, modelDeleteRef{model: model, provider: provider})
+	return 1, nil
+}
+
+func (m *mockModelsManager) RenameModelPricing(_ context.Context, model string, provider schemas.ModelProvider, newModel string) (int64, error) {
+	m.renameModelCalls = append(m.renameModelCalls, modelRenameRef{model: model, provider: provider, newModel: newModel})
+	return 1, nil
 }
 
 // providerHandlerForTest builds a handler with fixed provider config and model sets.
@@ -896,6 +919,224 @@ func TestListModelDetails_IncludesPricing(t *testing.T) {
 	}
 	if resp.Models[0].CacheReadCost == nil || *resp.Models[0].CacheReadCost != 0.00000025 {
 		t.Fatalf("expected cache read cost 0.00000025, got %#v", resp.Models[0].CacheReadCost)
+	}
+}
+
+// modelCatalogWithCustomPricing builds a ModelCatalog backed by a real SQLite
+// config store holding a manually-added (IsCustom) pricing row for
+// (model, provider) with the given mode, so handler tests can exercise the
+// custom-model rename/delete endpoints.
+func modelCatalogWithCustomPricing(t *testing.T, model string, provider schemas.ModelProvider, mode string) *modelcatalog.ModelCatalog {
+	t.Helper()
+	store, err := configstore.NewConfigStore(t.Context(), &configstore.Config{
+		Enabled: true,
+		Type:    configstore.ConfigStoreTypeSQLite,
+		Config: &configstore.SQLiteConfig{
+			Path: filepath.Join(t.TempDir(), "custom-pricing.db"),
+		},
+	}, &mockLogger{})
+	if err != nil {
+		t.Fatalf("create sqlite config store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close(t.Context()) })
+	if err := store.UpsertModelPrices(t.Context(), &configstoreTables.TableModelPricing{
+		Model:        model,
+		Provider:     string(provider),
+		Mode:         mode,
+		IsDeprecated: false,
+		IsCustom:     true,
+	}); err != nil {
+		t.Fatalf("upsert custom pricing row: %v", err)
+	}
+	ds := datasheet.New(store, &mockLogger{}, datasheet.Config{})
+	if err := ds.LoadFromDB(t.Context()); err != nil {
+		t.Fatalf("load pricing from db: %v", err)
+	}
+	return modelcatalog.NewTestCatalogWithDatasheet(ds)
+}
+
+func TestListModelDetails_IncludesIsCustom(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	h := providerHandlerForTest(
+		schemas.OpenAI,
+		[]schemas.Key{{ID: "key-a"}},
+		[]string{"gpt-4o", "my-model"},
+		[]string{"gpt-4o", "my-model"},
+	)
+	h.inMemoryStore.ModelCatalog = modelCatalogWithCustomPricing(t, "my-model", schemas.OpenAI, "chat")
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("GET")
+	ctx.Request.SetRequestURI("/api/models/details?provider=openai&limit=100&unfiltered=true")
+
+	h.listModelDetails(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+
+	var resp ListModelDetailsResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	custom := false
+	synced := false
+	for _, m := range resp.Models {
+		switch m.Name {
+		case "my-model":
+			custom = m.IsCustom
+		case "gpt-4o":
+			synced = m.IsCustom
+		}
+	}
+	if !custom {
+		t.Fatalf("expected my-model to be marked is_custom, got %#v", resp.Models)
+	}
+	if synced {
+		t.Fatalf("expected gpt-4o to NOT be marked is_custom, got %#v", resp.Models)
+	}
+}
+
+func TestDeleteModelCatalogEntry_CustomModelDeletes(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	mgr := &mockModelsManager{}
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{ModelCatalog: modelCatalogWithCustomPricing(t, "my-model", schemas.OpenAI, "chat")},
+		modelsManager: mgr,
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("DELETE")
+	ctx.Request.SetRequestURI("/api/models/catalog?model=my-model&provider=openai")
+
+	h.deleteModelCatalogEntry(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	if len(mgr.deleteModelCalls) != 1 {
+		t.Fatalf("expected 1 delete call, got %d", len(mgr.deleteModelCalls))
+	}
+	if mgr.deleteModelCalls[0].model != "my-model" || mgr.deleteModelCalls[0].provider != schemas.OpenAI {
+		t.Fatalf("unexpected delete call: %#v", mgr.deleteModelCalls[0])
+	}
+}
+
+func TestDeleteModelCatalogEntry_RejectsSyncedModel(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	mgr := &mockModelsManager{}
+	// gpt-4o comes from the datasheet (not custom).
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{ModelCatalog: modelCatalogForPricingJSON(t, []byte(`{"gpt-4o": {"provider": "openai", "mode": "chat"}}`))},
+		modelsManager: mgr,
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("DELETE")
+	ctx.Request.SetRequestURI("/api/models/catalog?model=gpt-4o&provider=openai")
+
+	h.deleteModelCatalogEntry(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	if len(mgr.deleteModelCalls) != 0 {
+		t.Fatalf("expected no delete calls, got %d", len(mgr.deleteModelCalls))
+	}
+}
+
+func TestDeleteModelCatalogEntry_MissingParams(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	h := &ProviderHandler{modelsManager: &mockModelsManager{}}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("DELETE")
+	ctx.Request.SetRequestURI("/api/models/catalog")
+
+	h.deleteModelCatalogEntry(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+}
+
+func TestRenameModelCatalogEntry_CustomModelRenames(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	mgr := &mockModelsManager{}
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{ModelCatalog: modelCatalogWithCustomPricing(t, "my-model", schemas.OpenAI, "chat")},
+		modelsManager: mgr,
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetRequestURI("/api/models/catalog/rename")
+	ctx.Request.SetBodyString(`{"model":"my-model","provider":"openai","new_model":"my-model-v2"}`)
+
+	h.renameModelCatalogEntry(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	if len(mgr.renameModelCalls) != 1 {
+		t.Fatalf("expected 1 rename call, got %d", len(mgr.renameModelCalls))
+	}
+	if mgr.renameModelCalls[0].model != "my-model" || mgr.renameModelCalls[0].provider != schemas.OpenAI || mgr.renameModelCalls[0].newModel != "my-model-v2" {
+		t.Fatalf("unexpected rename call: %#v", mgr.renameModelCalls[0])
+	}
+}
+
+func TestRenameModelCatalogEntry_RejectsSyncedModel(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	mgr := &mockModelsManager{}
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{ModelCatalog: modelCatalogForPricingJSON(t, []byte(`{"gpt-4o": {"provider": "openai", "mode": "chat"}}`))},
+		modelsManager: mgr,
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetRequestURI("/api/models/catalog/rename")
+	ctx.Request.SetBodyString(`{"model":"gpt-4o","provider":"openai","new_model":"gpt-4o-x"}`)
+
+	h.renameModelCatalogEntry(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	if len(mgr.renameModelCalls) != 0 {
+		t.Fatalf("expected no rename calls, got %d", len(mgr.renameModelCalls))
+	}
+}
+
+func TestRenameModelCatalogEntry_MissingNewModel(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	h := &ProviderHandler{modelsManager: &mockModelsManager{}}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetRequestURI("/api/models/catalog/rename")
+	ctx.Request.SetBodyString(`{"model":"my-model","provider":"openai"}`)
+
+	h.renameModelCatalogEntry(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
 	}
 }
 

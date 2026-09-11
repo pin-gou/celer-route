@@ -473,6 +473,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_cost_per_request_pricing_column"}, run: migrationAddCostPerRequestPricingColumn},
 	{IDs: []string{"add_provider_default_parameters_json_column"}, run: migrationAddProviderDefaultParametersJSONColumn},
 	{IDs: []string{"add_model_list_cache_table"}, run: migrationAddModelListCacheTable},
+	{IDs: []string{"add_model_pricing_is_custom_column"}, run: migrationAddModelPricingIsCustomColumn},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -10377,6 +10378,38 @@ func migrationAddModelPricingIsDeprecatedColumn(ctx context.Context, db *gorm.DB
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running add_model_pricing_is_deprecated_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddModelPricingIsCustomColumn adds is_custom to
+// governance_model_pricing so pricing rows seeded through the management API
+// (Add Custom Model) can be distinguished from rows synced from the
+// datasheet / provider key discovery. Only custom rows may be renamed or
+// deleted from the provider detail Models tab.
+func migrationAddModelPricingIsCustomColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_model_pricing_is_custom_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableModelPricing{}, "IsCustom"); err != nil {
+				return fmt.Errorf("failed to add is_custom column: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &tables.TableModelPricing{}, "IsCustom"); err != nil {
+				return fmt.Errorf("failed to drop is_custom column: %w", err)
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_model_pricing_is_custom_column migration: %s", err.Error())
 	}
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +27,7 @@ import (
 	"github.com/pin-gou/celer-route/framework/encrypt"
 	"github.com/pin-gou/celer-route/framework/logstore"
 	"github.com/pin-gou/celer-route/framework/modelcatalog"
+	"github.com/pin-gou/celer-route/framework/modelcatalog/live"
 	dynamicPlugins "github.com/pin-gou/celer-route/framework/plugins"
 	"github.com/pin-gou/celer-route/framework/sidekiq"
 	"github.com/pin-gou/celer-route/framework/temptoken"
@@ -121,6 +123,14 @@ type ServerCallbacks interface {
 	OnKeyDeleted(ctx context.Context, provider schemas.ModelProvider, keyID string) error
 	RefreshLiveModelsForKey(ctx context.Context, provider schemas.ModelProvider, keyID string) error
 	RefreshLiveModelsForAllKeys(ctx context.Context, provider schemas.ModelProvider) error
+	// DeleteModelPricing removes the pricing rows keyed by (model, provider)
+	// and reloads the pricing cache. Only custom (manually added) models may
+	// be deleted — the handler enforces that.
+	DeleteModelPricing(ctx context.Context, model string, provider schemas.ModelProvider) (int64, error)
+	// RenameModelPricing renames the pricing rows keyed by (model, provider)
+	// and reloads the pricing cache. Only custom (manually added) models may
+	// be renamed — the handler enforces that.
+	RenameModelPricing(ctx context.Context, model string, provider schemas.ModelProvider, newModel string) (int64, error)
 	ReloadRoutingRule(ctx context.Context, id string) error
 	RemoveRoutingRule(ctx context.Context, id string) error
 	// Webhook related callbacks
@@ -1619,9 +1629,90 @@ func (s *BifrostHTTPServer) RefreshLiveModelsForKey(ctx context.Context, provide
 	return nil
 }
 
+// liveRefreshResults accumulates which (keyID, unfiltered) fetches committed
+// during one provider-level sync pass, plus the union of fresh unfiltered model
+// IDs, so the Sync endpoint can drop stale live entries and reconcile the
+// datasheet view down to exactly the latest results.
+type liveRefreshResults struct {
+	mu        sync.Mutex
+	succeeded map[live.Key]struct{}
+	latest    map[string]struct{}
+}
+
+func newLiveRefreshResults() *liveRefreshResults {
+	return &liveRefreshResults{
+		succeeded: make(map[live.Key]struct{}),
+		latest:    make(map[string]struct{}),
+	}
+}
+
+// record marks one (keyID, unfiltered) fetch as committed with a fresh
+// response; for unfiltered fetches, models are folded into the latest set.
+// nil receiver is a no-op so callers that don't care can pass nil.
+func (r *liveRefreshResults) record(keyID string, unfiltered bool, models []string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.succeeded[live.Key{KeyID: keyID, Unfiltered: unfiltered}] = struct{}{}
+	if unfiltered {
+		for _, m := range models {
+			r.latest[m] = struct{}{}
+		}
+	}
+	r.mu.Unlock()
+}
+
+// anyUnfiltered reports whether at least one unfiltered fetch succeeded in the
+// pass. Reconciliation is gated on this so a fully failed pass never prunes.
+func (r *liveRefreshResults) anyUnfiltered() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for k := range r.succeeded {
+		if k.Unfiltered {
+			return true
+		}
+	}
+	return false
+}
+
+// latestModels returns the deduplicated, sorted union of unfiltered model IDs
+// from this pass's successful responses — the authoritative "latest results".
+func (r *liveRefreshResults) latestModels() []string {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, 0, len(r.latest))
+	for m := range r.latest {
+		out = append(out, m)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// retained returns the set of (keyID, unfiltered) pairs that succeeded, with
+// Provider filled, ready for live.Retain.
+func (r *liveRefreshResults) retained(provider schemas.ModelProvider) map[live.Key]struct{} {
+	out := make(map[live.Key]struct{}, len(r.succeeded))
+	for k := range r.succeeded {
+		k.Provider = provider
+		out[k] = struct{}{}
+	}
+	return out
+}
+
 // RefreshLiveModelsForAllKeys re-fetches list-models across every enabled key
 // of the provider on demand. It is the ModelsManager entrypoint behind the
-// provider-level refresh button.
+// provider-level refresh button. After the pass it reconciles the provider's
+// auto-synced entries down to exactly the fresh results: stale live entries
+// whose key/mode failed this pass are dropped, and non-custom pricing rows for
+// models the provider no longer lists are deleted (see
+// reconcileLiveModelsAfterSync).
 func (s *BifrostHTTPServer) RefreshLiveModelsForAllKeys(ctx context.Context, provider schemas.ModelProvider) error {
 	if s.Config == nil || s.Config.ModelCatalog == nil || s.Client == nil {
 		return fmt.Errorf("model catalog is not initialized")
@@ -1636,8 +1727,62 @@ func (s *BifrostHTTPServer) RefreshLiveModelsForAllKeys(ctx context.Context, pro
 	}
 	defer release()
 
-	s.RefreshLiveModelsForProvider(ctx, provider, keys)
+	results := newLiveRefreshResults()
+	s.RefreshLiveModelsForProvider(ctx, provider, keys, results)
+	s.reconcileLiveModelsAfterSync(ctx, provider, results)
 	return nil
+}
+
+// reconcileLiveModelsAfterSync converges the provider's auto-synced entries
+// onto the latest reality after a Sync pass, in two independent layers:
+//
+//  1. Orphan cleanup (runs even when every key fetch failed): non-custom
+//     pricing rows absent from the canonical datasheet are stale by definition
+//     (e.g. a model registered long ago that the datasheet never contained),
+//     so they are pruned regardless of list-models outcome.
+//  2. Live reconciliation (only when the pass obtained fresh unfiltered
+//     results): stale live entries whose key/mode failed this pass are dropped,
+//     and non-custom pricing rows for models the provider no longer lists are
+//     deleted (custom rows always survive). A fully failed pass, or one whose
+//     responses carried no models, leaves live + datasheet rows untouched
+//     (last-known-good semantics).
+func (s *BifrostHTTPServer) reconcileLiveModelsAfterSync(ctx context.Context, provider schemas.ModelProvider, results *liveRefreshResults) {
+	if s.Config == nil || s.Config.ModelCatalog == nil {
+		return
+	}
+
+	// 1. Orphan cleanup — independent of the key fetch outcome.
+	if deleted, err := s.Config.ModelCatalog.PruneOrphanPricingForProvider(ctx, provider); err != nil {
+		logger.Warn("failed to prune orphan pricing rows for provider %s after sync: %v", provider, err)
+	} else if deleted > 0 {
+		logger.Info("synced provider %s: removed %d orphan pricing rows not in the datasheet", provider, deleted)
+	}
+
+	if results == nil || !results.anyUnfiltered() {
+		return
+	}
+
+	// 2. Live reconciliation. latest is the union of this pass's successful
+	// unfiltered responses — the authoritative "latest results". When it is
+	// empty (a provider that serves nothing, or an empty upstream response)
+	// keep last-known-good rather than wiping a catalog that was healthy a
+	// moment ago.
+	latest := results.latestModels()
+	if len(latest) == 0 {
+		return
+	}
+
+	// Drop live entries for keys/modes that failed this pass so the provider's
+	// live union equals exactly the fresh results.
+	s.Config.ModelCatalog.RetainLive(provider, results.retained(provider))
+
+	// ReconcileProviderPricing skips partial-list providers (datasheet
+	// authoritative) and keeps custom rows.
+	if deleted, err := s.Config.ModelCatalog.ReconcileProviderPricing(ctx, provider, latest); err != nil {
+		logger.Warn("failed to reconcile pricing rows for provider %s after sync: %v", provider, err)
+	} else if deleted > 0 {
+		logger.Info("synced provider %s: pruned %d stale auto-synced pricing rows", provider, deleted)
+	}
 }
 
 // RefreshLiveModelsForProvider runs filtered + unfiltered list-models for the
@@ -1646,7 +1791,11 @@ func (s *BifrostHTTPServer) RefreshLiveModelsForAllKeys(ctx context.Context, pro
 //
 // Callers are responsible for invalidating stale entries first when keys
 // have been removed from the provider's set.
-func (s *BifrostHTTPServer) RefreshLiveModelsForProvider(ctx context.Context, provider schemas.ModelProvider, keys []schemas.Key) {
+//
+// results, when non-nil, records which (keyID, unfiltered) fetches committed,
+// so the Sync endpoint can prune the provider's auto-synced entries down to
+// exactly the fresh results afterwards.
+func (s *BifrostHTTPServer) RefreshLiveModelsForProvider(ctx context.Context, provider schemas.ModelProvider, keys []schemas.Key, results ...*liveRefreshResults) {
 	if len(keys) == 0 {
 		// Empty key slice + non-keyless provider would write under the "" sentinel
 		// reserved for keyless providers — colliding with the keyless namespace and
@@ -1655,7 +1804,7 @@ func (s *BifrostHTTPServer) RefreshLiveModelsForProvider(ctx context.Context, pr
 			logger.Warn("model discovery skipped for provider %s: no keys configured", provider)
 			return
 		}
-		s.FetchAndStoreLiveForKey(ctx, provider, "")
+		s.FetchAndStoreLiveForKey(ctx, provider, "", results...)
 		return
 	}
 	var wg sync.WaitGroup
@@ -1672,7 +1821,7 @@ func (s *BifrostHTTPServer) RefreshLiveModelsForProvider(ctx context.Context, pr
 		wg.Add(1)
 		go func(keyID string) {
 			defer wg.Done()
-			s.FetchAndStoreLiveForKey(ctx, provider, keyID)
+			s.FetchAndStoreLiveForKey(ctx, provider, keyID, results...)
 		}(key.ID)
 	}
 	if enabledCount == 0 {
@@ -1691,7 +1840,10 @@ func (s *BifrostHTTPServer) RefreshLiveModelsForProvider(ctx context.Context, pr
 // the check (today: OpenRouter, whose /v1/models is unauthenticated) so the
 // routing graph is the same at boot, after a key add, and after a reload —
 // stale-but-routable behavior would diverge otherwise.
-func (s *BifrostHTTPServer) FetchAndStoreLiveForKey(ctx context.Context, provider schemas.ModelProvider, keyID string) {
+//
+// results, when non-nil, records which (keyID, unfiltered) fetches committed
+// with a fresh response, so the Sync endpoint can prune stale entries.
+func (s *BifrostHTTPServer) FetchAndStoreLiveForKey(ctx context.Context, provider schemas.ModelProvider, keyID string, results ...*liveRefreshResults) {
 	if s.Config == nil || s.Config.ModelCatalog == nil {
 		return
 	}
@@ -1755,6 +1907,9 @@ func (s *BifrostHTTPServer) FetchAndStoreLiveForKey(ctx context.Context, provide
 			logger.Debug("discarding stale filtered list-models result for provider %s key %s: the provider's keys changed while the fetch was in flight", provider, keyID)
 			return
 		}
+		if len(results) > 0 {
+			results[0].record(keyID, false, nil)
+		}
 		if len(resp.KeyStatuses) > 0 && s.Config.ConfigStore != nil {
 			s.updateKeyStatus(ctx, resp.KeyStatuses)
 		}
@@ -1777,9 +1932,36 @@ func (s *BifrostHTTPServer) FetchAndStoreLiveForKey(ctx context.Context, provide
 		}
 		if !s.Config.ModelCatalog.UpsertLiveFromResponseIfCurrent(provider, keyID, true, resp, gen) {
 			logger.Debug("discarding stale unfiltered list-models result for provider %s key %s: the provider's keys changed while the fetch was in flight", provider, keyID)
+			return
+		}
+		if len(results) > 0 {
+			results[0].record(keyID, true, extractLiveModelIDs(resp, provider))
 		}
 	}()
 	wg.Wait()
+}
+
+// extractLiveModelIDs flattens an unfiltered list-models response into bare
+// model identifiers for this provider, dropping other-provider prefixed IDs
+// and duplicates. Mirrors modelcatalog.extractModelIDs.
+func extractLiveModelIDs(resp *schemas.BifrostListModelsResponse, provider schemas.ModelProvider) []string {
+	if resp == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(resp.Data))
+	out := make([]string, 0, len(resp.Data))
+	for _, m := range resp.Data {
+		parsedProvider, parsedModel := schemas.ParseModelString(m.ID, "")
+		if parsedProvider != "" && parsedProvider != provider {
+			continue
+		}
+		if _, ok := seen[parsedModel]; ok {
+			continue
+		}
+		seen[parsedModel] = struct{}{}
+		out = append(out, parsedModel)
+	}
+	return out
 }
 
 // ForceReloadPricing triggers an immediate pricing sync and resets the sync
@@ -1871,6 +2053,10 @@ func (s *BifrostHTTPServer) UpsertModelPricingAttributes(ctx context.Context, en
 				Provider:     e.Provider,
 				Mode:         strings.TrimSpace(e.Mode),
 				IsDeprecated: false,
+				// A row seeded through the management API is a manual model
+				// registration: mark it so the provider detail Models tab can
+				// label it "manual" and offer rename/delete.
+				IsCustom: true,
 			}, tx); err != nil {
 				return err
 			}
@@ -1890,6 +2076,26 @@ func (s *BifrostHTTPServer) UpsertModelPricingAttributes(ctx context.Context, en
 		return fmt.Errorf("failed to reload pricing cache after attribute write: %w", err)
 	}
 	return nil
+}
+
+// DeleteModelPricing removes the pricing rows keyed by (model, provider) and
+// reloads the in-memory pricing cache so the model drops out of list-models.
+// Enterprise overrides this method to broadcast a peer reload after commit.
+func (s *BifrostHTTPServer) DeleteModelPricing(ctx context.Context, model string, provider schemas.ModelProvider) (int64, error) {
+	if s.Config == nil || s.Config.ModelCatalog == nil {
+		return 0, fmt.Errorf("model catalog not initialized")
+	}
+	return s.Config.ModelCatalog.DeleteModelPricing(ctx, model, provider)
+}
+
+// RenameModelPricing renames every pricing row keyed by (model, provider) to
+// newModel and reloads the in-memory pricing cache. Enterprise overrides this
+// method to broadcast a peer reload after commit.
+func (s *BifrostHTTPServer) RenameModelPricing(ctx context.Context, model string, provider schemas.ModelProvider, newModel string) (int64, error) {
+	if s.Config == nil || s.Config.ModelCatalog == nil {
+		return 0, fmt.Errorf("model catalog not initialized")
+	}
+	return s.Config.ModelCatalog.RenameModelPricing(ctx, model, provider, newModel)
 }
 
 // ReloadProxyConfig reloads the proxy configuration

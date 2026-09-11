@@ -6,6 +6,7 @@ package modelcatalog
 
 import (
 	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/framework/modelcatalog/live"
 )
 
 // UpsertLive caches one (provider, keyID, unfiltered) list-models response.
@@ -60,6 +61,13 @@ func (mc *ModelCatalog) InvalidateLiveProvider(provider schemas.ModelProvider) {
 // failed list-models call cannot empty a catalog that was valid a moment ago.
 func (mc *ModelCatalog) RetainLiveKeys(provider schemas.ModelProvider, keep map[string]struct{}) {
 	mc.live.RetainKeys(provider, keep)
+}
+
+// RetainLive keeps only the provider's live entries whose (keyID, unfiltered)
+// pair is in keep, dropping the rest in both modes. Used after a sync pass so
+// the provider's live union equals exactly the fresh results.
+func (mc *ModelCatalog) RetainLive(provider schemas.ModelProvider, keep map[live.Key]struct{}) {
+	mc.live.Retain(provider, keep)
 }
 
 // SetKeyConfigForProvider replaces the keyconfig snapshot for one provider.

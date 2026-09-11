@@ -69,6 +69,15 @@ type Store struct {
 	datasheetByProvider    map[schemas.ModelProvider][]string             // rebuilt every reload
 	deprecatedByProvider   map[schemas.ModelProvider][]string             // rebuilt every reload
 
+	// datasheetKeys records the (model|provider|mode) keys present in the last
+	// successfully synced upstream datasheet (URL or bundled copy), independent
+	// of DB state. Used to identify orphan pricing rows — non-custom DB rows
+	// absent from the canonical datasheet — that the Sync button and the
+	// datasheet sync prune. Populated by applyPricingData and the SyncFromURL
+	// DB path; deliberately NOT by LoadFromDB, which mixes DB rows
+	// indiscriminately.
+	datasheetKeys map[string]struct{}
+
 	// Overrides under their own mutex: writes here don't block pricing reads
 	// (the hot CalculateCost path takes mu.RLock and overridesMu.RLock
 	// independently and the orderings never invert).
@@ -99,6 +108,7 @@ func New(configStore configstore.ConfigStore, logger schemas.Logger, cfg Config)
 		supportedParams:        make(map[string][]string),
 		datasheetByProvider:    make(map[schemas.ModelProvider][]string),
 		deprecatedByProvider:   make(map[schemas.ModelProvider][]string),
+		datasheetKeys:          make(map[string]struct{}),
 		url:                    cfg.URL,
 		modelParametersURL:     cfg.ModelParametersURL,
 		syncInterval:           cfg.SyncInterval,
@@ -220,6 +230,17 @@ func (s *Store) GetCapabilityEntry(model string, provider schemas.ModelProvider)
 		return entry
 	}
 	return nil
+}
+
+// IsCustomModel reports whether the pricing row backing (model, provider) was
+// seeded through the management API (Add Custom Model) rather than datasheet
+// sync / key discovery. Exact-name match only — base-model family fallbacks
+// must not leak the custom flag onto datasheet-synced sibling models.
+func (s *Store) IsCustomModel(model string, provider schemas.ModelProvider) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry := s.capabilityEntryForExactUnsafe(model, provider)
+	return entry != nil && entry.IsCustom
 }
 
 // BaseModelName returns the canonical base model name. Uses the pre-computed
@@ -440,7 +461,16 @@ func NewTestStore(baseModelIndex map[string]string) *Store {
 		supportedParams:        make(map[string][]string),
 		datasheetByProvider:    make(map[schemas.ModelProvider][]string),
 		deprecatedByProvider:   make(map[schemas.ModelProvider][]string),
+		datasheetKeys:          make(map[string]struct{}),
 	}
+}
+
+// SetDatasheetKeysForTest replaces the canonical datasheet membership set used
+// for orphan pruning. Test-only seam for packages outside datasheet.
+func (s *Store) SetDatasheetKeysForTest(keys map[string]struct{}) {
+	s.mu.Lock()
+	s.datasheetKeys = keys
+	s.mu.Unlock()
 }
 
 // SetSupportedParamsForTest replaces the supported-parameter index. Test-only

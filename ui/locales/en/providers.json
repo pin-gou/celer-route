@@ -322,8 +322,13 @@
 			"noModels": "No models found for {{provider}}. Click Sync or Add model to add one.",
 			"table": {
 				"modelName": "Model Name",
+				"source": "Source",
 				"status": "Status",
 				"test": "Test"
+			},
+			"source": {
+				"manual": "Manual",
+				"synced": "Synced"
 			},
 			"statusFilter": {
 				"all": "All",
@@ -347,7 +352,9 @@
 			"footerMatching": " matching \"{{query}}\"",
 			"tooltip": {
 				"copyModelId": "Copy provider-qualified model ID",
-				"editAttributes": "Edit model attributes"
+				"editAttributes": "Edit model attributes",
+				"renameModel": "Rename model",
+				"deleteModel": "Delete model"
 			},
 			"toast": {
 				"modelRefreshStarted": "Model refresh started for {{provider}}",
@@ -355,8 +362,36 @@
 				"failedToRefreshModels": "Failed to refresh models for {{provider}}",
 				"modelsTested": "Tested {{count}} models: {{passed}} passed, {{failed}} failed",
 				"failedToTestModels": "Failed to test models",
-				"testFailed": "Failed to test {{model}}"
+				"testFailed": "Failed to test {{model}}",
+				"modelDeleted": "Deleted model {{model}}",
+				"failedToDeleteModel": "Failed to delete model {{model}}"
 			}
+		},
+		"renameCustomModelSheet": {
+			"title": "Rename Custom Model",
+			"description": "Change the model ID clients send for this manually-added model. Pricing rows are renamed; governance rules and key allowlists referencing the old ID are not updated.",
+			"providerLabel": "Provider",
+			"currentModelLabel": "Current model ID",
+			"newModelLabel": "New model ID",
+			"newModelPlaceholder": "e.g. my-selfhosted-model-v2",
+			"newModelHint": "The exact model ID your clients will send in the `model` field after the rename.",
+			"cancel": "Cancel",
+			"rename": "Rename",
+			"saving": "Saving...",
+			"noPermission": "You don't have permission to perform this action",
+			"toast": {
+				"modelNameRequired": "New model ID is required",
+				"sameName": "New model ID must differ from the current one",
+				"modelRenamed": "Renamed model to {{id}}",
+				"failedToRename": "Failed to rename model"
+			}
+		},
+		"deleteModelConfirm": {
+			"title": "Delete model?",
+			"description": "This permanently removes the manually-added model \"{{model}}\" from provider {{provider}}. If the same model is later discovered by a provider key, it will reappear as a synced model.",
+			"cancel": "Cancel",
+			"confirm": "Delete",
+			"deleting": "Deleting..."
 		},
 		"addCustomModelSheet": {
 			"title": "Add Custom Model",

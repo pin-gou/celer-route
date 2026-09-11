@@ -2802,8 +2802,9 @@ func (s *RDBConfigStore) GetModelPrices(ctx context.Context) ([]tables.TableMode
 
 // pricingSyncUpdateColumns is the explicit set of governance_model_pricing
 // columns the pricing sync is allowed to overwrite via ON CONFLICT. Mirrors
-// every column on TableModelPricing except `id` (the primary key) and
-// `additional_attributes` (editorial metadata that must survive sync).
+// every column on TableModelPricing except `id` (the primary key),
+// `additional_attributes` (editorial metadata that must survive sync) and
+// `is_custom` (the management-API manual-flag that must survive sync).
 // Keep this list in lockstep with the table definition in
 // framework/configstore/tables/modelpricing.go.
 var pricingSyncUpdateColumns = []string{
@@ -3025,6 +3026,43 @@ func (s *RDBConfigStore) DeleteModelPrices(ctx context.Context, tx ...*gorm.DB) 
 		txDB = s.DB()
 	}
 	return txDB.WithContext(ctx).Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&tables.TableModelPricing{}).Error
+}
+
+// DeleteModelPrice deletes the pricing rows keyed by (model, provider). Used
+// by the provider detail Models tab to remove a manually-added model. Returns
+// the number of rows deleted; 0 means no such pricing row exists.
+func (s *RDBConfigStore) DeleteModelPrice(ctx context.Context, model, provider string, tx ...*gorm.DB) (int64, error) {
+	var txDB *gorm.DB
+	if len(tx) > 0 {
+		txDB = tx[0]
+	} else {
+		txDB = s.DB()
+	}
+	res := txDB.WithContext(ctx).Where("model = ? AND provider = ?", model, provider).Delete(&tables.TableModelPricing{})
+	if res.Error != nil {
+		return 0, s.parseGormError(res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+// RenameModelPrice renames every pricing row keyed by (model, provider) to
+// newModel. Callers must ensure (newModel, provider) has no existing rows so
+// the (model, provider, mode) unique index is not violated. Returns the number
+// of rows renamed; 0 means no such pricing row exists.
+func (s *RDBConfigStore) RenameModelPrice(ctx context.Context, model, provider, newModel string, tx ...*gorm.DB) (int64, error) {
+	var txDB *gorm.DB
+	if len(tx) > 0 {
+		txDB = tx[0]
+	} else {
+		txDB = s.DB()
+	}
+	res := txDB.WithContext(ctx).Model(&tables.TableModelPricing{}).
+		Where("model = ? AND provider = ?", model, provider).
+		Update("model", newModel)
+	if res.Error != nil {
+		return 0, s.parseGormError(res.Error)
+	}
+	return res.RowsAffected, nil
 }
 
 func (s *RDBConfigStore) GetPricingOverrides(ctx context.Context, filters PricingOverrideFilters) ([]tables.TablePricingOverride, error) {

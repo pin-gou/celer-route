@@ -47,6 +47,11 @@ type Entry struct {
 	Architecture    *schemas.Architecture `json:"architecture,omitempty"`
 	IsDeprecated    bool                  `json:"is_deprecated,omitempty"`
 
+	// IsCustom marks a pricing row seeded through the management API (Add
+	// Custom Model) rather than datasheet sync / key discovery. json:"-"
+	// prevents URL datasheet payloads from ever feeding into this field.
+	IsCustom bool `json:"-"`
+
 	// AdditionalAttributes carries editorial metadata stored on the pricing
 	// row (e.g. description). Populated from the DB read path only; the
 	// json:"-" tag prevents URL datasheet payloads from ever feeding into
@@ -780,6 +785,7 @@ func convertTablePricingToEntry(pricing *configstoreTables.TableModelPricing) *E
 		MaxOutputTokens:      pricing.MaxOutputTokens,
 		Architecture:         pricing.Architecture,
 		IsDeprecated:         pricing.IsDeprecated,
+		IsCustom:             pricing.IsCustom,
 		AdditionalAttributes: pricing.AdditionalAttributes,
 		Options:              options,
 	}

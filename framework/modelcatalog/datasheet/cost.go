@@ -8,6 +8,7 @@ import (
 
 	"github.com/pin-gou/celer-route/core/schemas"
 	configstoreTables "github.com/pin-gou/celer-route/framework/configstore/tables"
+	"gorm.io/gorm"
 )
 
 // CalculateCost calculates the cost of a Bifrost response.
@@ -1512,6 +1513,217 @@ func (s *Store) UpsertModelPricingAttributes(ctx context.Context, model string, 
 		return rows, fmt.Errorf("failed to reload pricing cache after attribute write: %w", err)
 	}
 	return rows, nil
+}
+
+// DeleteModelPricing deletes every pricing row keyed by (model, provider) and
+// reloads the pricing cache so the model drops out of the datasheet view /
+// list-models. Used by the provider detail Models tab to remove a
+// manually-added model. Returns the number of rows deleted (0 = no such
+// pricing row, which callers must surface as a validation error).
+func (s *Store) DeleteModelPricing(ctx context.Context, model string, provider schemas.ModelProvider) (int64, error) {
+	if s.configStore == nil {
+		return 0, fmt.Errorf("model catalog requires a config store")
+	}
+	rows, err := s.configStore.DeleteModelPrice(ctx, model, string(provider))
+	if err != nil {
+		return 0, err
+	}
+	if rows == 0 {
+		return 0, nil
+	}
+	if err := s.LoadFromDB(ctx); err != nil {
+		return rows, fmt.Errorf("failed to reload pricing cache after model delete: %w", err)
+	}
+	return rows, nil
+}
+
+// RenameModelPricing renames every pricing row keyed by (model, provider) to
+// newModel and reloads the pricing cache. Callers must have already verified
+// the row is a custom (manually added) one. The target name is rejected when
+// empty, identical to the current name, or already present for the provider
+// (would violate the (model, provider, mode) unique index). Returns the number
+// of rows renamed (0 = no such pricing row, which callers must surface as a
+// validation error).
+func (s *Store) RenameModelPricing(ctx context.Context, model string, provider schemas.ModelProvider, newModel string) (int64, error) {
+	if s.configStore == nil {
+		return 0, fmt.Errorf("model catalog requires a config store")
+	}
+	newModel = strings.TrimSpace(newModel)
+	if newModel == "" {
+		return 0, fmt.Errorf("new model name must not be empty")
+	}
+	if newModel == model {
+		return 0, fmt.Errorf("new model name must differ from the current name")
+	}
+	if s.pricingRowsExistForModelProvider(newModel, provider) {
+		return 0, fmt.Errorf("model %q already exists for provider %q", newModel, string(provider))
+	}
+	rows, err := s.configStore.RenameModelPrice(ctx, model, string(provider), newModel)
+	if err != nil {
+		return 0, err
+	}
+	if rows == 0 {
+		return 0, nil
+	}
+	if err := s.LoadFromDB(ctx); err != nil {
+		return rows, fmt.Errorf("failed to reload pricing cache after model rename: %w", err)
+	}
+	return rows, nil
+}
+
+// pricingRowsExistForModelProvider reports whether any pricing row exists
+// for (model, provider) across all modes. Caller holds no lock.
+func (s *Store) pricingRowsExistForModelProvider(model string, provider schemas.ModelProvider) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	prefix := model + "|" + normalizeProvider(string(provider)) + "|"
+	for key := range s.pricingData {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// ReconcileProviderPricing deletes every non-custom pricing row for provider
+// whose model is absent from latest, then reloads the pricing cache so the
+// datasheet view / list-models converges to the latest key-discovered results.
+// Custom (manually added) rows are always kept — they exist precisely because
+// no key discovered them. The whole delete set runs inside one transaction.
+// Returns the number of rows deleted. Callers must skip this for providers
+// whose list-models is a strict subset of their callable catalog (e.g.
+// Perplexity, Vertex), where the datasheet is the authoritative superset.
+func (s *Store) ReconcileProviderPricing(ctx context.Context, provider schemas.ModelProvider, latest []string) (int64, error) {
+	if s.configStore == nil {
+		return 0, fmt.Errorf("model catalog requires a config store")
+	}
+	keep := make(map[string]struct{}, len(latest))
+	for _, m := range latest {
+		keep[m] = struct{}{}
+	}
+	records, err := s.configStore.GetModelPrices(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var deleted int64
+	err = s.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
+		for _, p := range records {
+			if normalizeProvider(p.Provider) != string(provider) {
+				continue
+			}
+			if p.IsCustom {
+				continue
+			}
+			if _, ok := keep[p.Model]; ok {
+				continue
+			}
+			n, err := s.configStore.DeleteModelPrice(ctx, p.Model, p.Provider, tx)
+			if err != nil {
+				return err
+			}
+			deleted += n
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if deleted > 0 {
+		if err := s.LoadFromDB(ctx); err != nil {
+			return deleted, fmt.Errorf("failed to reload pricing cache after provider reconcile: %w", err)
+		}
+	}
+	return deleted, nil
+}
+
+// pruneOrphans deletes every non-custom pricing row whose (model, provider,
+// mode) key is absent from keep — the canonical datasheet membership set just
+// synced — then reloads the pricing cache. Returns the number of rows deleted.
+func (s *Store) pruneOrphans(ctx context.Context, keep map[string]struct{}) (int64, error) {
+	if s.configStore == nil {
+		return 0, fmt.Errorf("model catalog requires a config store")
+	}
+	records, err := s.configStore.GetModelPrices(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var deleted int64
+	err = s.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
+		for _, p := range records {
+			if p.IsCustom {
+				continue
+			}
+			key := makeKey(p.Model, normalizeProvider(p.Provider), p.Mode)
+			if _, ok := keep[key]; ok {
+				continue
+			}
+			n, err := s.configStore.DeleteModelPrice(ctx, p.Model, p.Provider, tx)
+			if err != nil {
+				return err
+			}
+			deleted += n
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if deleted > 0 {
+		if err := s.LoadFromDB(ctx); err != nil {
+			return deleted, fmt.Errorf("failed to reload pricing cache after orphan prune: %w", err)
+		}
+	}
+	return deleted, nil
+}
+
+// PruneOrphanPricingForProvider deletes every non-custom pricing row for
+// provider that is absent from the last successfully synced datasheet, then
+// reloads the pricing cache. Custom (manually added) rows always survive.
+// Used by the Sync button so stale entries (e.g. a model registered long ago
+// that the datasheet never contained) disappear even when the provider's key
+// list-models call fails. Returns the number of rows deleted.
+func (s *Store) PruneOrphanPricingForProvider(ctx context.Context, provider schemas.ModelProvider) (int64, error) {
+	if s.configStore == nil {
+		return 0, fmt.Errorf("model catalog requires a config store")
+	}
+	s.mu.RLock()
+	datasheetKeys := s.datasheetKeys
+	s.mu.RUnlock()
+
+	records, err := s.configStore.GetModelPrices(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var deleted int64
+	err = s.configStore.ExecuteTransaction(ctx, func(tx *gorm.DB) error {
+		for _, p := range records {
+			if normalizeProvider(p.Provider) != string(provider) {
+				continue
+			}
+			if p.IsCustom {
+				continue
+			}
+			key := makeKey(p.Model, normalizeProvider(p.Provider), p.Mode)
+			if _, ok := datasheetKeys[key]; ok {
+				continue
+			}
+			n, err := s.configStore.DeleteModelPrice(ctx, p.Model, p.Provider, tx)
+			if err != nil {
+				return err
+			}
+			deleted += n
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if deleted > 0 {
+		if err := s.LoadFromDB(ctx); err != nil {
+			return deleted, fmt.Errorf("failed to reload pricing cache after orphan prune: %w", err)
+		}
+	}
+	return deleted, nil
 }
 
 // ---------------------------------------------------------------------------

@@ -322,8 +322,13 @@
 			"noModels": "未找到 {{provider}} 的模型。点击同步或添加模型来添加。",
 			"table": {
 				"modelName": "模型名称",
+				"source": "来源",
 				"status": "状态",
 				"test": "测试"
+			},
+			"source": {
+				"manual": "手工添加",
+				"synced": "自动同步"
 			},
 			"statusFilter": {
 				"all": "全部",
@@ -347,7 +352,9 @@
 			"footerMatching": " 匹配 \"{{query}}\"",
 			"tooltip": {
 				"copyModelId": "复制提供商限定模型 ID",
-				"editAttributes": "编辑模型属性"
+				"editAttributes": "编辑模型属性",
+				"renameModel": "重命名模型",
+				"deleteModel": "删除模型"
 			},
 			"toast": {
 				"modelRefreshStarted": "{{provider}} 的模型刷新已开始",
@@ -355,8 +362,36 @@
 				"failedToRefreshModels": "{{provider}} 的模型刷新失败",
 				"modelsTested": "已测试 {{count}} 个模型：{{passed}} 通过，{{failed}} 失败",
 				"failedToTestModels": "测试模型失败",
-				"testFailed": "测试 {{model}} 失败"
+				"testFailed": "测试 {{model}} 失败",
+				"modelDeleted": "已删除模型 {{model}}",
+				"failedToDeleteModel": "删除模型 {{model}} 失败"
 			}
+		},
+		"renameCustomModelSheet": {
+			"title": "重命名自定义模型",
+			"description": "更改客户端为此手工添加的模型发送的模型 ID。定价行会被重命名；引用旧 ID 的治理规则和密钥允许列表不会更新。",
+			"providerLabel": "提供商",
+			"currentModelLabel": "当前模型 ID",
+			"newModelLabel": "新模型 ID",
+			"newModelPlaceholder": "例如 my-selfhosted-model-v2",
+			"newModelHint": "重命名后您的客户端在 `model` 字段中发送的确切模型 ID。",
+			"cancel": "取消",
+			"rename": "重命名",
+			"saving": "保存中...",
+			"noPermission": "您没有执行此操作的权限",
+			"toast": {
+				"modelNameRequired": "新模型 ID 不能为空",
+				"sameName": "新模型 ID 必须与当前名称不同",
+				"modelRenamed": "已将模型重命名为 {{id}}",
+				"failedToRename": "重命名模型失败"
+			}
+		},
+		"deleteModelConfirm": {
+			"title": "删除模型？",
+			"description": "这将永久移除提供商 {{provider}} 下手工添加的模型 \"{{model}}\"。如果之后该模型被提供商密钥发现，它将作为自动同步模型重新出现。",
+			"cancel": "取消",
+			"confirm": "删除",
+			"deleting": "删除中..."
 		},
 		"addCustomModelSheet": {
 			"title": "添加自定义模型",

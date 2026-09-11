@@ -11,6 +11,9 @@
 	"table": {
 		"provider": "Provider",
 		"model": "Model",
+		"source": "Source",
+		"sourceManual": "Manual",
+		"sourceSynced": "Synced",
 		"input": "Input",
 		"output": "Output",
 		"cacheWrite": "Cache Write",

@@ -43,6 +43,14 @@ type ModelsManager interface {
 	// key of the provider on demand. Returns ErrRefreshInProgress when the
 	// provider is already being refreshed.
 	RefreshLiveModelsForAllKeys(ctx context.Context, provider schemas.ModelProvider) error
+	// DeleteModelPricing removes the pricing rows keyed by (model, provider)
+	// and reloads the pricing cache. Only custom (manually added) models may
+	// be deleted — callers must enforce that.
+	DeleteModelPricing(ctx context.Context, model string, provider schemas.ModelProvider) (int64, error)
+	// RenameModelPricing renames the pricing rows keyed by (model, provider)
+	// and reloads the pricing cache. Only custom (manually added) models may
+	// be renamed — callers must enforce that.
+	RenameModelPricing(ctx context.Context, model string, provider schemas.ModelProvider, newModel string) (int64, error)
 }
 
 // ErrRefreshInProgress is returned by the on-demand model refresh entrypoints
@@ -221,6 +229,8 @@ func (h *ProviderHandler) RegisterRoutes(r *router.Router, middlewares ...schema
 	r.GET("/api/models/parameters", lib.ChainMiddlewares(h.getModelParameters, middlewares...))
 	r.GET("/api/models/base", lib.ChainMiddlewares(h.listBaseModels, middlewares...))
 	r.PUT("/api/models/catalog", lib.ChainMiddlewares(h.upsertModelCatalogEntries, middlewares...))
+	r.DELETE("/api/models/catalog", lib.ChainMiddlewares(h.deleteModelCatalogEntry, middlewares...))
+	r.POST("/api/models/catalog/rename", lib.ChainMiddlewares(h.renameModelCatalogEntry, middlewares...))
 }
 
 // listProviders handles GET /api/providers - List all providers
@@ -757,6 +767,10 @@ type ModelDetailsResponse struct {
 	CacheReadCost        *float64              `json:"cache_read_input_token_cost,omitempty"`
 	Architecture         *schemas.Architecture `json:"architecture,omitempty"`
 	IsDeprecated         bool                  `json:"is_deprecated,omitempty"`
+	// IsCustom reports whether the pricing row backing this model was seeded
+	// through the management API (Add Custom Model) rather than datasheet sync
+	// or key discovery. Only custom models may be renamed/deleted.
+	IsCustom             bool                  `json:"is_custom,omitempty"`
 	AdditionalAttributes map[string]string     `json:"additional_attributes,omitempty"`
 	AccessibleByKeys     []string              `json:"accessible_by_keys,omitempty"`
 }
@@ -877,6 +891,7 @@ func (h *ProviderHandler) listModelDetails(ctx *fasthttp.RequestCtx) {
 			details.CacheReadCost = capabilities.CacheReadInputTokenCost
 			details.Architecture = capabilities.Architecture
 			details.IsDeprecated = capabilities.IsDeprecated
+			details.IsCustom = capabilities.IsCustom
 			details.AdditionalAttributes = capabilities.AdditionalAttributes
 		}
 		responseModels = append(responseModels, details)
@@ -1508,6 +1523,85 @@ func (h *ProviderHandler) upsertModelCatalogEntries(ctx *fasthttp.RequestCtx) {
 
 	if err := h.modelsManager.UpsertModelPricingAttributes(ctx, payload); err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to upsert catalog entries: %v", err))
+		return
+	}
+	ctx.SetStatusCode(fasthttp.StatusNoContent)
+}
+
+// isCustomModel reports whether the (model, provider) pricing row was seeded
+// through the management API. Only custom (manually added) models may be
+// renamed or deleted from the provider detail Models tab.
+func (h *ProviderHandler) isCustomModel(model string, provider schemas.ModelProvider) bool {
+	if h.inMemoryStore == nil || h.inMemoryStore.ModelCatalog == nil {
+		return false
+	}
+	return h.inMemoryStore.ModelCatalog.IsCustomModel(model, provider)
+}
+
+// deleteModelCatalogEntry handles DELETE /api/models/catalog — removes the
+// pricing rows keyed by (model, provider) via the model + provider query
+// parameters. Only custom (manually added) models may be deleted; a model
+// synced from the datasheet or key discovery returns 400.
+func (h *ProviderHandler) deleteModelCatalogEntry(ctx *fasthttp.RequestCtx) {
+	model := strings.TrimSpace(string(ctx.QueryArgs().Peek("model")))
+	provider := strings.TrimSpace(string(ctx.QueryArgs().Peek("provider")))
+	if model == "" || provider == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "model and provider query parameters are required")
+		return
+	}
+	providerName := schemas.ModelProvider(provider)
+	if !h.isCustomModel(model, providerName) {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("model %s/%s is not a manually added model and cannot be deleted", provider, model))
+		return
+	}
+	rows, err := h.modelsManager.DeleteModelPricing(ctx, model, providerName)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to delete model: %v", err))
+		return
+	}
+	if rows == 0 {
+		SendError(ctx, fasthttp.StatusNotFound, fmt.Sprintf("no pricing row for model %s/%s", provider, model))
+		return
+	}
+	ctx.SetStatusCode(fasthttp.StatusNoContent)
+}
+
+// RenameModelCatalogRequest is the body of POST /api/models/catalog/rename.
+type RenameModelCatalogRequest struct {
+	Model    string `json:"model"`
+	Provider string `json:"provider"`
+	NewModel string `json:"new_model"`
+}
+
+// renameModelCatalogEntry handles POST /api/models/catalog/rename — renames
+// every pricing row keyed by (model, provider) to new_model. Only custom
+// (manually added) models may be renamed; a model synced from the datasheet
+// or key discovery returns 400.
+func (h *ProviderHandler) renameModelCatalogEntry(ctx *fasthttp.RequestCtx) {
+	var payload RenameModelCatalogRequest
+	if err := sonic.Unmarshal(ctx.PostBody(), &payload); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	payload.Model = strings.TrimSpace(payload.Model)
+	payload.Provider = strings.TrimSpace(payload.Provider)
+	payload.NewModel = strings.TrimSpace(payload.NewModel)
+	if payload.Model == "" || payload.Provider == "" || payload.NewModel == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "model, provider and new_model are required")
+		return
+	}
+	providerName := schemas.ModelProvider(payload.Provider)
+	if !h.isCustomModel(payload.Model, providerName) {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("model %s/%s is not a manually added model and cannot be renamed", payload.Provider, payload.Model))
+		return
+	}
+	rows, err := h.modelsManager.RenameModelPricing(ctx, payload.Model, providerName, payload.NewModel)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("failed to rename model: %v", err))
+		return
+	}
+	if rows == 0 {
+		SendError(ctx, fasthttp.StatusNotFound, fmt.Sprintf("no pricing row for model %s/%s", payload.Provider, payload.Model))
 		return
 	}
 	ctx.SetStatusCode(fasthttp.StatusNoContent)

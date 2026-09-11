@@ -32,6 +32,10 @@ func (s *Store) SyncFromURL(ctx context.Context) error {
 	pricingData, err := withRetries(ctx, urlFetchMaxRetries, urlFetchMaxBackoff, func() (map[string]Entry, error) {
 		return s.loadPricingFromURL(ctx)
 	})
+	// Only a successful URL fetch gives us an authoritative canonical catalog.
+	// The bundled-copy fallback below may be older than the remote datasheet,
+	// so pruning against it could delete rows that ARE in the remote sheet.
+	fromURL := err == nil
 	if err != nil {
 		// URL failed — fall back to existing DB records when we have them.
 		dbHasRecords := false
@@ -86,6 +90,20 @@ func (s *Store) SyncFromURL(ctx context.Context) error {
 
 		if err := s.LoadFromDB(ctx); err != nil {
 			return fmt.Errorf("failed to reload pricing cache: %w", err)
+		}
+
+		// When the sync came from the real datasheet URL, record the canonical
+		// membership and drop orphan pricing rows — non-custom DB rows absent
+		// from the datasheet (e.g. a model registered long ago that the sheet
+		// never contained). Without this they accumulate forever, since the
+		// batched upsert above only ever writes rows that ARE in the datasheet.
+		if fromURL && len(seen) > 0 {
+			s.setDatasheetKeys(seen)
+			if deleted, err := s.pruneOrphans(ctx, seen); err != nil {
+				return fmt.Errorf("failed to prune orphan pricing rows after datasheet sync: %w", err)
+			} else if deleted > 0 && s.logger != nil {
+				s.logger.Info("datasheet sync pruned %d orphan pricing rows not in the upstream datasheet", deleted)
+			}
 		}
 	} else {
 		// No config store — apply the parsed data directly to in-memory state.
@@ -159,16 +177,30 @@ func (s *Store) LoadFromURLIntoMemory(ctx context.Context) error {
 
 // applyPricingData replaces the in-memory pricing cache + datasheet view
 // from a freshly-parsed URL payload. Used by the LoadFromURLIntoMemory
-// path and the no-configstore SyncFromURL fallback.
+// path and the no-configstore SyncFromURL fallback. Also records the
+// canonical datasheet membership set used for orphan pruning.
 func (s *Store) applyPricingData(pricingData map[string]Entry) {
 	s.mu.Lock()
 	s.pricingData = make(map[string]configstoreTables.TableModelPricing, len(pricingData))
+	keys := make(map[string]struct{}, len(pricingData))
 	for modelKey, entry := range pricingData {
 		pricing := convertEntryToTablePricing(modelKey, entry)
 		key := makeKey(pricing.Model, pricing.Provider, pricing.Mode)
 		s.pricingData[key] = pricing
+		keys[key] = struct{}{}
 	}
+	s.datasheetKeys = keys
 	s.rebuildDatasheetViewUnsafe()
+	s.mu.Unlock()
+}
+
+// setDatasheetKeys replaces the canonical datasheet membership set used for
+// orphan pruning. Separate from applyPricingData because the config-store
+// SyncFromURL path persists rows to the DB and reloads via LoadFromDB rather
+// than applyPricingData.
+func (s *Store) setDatasheetKeys(keys map[string]struct{}) {
+	s.mu.Lock()
+	s.datasheetKeys = keys
 	s.mu.Unlock()
 }
 

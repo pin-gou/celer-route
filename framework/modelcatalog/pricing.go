@@ -72,6 +72,47 @@ func (mc *ModelCatalog) UpsertModelPricingAttributes(ctx context.Context, model 
 	return mc.datasheet.UpsertModelPricingAttributes(ctx, model, provider, attrs)
 }
 
+// DeleteModelPricing deletes the pricing rows keyed by (model, provider) and
+// reloads the pricing cache. Returns the number of rows deleted.
+func (mc *ModelCatalog) DeleteModelPricing(ctx context.Context, model string, provider schemas.ModelProvider) (int64, error) {
+	return mc.datasheet.DeleteModelPricing(ctx, model, provider)
+}
+
+// RenameModelPricing renames every pricing row keyed by (model, provider) to
+// newModel and reloads the pricing cache. Returns the number of rows renamed.
+func (mc *ModelCatalog) RenameModelPricing(ctx context.Context, model string, provider schemas.ModelProvider, newModel string) (int64, error) {
+	return mc.datasheet.RenameModelPricing(ctx, model, provider, newModel)
+}
+
+// ReconcileProviderPricing deletes every non-custom pricing row for provider
+// whose model is absent from latest, so the datasheet view converges to the
+// latest key-discovered results. Skipped for providers whose /v1/models is a
+// strict subset of their callable catalog (providersWithPartialListModels),
+// where the datasheet is authoritative and must not be pruned. Custom rows are
+// always kept. Returns the number of rows deleted.
+func (mc *ModelCatalog) ReconcileProviderPricing(ctx context.Context, provider schemas.ModelProvider, latest []string) (int64, error) {
+	if providersWithPartialListModels[provider] {
+		return 0, nil
+	}
+	return mc.datasheet.ReconcileProviderPricing(ctx, provider, latest)
+}
+
+// PruneOrphanPricingForProvider deletes every non-custom pricing row for
+// provider that is absent from the last successfully synced datasheet. Custom
+// rows always survive. Used by the Sync button so stale entries disappear
+// even when the provider's key list-models call fails. Returns the number of
+// rows deleted.
+func (mc *ModelCatalog) PruneOrphanPricingForProvider(ctx context.Context, provider schemas.ModelProvider) (int64, error) {
+	return mc.datasheet.PruneOrphanPricingForProvider(ctx, provider)
+}
+
+// IsCustomModel reports whether the pricing row backing (model, provider) was
+// seeded through the management API (Add Custom Model). Only custom models may
+// be renamed/deleted from the provider detail Models tab.
+func (mc *ModelCatalog) IsCustomModel(model string, provider schemas.ModelProvider) bool {
+	return mc.datasheet.IsCustomModel(model, provider)
+}
+
 func (mc *ModelCatalog) SetPricingOverrides(rows []configstoreTables.TablePricingOverride) error {
 	return mc.datasheet.SetOverrides(rows)
 }

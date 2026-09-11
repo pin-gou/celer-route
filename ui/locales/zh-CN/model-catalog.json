@@ -11,6 +11,9 @@
 	"table": {
 		"provider": "提供商",
 		"model": "模型",
+		"source": "来源",
+		"sourceManual": "手工添加",
+		"sourceSynced": "自动同步",
 		"input": "输入",
 		"output": "输出",
 		"cacheWrite": "缓存写入",

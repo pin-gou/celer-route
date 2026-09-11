@@ -170,6 +170,38 @@ func (s *Store) RetainKeys(provider schemas.ModelProvider, keep map[string]struc
 	s.mu.Unlock()
 }
 
+// Retain drops the provider's entries whose (keyID, unfiltered) pair is absent
+// from keep, leaving the named entries untouched. It is the per-entry
+// counterpart to RetainKeys: a caller that just completed a refresh pass uses
+// it to drop the keys/modes that failed this pass, so the provider's live union
+// equals exactly the fresh results rather than a mix of fresh and stale. Bumps
+// the provider's generation like RetainKeys.
+//
+// keep is read-only and is not retained by the store. A nil or empty keep is
+// equivalent to InvalidateProvider.
+func (s *Store) Retain(provider schemas.ModelProvider, keep map[Key]struct{}) {
+	s.mu.Lock()
+	for k := range s.entries {
+		if k.Provider != provider {
+			continue
+		}
+		// keep keys may or may not carry Provider; match on (KeyID, mode).
+		kept := false
+		for keepKey := range keep {
+			if keepKey.KeyID == k.KeyID && keepKey.Unfiltered == k.Unfiltered {
+				kept = true
+				break
+			}
+		}
+		if kept {
+			continue
+		}
+		delete(s.entries, k)
+	}
+	s.bumpLocked(provider)
+	s.mu.Unlock()
+}
+
 // ModelsForProvider returns the union of filtered entries for the provider,
 // sorted. Filtered entries are pre-gated so this is the effective allowed set
 // across the provider's keys.

@@ -2787,6 +2787,63 @@ func TestUpsertModelPricesBatch_SQLite(t *testing.T) {
 	assert.InDelta(t, 0.000005, *updated.InputCostPerToken, 1e-9)
 }
 
+func TestPricingSyncUpdateColumns_ExcludesEditorialAndCustomFlags(t *testing.T) {
+	// is_custom and additional_attributes must never be overwritten by the
+	// 24-hour datasheet sync, otherwise manual-model markers / user-set
+	// metadata would be silently reset.
+	require.NotContains(t, pricingSyncUpdateColumns, "is_custom")
+	require.NotContains(t, pricingSyncUpdateColumns, "additional_attributes")
+	require.NotContains(t, pricingSyncUpdateColumns, "id")
+}
+
+func TestDeleteModelPrice_SQLite(t *testing.T) {
+	s := setupRDBTestStore(t)
+	require.NoError(t, s.DB().AutoMigrate(&tables.TableModelPricing{}))
+
+	ctx := context.Background()
+	require.NoError(t, s.UpsertModelPrices(ctx, &tables.TableModelPricing{Model: "my-model", Provider: "openai", Mode: "chat", IsCustom: true}))
+	require.NoError(t, s.UpsertModelPrices(ctx, &tables.TableModelPricing{Model: "my-model", Provider: "openai", Mode: "embedding", IsCustom: true}))
+	require.NoError(t, s.UpsertModelPrices(ctx, &tables.TableModelPricing{Model: "other-model", Provider: "openai", Mode: "chat", IsCustom: true}))
+
+	rows, err := s.DeleteModelPrice(ctx, "my-model", "openai")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), rows, "both mode rows for the model must be deleted")
+
+	got, err := s.GetModelPrices(ctx)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "other-model", got[0].Model)
+
+	rows, err = s.DeleteModelPrice(ctx, "ghost", "openai")
+	require.NoError(t, err)
+	require.Equal(t, int64(0), rows, "unknown model deletes zero rows")
+}
+
+func TestRenameModelPrice_SQLite(t *testing.T) {
+	s := setupRDBTestStore(t)
+	require.NoError(t, s.DB().AutoMigrate(&tables.TableModelPricing{}))
+
+	ctx := context.Background()
+	require.NoError(t, s.UpsertModelPrices(ctx, &tables.TableModelPricing{Model: "my-model", Provider: "openai", Mode: "chat", IsCustom: true}))
+	require.NoError(t, s.UpsertModelPrices(ctx, &tables.TableModelPricing{Model: "my-model", Provider: "openai", Mode: "embedding", IsCustom: true}))
+
+	rows, err := s.RenameModelPrice(ctx, "my-model", "openai", "my-model-v2")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), rows, "both mode rows for the model must be renamed")
+
+	got, err := s.GetModelPrices(ctx)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	for _, p := range got {
+		require.Equal(t, "my-model-v2", p.Model)
+		require.True(t, p.IsCustom, "is_custom must survive rename")
+	}
+
+	rows, err = s.RenameModelPrice(ctx, "ghost", "openai", "ghost-v2")
+	require.NoError(t, err)
+	require.Equal(t, int64(0), rows, "unknown model renames zero rows")
+}
+
 func TestUpsertModelParametersBatch_SQLite(t *testing.T) {
 	s := setupRDBTestStore(t)
 	require.NoError(t, s.DB().AutoMigrate(&tables.TableModelParameters{}))

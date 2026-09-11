@@ -112,6 +112,46 @@ func TestRetainKeysDropsOnlyMissingKeys(t *testing.T) {
 	}
 }
 
+func TestRetainKeepsOnlyListedModesOfListedKeys(t *testing.T) {
+	s := New(nil)
+	upsertFiltered(s, openai, "k1", []string{"gpt-4o"})
+	upsertUnfiltered(s, openai, "k1", []string{"gpt-4o", "gpt-4o-mini"})
+	upsertFiltered(s, openai, "k2", []string{"o1"})
+	upsertUnfiltered(s, openai, "k2", []string{"o1", "o1-mini"})
+	upsertFiltered(s, anthropic, "k9", []string{"claude-3-5-sonnet"})
+
+	// Only k1's unfiltered entry "survived" this pass: k1 filtered, k2 both
+	// modes must be dropped.
+	s.Retain(openai, map[Key]struct{}{
+		{KeyID: "k1", Unfiltered: true}: {},
+	})
+
+	if got := s.ModelsForProvider(openai); len(got) != 0 {
+		t.Errorf("filtered after Retain = %v, want empty (k1 filtered and k2 dropped)", got)
+	}
+	if got := s.UnfilteredModelsForProvider(openai); !slices.Equal(got, []string{"gpt-4o", "gpt-4o-mini"}) {
+		t.Errorf("unfiltered after Retain = %v, want [gpt-4o gpt-4o-mini]", got)
+	}
+	if got := s.ModelsForProvider(anthropic); !slices.Equal(got, []string{"claude-3-5-sonnet"}) {
+		t.Errorf("other provider must be untouched, got %v", got)
+	}
+}
+
+func TestRetainEmptyKeepSetDropsAll(t *testing.T) {
+	s := New(nil)
+	upsertFiltered(s, openai, "k1", []string{"gpt-4o"})
+	upsertUnfiltered(s, openai, "k1", []string{"gpt-4o", "o1"})
+
+	s.Retain(openai, nil)
+
+	if got := s.ModelsForProvider(openai); len(got) != 0 {
+		t.Errorf("filtered after empty Retain = %v, want empty", got)
+	}
+	if got := s.UnfilteredModelsForProvider(openai); len(got) != 0 {
+		t.Errorf("unfiltered after empty Retain = %v, want empty", got)
+	}
+}
+
 func TestRetainKeysEmptyKeepSetDropsAll(t *testing.T) {
 	for _, tt := range []struct {
 		name string

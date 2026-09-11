@@ -48,6 +48,10 @@ export interface ModelDetails {
 	cache_read_input_token_cost?: number;
 	architecture?: unknown;
 	is_deprecated?: boolean;
+	// is_custom marks a model registered through the Add Custom Model sheet
+	// rather than datasheet sync / key discovery. Only custom models can be
+	// renamed or deleted from the provider detail Models tab.
+	is_custom?: boolean;
 	additional_attributes?: Record<string, string>;
 	accessible_by_keys?: string[];
 }
@@ -491,6 +495,27 @@ export const providersApi = baseApi.injectEndpoints({
 			invalidatesTags: ["Models"],
 		}),
 
+		// Delete the pricing rows keyed by (model, provider). Only custom
+		// (manually added) models may be deleted; synced models return 400.
+		deleteModelCatalogEntry: builder.mutation<void, { model: string; provider: string }>({
+			query: ({ model, provider }) => ({
+				url: `/models/catalog?model=${encodeURIComponent(model)}&provider=${encodeURIComponent(provider)}`,
+				method: "DELETE",
+			}),
+			invalidatesTags: ["Models"],
+		}),
+
+		// Rename the pricing rows keyed by (model, provider) to new_model. Only
+		// custom (manually added) models may be renamed; synced models return 400.
+		renameModelCatalogEntry: builder.mutation<void, { model: string; provider: string; new_model: string }>({
+			query: ({ model, provider, new_model }) => ({
+				url: "/models/catalog/rename",
+				method: "POST",
+				body: { model, provider, new_model },
+			}),
+			invalidatesTags: ["Models"],
+		}),
+
 		// Batch update provider keys (enable/disable multiple keys at once)
 		batchUpdateProviderKeys: builder.mutation<
 			{ updated: number; key_ids: string[] },
@@ -562,6 +587,8 @@ export const {
 	useGetModelDetailsQuery,
 	useLazyGetModelDetailsQuery,
 	useUpsertModelCatalogEntriesMutation,
+	useDeleteModelCatalogEntryMutation,
+	useRenameModelCatalogEntryMutation,
 	useBatchUpdateProviderKeysMutation,
 	useTestProviderModelMutation,
 	useTestProviderModelsMutation,

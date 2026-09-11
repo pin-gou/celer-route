@@ -461,6 +461,17 @@ type ConfigStore interface {
 	UpsertModelPricesBatch(ctx context.Context, pricing []tables.TableModelPricing, tx ...*gorm.DB) error
 	DeleteModelPrices(ctx context.Context, tx ...*gorm.DB) error
 
+	// DeleteModelPrice deletes the pricing rows keyed by (model, provider).
+	// Returns the number of rows deleted (0 = no such pricing row, which
+	// callers must surface as a validation error).
+	DeleteModelPrice(ctx context.Context, model, provider string, tx ...*gorm.DB) (int64, error)
+
+	// RenameModelPrice renames every pricing row keyed by (model, provider) to
+	// newModel. Callers must verify (newModel, provider) has no existing rows
+	// first so the (model, provider, mode) unique index is not violated.
+	// Returns the number of rows renamed.
+	RenameModelPrice(ctx context.Context, model, provider, newModel string, tx ...*gorm.DB) (int64, error)
+
 	// UpsertModelPricingAttributes writes only the additional_attributes column
 	// on the pricing rows keyed by (model, provider). Returns the number of
 	// rows updated; 0 means no such pricing row exists.

@@ -19,6 +19,12 @@ type TableModelPricing struct {
 	MaxOutputTokens *int                  `gorm:"default:null" json:"max_output_tokens,omitempty"`
 	Architecture    *schemas.Architecture `gorm:"type:text;serializer:json;default:null" json:"architecture,omitempty"`
 	IsDeprecated    bool                  `gorm:"default:false;column:is_deprecated" json:"is_deprecated"`
+	// IsCustom marks a pricing row seeded through the management API (Add
+	// Custom Model) rather than the datasheet sync or a provider key's
+	// list-models discovery. Only custom rows may be renamed/deleted from the
+	// provider detail Models tab. Excluded from the pricing-sync update
+	// columns so the 24-hour datasheet sync never resets it.
+	IsCustom bool `gorm:"default:false;column:is_custom" json:"is_custom"`
 
 	// Costs - Text
 	InputCostPerToken          *float64 `gorm:"default:null" json:"input_cost_per_token,omitempty"`

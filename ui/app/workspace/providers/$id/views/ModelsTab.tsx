@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { CheckCircle2, Copy, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, PencilIcon, PencilLine, PlusIcon, RefreshCwIcon, SearchIcon, Trash2, XCircle } from "lucide-react";
 import {
 	getErrorMessage,
 	ModelDetails,
@@ -15,7 +15,9 @@ import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useDebouncedValue } from "@/hooks/useDebounce";
 import { toast } from "sonner";
 import AttributeSheet from "@/app/workspace/model-catalog/views/attributeSheet";
+import ConfirmDeleteModelDialog from "@/app/workspace/providers/dialogs/confirmDeleteModelDialog";
 import { AddCustomModelSheet } from "./AddCustomModelSheet";
+import { RenameCustomModelSheet } from "./RenameCustomModelSheet";
 
 interface ModelsTabProps {
 	provider: ModelProvider;
@@ -58,6 +60,8 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 
 	const [editingModel, setEditingModel] = useState<ModelDetails | null>(null);
 	const [showAddModelSheet, setShowAddModelSheet] = useState(false);
+	const [renameModel, setRenameModel] = useState<ModelDetails | null>(null);
+	const [deleteModel, setDeleteModel] = useState<ModelDetails | null>(null);
 
 	const models = modelsData?.models ?? [];
 	const total = modelsData?.total ?? 0;
@@ -237,6 +241,7 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 						<thead>
 							<tr className="text-muted-foreground border-b">
 								<th className="px-4 py-2 font-medium">{t("providers2.modelsTab.table.modelName")}</th>
+								<th className="w-28 px-2 py-2 font-medium">{t("providers2.modelsTab.table.source")}</th>
 								<th className="w-28 px-2 py-2 font-medium">{t("providers2.modelsTab.table.status")}</th>
 								<th className="w-20 px-2 py-2 font-medium">{t("providers2.modelsTab.table.test")}</th>
 								<th className="w-20 px-2 py-2 font-medium"></th>
@@ -267,6 +272,23 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 													<TooltipContent>{t("providers2.modelsTab.tooltip.copyModelId")}</TooltipContent>
 												</Tooltip>
 											</span>
+										</td>
+										<td className="px-2 py-2">
+											{model.is_custom ? (
+												<span
+													data-testid={`providers2-models-source-${model.name}`}
+													className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700"
+												>
+													{t("providers2.modelsTab.source.manual")}
+												</span>
+											) : (
+												<span
+													data-testid={`providers2-models-source-${model.name}`}
+													className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+												>
+													{t("providers2.modelsTab.source.synced")}
+												</span>
+											)}
 										</td>
 										<td className="px-2 py-2">
 											{model.is_deprecated ? (
@@ -305,19 +327,51 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 											</Button>
 										</td>
 										<td className="px-2 py-2">
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<button
-														onClick={() => setEditingModel(model)}
-														className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
-														disabled={!hasUpdateAccess}
-														data-testid={`providers2-models-edit-${model.name}`}
-													>
-														<PencilIcon className="h-3.5 w-3.5" />
-													</button>
-												</TooltipTrigger>
-												<TooltipContent>{t("providers2.modelsTab.tooltip.editAttributes")}</TooltipContent>
-											</Tooltip>
+											<div className="flex items-center justify-end gap-1">
+												{model.is_custom && (
+													<>
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<button
+																	onClick={() => setRenameModel(model)}
+																	className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+																	disabled={!hasUpdateAccess}
+																	data-testid={`providers2-models-rename-${model.name}`}
+																>
+																	<PencilLine className="h-3.5 w-3.5" />
+																</button>
+															</TooltipTrigger>
+															<TooltipContent>{t("providers2.modelsTab.tooltip.renameModel")}</TooltipContent>
+														</Tooltip>
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<button
+																	onClick={() => setDeleteModel(model)}
+																	className="text-muted-foreground rounded p-1 transition-colors hover:text-red-600"
+																	disabled={!hasUpdateAccess}
+																	data-testid={`providers2-models-delete-${model.name}`}
+																>
+																	<Trash2 className="h-3.5 w-3.5" />
+																</button>
+															</TooltipTrigger>
+															<TooltipContent>{t("providers2.modelsTab.tooltip.deleteModel")}</TooltipContent>
+														</Tooltip>
+													</>
+												)}
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<button
+															onClick={() => setEditingModel(model)}
+															className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+															disabled={!hasUpdateAccess}
+															data-testid={`providers2-models-edit-${model.name}`}
+														>
+															<PencilIcon className="h-3.5 w-3.5" />
+														</button>
+													</TooltipTrigger>
+													<TooltipContent>{t("providers2.modelsTab.tooltip.editAttributes")}</TooltipContent>
+												</Tooltip>
+											</div>
 										</td>
 									</tr>
 								);
@@ -353,6 +407,28 @@ export function ModelsTab({ provider }: ModelsTabProps) {
 					provider={provider}
 					onClose={() => {
 						setShowAddModelSheet(false);
+						refetch();
+					}}
+				/>
+			)}
+			{renameModel && (
+				<RenameCustomModelSheet
+					provider={provider}
+					model={renameModel}
+					onClose={() => {
+						setRenameModel(null);
+						refetch();
+					}}
+				/>
+			)}
+			{deleteModel && (
+				<ConfirmDeleteModelDialog
+					show={!!deleteModel}
+					model={deleteModel}
+					provider={provider}
+					onCancel={() => setDeleteModel(null)}
+					onDelete={() => {
+						setDeleteModel(null);
 						refetch();
 					}}
 				/>
