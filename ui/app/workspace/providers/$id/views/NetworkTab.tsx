@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { DefaultNetworkConfig } from "@/lib/constants/config";
+import { DefaultNetworkConfig, ProviderDefaultBaseUrls } from "@/lib/constants/config";
 import { cn } from "@/lib/utils";
 import { getErrorMessage, setProviderFormDirtyState, useAppDispatch } from "@/lib/store";
 import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
@@ -135,6 +135,9 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 	const baseURLRequired = isCustomProvider;
 	const baseFormat = (provider.custom_provider_config?.base_provider_type as string) || "default";
 	const hideBaseURL = provider.name === "vllm" || provider.name === "ollama" || provider.name === "sgl";
+	const baseURLPlaceholder = isCustomProvider
+		? t("fragments.network.baseUrlPlaceholderCustom")
+		: (ProviderDefaultBaseUrls[provider.name as keyof typeof ProviderDefaultBaseUrls] ?? t("fragments.network.baseUrlPlaceholder"));
 
 	const onSubmit = (data: NetworkAndProxyFormSchema) => {
 		if (baseURLRequired && (data.network_config?.base_url ?? "").trim() === "") {
@@ -209,9 +212,7 @@ export function NetworkTab({ provider }: NetworkTabProps) {
 												{baseURLRequired && <FormDescription>{t(`fragments.network.baseUrlDesc.${baseFormat}`)}</FormDescription>}
 												<FormControl>
 													<Input
-														placeholder={
-															isCustomProvider ? t("fragments.network.baseUrlPlaceholderCustom") : t("fragments.network.baseUrlPlaceholder")
-														}
+														placeholder={baseURLPlaceholder}
 														{...field}
 														value={field.value || ""}
 														disabled={!hasUpdateProviderAccess}

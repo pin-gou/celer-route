@@ -250,6 +250,58 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	gmicloud: "https://gmicloud.ai/",
 };
 
+// Default Base URL per known provider — mirrors the built-in defaults in the
+// Go provider implementations (each provider's NewProvider sets this when
+// network_config.base_url is empty). Shown as the Base URL input placeholder on
+// the Network tab so users can see what the gateway will actually use before
+// they override it. Providers without a static default (azure, bedrock, vertex,
+// ollama/vllm/sgl — which hide the field entirely) are intentionally absent;
+// callers fall back to the generic placeholder for those.
+export const ProviderDefaultBaseUrls: Partial<Record<ProviderName, string>> = {
+	alibaba: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+	alibaba_tokenplan: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+	anthropic: "https://api.anthropic.com",
+	cerebras: "https://api.cerebras.ai",
+	cohere: "https://api.cohere.ai",
+	coze: "https://api.coze.com",
+	coze_cn: "https://api.coze.cn",
+	deepseek: "https://api.deepseek.com",
+	elevenlabs: "https://api.elevenlabs.io",
+	fireworks: "https://api.fireworks.ai/inference",
+	gemini: "https://generativelanguage.googleapis.com/v1beta",
+	gmicloud: "https://api.gmi-serving.com",
+	groq: "https://api.groq.com/openai",
+	huggingface: "https://router.huggingface.co",
+	iflytek: "https://spark-api-open.xf-yun.com",
+	minimax: "https://api.minimaxi.com/anthropic",
+	mistral: "https://api.mistral.ai",
+	modelscope: "https://api-inference.modelscope.cn",
+	moonshot: "https://api.moonshot.cn/v1",
+	nebius: "https://api.tokenfactory.nebius.com",
+	openai: "https://api.openai.com",
+	opencode: "https://opencode.ai/zen",
+	"opencode-go": "https://opencode.ai/zen/go",
+	"opencode-zen": "https://opencode.ai/zen",
+	openrouter: "https://openrouter.ai/api",
+	parasail: "https://api.parasail.io",
+	perplexity: "https://api.perplexity.ai",
+	replicate: "https://api.replicate.com",
+	runway: "https://api.dev.runwayml.com",
+	runware: "https://api.runware.ai/v1",
+	sarvam: "https://api.sarvam.ai",
+	sensenova: "https://token.sensenova.cn",
+	siliconflow: "https://api.siliconflow.cn/v1",
+	stepfun: "https://api.stepfun.com",
+	tencent: "https://api.hunyuan.cloud.tencent.com/v1",
+	volcengine: "https://ark.cn-beijing.volces.com/api/v3",
+	wafer: "https://pass.wafer.ai/v1",
+	xai: "https://api.x.ai",
+	xiaomi_mimo: "https://api.xiaomimimo.com",
+	zhipu: "https://open.bigmodel.cn/api/paas/v4",
+	baidu: "https://qianfan.baidubce.com/v2",
+	baichuan: "https://api.baichuan-ai.com",
+};
+
 export const DefaultNetworkConfig = {
 	base_url: "",
 	default_request_timeout_in_seconds: 300,
