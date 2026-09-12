@@ -35,6 +35,34 @@ func TestArgumentsContainPathKey(t *testing.T) {
 	}
 }
 
+func TestArgumentsContainSkillKey(t *testing.T) {
+	cases := []struct {
+		name string
+		args string
+		want bool
+	}{
+		{"empty", "", false},
+		{"non-json", "not a json object", false},
+		{"json-array", `["name", "x"]`, false},
+		{"name", `{"name": "pg-build"}`, true},
+		{"skill_name", `{"skill_name": "docs-writer"}`, true},
+		{"skill", `{"skill": "add-pricing-field"}`, true},
+		{"skill_id", `{"skill_id": "s1"}`, true},
+		{"mixed case", `{"SKILL_NAME": "docs-writer"}`, true},
+		{"nested name not matched", `{"options": {"name": "x"}}`, false},
+		{"path key not matched", `{"file_path": "/etc/hostname"}`, false},
+		{"unrelated key", `{"query": "*.go"}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := argumentsContainSkillKey(tc.args)
+			if got != tc.want {
+				t.Errorf("argumentsContainSkillKey(%q) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestShouldSkipReadFileTool_DefaultWhitelist(t *testing.T) {
 	cfg := &Config{SkipReadFileTools: append([]string{}, DefaultSkipReadFileTools...)}
 	cases := []struct {
@@ -54,6 +82,16 @@ func TestShouldSkipReadFileTool_DefaultWhitelist(t *testing.T) {
 		{"empty toolName", "", `{"file_path": "/etc"}`, false},
 		{"name matches but args not JSON", "Read", "not json", false},
 		{"case-insensitive name match", "READ", `{"file_path": "/etc"}`, true},
+		{"opencode skill by name", "skill", `{"name": "pg-build"}`, true},
+		{"opencode Skill PascalCase", "Skill", `{"name": "pg-build"}`, true},
+		{"claude get_skill by skill_name", "get_skill", `{"skill_name": "docs-writer"}`, true},
+		{"claude GetSkill PascalCase", "GetSkill", `{"skill": "api-validator"}`, true},
+		{"MCP load_skill", "load_skill", `{"skill_id": "s1"}`, true},
+		{"skill tool with path key", "skill", `{"path": "skills/x/SKILL.md"}`, true},
+		{"skill tool with unrelated key", "skill", `{"query": "x"}`, false},
+		{"skill tool with empty args", "skill", "", false},
+		{"list_skills empty args", "list_skills", `{}`, false},
+		{"whitelisted read tool ignores name key", "Read", `{"name": "file.txt"}`, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

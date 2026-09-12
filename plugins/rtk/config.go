@@ -106,7 +106,10 @@ type Config struct {
 	// the RTK pipeline entirely. A tool_result for a whitelisted tool is
 	// skipped only when its arguments JSON also carries a path-like key
 	// (file_path / filePath / filepath / path / target_path / offset_path
-	// / file) at the top level — see shouldSkipReadFileTool.
+	// / file) at the top level — or, for the built-in skill-loading tools
+	// (opencode `skill`, Claude Code `get_skill` / `list_skills`, generic
+	// MCP `load_skill`), a skill-name key (name / skill_name / skill /
+	// skill_id) — see shouldSkipReadFileTool.
 	//
 	// Skip semantics: the message is passed through unchanged, no
 	// PipelineRunner.Run is called, no raw-output pointer is written, no
