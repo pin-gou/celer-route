@@ -11,10 +11,10 @@ import (
 	"github.com/pin-gou/celer-route/core/schemas"
 )
 
-// GetDefaultConfigDir returns the OS-specific default configuration directory for Bifrost.
+// GetDefaultConfigDir returns the OS-specific default configuration directory for celer-route.
 // This follows standard conventions:
-// - Linux/macOS: ~/.config/bifrost
-// - Windows: %APPDATA%\bifrost
+// - Linux/macOS: ~/.config/celer-route
+// - Windows: %APPDATA%\celer-route
 // - If appDir is provided (non-empty), it returns that instead
 func GetDefaultConfigDir(appDir string) string {
 	// If appDir is provided, use it directly
@@ -26,25 +26,25 @@ func GetDefaultConfigDir(appDir string) string {
 	var configDir string
 	switch runtime.GOOS {
 	case "windows":
-		// Windows: %APPDATA%\bifrost
+		// Windows: %APPDATA%\celer-route
 		if appData := os.Getenv("APPDATA"); appData != "" {
-			configDir = filepath.Join(appData, "bifrost")
+			configDir = filepath.Join(appData, "celer-route")
 		} else {
 			// Fallback to user home directory
 			if homeDir, err := os.UserHomeDir(); err == nil {
-				configDir = filepath.Join(homeDir, "AppData", "Roaming", "bifrost")
+				configDir = filepath.Join(homeDir, "AppData", "Roaming", "celer-route")
 			}
 		}
 	default:
-		// Linux, macOS and other Unix-like systems: ~/.config/bifrost
+		// Linux, macOS and other Unix-like systems: ~/.config/celer-route
 		if homeDir, err := os.UserHomeDir(); err == nil {
-			configDir = filepath.Join(homeDir, ".config", "bifrost")
+			configDir = filepath.Join(homeDir, ".config", "celer-route")
 		}
 	}
 
 	// If we couldn't determine the config directory, fall back to current directory
 	if configDir == "" {
-		configDir = "./bifrost-data"
+		configDir = "./celer-route-data"
 	}
 
 	return configDir
