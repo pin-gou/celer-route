@@ -139,6 +139,9 @@ jobs:
           ANTLING_API_KEY: ${{ secrets.ANTLING_API_KEY }}
           YI_API_KEY: ${{ secrets.YI_API_KEY }}
           QWENCLOUD_API_KEY: ${{ secrets.QWENCLOUD_API_KEY }}
+          BYTEPLUS_API_KEY: ${{ secrets.BYTEPLUS_API_KEY }}
+          QINIU_API_KEY: ${{ secrets.QINIU_API_KEY }}
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           BAICHUAN_API_KEY: ${{ secrets.BAICHUAN_API_KEY }}
           IFLYTEK_API_KEY: ${{ secrets.IFLYTEK_API_KEY }}
           STEPFUN_API_KEY: ${{ secrets.STEPFUN_API_KEY }}

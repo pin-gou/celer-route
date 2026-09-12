@@ -1157,6 +1157,48 @@ export const ProviderIcons = {
 			/>
 		);
 	},
+
+	byteplus: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/byteplus-icon.png"
+				alt="BytePlus ModelArk"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	qiniu: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/qiniu-icon.png"
+				alt="七牛云 Qiniu"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	zai: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/zai-icon.png"
+				alt="Z.AI (GLM Coding Plan)"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
 } as const;
 
 // Routing Engine Icons

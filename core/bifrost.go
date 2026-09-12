@@ -31,6 +31,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/baidu"
 	"github.com/pin-gou/celer-route/core/providers/bedrock"
 	"github.com/pin-gou/celer-route/core/providers/bedrockmantle"
+	"github.com/pin-gou/celer-route/core/providers/byteplus"
 	"github.com/pin-gou/celer-route/core/providers/cerebras"
 	"github.com/pin-gou/celer-route/core/providers/cohere"
 	"github.com/pin-gou/celer-route/core/providers/coze"
@@ -55,6 +56,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/openrouter"
 	"github.com/pin-gou/celer-route/core/providers/parasail"
 	"github.com/pin-gou/celer-route/core/providers/perplexity"
+	"github.com/pin-gou/celer-route/core/providers/qiniu"
 	"github.com/pin-gou/celer-route/core/providers/qwencloud"
 	"github.com/pin-gou/celer-route/core/providers/replicate"
 	"github.com/pin-gou/celer-route/core/providers/runware"
@@ -73,6 +75,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/xai"
 	"github.com/pin-gou/celer-route/core/providers/yi"
 	"github.com/pin-gou/celer-route/core/providers/xiaomimimo"
+	"github.com/pin-gou/celer-route/core/providers/zai"
 	"github.com/pin-gou/celer-route/core/providers/zhipu"
 	schemas "github.com/pin-gou/celer-route/core/schemas"
 	"github.com/valyala/fasthttp"
@@ -4638,6 +4641,12 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return yi.NewYiProvider(config, bifrost.logger)
 	case schemas.QwenCloud:
 		return qwencloud.NewQwenCloudProvider(config, bifrost.logger)
+	case schemas.BytePlus:
+		return byteplus.NewBytePlusProvider(config, bifrost.logger)
+	case schemas.Qiniu:
+		return qiniu.NewQiniuProvider(config, bifrost.logger)
+	case schemas.ZAI:
+		return zai.NewZaiProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

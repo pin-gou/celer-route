@@ -600,6 +600,18 @@ func ModifyExpectationsForProvider(expectations ResponseExpectations, provider s
 		expectations.ShouldHaveUsageStats = true
 		expectations.ShouldHaveLatency = true
 
+	case schemas.BytePlus:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.Qiniu:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.ZAI:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
 	default:
 		// Keep default expectations — all true from BasicChatExpectations
 	}

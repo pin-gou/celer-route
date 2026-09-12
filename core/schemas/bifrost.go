@@ -116,6 +116,9 @@ const (
 	AntLing          ModelProvider = "antling"
 	Yi               ModelProvider = "yi"
 	QwenCloud        ModelProvider = "qwencloud"
+	BytePlus         ModelProvider = "byteplus"
+	Qiniu            ModelProvider = "qiniu"
+	ZAI              ModelProvider = "zai"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
@@ -185,6 +188,9 @@ var StandardProviders = []ModelProvider{
 	AntLing,
 	Yi,
 	QwenCloud,
+	BytePlus,
+	Qiniu,
+	ZAI,
 }
 
 // KeylessProviders is the set of built-in (non-custom) providers that never

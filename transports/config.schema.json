@@ -618,6 +618,15 @@
         },
         "qwencloud": {
           "$ref": "#/$defs/provider"
+        },
+        "byteplus": {
+          "$ref": "#/$defs/provider"
+        },
+        "qiniu": {
+          "$ref": "#/$defs/provider"
+        },
+        "zai": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -8229,7 +8238,10 @@
             "internlm",
             "antling",
             "yi",
-            "qwencloud"
+            "qwencloud",
+            "byteplus",
+            "qiniu",
+            "zai"
           ],
           "description": "Base provider type to extend"
         },

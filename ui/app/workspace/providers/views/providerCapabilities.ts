@@ -66,4 +66,7 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	antling: ["chat", "tools"],
 	yi: ["chat"],
 	qwencloud: ["chat", "tools", "vision"],
+	byteplus: ["chat", "tools"],
+	qiniu: ["chat", "tools"],
+	zai: ["chat", "tools"],
 };

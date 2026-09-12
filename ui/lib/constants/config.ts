@@ -90,6 +90,9 @@ export const ModelPlaceholders = {
 	antling: "e.g. ling-plus, ling-lite, ring-plus",
 	yi: "e.g. yi-lightning, yi-large",
 	qwencloud: "e.g. qwen3-max, qwen3-coder-plus, qwen-turbo",
+	byteplus: "e.g. seed-2.0, seed-1.6, kimi-k2-thinking, glm-4.7",
+	qiniu: "e.g. deepseek-v3.1, glm-4.5, kimi-k2, doubao-seed-1.6",
+	zai: "e.g. glm-5.1, glm-5, glm-4.7",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
@@ -148,6 +151,9 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	antling: true,
 	yi: true,
 	qwencloud: true,
+	byteplus: true,
+	qiniu: true,
+	zai: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
@@ -208,6 +214,9 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	antling: "https://developer.ant-ling.com",
 	yi: "https://platform.01.ai",
 	qwencloud: "https://www.qwencloud.com",
+	byteplus: "https://www.byteplus.com",
+	qiniu: "https://www.qiniu.com",
+	zai: "https://z.ai",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
@@ -268,6 +277,9 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	antling: "https://chat.ant-ling.com/open",
 	yi: "https://platform.01.ai",
 	qwencloud: "https://www.qwencloud.com/console/api-keys",
+	byteplus: "https://console.byteplus.com/ark/region:ark+ap-southeast-1/apiKey",
+	qiniu: "https://portal.qiniu.com/ai-inference/api-key",
+	zai: "https://z.ai/subscribe",
 };
 
 // Default Base URL per known provider — mirrors the built-in defaults in the
@@ -325,6 +337,9 @@ export const ProviderDefaultBaseUrls: Partial<Record<ProviderName, string>> = {
 	antling: "https://api.ant-ling.com",
 	yi: "https://api.lingyiwanwu.com",
 	qwencloud: "https://api.qwen.cloud",
+	byteplus: "https://ark.ap-southeast-1.bytepluses.com/api/v3",
+	qiniu: "https://api.qnaigc.com/v1",
+	zai: "https://api.z.ai",
 };
 
 export const DefaultNetworkConfig = {

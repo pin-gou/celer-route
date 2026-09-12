@@ -54,6 +54,9 @@ export const KnownProvidersNames = [
 	"antling",
 	"yi",
 	"qwencloud",
+	"byteplus",
+	"qiniu",
+	"zai",
 ] as const;
 
 // Local Provider type derived from KNOWN_PROVIDERS constant
@@ -190,6 +193,9 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	antling: "蚂蚁 Ling / Ring",
 	yi: "零一万物 Yi",
 	qwencloud: "Qwen Cloud",
+	byteplus: "BytePlus ModelArk",
+	qiniu: "七牛云 Qiniu",
+	zai: "Z.AI (GLM Coding Plan)",
 } as const;
 
 // Helper function to get provider label, supporting custom providers

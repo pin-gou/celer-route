@@ -33,6 +33,9 @@ export const FAMILY_MAP: Record<FamilyKey, string[]> = {
 		"antling",
 		"yi",
 		"qwencloud",
+		"byteplus",
+		"qiniu",
+		"zai",
 	],
 	overseas: [
 		"openai",
