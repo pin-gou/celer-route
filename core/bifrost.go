@@ -21,11 +21,11 @@ import (
 	"github.com/pin-gou/celer-route/core/mcp"
 	"github.com/pin-gou/celer-route/core/mcp/codemode/starlark"
 	"github.com/pin-gou/celer-route/core/mcp/credstore"
+	"github.com/pin-gou/celer-route/core/providers/360ai"
 	"github.com/pin-gou/celer-route/core/providers/alibaba"
 	"github.com/pin-gou/celer-route/core/providers/alibabatokenplan"
-	"github.com/pin-gou/celer-route/core/providers/360ai"
-	"github.com/pin-gou/celer-route/core/providers/antling"
 	"github.com/pin-gou/celer-route/core/providers/anthropic"
+	"github.com/pin-gou/celer-route/core/providers/antling"
 	"github.com/pin-gou/celer-route/core/providers/azure"
 	"github.com/pin-gou/celer-route/core/providers/baichuan"
 	"github.com/pin-gou/celer-route/core/providers/baidu"
@@ -36,6 +36,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/cohere"
 	"github.com/pin-gou/celer-route/core/providers/coze"
 	"github.com/pin-gou/celer-route/core/providers/cozecn"
+	"github.com/pin-gou/celer-route/core/providers/deepinfra"
 	"github.com/pin-gou/celer-route/core/providers/deepseek"
 	"github.com/pin-gou/celer-route/core/providers/elevenlabs"
 	"github.com/pin-gou/celer-route/core/providers/fireworks"
@@ -43,13 +44,16 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/gmicloud"
 	"github.com/pin-gou/celer-route/core/providers/groq"
 	"github.com/pin-gou/celer-route/core/providers/huggingface"
+	"github.com/pin-gou/celer-route/core/providers/hyperbolic"
 	"github.com/pin-gou/celer-route/core/providers/iflytek"
 	"github.com/pin-gou/celer-route/core/providers/internlm"
 	"github.com/pin-gou/celer-route/core/providers/minimax"
+	"github.com/pin-gou/celer-route/core/providers/minimaxcn"
 	"github.com/pin-gou/celer-route/core/providers/mistral"
 	"github.com/pin-gou/celer-route/core/providers/modelscope"
 	"github.com/pin-gou/celer-route/core/providers/moonshot"
 	"github.com/pin-gou/celer-route/core/providers/nebius"
+	"github.com/pin-gou/celer-route/core/providers/nvidia"
 	"github.com/pin-gou/celer-route/core/providers/ollama"
 	"github.com/pin-gou/celer-route/core/providers/openai"
 	"github.com/pin-gou/celer-route/core/providers/opencode"
@@ -61,20 +65,23 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/replicate"
 	"github.com/pin-gou/celer-route/core/providers/runware"
 	"github.com/pin-gou/celer-route/core/providers/runway"
+	"github.com/pin-gou/celer-route/core/providers/sambanova"
 	"github.com/pin-gou/celer-route/core/providers/sarvam"
 	"github.com/pin-gou/celer-route/core/providers/sensenova"
 	"github.com/pin-gou/celer-route/core/providers/sgl"
 	"github.com/pin-gou/celer-route/core/providers/siliconflow"
 	"github.com/pin-gou/celer-route/core/providers/stepfun"
 	"github.com/pin-gou/celer-route/core/providers/tencent"
+	"github.com/pin-gou/celer-route/core/providers/together"
 	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
 	"github.com/pin-gou/celer-route/core/providers/vertex"
 	"github.com/pin-gou/celer-route/core/providers/vllm"
 	"github.com/pin-gou/celer-route/core/providers/volcengine"
 	"github.com/pin-gou/celer-route/core/providers/wafer"
+	"github.com/pin-gou/celer-route/core/providers/watsonx"
 	"github.com/pin-gou/celer-route/core/providers/xai"
-	"github.com/pin-gou/celer-route/core/providers/yi"
 	"github.com/pin-gou/celer-route/core/providers/xiaomimimo"
+	"github.com/pin-gou/celer-route/core/providers/yi"
 	"github.com/pin-gou/celer-route/core/providers/zai"
 	"github.com/pin-gou/celer-route/core/providers/zhipu"
 	schemas "github.com/pin-gou/celer-route/core/schemas"
@@ -4647,6 +4654,20 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return qiniu.NewQiniuProvider(config, bifrost.logger)
 	case schemas.ZAI:
 		return zai.NewZaiProvider(config, bifrost.logger)
+	case schemas.Together:
+		return together.NewTogetherProvider(config, bifrost.logger)
+	case schemas.NVIDIA:
+		return nvidia.NewNvidiaProvider(config, bifrost.logger)
+	case schemas.Sambanova:
+		return sambanova.NewSambanovaProvider(config, bifrost.logger)
+	case schemas.DeepInfra:
+		return deepinfra.NewDeepInfraProvider(config, bifrost.logger)
+	case schemas.Hyperbolic:
+		return hyperbolic.NewHyperbolicProvider(config, bifrost.logger)
+	case schemas.MinimaxCN:
+		return minimaxcn.NewMinimaxCNProvider(config, bifrost.logger)
+	case schemas.Watsonx:
+		return watsonx.NewWatsonxProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

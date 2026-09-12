@@ -69,4 +69,12 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	byteplus: ["chat", "tools"],
 	qiniu: ["chat", "tools"],
 	zai: ["chat", "tools"],
+	together: ["chat", "embed", "tools", "image", "vision"],
+	nvidia: ["chat", "embed", "tools"],
+	sambanova: ["chat", "tools"],
+	deepinfra: ["chat", "embed", "tools", "image"],
+	hyperbolic: ["chat", "tools", "image"],
+	azure_ai: ["chat", "embed", "tools", "vision"],
+	watsonx: ["chat", "tools"],
+	minimax_cn: ["chat", "tools"],
 };

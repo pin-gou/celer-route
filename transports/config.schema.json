@@ -627,6 +627,30 @@
         },
         "zai": {
           "$ref": "#/$defs/provider"
+        },
+        "together": {
+          "$ref": "#/$defs/provider"
+        },
+        "nvidia": {
+          "$ref": "#/$defs/provider"
+        },
+        "sambanova": {
+          "$ref": "#/$defs/provider"
+        },
+        "deepinfra": {
+          "$ref": "#/$defs/provider"
+        },
+        "hyperbolic": {
+          "$ref": "#/$defs/provider"
+        },
+        "azure_ai": {
+          "$ref": "#/$defs/provider_with_azure_ai_config"
+        },
+        "watsonx": {
+          "$ref": "#/$defs/provider"
+        },
+        "minimax_cn": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -5613,6 +5637,34 @@
         }
       ]
     },
+    "azure_ai_key": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base_key"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "azure_ai_key_config": {
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "type": "string",
+                  "description": "Azure AI Foundry endpoint (e.g. https://<resource>.services.ai.azure.com/models or https://<resource>.openai.azure.com/openai/v1) (can use env. prefix)"
+                }
+              },
+              "required": [
+                "endpoint"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "azure_ai_key_config"
+          ]
+        }
+      ]
+    },
     "vertex_key": {
       "allOf": [
         {
@@ -5880,6 +5932,47 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/azure_key"
+          },
+          "minItems": 1,
+          "description": "API keys for this provider"
+        },
+        "network_config": {
+          "$ref": "#/$defs/network_config"
+        },
+        "concurrency_and_buffer_size": {
+          "$ref": "#/$defs/concurrency_and_buffer_size"
+        },
+        "proxy_config": {
+          "$ref": "#/$defs/proxy_config"
+        },
+        "send_back_raw_request": {
+          "type": "boolean",
+          "description": "Include raw request in BifrostResponse (default: false)"
+        },
+        "send_back_raw_response": {
+          "type": "boolean",
+          "description": "Include raw response in BifrostResponse (default: false)"
+        },
+        "store_raw_request_response": {
+          "type": "boolean",
+          "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
+        },
+        "custom_provider_config": {
+          "$ref": "#/$defs/custom_provider_config"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    "provider_with_azure_ai_config": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/azure_ai_key"
           },
           "minItems": 1,
           "description": "API keys for this provider"

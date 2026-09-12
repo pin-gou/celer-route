@@ -57,6 +57,14 @@ export const KnownProvidersNames = [
 	"byteplus",
 	"qiniu",
 	"zai",
+	"together",
+	"nvidia",
+	"sambanova",
+	"deepinfra",
+	"hyperbolic",
+	"azure_ai",
+	"watsonx",
+	"minimax_cn",
 ] as const;
 
 // Local Provider type derived from KNOWN_PROVIDERS constant
@@ -68,17 +76,21 @@ export const ProviderNames: readonly ProviderName[] = KnownProvidersNames;
 // Custom providers must instead be checked via custom_provider_config.allowed_requests.embedding.
 export const EmbeddingSupportedProviders: readonly ProviderName[] = [
 	"azure",
+	"azure_ai",
 	"bedrock",
 	"cohere",
+	"deepinfra",
 	"fireworks",
 	"gemini",
 	"huggingface",
 	"mistral",
 	"nebius",
+	"nvidia",
 	"ollama",
 	"openai",
 	"openrouter",
 	"sgl",
+	"together",
 	"vertex",
 	"vllm",
 ] as const;
@@ -196,6 +208,14 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	byteplus: "BytePlus ModelArk",
 	qiniu: "七牛云 Qiniu",
 	zai: "Z.AI (GLM Coding Plan)",
+	together: "Together AI",
+	nvidia: "NVIDIA NIM",
+	sambanova: "SambaNova",
+	deepinfra: "DeepInfra",
+	hyperbolic: "Hyperbolic",
+	azure_ai: "Azure AI Foundry",
+	watsonx: "IBM watsonx.ai",
+	minimax_cn: "MiniMax 中国版",
 } as const;
 
 // Helper function to get provider label, supporting custom providers

@@ -93,6 +93,14 @@ export const ModelPlaceholders = {
 	byteplus: "e.g. seed-2.0, seed-1.6, kimi-k2-thinking, glm-4.7",
 	qiniu: "e.g. deepseek-v3.1, glm-4.5, kimi-k2, doubao-seed-1.6",
 	zai: "e.g. glm-5.1, glm-5, glm-4.7",
+	together: "e.g. meta-llama/Llama-3.3-70B-Instruct-Turbo, Qwen/Qwen2.5-72B-Instruct",
+	nvidia: "e.g. meta/llama-3.3-70b-instruct, deepseek-ai/deepseek-r1",
+	sambanova: "e.g. Meta-Llama-3.3-70B-Instruct, Qwen2.5-72B-Instruct",
+	deepinfra: "e.g. meta-llama/Llama-3.3-70B-Instruct, deepseek-ai/DeepSeek-R1",
+	hyperbolic: "e.g. meta-llama/Llama-3.3-70B-Instruct, Qwen/Qwen2.5-72B-Instruct",
+	azure_ai: "e.g. gpt-4o-mini (deployment names)",
+	watsonx: "e.g. meta-llama/llama-3-3-70b-instruct",
+	minimax_cn: "e.g. MiniMax-Text-01, abab6.5s-chat",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
@@ -154,6 +162,14 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	byteplus: true,
 	qiniu: true,
 	zai: true,
+	together: true,
+	nvidia: true,
+	sambanova: true,
+	deepinfra: true,
+	hyperbolic: true,
+	azure_ai: true,
+	watsonx: true,
+	minimax_cn: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
@@ -217,6 +233,14 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	byteplus: "https://www.byteplus.com",
 	qiniu: "https://www.qiniu.com",
 	zai: "https://z.ai",
+	together: "https://www.together.ai",
+	nvidia: "https://build.nvidia.com",
+	sambanova: "https://sambanova.ai",
+	deepinfra: "https://deepinfra.com",
+	hyperbolic: "https://hyperbolic.xyz",
+	azure_ai: "https://ai.azure.com",
+	watsonx: "https://www.ibm.com/products/watsonx-ai",
+	minimax_cn: "https://platform.minimax.chat",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
@@ -280,6 +304,14 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	byteplus: "https://console.byteplus.com/ark/region:ark+ap-southeast-1/apiKey",
 	qiniu: "https://portal.qiniu.com/ai-inference/api-key",
 	zai: "https://z.ai/subscribe",
+	together: "https://api.together.xyz/settings/api-keys",
+	nvidia: "https://org.ngc.nvidia.com/setup/api-key",
+	sambanova: "https://cloud.sambanova.ai/account",
+	deepinfra: "https://deepinfra.com/dash/api_keys",
+	hyperbolic: "https://app.hyperbolic.xyz/settings",
+	azure_ai: "https://portal.azure.com/#settings/keys",
+	watsonx: "https://dataplatform.cloud.ibm.com",
+	minimax_cn: "https://platform.minimax.chat/user-center/basic-information/interface-key",
 };
 
 // Default Base URL per known provider — mirrors the built-in defaults in the
@@ -340,6 +372,13 @@ export const ProviderDefaultBaseUrls: Partial<Record<ProviderName, string>> = {
 	byteplus: "https://ark.ap-southeast-1.bytepluses.com/api/v3",
 	qiniu: "https://api.qnaigc.com/v1",
 	zai: "https://api.z.ai",
+	together: "https://api.together.xyz/v1",
+	nvidia: "https://integrate.api.nvidia.com/v1",
+	sambanova: "https://api.sambanova.ai/v1",
+	deepinfra: "https://api.deepinfra.com/v1/openai",
+	hyperbolic: "https://api.hyperbolic.xyz/v1",
+	watsonx: "https://us-south.ml.cloud.ibm.com/ml/gateway/v1",
+	minimax_cn: "https://api.minimax.chat/v1",
 };
 
 export const DefaultNetworkConfig = {

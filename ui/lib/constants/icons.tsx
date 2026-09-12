@@ -1199,6 +1199,118 @@ export const ProviderIcons = {
 			/>
 		);
 	},
+
+	together: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/together-icon.png"
+				alt="Together AI"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	nvidia: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/nvidia-icon.png"
+				alt="NVIDIA NIM"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	sambanova: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/sambanova-icon.png"
+				alt="SambaNova"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	deepinfra: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/deepinfra-icon.png"
+				alt="DeepInfra"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	hyperbolic: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/hyperbolic-icon.png"
+				alt="Hyperbolic"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	azure_ai: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/azure_ai-icon.png"
+				alt="Azure AI Foundry"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	watsonx: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/watsonx-icon.png"
+				alt="IBM watsonx.ai"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	minimax_cn: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/minimax_cn-icon.png"
+				alt="MiniMax 中国版"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
 } as const;
 
 // Routing Engine Icons

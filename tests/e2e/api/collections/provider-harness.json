@@ -51093,5 +51093,332 @@
         }
       ]
     }
+  ,
+{
+  "name": "55. New Providers (together/nvidia/sambanova/deepinfra/hyperbolic/azure_ai/watsonx/minimax_cn) Chat Completion",
+  "description": "Smoke-test the eight newly added OpenAI-compatible providers. Each case routes via the provider/model prefix convention (<provider>/<model>); azure_ai uses deployment names as models and watsonx authenticates via IAM bearer token exchange.",
+  "item": [
+    {
+      "name": "Chat completion: together/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"together/meta-llama/Llama-3.3-70B-Instruct-Turbo\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: nvidia/meta/llama-3.3-70b-instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"nvidia/meta/llama-3.3-70b-instruct\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: sambanova/Meta-Llama-3.3-70B-Instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"sambanova/Meta-Llama-3.3-70B-Instruct\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: deepinfra/meta-llama/Llama-3.3-70B-Instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"deepinfra/meta-llama/Llama-3.3-70B-Instruct\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: hyperbolic/meta-llama/Llama-3.3-70B-Instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"hyperbolic/meta-llama/Llama-3.3-70B-Instruct\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: azure_ai/gpt-4o-mini",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"azure_ai/gpt-4o-mini\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: watsonx/meta-llama/llama-3-3-70b-instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"watsonx/meta-llama/llama-3-3-70b-instruct\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: minimax_cn/MiniMax-Text-01",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"minimax_cn/MiniMax-Text-01\",\n  \"max_tokens\": 64,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ping\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    }
+  ]
+}
   ]
 }

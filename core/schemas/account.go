@@ -132,6 +132,7 @@ type Key struct {
 	Weight                 float64                 `json:"weight"`                              // Weight for load balancing between multiple keys
 	Aliases                KeyAliases              `json:"aliases,omitempty"`                   // Mapping of model identifiers to inference profiles
 	AzureKeyConfig         *AzureKeyConfig         `json:"azure_key_config,omitempty"`          // Azure-specific key configuration
+	AzureAIKeyConfig       *AzureAIKeyConfig       `json:"azure_ai_key_config,omitempty"`       // Azure AI Foundry-specific key configuration
 	VertexKeyConfig        *VertexKeyConfig        `json:"vertex_key_config,omitempty"`         // Vertex-specific key configuration
 	BedrockKeyConfig       *BedrockKeyConfig       `json:"bedrock_key_config,omitempty"`        // AWS Bedrock-specific key configuration
 	BedrockMantleKeyConfig *BedrockMantleKeyConfig `json:"bedrock_mantle_key_config,omitempty"` // Bedrock Mantle-specific key configuration
@@ -669,6 +670,14 @@ type AzureKeyConfig struct {
 	ClientSecret *SecretVar `json:"client_secret,omitempty"` // Azure client secret for authentication
 	TenantID     *SecretVar `json:"tenant_id,omitempty"`     // Azure tenant ID for authentication
 	Scopes       []string   `json:"scopes,omitempty"`
+}
+
+// AzureAIKeyConfig represents the Azure AI Foundry-specific configuration.
+// Foundry serverless endpoints use the Models API surface
+// (https://<resource>.services.ai.azure.com/models) or the OpenAI-compatible
+// surface (https://<resource>.openai.azure.com/openai/v1) with an api-key header.
+type AzureAIKeyConfig struct {
+	Endpoint SecretVar `json:"endpoint"` // Azure AI Foundry service endpoint URL
 }
 
 // VertexKeyConfig represents the Vertex-specific configuration.

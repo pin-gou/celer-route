@@ -119,6 +119,14 @@ const (
 	BytePlus         ModelProvider = "byteplus"
 	Qiniu            ModelProvider = "qiniu"
 	ZAI              ModelProvider = "zai"
+	Together         ModelProvider = "together"
+	NVIDIA           ModelProvider = "nvidia"
+	Sambanova        ModelProvider = "sambanova"
+	DeepInfra        ModelProvider = "deepinfra"
+	Hyperbolic       ModelProvider = "hyperbolic"
+	AzureAI          ModelProvider = "azure_ai"
+	Watsonx          ModelProvider = "watsonx"
+	MinimaxCN        ModelProvider = "minimax_cn"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
@@ -191,6 +199,14 @@ var StandardProviders = []ModelProvider{
 	BytePlus,
 	Qiniu,
 	ZAI,
+	Together,
+	NVIDIA,
+	Sambanova,
+	DeepInfra,
+	Hyperbolic,
+	AzureAI,
+	Watsonx,
+	MinimaxCN,
 }
 
 // KeylessProviders is the set of built-in (non-custom) providers that never

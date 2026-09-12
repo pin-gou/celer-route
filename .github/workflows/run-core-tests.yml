@@ -59,6 +59,14 @@ jobs:
       SGL_API_KEY: ${{ secrets.SGL_API_KEY }}
       CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      SAMBANOVA_API_KEY: ${{ secrets.SAMBANOVA_API_KEY }}
+      DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+      HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+      AZURE_AI_API_KEY: ${{ secrets.AZURE_AI_API_KEY }}
+      WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
+      MINIMAX_CN_API_KEY: ${{ secrets.MINIMAX_CN_API_KEY }}
       SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
       COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
       FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
@@ -88,16 +96,21 @@ jobs:
             api.anthropic.com:443
             api.cerebras.ai:443
             api.cohere.ai:443
+            api.deepinfra.com:443
             api.deepseek.com:443
             api.elevenlabs.io:443
             api.fireworks.ai:443
             api.github.com:443
             api.groq.com:443
+            api.hyperbolic.xyz:443
+            api.minimax.chat:443
             api.mistral.ai:443
             api.openai.com:443
             api.parasail.io:443
             api.perplexity.ai:443
             api.replicate.com:443
+            api.sambanova.ai:443
+            api.together.xyz:443
             api.x.ai:443
             azure.archive.ubuntu.com:80
             esm.ubuntu.com:443
@@ -116,7 +129,9 @@ jobs:
             getbifrost.ai:443
             github.com:443
             huggingface.co:443
+            iam.cloud.ibm.com:443
             iojs.org:443
+            integrate.api.nvidia.com:443
             login.microsoftonline.com:443
             maxim-o1.openai.azure.com:443
             nodejs.org:443
