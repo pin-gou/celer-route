@@ -603,6 +603,21 @@
         },
         "gmicloud": {
           "$ref": "#/$defs/provider"
+        },
+        "360ai": {
+          "$ref": "#/$defs/provider"
+        },
+        "internlm": {
+          "$ref": "#/$defs/provider"
+        },
+        "antling": {
+          "$ref": "#/$defs/provider"
+        },
+        "yi": {
+          "$ref": "#/$defs/provider"
+        },
+        "qwencloud": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true
@@ -8209,7 +8224,12 @@
             "modelscope",
             "coze",
             "coze_cn",
-            "gmicloud"
+            "gmicloud",
+            "360ai",
+            "internlm",
+            "antling",
+            "yi",
+            "qwencloud"
           ],
           "description": "Base provider type to extend"
         },

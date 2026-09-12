@@ -580,6 +580,26 @@ func ModifyExpectationsForProvider(expectations ResponseExpectations, provider s
 		expectations.ShouldHaveUsageStats = true
 		expectations.ShouldHaveLatency = true
 
+	case schemas.ThreeSixtyAI:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.InternLM:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.AntLing:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.Yi:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
+	case schemas.QwenCloud:
+		expectations.ShouldHaveUsageStats = true
+		expectations.ShouldHaveLatency = true
+
 	default:
 		// Keep default expectations — all true from BasicChatExpectations
 	}

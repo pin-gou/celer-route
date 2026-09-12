@@ -1087,6 +1087,76 @@ export const ProviderIcons = {
 			/>
 		);
 	},
+
+	"360ai": ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/360ai-icon.png"
+				alt="360 智脑"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	internlm: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/internlm-icon.png"
+				alt="书生·浦语 InternLM"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	antling: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/antling-icon.png"
+				alt="蚂蚁 Ling / Ring"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	yi: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/yi-icon.png"
+				alt="零一万物 Yi"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
+
+	qwencloud: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<img
+				src="/provider-icons/qwencloud-icon.png"
+				alt="Qwen Cloud"
+				height={resolvedSize}
+				width={resolvedSize}
+				className={className}
+				style={{ objectFit: "contain" }}
+			/>
+		);
+	},
 } as const;
 
 // Routing Engine Icons

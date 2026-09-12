@@ -23,6 +23,8 @@ import (
 	"github.com/pin-gou/celer-route/core/mcp/credstore"
 	"github.com/pin-gou/celer-route/core/providers/alibaba"
 	"github.com/pin-gou/celer-route/core/providers/alibabatokenplan"
+	"github.com/pin-gou/celer-route/core/providers/360ai"
+	"github.com/pin-gou/celer-route/core/providers/antling"
 	"github.com/pin-gou/celer-route/core/providers/anthropic"
 	"github.com/pin-gou/celer-route/core/providers/azure"
 	"github.com/pin-gou/celer-route/core/providers/baichuan"
@@ -41,6 +43,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/groq"
 	"github.com/pin-gou/celer-route/core/providers/huggingface"
 	"github.com/pin-gou/celer-route/core/providers/iflytek"
+	"github.com/pin-gou/celer-route/core/providers/internlm"
 	"github.com/pin-gou/celer-route/core/providers/minimax"
 	"github.com/pin-gou/celer-route/core/providers/mistral"
 	"github.com/pin-gou/celer-route/core/providers/modelscope"
@@ -52,6 +55,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/openrouter"
 	"github.com/pin-gou/celer-route/core/providers/parasail"
 	"github.com/pin-gou/celer-route/core/providers/perplexity"
+	"github.com/pin-gou/celer-route/core/providers/qwencloud"
 	"github.com/pin-gou/celer-route/core/providers/replicate"
 	"github.com/pin-gou/celer-route/core/providers/runware"
 	"github.com/pin-gou/celer-route/core/providers/runway"
@@ -67,6 +71,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/volcengine"
 	"github.com/pin-gou/celer-route/core/providers/wafer"
 	"github.com/pin-gou/celer-route/core/providers/xai"
+	"github.com/pin-gou/celer-route/core/providers/yi"
 	"github.com/pin-gou/celer-route/core/providers/xiaomimimo"
 	"github.com/pin-gou/celer-route/core/providers/zhipu"
 	schemas "github.com/pin-gou/celer-route/core/schemas"
@@ -4623,6 +4628,16 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return cozecn.NewCozeCnProvider(config, bifrost.logger)
 	case schemas.GMICloud:
 		return gmicloud.NewGMICloudProvider(config, bifrost.logger)
+	case schemas.ThreeSixtyAI:
+		return ai360.NewAI360Provider(config, bifrost.logger)
+	case schemas.InternLM:
+		return internlm.NewInternLMProvider(config, bifrost.logger)
+	case schemas.AntLing:
+		return antling.NewAntLingProvider(config, bifrost.logger)
+	case schemas.Yi:
+		return yi.NewYiProvider(config, bifrost.logger)
+	case schemas.QwenCloud:
+		return qwencloud.NewQwenCloudProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

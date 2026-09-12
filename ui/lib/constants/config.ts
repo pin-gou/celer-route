@@ -85,6 +85,11 @@ export const ModelPlaceholders = {
 	coze: "e.g. claude-3-7-sonnet-20250514, gpt-4o",
 	coze_cn: "e.g. claude-3-7-sonnet-20250514, gpt-4o",
 	gmicloud: "e.g. deepseek-ai/DeepSeek-V4-Flash-0731, Qwen/Qwen3.8-Max",
+	"360ai": "e.g. 360GPT_S2_V9, 360GPT_S2_PRO",
+	internlm: "e.g. Intern-S1, Intern-S1.5",
+	antling: "e.g. ling-plus, ling-lite, ring-plus",
+	yi: "e.g. yi-lightning, yi-large",
+	qwencloud: "e.g. qwen3-max, qwen3-coder-plus, qwen-turbo",
 };
 
 // Note: i18n-aware label lookups are handled at the call site.
@@ -138,6 +143,11 @@ export const isKeyRequiredByProvider: Record<ProviderName, boolean> = {
 	coze: true,
 	coze_cn: true,
 	gmicloud: true,
+	"360ai": true,
+	internlm: true,
+	antling: true,
+	yi: true,
+	qwencloud: true,
 };
 
 // Provider websites (link on the provider detail header) for known providers.
@@ -193,6 +203,11 @@ export const ProviderWebsites: Partial<Record<ProviderName, string>> = {
 	coze: "https://www.coze.com",
 	coze_cn: "https://www.coze.cn",
 	gmicloud: "https://gmicloud.ai",
+	"360ai": "https://ai.360.cn",
+	internlm: "https://internlm.intern-ai.org.cn",
+	antling: "https://developer.ant-ling.com",
+	yi: "https://platform.01.ai",
+	qwencloud: "https://www.qwencloud.com",
 };
 
 // API-key registration/creation pages per known provider. Rendered as a
@@ -248,6 +263,11 @@ export const ProviderApiKeyUrls: Partial<Record<ProviderName, string>> = {
 	coze: "https://www.coze.com/settings/api",
 	coze_cn: "https://www.coze.cn/settings/api",
 	gmicloud: "https://gmicloud.ai/",
+	"360ai": "https://ai.360.cn/platform/console/api",
+	internlm: "https://internlm.intern-ai.org.cn/api/api-keys",
+	antling: "https://chat.ant-ling.com/open",
+	yi: "https://platform.01.ai",
+	qwencloud: "https://www.qwencloud.com/console/api-keys",
 };
 
 // Default Base URL per known provider — mirrors the built-in defaults in the
@@ -300,6 +320,11 @@ export const ProviderDefaultBaseUrls: Partial<Record<ProviderName, string>> = {
 	zhipu: "https://open.bigmodel.cn/api/paas/v4",
 	baidu: "https://qianfan.baidubce.com/v2",
 	baichuan: "https://api.baichuan-ai.com",
+	"360ai": "https://api.360.cn",
+	internlm: "https://chat.intern-ai.org.cn/api",
+	antling: "https://api.ant-ling.com",
+	yi: "https://api.lingyiwanwu.com",
+	qwencloud: "https://api.qwen.cloud",
 };
 
 export const DefaultNetworkConfig = {

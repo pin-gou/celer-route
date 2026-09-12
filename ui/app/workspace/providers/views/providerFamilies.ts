@@ -28,6 +28,11 @@ export const FAMILY_MAP: Record<FamilyKey, string[]> = {
 		"xiaomi_mimo",
 		"modelscope",
 		"coze_cn",
+		"360ai",
+		"internlm",
+		"antling",
+		"yi",
+		"qwencloud",
 	],
 	overseas: [
 		"openai",

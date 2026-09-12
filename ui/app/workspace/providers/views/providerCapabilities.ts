@@ -61,4 +61,9 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	coze: ["chat"],
 	coze_cn: ["chat"],
 	gmicloud: ["chat", "vision", "tools"],
+	"360ai": ["chat", "tools"],
+	internlm: ["chat", "tools"],
+	antling: ["chat", "tools"],
+	yi: ["chat"],
+	qwencloud: ["chat", "tools", "vision"],
 };

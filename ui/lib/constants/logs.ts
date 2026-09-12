@@ -49,6 +49,11 @@ export const KnownProvidersNames = [
 	"coze",
 	"coze_cn",
 	"gmicloud",
+	"360ai",
+	"internlm",
+	"antling",
+	"yi",
+	"qwencloud",
 ] as const;
 
 // Local Provider type derived from KNOWN_PROVIDERS constant
@@ -180,6 +185,11 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	coze: "Coze",
 	coze_cn: "Coze (国内版)",
 	gmicloud: "GMI Cloud",
+	"360ai": "360 智脑",
+	internlm: "书生·浦语 InternLM",
+	antling: "蚂蚁 Ling / Ring",
+	yi: "零一万物 Yi",
+	qwencloud: "Qwen Cloud",
 } as const;
 
 // Helper function to get provider label, supporting custom providers
