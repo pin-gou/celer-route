@@ -204,7 +204,32 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostR
 	ctx.SetValue(schemas.BifrostContextKeyRTKSentinelStripped, nil)
 
 	state := p.getCompressionState(ctx)
-	if state == nil || !state.Compressed {
+	if state == nil {
+		return resp, bifrostErr, nil
+	}
+
+	// Observability that must survive even when nothing was compressed —
+	// scanned indices and bypassed (already-truncated echo) indices. Without
+	// these, a request that merely echoed an earlier request's truncated tool
+	// output would be indistinguishable from one where RTK never ran, and the
+	// log detail view would show "compression not triggered" right next to
+	// visibly truncated content. Both are emitted unconditionally (whenever
+	// non-empty); the Compressed-gated block below only adds the
+	// compression-specific fields (usage rewrite, techniques, ratio,
+	// raw-output pointers).
+	if len(state.ScannedIndices) > 0 {
+		ctx.SetValue(schemas.BifrostContextKeyRTKPipelineScanned, state.ScannedIndices)
+	}
+	if len(state.BypassedTruncated) > 0 {
+		ctx.SetValue(schemas.BifrostContextKeyRTKBypassedTruncated, state.BypassedTruncated)
+	}
+
+	if !state.Compressed {
+		// Nothing was compressed in this request. Clean up the per-request
+		// state regardless: a scanned-but-not-compressed request leaves a
+		// state entry that would otherwise linger in the store for the
+		// lifetime of the process.
+		p.clearCompressionState(ctx)
 		return resp, bifrostErr, nil
 	}
 
@@ -245,15 +270,6 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostR
 	}
 	if len(state.RawOutputEntries) > 0 {
 		ctx.SetValue(schemas.BifrostContextKeyRTKRawOutputEntries, state.RawOutputEntries)
-	}
-
-	// Record which message indices the RTK pipeline scanned this request so the
-	// log detail diff view can distinguish "did not participate" from
-	// "participated but not compressed" without persisting any message text.
-	// Original text for compressed indices is recovered from the raw-output
-	// file referenced by rtk_raw_output_id (set above).
-	if len(state.ScannedIndices) > 0 {
-		ctx.SetValue(schemas.BifrostContextKeyRTKPipelineScanned, state.ScannedIndices)
 	}
 
 	// Clean up the per-request state to prevent memory leaks.

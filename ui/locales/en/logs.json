@@ -838,6 +838,8 @@
 		"rtkUncompressed": "Compression not triggered",
 		"rtkSnapshotDisabled": "Raw output retention is disabled. To view compression diffs in log details, enable ",
 		"rtkSnapshotGoToConfig": "Raw Output Retention",
+		"rtkBypassedHint": "RTK did not compress anything new in this request: the tool content below already carried an [rtk:raw_output_id=...] marker from an earlier compression and was passed through unchanged (anti-recursion). The truncation happened in an earlier request — click \"Recover original\" to fetch the full text.",
+		"rtkBypassedRecover": "Recover original",
 		"rtkOriginalLabel": "Original",
 		"rtkCompressedLabel": "Compressed",
 		"rtkMessageLabel": "Message #{{index}}",

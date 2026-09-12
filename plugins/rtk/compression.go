@@ -8,6 +8,20 @@ import (
 	"github.com/pin-gou/celer-route/plugins/rtk/renderers"
 )
 
+// rawOutputIDMarker is the wire marker appendRawOutputHint appends to the end
+// of a truncated tool_result so the LLM can recover the original. A tool
+// message that already carries it is RTK-compressed output echoed back by the
+// client (stored verbatim from an earlier gateway compression); the pipeline
+// should surface it as "already truncated elsewhere" rather than pretending
+// nothing happened. Also matches the prefix form [rtk:raw-output-begin] used
+// by the raw-output HTTP endpoint, since that wrapped body may re-enter the
+// pipeline through admin/preview paths before the PreLLMHook strip runs.
+func containsRawOutputEcho(text string) bool {
+	return strings.Contains(text, rawOutputIDMarker) || strings.Contains(text, rawOutputSentinelMagic)
+}
+
+const rawOutputIDMarker = "[rtk:raw_output_id="
+
 // ProcessStats holds token statistics for a single text compression pass.
 type ProcessStats struct {
 	OriginalTokens    int                    `json:"originalTokens"`
@@ -122,12 +136,30 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 			// file referenced by rtk_raw_output_id in the log metadata.
 			appendScanned(state, rtkCanonicalIndex(i, hintOffset))
 
+			// Already-truncated echo: the tool output carries the RTK raw-output
+			// marker (either the [rtk:raw_output_id=...] hint appended by an
+			// earlier compression that the client echoed back, or the wrapped
+			// [rtk:raw-output-begin] body). Mark it as bypassed-truncated so
+			// the log detail view can explain the visible truncation even when
+			// this request does not compress anything new.
+			if containsRawOutputEcho(text) {
+				state.BypassedTruncated = append(state.BypassedTruncated, rtkCanonicalIndex(i, hintOffset))
+			}
+
 			// Compress through the PipelineRunner (EngineCatalog + pipeline).
 			result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
 			if p.metrics != nil {
 				p.metrics.RecordEngineBreakdown(breakdown)
 			}
 			if err != nil || result == "" || result == text {
+				// A no-op result may still be the anti-recursion bypass: the
+				// tool output already carried the RTK raw-output sentinel and
+				// was passed through unchanged. Record the index so the log
+				// detail view can surface "echoed truncated content, no new
+				// compression" instead of "compression not triggered".
+				if result == text && techsContain(techs, "rtk-raw-output-bypass") {
+					state.BypassedTruncated = append(state.BypassedTruncated, rtkCanonicalIndex(i, hintOffset))
+				}
 				compressedTotal += origTokens
 				continue
 			}
@@ -215,12 +247,22 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				// original text is recovered via rtk_raw_output_id when needed.
 				appendScanned(state, rtkCanonicalIndex(i, hintOffset)*100+j)
 
+				// Already-truncated echo (see the OpenAI-style path for details).
+				if containsRawOutputEcho(text) {
+					state.BypassedTruncated = append(state.BypassedTruncated, rtkCanonicalIndex(i, hintOffset)*100+j)
+				}
+
 				// Compress through the PipelineRunner.
 				result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
 				if p.metrics != nil {
 					p.metrics.RecordEngineBreakdown(breakdown)
 				}
 				if err != nil || result == "" || result == text {
+					// Anti-recursion bypass: the tool_result already carried an
+					// RTK raw-output sentinel and was passed through unchanged.
+					if result == text && techsContain(techs, "rtk-raw-output-bypass") {
+						state.BypassedTruncated = append(state.BypassedTruncated, rtkCanonicalIndex(i, hintOffset)*100+j)
+					}
 					compressedTotal += origTokens
 					continue
 				}
@@ -516,6 +558,11 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		// the pipeline actually compressed.
 		appendScanned(state, rtkCanonicalIndex(i, hintOffset))
 
+		// Already-truncated echo (see the chat path for details).
+		if containsRawOutputEcho(text) {
+			state.BypassedTruncated = append(state.BypassedTruncated, rtkCanonicalIndex(i, hintOffset))
+		}
+
 		// Compress through the PipelineRunner (tool-role filtered so a
 		// stacked pipeline only runs its RTK-scoped engines here).
 		result, breakdown, techs, filterMatched, err, ptrs := runner.Run(ctx, enginesForRole(pipeline, "tool"), text, cfg)
@@ -523,6 +570,11 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 			p.metrics.RecordEngineBreakdown(breakdown)
 		}
 		if err != nil || result == "" || result == text {
+			// Anti-recursion bypass: the function_call_output already carried
+			// an RTK raw-output sentinel and was passed through unchanged.
+			if result == text && techsContain(techs, "rtk-raw-output-bypass") {
+				state.BypassedTruncated = append(state.BypassedTruncated, rtkCanonicalIndex(i, hintOffset))
+			}
 			compressedTotal += origTokens
 			continue
 		}
@@ -1304,6 +1356,19 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// techsContain reports whether the pipeline techniques list contains the given
+// technique id. Used to recognise the anti-recursion bypass
+// ("rtk-raw-output-bypass") so its scanned indices can be surfaced to the log
+// detail view even though no compression fired.
+func techsContain(techs []string, id string) bool {
+	for _, t := range techs {
+		if t == id {
+			return true
+		}
+	}
+	return false
 }
 
 // enginesForRole returns a copy of the pipeline filtered to the engines that

@@ -466,6 +466,88 @@ func TestPostLLMHookScannedIndices(t *testing.T) {
 			t.Errorf("RTKRawOutputID = %v, want abcdef0123456789abcdef01", v)
 		}
 	})
+
+	// The observability features added for the log detail view must survive
+	// a request where nothing was compressed: the RTK pipeline may still have
+	// scanned messages, and may have recognised some tool outputs as
+	// already-truncated RTK echoes (anti-recursion bypass). Without these the
+	// log detail view would render "compression not triggered" right next to
+	// visibly truncated content.
+	t.Run("writes_scanned_and_bypassed_when_not_compressed", func(t *testing.T) {
+		p := newTestPlugin(t)
+		ctx := newTestCtx(t)
+		state := &CompressionState{
+			Compressed:        false,
+			ScannedIndices:    []int{3, 7},
+			BypassedTruncated: []int{7},
+		}
+		p.setState(ctx, state)
+		resp := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Usage: &schemas.BifrostLLMUsage{PromptTokens: 500, TotalTokens: 600}}}
+		_, _, err := p.PostLLMHook(ctx, resp, nil)
+		if err != nil {
+			t.Fatalf("PostLLMHook returned error: %v", err)
+		}
+		// Scanned indices written even though nothing was compressed.
+		scanned, ok := ctx.Value(schemas.BifrostContextKeyRTKPipelineScanned).([]int)
+		if !ok || len(scanned) != 2 || scanned[0] != 3 || scanned[1] != 7 {
+			t.Errorf("RTKPipelineScanned = %v, want [3 7]", scanned)
+		}
+		// Bypassed indices written so the UI can explain the echoed truncation.
+		bypassed, ok := ctx.Value(schemas.BifrostContextKeyRTKBypassedTruncated).([]int)
+		if !ok || len(bypassed) != 1 || bypassed[0] != 7 {
+			t.Errorf("RTKBypassedTruncated = %v, want [7]", bypassed)
+		}
+		// Compression-specific fields must stay absent on the non-compressed path.
+		if v := ctx.Value(schemas.BifrostContextKeyRTKTechniques); v != nil {
+			t.Errorf("RTKTechniques should be nil when not compressed, got %v", v)
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKCompressionRatio); v != nil {
+			t.Errorf("RTKCompressionRatio should be nil when not compressed, got %v", v)
+		}
+		// Usage must NOT be rewritten when nothing was compressed.
+		if resp.ChatResponse.Usage.PromptTokens != 500 {
+			t.Errorf("PromptTokens rewritten to %d, want unchanged 500", resp.ChatResponse.Usage.PromptTokens)
+		}
+	})
+
+	t.Run("omits_bypassed_when_empty", func(t *testing.T) {
+		p := newTestPlugin(t)
+		ctx := newTestCtx(t)
+		state := &CompressionState{
+			Compressed:     false,
+			ScannedIndices: []int{1},
+		}
+		p.setState(ctx, state)
+		resp := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Usage: &schemas.BifrostLLMUsage{}}}
+		_, _, err := p.PostLLMHook(ctx, resp, nil)
+		if err != nil {
+			t.Fatalf("PostLLMHook returned error: %v", err)
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKPipelineScanned); v == nil {
+			t.Error("RTKPipelineScanned should be set even with no compression")
+		}
+		if v := ctx.Value(schemas.BifrostContextKeyRTKBypassedTruncated); v != nil {
+			t.Errorf("RTKBypassedTruncated should be nil when empty, got %T", v)
+		}
+	})
+
+	t.Run("clears_state_when_not_compressed", func(t *testing.T) {
+		p := newTestPlugin(t)
+		ctx := newTestCtx(t)
+		state := &CompressionState{
+			Compressed:        false,
+			ScannedIndices:    []int{3},
+			BypassedTruncated: []int{3},
+		}
+		p.setState(ctx, state)
+		resp := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Usage: &schemas.BifrostLLMUsage{}}}
+		if _, _, err := p.PostLLMHook(ctx, resp, nil); err != nil {
+			t.Fatalf("PostLLMHook returned error: %v", err)
+		}
+		if st := p.getCompressionState(ctx); st != nil {
+			t.Error("compression state must be cleared after PostLLMHook on the non-compressed path (leak regression)")
+		}
+	})
 }
 
 // TestPostLLMHookNoStatePassthrough verifies that when no compression state

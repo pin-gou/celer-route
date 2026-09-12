@@ -1059,6 +1059,17 @@ func mergeRealtimeMetadata(metadata map[string]interface{}, ctx *schemas.Bifrost
 		}
 		metadata["rtk_pipeline_scanned"] = scanned
 	}
+	// BypassedTruncated marks message/block indices whose tool output was
+	// recognised as already-truncated RTK output (carried a raw-output
+	// sentinel) and passed through unchanged via the anti-recursion bypass.
+	// Emitted even when nothing was compressed, so the log detail view can
+	// explain echoed truncated content instead of "compression not triggered".
+	if bypassed, ok := ctx.Value(schemas.BifrostContextKeyRTKBypassedTruncated).([]int); ok && len(bypassed) > 0 {
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["rtk_bypassed_truncated"] = bypassed
+	}
 
 	return metadata
 }

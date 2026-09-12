@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/pin-gou/celer-route/core/schemas"
 )
 
 // TestProcessRtkText_RawOutputBypass verifies that processRtkText short-
@@ -89,6 +91,53 @@ func hasTechnique(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// TestApplyRtkCompression_RecordsEchoedTruncated verifies that a tool message
+// which already carries the [rtk:raw_output_id=...] marker — an echoed
+// truncation from an earlier request — is recorded in state.BypassedTruncated
+// even though this request compresses nothing new. Without the marker this
+// request would be indistinguishable from one where RTK never ran, and the log
+// detail view would show "compression not triggered" next to visibly truncated
+// content.
+func TestApplyRtkCompression_RecordsEchoedTruncated(t *testing.T) {
+	p := newTestPlugin(t)
+	applyConfigDefaults(p.config)
+	p.config.RawOutputRetention = string(RawOutputRetentionNever) // no disk persistence in this test
+
+	ctx := newTestCtx(t)
+	echoedBody := "some already-truncated tool output\n"
+	truncated := echoedBody + "\n[rtk:raw_output_id=86127e90ef71af5894af812b; orig=5.0KB; ttl=24h; redacted=true; fetch=GET http://celer-route/api/context/rtk/raw-output/86127e90ef71af5894af812b]\n"
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Input: []schemas.ChatMessage{
+				{
+					Role:            schemas.ChatMessageRoleTool,
+					Content:         &schemas.ChatMessageContent{ContentStr: &truncated},
+					ChatToolMessage: &schemas.ChatToolMessage{ToolCallID: strPtr("call_echo_1")},
+				},
+			},
+		},
+	}
+
+	globalCatalog.RegisterEngine("rtk", &rtkEngine{plugin: p})
+	runner := NewPipelineRunner(globalCatalog)
+	pipeline := &Pipeline{Engines: []string{"rtk"}}
+
+	state := applyRtkCompression(ctx, req, p, runner, pipeline, EngineConfig{Enabled: true})
+	if state == nil {
+		t.Fatal("applyRtkCompression returned nil state")
+	}
+	if state.Compressed {
+		t.Error("Compressed should be false for echoed-only content (nothing new to trim)")
+	}
+	if len(state.BypassedTruncated) != 1 || state.BypassedTruncated[0] != 0 {
+		t.Errorf("BypassedTruncated = %v, want [0]", state.BypassedTruncated)
+	}
+	if len(state.ScannedIndices) != 1 || state.ScannedIndices[0] != 0 {
+		t.Errorf("ScannedIndices = %v, want [0]", state.ScannedIndices)
+	}
 }
 
 // TestDenoiseVsTruncateHintPolicies (strategy C) pins the split between

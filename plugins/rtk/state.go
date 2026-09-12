@@ -19,6 +19,17 @@ type CompressionState struct {
 	// index where the pipeline did compress is recovered from the raw-output
 	// file referenced by RawOutputPointers (rtk_raw_output_id).
 	ScannedIndices []int
+	// BypassedTruncated records the message/block indices whose tool output
+	// the pipeline recognised as already-truncated RTK output — the body
+	// carried a [rtk:raw_output_id=...] sentinel (either stripped by the
+	// PreLLMHook entry strip, or detected in-pipeline) — and passed through
+	// unchanged via the anti-recursion bypass. Distinct from ScannedIndices:
+	// a bypassed index means the visible truncated content was inherited from
+	// an earlier request, not produced by this one. Surfaced as
+	// BifrostContextKeyRTKBypassedTruncated even when nothing was compressed,
+	// so the log detail view can explain "echoed truncated content, no new
+	// compression" instead of "compression not triggered".
+	BypassedTruncated []int
 	// RawOutputEntries carries per-message raw-output pointer metadata
 	// (scanned index + pointer ID) so the log detail view can render one
 	// "View raw output" link per compressed message. Populated alongside
@@ -33,6 +44,7 @@ func NewCompressionState() *CompressionState {
 		Techniques:        make([]string, 0),
 		RawOutputPointers: make([]*RtkRawOutputPointer, 0),
 		ScannedIndices:    make([]int, 0),
+		BypassedTruncated: make([]int, 0),
 		RawOutputEntries:  make([]schemas.RTKRawOutputEntry, 0),
 	}
 }

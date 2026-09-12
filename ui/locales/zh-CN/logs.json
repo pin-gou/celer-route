@@ -838,6 +838,8 @@
 		"rtkUncompressed": "未触发压缩",
 		"rtkSnapshotDisabled": "原始输出保留未启用。如需在日志详情查看压缩对比，请启用",
 		"rtkSnapshotGoToConfig": "原始输出保留",
+		"rtkBypassedHint": "本请求 RTK 未发生新压缩：以下工具内容已携带先前压缩产生的 [rtk:raw_output_id=...] 标记，防递归原样透传。截断发生在更早的请求——点击「恢复原文」可获取完整内容。",
+		"rtkBypassedRecover": "恢复原文",
 		"rtkOriginalLabel": "原文",
 		"rtkCompressedLabel": "压缩后",
 		"rtkMessageLabel": "消息 #{{index}}",

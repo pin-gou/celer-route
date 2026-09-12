@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useGetRtkRawOutputQuery } from "@/lib/store/apis/rtkAdminApi";
+import { useGetRtkRawOutputQuery, useLazyGetRtkRawOutputQuery } from "@/lib/store/apis/rtkAdminApi";
 
 interface ScannedIndexEntry {
 	index: number;
@@ -56,6 +56,7 @@ export default function RTKCompressionDiffView({ metadata, compressedItems }: Pr
 	const rawOutputID = stringFromMetadata(metadata?.rtk_raw_output_id);
 	const rawOutputEntries = rawOutputEntriesFromMetadata(metadata?.rtk_raw_output_entries);
 	const scannedIndices = numberArrayFromMetadata(metadata?.rtk_pipeline_scanned);
+	const bypassedIndices = numberArrayFromMetadata(metadata?.rtk_bypassed_truncated);
 
 	// Empty / not-triggered state: no raw-output pointer AND no scanned indices.
 	const compressedFlag = techniques.length > 0 || (scannedIndices.length ?? 0) > 0 || !!rawOutputID || rawOutputEntries.length > 0;
@@ -69,6 +70,16 @@ export default function RTKCompressionDiffView({ metadata, compressedItems }: Pr
 				<div className="text-xs">{tFn("detailView.rtkNoSnapshots")}</div>
 			</div>
 		);
+	}
+
+	// Echoed truncated content: the pipeline recognised some tool outputs as
+	// already-truncated RTK output (they carried a [rtk:raw_output_id=...]
+	// marker from an earlier compression) and passed them through unchanged —
+	// no new compression, no raw-output pointers of its own. The visible
+	// truncation therefore happened in an earlier request; explain that
+	// instead of the generic "snapshot disabled" banner.
+	if (bypassedIndices.length > 0 && !rawOutputID && rawOutputEntries.length === 0) {
+		return <BypassedDiffView metadata={metadata} bypassedIndices={bypassedIndices} compressedItems={compressedItems} />;
 	}
 
 	// No raw-output pointer: the pipeline ran (scanned or marked techniques)
@@ -126,6 +137,91 @@ export default function RTKCompressionDiffView({ metadata, compressedItems }: Pr
 
 	// Legacy single-ID path (old logs): fetch one file and split it.
 	return <PopulatedDiff metadata={metadata} rawOutputID={rawOutputID!} compressedItems={compressedItems} scannedIndices={scannedIndices} />;
+}
+
+// ---------------------------------------------------------------------------
+// Bypassed-truncated path (echoed content, no new compression)
+// ---------------------------------------------------------------------------
+
+interface BypassedDiffViewProps {
+	metadata: Record<string, unknown> | undefined;
+	bypassedIndices: ScannedIndexEntry[];
+	compressedItems?: CompressedItem[];
+}
+
+// BypassedDiffView renders requests where the RTK pipeline recognised tool
+// outputs as already-truncated RTK output (they carried a raw-output marker
+// from an earlier compression) and passed them through unchanged — no new
+// compression, no raw-output pointers of its own. The visible truncation
+// happened in an earlier request; the operator can still recover each echoed
+// body's original via the marker's pointer ID.
+function BypassedDiffView({ metadata, bypassedIndices, compressedItems }: BypassedDiffViewProps) {
+	const { t: tFn } = useTranslation("logs");
+
+	const ratio = numberFromMetadata(metadata?.rtk_compression_ratio);
+	const techniques = stringArrayFromMetadata(metadata?.rtk_techniques);
+	const filterMatched = stringFromMetadata(metadata?.rtk_filter_matched);
+
+	const bypassedSet = new Set(bypassedIndices.map((entry) => entry.index));
+	const items = (compressedItems ?? []).filter((item) => bypassedSet.has(item.index));
+
+	return (
+		<div className="space-y-4" data-testid="rtk-diff-bypassed">
+			<RTKHeader ratio={ratio} techniques={techniques} filterMatched={filterMatched} />
+			<Alert className="border-sky-300 bg-sky-50 dark:border-sky-700 dark:bg-sky-950" data-testid="rtk-bypassed-banner">
+				<AlertDescription className="text-sky-800 dark:text-sky-200">{tFn("detailView.rtkBypassedHint")}</AlertDescription>
+			</Alert>
+			{items.length === 0 ? (
+				<div className="text-muted-foreground rounded-sm border border-dashed p-6 text-center text-sm">
+					{tFn("detailView.rtkNoSnapshots")}
+				</div>
+			) : (
+				<div className="flex flex-col gap-4">
+					{items.map((item) => (
+						<BypassedMessageRow key={`byp-${item.index}`} index={item.index} content={item.content} />
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
+// BypassedMessageRow shows one echoed-truncated tool message. The content pane
+// is the body as it reached this request; when the body carries a raw-output
+// pointer the operator can fetch the original on demand.
+function BypassedMessageRow({ index, content }: { index: number; content: string }) {
+	const { t } = useTranslation("logs");
+	const [fetchRaw, { data: rawText, isLoading, isFetching }] = useLazyGetRtkRawOutputQuery();
+	const pointerId = extractRawOutputPointerId(content);
+
+	return (
+		<div className="rounded-sm border" data-testid={`rtk-bypassed-message-${index}`}>
+			<div className="bg-muted/20 flex items-center justify-between rounded-t-sm border-b px-4 py-2 text-xs">
+				<span className="font-medium">{t("detailView.rtkMessageLabel", { index: index >= 0 ? index : 0 })}</span>
+				{pointerId !== "" && (
+					<button
+						type="button"
+						className="text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+						disabled={isLoading || isFetching}
+						data-testid={`rtk-bypassed-recover-${index}`}
+						onClick={() => fetchRaw(pointerId)}
+					>
+						{t("detailView.rtkBypassedRecover")}
+					</button>
+				)}
+			</div>
+			<div className="relative grid grid-cols-1 gap-0 md:grid-cols-2">
+				<DiffPane
+					label={t("detailView.rtkOriginalLabel")}
+					content={rawText ?? ""}
+					side="original"
+					loading={isLoading || isFetching}
+					error={false}
+				/>
+				<DiffPane label={t("detailView.rtkCompressedLabel")} content={content} side="compressed" />
+			</div>
+		</div>
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +512,15 @@ function rawOutputEntriesFromMetadata(v: unknown): RawOutputEntry[] {
 			id: typeof entry.id === "string" ? entry.id : String(entry.id ?? ""),
 		}))
 		.filter((entry) => entry.id.length > 0);
+}
+
+// extractRawOutputPointerId pulls the 24-hex pointer ID out of an echoed
+// [rtk:raw_output_id=<id>; ...] marker embedded in a tool message body.
+// Returns "" when the body carries no marker (e.g. it was not echoed from an
+// earlier compression, or the marker is malformed).
+function extractRawOutputPointerId(content: string): string {
+	const m = content.match(/\[rtk:raw_output_id=([0-9a-f]{24})/);
+	return m ? m[1] : "";
 }
 
 // splitRawOutputByIndex partitions the raw-output file body across the
