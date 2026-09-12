@@ -1,8 +1,9 @@
 # celer-route single-binary installer for Windows.
 #
 # Downloads the celer-route-http.exe gateway binary for windows/amd64 from the
-# GitHub release assets, verifies its SHA256 checksum, and installs it to the
-# prefix directory (default %USERPROFILE%\.local\bin).
+# repository-level GitHub release assets (tag vX.Y.Z), verifies its SHA256
+# checksum, and installs it to the prefix directory (default
+# %USERPROFILE%\.local\bin).
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File install.ps1
@@ -21,10 +22,10 @@ $Arch = "amd64"
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# Resolve the latest transports release if no explicit version was given
+# Resolve the latest repository release if no explicit version was given
 if ($Version -eq "latest") {
-    $refs = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/git/matching-refs/tags/transports/v" -Headers @{ "User-Agent" = "celer-route-installer" }
-    $versions = @($refs | ForEach-Object { $_.ref -replace '^refs/tags/transports/v', '' } | Where-Object { $_ -match '^[0-9]+\.[0-9]+\.[0-9]+$' })
+    $refs = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/git/matching-refs/tags/v" -Headers @{ "User-Agent" = "celer-route-installer" }
+    $versions = @($refs | ForEach-Object { $_.ref -replace '^refs/tags/v', '' } | Where-Object { $_ -match '^[0-9]+\.[0-9]+\.[0-9]+$' })
     if ($versions.Count -eq 0) {
         Write-Host "could not resolve the latest version from GitHub" -ForegroundColor Red
         exit 1
@@ -38,9 +39,8 @@ else {
     $Version = "v$Version"
 }
 
-$Tag = "transports/$Version"
 $Asset = "celer-route-http-windows-$Arch.exe"
-$Url = "https://github.com/$Repo/releases/download/$Tag/$Asset"
+$Url = "https://github.com/$Repo/releases/download/$Version/$Asset"
 
 Write-Host "Downloading $Url..."
 $Tmp = Join-Path $env:TEMP "celer-route-install-$([guid]::NewGuid().ToString('N'))"

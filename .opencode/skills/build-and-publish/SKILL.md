@@ -21,6 +21,7 @@ metadata:
 | 当前目录为仓库根目录 | `Makefile` 存在 | 终止并提示 |
 | git 工作区干净 | `git status --porcelain` 为空 | 终止并提示提交或 stash |
 | 参数 `version` | 格式 `vX.Y.Z`（如 `v1.2.3`） | 终止并提示正确格式 |
+| 交叉编译工具链 | `bash .github/workflows/scripts/install-cross-compilers.sh` 可自动安装（需 sudo，或已手动装好）；产物校验见步骤 3.5 | 工具链不可用且无法安装时终止——二进制为硬依赖，不发二进制不建 release |
 
 ## 参数
 
@@ -54,6 +55,48 @@ git pull origin main
 ```bash
 make docker-image-multiarch VERSION="$version"
 ```
+
+### 步骤 3.5：构建并上传发布二进制
+
+构建 5 平台二进制（linux/amd64、linux/arm64、darwin/amd64、darwin/arm64、windows/amd64）并展平命名；上传与 `gh release create` 一起在步骤 5 执行。
+
+#### 3.5.1 构建内嵌 UI 与交叉编译
+
+```bash
+# 构建内嵌 UI（go:embed 需要）
+make build-ui
+
+# 安装交叉编译工具链（musl / arm-gcc / mingw / osxcross，需 sudo；已装则 apt 幂等、SDK 目录存在即跳过下载）
+bash .github/workflows/scripts/install-cross-compilers.sh
+
+# 交叉编译 5 平台（产物在 dist/<os>/<arch>/celer-route-http[.exe] + .sha256）
+bash .github/workflows/scripts/build-executables.sh "$version"
+```
+
+产物校验：`ls dist/*/*/celer-route-http*` 应含 5 平台二进制 + 5 个 `.sha256`。
+
+#### 3.5.2 展平二进制命名
+
+`gh release upload` 的资产名 = basename，linux/amd64 与 linux/arm64 的 `celer-route-http` 会重名覆盖。上传前按 `celer-route-http-<os>-<arch>[.exe]` 展平并重新生成校验和（与 `release-celer-route-http-finalize.sh` 的做法保持一致）：
+
+```bash
+STAGE=$(mktemp -d)
+trap 'rm -rf "$STAGE"' EXIT
+while IFS= read -r -d '' asset; do
+  rel="${asset#dist/}"
+  plat="${rel%%/*}"
+  arch_dir="$(dirname "$rel" | cut -d/ -f2)"
+  base="$(basename "$asset")"
+  stem="${base%.exe}"
+  ext="${base#$stem}"
+  cp "$asset" "$STAGE/celer-route-http-${plat}-${arch_dir}${ext}"
+done < <(find dist -type f -name "celer-route-http*" ! -name "*.sha256" -print0)
+(cd "$STAGE" && for f in celer-route-http-*; do [ -f "$f" ] && shasum -a 256 "$f" > "$f.sha256"; done)
+[ "$(ls "$STAGE" | wc -l)" -eq 10 ] || { echo "ERROR: 展平产物数量异常（应为 5 二进制 + 5 校验和）"; exit 1; }
+```
+
+- 展平后的 `$STAGE` 目录在步骤 5 中用于 `gh release upload`
+- `$STAGE` 由 EXIT trap 自动清理
 
 ### 步骤 4：分析变更并生成 CHANGELOG
 
@@ -194,17 +237,47 @@ git tag "$version"
 git push origin "$version"
 
 # 创建 release
-# 将 CHANGELOG 内容写入临时文件
+# 将 CHANGELOG 内容写入临时文件（CHANGELOG 前加 Installation 段）
 cat > /tmp/changelog-${version}.md << 'CHANGELOG_EOF'
+### Installation
+
+#### Single Binary
+
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
+\`\`\`
+
+Pre-built binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and windows/amd64 are attached to this release, each with a \`.sha256\` checksum.
+
+#### Docker
+
+\`\`\`bash
+docker run -p 8080:8080 ghcr.io/pin-gou/celer-route:v<version>
+\`\`\`
+
 {{CHANGELOG_CONTENT}}
 CHANGELOG_EOF
 
+# 创建 release（不含资产），再单独上传——二进制总量约 660MB，分离执行保证上传中断时只需重跑 upload
 gh release create "$version" \
   --title "$version" \
   --notes-file /tmp/changelog-${version}.md
 
+gh release upload "$version" "$STAGE"/celer-route-http-* --clobber
+
+# 校验资产齐全（5 二进制 + 5 校验和）
+COUNT=$(gh release view "$version" --json assets --jq '.assets | length')
+if [[ "$COUNT" -ne 10 ]]; then
+  echo "ERROR: 资产数量异常（期望 10，实际 $COUNT）——重跑 gh release upload 补传"
+  exit 1
+fi
+
 rm -f /tmp/changelog-${version}.md
 ```
+
+- 上传中断：release 已创建，重跑 `gh release upload "$version" "$STAGE"/celer-route-http-* --clobber` 即可，不要重复 `gh release create`（tag 已存在时会报错，属预期）
+- `"$STAGE"/celer-route-http-*` 会被 shell 展开为全部二进制与校验和文件
+- `$STAGE` 由步骤 3.5.2 的 EXIT trap 清理
 
 ## 完整执行脚本
 
@@ -231,6 +304,24 @@ git pull origin main
 # 步骤 3：构建镜像
 make docker-image-multiarch VERSION="$version"
 
+# 步骤 3.5：构建发布二进制（内嵌 UI + 交叉编译 5 平台 + 展平命名）
+make build-ui
+bash .github/workflows/scripts/install-cross-compilers.sh
+bash .github/workflows/scripts/build-executables.sh "$version"
+STAGE=$(mktemp -d)
+trap 'rm -rf "$STAGE"' EXIT
+while IFS= read -r -d '' asset; do
+  rel="${asset#dist/}"
+  plat="${rel%%/*}"
+  arch_dir="$(dirname "$rel" | cut -d/ -f2)"
+  base="$(basename "$asset")"
+  stem="${base%.exe}"
+  ext="${base#$stem}"
+  cp "$asset" "$STAGE/celer-route-http-${plat}-${arch_dir}${ext}"
+done < <(find dist -type f -name "celer-route-http*" ! -name "*.sha256" -print0)
+(cd "$STAGE" && for f in celer-route-http-*; do [ -f "$f" ] && shasum -a 256 "$f" > "$f.sha256"; done)
+[ "$(ls "$STAGE" | wc -l)" -eq 10 ] || { echo "ERROR: 展平产物数量异常（应为 5 二进制 + 5 校验和）"; exit 1; }
+
 # 步骤 4：分析变更
 current_tag="$version"
 prev_tag=$(git tag --sort=-version:refname | grep -vE '\-(rc|alpha|beta)' | head -n 2 | tail -n 1)
@@ -251,10 +342,33 @@ echo ""
 # agent 在此处手动分析并生成 CHANGELOG markdown
 # ...
 
-# 步骤 5：创建 Release
+# 步骤 5：创建 Release（正文含 Installation 段；create 与 upload 分离）
 git tag "$version"
 git push origin "$version"
+cat > /tmp/changelog-${version}.md << 'CHANGELOG_EOF'
+### Installation
+
+#### Single Binary
+
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
+\`\`\`
+
+Pre-built binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and windows/amd64 are attached to this release, each with a \`.sha256\` checksum.
+
+#### Docker
+
+\`\`\`bash
+docker run -p 8080:8080 ghcr.io/pin-gou/celer-route:v<version>
+\`\`\`
+
+CHANGELOG_EOF
+# agent 将生成的 CHANGELOG 内容追加入 /tmp/changelog-${version}.md（Installation 段之后）
 gh release create "$version" --title "$version" --notes-file /tmp/changelog-${version}.md
+gh release upload "$version" "$STAGE"/celer-route-http-* --clobber
+COUNT=$(gh release view "$version" --json assets --jq '.assets | length')
+[[ "$COUNT" -eq 10 ]] || { echo "ERROR: 资产数量异常（期望 10，实际 $COUNT）——重跑 gh release upload 补传"; exit 1; }
+rm -f /tmp/changelog-${version}.md
 ```
 
 ## 报告格式
@@ -270,6 +384,11 @@ gh release create "$version" --title "$version" --notes-file /tmp/changelog-${ve
 ### 构建产物
 - **Docker 镜像：** ghcr.io/pin-gou/celer-route:{{version}}（multi-arch: linux/amd64, linux/arm64）
 - **GitHub Release：** https://github.com/{{owner}}/{{repo}}/releases/tag/{{version}}
+- **二进制资产（上传至 Release）：**
+  - celer-route-http-linux-amd64 / celer-route-http-linux-arm64
+  - celer-route-http-darwin-amd64 / celer-route-http-darwin-arm64
+  - celer-route-http-windows-amd64.exe
+  - 以上均附 `.sha256`
 
 ### CHANGELOG 摘要
 
@@ -304,6 +423,9 @@ gh release create "$version" --title "$version" --notes-file /tmp/changelog-${ve
 - 工作区不干净时拒绝执行，防止误提交未完成的变更
 - `gh release create` 使用 `--notes-file` 而非 `--notes`，避免 shell 转义问题
 - 临时 changelog 文件在 release 创建后立即删除
+- `gh release create` 与 `gh release upload` 分离执行：上传中断时只重跑 `gh release upload --clobber` 覆盖重传，不要重复 `gh release create`（tag 已存在时会报错，属预期）
+- 上传后必须校验资产数量（`gh release view` 应为 10），不足时补传，不静默放行
+- 交叉编译工具链为硬依赖：`install-cross-compilers.sh` 失败且无法手动补齐时终止，不发无二进制资产的 release
 
 ## 明确不做的事
 
@@ -311,3 +433,4 @@ gh release create "$version" --title "$version" --notes-file /tmp/changelog-${ve
 - 不修改 `AGENTS.md` 或版本文件——由发布流程独立管理
 - 不推送 `latest` tag 以外的 Docker 标签——`make docker-image-multiarch` 已经处理
 - 不创建 PR——发布流程直接从 main 分支进行
+- 不重复创建 `transports/vX` release（避免与 CI 路径冲突）——二进制只挂仓库级 `vX`

@@ -4,8 +4,8 @@ set -euo pipefail
 # celer-route single-binary installer.
 #
 # Downloads the celer-route-http gateway binary for the current OS/arch from
-# the GitHub release assets, verifies its SHA256 checksum, and installs it to
-# PREFIX (default ~/.local/bin).
+# the repository-level GitHub release assets (tag vX.Y.Z), verifies its SHA256
+# checksum, and installs it to PREFIX (default ~/.local/bin).
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
@@ -24,7 +24,7 @@ Usage: install.sh [--version vX.Y.Z] [--prefix DIR] [--mirror URL]
 Install the celer-route HTTP gateway binary.
 
 Options:
-  --version vX.Y.Z   Version to install (default: latest release)
+  --version vX.Y.Z   Version to install (default: latest repository release)
   --prefix DIR       Install directory (default: ~/.local/bin)
   --mirror URL       Optional base URL of a binary mirror (used instead of GitHub release assets)
 
@@ -68,26 +68,26 @@ fi
 ext=""
 [[ "$os" == "windows" ]] && ext=".exe"
 
-# Resolve the latest transports release if no explicit version was given
+# Resolve the latest repository release if no explicit version was given
 if [[ "$VERSION" == "latest" ]]; then
-  refs="$(curl -fsSL "https://api.github.com/repos/${REPO}/git/matching-refs/tags/transports/v" 2>/dev/null || true)"
-  VERSION="$(printf '%s' "$refs" | grep -o '"ref": *"refs/tags/transports/v[^"]*"' | sed 's/.*transports\///;s/"//' | sort -V | tail -1 || true)"
+  refs="$(curl -fsSL "https://api.github.com/repos/${REPO}/git/matching-refs/tags/v" 2>/dev/null || true)"
+  VERSION="$(printf '%s' "$refs" | grep -o '"ref": *"refs/tags/v[0-9][^"]*"' | sed 's/.*tags\/v//;s/"//' | sort -V | tail -1 || true)"
   if [[ -z "$VERSION" ]]; then
     echo "could not resolve the latest version from GitHub" >&2
     exit 1
   fi
+  VERSION="v${VERSION}"
   echo "latest version: $VERSION"
 else
   VERSION="${VERSION#v}"
   VERSION="v${VERSION}"
 fi
 
-TAG="transports/${VERSION}"
 ASSET="${BIN_NAME}-${os}-${arch}${ext}"
 if [[ -n "$MIRROR" ]]; then
   URL="${MIRROR}/${VERSION}/${os}/${arch}/${BIN_NAME}${ext}"
 else
-  URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
+  URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
 fi
 
 echo "Downloading ${URL} ..."
