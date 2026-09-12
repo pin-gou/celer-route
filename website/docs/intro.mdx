@@ -18,6 +18,22 @@ celer-route 是一个高性能的个人 LLM 接口网关，将主流 LLM 提供�
 - **插件系统** — 提供商冷却、语义缓存、请求日志、模拟响应、提示词管理等插件
 - **双数据库后端** — 同一镜像同时支持 SQLite（单机零依赖）与 PostgreSQL（生产 HA）
 
+## 快速上手
+
+**方式一：下载单个二进制（免 Docker）**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
+```
+
+安装后访问 [`http://localhost:8080`](http://localhost:8080) 即可打开 Web 管理界面。详细说明见 [部署：单二进制](./deployment/binary)。
+
+**方式二：Docker**
+
+```bash
+docker run -d -p 8080:8080 -v ~/celer-route-data:/app/data ghcr.io/pin-gou/celer-route:latest
+```
+
 ## 接下来阅读
 
 import DocCardList from '@theme/DocCardList';

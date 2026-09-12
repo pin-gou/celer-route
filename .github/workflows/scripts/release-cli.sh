@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Release bifrost CLI component
+# Release celer-route CLI component
 # Usage: ./release-cli.sh <version>
 
 # Get the absolute path of the script directory
@@ -21,7 +21,7 @@ fi
 VERSION="$1"
 TAG_NAME="cli/v${VERSION}"
 
-echo "🚀 Releasing bifrost CLI v$VERSION..."
+echo "🚀 Releasing celer-route CLI v$VERSION..."
 
 # Validate CLI build
 echo "🔨 Validating CLI build..."
@@ -98,7 +98,7 @@ else
 fi
 
 # Create GitHub release
-TITLE="Bifrost CLI v$VERSION"
+TITLE="celer-route CLI v$VERSION"
 
 # Mark prereleases when version contains a hyphen
 PRERELEASE_FLAG=""
@@ -106,15 +106,15 @@ if [[ "$VERSION" == *-* ]]; then
   PRERELEASE_FLAG="--prerelease"
 fi
 
-BODY="## Bifrost CLI Release v$VERSION
+BODY="## celer-route CLI Release v$VERSION
 
 $CHANGELOG_BODY
 
 ### Installation
 
-#### Binary Download
+#### Go Install
 \`\`\`bash
-npx @maximhq/bifrost --cli-version v$VERSION
+go install github.com/pin-gou/celer-route/cli@v$VERSION
 \`\`\`
 
 ---
@@ -130,7 +130,7 @@ else
     ${PRERELEASE_FLAG}
 fi
 
-echo "✅ Bifrost CLI released successfully"
+echo "✅ celer-route CLI released successfully"
 
 # Print summary
 echo ""

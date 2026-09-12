@@ -1,0 +1,116 @@
+---
+title: 部署：单二进制（免 Docker）
+description: 下载一个二进制即可运行 celer-route，无需 Docker——适合本地调试、试用与轻量部署
+sidebar_position: 1
+---
+
+# 部署：单二进制
+
+celer-route 每次发版都会构建 **linux / macOS / Windows** 各平台的预编译二进制，挂在 GitHub Release 上。下载一个可执行文件就能直接运行整个网关——Web 管理界面、全部插件、SQLite 存储都已编译进单个二进制，不需要 Docker、不需要安装任何运行时。
+
+## 支持平台
+
+| 平台 | 架构 | 文件名 |
+|------|------|--------|
+| Linux | amd64 / arm64 | `celer-route-http-linux-amd64` / `celer-route-http-linux-arm64` |
+| macOS | amd64 / arm64 | `celer-route-http-darwin-amd64` / `celer-route-http-darwin-arm64` |
+| Windows | amd64 | `celer-route-http-windows-amd64.exe` |
+
+## 安装
+
+### 一键脚本（Linux / macOS）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
+```
+
+脚本会自动检测操作系统与 CPU 架构、下载对应二进制、校验 SHA256，并安装到 `~/.local/bin`。也可以指定版本与安装目录：
+
+```bash
+bash install.sh --version v1.2.3 --prefix /usr/local/bin
+```
+
+### PowerShell（Windows）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+默认安装到 `%USERPROFILE%\.local\bin\celer-route-http.exe`，同样会校验 SHA256。
+
+### 手动下载
+
+从 [GitHub Releases](https://github.com/pin-gou/celer-route/releases) 找到对应平台的 release，下载 `celer-route-http-<os>-<arch>`（及同名的 `.sha256` 文件），然后：
+
+```bash
+# 1. 校验文件完整性
+shasum -a 256 -c celer-route-http-linux-amd64.sha256
+
+# 2. 赋予执行权限并运行
+chmod +x celer-route-http-linux-amd64
+./celer-route-http-linux-amd64 -host 0.0.0.0 -port 8080
+```
+
+## 首次运行
+
+不配置任何东西也可以启动：celer-route 会自动探测常见环境变量（如 `OPENAI_API_KEY`），并默认把配置、日志写入当前目录。更规范的做法是指定数据目录：
+
+```bash
+./celer-route-http -host 0.0.0.0 -port 8080 -app-dir ~/celer-route-data
+```
+
+- `-app-dir`：数据目录，包含 `config.json`（配置）与日志
+- `-host`：监听地址，默认 `localhost`（对外提供服务用 `0.0.0.0`）
+- `-port`：监听端口，默认 `8080`
+- `-version`：打印版本号后退出
+
+启动成功后访问 [`http://localhost:8080`](http://localhost:8080) 进入 Web 管理界面。
+
+### 配置（可选）
+
+把 `config.json` 放到 `-app-dir` 指定的目录即可启用完整配置（SQLite / PostgreSQL 存储、插件开关、路由等）。配置示例见 [部署：SQLite](./sqlite)。
+
+## 注册为系统服务（Linux）
+
+```ini
+# /etc/systemd/system/celer-route.service
+[Unit]
+Description=celer-route LLM gateway
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/celer-route-http -host 0.0.0.0 -port 8080 -app-dir /var/lib/celer-route
+Restart=always
+User=celer-route
+Group=celer-route
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now celer-route
+```
+
+## 升级
+
+再次运行安装脚本即可覆盖为最新版本；指定 `--version` 可固定在某个版本。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
+```
+
+升级后沿用原来的 `-app-dir`，配置与数据保持不变。
+
+## 与 Docker 部署的区别
+
+| 维度 | 单二进制 | Docker |
+|------|----------|--------|
+| 前置依赖 | 无 | 需要 Docker |
+| 启动方式 | `./celer-route-http -host 0.0.0.0` | `docker run -p 8080:8080 ...` |
+| 数据目录 | `-app-dir` 指定即可 | 需挂载卷 |
+| 自动更新 | 手动重跑安装脚本 | 手动拉取新镜像 |
+| 适用场景 | 本地调试、单机试用、轻量自托管 | 生产多节点、已有容器编排 |
+
+需要 PostgreSQL 生产部署时，两种方式都支持，配置方式相同（见 [部署：PostgreSQL](./postgres)）。

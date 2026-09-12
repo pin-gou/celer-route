@@ -168,7 +168,7 @@ run_combo() {
 
     local elapsed=0
     while [ $elapsed -lt 60 ]; do
-        if grep -q "successfully started bifrost" "$server_log" 2>/dev/null; then
+        if grep -q "successfully started celer-route" "$server_log" 2>/dev/null; then
             break
         fi
         if ! kill -0 "$CURRENT_PID" 2>/dev/null; then

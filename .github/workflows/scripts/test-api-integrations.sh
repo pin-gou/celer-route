@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# API integrations test: compiles bifrost-http, runs it against PostgreSQL using
+# API integrations test: compiles celer-route-http, runs it against PostgreSQL using
 # tests/config.json (with a runtime config_store/logs_store overlay), then runs
 # the api-management newman collection via tests/e2e/api/runners/run-newman-api-tests.sh.
 
@@ -17,7 +17,7 @@ COMPOSE_FILE="$CONFIGS_DIR/docker-compose.yml"
 SOURCE_CONFIG="$REPO_ROOT/tests/config.json"
 RUNNER="$REPO_ROOT/tests/e2e/api/runners/run-newman-api-tests.sh"
 BIN_DIR="$REPO_ROOT/tmp"
-BIFROST_BINARY="$BIN_DIR/bifrost-http"
+BIFROST_BINARY="$BIN_DIR/celer-route-http"
 
 PORT="${PORT:-8080}"
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
@@ -74,7 +74,7 @@ trap cleanup EXIT
 echo "🎨 Building UI..."
 (cd "$REPO_ROOT" && make build-ui)
 
-echo "🔨 Building bifrost-http binary..."
+echo "🔨 Building celer-route-http binary..."
 mkdir -p "$BIN_DIR"
 (cd "$REPO_ROOT/transports/celer-route-http" && go build -o "$BIFROST_BINARY" .)
 
@@ -140,14 +140,14 @@ jq --arg host "$POSTGRES_HOST" --arg port "$POSTGRES_PORT" --arg user "$POSTGRES
      "logs_store":   {"enabled": true, "type": "postgres", "config": {"host": $host, "port": $port, "user": $user, "password": $pass, "db_name": $db, "ssl_mode": $ssl}}
    }' "$SOURCE_CONFIG" > "$MERGED_CONFIG"
 
-echo "🚀 Starting bifrost-http on port $PORT..."
+echo "🚀 Starting celer-route-http on port $PORT..."
 "$BIFROST_BINARY" --app-dir "$TEMP_DIR" --port "$PORT" --log-level debug > "$SERVER_LOG" 2>&1 &
 BIFROST_PID=$!
 
 MAX_WAIT=60
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-  if grep -q "successfully started bifrost" "$SERVER_LOG" 2>/dev/null; then
+  if grep -q "successfully started celer-route" "$SERVER_LOG" 2>/dev/null; then
     echo "✅ Bifrost started (PID $BIFROST_PID)"
     break
   fi

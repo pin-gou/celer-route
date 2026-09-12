@@ -1073,13 +1073,13 @@ jobs:
             echo "Docker Compose plugin is available"
             docker compose version
           fi
-      - name: Run bifrost-http tests
+      - name: Run celer-route-http tests
         env:
           MAXIM_API_KEY: ${{ secrets.MAXIM_API_KEY }}
           MAXIM_LOGGER_ID: ${{ secrets.MAXIM_LOG_REPO_ID }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
           BIFROST_ENCRYPTION_KEY: ${{ secrets.BIFROST_ENCRYPTION_KEY }}
-        run: ./.github/workflows/scripts/test-bifrost-http.sh
+        run: ./.github/workflows/scripts/test-celer-route-http.sh
   # Migration tests - validates database migrations from previous versions
   test-migrations:
     needs: [check-skip, detect-changes]
@@ -2169,7 +2169,7 @@ jobs:
         id: prep
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: ./.github/workflows/scripts/release-bifrost-http-prep.sh "${{ needs.detect-changes.outputs.transport-version }}"
+        run: ./.github/workflows/scripts/release-celer-route-http-prep.sh "${{ needs.detect-changes.outputs.transport-version }}"
   # Build darwin, windows, linux/amd64 binaries and upload to R2
   build-binaries-x86:
     needs: [bifrost-http-prep, detect-changes]
@@ -2224,6 +2224,13 @@ jobs:
         run: bash ./.github/workflows/scripts/install-cross-compilers.sh
       - name: Build executables
         run: bash ./.github/workflows/scripts/build-executables.sh "${{ needs.detect-changes.outputs.transport-version }}" "darwin/amd64 darwin/arm64 linux/amd64 windows/amd64"
+      - name: Upload binaries artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: celer-route-binaries-x86
+          path: dist/**
+          if-no-files-found: error
+          retention-days: 30
       - name: Configure R2
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
@@ -2281,6 +2288,13 @@ jobs:
         run: make build-ui
       - name: Build linux/arm64 binary
         run: bash ./.github/workflows/scripts/build-executables.sh "${{ needs.detect-changes.outputs.transport-version }}" "linux/arm64"
+      - name: Upload binaries artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: celer-route-binaries-arm64
+          path: dist/**
+          if-no-files-found: error
+          retention-days: 30
       - name: Configure R2
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
@@ -2313,7 +2327,10 @@ jobs:
             api.github.com:443
             files.pythonhosted.org:443
             github.com:443
+            objects.githubusercontent.com:443
             pypi.org:443
+            release-assets.githubusercontent.com:443
+            uploads.github.com:443
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -2328,13 +2345,23 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: bash ./.github/workflows/scripts/configure-r2.sh
-      - name: Finalize bifrost-http release
+      - name: Download x86 binaries
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: celer-route-binaries-x86
+          path: dist
+      - name: Download arm64 binaries
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: celer-route-binaries-arm64
+          path: dist
+      - name: Finalize celer-route-http release
         id: release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: ./.github/workflows/scripts/release-bifrost-http-finalize.sh "${{ needs.detect-changes.outputs.transport-version }}"
+        run: ./.github/workflows/scripts/release-celer-route-http-finalize.sh "${{ needs.detect-changes.outputs.transport-version }}"
   # Docker build amd64
   docker-build-amd64:
     needs:
@@ -2399,7 +2426,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          ./.github/workflows/scripts/verify-bifrost-http-release.sh "${{ needs.detect-changes.outputs.transport-version }}" "${{ needs.detect-changes.outputs.bifrost-http-needs-release }}"
+          ./.github/workflows/scripts/verify-celer-route-http-release.sh "${{ needs.detect-changes.outputs.transport-version }}" "${{ needs.detect-changes.outputs.bifrost-http-needs-release }}"
           echo "verified=true" >> $GITHUB_OUTPUT
       - name: Setup Docker Buidx
         uses: step-security/setup-buildx-action@f931205d68723ad9589fd2a7e2ece238bf9de341 # v4.0.0
@@ -2491,7 +2518,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          ./.github/workflows/scripts/verify-bifrost-http-release.sh "${{ needs.detect-changes.outputs.transport-version }}" "${{ needs.detect-changes.outputs.bifrost-http-needs-release }}"
+          ./.github/workflows/scripts/verify-celer-route-http-release.sh "${{ needs.detect-changes.outputs.transport-version }}" "${{ needs.detect-changes.outputs.bifrost-http-needs-release }}"
           echo "verified=true" >> $GITHUB_OUTPUT
       - name: Setup Docker Buidx
         uses: step-security/setup-buildx-action@f931205d68723ad9589fd2a7e2ece238bf9de341 # v4.0.0
@@ -2694,6 +2721,6 @@ jobs:
             BIFROST_STATUS="❌ Failed"
           fi
           # Build the message with proper formatting
-          MESSAGE=$(printf "🚀 **Release Pipeline Complete**\n\n**Components:**\n• Core: %s\n• Framework: %s\n• Plugins: %s\n• Bifrost HTTP: %s\n\n**Details:**\n• Branch: \`${{ github.ref_name }}\`\n• Commit: \`%.8s\`\n• Author: %s\n\n[View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" "$CORE_STATUS" "$FRAMEWORK_STATUS" "$PLUGINS_STATUS" "$BIFROST_STATUS" "${{ github.sha }}" "${{ github.actor }}")
+          MESSAGE=$(printf "🚀 **Release Pipeline Complete**\n\n**Components:**\n• Core: %s\n• Framework: %s\n• Plugins: %s\n• celer-route: %s\n\n**Details:**\n• Branch: \`${{ github.ref_name }}\`\n• Commit: \`%.8s\`\n• Author: %s\n\n[View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" "$CORE_STATUS" "$FRAMEWORK_STATUS" "$PLUGINS_STATUS" "$BIFROST_STATUS" "${{ github.sha }}" "${{ github.actor }}")
           payload="$(jq -n --arg content "$MESSAGE" '{content:$content}')"
           curl -sS -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK"

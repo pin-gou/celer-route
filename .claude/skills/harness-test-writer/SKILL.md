@@ -19,7 +19,7 @@ confirm before proceeding.
 The argument may be a PR number, an issue number, or a GitHub URL.
 
 - URL containing `/pull/` => PR. URL containing `/issues/` => issue.
-- A bare number is ambiguous: try `gh pr view <N> --repo maximhq/bifrost` first; if it
+- A bare number is ambiguous: try `gh pr view <N> --repo pin-gou/celer-route` first; if it
   404s, try `gh issue view <N>`. If BOTH exist and refer to different things, ask the
   user which one they mean with AskUserQuestion.
 - No argument at all => ask the user for the PR/issue reference.
@@ -27,10 +27,10 @@ The argument may be a PR number, an issue number, or a GitHub URL.
 Fetch full context:
 
 ```bash
-gh pr view <N> --repo maximhq/bifrost --json title,body,state,files,baseRefName
-gh pr diff <N> --repo maximhq/bifrost
+gh pr view <N> --repo pin-gou/celer-route --json title,body,state,files,baseRefName
+gh pr diff <N> --repo pin-gou/celer-route
 # or
-gh issue view <N> --repo maximhq/bifrost --json title,body,state,labels,comments
+gh issue view <N> --repo pin-gou/celer-route --json title,body,state,labels,comments
 ```
 
 For a PR, also note any `Closes #X` issue and fetch that issue too - the issue usually

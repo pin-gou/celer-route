@@ -1782,10 +1782,10 @@ setup-workspace: ## Set up Go workspace with all local modules for development
 	@$(ECHO) "$(GREEN)✓ Go workspace ready with all local modules$(NC)"
 	@$(ECHO) ""
 	@$(ECHO) "$(CYAN)Local modules in workspace:$(NC)"
-	@go list -m all | grep "github.com/maximhq/bifrost" | grep -v " v" | sed 's/^/  ✓ /'
+	@go list -m all | grep "github.com/pin-gou/celer-route" | grep -v " v" | sed 's/^/  ✓ /'
 	@$(ECHO) ""
 	@$(ECHO) "$(CYAN)Remote modules (no local version):$(NC)"
-	@go list -m all | grep "github.com/maximhq/bifrost" | grep " v" | sed 's/^/  → /'
+	@go list -m all | grep "github.com/pin-gou/celer-route" | grep " v" | sed 's/^/  → /'
 	@$(ECHO) ""
 	@$(ECHO) "$(YELLOW)Note: go.work files are not committed to version control$(NC)"
 

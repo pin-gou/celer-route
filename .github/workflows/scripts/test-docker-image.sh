@@ -21,8 +21,8 @@ source "$SCRIPT_DIR/setup-go-workspace.sh"
 
 PLATFORM=${1:-linux/amd64}
 ARCH=$(echo "$PLATFORM" | cut -d'/' -f2)
-IMAGE_TAG="bifrost-test:ci-${GITHUB_SHA:-local}-${ARCH}"
-CONTAINER_NAME="bifrost-test-${ARCH}"
+IMAGE_TAG="celer-route-test:ci-${GITHUB_SHA:-local}-${ARCH}"
+CONTAINER_NAME="celer-route-test-${ARCH}"
 TEST_PORT=8080
 DOCKER_COMPOSE_FILE="$REPO_ROOT/tests/docker-compose.yml"
 TEMP_DIR=$(mktemp -d)

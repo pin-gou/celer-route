@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sourceable helpers shared by the CI harness runners (test-provider-harness.sh,
-# test-cli-harness.sh). Builds the bifrost-http binary, seeds a throwaway app
+# test-cli-harness.sh). Builds the celer-route-http binary, seeds a throwaway app
 # dir with sqlite stores, and boots the gateway.
 #
 # Usage:
@@ -13,7 +13,7 @@
 : "${REPO_ROOT:?REPO_ROOT must be set before sourcing harness-gateway.sh}"
 
 HARNESS_BIFROST_PID=""
-HARNESS_BINARY="$REPO_ROOT/tmp/bifrost-http"
+HARNESS_BINARY="$REPO_ROOT/tmp/celer-route-http"
 # Every harness config derives from the same source of truth the local
 # `make dev` app dir uses, so CI and laptop runs exercise identical wiring.
 HARNESS_SOURCE_CONFIG="$REPO_ROOT/tests/integrations/python/config.json"
@@ -22,7 +22,7 @@ harness_build_gateway() {
   echo "🎨 Building UI..."
   (cd "$REPO_ROOT" && make build-ui)
 
-  echo "🔨 Building bifrost-http binary..."
+  echo "🔨 Building celer-route-http binary..."
   mkdir -p "$REPO_ROOT/tmp"
   (cd "$REPO_ROOT/transports/celer-route-http" && go build -o "$HARNESS_BINARY" .)
 }
@@ -50,7 +50,7 @@ harness_start_gateway() {
   local app_dir="$1" port="$2" log_file="$3"
   local base_url="http://localhost:$port"
 
-  echo "🚀 Starting bifrost-http on port $port..."
+  echo "🚀 Starting celer-route-http on port $port..."
   "$HARNESS_BINARY" --app-dir "$app_dir" --port "$port" --log-level info > "$log_file" 2>&1 &
   HARNESS_BIFROST_PID=$!
 

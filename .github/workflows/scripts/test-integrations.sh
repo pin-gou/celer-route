@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Test integration tests by building bifrost-http from source, starting it,
+# Test integration tests by building celer-route-http from source, starting it,
 # and running Python and TypeScript SDK integration tests
 # Usage: ./test-integrations.sh
 
@@ -47,21 +47,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Step 1: Build bifrost-http from source
+# Step 1: Build celer-route-http from source
 echo ""
-echo "🔨 Building bifrost-http from source..."
+echo "🔨 Building celer-route-http from source..."
 cd "$REPO_ROOT"
 
 # Build the UI first, then the binary
 make build-ui
 make build
 
-if [ ! -f "$REPO_ROOT/tmp/bifrost-http" ]; then
-  echo "❌ Error: bifrost-http binary not found at $REPO_ROOT/tmp/bifrost-http"
+if [ ! -f "$REPO_ROOT/tmp/celer-route-http" ]; then
+  echo "❌ Error: celer-route-http binary not found at $REPO_ROOT/tmp/celer-route-http"
   exit 1
 fi
 
-echo "✅ Build complete: $REPO_ROOT/tmp/bifrost-http"
+echo "✅ Build complete: $REPO_ROOT/tmp/celer-route-http"
 
 # Step 2: Start Bifrost server with Python integration test config
 echo ""
@@ -71,7 +71,7 @@ echo "   Host: $TEST_HOST"
 echo "   Port: $TEST_PORT"
 
 # Start server in background with Python config directory
-"$REPO_ROOT/tmp/bifrost-http" \
+"$REPO_ROOT/tmp/celer-route-http" \
   -host "$TEST_HOST" \
   -port "$TEST_PORT" \
   -log-style json \

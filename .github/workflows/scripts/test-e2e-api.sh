@@ -93,7 +93,7 @@ PYEOF
   MAX_WAIT=60
   ELAPSED=0
   while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if grep -q "successfully started bifrost" "$SERVER_LOG" 2>/dev/null; then
+    if grep -q "successfully started celer-route" "$SERVER_LOG" 2>/dev/null; then
       echo "   ✅ Bifrost started"
       break
     fi

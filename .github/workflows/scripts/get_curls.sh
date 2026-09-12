@@ -1,7 +1,7 @@
 #!/bin/bash
 set -uo pipefail
 
-# Bifrost HTTP Transport - GET API Endpoints
+# celer-route HTTP Transport - GET API Endpoints
 # This script tests all GET endpoints and reports their status
 
 # Base URL (update as needed)
@@ -69,4 +69,4 @@ echo "  Passed: $((TOTAL_TESTS - FAILED_TESTS))"
 echo "  Failed: $FAILED_TESTS"
 echo "========================================"
 
-echo "The aim of the script is to make sure bifrost server is not crashing"
+echo "The aim of the script is to make sure celer-route server is not crashing"

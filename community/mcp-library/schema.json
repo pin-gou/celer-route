@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/maximhq/bifrost/community/mcp-library/schema.json",
+  "$id": "https://github.com/pin-gou/celer-route/community/mcp-library/schema.json",
   "title": "Bifrost MCP Library Catalog",
   "description": "Schema for the community-maintained MCP server catalog served by Bifrost.",
   "type": "object",

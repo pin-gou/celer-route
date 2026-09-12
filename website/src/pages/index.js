@@ -506,7 +506,7 @@ export default function Home() {
         <div className="pg-footer">
           <p>
             {L.footerApache}
-            <a href="https://github.com/maximhq/bifrost" target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/pin-gou/celer-route" target="_blank" rel="noopener noreferrer">
               {L.bifrost}
             </a>
             {L.footerBuilt}

@@ -84,7 +84,7 @@
 
   - The Bifrost gateway (core, transports, framework, CLI)
   - Official Bifrost plugins (`plugins/` directory)
-  - The Bifrost Docker image (`maximhq/bifrost`)
+  - The Bifrost Docker image (`pin-gou/celer-route`)
   - The Bifrost web UI
 
   The following are **out of scope**:

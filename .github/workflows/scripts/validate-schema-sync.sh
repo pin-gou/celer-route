@@ -21,9 +21,9 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 # Ensure go.work exists at the repo root. schemasync's packages.Load needs
-# it to resolve bifrost's local modules against each other. On fresh CI
+# it to resolve celer-route's local modules against each other. On fresh CI
 # runners go.work is not checked in, so we provision it here inline.
-# Sibling scripts (test-bifrost-http.sh etc.) call setup-go-workspace.sh
+# Sibling scripts (test-celer-route-http.sh etc.) call setup-go-workspace.sh
 # via `source`, but that relies on the `return` builtin which has
 # platform-dependent edge cases under `set -e`; we instead do the same
 # work inline so this wrapper is self-contained.
@@ -54,7 +54,7 @@ echo "=================================================================="
 # The schemasync tool is its own module (separate go.mod). Build it with
 # GOWORK=off so the tool's deps (golang.org/x/tools) resolve against its
 # own go.mod, not the repo's go.work. At runtime the tool itself sets
-# GOWORK=<repo-root>/go.work when loading bifrost packages.
+# GOWORK=<repo-root>/go.work when loading celer-route packages.
 (cd "$TOOL_DIR" && GOWORK=off go build -o /tmp/schemasync .)
 /tmp/schemasync \
   --schema "$REPO_ROOT/transports/config.schema.json" \

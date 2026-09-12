@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Load Test Script for Bifrost
-# Runs a load test against bifrost-http with a mocker provider
+# Runs a load test against celer-route-http with a mocker provider
 # Usage: ./load-test.sh
 #
 # This script:
-# 1. Builds bifrost-http and mocker locally
+# 1. Builds celer-route-http and mocker locally
 # 2. Creates a config.json with mocker provider (OpenAI-style)
-# 3. Starts mocker with 0ms latency and bifrost-http
+# 3. Starts mocker with 0ms latency and celer-route-http
 # 4. Runs calibration (Vegeta -> Mocker direct) for non-streaming and streaming
 # 5. Runs overhead tests (Vegeta -> Bifrost -> Mocker) for non-streaming and streaming
 # 6. Subtracts calibration from test to isolate Bifrost proxy overhead
@@ -243,14 +243,14 @@ install_vegeta() {
   fi
 }
 
-# Build bifrost-http if binary doesn't exist
+# Build celer-route-http if binary doesn't exist
 build_bifrost_http() {
-  if [ -f "${REPO_ROOT}/tmp/bifrost-http" ]; then
-    log_success "bifrost-http binary already exists at ${REPO_ROOT}/tmp/bifrost-http"
+  if [ -f "${REPO_ROOT}/tmp/celer-route-http" ]; then
+    log_success "celer-route-http binary already exists at ${REPO_ROOT}/tmp/celer-route-http"
     return 0
   fi
 
-  log_info "Building bifrost-http..."
+  log_info "Building celer-route-http..."
   cd "${BIFROST_HTTP_DIR}"
 
   # Ensure ui directory exists for //go:embed all:ui (load test does not need the real UI assets)
@@ -259,10 +259,10 @@ build_bifrost_http() {
     echo "placeholder" > "${BIFROST_HTTP_DIR}/ui/.gitkeep"
   fi
 
-  if go build -o ${REPO_ROOT}/tmp/bifrost-http .; then
-    log_success "bifrost-http built successfully"
+  if go build -o ${REPO_ROOT}/tmp/celer-route-http .; then
+    log_success "celer-route-http built successfully"
   else
-    log_error "Failed to build bifrost-http"
+    log_error "Failed to build celer-route-http"
     exit 1
   fi
 
@@ -608,7 +608,7 @@ stop_mocker() {
   fi
 }
 
-# Stop bifrost-http server
+# Stop celer-route-http server
 stop_bifrost() {
   if [ -n "$BIFROST_PID" ] && kill -0 "$BIFROST_PID" 2>/dev/null; then
     log_info "Stopping bifrost (PID: ${BIFROST_PID})..."
@@ -682,14 +682,14 @@ stop_stats_monitor() {
   fi
 }
 
-# Start bifrost-http server
+# Start celer-route-http server
 start_bifrost() {
   CURRENT_PHASE="start bifrost"
-  log_info "Starting bifrost-http on port ${BIFROST_PORT} with log level ${BIFROST_LOG_LEVEL}..."
+  log_info "Starting celer-route-http on port ${BIFROST_PORT} with log level ${BIFROST_LOG_LEVEL}..."
 
   cd "${WORK_DIR}"
   local bifrost_log="${WORK_DIR}/bifrost.log"
-  "${REPO_ROOT}/tmp/bifrost-http" -app-dir "${WORK_DIR}" -port "${BIFROST_PORT}" -host "0.0.0.0" -log-level "${BIFROST_LOG_LEVEL}" > "${bifrost_log}" 2>&1 &
+  "${REPO_ROOT}/tmp/celer-route-http" -app-dir "${WORK_DIR}" -port "${BIFROST_PORT}" -host "0.0.0.0" -log-level "${BIFROST_LOG_LEVEL}" > "${bifrost_log}" 2>&1 &
   BIFROST_PID=$!
 
   # Wait for bifrost to be ready. /health is skipped by the access log middleware,
@@ -1173,7 +1173,7 @@ EOF
 
 ## Method
 
-- **Single instance**: All tests run against one bifrost-http process. Non-streaming uses ${RATE} RPS; streaming uses ${STREAMING_RATE} RPS.
+- **Single instance**: All tests run against one celer-route-http process. Non-streaming uses ${RATE} RPS; streaming uses ${STREAMING_RATE} RPS.
 - **Overhead measurement**: Non-streaming and streaming chat completions. Mocker at ${OVERHEAD_MOCKER_LATENCY_MS}ms latency, calibration (Vegeta->Mocker) subtracted from test (Vegeta->Bifrost->Mocker)
 - **Stress test**: Non-streaming and streaming chat completions. Mocker at ${STRESS_MOCKER_LATENCY_MS}ms latency, verifies 100% success under sustained concurrency
 
@@ -1229,7 +1229,7 @@ main() {
   echo "╚═══════════════════════════════════════════════════════════╝"
   echo ""
 
-  log_info "Configuration: single bifrost-http instance, non-streaming ${RATE} RPS, streaming ${STREAMING_RATE} RPS"
+  log_info "Configuration: single celer-route-http instance, non-streaming ${RATE} RPS, streaming ${STREAMING_RATE} RPS"
   log_info "Provider concurrency: 5,000 (buffer: 10,000)"
   log_info "Overhead thresholds: mean<${MAX_OVERHEAD_MEAN_US}µs, p50<${MAX_OVERHEAD_P50_US}µs, p90<${MAX_OVERHEAD_P90_US}µs, p95<${MAX_OVERHEAD_P95_US}µs, p99<${MAX_OVERHEAD_P99_US}µs"
   log_info "Phase 1: Overhead measurement — non-streaming + streaming, ${OVERHEAD_MOCKER_LATENCY_MS}ms mocker, ${OVERHEAD_DURATION}s each"

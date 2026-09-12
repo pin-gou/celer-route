@@ -236,7 +236,7 @@ For each PR in the release window, query its linked closing issues (this catches
 
 ```bash
 # For each PR number in the release window:
-gh api graphql -f query="query{repository(owner:\"maximhq\",name:\"bifrost\"){pullRequest(number:PR_NUMBER){closingIssuesReferences(first:100){nodes{number title}}}}}" \
+gh api graphql -f query="query{repository(owner:\"pin-gou\",name:\"celer-route\"){pullRequest(number:PR_NUMBER){closingIssuesReferences(first:100){nodes{number title}}}}}" \
   --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[]? | "#\(.number)\t\(.title)"'
 ```
 
@@ -251,7 +251,7 @@ Merge both sources and **deduplicate by issue number** before confirming/renderi
 Confirm each issue's state and final title before listing it:
 
 ```bash
-gh api repos/maximhq/bifrost/issues/<ISSUE_NUMBER> --jq '"#\(.number) [\(.state)] \(.title)"'
+gh api repos/pin-gou/celer-route/issues/<ISSUE_NUMBER> --jq '"#\(.number) [\(.state)] \(.title)"'
 ```
 
 Render every closed issue as a markdown link in ascending issue-number order:

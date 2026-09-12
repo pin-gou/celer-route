@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Run integration tests with Bifrost binary and PostgreSQL
-# Usage: ./run-integration-tests.sh <bifrost-binary-path> [port]
+# Usage: ./run-integration-tests.sh <celer-route-http-binary-path> [port]
 
 # Get the absolute path of the script directory
 if command -v readlink >/dev/null 2>&1 && readlink -f "$0" >/dev/null 2>&1; then
@@ -16,10 +16,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd -P)"
 
 # Parse arguments
 if [ "${1:-}" = "" ]; then
-  echo "Usage: $0 <bifrost-binary-path> [port]" >&2
+  echo "Usage: $0 <celer-route-http-binary-path> [port]" >&2
   echo "" >&2
   echo "Arguments:" >&2
-  echo "  bifrost-binary-path  Path to the bifrost-http binary" >&2
+  echo "  celer-route-http-binary-path  Path to the celer-route-http binary" >&2
   echo "  port                 Port to run Bifrost on (default: 8080)" >&2
   exit 1
 fi
@@ -223,7 +223,7 @@ ELAPSED=0
 SERVER_READY=false
 
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-  if grep -q "successfully started bifrost" "$SERVER_LOG" 2>/dev/null; then
+  if grep -q "successfully started celer-route" "$SERVER_LOG" 2>/dev/null; then
     SERVER_READY=true
     echo "   ✅ Bifrost started successfully"
     break

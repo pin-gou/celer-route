@@ -64,7 +64,7 @@ upload_with_retry() {
 }
 
 # Upload to versioned path
-if ! upload_with_retry "./dist/" "s3://$R2_BUCKET/bifrost/$CLI_VERSION/"; then
+if ! upload_with_retry "./dist/" "s3://$R2_BUCKET/celer-route/$CLI_VERSION/"; then
   exit 1
 fi
 
@@ -87,7 +87,7 @@ else
 
   # Upload to latest path
   echo "📤 Uploading to latest/"
-  if ! upload_with_retry "./dist/" "s3://$R2_BUCKET/bifrost/latest/"; then
+  if ! upload_with_retry "./dist/" "s3://$R2_BUCKET/celer-route/latest/"; then
     exit 1
   fi
 fi

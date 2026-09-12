@@ -28,9 +28,9 @@ title: \"$VERSION\"
 description: \"$VERSION changelog - $CURRENT_DATE\"
 ---
 <Tabs>
-  <Tab title=\"NPX\">
+  <Tab title=\"Binary\">
     \`\`\`bash
-    npx -y @maximhq/bifrost --transport-version $VERSION
+    curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
     \`\`\`
   </Tab>
   <Tab title=\"Docker\">

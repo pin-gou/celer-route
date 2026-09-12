@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Finalize bifrost-http release: changelog, tagging, GitHub release, R2 latest copy
-# Usage: ./release-bifrost-http-finalize.sh <version>
+# Finalize celer-route-http release: changelog, tagging, GitHub release, R2 latest copy
+# Usage: ./release-celer-route-http-finalize.sh <version>
 
 # Validate input argument
 if [ "${1:-}" = "" ]; then
@@ -13,7 +13,7 @@ fi
 VERSION="$1"
 TAG_NAME="transports/v${VERSION}"
 
-echo "🏷️ Finalizing bifrost-http v$VERSION release..."
+echo "🏷️ Finalizing celer-route-http v$VERSION release..."
 
 # Get core and framework versions from version files
 CORE_VERSION="v$(tr -d '\n\r' < core/version)"
@@ -91,7 +91,7 @@ git tag "$TAG_NAME" -m "Release transports v$VERSION" -m "$CHANGELOG_BODY"
 git push origin "$TAG_NAME"
 
 # Create GitHub release
-TITLE="Bifrost HTTP v$VERSION"
+TITLE="celer-route v$VERSION"
 
 # Mark prereleases when version contains a hyphen
 PRERELEASE_FLAG=""
@@ -132,7 +132,7 @@ The following plugin versions are compatible with this release:
   done
 fi
 
-BODY="## Bifrost HTTP Transport Release v$VERSION
+BODY="## celer-route v$VERSION
 
 $CHANGELOG_BODY
 
@@ -143,10 +143,12 @@ $CHANGELOG_BODY
 docker run -p 8080:8080 ghcr.io/pin-gou/celer-route:v$VERSION
 \`\`\`
 
-#### Binary Download
+#### Single Binary
 \`\`\`bash
-npx @maximhq/bifrost --transport-version v$VERSION
+curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
 \`\`\`
+
+Pre-built binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and windows/amd64 are attached to this release, each with a \`.sha256\` checksum.
 
 ### Docker Images
 - **\`ghcr.io/pin-gou/celer-route:v$VERSION\`** - This specific version
@@ -166,14 +168,39 @@ gh release create "$TAG_NAME" \
   --notes "$BODY" \
   ${PRERELEASE_FLAG} ${LATEST_FLAG}
 
-echo "✅ Bifrost HTTP released successfully"
+# Upload pre-built binaries and checksums to the release (populated by the
+# build-binaries jobs via actions/download-artifact into dist/). gh release
+# upload names assets by basename, so binaries are flattened to unique
+# celer-route-http-<os>-<arch>[.exe] names and checksums regenerated for them.
+DIST_DIR="${DIST_DIR:-dist}"
+if [ -d "$DIST_DIR" ]; then
+  echo "📦 Uploading release binaries from $DIST_DIR..."
+  STAGE="$(mktemp -d)"
+  trap 'rm -rf "$STAGE"' EXIT
+  while IFS= read -r -d '' asset; do
+    rel="${asset#"$DIST_DIR"/}"
+    plat="${rel%%/*}"
+    arch_dir="$(dirname "$rel" | cut -d/ -f2)"
+    base="$(basename "$asset")"
+    stem="${base%.exe}"
+    ext="${base#"$stem"}"
+    upload_name="celer-route-http-${plat}-${arch_dir}${ext}"
+    cp "$asset" "$STAGE/$upload_name"
+  done < <(find "$DIST_DIR" -type f -name "celer-route-http*" ! -name "*.sha256" -print0)
+  (cd "$STAGE" && for f in celer-route-http-*; do [ -f "$f" ] && shasum -a 256 "$f" > "$f.sha256"; done)
+  gh release upload "$TAG_NAME" "$STAGE"/* --clobber
+  FOUND=$(find "$STAGE" -type f | wc -l | tr -d ' ')
+  echo "✅ Uploaded $FOUND release assets"
+fi
+
+echo "✅ celer-route released successfully"
 
 # Copy versioned R2 path to latest/ for stable releases
 if [[ "$VERSION" != *-* ]]; then
   if [ -n "${R2_ENDPOINT:-}" ] && [ -n "${R2_BUCKET:-}" ]; then
     echo "📤 Copying versioned binaries to latest/ on R2..."
     R2_ENDPOINT="$(echo "$R2_ENDPOINT" | tr -d '[:space:]')"
-    aws s3 sync "s3://$R2_BUCKET/bifrost/v$VERSION/" "s3://$R2_BUCKET/bifrost/latest/" \
+    aws s3 sync "s3://$R2_BUCKET/celer-route/v$VERSION/" "s3://$R2_BUCKET/celer-route/latest/" \
       --endpoint-url "$R2_ENDPOINT" \
       --profile "${R2_AWS_PROFILE:-R2}" \
       --no-progress \

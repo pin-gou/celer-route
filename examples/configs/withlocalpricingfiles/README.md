@@ -43,7 +43,7 @@ docker run -p 8080:8080 \
   -v "$(pwd)/config.json:/app/data/config.json" \
   -v "$(pwd)/pricing.json:/app/data/pricing.json" \
   -v "$(pwd)/model-parameters.json:/app/data/model-parameters.json" \
-  maximhq/bifrost
+  pin-gou/celer-route
 ```
 
 ## Run locally

@@ -6,6 +6,7 @@ export default {
       label: '入门',
       collapsed: false,
       items: [
+        'deployment/binary',
         'deployment/sqlite',
         'deployment/postgres',
         'features/data-storage',

@@ -7,7 +7,7 @@ set -euo pipefail
 # The core module's own `go test` suite has been replaced here by the provider
 # harness: it exercises the same provider code paths end-to-end through a live
 # gateway instead of in-process. The core build is still validated first, both
-# as a fast compile gate and because the harness needs a bifrost-http binary
+# as a fast compile gate and because the harness needs a celer-route-http binary
 # that links against this module.
 
 if command -v readlink >/dev/null 2>&1 && readlink -f "$0" >/dev/null 2>&1; then

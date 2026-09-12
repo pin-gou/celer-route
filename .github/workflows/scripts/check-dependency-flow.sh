@@ -45,7 +45,7 @@ case "$STAGE" in
     echo "✅ Core: v$VERSION (just released)"
     echo "❓ Framework: Check if update needed"
     echo "❓ Plugins: Will check after framework"
-    echo "❓ Bifrost HTTP: Will check after plugins"
+    echo "❓ celer-route: Will check after plugins"
     echo ""
     echo "🔄 Next Step: Manually trigger Framework Release if needed"
     ;;
@@ -57,7 +57,7 @@ case "$STAGE" in
     echo "✅ Core: (already updated)"
     echo "✅ Framework: v$VERSION (just released)"
     echo "❓ Plugins: Check if any need updates"
-    echo "❓ Bifrost HTTP: Will check after plugins"
+    echo "❓ celer-route: Will check after plugins"
     echo ""
     echo "🔄 Next Step: Check Plugins Release workflow"
     ;;
@@ -69,9 +69,9 @@ case "$STAGE" in
     echo "✅ Core: (already updated)"
     echo "✅ Framework: (already updated)"
     echo "✅ Plugins: (just released)"
-    echo "❓ Bifrost HTTP: Check if update needed"
+    echo "❓ celer-route: Check if update needed"
     echo ""
-    echo "🔄 Next Step: Manually trigger Bifrost HTTP Release if needed"
+    echo "🔄 Next Step: Manually trigger celer-route Release if needed"
     ;;
 
   *)

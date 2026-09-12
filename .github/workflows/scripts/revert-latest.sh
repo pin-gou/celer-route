@@ -56,12 +56,12 @@ sync_with_retry() {
 
 # Check if the version exists in R2
 echo "🔍 Checking if version $VERSION exists..."
-if ! aws s3 ls "s3://$R2_BUCKET/bifrost/$VERSION/" \
+if ! aws s3 ls "s3://$R2_BUCKET/celer-route/$VERSION/" \
      --endpoint-url "$R2_ENDPOINT" \
      --profile "${R2_AWS_PROFILE:-R2}" >/dev/null 2>&1; then
   echo "❌ Version $VERSION not found in R2 bucket"
   echo "Available versions:"
-  aws s3 ls "s3://$R2_BUCKET/bifrost/" \
+  aws s3 ls "s3://$R2_BUCKET/celer-route/" \
     --endpoint-url "$R2_ENDPOINT" \
     --profile "${R2_AWS_PROFILE:-R2}" | grep "PRE v" | awk '{print $2}' | sed 's/\///g' || true
   exit 1
@@ -70,7 +70,7 @@ fi
 echo "✅ Version $VERSION found in R2"
 
 # Sync the specific version to latest
-if ! sync_with_retry "s3://$R2_BUCKET/bifrost/$VERSION/" "s3://$R2_BUCKET/bifrost/latest/"; then
+if ! sync_with_retry "s3://$R2_BUCKET/celer-route/$VERSION/" "s3://$R2_BUCKET/celer-route/latest/"; then
   exit 1
 fi
 

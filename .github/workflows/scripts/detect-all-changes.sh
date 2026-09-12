@@ -278,9 +278,9 @@ else
   echo "   ⏭️ No plugin changes detected"
 fi
 
-# Check Bifrost HTTP
+# Check celer-route
 echo ""
-echo "🚀 Checking bifrost-http..."
+echo "🚀 Checking celer-route..."
 TRANSPORT_TAG="transports/v${TRANSPORT_VERSION}"
 DOCKER_TAG_EXISTS="false"
 
@@ -291,14 +291,19 @@ if git rev-parse --verify "$TRANSPORT_TAG" >/dev/null 2>&1; then
   GIT_TAG_EXISTS="true"
 fi
 
-# Check if Docker tag exists on DockerHub
-echo "   🐳 Checking DockerHub for tag v${TRANSPORT_VERSION}..."
-DOCKER_CHECK_RESPONSE=$(curl -s "https://registry.hub.docker.com/v2/repositories/maximhq/bifrost/tags/v${TRANSPORT_VERSION}/" 2>/dev/null || echo "")
-if [ -n "$DOCKER_CHECK_RESPONSE" ] && echo "$DOCKER_CHECK_RESPONSE" | grep -q '"name"'; then
-  echo "   ⏭️ Docker tag v${TRANSPORT_VERSION} already exists on DockerHub"
+# Check if Docker tag exists on GHCR
+echo "   🐳 Checking GHCR for tag v${TRANSPORT_VERSION}..."
+VERSIONS_URL="https://api.github.com/repos/pin-gou/celer-route/packages/container/celer-route/versions?package_type=container&per_page=100"
+if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
+  DOCKER_CHECK_RESPONSE=$(curl -s -H "Authorization: Bearer ${GH_TOKEN:-${GITHUB_TOKEN}}" "$VERSIONS_URL" 2>/dev/null || echo "")
+else
+  DOCKER_CHECK_RESPONSE=$(curl -s "$VERSIONS_URL" 2>/dev/null || echo "")
+fi
+if [ -n "$DOCKER_CHECK_RESPONSE" ] && echo "$DOCKER_CHECK_RESPONSE" | grep -q "\"v${TRANSPORT_VERSION}\""; then
+  echo "   ⏭️ Docker tag v${TRANSPORT_VERSION} already exists on GHCR"
   DOCKER_TAG_EXISTS="true"
 else
-  echo "   ❌ Docker tag v${TRANSPORT_VERSION} not found on DockerHub"
+  echo "   ❌ Docker tag v${TRANSPORT_VERSION} not found on GHCR"
 fi
 
 # Determine if release is needed
@@ -432,7 +437,7 @@ echo "📋 Release Summary:"
 echo "   Core: $CORE_NEEDS_RELEASE (v$CORE_VERSION)"
 echo "   Framework: $FRAMEWORK_NEEDS_RELEASE (v$FRAMEWORK_VERSION)"
 echo "   Plugins: $PLUGINS_NEED_RELEASE (${#PLUGIN_CHANGES[@]} plugins)"
-echo "   Bifrost HTTP: $BIFROST_HTTP_NEEDS_RELEASE (v$TRANSPORT_VERSION)"
+echo "   celer-route: $BIFROST_HTTP_NEEDS_RELEASE (v$TRANSPORT_VERSION)"
 echo "   Docker: $DOCKER_NEEDS_RELEASE (v$TRANSPORT_VERSION)"
 
 # Set outputs (only when running in GitHub Actions)

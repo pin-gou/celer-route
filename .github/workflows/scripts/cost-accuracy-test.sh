@@ -16,7 +16,7 @@ BENCHMARK_DIR="${BENCHMARK_DIR:-${ROOT_DIR}/../bifrost-benchmarking}"
 WORK_DIR="${ROOT_DIR}/tmp/cost-accuracy"
 APP_DIR="${WORK_DIR}/app"
 RESULTS_FILE="${WORK_DIR}/results.json"
-BIFROST_BIN="${ROOT_DIR}/tmp/bifrost-http"
+BIFROST_BIN="${ROOT_DIR}/tmp/celer-route-http"
 MOCKER_BIN="${ROOT_DIR}/tmp/mocker"
 HITTER_BIN="${ROOT_DIR}/tmp/hitter"
 POSTGRES_DB="${POSTGRES_DB:-bifrost_cost_accuracy}"
@@ -146,7 +146,7 @@ build_binaries() {
   mkdir -p "${ROOT_DIR}/tmp" "${ROOT_DIR}/transports/celer-route-http/ui"
   touch "${ROOT_DIR}/transports/celer-route-http/ui/.gitkeep"
 
-  log "building bifrost-http"
+  log "building celer-route-http"
   (cd "${ROOT_DIR}/transports/celer-route-http" && go build -o "${BIFROST_BIN}" .)
 
   # GOWORK=off: bifrost-benchmarking is its own module and in CI is checked out
@@ -232,7 +232,7 @@ start_services() {
     exit 1
   fi
 
-  log "starting bifrost-http on ${BIFROST_PORT}"
+  log "starting celer-route-http on ${BIFROST_PORT}"
   "${BIFROST_BIN}" -app-dir "${APP_DIR}" -host 127.0.0.1 -port "${BIFROST_PORT}" -log-level info > "${WORK_DIR}/bifrost.log" 2>&1 &
   BIFROST_PID=$!
   if ! wait_http "http://127.0.0.1:${BIFROST_PORT}/health" 90; then

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prepare bifrost-http release: update dependencies, build UI, validate, commit/push
-# Usage: ./release-bifrost-http-prep.sh <version>
+# Prepare celer-route-http release: update dependencies, build UI, validate, commit/push
+# Usage: ./release-celer-route-http-prep.sh <version>
 
 # Get the absolute path of the script directory
 # Use readlink if available (Linux), otherwise use cd/pwd (macOS compatible)
@@ -23,7 +23,7 @@ fi
 
 VERSION="$1"
 
-echo "🚀 Preparing bifrost-http v$VERSION release..."
+echo "🚀 Preparing celer-route-http v$VERSION release..."
 
 # Get core and framework versions from version files
 CORE_VERSION="v$(tr -d '\n\r' < core/version)"
@@ -153,5 +153,5 @@ else
   echo "ℹ️ No staged changes to commit"
 fi
 
-echo "✅ Prep complete for bifrost-http v$VERSION"
+echo "✅ Prep complete for celer-route-http v$VERSION"
 echo "success=true" >> "$GITHUB_OUTPUT"

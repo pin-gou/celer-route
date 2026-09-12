@@ -29,11 +29,11 @@ trap cleanup EXIT
 echo "🎨 Building UI..."
 make build-ui
 
-# Build bifrost-http binary
-echo "🔨 Building bifrost-http binary..."
+# Build celer-route-http binary
+echo "🔨 Building celer-route-http binary..."
 mkdir -p tmp
 cd transports/celer-route-http
-go build -o ../../tmp/bifrost-http .
+go build -o ../../tmp/celer-route-http .
 cd ../..
 
 # Start Docker services
@@ -105,10 +105,10 @@ docker exec -e PGPASSWORD=bifrost_password "$(docker compose -f "$CONFIGS_DIR/do
   -c "DROP DATABASE IF EXISTS bifrost;" \
   -c "CREATE DATABASE bifrost;"
 
-# Start bifrost-http server with default config
+# Start celer-route-http server with default config
 SERVER_LOG=$(mktemp)
-echo "🚀 Starting bifrost-http server..."
-./tmp/bifrost-http --app-dir "$CONFIGS_DIR/default" --port 18080 --log-level debug 2>&1 | tee "$SERVER_LOG" &
+echo "🚀 Starting celer-route-http server..."
+./tmp/celer-route-http --app-dir "$CONFIGS_DIR/default" --port 18080 --log-level debug 2>&1 | tee "$SERVER_LOG" &
 SERVER_PID=$!
 
 # Wait for server to be ready
@@ -118,7 +118,7 @@ ELAPSED=0
 SERVER_READY=false
 
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-  if grep -q "successfully started bifrost, serving UI on http://localhost:18080" "$SERVER_LOG" 2>/dev/null; then
+  if grep -q "successfully started celer-route, serving UI on http://localhost:18080" "$SERVER_LOG" 2>/dev/null; then
     SERVER_READY=true
     echo "✅ Server started successfully"
     break

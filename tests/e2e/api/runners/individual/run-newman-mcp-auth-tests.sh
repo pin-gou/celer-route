@@ -229,7 +229,7 @@ run_mode() {
 
     local elapsed=0
     while [ $elapsed -lt 60 ]; do
-        grep -q "successfully started bifrost" "$server_log" 2>/dev/null && break
+        grep -q "successfully started celer-route" "$server_log" 2>/dev/null && break
         if ! kill -0 "$CURRENT_PID" 2>/dev/null; then
             echo -e "${RED}   Server exited before becoming ready${NC}"; cat "$server_log"
             OVERALL_EXIT=1; CURRENT_PID=""; rm -rf "$CURRENT_DIR"; CURRENT_DIR=""; return

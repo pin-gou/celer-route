@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Test celer-route-http component
-# Usage: ./test-bifrost-http.sh
+# Usage: ./test-celer-route-http.sh
 
 # Get the absolute path of the script directory
 if command -v readlink >/dev/null 2>&1 && readlink -f "$0" >/dev/null 2>&1; then
@@ -61,8 +61,8 @@ fi
 # Build the binary for integration testing
 echo "🔨 Building binary for integration testing..."
 mkdir -p ../tmp
-cd bifrost-http
-go build -o ../../tmp/bifrost-http .
+cd celer-route-http
+go build -o ../../tmp/celer-route-http .
 cd ..
 
 # Run integration tests with different configurations
@@ -80,7 +80,7 @@ CONFIGS_TO_TEST=(
   "withsemanticcache"
 )
 
-TEST_BINARY="../tmp/bifrost-http"
+TEST_BINARY="../tmp/celer-route-http"
 CONFIGS_DIR="../.github/workflows/configs"
 
 # Running docker compose
@@ -179,7 +179,7 @@ for config in "${CONFIGS_TO_TEST[@]}"; do
   SERVER_READY=false
 
   while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if grep -q "successfully started bifrost, serving UI on http://localhost:18080" "$SERVER_LOG" 2>/dev/null; then
+    if grep -q "successfully started celer-route, serving UI on http://localhost:18080" "$SERVER_LOG" 2>/dev/null; then
       SERVER_READY=true
       echo "    ✅ Server started successfully with config: $config"
       break
@@ -237,4 +237,4 @@ for config in "${CONFIGS_TO_TEST[@]}"; do
 done
 
 cd ..
-echo "✅ Bifrost-HTTP tests completed successfully"
+echo "✅ celer-route-http tests completed successfully"

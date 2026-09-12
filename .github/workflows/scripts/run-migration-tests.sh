@@ -156,7 +156,7 @@ wait_for_bifrost() {
   local elapsed=0
 
   while [ $elapsed -lt $max_wait ]; do
-    if grep -q "successfully started bifrost" "$log_file" 2>/dev/null; then
+    if grep -q "successfully started celer-route" "$log_file" 2>/dev/null; then
       return 0
     fi
 
@@ -2079,6 +2079,7 @@ append_dynamic_columns_postgres() {
     echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
     echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
     echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
   # v1.6.3 columns - config store tables
   # -------------------------------------------------------------------------
 
@@ -2164,6 +2165,7 @@ append_dynamic_columns_postgres() {
     echo "UPDATE logs SET server_side_fallback_model = NULL WHERE id = 'log-migration-test-001';" >> "$output_file"
     echo "UPDATE logs SET server_side_fallback_model = 'gpt-4-turbo' WHERE id = 'log-migration-test-002';" >> "$output_file"
     echo "UPDATE logs SET server_side_fallback_model = NULL WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
   # v1.6.4 columns
   # -------------------------------------------------------------------------
 
@@ -3471,6 +3473,7 @@ append_dynamic_columns_sqlite() {
     echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
     echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
     echo "UPDATE logs SET redaction_mapping = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
   # logs.redaction_mapping (added in v1.6.4 via logs_add_redaction_mapping_column -
   # nullable text, stores the encrypted reversible redaction mapping)
   if column_exists_sqlite "$logs_db" "logs" "redaction_mapping"; then
@@ -5645,7 +5648,7 @@ EOF
 
   # Build current version ONCE before testing
   log_info "Building current version from Go workspace..."
-  local current_binary="$TEMP_DIR/bifrost-http-current"
+  local current_binary="$TEMP_DIR/celer-route-http-current"
   cd "$REPO_ROOT"
   # Ensure the embedded ui directory exists (it's gitignored, so it won't be present in CI)
   if [ ! -d "$REPO_ROOT/transports/celer-route-http/ui" ]; then
@@ -5687,6 +5690,9 @@ EOF
 
     # Start bifrost with this version using npx
     local server_log="$TEMP_DIR/server-$version.log"
+    # NOTE: npx @maximhq/bifrost is the legacy distribution channel. New
+    # releases no longer publish to npm; historical transport versions remain
+    # available there, which is exactly what migration tests need (old -> new).
     log_info "Starting bifrost $version via npx..."
 
     npx @maximhq/bifrost --transport-version "$version" \
@@ -5850,7 +5856,7 @@ EOF
 
   # Build current version ONCE before testing
   log_info "Building current version from Go workspace..."
-  local current_binary="$TEMP_DIR/bifrost-http-current"
+  local current_binary="$TEMP_DIR/celer-route-http-current"
   cd "$REPO_ROOT"
   # Ensure the embedded ui directory exists (it's gitignored, so it won't be present in CI)
   if [ ! -d "$REPO_ROOT/transports/celer-route-http/ui" ]; then
@@ -5886,6 +5892,9 @@ EOF
 
     # Start bifrost with this version using npx
     local server_log="$TEMP_DIR/server-$version.log"
+    # NOTE: npx @maximhq/bifrost is the legacy distribution channel. New
+    # releases no longer publish to npm; historical transport versions remain
+    # available there, which is exactly what migration tests need (old -> new).
     log_info "Starting bifrost $version via npx..."
 
     npx @maximhq/bifrost --transport-version "$version" \

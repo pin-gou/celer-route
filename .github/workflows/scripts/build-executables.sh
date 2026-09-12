@@ -62,10 +62,10 @@ for platform in "${platforms[@]}"; do
     *) echo "Unsupported platform: $PLATFORM_DIR"; exit 1 ;;
   esac
 
-  output_name="bifrost-http"
+  output_name="celer-route-http"
   [[ "$GOOS" = "windows" ]] && output_name+='.exe'
 
-  echo "Building bifrost-http for $PLATFORM_DIR/$GOARCH..."
+  echo "Building celer-route-http for $PLATFORM_DIR/$GOARCH..."
   mkdir -p "$PROJECT_ROOT/dist/$PLATFORM_DIR/$GOARCH"
 
   # Change to the module directory for building
@@ -117,6 +117,9 @@ for platform in "${platforms[@]}"; do
       go build -trimpath -ldflags "-s -w -buildid= -X main.Version=v${VERSION}" \
       -o "$PROJECT_ROOT/dist/$PLATFORM_DIR/$GOARCH/$output_name" .
   fi
+
+  # Generate SHA256 checksum alongside the binary
+  (cd "$PROJECT_ROOT/dist/$PLATFORM_DIR/$GOARCH" && shasum -a 256 "$output_name" > "$output_name.sha256")
 
   # Change back to project root
   cd "$PROJECT_ROOT"

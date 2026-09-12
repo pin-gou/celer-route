@@ -75,6 +75,8 @@ var uiContent embed.FS
 
 var Version string
 
+var showVersion bool
+
 var logger = bifrost.NewDefaultLogger(schemas.LogLevelInfo)
 var server *bifrostServer.BifrostHTTPServer
 
@@ -108,12 +110,19 @@ func init() {
 	flag.StringVar(&server.AppDir, "app-dir", bifrostServer.DefaultAppDir, "Application data directory (contains config.json and logs)")
 	flag.StringVar(&server.LogLevel, "log-level", defaultLogLevel, "Logger level (debug, info, warn, error). Default is info.")
 	flag.StringVar(&server.LogOutputStyle, "log-style", bifrostServer.DefaultLogOutputStyle, "Logger output type (json or pretty). Default is JSON.")
+	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
 }
 
 // main is the entry point of the application.
 func main() {
 	// Parse command line flags
 	flag.Parse()
+
+	// Print version and exit
+	if showVersion {
+		fmt.Println(Version)
+		return
+	}
 
 	// Printing version
 	versionLine := fmt.Sprintf("║%s%s%s║", strings.Repeat(" ", (92-2-len(Version))/2), Version, strings.Repeat(" ", (92-2-len(Version)+1)/2))

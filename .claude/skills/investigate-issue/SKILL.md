@@ -54,20 +54,20 @@ If no issue ID is provided, ask the user:
 What is the GitHub issue number you want to investigate?
 ```
 
-The repository is always `maximhq/bifrost`.
+The repository is always `pin-gou/celer-route`.
 
 Fetch full issue details:
 ```bash
 # Get issue with all metadata
-gh issue view <ISSUE_ID> --repo maximhq/bifrost --json number,title,body,labels,assignees,state,comments,author,createdAt,updatedAt
+gh issue view <ISSUE_ID> --repo pin-gou/celer-route --json number,title,body,labels,assignees,state,comments,author,createdAt,updatedAt
 
 # Get issue comments for additional context
-gh issue view <ISSUE_ID> --repo maximhq/bifrost --json comments --jq '.comments[].body'
+gh issue view <ISSUE_ID> --repo pin-gou/celer-route --json comments --jq '.comments[].body'
 ```
 
 If the issue does not exist or `gh` fails:
 - Check authentication: `gh auth status`
-- Verify the issue number is valid: `gh issue list --repo maximhq/bifrost --limit 5 --json number,title`
+- Verify the issue number is valid: `gh issue list --repo pin-gou/celer-route --limit 5 --json number,title`
 - Report the error and ask the user for a corrected issue ID
 
 ## Step 2: Classify the Issue
@@ -768,9 +768,9 @@ Once all approved changes are applied:
 
 ### Issue Not Found
 ```
-Issue #<ID> was not found in maximhq/bifrost.
+Issue #<ID> was not found in pin-gou/celer-route.
 - Verify the issue number is correct
-- Run: gh issue list --repo maximhq/bifrost --limit 10 --json number,title
+- Run: gh issue list --repo pin-gou/celer-route --limit 10 --json number,title
 ```
 
 ### gh CLI Not Authenticated

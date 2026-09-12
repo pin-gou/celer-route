@@ -1,8 +1,8 @@
-# Bifrost Gateway
+# celer-route Gateway
 
-Bifrost Gateway is a blazing-fast HTTP API that unifies access to 15+ AI providers (OpenAI, Anthropic, AWS Bedrock, Google Vertex, and more) through a single OpenAI-compatible interface. Deploy in seconds with zero configuration and get automatic fallbacks, semantic caching, tool calling, and enterprise-grade features.
+celer-route Gateway is a blazing-fast HTTP API that unifies access to 15+ AI providers (OpenAI, Anthropic, AWS Bedrock, Google Vertex, and more) through a single OpenAI-compatible interface. Deploy in seconds with zero configuration and get automatic fallbacks, semantic caching, tool calling, and enterprise-grade features.
 
-**Complete Documentation**: [https://docs.getbifrost.ai](https://docs.getbifrost.ai)
+**Complete Documentation**: [https://github.com/pin-gou/celer-route](https://github.com/pin-gou/celer-route)
 
 ---
 
@@ -12,11 +12,11 @@ Bifrost Gateway is a blazing-fast HTTP API that unifies access to 15+ AI provide
 
 Choose your preferred method:
 
-#### NPX (Recommended)
+#### Single Binary (Recommended)
 
 ```bash
-# Install and run locally
-npx -y @maximhq/bifrost
+# Download the pre-built binary for your OS/arch and run it locally
+curl -fsSL https://raw.githubusercontent.com/pin-gou/celer-route/main/scripts/install.sh | bash
 
 # Open web interface at http://localhost:8080
 ```
@@ -24,17 +24,17 @@ npx -y @maximhq/bifrost
 #### Docker
 
 ```bash
-# Pull and run Bifrost Gateway
-docker pull maximhq/bifrost
-docker run -p 8080:8080 maximhq/bifrost
+# Pull and run celer-route
+docker pull ghcr.io/pin-gou/celer-route:latest
+docker run -p 8080:8080 ghcr.io/pin-gou/celer-route:latest
 
 # For persistent configuration
-docker run -p 8080:8080 -v $(pwd)/data:/app/data maximhq/bifrost
+docker run -p 8080:8080 -v $(pwd)/data:/app/data ghcr.io/pin-gou/celer-route:latest
 ```
 
 ### Configuration
 
-Bifrost starts with zero configuration needed. Configure providers through the **built-in web UI** at `http://localhost:8080` or via API:
+celer-route starts with zero configuration needed. Configure providers through the **built-in web UI** at `http://localhost:8080` or via API:
 
 ```bash
 # Add OpenAI provider via API
@@ -65,7 +65,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai/gpt-4o-mini",
-    "messages": [{"role": "user", "content": "Hello, Bifrost!"}]
+    "messages": [{"role": "user", "content": "Hello, celer-route!"}]
   }'
 ```
 
@@ -75,7 +75,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 
 ## Key Features
 
-Bifrost Gateway provides enterprise-grade AI infrastructure with these core capabilities:
+celer-route Gateway provides enterprise-grade AI infrastructure with these core capabilities:
 
 ### Core Features
 
@@ -107,7 +107,7 @@ Bifrost Gateway provides enterprise-grade AI infrastructure with these core capa
 
 ## SDK Integrations
 
-Replace your existing SDK base URLs to unlock Bifrost's features instantly:
+Replace your existing SDK base URLs to unlock celer-route's features instantly:
 
 ### OpenAI SDK
 
@@ -115,7 +115,7 @@ Replace your existing SDK base URLs to unlock Bifrost's features instantly:
 import openai
 client = openai.OpenAI(
     base_url="http://localhost:8080/openai",
-    api_key="dummy"  # Handled by Bifrost
+    api_key="dummy"  # Handled by celer-route
 )
 ```
 
@@ -125,7 +125,7 @@ client = openai.OpenAI(
 import anthropic
 client = anthropic.Anthropic(
     base_url="http://localhost:8080/anthropic",
-    api_key="dummy"  # Handled by Bifrost
+    api_key="dummy"  # Handled by celer-route
 )
 ```
 
@@ -136,7 +136,7 @@ import google.generativeai as genai
 genai.configure(
     transport="rest",
     api_endpoint="http://localhost:8080/genai",
-    api_key="dummy"  # Handled by Bifrost
+    api_key="dummy"  # Handled by celer-route
 )
 ```
 
@@ -163,4 +163,4 @@ genai.configure(
 
 ---
 
-*Built with ❤️ by [Maxim](https://getmaxim.ai)*
+*Built with ❤️ by the [celer-route](https://github.com/pin-gou/celer-route) community*

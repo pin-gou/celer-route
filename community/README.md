@@ -38,7 +38,7 @@ This directory contains community-maintained data that powers parts of the Bifro
 
 ## Adding a New Catalog
 
-If you'd like to propose a new community-maintained catalog, open a [feature request](https://github.com/maximhq/bifrost/issues/new?template=feature_request.yml) describing:
+If you'd like to propose a new community-maintained catalog, open a [feature request](https://github.com/pin-gou/celer-route/issues/new?template=feature_request.yml) describing:
 
 - What data the catalog would contain
 - How it would be consumed by the platform
