@@ -1,3 +1,5 @@
+import { formatTokenCount } from "./tokenUnits";
+
 export const COMPACT_NUMBER_FORMAT = {
 	notation: "compact",
 	compactDisplay: "short",
@@ -34,27 +36,13 @@ function formatTokenPriceValue(cost: number): string {
 	})}`;
 }
 
-export function formatTokensAdaptive(value: number): string {
-	if (!Number.isFinite(value)) return "0";
-	if (value >= 1_000_000_000) {
-		return `${(value / 1_000_000_000).toLocaleString("en-US", {
-			minimumFractionDigits: 1,
-			maximumFractionDigits: 1,
-		})} 吉`;
-	}
-	if (value >= 1_000_000) {
-		return `${(value / 1_000_000).toLocaleString("en-US", {
-			minimumFractionDigits: 1,
-			maximumFractionDigits: 1,
-		})} 兆`;
-	}
-	if (value >= 1_000) {
-		return `${(value / 1_000).toLocaleString("en-US", {
-			minimumFractionDigits: 1,
-			maximumFractionDigits: 1,
-		})} 千`;
-	}
-	return value.toLocaleString("en-US");
+/**
+ * Format a token count with adaptive units under the user's preferred unit
+ * system (千兆吉 vs 万亿, persisted in localStorage). Scaled values carry two
+ * decimal places; raw counts below the first unit threshold are grouped as-is.
+ */
+export function formatTokensAdaptive(value: number, fractionDigits = 2): string {
+	return formatTokenCount(value, fractionDigits);
 }
 
 export function formatTokenPriceCompact(cost?: number): string {

@@ -106,6 +106,11 @@
 		"virtualKey": "API Keys",
 		"app": "应用"
 	},
+	"tokenUnits": {
+		"si": "千兆吉",
+		"cn": "万亿",
+		"tooltip": "切换词元计数单位"
+	},
 	"toast": {
 		"exportStarted": "导出已开始",
 		"exportFailed": "导出失败",

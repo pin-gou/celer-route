@@ -9,6 +9,8 @@ import { formatCost } from "@/app/workspace/dashboard/utils/chartUtils";
 import { getMessage } from "@/app/workspace/logs/views/columns";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import type { LogEntry } from "@/lib/types/logs";
+import { formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
@@ -240,6 +242,10 @@ export function LogsTimeline({
 	className,
 }: LogsTimelineProps) {
 	const { t } = useTranslation("logs");
+
+	// Re-render the tooltip token counts when the unit system changes.
+	useTokenUnitPreference();
+
 	const [tooltipLog, setTooltipLog] = useState<LogEntry | null>(null);
 	const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 	const [tooltipAbove, setTooltipAbove] = useState(true);
@@ -658,8 +664,8 @@ export function LogsTimeline({
 							</div>
 							{tooltipLog.token_usage && (
 								<div className="text-muted-foreground mt-1 flex gap-3">
-									<span>{t("timeline.tooltip.input", { value: tooltipLog.token_usage.prompt_tokens.toLocaleString() })}</span>
-									<span>{t("timeline.tooltip.output", { value: tooltipLog.token_usage.completion_tokens.toLocaleString() })}</span>
+									<span>{t("timeline.tooltip.input", { value: formatTokensAdaptive(tooltipLog.token_usage.prompt_tokens) })}</span>
+									<span>{t("timeline.tooltip.output", { value: formatTokensAdaptive(tooltipLog.token_usage.completion_tokens) })}</span>
 									{tooltipLog.status !== "processing" &&
 										tooltipLog.latency != null &&
 										tooltipLog.latency > 0 &&

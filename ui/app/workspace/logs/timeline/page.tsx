@@ -13,6 +13,7 @@ import { useLogsTimelineSSE, type ActiveLogEntry } from "@/hooks/useLogsTimeline
 import { summarizeTimelineStats } from "./views/timelineStats";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TokenNumber } from "@/components/tokenNumber";
 import NumberFlow from "@number-flow/react";
 import { Activity, BarChart, CheckCircle, Clock, Hash, Info, XCircle } from "lucide-react";
 
@@ -412,64 +413,20 @@ export default function TimelinePage() {
 			{
 				key: "total-tokens",
 				title: t("timeline.statCards.totalTokens"),
-				value: (
-					<NumberFlow
-						value={
-							timelineStats.totalTokens >= 1_000_000
-								? timelineStats.totalTokens / 1_000_000
-								: timelineStats.totalTokens >= 1_000
-									? timelineStats.totalTokens / 1_000
-									: timelineStats.totalTokens
-						}
-						format={
-							timelineStats.totalTokens >= 1_000
-								? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
-								: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
-						}
-						suffix={timelineStats.totalTokens >= 1_000_000 ? "M" : timelineStats.totalTokens >= 1_000 ? "K" : ""}
-					/>
-				),
+				value: <TokenNumber value={timelineStats.totalTokens} />,
 				icon: <Hash className="size-4" />,
 				description: t("timeline.statCards.totalTokensDesc"),
 				subValue: (
 					<div className="flex items-center gap-1">
 						<span className="text-muted-foreground">{t("timeline.statCards.in")}:</span>
 						<strong>
-							<NumberFlow
-								value={
-									timelineStats.promptTokens >= 1_000_000
-										? timelineStats.promptTokens / 1_000_000
-										: timelineStats.promptTokens >= 1_000
-											? timelineStats.promptTokens / 1_000
-											: timelineStats.promptTokens
-								}
-								format={
-									timelineStats.promptTokens >= 1_000
-										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
-										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
-								}
-							/>
+							<TokenNumber value={timelineStats.promptTokens} />
 						</strong>
-						<span>{timelineStats.promptTokens >= 1_000_000 ? "M" : timelineStats.promptTokens >= 1_000 ? "K" : ""}</span>
 						<span className="text-muted-foreground mx-1">·</span>
 						<span className="text-muted-foreground">{t("timeline.statCards.out")}:</span>
 						<strong>
-							<NumberFlow
-								value={
-									timelineStats.completionTokens >= 1_000_000
-										? timelineStats.completionTokens / 1_000_000
-										: timelineStats.completionTokens >= 1_000
-											? timelineStats.completionTokens / 1_000
-											: timelineStats.completionTokens
-								}
-								format={
-									timelineStats.completionTokens >= 1_000
-										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
-										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
-								}
-							/>
+							<TokenNumber value={timelineStats.completionTokens} />
 						</strong>
-						<span>{timelineStats.completionTokens >= 1_000_000 ? "M" : timelineStats.completionTokens >= 1_000 ? "K" : ""}</span>
 					</div>
 				),
 			},

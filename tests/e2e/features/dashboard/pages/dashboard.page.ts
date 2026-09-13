@@ -40,9 +40,10 @@ export class DashboardPage extends BasePage {
     this.modelUsageChart = page.locator('[data-testid="chart-model-usage"]')
 
     // Chart type toggles - using data-testid with actions suffix
-    // Volume and token charts have only ChartTypeToggle in the actions bar
+    // Volume chart has only ChartTypeToggle in the actions bar
     this.volumeChartToggle = page.locator('[data-testid="chart-log-volume-actions"]').locator('button').filter({ has: page.locator('svg') })
-    this.tokenChartToggle = page.locator('[data-testid="chart-token-usage-actions"]').locator('button').filter({ has: page.locator('svg') })
+    // Token chart has TokenUnitToggle + ChartTypeToggle; scope to the ChartTypeToggle div so getChartToggleState reads the right element
+    this.tokenChartToggle = page.locator('[data-testid="chart-token-usage-actions"]').locator('> div > div').last().locator('button')
     // Cost and model charts have model filter + ChartTypeToggle; scope to ChartTypeToggle buttons only so getChartToggleState reads the right element
     this.costChartToggle = page.locator('[data-testid="chart-cost-total-actions"]').locator('> div > div').last().locator('button')
     this.modelChartToggle = page.locator('[data-testid="chart-model-usage-actions"]').locator('> div > div').last().locator('button')
@@ -181,13 +182,16 @@ export class DashboardPage extends BasePage {
   }
 
   /**
-   * Toggle chart type for token chart
+   * Toggle chart type for token chart.
+   * Scopes to the ChartTypeToggle only (excludes the TokenUnitToggle in the same actions bar).
    */
   async toggleTokenChartType(): Promise<void> {
     await this.dismissToasts()
     await this.closePopups()
     const actionsContainer = this.page.locator('[data-testid="chart-token-usage-actions"]')
-    const toggleBtn = await this.getInactiveToggleButton(actionsContainer)
+    // ChartTypeToggle is the last div child of the actions bar; its two buttons are the bar/line toggles only
+    const chartTypeButtons = actionsContainer.locator('> div > div').last().locator('button')
+    const toggleBtn = await this.getInactiveToggleButtonFrom(chartTypeButtons)
     await toggleBtn.waitFor({ state: 'visible' })
     await toggleBtn.click()
     await this.page.waitForLoadState('networkidle').catch(() => {})

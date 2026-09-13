@@ -1,6 +1,7 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TokenHistogramResponse } from "@/lib/types/logs";
 import { formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { Info } from "lucide-react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,6 +17,10 @@ const METER_COLORS = { cached: "#06b6d4", input: "#3b82f6" };
 
 function ExternalCacheTokenMeterChartImpl({ data }: ExternalCacheTokenMeterChartProps) {
 	const { t } = useTranslation("dashboard");
+
+	// Re-render the token counts when the unit system changes.
+	useTokenUnitPreference();
+
 	const { ref, width, height } = useGaugeSize();
 
 	const { percentage, totalCachedRead, totalPromptTokens } = useMemo(() => {

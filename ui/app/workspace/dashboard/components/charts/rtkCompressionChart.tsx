@@ -1,4 +1,5 @@
-import { formatRtkCompactNumber, formatRtkRatio } from "@/lib/utils/numbers";
+import { formatRtkRatio, formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { format } from "date-fns";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,18 +54,18 @@ function CustomTooltip({ active, payload, t }: any) {
 						<span className="h-2 w-2 rounded-full bg-blue-500" />
 						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.rtkCompressed")}</span>
 					</span>
-					<span className="font-medium">{formatRtkCompactNumber(compressed)}</span>
+					<span className="font-medium">{formatTokensAdaptive(compressed)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
 					<span className="flex items-center gap-1.5">
 						<span className="h-2 w-2 rounded-full bg-green-500" />
 						<span className="text-zinc-600 dark:text-zinc-400">{t("charts.rtkSaved")}</span>
 					</span>
-					<span className="font-medium">{formatRtkCompactNumber(saved)}</span>
+					<span className="font-medium">{formatTokensAdaptive(saved)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
 					<span className="text-zinc-600 dark:text-zinc-400">{t("charts.rtkOriginal")}</span>
-					<span className="font-medium">{formatRtkCompactNumber(total)}</span>
+					<span className="font-medium">{formatTokensAdaptive(total)}</span>
 				</div>
 				{ratio > 0 && (
 					<div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-1 dark:border-zinc-700">
@@ -79,6 +80,10 @@ function CustomTooltip({ active, payload, t }: any) {
 
 function RtkCompressionChartImpl({ data, chartType, startTime, endTime }: RtkCompressionChartProps) {
 	const { t } = useTranslation("dashboard");
+
+	// Re-render the token stats and axis ticks when the unit system changes.
+	useTokenUnitPreference();
+
 	const chartData = useMemo(() => {
 		if (!data?.buckets || !data.bucket_size_seconds) {
 			return [];
@@ -120,7 +125,7 @@ function RtkCompressionChartImpl({ data, chartType, startTime, endTime }: RtkCom
 							tickLine={false}
 							axisLine={false}
 							width={50}
-							tickFormatter={(v) => formatRtkCompactNumber(v)}
+							tickFormatter={(v) => formatTokensAdaptive(v)}
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>
@@ -162,7 +167,7 @@ function RtkCompressionChartImpl({ data, chartType, startTime, endTime }: RtkCom
 							tickLine={false}
 							axisLine={false}
 							width={50}
-							tickFormatter={(v) => formatRtkCompactNumber(v)}
+							tickFormatter={(v) => formatTokensAdaptive(v)}
 							domain={[0, (dataMax: number) => Math.max(dataMax, 1)]}
 							allowDataOverflow={false}
 						/>

@@ -11,6 +11,7 @@ import type {
 	ProviderTokenHistogramResponse,
 } from "@/lib/types/logs";
 import { formatCompactNumber as formatNumber, formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import NumberFlow from "@number-flow/react";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -288,6 +289,9 @@ function ProviderUsageTabImpl({
 	onProviderThroughputProviderChange,
 }: ProviderUsageTabProps) {
 	const { t } = useTranslation("dashboard");
+
+	// Re-render the token totals and rankings rows when the unit system changes.
+	useTokenUnitPreference();
 
 	const providerTokenTotal = useMemo(() => {
 		if (!providerTokenData?.buckets) return null;

@@ -5,6 +5,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import type { ProviderName } from "@/lib/constants/logs";
 import { RequestTypeColors, RequestTypeLabels, Status, StatusBarColors } from "@/lib/constants/logs";
@@ -65,6 +66,10 @@ export function SessionDetailsSheet({
 	onFilterByParentRequestId,
 }: SessionDetailsSheetProps) {
 	const { t } = useTranslation("logs");
+
+	// Re-render the total-token summary when the unit system changes.
+	const [tokenUnits] = useTokenUnitPreference();
+
 	const [triggerGetSession] = useLazyGetLogSessionByIdQuery();
 	const [sessionLogs, setSessionLogs] = useState<LogEntry[]>([]);
 	const [loadingSession, setLoadingSession] = useState(false);
@@ -111,7 +116,7 @@ export function SessionDetailsSheet({
 				value: formatDurationFromMs(sessionSummary?.duration_ms),
 			},
 		],
-		[t, sessionSummary, sessionLogs.length],
+		[t, tokenUnits, sessionSummary, sessionLogs.length],
 	);
 
 	const sortSessionLogs = useCallback(

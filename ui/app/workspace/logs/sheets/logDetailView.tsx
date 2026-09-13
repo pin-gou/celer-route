@@ -45,6 +45,7 @@ import { useGetUserAgentMappingsQuery } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { downloadAsJson } from "@/lib/utils/browser-download";
 import { formatCompactNumber, formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { applyRedactionMapping, hasRedactionMappingEntries } from "@/lib/utils/redaction";
 import { extractCompressedToolContents } from "@/lib/utils/rtkToolContents";
 import { isJson } from "@/lib/utils/validation";
@@ -1017,6 +1018,10 @@ export function LogDetailView({
 	onFilterByParentRequestId,
 }: LogDetailViewProps) {
 	const { t } = useTranslation("logs");
+
+	// Re-render token figures when the unit system changes.
+	useTokenUnitPreference();
+
 	const { copy: copyBody } = useCopyToClipboard({
 		successMessage: t("toast.requestBodyCopied"),
 		errorMessage: t("toast.copyRequestBodyFailed"),

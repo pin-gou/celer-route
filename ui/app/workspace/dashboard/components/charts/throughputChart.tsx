@@ -3,6 +3,7 @@ import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { formatFullTimestamp, formatTimestamp, formatTokensPerSecond, THROUGHPUT_COLOR } from "../../utils/chartUtils";
 import { ChartErrorBoundary } from "./chartErrorBoundary";
 import type { ChartType } from "./chartTypeToggle";
@@ -46,6 +47,10 @@ function CustomTooltip({ active, payload, t }: any) {
 
 function ThroughputChartImpl({ data, chartType, startTime, endTime }: ThroughputChartProps) {
 	const { t } = useTranslation("dashboard");
+
+	// Re-render the completion-token stat and tooltip when the unit system changes.
+	useTokenUnitPreference();
+
 	const chartData = useMemo(() => {
 		if (!data?.buckets || !data.bucket_size_seconds) {
 			return [];

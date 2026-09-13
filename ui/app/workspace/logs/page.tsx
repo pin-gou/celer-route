@@ -24,6 +24,8 @@ import { useLogsTimelineSSE, type ActiveLogEntry } from "@/hooks/useLogsTimeline
 import { dateUtils } from "@/lib/types/logs";
 import { getRangeForPeriod } from "@/lib/utils/timeRange";
 import { COMPACT_NUMBER_FORMAT } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
+import { TokenNumber } from "@/components/tokenNumber";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import NumberFlow from "@number-flow/react";
 import { useLocation } from "@tanstack/react-router";
@@ -87,6 +89,11 @@ function toProcessingEntry(a: ActiveLogEntry): DisplayLogEntry {
 
 export default function LogsPage() {
 	const { t } = useTranslation("logs");
+
+	// Subscribe so the stat cards and table token columns refresh when the
+	// token unit system is toggled.
+	const [tokenUnits] = useTokenUnitPreference();
+
 	const [error, setError] = useState<string | null>(null);
 	const [showEmptyState, setShowEmptyState] = useState(false);
 	const hasCheckedEmptyState = useRef(false);
@@ -663,63 +670,19 @@ export default function LogsPage() {
 			},
 			{
 				title: t("statCards.totalTokens"),
-				value: (
-					<NumberFlow
-						value={
-							(stats?.total_tokens ?? 0) >= 1_000_000
-								? (stats?.total_tokens ?? 0) / 1_000_000
-								: (stats?.total_tokens ?? 0) >= 1_000
-									? (stats?.total_tokens ?? 0) / 1_000
-									: (stats?.total_tokens ?? 0)
-						}
-						format={
-							(stats?.total_tokens ?? 0) >= 1_000
-								? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
-								: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
-						}
-						suffix={(stats?.total_tokens ?? 0) >= 1_000_000 ? " 兆" : (stats?.total_tokens ?? 0) >= 1_000 ? " 千" : ""}
-					/>
-				),
+				value: <TokenNumber value={stats?.total_tokens ?? 0} />,
 				icon: <Hash className="size-4" />,
 				subValue: (
 					<>
 						<span>{t("statCards.in")}：</span>
 						<strong>
-							<NumberFlow
-								value={
-									(stats?.prompt_tokens ?? 0) >= 1_000_000
-										? (stats?.prompt_tokens ?? 0) / 1_000_000
-										: (stats?.prompt_tokens ?? 0) >= 1_000
-											? (stats?.prompt_tokens ?? 0) / 1_000
-											: (stats?.prompt_tokens ?? 0)
-								}
-								format={
-									(stats?.prompt_tokens ?? 0) >= 1_000
-										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
-										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
-								}
-							/>
+							<TokenNumber value={stats?.prompt_tokens ?? 0} />
 						</strong>
-						<span>{(stats?.prompt_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.prompt_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
 						<span className="mx-1">·</span>
 						<span>{t("statCards.out")}：</span>
 						<strong>
-							<NumberFlow
-								value={
-									(stats?.completion_tokens ?? 0) >= 1_000_000
-										? (stats?.completion_tokens ?? 0) / 1_000_000
-										: (stats?.completion_tokens ?? 0) >= 1_000
-											? (stats?.completion_tokens ?? 0) / 1_000
-											: (stats?.completion_tokens ?? 0)
-								}
-								format={
-									(stats?.completion_tokens ?? 0) >= 1_000
-										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
-										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
-								}
-							/>
+							<TokenNumber value={stats?.completion_tokens ?? 0} />
 						</strong>
-						<span>{(stats?.completion_tokens ?? 0) >= 1_000_000 ? "兆" : (stats?.completion_tokens ?? 0) >= 1_000 ? "千" : ""}</span>
 					</>
 				),
 				description: t("statCards.totalTokensDesc"),
@@ -738,22 +701,8 @@ export default function LogsPage() {
 					<>
 						<span>{t("statCards.rtkTokensSaved")}：</span>
 						<strong>
-							<NumberFlow
-								value={
-									(rtkStats?.stats.tokensSaved ?? 0) >= 1_000_000
-										? (rtkStats?.stats.tokensSaved ?? 0) / 1_000_000
-										: (rtkStats?.stats.tokensSaved ?? 0) >= 1_000
-											? (rtkStats?.stats.tokensSaved ?? 0) / 1_000
-											: (rtkStats?.stats.tokensSaved ?? 0)
-								}
-								format={
-									(rtkStats?.stats.tokensSaved ?? 0) >= 1_000
-										? { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true }
-										: { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }
-								}
-							/>
+							<TokenNumber value={rtkStats?.stats.tokensSaved ?? 0} />
 						</strong>
-						<span>{(rtkStats?.stats.tokensSaved ?? 0) >= 1_000_000 ? "兆" : (rtkStats?.stats.tokensSaved ?? 0) >= 1_000 ? "千" : ""}</span>
 						<span className="mx-1">·</span>
 						<span>{t("statCards.rtkCompressedCount")}：</span>
 						<strong>
@@ -765,7 +714,7 @@ export default function LogsPage() {
 				description: t("statCards.rtkCompressionDesc"),
 			},
 		],
-		[t, stats, rtkStats],
+		[t, tokenUnits, stats, rtkStats],
 	);
 
 	const { data: userAgentMappingsData } = useGetUserAgentMappingsQuery();
@@ -779,7 +728,7 @@ export default function LogsPage() {
 		return icons;
 	}, [userAgentMappingsData?.mappings]);
 
-	const columns = useMemo(() => createColumns(customAppIcons, grouped), [customAppIcons, grouped]);
+	const columns = useMemo(() => createColumns(customAppIcons, grouped), [customAppIcons, grouped, tokenUnits]);
 
 	const columnIds = useMemo(
 		() => columns.map((col) => ("id" in col && col.id ? col.id : "accessorKey" in col ? String(col.accessorKey) : "")).filter(Boolean),

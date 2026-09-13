@@ -6,8 +6,10 @@ import type {
 	ThroughputHistogramResponse,
 	TokenHistogramResponse,
 } from "@/lib/types/logs";
-import { COMPACT_NUMBER_FORMAT, formatRtkCompactNumber, formatRtkRatio, formatTokensAdaptive } from "@/lib/utils/numbers";
+import { COMPACT_NUMBER_FORMAT, formatRtkRatio, formatTokensAdaptive } from "@/lib/utils/numbers";
 import type { RtkStatsHistogramResponse } from "@/lib/types/plugins";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
+import { TokenUnitToggle } from "@/components/tokenUnitToggle";
 import { Info } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { memo, useMemo } from "react";
@@ -113,6 +115,10 @@ function OverviewTabImpl({
 	onUsageModelChange,
 }: OverviewTabProps) {
 	const { t } = useTranslation("dashboard");
+
+	// Subscribe so the card totals (and every token display rendered below)
+	// refresh when the user toggles the token unit system.
+	useTokenUnitPreference();
 
 	const volumeTotal = useMemo(() => {
 		if (!histogramData?.buckets) return null;
@@ -266,7 +272,12 @@ function OverviewTabImpl({
 							</span>
 						</div>
 					}
-					controls={<ChartTypeToggle chartType={tokenChartType} onToggle={onTokenChartToggle} data-testid="dashboard-token-chart-toggle" />}
+					controls={
+						<>
+							<TokenUnitToggle />
+							<ChartTypeToggle chartType={tokenChartType} onToggle={onTokenChartToggle} data-testid="dashboard-token-chart-toggle" />
+						</>
+					}
 				>
 					<TokenUsageChart data={tokenData} chartType={tokenChartType} startTime={startTime} endTime={endTime} />
 				</ChartCard>
@@ -279,17 +290,17 @@ function OverviewTabImpl({
 					totalLabel={t("charts.rtkOriginal")}
 					total={
 						rtkOriginalTokens !== null ? (
-							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkOriginalTokens)}</span>
+							<span className="truncate whitespace-nowrap">{formatTokensAdaptive(rtkOriginalTokens)}</span>
 						) : undefined
 					}
-					totalTooltip={rtkOriginalTokens !== null ? formatRtkCompactNumber(rtkOriginalTokens) : undefined}
+					totalTooltip={rtkOriginalTokens !== null ? formatTokensAdaptive(rtkOriginalTokens) : undefined}
 					secondaryTotalLabel={t("charts.rtkCompressed")}
 					secondaryTotal={
 						rtkCompressedTokens !== null ? (
-							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkCompressedTokens)}</span>
+							<span className="truncate whitespace-nowrap">{formatTokensAdaptive(rtkCompressedTokens)}</span>
 						) : undefined
 					}
-					secondaryTotalTooltip={rtkCompressedTokens !== null ? formatRtkCompactNumber(rtkCompressedTokens) : undefined}
+					secondaryTotalTooltip={rtkCompressedTokens !== null ? formatTokensAdaptive(rtkCompressedTokens) : undefined}
 					tertiaryTotalLabel={t("charts.rtkRatio")}
 					tertiaryTotal={
 						rtkRangeRatio !== null ? <span className="truncate whitespace-nowrap">{formatRtkRatio(rtkRangeRatio)}</span> : undefined
@@ -297,11 +308,9 @@ function OverviewTabImpl({
 					tertiaryTotalTooltip={rtkRangeRatio !== null ? formatRtkRatio(rtkRangeRatio) : undefined}
 					quaternaryTotalLabel={t("charts.rtkSaved")}
 					quaternaryTotal={
-						rtkSavedTokens !== null ? (
-							<span className="truncate whitespace-nowrap">{formatRtkCompactNumber(rtkSavedTokens)}</span>
-						) : undefined
+						rtkSavedTokens !== null ? <span className="truncate whitespace-nowrap">{formatTokensAdaptive(rtkSavedTokens)}</span> : undefined
 					}
-					quaternaryTotalTooltip={rtkSavedTokens !== null ? formatRtkCompactNumber(rtkSavedTokens) : undefined}
+					quaternaryTotalTooltip={rtkSavedTokens !== null ? formatTokensAdaptive(rtkSavedTokens) : undefined}
 					legend={
 						<div className={CHART_HEADER_LEGEND_CLASS}>
 							<span className="flex items-center gap-1">

@@ -1,5 +1,6 @@
 import type { ProviderTokenHistogramResponse } from "@/lib/types/logs";
 import { formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -92,6 +93,10 @@ function SingleProviderTooltip({ active, payload, provider }: any) {
 
 function ProviderTokenChartImpl({ data, chartType, startTime, endTime, selectedProvider }: ProviderTokenChartProps) {
 	const { t } = useTranslation("dashboard");
+
+	// Re-render tooltips and axis ticks when the token unit system changes.
+	useTokenUnitPreference();
+
 	const { chartData, mode, displayProviders } = useMemo(() => {
 		if (!data?.buckets || !data.bucket_size_seconds) {
 			return { chartData: [], mode: "all" as const, displayProviders: [] };

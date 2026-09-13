@@ -3,6 +3,7 @@ import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatTokensAdaptive } from "@/lib/utils/numbers";
+import { useTokenUnitPreference } from "@/lib/hooks/useTokenUnitPreference";
 import { CHART_COLORS, formatFullTimestamp, formatTimestamp } from "../../utils/chartUtils";
 import { ChartErrorBoundary } from "./chartErrorBoundary";
 import type { ChartType } from "./chartTypeToggle";
@@ -58,6 +59,10 @@ function CustomTooltip({ active, payload, t }: any) {
 
 function TokenUsageChartImpl({ data, chartType, startTime, endTime }: TokenUsageChartProps) {
 	const { t } = useTranslation("dashboard");
+
+	// Re-render the axis ticks and tooltip when the token unit system changes.
+	useTokenUnitPreference();
+
 	const chartData = useMemo(() => {
 		if (!data?.buckets || !data.bucket_size_seconds) {
 			return [];
