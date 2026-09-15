@@ -5,7 +5,7 @@ Reads a JSON command spec from stdin, injects consistent PG_* env vars
 (hook protocol), runs the command, handles timeout and logging,
 returns JSON result.
 
-Replaces: pg-regression/scripts/pg-run-command.py (merged here).
+Replaces: pg-regression/scripts/pg-run-command.py (merged here; skill 已移除, 实现保留).
 Scope:    env hooks (prepare_env / clean_env) + role actions
           (start / stop / logs / tail) only. Module hooks (build / lint /
           test.unit / test.integration) stay as raw `timeout N bash -c '<cmd>'`
@@ -90,8 +90,6 @@ PROJECT_ROOT = find_project_root()
 #
 # 协议范围: 仅 environments 维度. modules 维度不走 hook 协议 (pg-run 直接 cwd 调用).
 # 历史 alias (PG_SKILL_NAME / PG_CHANGE_NAME / PG_MODULE) 不再注入.
-# v6 新增 PG_CHANGE_ID / PG_OUTPUT_PATH: 仅 describe_env 使用, 其他 action 即使传了
-# 这两个 spec_key 也会被注入 (脚本读不到 env var 不报错即可).
 _PG_ENV_MAP = {
     "session": "PG_RUN_SESSION",
     "caller": "PG_RUN_CALLER",
@@ -105,8 +103,6 @@ _PG_ENV_MAP = {
     "hook_log_dir": "PG_HOOK_LOG_DIR",
     "log_path": "PG_LOG_FILE",
     "hook_result_path": "PG_RESULT_FILE",
-    "change_id": "PG_CHANGE_ID",
-    "output_path": "PG_OUTPUT_PATH",
 }
 
 
@@ -116,7 +112,7 @@ def build_env(spec):
     Always-injected (project-controlled):
         PG_PROJECT_ROOT — project root (find_project_root)
         PG_SKILLS_PATH  — pg-skills subtree path (computed from __file__)
-        PG_RUN_CALLER   — caller identity (pg-build / pg-regression / pg-fix-issue / pg-quick-build / ad-hoc)
+        PG_RUN_CALLER   — caller identity (pg-agent / ad-hoc)
                           resolved from $PG_RUNNER_ORIGIN (legacy alias 仍兼容) or "ad-hoc".
 
     Spec-injected (caller-controlled):

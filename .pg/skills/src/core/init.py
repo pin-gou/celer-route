@@ -33,7 +33,7 @@ skills.backup.*
 *.profile
 cronjobs/prompt.txt
 
-# pg-init-project dynamic output (review-only, regenerated each run)
+# pg-init 动态生成文件 (review-only, 每次重新生成)
 agents-md-patches.md
 
 # Build artifacts within change sessions
@@ -185,7 +185,7 @@ def initialize_project(
         output(f"ERROR: .pg/ not found at {pg_dir}.")
         output("  .pg/skills must be present before running pg init.")
         output("  If pg-skills has not been synced, run:")
-        output("    git subtree add --prefix=.pg/skills pg-skills v0.9.3 --squash")
+        output("    git subtree add --prefix=.pg/skills pg-skills v1.0.0 --squash")
         return 1
 
     integration = None
@@ -301,7 +301,10 @@ def create_pg_run_wrappers(
     elif link.exists():
         link.unlink()
     link.symlink_to(target)
-    link.chmod(link.stat().st_mode | 0o111)
+    try:
+        link.chmod(link.lstat().st_mode | 0o111)
+    except OSError:
+        pass
     output(f"  - symlink: pg-run -> {target}")
 
 
@@ -325,7 +328,7 @@ def ensure_project_skeleton(project_root: Path) -> None:
 def generate_project_yaml(project_root: Path) -> str:
     name = project_root.name
     return f"""# pg-skills project declaration
-# Edit this file to declare real modules, environments, tracks, and stages.
+# Edit this file to declare real modules and environments.
 # Schema: .pg/skills/src/runtime/spec/project.schema.json
 
 schema: spec-driven
@@ -335,27 +338,14 @@ modules:
   placeholder:
     root: .
     language: python
-    description: "Placeholder module; replaced by pg-init-project."
+    description: "Placeholder module; edit this file to declare real modules."
 environments:
   placeholder:
     description: "Placeholder environment; replace during project onboarding."
     roles:
-      placeholder:
+      - name: placeholder
         instances:
           - name: placeholder-1
             host: localhost
             port: 9999
-tracks:
-  placeholder:
-    modules: [placeholder]
-    max_fail_retries: 1
-    max_fix_retries: 1
-    description: "Placeholder track; replace after defining real modules."
-stages:
-  - name: placeholder
-    tracks: [placeholder]
-    gate: all_pass
-    environment:
-      required: false
-    description: "Placeholder stage; replace after defining real modules."
 """

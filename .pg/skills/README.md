@@ -40,7 +40,7 @@ pg-skills 仓库（独立远程）                  您的项目仓库
 # 1. 用 git subtree 把 pg-skills 同步进项目
 git remote add pg-skills git@github.com:pin-gou/pg-skills.git
 git fetch pg-skills
-git subtree add --prefix=.pg/skills pg-skills v0.9.3 --squash
+git subtree add --prefix=.pg/skills pg-skills v1.0.0 --squash
 
 # 2a. 交互式终端可直接运行：自动探测，并要求确认或选择
 python3 .pg/skills/src/runtime/bin/pg init
@@ -74,8 +74,8 @@ python3 .pg/skills/src/runtime/bin/pg init --list-tools
 # 3. 重启所选开发工具
 #    OpenCode 从 .opencode/ 加载；Mobile Coder 从 .mobile-coder/ 加载
 
-# 4. 在所选工具中加载并执行 pg-init-project skill
-#    （工具会扫描仓库结构，生成 .pg/context/repo-scan.md + 实打实的 .pg/project.yaml）
+# 4. 在所选工具中运行 /0-pg-auto-pilot
+#    （自动驾驶模式：计划含"启动实例并验证结果"、执行前选定环境并确认准备方式）
 
 # 5. (可选) 同步 hook 公共库。`pg init` 与旧版保持一致，不负责复制 common.sh。
 #    如 `pg doctor` 报 `pg_resolve_paths` 缺失则手动复制：
@@ -97,12 +97,9 @@ python3 .pg/skills/src/runtime/bin/pg init --list-tools
 
 ```
 .opencode/
-├── agents/   <── symlinks: explore.md, pg-manager.md, pg-build/, pg-fix-issue/, pg-quick-build/, pg-regression/
-├── commands/ <── symlinks: pg-0-auto-pilot.md, pg-1-define.md, pg-2-propose.md, pg-2.1-propose-refine.md, pg-2b-quick-build.md,
-│                          pg-3-build.md, pg-4-regression.md, pg-5-fix-issue.md, pg-6-archive.md
-├── skills/   <── symlinks: pg-archive/, pg-browser-testing-with-devtools/, pg-build/, pg-fix-issue/,
-│                          pg-init-project/, pg-propose/, pg-quick-build/,
-│                          pg-regression/, pg-systematic-diagnosing/, pg-verify-and-merge/, pg-auto-pilot/
+├── agents/   <── symlinks: explore.md
+├── commands/ <── symlinks: pg-0-auto-pilot.md
+├── skills/   <── symlinks: pg-auto-pilot/
 └── (无 scripts/ —— pg-skills 的 scripts/ 不通过 symlink 暴露)
 ```
 
@@ -117,7 +114,7 @@ python3 .pg/skills/src/runtime/bin/pg doctor
 ```bash
 git remote add pg-skills git@github.com:pin-gou/pg-skills.git
 git fetch pg-skills
-git subtree add --prefix=.pg/skills pg-skills v0.9.3 --squash
+git subtree add --prefix=.pg/skills pg-skills v1.0.0 --squash
 python3 .pg/skills/src/runtime/bin/pg init
 git add .pg/
 git commit -m "feat: 接入 pg-skills $(cat .pg/skills/VERSION)"
@@ -175,49 +172,15 @@ pg-skills/
 
 ## 4. 日常工作流
 
-> 所有工作流通过 slash command 或用户显式要求触发。opencode 加载 `.opencode/commands/` 下的 symlink 后即可使用。**pg-* 工作流 skill 仅由用户显式触发（对应 `/pg-*` 命令或明确自然语言请求），agent 不得自行加载。**
+> 工作流通过 slash command 或用户显式要求触发。opencode 加载 `.opencode/commands/` 下的 symlink 后即可使用。**当前仅保留 `pg-auto-pilot` 一个 SKILL；pg-define / pg-propose / pg-build / pg-regression / pg-fix-issue / pg-archive / pg-verify-and-merge 等已移除。**
 
-### 标准流：propose → build → verify → merge
-
-| 步骤 | 命令 / skill | 产出 |
-|------|-------------|------|
-| 定义需求 | `/1-pg-define` 或 `pg-define` skill（用户显式触发） | `.pg/changes/<name>/proposal.md` |
-| 生成设计 | `/2-pg-propose` | design.md + tasks.md + execution-manifest.yaml |
-| 构建实现 | `/3-pg-build` | 事件溯源引擎驱动，runner 自动编排 sub-agent |
-| 验证合并 | `pg-verify-and-merge` skill（用户显式要求后触发，如"verify 并合并"） | 合并到 master |
-
-### 快捷流：跳过 proposal 直接构建
-
-| 步骤 | 命令 / skill | 说明 |
-|------|-------------|------|
-| 直接编码 | `/2b-pg-quick-build` | 不生成 proposal/design/tasks，直接构建代码与测试。v2.1 起可选调 `describe_env` 做 V-* 可达性过滤（白名单触发） |
-| 验证 | `pg-verify-and-merge` skill（用户显式要求后触发） | 同上 |
-
-### 回归流
-
-| 步骤 | 命令 / skill | 说明 |
-|------|-------------|------|
-| 跑回归 | `/4-pg-regression` | 执行测试 → 调度 fix-test agent → 输出问题清单 → 可选修复生产代码 |
-
-### 修复流
-
-| 步骤 | 命令 / skill | 说明 |
-|------|-------------|------|
-| 修复问题 | `/5-pg-fix-issue` | 切 branch → 修复 → git push → 创建 PR |
-
-### 变更归档
-
-| 步骤 | 命令 / skill | 说明 |
-|------|-------------|------|
-| 手动归档 | `/6-pg-archive` | `pg-build` 成功时自动归档；此项用于脚本失败后或主动放弃时手动归档 |
-
-> **v0.8.4 起**：`/2.1-pg-propose-refine` 已删除。5 项 common decisions 固化为 `pg-gen-tasks-skeleton.py` 常量块；产物生成后直接进入 `/3-pg-build`。
-
-### 自动驾驶流
+### 唯一工作流：pg-auto-pilot 自动驾驶
 
 | 步骤 | 命令 / skill | 说明 |
 |------|-------------|------|
 | 自动驾驶 | `/0-pg-auto-pilot`（`pg-auto-pilot` skill，agent 可自主加载） | 不限定 LLM 如何规划与执行；仅要求实施计划含"启动实例并验证编码结果"步骤，执行前让用户选定环境并确认环境准备方式 |
+
+> 合并到 default 分支不再由 SKILL 负责——改用手动 `git merge`。
 
 ---
 
@@ -240,17 +203,18 @@ pg-skills/
 | **0.9.0** | v6 describe_env 协议（env-description.yaml）+ pg-fix-issue 大幅精简 + pg-propose-refine 流程删除 + explore sub-agent + pg-build bootstrap 防御加固 + escalate_threshold 字段删除 |
 | **0.9.1** | define-summary.yaml schema + 定界后环境验证 + env_resource_refs 强引用 + pg-propose 阶段 1.8 + progress-monitor 重构 |
 | **0.9.2** | 合并自动 rebase 防覆盖 + restart 无脚本兜底 + 能力自动对账 + 重新定界 + 质量校验三态 + 初始化体验优化 + 进度预览渲染 |
-| **0.9.3** | 工作流 skill 仅限用户显式触发 + Auto-Pilot 自动驾驶模式 + DeepSeek Harness 集成 + pg-run "更新"Tab —— **当前** |
-| **1.0.x** | 生产就绪，在 2+ 外部项目 dogfood（未达） |
+| **0.9.3** | 工作流 skill 仅限用户显式触发 + Auto-Pilot 自动驾驶模式 + DeepSeek Harness 集成 + pg-run "更新"Tab |
+| **0.9.4** | pg-run 更新菜单直接选版本 + 分页 + skill 门控规则统一 |
+| **1.0.0** | 工作流收敛到单一 pg-auto-pilot + describe_env 协议移除 + tracks/stages 清理 + pg-init-project 重写 —— **当前** |
 
 ### 升级命令
 
 ```bash
-# 升级到最新版（master）
+# 升级到最新版（main）
 pg upgrade
 
 # 升级到指定版本
-pg upgrade v0.9.3
+pg upgrade v1.0.0
 
 # 查看远程可用版本
 pg upgrade --list
@@ -310,37 +274,35 @@ python3 .pg/skills/src/runtime/bin/pg init --no-symlinks
 
 #### 7.1.2 v4 协议 — caller × session 双维度路由
 
-v4 协议把"日志目录路由"拆成两个**正交维度**，三类调用方（pg-build / pg-regression / pg-fix-issue / ad-hoc）共享同一套接口，但落到不同的目录树：
+v4 协议把"日志目录路由"拆成两个**正交维度**，调用方（pg-agent / ad-hoc）共享同一套接口，但落到不同的目录树：
 
 | 维度 | CLI 字段 | 取值规则 | 作用 |
 |------|----------|----------|------|
-| **caller**（调用方身份） | `--skill` / `--caller` | `pg-build` / `pg-regression` / `pg-fix-issue` / `ad-hoc`（**硬缺省**） | 一级目录 |
-| **session**（工作单元） | `--session` | caller=ad-hoc 时留空自动生成 `auto-<date>-<pid>`；SKILL caller 必填 | 二级目录 |
+| **caller**（调用方身份） | `--skill` / `--caller` | `pg-agent` / `ad-hoc`（**硬缺省**） | 一级目录 |
+| **session**（工作单元） | `--session` | caller=ad-hoc 时留空自动生成 `auto-<date>-<pid>`；pg-agent 必填 | 二级目录 |
 | **env** | `--env` | 必填 | 三级目录 |
 
 **日志目录路由表**（与 `.pg/hooks/lib/common.sh:pg_resolve_paths` 同步）：
 
 | caller | 日志目录 | session 命名约定 |
 |--------|----------|------------------|
-| `pg-build` | `.pg/changes/<session>/2-build/<env>/logs/` | 提案名（如 `add-foo-bar`） |
-| `pg-regression` | `.pg/regression/<session>/<env>/logs/` | `regression-<suite>-<date>-<seq>` |
-| `pg-fix-issue` | `.pg/fix-issue/<session>/<env>/logs/` | `fix-<date>-<slug>` |
+| `pg-agent` | `.pg/agent/<session>/<env>/logs/` | `<iso-date>-<keyword>`（如 `2026-09-12-fix-login`） |
 | `ad-hoc` | `.pg/ad-hoc/<session>/<env>/logs/` | 留空自动生成 `auto-<date>-<pid>`，或显式传入 |
 
 **为什么是 caller 而不是 skill**：旧协议里 `--skill` 既是"调用方身份"又是"pg-skills 这个项目"的概念。v4 拆开后，调用方身份一律叫 **caller**（写为 `PG_RUN_CALLER`），不再和项目名混淆。
 
-**为什么不双写到旧路径**：pg-build / pg-regression / pg-fix-issue 的日志目录**完全保持现状**（路径不变），不需要迁移；ad-hoc 单独走 `.pg/ad-hoc/` 不污染 SKILL 命名空间。
+**为什么不双写到旧路径**：其余 caller 路由（pg-build / pg-regression / pg-fix-issue / pg-propose / pg-quick-build）已随对应 SKILL 移除；`pg-agent` / `ad-hoc` 各自独立命名空间。
 
-#### 7.1.3 三种使用场景的调用范式
+#### 7.1.3 使用场景的调用范式
 
-**场景 A：SKILL 调用（编排流内）**
+**场景 A：LLM agent 调用（pg-auto-pilot）**
 
 ```bash
-# pg-build 子 agent 收到 context 后执行的命令
+# pg-auto-pilot 收到任务后, 固定用 --caller pg-agent + 一次性 session-id
 python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py invoke-hook \
-  --session my-feat --env dev-local \
+  --session 2026-09-12-fix-login --env dev-local \
   --role backend --instance backend-1 --action start \
-  --skill pg-build --stage dev
+  --skill pg-agent --stage dev
 ```
 
 **场景 B：pg-run 菜单 / CLI 直达**
@@ -351,7 +313,7 @@ python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py invoke-hook \
 # ┌─ pg-run — pg-skills 运行菜单 ──────────────────┐
 # │ Tab: 常用操作|Environment|Instance|Module|更新 │
 # │ 常用操作: 准备并启动 / 停止清理 / 启停所有      │
-# │ 更新   : 检查更新 / 强制更新到指定版本        │
+# │ 更新   : 直接选版本 (main 置顶, 每页10项) + 确认 │
 # └─────────────────────────────────────────────────┘
 
 # 跳过菜单、直达执行 module 操作
@@ -476,7 +438,7 @@ fi
 pg_exit --status=pass
 ```
 
-#### 7.1.5 注入的环境变量（v5 SSOT）
+#### 7.1.5 注入的环境变量（v7 SSOT）
 
 **机器可读 SSOT**：`.pg/skills/src/runtime/spec/hook-env-vars.yaml`。
 本节表格与 YAML 文件双向同步，一致性由 `tests/test_hook_env_vars_ssot.py` 校验。
@@ -488,7 +450,7 @@ pg_exit --status=pass
 |---|---|---|
 | `PG_PROJECT_ROOT` | path | 项目根路径 |
 | `PG_SKILLS_PATH` | path | pg-skills 仓库根 |
-| `PG_RUN_CALLER` | enum | 调用方身份（pg-build / pg-regression / pg-fix-issue / ad-hoc），硬缺省 `ad-hoc` |
+| `PG_RUN_CALLER` | enum | 调用方身份（pg-agent / ad-hoc），硬缺省 `ad-hoc` |
 
 ##### Spec 注入（pg-run-hook.py:_PG_ENV_MAP 由 spec 字段驱动）
 
@@ -500,6 +462,7 @@ pg_exit --status=pass
 | `PG_ROLE` | `role` | per-role | role 名 |
 | `PG_INSTANCE_NAME` | `instance_name` | per-role | instance 名 |
 | `PG_INSTANCE_HOST` | `instance_host` | per-role | instance host |
+| `PG_INSTANCE_PORT` | `instance_port` | per-role | 实例声明的端口号（instances[].port） |
 | `PG_HOOK_TYPE` | `hook_type` | 全部 | hook 类型（start / stop / logs / tail / prepare_env / clean_env） |
 | `PG_HOOK_LOG_DIR` | `hook_log_dir` | 全部 | 预拼日志绝对目录（lib/common.sh:pg_resolve_paths 优先信任） |
 | `PG_LOG_FILE` | `log_path` | 全部 | hook stdout/stderr 目标路径 |
@@ -542,9 +505,7 @@ pg_exit --status=pass
 
 | caller | session 形式 | `PG_HOOK_LOG_DIR` |
 |--------|--------------|-------------------|
-| `pg-build` | `<session>`（提案名） | `<root>/.pg/changes/<session>/2-build/<env>/logs` |
-| `pg-regression` | `regression-<suite>-<date>-<seq>` | `<root>/.pg/regression/<session>/<env>/logs` |
-| `pg-fix-issue` | `fix-<date>-<slug>` | `<root>/.pg/fix-issue/<session>/<env>/logs` |
+| `pg-agent` | `<iso-date>-<keyword>` | `<root>/.pg/agent/<session>/<env>/logs` |
 | `ad-hoc` | `auto-<date>-<pid>` 或显式 | `<root>/.pg/ad-hoc/<session>/<env>/logs` |
 
 ##### `PG_LOG_FILE` 的来源
@@ -594,7 +555,7 @@ python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py invoke-hook \
   --session <S> --env <ENV> --role <ROLE> \
   --instance <INSTANCE> --action <ACTION> \
   [--stage <ST>] [--tail-lines <N>] \
-  [--skill pg-build|pg-regression|pg-fix-issue|ad-hoc] \
+  [--skill pg-agent|ad-hoc] \
   [--log-dir <DIR>] [--timeout-override <SECS>]
 ```
 
@@ -605,14 +566,14 @@ python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py invoke-hook \
 | `--env` | ✅ | 必须在 project.yaml `environments` 列表中 |
 | `--role` | ✅² | backend / frontend / agent。`start/stop/logs/tail` 必填；`prepare_env/clean_env` 忽略 |
 | `--instance` | ✅² | 必须在 `environments.<env>.roles.<role>.instances[]` 中 |
-| `--action` | ✅ | per-role: `start / stop / logs / tail`；env-level: `prepare_env / clean_env` |
+| `--action` | ✅ | per-role: `start / stop / restart / logs / tail / health_check`；env-level: `prepare_env / clean_env / restart_all_instances` |
 | `--stage` | ❌ | 默认 `manual`；用于 spec.stage 标记 |
 | `--tail-lines` | ❌ | 仅 `--action logs\|tail` 生效 |
-| `--skill` / `--caller` | ❌ | 调用方身份，**硬缺省 `ad-hoc`**。SKILL 调用必须显式标注 |
+| `--skill` / `--caller` | ❌ | 调用方身份，**硬缺省 `ad-hoc`**。pg-agent（pg-auto-pilot）必须显式标注 |
 | `--log-dir` | ❌ | 显式覆盖日志目录（agent 调试用，优先级最高） |
 | `--timeout-override` | ❌ | 覆盖 project.yaml 的 `timeout_seconds`（ad-hoc 调试用，输出 WARN） |
 
-¹ SKILL caller (pg-build / pg-regression / pg-fix-issue) **必须**显式传 `--session`；ad-hoc 留空 → 自动生成 `auto-<date>-<pid>`。
+¹ pg-agent **必须**显式传 `--session`；ad-hoc 留空 → 自动生成 `auto-<date>-<pid>`。
 
 ² `--role` / `--instance` 对 env-level actions 是 no-op（CLI parser 不强制、runtime 也忽略）。
 
@@ -628,29 +589,9 @@ python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py invoke-hook \
   - host / port 由 runner 从 `instances[]` 自动反查。
 - `--timeout-override <N>`：ad-hoc 调试时显式覆盖 `timeout_seconds`，runner 输出 WARN 提示覆盖值。
 
-##### status subcommand（prepare_env 状态查询）
-
-与 `invoke-hook` 平级：
-
-```bash
-python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py status \
-  --change <C> [--stage <S>]
-```
-
-| 标志 | 必填 | 说明 |
-|------|------|------|
-| `--change` | ✅ | 当前 change 名（status subcommand 暂未改 `--session`，仅作 runner 透传参数） |
-| `--stage` | ❌ | 可选 stage 名过滤 |
-
-典型用法：在 verify agent 中查询 prepare_env 是否已成功执行，避免硬编码 log_path。
-
-> 历史兼容：`pg-pipeline-runner.py prepare-env-status <C> [stage]` 仍可用，`pg-invoke-hook.py status` 是统一 runtime 入口。
-
 #### 7.1.8 历史兼容与迁移
 
-- `pg-pipeline-runner.py invoke-hook` 仍然可用（thin wrapper 转发到 `pg-invoke-hook.py`），但新代码统一走新路径。
-- `--change` 字段保留 1 版本作为 deprecated alias；SKILL / pg-run / agent 调用方应改为 `--session`。
-- 旧 `.pg/changes/manual/` 目录里的历史日志保留为只读归档，新调用**不再**追加。
+- `--change` 字段保留 1 版本作为 deprecated alias；agent / pg-run 调用方应改为 `--session`。
 - v5 起 `PG_SKILL_NAME` / `PG_CHANGE_NAME` / `PG_RUNNER_ORIGIN` 已从注入实现移除，老 hook 须改用 `PG_RUN_CALLER` / `PG_RUN_SESSION`。
 - `lib/common.sh:kill_pid_file` 已弃用，迁移到 `hook-helpers.sh:pg_stop_bg`（保留 kill_pid_file 作为兼容垫片，打 WARN）。
 

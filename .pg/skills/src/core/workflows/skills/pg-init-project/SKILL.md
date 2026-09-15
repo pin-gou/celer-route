@@ -1,18 +1,18 @@
 ---
 name: pg-init-project
-description: 在一个新项目里初始化 pg-skills 配置。扫描仓库结构（构建文件、源码组织、多模块布局），生成 `.pg/project.yaml`（modules/environments/tracks/stages，module 的 build/lint/test 命令直接写在 `modules.<m>.<field>` 字段里）、`.pg/hooks/` 下仅服务 environments 维度的 lifecycle shell 脚本（role start/stop/restart + prepare_env/clean_env），以及 `.pg/code-review/` 目录（按语言自动派发的 review profile 集，供 pg-build v2.6 review phase 使用）。在 `pg init` 之后、第一次跑 `pg-propose` / `pg-build` 之前使用。
+description: 在一个新项目里初始化 pg-skills 配置。扫描仓库结构（构建文件、源码组织、多模块布局），生成 `.pg/project.yaml`（modules/environments，module 的 build/lint/test 命令直接写在 `modules.<m>.<field>` 字段里）、`.pg/hooks/` 下仅服务 environments 维度的 lifecycle shell 脚本（role start/stop/health_check + prepare_env/clean_env），并把 `.pg/context/agent-protocol.md` 注入项目。在 `pg init` 之后、第一次跑 `pg-auto-pilot` 之前使用。仅当用户显式要求初始化/补全 pg-skills 项目配置时加载；与构建无关的日常任务禁止自行加载、禁止主动提示用户使用本 SKILL。
 license: MIT
 compatibility: 项目根目录需要 `.pg/` 目录（已由 `pg init` 创建）和 `.pg/skills/`（已由 `git subtree add` 同步）。
 metadata:
   author: pg-spec
-  version: "0.4"
+  version: "1.0"
 ---
 
 # pg-init-project
 
 把一个刚跑完 `pg init` 的项目仓库"填实"成可用的 pg-skills 项目：扫描技术栈和模块布局，生成 `.pg/project.yaml` 和 `.pg/hooks/` 下的 hook 脚本。
 
-`pg init` 只搭骨架（目录结构 + 空白 `project.yaml` + 模板 hook）。本 SKILL 做的是基于实际仓库的"项目级一次成型"。
+`pg init` 只搭骨架（目录结构 + placeholder `project.yaml` + 工具适配器安装）。本 SKILL 做的是基于实际仓库的"项目级一次成型"，并把 agent 协议（`.pg/context/agent-protocol.md`）注入项目——`pg doctor` 的 `context_protocol_present` 检查依赖这一步。
 
 ---
 
@@ -23,7 +23,7 @@ metadata:
 - **不使用**：只是想跑 `pg doctor` 校验配置——直接 `pg doctor` 即可。
 - **不使用**：跑过本 SKILL 后想调整某个 module 的 build/test 命令——直接编辑 `.pg/project.yaml` 里 `modules.<m>.{build,lint,test.<key>}` 字段即可，不要重跑 SKILL。**这些命令不走 hook**，不需要改 `.pg/hooks/` 下的脚本。
 - **不使用**：跑过本 SKILL 后想调整某个 role 的 lifecycle 命令——直接编辑 `.pg/hooks/<role>-<action>.sh` 或 `.pg/project.yaml` 里 `environments.<env>.roles.<r>.actions.<action>.script` 字段即可。
-- **不使用**：从一次 change 的视角去修复或扩展——那是 `pg-fix-issue` / `pg-build` 的事。
+- **不使用**：从一次 change 的视角去修复或扩展——那是 `pg-auto-pilot` 的事。
 
 ---
 
@@ -38,15 +38,15 @@ metadata:
 生成 `project.yaml` 时每个字段按以下规则处理：
 
 - **真实可推**：构建命令、模块路径、language 枚举——必须从仓库文件推断出来。
-- **可推断但需确认**：environments / tracks / stages 的拓扑——本 SKILL 给出一组 **合理的初值**，但必须在最终输出里明确告诉用户"哪些字段是基于常见模式推断的、可能需要调整"。
-- **不可推断**：端口、host、roles 之间的拓扑——本 SKILL **不编造**，而是留 `TBD: <说明>` 注释让用户填。
+- **可推断但需确认**：environments 的拓扑——本 SKILL 给出一组 **合理的初值**，但必须在最终输出里明确告诉用户"哪些字段是基于常见模式推断的、可能需要调整"。
+- **不可推断**：端口、host、role 之间的拓扑——本 SKILL **不编造**，而是留 `TBD: <说明>` 注释让用户填。
 
 ### 2.5 输出语言：优先中文
 
-本 SKILL 生成的所有面向用户的产物（`repo-scan.md`、`project.yaml` 的 `description` 字段、stages / tracks / environments / roles 的说明、最终汇报）**优先使用中文**。规则：
+本 SKILL 生成的所有面向用户的产物（`repo-scan.md`、`project.yaml` 的 `description` 字段、environments / roles 的说明、最终汇报）**优先使用中文**。规则：
 
 - **必须中文**：`description` 字段、`repo-scan.md` 的章节标题与正文、TBD 标注的解释文字、终态汇报。
-- **必须保留英文/原文**：模块 id、role 名、instance 名（schema 用 `^[a-z][a-z0-9-]*$` 约束）、`language` 枚举值（`java` / `typescript` 等）、shell 命令、构建/测试命令、YAML 字段 key。这些是机器契约或 schema 约束，**不能翻译**。
+- **必须保留英文/原文**：module id、role 名、instance 名（schema 用 `^[a-z][a-z0-9-]*$` 约束）、`language` 枚举值（`java` / `typescript` 等）、shell 命令、构建/测试命令、YAML 字段 key。这些是机器契约或 schema 约束，**不能翻译**。
 - **保留原文作为引用**：当 description 中引用代码里的标识符、文件名、命令时，原文照抄（如 `mvn -pl kuboard-server -am test`），不要翻译。
 - **不引入**额外的语言切换机制（如 `lang: zh` 字段）。中文是默认；用户如需英文，直接编辑生成的文件即可。
 
@@ -54,41 +54,31 @@ metadata:
 
 **Hook 协议边界（schema/runtime SSOT）**：hook 只服务于 **environments 维度**，不服务于 modules 维度。具体：
 
-- **走 hook 协议**（生成 `.pg/hooks/<name>.sh`）：`environments.<env>.{prepare_env, clean_env}`、`environments.<env>.roles.<r>.{start, stop, restart, logs, tail, ...}`。runner 通过 `pg-run-hook.py` 调用，注入 `PG_*` env vars（v5 SSOT 见 `.pg/skills/src/runtime/spec/hook-env-vars.yaml`：硬注入 `PG_PROJECT_ROOT` / `PG_SKILLS_PATH` / `PG_RUN_CALLER` + spec 注入 `PG_RUN_SESSION` / `PG_STAGE` / `PG_ENV` / `PG_ROLE` / `PG_INSTANCE_NAME` / `PG_INSTANCE_HOST` / `PG_HOOK_TYPE` / `PG_HOOK_LOG_DIR` / `PG_LOG_FILE` / `PG_RESULT_FILE`）。
-- **不走 hook 协议**（直接写在 `project.yaml` 里）：`modules.<m>.{build, lint, test.<key>}` 字段。这些字段是 `executable_command` 形态（`string` 或 `{cmd, timeout_seconds}`），runner 渲染为 `timeout N bash -c '<cmd>'` 直接执行，**不**经过 `.pg/hooks/<m>-<action>.sh`。原因：单测/单条命令经常需要 ad-hoc 跑（`mvn -Dtest=FooTest`、`pnpm test:e2e --grep "..."`），把每条命令固化成 hook 反而牺牲 agent 灵活性。
+- **走 hook 协议**（生成 `.pg/hooks/<name>.sh`）：`environments.<env>.{prepare_env, clean_env}`、`environments.<env>.roles.<r>.{start, stop, restart, logs, tail, health_check, ...}`。runner 通过 `pg-invoke-hook.py` 调用，注入 `PG_*` env vars（v7 SSOT 见 `.pg/skills/src/runtime/spec/hook-env-vars.yaml`：硬注入 `PG_PROJECT_ROOT` / `PG_SKILLS_PATH` / `PG_RUN_CALLER` + spec 注入 `PG_RUN_SESSION` / `PG_STAGE` / `PG_ENV` / `PG_ROLE` / `PG_INSTANCE_NAME` / `PG_INSTANCE_HOST` / `PG_INSTANCE_PORT` / `PG_HOOK_TYPE` / `PG_HOOK_LOG_DIR` / `PG_LOG_FILE` / `PG_RESULT_FILE`）。
+- **不走 hook 协议**（直接写在 `project.yaml` 里）：`modules.<m>.{build, lint, test.<key>}` 字段。这些字段是 `executable_command` 形态（`string` 或 `{cmd, timeout_seconds}`），由 `pg-parse-config.py --resolve-module-build <m>` 等子命令解析，runner 渲染为 `timeout N bash -c '<cmd>'` 直接执行，**不**经过 `.pg/hooks/<m>-<action>.sh`。原因：单测/单条命令经常需要 ad-hoc 跑（`mvn -Dtest=FooTest`、`pnpm test:e2e --grep "..."`），把每条命令固化成 hook 反而牺牲 agent 灵活性。
 
-因此 `pg-init-project` 的 Phase 3 只为 **environments 节点**生成 hook 脚本。`examples/<language>/hooks/module-<action>.sh` 是 **历史示例模板**，**不再复制到项目里**（项目模块命令直接写在 `project.yaml` 里）。
+因此本 SKILL 的 Phase 3 只为 **environments 节点**生成 hook 脚本。如果仓库里残留了 `<module>-{build,test,lint}.sh` 之类的旧 hook，提示用户删除（`rm .pg/hooks/<m>-*.sh`）；`pg doctor` 不会把它们当 schema 错误，但它们是死代码。
 
-如果仓库里残留了 `<module>-{build,test,lint}.sh` 之类的旧 hook，提示用户删除（`rm .pg/hooks/<m>-*.sh`）；`pg doctor` 不会把它们当 schema 错误，但它们是死代码。
-
-**SSOT 公共库**：除模板外，pg-init-project 还要把 `.pg/skills/examples/shell/hooks/lib/common.sh` 复制到项目的 `.pg/hooks/lib/common.sh`。该文件是 hook 协议 SSOT，包含 `pg_resolve_paths`：
+**SSOT 公共库**：除模板外，本 SKILL 还要把 `.pg/skills/examples/shell/hooks/lib/common.sh` 复制到项目的 `.pg/hooks/lib/common.sh`。该文件是 hook 协议 SSOT，包含 `pg_resolve_paths`：
 
 - **优先**：直接信任 `PG_HOOK_LOG_DIR`（由 `pg-invoke-hook.py` 在 spec 阶段预拼的绝对路径）
-- **Fallback**：按 `PG_RUN_CALLER` + `PG_RUN_SESSION` + `PG_ENV` 自拼（v5 caller × session 双维度路由；老式手工调用 / 未走 `pg-invoke-hook.py` 仍可走此路径）
-  - `pg-build` → `.pg/changes/<C>/2-build/<env>-logs`
-  - `pg-regression` → `.pg/regression/<suite>/<env>-logs`（从 `regression-<suite>` 截 suite）
-  - `pg-fix-issue` → `.pg/fix-issue/<change>/<env>-logs`
+- **Fallback**：按 `PG_RUN_CALLER` + `PG_RUN_SESSION` + `PG_ENV` 自拼（caller × session 双维度路由；老式手工调用 / 未走 `pg-invoke-hook.py` 仍可走此路径）
+  - `pg-agent` → `.pg/agent/<session>/<env>-logs`
+  - `ad-hoc` → `.pg/ad-hoc/<session>/<env>-logs`
   - 兜底 → `scripts/logs|pids`
 
-无此文件时，模板 fallback 到 caller 控制的 `$PG_LOG_FILE`（所有 skill 共用一条日志，pg-regression / pg-fix-issue 不再走隔离目录）。
+无此文件时，模板 fallback 到 caller 控制的 `$PG_LOG_FILE`（所有调用共用一条日志，不再走隔离目录）。
 
-`pg_resolve_paths` 的 fallback 路由表必须与 `.pg/skills/src/runtime/bin/pg-invoke-hook.py:pg_log_dir_for_skill` 三处保持同步（SSOT）。改动前先核对两侧。
-
-**Code-review 配置同样不进 hook 协议**：
-
-pg-build v2.6 的 review phase（`test → dev → review → verify → gate`）需要 `.pg/code-review/code-review.yaml`（profile 索引）与 `.pg/code-review/<profile>/*.md`（检查项执行细则）作为 SSOT 输入。这两类文件**不进 `.pg/hooks/`**，由本 SKILL 的 Phase 2.5 生成。
-
-- **`pg-build/review` agent** 自动派发 profile：根据 `module_details[].language`（java/kotlin/scala → `java-spring`，go → `go`，typescript/javascript/vue → `vue3`，其他 → `default`），无需在 `project.yaml` 写任何 review-related 字段。
-- **simple track**（`type: simple`）自动跳过 review——orchestrator bootstrap 时从 `execution-manifest.yaml.phases.review` 是否存在派生 `code_review_enabled`，simple track 不生成该 phase，自然跳过。
-- **security profile** 不在 language 自动派发范围内，需用户对鉴权/加密类变更**显式**启用（`tracks.<id>.code_review_profiles: [security, ...]`）。本 SKILL 默认**不**拷 security profile 模板；终态汇报里会提示用户手动启用方式。
+`pg_resolve_paths` 的 fallback 路由表必须与 `.pg/skills/src/runtime/bin/pg-invoke-hook.py:pg_log_dir_for_skill` 保持同步（SSOT）。改动前先核对两侧。
 
 **environments 维度的 hook 生成规则**：
 
 - 命名约定：`<role-name>-<action>.sh`（例：`backend-start.sh`、`backend-stop.sh`、`frontend-start.sh`）。environment 级 hook 用 `prepare_env.sh` / `clean_env.sh`。
-- 模板来源：`.pg/skills/examples/shell/hooks/role-{start,stop,logs,restart}.sh` 与 `env-{prepare,clean}.sh`。pg-init-project 把模板复制到 `.pg/hooks/<role>-<action>.sh` 后，替换其中的 `CMD_PLACEHOLDER` 为本 role 真实的 start/stop 命令。
-- 模板里**只**改 `CMD_PLACEHOLDER` 命令块，**不**改 trap / `pg_fail` / `pg_exit` 调用——hook 协议是 SSOT。
+- 模板来源：`.pg/skills/examples/shell/hooks/role-{start,stop,logs,health-check}.sh` 与 `env-{prepare,clean}.sh`。本 SKILL 把模板复制到 `.pg/hooks/<role>-<action>.sh` 后，替换其中的 TODO 块为本 role 真实的 start/stop 命令。
+- **不生成 restart 脚本**：`restart` action 由 `pg-invoke-hook.py` 的 fallback（stop → start → [health_check]）自动处理，无需独立脚本。
+- 模板里**只**改 TODO 命令块，**不**改 trap / `pg_fail` / `pg_exit` 调用——hook 协议是 SSOT。
 
-**注意**：`modules.<m>.build` / `modules.<m>.test.<key>` 等字段出现在 `project.yaml` 里时，必须是 `executable_command` 形态（string 或 `{cmd, timeout_seconds}`），runner 用 `pg-parse-config.py --resolve-module-build <m>` 等子命令解析。不要在 `project.yaml` 里写 `"build": "bash .pg/hooks/kuboard-server-build.sh"` 这种"调用 hook 来跑 build"的形式——那是错误的，会双重 timeout。
+**注意**：`modules.<m>.build` / `modules.<m>.test.<key>` 等字段出现在 `project.yaml` 里时，必须是 `executable_command` 形态（string 或 `{cmd, timeout_seconds}`）。不要在 `project.yaml` 里写 `"build": "bash .pg/hooks/kuboard-server-build.sh"` 这种"调用 hook 来跑 build"的形式——那是错误的，会双重 timeout。
 
 ### 4. 跑 `pg doctor` 收尾
 
@@ -98,7 +88,7 @@ pg-build v2.6 的 review phase（`test → dev → review → verify → gate`�
 
 ## 工作流
 
-按顺序执行 Phase 1 → 4。**不要跳过 Phase 1**——它是后面所有推断的事实基础。
+按顺序执行 Phase 1 → 5。**不要跳过 Phase 1**——它是后面所有推断的事实基础。
 
 ### Phase 1: 扫描仓库
 
@@ -113,7 +103,7 @@ pg-build v2.6 的 review phase（`test → dev → review → verify → gate`�
    - `build.gradle` / `build.gradle.kts` → Gradle
    - `go.mod` → Go（看是否多 module workspace）
    - `package.json` 存在且有 `workspaces` 字段 → pnpm/yarn workspace
-   - `pyproject.toml` / `setup.py` / `pyproject` → Python
+   - `pyproject.toml` / `setup.py` → Python
    - 都没有 → 标记为 "mixed / unknown"，让用户确认
 
 3. 对每个识别到的 multi-module 入口（Maven `<modules>` / Go workspace / pnpm `workspaces` 数组），递归 1 层列出子模块路径。
@@ -124,13 +114,13 @@ pg-build v2.6 的 review phase（`test → dev → review → verify → gate`�
    - TS/Vue：默认 `*.spec.ts` / `*.test.ts` / `tests/`
    - Python：默认 `test_*.py` / `*_test.py` / `tests/`
 
-5. 把扫到的内容写进 `.pg/context/repo-scan.md`，格式见"输出格式 §1"。**全文使用中文**（除命令、文件名、模块 id 这些机器契约）。
+5. 把扫到的内容写进 `.pg/context/repo-scan.md`，格式见"输出格式 §1"。**全文使用中文**（除命令、文件名、module id 这些机器契约）。
 
 **产出**：`repo-scan.md` 已写盘。
 
 ### Phase 2: 生成 `.pg/project.yaml`
 
-**目标**：替换 placeholder 的 `project.yaml`，填实 modules/environments/tracks/stages。
+**目标**：替换 placeholder 的 `project.yaml`，填实 modules + environments。**不再生成 tracks / stages**（已从 schema 移除，`pg doctor` 不再接受这两个顶层键）。
 
 读取 `.pg/skills/src/runtime/spec/project.schema.json`，按 schema 字段填：
 
@@ -140,50 +130,20 @@ pg-build v2.6 的 review phase（`test → dev → review → verify → gate`�
   - **单模块**：一个 module，`root: .`, `language: <推断>`。
   - **pnpm workspace**：每个 `packages/<name>/` 算一个 module，`language: typescript`。
   - **Go workspace**：每个 module 目录一个 module。
+  - 每个 module 的 `build` / `lint` / `test` 字段按 repo-scan 推断的命令写成 `executable_command` 形态（`string` 或 `{cmd, timeout_seconds}`）；`test` 是 `key → 命令` 的 map（如 `unit` / `integration` / `e2e`），按扫描到的测试入口填。
 - `environments`：用 schema 的 environment 形态，但**只填合理的初值**：
-  - 默认给一个 `local` environment，含 `dev` role 一个 instance，host `localhost`、port `TBD: <常见端口，e.g. 8080>`。
+  - 默认给一个 `local` environment，含一个 `dev` role 与一个 instance，host `localhost`、port `TBD: <常见端口，e.g. 8080>`。
+  - role 的 `actions` 只声明本 SKILL 生成了脚本的 action（`start` / `stop`；`logs` / `health_check` 按需声明），`script` 指向 `.pg/hooks/<role>-<action>.sh`（Phase 3 生成后再写）。
   - 在 `description` 字段用 `TBD:` 标注所有未确认值。
-- \`tracks\`：用 schema 的 track 形态。
-  - 每个 module 一个 standard track，\`type: standard\`，\`max_fix_retries: 5\`，\`modules: [<module.id>]\`。
-  - 额外生成一个聚合的 \`scenario\` track，\`type: scenario\`，\`modules\` 包含所有 module id，\`max_fix_retries: 3\`，用于端到端场景验证。
-- \`stages\`：两个 stage：
-  - \`dev\`：\`environment.required: false\`，tracks 包含所有 standard track（仅跑 unit tests）。
-  - \`int\`：\`environment.required: true\`，tracks 包含所有 standard track + \`scenario\` track（同时跑集成测试和端到端场景验证）。
 
 **注意**：
 - **绝不**编造端口 / host / role 拓扑——这些只能从 `repo-scan.md` 之外的信息推断（如 README、部署脚本），没有就 `TBD:`。
-- 不引入 schema 之外的字段（`additionalProperties: false`）。
+- 不引入 schema 之外的字段（`additionalProperties: false`）——特别是**不要**写 `tracks` / `stages` / `describe_env` 等已移除的键，写了 `pg doctor` 会校验失败。
 - `description` 字段用 `TBD:` 标注需用户复核的项，例：`description: "TBD: 确认端口 8080 还是 80"`。**所有 description 一律使用中文**（除非引用代码标识符或 shell 命令保持原文）。
 
-写盘前用 schema 校验一次（`python3 .pg/skills/src/runtime/bin/pg doctor` 会跑校验；本阶段至少过 yaml 解析）。
+写盘前至少过 yaml 解析，Phase 4 会跑完整 schema 校验。
 
 **产出**：`project.yaml` 写盘。
-
-### Phase 2.5: 生成 `.pg/code-review/` (pg-build review phase SSOT)
-
-**目标**：根据 Phase 1 扫到的 module languages，生成 pg-build v2.6 review phase 所需的 profile 索引与各 profile 检查项细则。这是 review phase 的 SSOT 输入（与 hooks 模板同源角色，但**不进** `.pg/hooks/`）。
-
-**幂等约束（MUST）**：如果项目**已存在** `.pg/code-review/code-review.yaml`（或 `.pg/code-review/` 目录），**不**覆盖。用户手工调过的检查项细则可能被无脑覆盖丢失；这种情况跳过生成并在终态汇报里提示"已存在，跳过；如需重置，备份后删除 `.pg/code-review/` 再重跑"。
-
-**生成步骤**：
-
-1. **总是拷 default profile**：从 `.pg/skills/examples/code-review/code-review.yaml` 拷到项目根 `.pg/code-review/code-review.yaml`；从 `.pg/skills/examples/code-review/default/*.md` 拷到 `.pg/code-review/default/`。这是所有 track 的兜底 profile，不可省略。
-2. **按 Phase 1 扫到的 language 追加语言 profile**：遍历 Phase 1 识别到的 module，对每种出现的 language 拷对应 profile 的检查项细则到 `.pg/code-review/<profile>/`：
-   - `java` / `kotlin` / `scala` → 拷 `.pg/skills/examples/code-review/java-spring/*.md`（`pattern_consistency` + `null_safety`）
-   - `go` → 拷 `.pg/skills/examples/code-review/go/*.md`（`pattern_consistency` + `error_wrapping`）
-   - `typescript` / `javascript` / Vue 单文件 → 拷 `.pg/skills/examples/code-review/vue3/*.md`（`pattern_consistency` + `component_props`）
-   - 同一种 profile 重复触发（如多个 java module）**不**重复拷贝，靠幂等检查保证。
-3. **不拷 security profile**：security 是 opt-in 语义（用户对鉴权/加密类变更**显式**指定），不属于 language 自动派发。终态汇报里给出手动启用提示（步骤见下方"Phase 2.5 完成后提示"）。
-4. **模板来源守护**：`.pg/skills/examples/code-review/` 是 subtree 拉来的 SSOT 模板。若该项目里该目录缺失（如 pg-skills 版本过旧），**不**凭空生成，改为：
-   - 输出 `WARN: .pg/skills/examples/code-review/ 模板目录不存在 — review phase 将退化到 default-only 检查，可能漏掉 language 特异项；请先升级 pg-skills`
-   - 仍生成最简化的 `.pg/code-review/code-review.yaml`（仅含 default profile），防止 review phase 启动因缺 SSOT 而 fatal。
-
-**Phase 2.5 完成后提示**（写入终态汇报）：
-
-- 已生成 profile：`<default> [+] <java-spring|go|vue3 ...>`，按 phase 1 实际扫到的 language 列。
-- 提醒用户：如需对鉴权/加密类变更启用 security review（`secret_leak` / `auth_bypass` / `error_silence`），手动拷 `.pg/skills/examples/code-review/security/*.md` 到 `.pg/code-review/security/`，并在 proposal 阶段把对应 track 的 `tracks.<id>.code_review_profiles: [security, ...]` 显式声明（pg-propose 会写入 `execution-manifest.yaml`）。
-
-**产出**：`.pg/code-review/code-review.yaml` 已写盘，对应 `.pg/code-review/<profile>/` 子目录已就绪。**例外情况**：项目已有 `.pg/code-review/` 时全步骤跳过，Phase 2.5 视为 noop。
 
 ### Phase 3: 生成 `.pg/hooks/` 并修复 `project.yaml` 引用
 
@@ -193,10 +153,12 @@ pg-build v2.6 的 review phase（`test → dev → review → verify → gate`�
 
 **生成步骤**：
 
-1. 遍历 `environments.<env>.roles`，对每个 role 的 `actions.start` / `actions.stop` / `actions.health_check`（声明才生成），生成 `.pg/hooks/<role>-<action>.sh`。
-   - **不生成 restart 脚本**：`restart` action 的 `script` 直接指向 `<role>-start.sh`，因为 start 已内置 `kill_port` 端口清理逻辑，等价于 stop + start。
-   - **health_check 是 opt-in**：仅当 `environments.<env>.roles.<r>.actions.health_check` 字段存在时才生成 `.pg/hooks/<role>-health-check.sh`。
-   - **所有 role 必须生成完整辅助脚本**：有 start 就必须有 stop + health_check（即使 project.yaml 中只声明了 start，也要补全）。确保 `project.yaml` 中 actions 引用完整。
+1. 遍历 `environments.<env>.roles`，对每个 role：
+   - 生成 `.pg/hooks/<role>-start.sh` 与 `.pg/hooks/<role>-stop.sh`（**必生成**：start 需要 stop 配对，pg-invoke-hook 的 restart fallback 依赖 stop+start 都存在）。
+   - `actions.health_check` 声明了才生成 `.pg/hooks/<role>-health-check.sh`（**opt-in**，模板 `role-health-check.sh` 已实例化 `PG_INSTANCE_PORT`，无需 TODO 替换）。
+   - `actions.logs` 声明了才生成 `.pg/hooks/<role>-logs.sh`。
+   - **不生成 restart 脚本**：restart 由 pg-invoke-hook fallback（stop → start → [health_check]）处理。
+   - start/stop 模板来源 `.pg/skills/examples/shell/hooks/role-start.sh` / `role-stop.sh`，复制后把 TODO 块替换为本 role 真实的启动/停止命令。
 
 2. **生成后立即修改 `project.yaml`**：将 `environments.<env>.roles.<r>.actions.<action>.script` 从内联命令改为 `.pg/hooks/<role>-<action>.sh` 路径。确保 `pg-invoke-hook.py` 执行的是 hook 文件而非内联命令。
 
@@ -204,51 +166,47 @@ pg-build v2.6 的 review phase（`test → dev → review → verify → gate`�
    - **prepare_env 模板应调用 `pg-invoke-hook.py` 来启动/停止服务**，而非直接调用 `pg_start_bg`。格式：
      ```bash
      python3 "$PG_SKILLS_PATH/src/runtime/bin/pg-invoke-hook.py" \
-         --caller pg-build --session "$SESSION" \
+         --caller "${PG_RUN_CALLER:-pg-agent}" --session "$PG_RUN_SESSION" \
          --env local --role <role> --action start --instance <instance>
      # ... 种子化逻辑 ...
      python3 "$PG_SKILLS_PATH/src/runtime/bin/pg-invoke-hook.py" \
-         --caller pg-build --session "$SESSION" \
+         --caller "${PG_RUN_CALLER:-pg-agent}" --session "$PG_RUN_SESSION" \
          --env local --role <role> --action stop --instance <instance>
      ```
-     这样 start/stop 逻辑只需维护一份（在 start/stop hook 中），prepare_env 不复现。
+     这样 start/stop 逻辑只需维护一份（在 start/stop hook 中），prepare_env 不复现。caller 只允许 `pg-agent` / `ad-hoc`（`pg-invoke-hook.py` 的 `--caller` choices 白名单），继承 `PG_RUN_CALLER` 即可两者兼得。
 
 4. 复制 SSOT 公共库（与模板同源）：
    - 源：`.pg/skills/examples/shell/hooks/lib/common.sh`
    - 目标：`.pg/hooks/lib/common.sh`
-   - 作用：模板头部条件 `source lib/common.sh` + `pg_resolve_paths` 才能找到目标；`pg_resolve_paths` 优先信任 `PG_HOOK_LOG_DIR`（由 `pg-invoke-hook.py` 预拼），fallback 时按 `PG_RUN_CALLER + PG_RUN_SESSION + PG_ENV` 自拼（v5 caller × session 双维度路由）
-       - 跳过此步：生成的 hook 仍能工作（走 `$PG_LOG_FILE`），但 pg-regression / pg-fix-issue 日志会回落到 `scripts/logs`，不写到预期的 `.pg/regression/` / `.pg/fix-issue/` 目录
-5. 模板来源：从 `.pg/skills/examples/shell/hooks/role-<action>.sh` 复制并替换 TODO 块；env 级模板从 `env-prepare.sh` / `env-clean.sh` 复制。health_check 模板从 `role-health-check.sh` 复制（**不含 TODO 块，是已实例化的最终形态**），仅在 §1 检测到 `actions.health_check` 字段时生成。模板依赖 `pg-run-hook.py` 注入的 PG_* env vars（v5 SSOT 见 `.pg/skills/src/runtime/spec/hook-env-vars.yaml`）。
+   - 作用：模板头部条件 `source lib/common.sh` + `pg_resolve_paths` 才能找到目标；`pg_resolve_paths` 优先信任 `PG_HOOK_LOG_DIR`（由 `pg-invoke-hook.py` 预拼），fallback 时按 `PG_RUN_CALLER + PG_RUN_SESSION + PG_ENV` 自拼。
+   - 跳过此步：生成的 hook 仍能工作（走 `$PG_LOG_FILE`），但日志回落到 `scripts/logs`，不写到预期的 `.pg/agent/` / `.pg/ad-hoc/` 目录，`pg doctor` 也会报 `hooks_lib_common_present` warning。
+
+5. 模板来源：从 `.pg/skills/examples/shell/hooks/role-<action>.sh` 复制并替换 TODO 块；env 级模板从 `env-prepare.sh` / `env-clean.sh` 复制。
+
 6. chmod 755。
+
 7. **不**改 trap / `pg_fail` / `pg_exit` 调用——hook 协议是 SSOT。
 
 **产出**：`.pg/hooks/<role>-<action>.sh` 与 `.pg/hooks/{prepare_env,clean_env}.sh`（如适用）全部写盘且可执行，同时 `project.yaml` 中 action 引用已更新为 hook 文件路径。如果 environments 没有任何 actions（只声明静态 roles），**不**生成任何 hook，目录保持空。
 
 ### Phase 4: 跑 `pg doctor` 校验
 
-**目标**：让用户看到一份 "OK (4 checks passed), 0 warning" 的输出。
+**目标**：让用户看到一份 "OK (N checks passed)"、0 ERROR 的输出。
 
 ```bash
 python3 .pg/skills/src/runtime/bin/pg doctor
 ```
 
-如果 doctor 报 schema 错：检查 `project.yaml` 的 `TBD:` 字段是否破坏了 schema 约束（不应该，`TBD:` 只在 description 字段里，但 lint 一遍）。
+- 如果 doctor 报 schema 错：检查 `project.yaml` 的 `TBD:` 字段是否破坏了 schema 约束（不应该，`TBD:` 只在 description 字段里，但 lint 一遍）。**最常见原因是手滑写了已移除的键**（`tracks` / `stages` / `describe_env` / `verify_merge` / `git` / action 级 `host` / `parallel` / `libvirt_uri`）——对照 `src/runtime/spec/project.schema.json` 删掉。
+- 如果 doctor 报 `.pg/hooks/<x>.sh not executable`：`chmod +x`。
+- 如果 doctor 报 `.pg/ not found` / `project.yaml not found`：用户没跑 `pg init`，退出并提示先跑 `pg init`。
+- 如果 doctor 报 `.pg/context/agent-protocol.md is missing`：Phase 5 尚未执行——继续往下走，Phase 5.3 会复制并消除该 warning。
 
-如果 doctor 报 `.pg/hooks/<x>.sh not executable`：`chmod +x`。
-
-如果 doctor 报 `.pg-version not found`：用户没跑 `pg init`，退出并提示先跑 `pg init`。
-
-**Code-review 一致性补充校验**（doctor 不覆盖，需人工 grep）：
-
-- 项目有 java module 时，`.pg/code-review/java-spring/pattern_consistency.md` + `null_safety.md` 应当都存在（缺失则 `profile_loader.py` 启动 review 时会 fallback 到 default，不是 fatal，但失去语言特异检查项）。
-- 类比：go → `.pg/code-review/go/{pattern_consistency,error_wrapping}.md`；typescript → `.pg/code-review/vue3/{pattern_consistency,component_props}.md`。
-- 项目有混合 language 时，每个 language 对应的 profile 目录都应有这两个最小检查项文件。
-
-**产出**：doctor 输出 0 / 0 / 4。
+**产出**：doctor 输出 0 ERROR（warning 仅允许 `AGENTS.md does not reference agent-protocol` 这类待 Phase 5 处理项）。
 
 ### Phase 5: AGENTS.md drift 检测 + agent 协议注入
 
-**目标**：解决 "项目已有 AGENTS.md 描述启动/构建命令 → 但 .pg/hooks/ 接管了 SSOT → AGENTS.md 与 hooks 协议 drift" 的历史遗留问题。Phase 5 不直接修改用户的 AGENTS.md，而是产出 drift 报告 + 生成 `.pg/context/agent-protocol.md`（agent 通用的 SSOT 发现机制文档），让 agent 一眼就知道该用什么入口。
+**目标**：解决 "项目已有 AGENTS.md 描述启动/构建命令 → 但 .pg/hooks/ 接管了 SSOT → AGENTS.md 与 hooks 协议 drift" 的历史遗留问题。Phase 5 不直接修改用户的 AGENTS.md，而是产出 drift 报告 + 生成 `.pg/context/agent-protocol.md`（agent 通用的 SSOT 发现机制文档，同时满足 `pg doctor` 的 `context_protocol_present` 检查）。
 
 **MUST**：如果 `PG_SKIP_AGENTS_MD_MIGRATION=1`（env），跳过整个 Phase 5，便于用户拒绝该自动化。
 
@@ -280,7 +238,7 @@ files=$(git ls-files '**/AGENTS.md' 'AGENTS.md' 2>/dev/null || \
 
 #### Step 5.3: 生成 `.pg/context/agent-protocol.md`
 
-**模板来源**：`pg-skills/examples/shell/agent-protocol.md`（已写好的最终形态）。
+**模板来源**：`.pg/skills/examples/shell/agent-protocol.md`（已写好的最终形态）。
 
 复制到 `.pg/context/agent-protocol.md`，**不做内容改写**——模板是 SSOT。
 
@@ -337,8 +295,8 @@ Scanner: pg-init-project Phase 5 v1
 
 下一步:
   1. cat .pg/context/agents-md-patches.md  review patch 清单
-  2. 按 patch 手动修改 4 个 AGENTS.md (或写脚本批量应用)
-  3. 跑 pg doctor 验证 agents_md_protocol_link_present + context_protocol_present
+  2. 按 patch 手动修改 AGENTS.md (或写脚本批量应用)
+  3. 跑 pg doctor 验证 context_protocol_present + agents_md_protocol_link_present
 ```
 
 **MUST**：不静默修改用户的 AGENTS.md——这违反 LLM agent 与用户文件的边界。
@@ -346,9 +304,7 @@ Scanner: pg-init-project Phase 5 v1
 #### 跳过 Phase 5 的方式
 
 ```bash
-PG_SKIP_AGENTS_MD_MIGRATION=1 python3 .pg/skills/src/core/workflows/scripts/pg-parse-config.py pg-init-project
-# 或者
-PG_SKIP_AGENTS_MD_MIGRATION=1 bash .pg/skills/src/core/workflows/skills/pg-init-project/...
+PG_SKIP_AGENTS_MD_MIGRATION=1 <触发本 SKILL 的命令>
 ```
 
 适用场景：
@@ -368,7 +324,7 @@ PG_SKIP_AGENTS_MD_MIGRATION=1 bash .pg/skills/src/core/workflows/skills/pg-init-
 # <项目名> 仓库扫描报告
 
 Generated: <ISO 时间戳>
-Scanner: pg-init-project v0.1
+Scanner: pg-init-project v1.0
 
 ## 技术栈
 
@@ -419,7 +375,6 @@ pnpm test:e2e
 
 - `environments.local.roles.dev.instances[0].port`: 8080 — 按 Spring Boot 默认推断，请到 application.yml 确认
 - `environments.local.roles.dev.instances[0].host`: localhost — 本地开发默认；staging / prod 需用户补充
-- 是否启用 security review profile（opt-in，需手动指定 `tracks.<id>.code_review_profiles: [security, ...]`）
 ```
 
 ### §2: 终态汇报（写完所有文件后给 LLM 主循环的回报）
@@ -429,28 +384,24 @@ pnpm test:e2e
 
 已生成:
 - .pg/context/repo-scan.md
-  - .pg/project.yaml（X 个模块，Y 个环境，Z 个 track，dev + int 两个 stage；
-                     module 命令直接写在 modules.<m>.{build,lint,test.<key>} 字段里；
-                     int stage 包含 standard + scenario 两种 track）
-  - .pg/code-review/code-review.yaml + .pg/code-review/{default[,java-spring|go|vue3...]}/ (按 language 自动派发；
-                     security profile 需手动 opt-in, 见下方提示)
-  - .pg/hooks/<role>-<action>.sh × M（仅 environments 维度的 lifecycle actions）
-  - .pg/hooks/{prepare_env,clean_env}.sh（如声明）
-  - .pg/hooks/lib/common.sh（SSOT 公共库）
+- .pg/project.yaml（X 个模块，Y 个环境；module 命令直接写在 modules.<m>.{build,lint,test.<key>} 字段里）
+- .pg/hooks/<role>-<action>.sh × M（仅 environments 维度的 lifecycle actions: start/stop[+health_check/logs 按声明]）
+- .pg/hooks/{prepare_env,clean_env}.sh（如声明）
+- .pg/hooks/lib/common.sh（SSOT 公共库）
+- .pg/context/agent-protocol.md（agent 协议速查, SSOT）
+- .pg/context/agents-md-patches.md（AGENTS.md drift 清单, 待 review）
 
-Doctor: OK (4 checks passed)，0 warning
+Doctor: OK (N checks passed)，0 ERROR
 
 需人工复核的项 (TBD):
-  - environments.local.roles.dev.instances[0].port: 8080（请到 application.yml 确认）
-  - <是否启用 security review profile: 手动拷 .pg/skills/examples/code-review/security/ → .pg/code-review/security/，
-    然后在 proposal 阶段对相关 track 设 tracks.<id>.code_review_profiles: [security, ...]>
+  - environments.local.roles.dev.instances[0].port: 8080（请到 application.yaml 确认）
   - <其他 TBD 项，详见 repo-scan.md>
 
 Next steps:
   1. 在 .pg/project.yaml 与 .pg/context/repo-scan.md 中复核所有 TBD 项
   2. 补全 environments 缺失的 port / host
-  3. 如需启用 security review profile，按上方说明手动操作
-  4. 运行 pg-propose 启动第一个 change
+  3. review .pg/context/agents-md-patches.md 并按清单更新 AGENTS.md（可选）
+  4. 运行 pg-auto-pilot 启动第一次自动驾驶
 ```
 
 ---
@@ -461,16 +412,15 @@ Next steps:
 
 1. **不扫仓库直接编 modules** —— 凭空生成 modules 列表，跳过实际代码。**反例**：看到 `pom.xml` 假设"单模块 Java"，但实际是 4 个 Maven 子模块。
 2. **编造端口/host** —— 把 8080 写死成 backend port，不验证。**反例**：8080 在项目里是 kuboard-server，但用户的 Spring Boot 实际跑 80。
-3. **改 hook 协议** —— 在生成的 hook 里改 `pg_fail` / `pg_exit` 的参数或 trap 行为。**反例**：把 `set -euo pipefail` 改成 `set -e` 怕报错。这破坏 SSOT。
-4. **跳过 `pg doctor`** —— 写完文件直接返回成功。**反例**：用户跑 `pg-propose` 时报 schema 错，回头找问题浪费半小时。
-5. **把 placeholder 留着** —— 在 `project.yaml` 顶部保留 `placeholder` module 不删。**反例**：schema 允许 `minProperties: 1` 但实际项目有 4 个 module，placeholder 残留污染 tracks/stages。
-6. **混淆 module hook 与 environment hook 的边界** —— 把 `modules.<m>.build` 写成 `bash .pg/hooks/kuboard-server-build.sh`，期望它走 hook 协议。**错**：`modules.<m>.build` 是 `executable_command` 字段，runner 直接渲染为 `timeout N bash -c '<cmd>'` 执行，**不**调用 `.pg/hooks/<m>-<action>.sh`。`pg-run-hook.py` 只服务于 `environments.<env>.{prepare_env,clean_env}` 与 `environments.<env>.roles.<r>.{start,stop,...}`。项目里如果残留 `<module>-{build,test,lint}.sh`，是历史模板的产物，删除即可。
-7. **忘记复制 `lib/common.sh`** —— 只复制 5 个 role/env 模板但漏掉 `lib/common.sh`。**反例**：新项目跑 `pg-regression` 时日志写到 `scripts/logs` 而非 `.pg/regression/<suite>/<env>-logs`，排错时找不到日志。`pg doctor` 会有 `hooks_lib_common_present` warning 提示。
-8. **Phase 5 直接修改 AGENTS.md** —— 不允许！必须只产 drift 清单，让用户 review 后手动应用。**反例**：pg-init-project 静默改用户的 AGENTS.md，导致用户信任破裂。
-9. **Phase 5 跳过 PG_SKIP_AGENTS_MD_MIGRATION 兜底** —— 用户拒绝时仍强行生成 patch 清单。**反例**：CI 跑 pg-init-project 时 .pg/context/ 下出现污染 artifacts，diff 噪音。
-10. **Phase 2.5 覆盖已存在的 `.pg/code-review/`** —— 项目用户手工调过检查项细则（如改权重、调阈值、新增 check），被 init-project 无脑覆盖。**反例**：review 阶段阈值的 TBD 复盘在 webvirt 早期手工调过，被 init-project 重跑时抹平。**MUST 幂等**：已存在则全步骤 skip。
-11. **Phase 2.5 自动拷 security profile** —— 把 opt-in 的 security 模板默认带上，导致没有真正安全敏感的变更也被 secret_leak / auth_bypass 检查项耗时长 / 高分。**反例**：纯前端 UI 调整被 security check 误报。**MUST opt-in**：security 不在 language 自动派发范围。
-12. **Phase 2.5 凭空编造模板内容** —— `.pg/skills/examples/code-review/` 缺失时自己手写一份"看着像样"的检查项细则。**反例**：init-project 写入的细则缺斤少两，pg-build/review agent 跑起来与说明书对不上。**正确做法**：模板缺失时 WARN + 仅生成 default profile，让用户升级 pg-skills。
+3. **改 hook 协议** —— 在生成的 hook 里改 `pg_fail` / `pg_exit` 的参数或 trap 行为。**反例**：把 `set -uo pipefail` 改成 `set -e` 怕报错。这破坏 SSOT。
+4. **跳过 `pg doctor`** —— 写完文件直接返回成功。**反例**：用户跑 `pg-auto-pilot` 时报 schema 错，回头找问题浪费半小时。
+5. **把 placeholder 留着** —— 在 `project.yaml` 顶部保留 `placeholder` module / environment 不删。**反例**：schema 允许 `minProperties: 1` 但实际项目有 4 个 module，placeholder 残留污染 SSOT。
+6. **混淆 module hook 与 environment hook 的边界** —— 把 `modules.<m>.build` 写成 `bash .pg/hooks/kuboard-server-build.sh`，期望它走 hook 协议。**错**：`modules.<m>.build` 是 `executable_command` 字段，runner 直接渲染为 `timeout N bash -c '<cmd>'` 执行，**不**调用 `.pg/hooks/<m>-<action>.sh`。`pg-invoke-hook.py` 只服务于 `environments.<env>.{prepare_env,clean_env}` 与 `environments.<env>.roles.<r>.{start,stop,...}`。项目里如果残留 `<module>-{build,test,lint}.sh`，是历史模板的产物，删除即可。
+7. **忘记复制 `lib/common.sh`** —— 只复制 role/env 模板但漏掉 `lib/common.sh`。**反例**：新项目跑 hook 时日志写到 `scripts/logs` 而非 `.pg/agent/<session>/<env>-logs`，排错时找不到日志。`pg doctor` 会有 `hooks_lib_common_present` warning 提示。
+8. **生成已移除的 schema 段** —— 按旧文档写出 `tracks` / `stages` / `describe_env` / `verify_merge` / `git` / action 级 `host` 等键。**反例**：`pg doctor` 报 `Additional properties are not allowed ('tracks' was unexpected)`。**正确做法**：只生成当前 `project.schema.json` 允许的键（modules + environments）。
+9. **Phase 5 直接修改 AGENTS.md** —— 不允许！必须只产 drift 清单，让用户 review 后手动应用。**反例**：pg-init-project 静默改用户的 AGENTS.md，导致用户信任破裂。
+10. **Phase 5 跳过 PG_SKIP_AGENTS_MD_MIGRATION 兜底** —— 用户拒绝时仍强行生成 patch 清单。**反例**：CI 跑 pg-init-project 时 `.pg/context/` 下出现污染 artifacts，diff 噪音。
+11. **prepare_env 使用已移除的 caller** —— 模板里写 `--caller pg-build` / `--caller pg-regression`。**反例**：`pg-invoke-hook.py` 报 `invalid choice`，因为 `--caller` 白名单只有 `pg-agent` / `ad-hoc`。**正确做法**：`--caller "${PG_RUN_CALLER:-pg-agent}"`。
 
 ---
 
@@ -479,20 +429,17 @@ Next steps:
 - **MUST**：扫完仓库**才**开始写 `project.yaml`。不允许"看名字猜结构"。
 - **MUST**：每个 module 的 `root` 路径相对项目根，且与仓库里实际存在的路径一一对应。
 - **MUST**：所有 `TBD:` 项集中在 `description` 字段，**不**污染 `root` / `language` / `cmd` 等结构化字段。
-- **MUST**：跑 `pg doctor` 且输出 0 错误才视为完成。
-- **MUST**：复制 `.pg/skills/examples/shell/hooks/lib/common.sh` 到 `.pg/hooks/lib/common.sh`，让生成的 role-* / env-* hook 能调 `pg_resolve_paths` 做 per-skill 路径路由。
-- **MUST**：Phase 2.5 幂等——项目**已存在** `.pg/code-review/` 时不覆盖，避免丢失用户手工调过的检查项细则。
-- **MUST**：Code-review profile 模板来源 = `.pg/skills/examples/code-review/`（与 hook 模板同源角色）；该目录缺失时**不**凭空生成，仅生成最简 default profile 并 WARN 而非 fail。
-- **MUST**：Security profile 必须 opt-in，**不**自动拷贝；在终态汇报里给出手动启用步骤。
+- **MUST**：跑 `pg doctor` 且输出 0 ERROR 才视为完成。
+- **MUST**：复制 `.pg/skills/examples/shell/hooks/lib/common.sh` 到 `.pg/hooks/lib/common.sh`，让生成的 role-* / env-* hook 能调 `pg_resolve_paths` 做 per-caller 路径路由。
 - **MUST**：Phase 5 不直接修改任何 AGENTS.md——只产 drift 清单。
 - **MUST**：Phase 5 必须在 `PG_SKIP_AGENTS_MD_MIGRATION=1` 时完全跳过。
-- **MUST NOT**：引入 `additionalProperties: false` 之外的 schema 字段。
-- **MUST NOT**：从 `examples/<lang>/hooks/module-*.sh` 之外的地方抄 module hook——module 命令应在 `project.yaml` 里以 `executable_command` 形态声明，**不进 hook 协议**。
+- **MUST**：prepare_env 模板中调用 `pg-invoke-hook.py` 的 `--caller` 只能传 `pg-agent` / `ad-hoc`（或 `"${PG_RUN_CALLER:-pg-agent}"` 继承当前值）。
+- **MUST NOT**：引入 `additionalProperties: false` 之外的 schema 字段，尤其**不生成**已移除的 `tracks` / `stages` / `describe_env` / `verify_merge` / `git` / `instance.libvirt_uri` / action 级 `host` / `hosts` / `parallel`。
 - **MUST NOT**：把 `modules.<m>.build` 写成 `bash .pg/hooks/<m>-build.sh`——那是双重封装 + 双重 timeout，runner 不识别。
-- **MUST NOT**：动 `pg-version` / `pg` CLI / `hook-helpers.sh` / `error-categories.yaml`。
-- **MUST NOT**：动 `.pg/skills/src/core/workflows/agents/pg-build/{review,fix-review}.md` / `profile_loader.py` / `manifest.schema.json`——review phase 的协议 SSOT 不属于 init-project 范围。
-- **MUST NOT**：自动覆盖已存在的 `.pg/code-review/code-review.yaml`（即便内容是 stub）——Phase 2.5 视为 noop。
-- **SHOULD**：每个 module 至少生成 `build` 和 `test` 两个 hook；`lint` 仅在 language 习惯上有独立命令时（go: `go vet`）才生成。
+- **MUST NOT**：动 `pg` CLI / `hook-helpers.sh` / `error-categories.yaml` / `hook-env-vars.yaml` / `project.schema.json`。
+- **MUST NOT**：改写 `.pg/skills/examples/shell/agent-protocol.md` 模板内容——它是 SSOT，Phase 5 只做复制。
+- **MUST NOT**：修改 `pg-auto-pilot` SKILL 或其它已注册 SKILL 的定义。
+- **SHOULD**：每个 module 至少生成 `build` 和 `test` 命令；`lint` 仅在 language 习惯上有独立命令时（go: `go vet`）才生成。
 - **SHOULD**：在最终汇报里把所有 TBD 项用清单列出来，让用户一次性 review 完。
 - **SHOULD**：Phase 5 的 patch 清单按严重度排序（c → b → a），让用户优先看最严重的。
 
@@ -500,20 +447,12 @@ Next steps:
 
 ## 文档变更记录
 
-- **v0.4（当前版本）**：适配 Phase 1 协议变更（PG_INSTANCE_PORT 注入、pg_run_bash）。
-  - Phase 2 修复：模板路径使用 `PG_PROJECT_ROOT` 兜底，`lib/common.sh` 路径 `$HOOK_DIR/../lib/common.sh`。
-  - Phase 3 修复：不生成 restart 脚本；action 引用 hook 文件而非内联命令；prepare_env 调用 invoke-hook 而非重复实现 start/stop；所有 role 补齐 stop/health-check 脚本。
-  - 模板修复：`role-start.sh` 新增端口检查（`check_port` + `kill_port`）、`pg_run_bash` 示例、`PG_INSTANCE_PORT` 变量、`START_TIME` 正确 duration 计算。`role-health-check.sh` 使用 `PG_INSTANCE_PORT` 取代硬编码常量。
-  - 可执行命令：`pg_run_bash` 新增于 `hook-helpers.sh`，自动包装 shell 操作符（`&&`、`||`、`cd`）为 `bash -c "..."`。
-  - 环境变量：`PG_INSTANCE_PORT` 新增于 `hook-env-vars.yaml` 并注入，所有脚本端口从 `PG_INSTANCE_PORT` 读取。
-
-- **v0.3（前置版本）**：适配 pg-build v2.6 code-review phase。
-  - 新增 Phase 2.5：根据 Phase 1 扫到的 module language 自动派发 review profile，写入 `.pg/code-review/code-review.yaml` + 对应 profile 目录。Security profile 保持 opt-in，不自动拷贝。
-  - §1 模板：`repo-scan.md` 模块清单表追加语言相关列。
-  - §2 终态汇报：追加 `.pg/code-review/` 与"手动启用 security profile"两条提示。
-  - 行为规约新增 4 条 MUST / 2 条 MUST NOT（review 配置不进 hook 协议、Phase 2.5 幂等、模板缺失 WARN 而非凭空编造、security opt-in、不动 review agent / profile_loader / manifest schema）。
-  - 失败模式新增 3 条（#10 Phase 2.5 覆盖已存在目录、#11 自动拷 security profile、#12 凭空编造模板内容）。
-  - 配套外部依赖：`.pg/skills/examples/code-review/` 目录必须存在（subtree 拉取的 SSOT 模板），含 default / java-spring / go / vue3 / security 5 个 profile 的检查项细则。该目录缺失时本 SKILL 仅生成 default profile 并 WARN。
-
-- **v0.2（前置版本）**：当前内容基线（含 Phase 5 AGENTS.md drift 报告、`PG_SKIP_AGENTS_MD_MIGRATION` 兜底、lib/common.sh SSOT 公共库复制等）。
-- **v0.1**：初版骨架。
+- **v1.0（当前版本）**：基于当前仓库状态全面重写（对齐 pg-skills 工作流收敛到 pg-auto-pilot 单一 SKILL）：
+  - **移除** tracks / stages 生成：schema 已删除这两个顶层键（`pg doctor` 不再接受），Phase 2 只生成 modules + environments。
+  - **移除** Phase 2.5 code-review profile 生成：`examples/code-review/` 模板目录与 review phase 一并移除。
+  - **移除** describe_env 相关：schema 字段、hook 模板、`PG_CHANGE_ID` / `PG_OUTPUT_PATH` env vars 均已删除。
+  - **更新** caller 白名单：`--caller` 仅允许 `pg-agent` / `ad-hoc`（原 `pg-build` / `pg-regression` / `pg-fix-issue` 均已移除）；prepare_env 模板改用 `"${PG_RUN_CALLER:-pg-agent}"`。
+  - **更新** hook 模板清单：restart 脚本不再生成（`pg-invoke-hook.py` fallback 处理）；health_check / logs 按声明 opt-in；模板来源 = `examples/shell/hooks/` 现有 6 个模板 + `lib/common.sh`。
+  - **更新** Phase 5 日志路由表：仅 `pg-agent → .pg/agent/<session>/<env>-logs` 与 `ad-hoc → .pg/ad-hoc/<session>/<env>-logs` 两档。
+  - **保留**：Phase 1 扫描、三态原则、hooks 走模板不发明、Phase 4 doctor 收尾、Phase 5 AGENTS.md drift 检测 + agent-protocol 注入（该注入同时满足 `pg doctor` 的 `context_protocol_present` 检查——`pg init` 不安装此文件）。
+  - **失败模式 / 行为规约** 同步更新（新增 #8 生成已移除 schema 段、#11 使用已移除 caller）。

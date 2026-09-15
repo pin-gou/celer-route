@@ -2,51 +2,40 @@
 """pg-invoke-hook.py — runtime 层统一 LLM-facing 入口 (env hooks + role actions).
 
 抽取自 pg-pipeline-runner.py:cmd_invoke_hook (v3.1) 主体实现, 提升到 runtime 层后
-供 pg-build / pg-fix-issue / pg-regression 三个 SKILL + pg-run 手动调用 + agent
-ad-hoc 调用共享. pg-pipeline-runner.py 保留同名子命令 (thin wrapper) 以保证向后兼容.
+供 pg-agent (pg-auto-pilot 自动驾驶模式) 与 pg-run 手动调用 + ad-hoc 调用共享.
 
 设计动机:
-- pg-pipeline-runner.py 同时承担 "编排状态机" (next/record/check) 与
-  "hook executor" (invoke-hook) 两类职责. 抽离后:
-  * executor 归 runtime/bin/ (CLAUDE.md 仓库结构第 28-30 行预留位置)
-  * SKILL 之间不再互相依赖 runner 路径
-  * 测试可走 subprocess.run 黑盒, 不需 mock sys.argv
+- 统一 hook executor 入口, 注入 PG_* env vars、timeout 管理、日志路由
+- LLM agent 一律通过本工具调 hook, 禁止直接 bash hook 脚本 (审计/日志/超时)
+- 测试可走 subprocess.run 黑盒, 不需 mock sys.argv
 
 v5 协议 (current):
 - --change → --session (canonical). --change 保留 1 版本作为 deprecated alias.
 - --skill / --caller 硬缺省 'ad-hoc', 任何漏传 caller 的调用都落到 .pg/ad-hoc/.
 - 新增 --log-dir (调试覆盖), --timeout-override (ad-hoc 调试, 输出 WARN).
 - caller 维度路由:
-    pg-build       -> .pg/changes/<session>/2-build/<env>-logs
-    pg-regression  -> .pg/regression/<session>/<env>-logs
-    pg-fix-issue   -> .pg/fix-issue/<session>/<env>-logs
-    pg-quick-build -> .pg/quick-build/<session>/<env>-logs
+    pg-agent       -> .pg/agent/<session>/<env>-logs
     ad-hoc         -> .pg/ad-hoc/<session>/<env>-logs
 
 顶级 subcommands:
 - invoke-hook — 触发 role action (start/stop/restart/logs/tail/health_check) 或 env-level hook
-  (prepare_env/clean_env). 内部反查 project.yaml, 渲染 spec, 调 pg-run-hook.py.
-- status     — 透传 prepare_env 状态查询到 pg-pipeline-runner.py
-  prepare-env-status 子命令 (stdout JSON 透传, exit code 透传).
-  LLM-facing 入口统一在 runtime 层, 与 invoke-hook 平级.
+  (prepare_env/clean_env/restart_all_instances).
 
 支持的动作 (仅 invoke-hook):
 - per-role (需 --role + --instance):
   * start / stop / restart / logs / tail / health_check
 - env-level (忽略 --role/--instance):
-  * prepare_env / clean_env
+  * prepare_env / clean_env / restart_all_instances
 
 Usage:
   python3 pg-invoke-hook.py invoke-hook \\
     --session <S> --env <ENV> --role <ROLE> --instance <I> --action <A> \\
-    [--stage <ST>] [--tail-lines <N>] [--skill pg-build|pg-regression|pg-fix-issue|pg-quick-build|ad-hoc] \\
+    [--stage <ST>] [--tail-lines <N>] [--skill pg-agent|ad-hoc] \\
     [--log-dir <DIR>] [--timeout-override <SECS>]
 
   python3 pg-invoke-hook.py invoke-hook \\
     --session <S> --env <ENV> --action prepare_env \\
-    [--skill pg-build|pg-regression|pg-fix-issue|pg-quick-build|ad-hoc]
-
-  python3 pg-invoke-hook.py status --change <C> [--stage <ST>]
+    [--skill pg-agent|ad-hoc]
 
 Args:
   --session         session 名 (canonical). 与 caller 正交. 留空 + caller=ad-hoc →
@@ -56,7 +45,8 @@ Args:
   --stage           stage name (默认: manual)
   --role            role name (backend/frontend/agent); per-role 必填, env-level 忽略
   --instance        instance name; per-role 必填, env-level 忽略
-  --action          start|stop|logs|tail (per-role) 或 prepare_env|clean_env (env-level)
+  --action          start|stop|restart|logs|tail|health_check (per-role)
+                    或 prepare_env|clean_env|restart_all_instances (env-level)
   --tail-lines      (logs/tail only) 追加 --tail-lines N 到 hook args 末尾
   --skill / --caller 调用方身份. 硬缺省 'ad-hoc'. SKILL 调用必须显式标注.
   --log-dir         显式覆盖日志目录 (优先级最高, 用于 agent 调试).
@@ -70,9 +60,7 @@ Spec 渲染 (v5):
                     (完整 SSOT 见 src/runtime/spec/hook-env-vars.yaml)
   timeout_seconds  = act_cfg["timeout_seconds"] (可被 --timeout-override 覆盖)
   log_path        = per-caller 路由 (see pg_log_dir_for_skill):
-                    pg-build       -> .pg/changes/<session>/2-build/<env>-logs
-                    pg-regression  -> .pg/regression/<session>/<env>-logs
-                    pg-fix-issue   -> .pg/fix-issue/<session>/<env>-logs
+                    pg-agent       -> .pg/agent/<session>/<env>-logs
                     ad-hoc         -> .pg/ad-hoc/<session>/<env>-logs
   wait_for_completion (bool, 默认 start=False / 其他=True):
                     start action 默认 fire-and-forget, hook 用 pg_start_bg
@@ -86,7 +74,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -133,22 +120,12 @@ def find_pg_skills_root(project_root: Path) -> Path:
 
 
 # 与原 cmd_invoke_hook 一致 (line 3166-3168)
-ENV_LEVEL_ACTIONS = ("prepare_env", "describe_env", "clean_env", "restart_all_instances")
+ENV_LEVEL_ACTIONS = ("prepare_env", "clean_env", "restart_all_instances")
 
 # Caller 维度枚举 (与 .pg/hooks/lib/common.sh:pg_resolve_paths 的 case 分支同步)
-CALLER_PG_BUILD = "pg-build"
-CALLER_PG_REGRESSION = "pg-regression"
-CALLER_PG_FIX_ISSUE = "pg-fix-issue"
-CALLER_PG_PROPOSE = "pg-propose"
-CALLER_PG_QUICK_BUILD = "pg-quick-build"
 CALLER_PG_AGENT = "pg-agent"
 CALLER_AD_HOC = "ad-hoc"
-KNOWN_CALLERS = (CALLER_PG_BUILD, CALLER_PG_REGRESSION, CALLER_PG_FIX_ISSUE, CALLER_PG_PROPOSE, CALLER_PG_QUICK_BUILD, CALLER_PG_AGENT, CALLER_AD_HOC)
-
-# v6 新增: describe_env 触发者 (生成 env-description.yaml 供下游消费)
-# v7: caller=ad-hoc 也允许 (pg-run 手动探测, 落到 .pg/ad-hoc/<session>/)
-# v2.1: caller=pg-quick-build 也允许 (落到 .pg/quick-build/<session>/, 不污染 .pg/changes/)
-DESCRIBE_ENV_CALLERS = (CALLER_PG_PROPOSE, CALLER_PG_FIX_ISSUE, CALLER_PG_REGRESSION, CALLER_PG_QUICK_BUILD, CALLER_AD_HOC)
+KNOWN_CALLERS = (CALLER_PG_AGENT, CALLER_AD_HOC)
 
 
 def _resolve_wait_for_completion(action: str, cli_value, cfg_value=None):
@@ -195,31 +172,11 @@ def pg_log_dir_for_skill(caller: str, session: str, env: str, project_root: Path
     """Return the per-caller log directory for hook logs (v4 协议).
 
     Routing rules (must stay in sync with .pg/hooks/lib/common.sh:pg_resolve_paths):
-      pg-build       -> .pg/changes/<session>/2-build/<env>-logs
-      pg-regression  -> .pg/regression/<session>/<env>-logs   (session = <suite>-<date>-<seq>)
-      pg-fix-issue   -> .pg/fix-issue/<session>/<env>-logs    (session 已含 fix- 前缀)
-      pg-propose     -> .pg/changes/<change-id>/2-propose/<env>-logs
-      pg-quick-build -> .pg/quick-build/<session>/<env>-logs  (独立命名空间, 不与 .pg/changes/ 混)
-      pg-agent       -> .pg/agent/<session>/<env>-logs        (LLM agent 通用入口, session = <iso-date>-<keyword>)
-      ad-hoc         -> .pg/ad-hoc/<session>/<env>-logs       (独立顶级目录, 不与 SKILL 命名空间混)
+      pg-agent       -> .pg/agent/<session>/<env>-logs   (LLM agent 通用入口, session = <iso-date>-<keyword>)
+      ad-hoc         -> .pg/ad-hoc/<session>/<env>-logs  (独立顶级目录, 不与其他命名空间混)
     """
     base = project_root / ".pg"
     dir_name = f"{env}-logs"
-    if caller == CALLER_PG_BUILD:
-        return base / "changes" / session / "2-build" / dir_name
-    if caller == CALLER_PG_REGRESSION:
-        return base / "regression" / session / dir_name
-    if caller == CALLER_PG_FIX_ISSUE:
-        return base / "fix-issue" / session / dir_name
-    if caller == CALLER_PG_PROPOSE:
-        # v1.1: 与产物目录对齐 — 剥离 session 的 ISO 日期前缀 (<date>-<change-id> →
-        # <change-id>), 日志落在 .pg/changes/<change-id>/2-propose/, 避免产物与
-        # 日志分裂到两个目录. 日志文件名含日期时间戳, 不会与归档日期目录冲突.
-        _m = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", session)
-        _change = _m.group(1) if _m else session
-        return base / "changes" / _change / "2-propose" / dir_name
-    if caller == CALLER_PG_QUICK_BUILD:
-        return base / "quick-build" / session / dir_name
     if caller == CALLER_PG_AGENT:
         return base / "agent" / session / dir_name
     # ad-hoc
@@ -243,7 +200,7 @@ def build_env_level_hook_spec(
     empty strings; log_path is namespaced under env-level hooks subdir so
     it doesn't collide with role.* action logs.
 
-    caller: 调用方身份 (pg-build / pg-regression / pg-fix-issue / pg-quick-build / ad-hoc).
+    caller: 调用方身份 (pg-agent / ad-hoc).
             注入为 PG_RUN_CALLER via pg-run-hook.py.
     """
     rendered_args = []
@@ -273,84 +230,6 @@ def build_env_level_hook_spec(
         "hook_log_dir": str(hook_log_dir),
         "hook_result_path": result_path,
         "caller": caller,
-        "wait_for_completion": True,
-    }
-    return spec
-
-
-def build_describe_env_spec(
-    session: str,
-    env: str,
-    stage: str,
-    act_cfg: dict,
-    project_root: Path,
-    caller: str,
-) -> dict:
-    """Build pg-run-hook.py spec for describe_env (v6 新增, v7 caller 扩 ad-hoc).
-
-    describe_env 与 prepare_env / clean_env 同属 env-level, 但有两个差异:
-      1. 必须注入 PG_CHANGE_ID + PG_OUTPUT_PATH (脚本写入 env-description.yaml)
-      2. caller 限定为 pg-propose / pg-fix-issue / pg-regression / pg-quick-build / ad-hoc
-         (其他 caller 调用直接报错)
-
-    语义契约: describe_env 的产出描述的是 prepare_env 成功执行后的预期基线.
-    pg-build 在 bootstrap 阶段先调 prepare_env 确保成功, 再 dispatch scenario
-    track, 届时环境状态应与 env-description.yaml 一致.
-
-    输出路径按 caller 路由 (统一用 --session 作为路径派生源, 不再单独传 --change-id):
-      pg-propose     -> .pg/changes/<session>/env-description.yaml
-      pg-fix-issue   -> .pg/fix-issue/<session>/env-description.yaml
-      pg-regression  -> .pg/regression/<session>/env-description.yaml
-      pg-quick-build -> .pg/quick-build/<session>/env-description.yaml
-      ad-hoc         -> .pg/ad-hoc/<session>/env-description.yaml
-
-    脚本超时默认 60s (仅探测, 不应长跑); YAML 缺 timeout_seconds 时回落到此值.
-    """
-    inner_cmd = "bash " + shlex.quote(act_cfg["script"])
-
-    hook_log_dir = pg_log_dir_for_skill(caller, session, env, project_root)
-    log_path = str(hook_log_dir / "env.describe_env.log")
-    result_path = str(hook_log_dir / "env.describe_env.result.json")
-
-    # 从 session 中剥离 ISO 日期前缀 (YYYY-MM-DD-) 得到 change_id,
-    # 用于产物路径 (正常目录名, 不含日期前缀).
-    # 若 session 无日期前缀则保持原样.
-    _match = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", session)
-    change_id = _match.group(1) if _match else session
-
-    if caller == CALLER_PG_PROPOSE:
-        output_path = str(project_root / ".pg" / "changes" / change_id / "env-description.yaml")
-    elif caller == CALLER_PG_FIX_ISSUE:
-        output_path = str(project_root / ".pg" / "fix-issue" / change_id / "env-description.yaml")
-    elif caller == CALLER_PG_REGRESSION:
-        output_path = str(project_root / ".pg" / "regression" / change_id / "env-description.yaml")
-    elif caller == CALLER_PG_QUICK_BUILD:
-        output_path = str(project_root / ".pg" / "quick-build" / change_id / "env-description.yaml")
-    elif caller == CALLER_AD_HOC:
-        output_path = str(project_root / ".pg" / "ad-hoc" / change_id / "env-description.yaml")
-    else:
-        sys.stderr.write(
-            f"Error: --action describe_env requires caller in {DESCRIBE_ENV_CALLERS}, got '{caller}'\n"
-        )
-        sys.exit(2)
-
-    spec = {
-        "cmd": inner_cmd,
-        "session": session,
-        "change": session,
-        "stage": stage,
-        "env": env,
-        "role": "",
-        "instance_name": "",
-        "instance_host": "",
-        "hook_type": "describe_env",
-        "timeout_seconds": act_cfg.get("timeout_seconds") or 60,
-        "log_path": log_path,
-        "hook_log_dir": str(hook_log_dir),
-        "hook_result_path": result_path,
-        "caller": caller,
-        "change_id": change_id,
-        "output_path": output_path,
         "wait_for_completion": True,
     }
     return spec
@@ -558,18 +437,15 @@ def invoke_hook_main(argv=None) -> int:
         prog="pg-invoke-hook.py invoke-hook",
         description=(
             "Trigger a role action (start/stop/restart/logs/tail/health_check) or env-level hook "
-            "(prepare_env/clean_env) via pg-run-hook.py. Used by SKILL "
-            "orchestrators (pg-build / pg-fix-issue / pg-regression / pg-quick-build) and by "
-            "agent ad-hoc / pg-run manual calls. NOT part of any pipeline state "
-            "machine."
+            "(prepare_env/clean_env/restart_all_instances) via pg-run-hook.py. "
+            "Used by pg-agent (pg-auto-pilot) and agent ad-hoc / pg-run manual calls. "
+            "NOT part of any pipeline state machine."
         ),
     )
     parser.add_argument("--session", default="",
                         help=(
                             "session 名 (与 caller 正交). "
-                            "pg-build: 提案名; pg-regression: <suite>-<date>-<seq>; "
-                            "pg-fix-issue: fix-<date>-<slug>; "
-                            "pg-quick-build: <iso-date>-<keyword>; "
+                            "pg-agent: <iso-date>-<keyword>; "
                             "ad-hoc 留空: 自动生成 auto-<date>-<pid>."
                         ))
     parser.add_argument("--change", default=None,
@@ -598,15 +474,13 @@ def invoke_hook_main(argv=None) -> int:
     parser.add_argument("--action", required=True,
                         choices=["start", "stop", "restart", "logs", "tail",
                                  "health_check",
-                                 "prepare_env", "describe_env", "clean_env",
+                                 "prepare_env", "clean_env",
                                  "restart_all_instances"],
                         help=(
                             "action to trigger. start/stop/restart/logs/tail/health_check are "
                             "per-role lifecycle actions (require --role and "
-                            "--instance); prepare_env/describe_env/clean_env/restart_all_instances "
-                            "are environment-level lifecycle hooks (ignore --role/--instance). "
-                            "describe_env (v6): caller 限定 pg-propose/pg-fix-issue/pg-regression/pg-quick-build, "
-                            "自动注入 PG_CHANGE_ID + PG_OUTPUT_PATH, 写入 env-description.yaml."
+                            "--instance); prepare_env/clean_env/restart_all_instances "
+                            "are environment-level lifecycle hooks (ignore --role/--instance)."
                         ))
     parser.add_argument("--tail-lines", type=int, default=None,
                         help="(logs/tail only) append --tail-lines N to hook args")
@@ -616,7 +490,7 @@ def invoke_hook_main(argv=None) -> int:
                             "调用方身份 (caller 维度路由). "
                             "硬缺省 'ad-hoc' — 任何不显式传 --skill 的调用都视为 ad-hoc, "
                             "日志落到 .pg/ad-hoc/<session>/<env>-logs/."
-                            "SKILL (pg-build / pg-regression / pg-fix-issue / pg-propose / pg-quick-build) 必须显式标注."
+                            "pg-agent (pg-auto-pilot) 必须显式标注."
                         ))
     parser.add_argument("--log-dir", default=None,
                         help=(
@@ -689,9 +563,9 @@ def invoke_hook_main(argv=None) -> int:
 
     env_cfg = (config.get("environments") or {}).get(args.env) or {}
 
-    # Environment-level lifecycle hooks (prepare_env / describe_env / clean_env /
-    # restart_all_instances) are NOT role-scoped: prepare_env / describe_env /
-    # clean_env live directly under environments.<env>.
+    # Environment-level lifecycle hooks (prepare_env / clean_env /
+    # restart_all_instances) are NOT role-scoped: prepare_env / clean_env
+    # live directly under environments.<env>.
     # restart_all_instances 走特殊路径: 内部展开为 stop → start → health_check 三阶段.
     if args.action in ENV_LEVEL_ACTIONS:
         if args.action == "restart_all_instances":
@@ -722,41 +596,6 @@ def invoke_hook_main(argv=None) -> int:
                 return 1
             # 走多 spec 流程 (后续 _run_multi_specs 处理)
             spec = {"_multi_specs": specs, "action": "restart_all_instances"}
-        elif args.action == "describe_env":
-            # describe_env: 必须显式声明在 environments.<env>.describe_env, 且 caller 必须是
-            # pg-propose / pg-fix-issue / pg-regression (其他 caller 无语义).
-            if args.caller not in DESCRIBE_ENV_CALLERS:
-                sys.stderr.write(
-                    f"Error: --action describe_env requires --caller in "
-                    f"{DESCRIBE_ENV_CALLERS}, got '{args.caller}'\n"
-                )
-                return 1
-            if not args.session:
-                sys.stderr.write(
-                    "Error: --action describe_env requires --session\n"
-                )
-                return 1
-            describe_cfg = env_cfg.get("describe_env")
-            if not describe_cfg:
-                sys.stderr.write(
-                    f"Error: action 'describe_env' not defined in "
-                    f"environments.{args.env}.describe_env (must be explicit)\n"
-                )
-                return 1
-            script_path = project_root / describe_cfg["script"]
-            if not script_path.is_file():
-                sys.stderr.write(
-                    f"Error: describe_env script not found: {script_path}\n"
-                )
-                return 2
-            spec = build_describe_env_spec(
-                session=args.session,
-                env=args.env,
-                stage=args.stage,
-                act_cfg=describe_cfg,
-                project_root=project_root,
-                caller=args.caller,
-            )
         else:
             env_hook_cfg = env_cfg.get(args.action)
             if not env_hook_cfg:
@@ -939,16 +778,13 @@ def invoke_hook_main(argv=None) -> int:
                 return 0
             sub_results.append({
                 "spec_role": sub_spec.get("role", ""),
-                "spec_phase": sub_spec.get("phase", ""),
                 "returncode": proc.returncode,
             })
             if proc.returncode != 0:
                 overall_ok = False
                 break
-        # v3.12: restart_all_instances 复合 action 完成后, 写聚合 result.json
-        # 与 _build_env_hook_plan (pg-build/bootstrap.py:648-651) 的 result_file 约定对齐。
-        # pg-build 的 _verify_hook_executed 现在也会接受 dev-local-logs/role.* 日志
-        # (即使本聚合文件缺失也能通过), 写此文件只是为了让 _build_env_hook_plan 约定的契约完整。
+        # restart_all_instances / restart fallback 复合 action 完成后, 写聚合 result.json
+        # (与 hook 协议的 result_file 约定对齐, 供调用方检查).
         result_file = os.environ.get("PG_RESULT_FILE", "")
         if result_file:
             try:
@@ -978,63 +814,12 @@ def invoke_hook_main(argv=None) -> int:
     return proc.returncode
 
 
-def status_main(argv=None) -> int:
-    """LLM-facing entry for prepare_env status query.
-
-    Thin passthrough to pg-pipeline-runner.py prepare-env-status:
-    - Validates --change (required) and --stage (optional)
-    - Locates pg-pipeline-runner.py via find_project_root() + pg-skills layout
-    - Spawns subprocess.run with stdout/stderr/exit code passthrough
-
-    Output: identical to `pg-pipeline-runner.py prepare-env-status <change> [stage]`
-    (JSON array of {stage, prepare:{status, log_path, message}} objects).
-    """
-    parser = argparse.ArgumentParser(
-        prog="pg-invoke-hook.py status",
-        description=(
-            "Query prepare_env status for a change (and optional stage). "
-            "Thin passthrough to pg-pipeline-runner.py prepare-env-status. "
-            "Returns identical JSON output and exit code."
-        ),
-    )
-    parser.add_argument("--change", required=True,
-                        help="change name (positional arg to runner)")
-    parser.add_argument("--stage", default=None,
-                        help="optional stage name filter (positional arg to runner)")
-
-    if argv is None:
-        argv = sys.argv
-    # argv layout: [program_name, "status", *flags]; auto-prepend if missing.
-    if len(argv) < 2 or argv[1] != "status":
-        argv = [argv[0], "status", *argv[1:]]
-    args = parser.parse_args(argv[1:][1:])
-
-    project_root = find_project_root()
-    runner = (
-        project_root
-        / ".pg" / "skills" / "src" / "opencode" / "skills"
-        / "pg-build" / "scripts" / "pg-pipeline-runner.py"
-    )
-    if not runner.is_file():
-        sys.stderr.write(
-            f"Error: pg-pipeline-runner.py not found at {runner}\n"
-        )
-        return 2
-
-    cmd = ["python3", str(runner), "prepare-env-status", args.change]
-    if args.stage:
-        cmd.append(args.stage)
-
-    proc = subprocess.run(cmd, cwd=str(project_root))
-    return proc.returncode
-
-
 def main(argv=None) -> int:
     """CLI entry dispatcher.
 
-    Dispatches to invoke_hook_main() or status_main() based on the first
-    positional subcommand. If no subcommand is given, default to invoke-hook
-    for backward compatibility with the v3.2 thin-wrapper convention
+    Dispatches to invoke_hook_main() based on the first positional subcommand.
+    If no subcommand is given, default to invoke-hook for backward compatibility
+    with the v3.2 thin-wrapper convention
     (`pg-invoke-hook.py <flags>` still works as `pg-invoke-hook.py invoke-hook <flags>`).
     """
     if argv is None:
@@ -1045,15 +830,12 @@ def main(argv=None) -> int:
             "Usage:\n"
             "  pg-invoke-hook.py invoke-hook --change <C> --env <ENV> "
             "--role <ROLE> --instance <I> --action <A> [...]\n"
-            "  pg-invoke-hook.py status --change <C> [--stage <S>]\n"
         )
         return 2
 
     subcommand = argv[1]
     if subcommand == "invoke-hook":
         return invoke_hook_main(argv)
-    if subcommand == "status":
-        return status_main(argv)
 
     # No subcommand or unknown subcommand: backward compat treats no
     # subcommand as invoke-hook (existing SKILL.md prompts use
@@ -1063,7 +845,7 @@ def main(argv=None) -> int:
 
     sys.stderr.write(
         f"Error: unknown subcommand '{subcommand}'\n"
-        f"Valid subcommands: invoke-hook, status\n"
+        f"Valid subcommands: invoke-hook\n"
     )
     return 2
 

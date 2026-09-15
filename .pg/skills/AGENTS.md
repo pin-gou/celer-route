@@ -33,7 +33,7 @@ pg-skills 仓库（独立远程）               您的项目仓库
 │                    Skill 层 (src/core/workflows/)                   │
 │  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  │
 │  │ commands │  │  skills   │  │  agents   │  │  scripts  │  │
-│  │ (9 个)   │  │ (12 个)   │  │ (sub-     │  │ (config/  │  │
+│  │ (1 个)   │  │ (1 个)    │  │ (sub-     │  │ (config/  │  │
 │  │          │  │           │  │  agent)   │  │  test     │  │
 │  └──────────┘  └───────────┘  └───────────┘  │  parser)  │  │
 │                                               └───────────┘  │
@@ -56,22 +56,17 @@ pg-skills 仓库（独立远程）               您的项目仓库
 | **environments**（prepare_env / clean_env / role start/stop/logs） | ✅ | `.pg/hooks/<name>.sh` via `project.yaml` | `pg-invoke-hook.py`，注入 `PG_*` env vars |
 | **modules**（build / lint / test） | ❌ | `project.yaml` `modules.<m>.{build,lint,test}` | 直接 `timeout N bash -c '<cmd>'` |
 
-### 2.3 标准工作流
+### 2.3 唯一工作流：pg-auto-pilot 自动驾驶
 
 ```
-/1-pg-define → /2-pg-propose → /3-pg-build → pg-verify-and-merge（仅用户显式触发，如"verify 并合并"）
+/0-pg-auto-pilot
 ```
 
-> **v0.8.4 起**：`/2.1-pg-propose-refine` 已删除。5 项 common decisions 固化为 `pg-gen-tasks-skeleton.py` 常量块；产物生成后直接进入 `/3-pg-build`。
-
-> **pg-* 工作流 skill 仅限用户显式触发**：pg-define / pg-propose / pg-build / pg-fix-issue / pg-quick-build / pg-regression / pg-verify-and-merge 只在用户通过对应 `/pg-*` 命令或明确自然语言请求时加载；pg-build 完成后**不自动触发** pg-verify-and-merge，由用户明确指示后执行。
+> **当前 SKILL 仅两个**：`pg-auto-pilot`（自动驾驶）与 `pg-init-project`（项目初始化）。pg-define / pg-propose / pg-build / pg-fix-issue / pg-quick-build / pg-regression / pg-verify-and-merge / pg-archive 等已移除。合并到 default 分支不再由 SKILL 负责，改用手动 `git merge`。
 >
-> **例外：`pg-auto-pilot`（`/0-pg-auto-pilot`）** 是自动驾驶模式——LLM 可自主加载，不归入上述门控。它不限定 LLM 如何规划与执行，只要求实施计划含"启动实例并验证结果"步骤、执行前让用户选定环境并确认环境准备方式。
-
-快捷流：`/2b-pg-quick-build` → `pg-verify-and-merge`（用户显式触发）
-回归流：`/4-pg-regression`
-修复流：`/5-pg-fix-issue`
-归档：`/6-pg-archive`
+> **pg-auto-pilot** 是自动驾驶模式——LLM 可自主加载。它不限定 LLM 如何规划与执行，只要求实施计划含"启动实例并验证结果"步骤、执行前让用户选定环境并确认环境准备方式。
+>
+> **pg-init-project** 是项目初始化 SKILL——仅在用户显式要求时由 LLM 加载（禁止自行加载或主动提示）。它扫描仓库后生成 `.pg/project.yaml` + `.pg/hooks/`，并注入 `.pg/context/agent-protocol.md`（`pg init` 不安装此文件，`pg doctor` 的 `context_protocol_present` 检查依赖它）。
 
 ---
 
@@ -85,39 +80,19 @@ pg-skills/
 ├── AGENTS.md                     # 本文件
 │
 ├── src/
-│   ├── opencode/                 # Skill & Agent 层（opencode 集成）
-│   │   ├── commands/             # 9 个 slash command 定义
-│   │   │   ├── pg-0-auto-pilot.md      # 自动驾驶模式（壳子，调用 pg-auto-pilot skill）
-│   │   │   ├── pg-1-define.md          # 探索/设计/定界（壳子，调用 pg-define skill）
-│   │   │   ├── pg-1-grill.md           # 设计树拷问模式（壳子，调用 pg-define skill 的 grill 模式）
-│   │   │   ├── pg-2-propose.md          # 提出变更
-│   │   │   ├── pg-2b-quick-build.md     # 跳过 proposal 直接实施
-│   │   │   ├── pg-3-build.md            # 执行 tasks.md 构建代码
-│   │   │   ├── pg-4-regression.md       # 回归测试
-│   │   │   ├── pg-5-fix-issue.md        # 修复问题
-│   │   │   └── pg-6-archive.md          # 手动归档
+│   ├── core/workflows/            # Skill & Agent 层（工具无关）
+│   │   ├── commands/             # 1 个 slash command 定义
+│   │   │   └── pg-0-auto-pilot.md      # 自动驾驶模式（壳子，调用 pg-auto-pilot skill）
 │   │   │
-│   │   ├── skills/               # 12 个 SKILL.md 定义
-│   │   │   ├── pg-archive/               # 变更归档
-│   │   │   ├── pg-browser-testing-with-devtools/  # 浏览器 E2E 测试
-│   │   │   ├── pg-build/                 # 事件溯源 pipeline 引擎（最大 skill）
-│   │   │   ├── pg-define/                # 探索/设计/定界
-│   │   │   ├── pg-fix-issue/             # Bug 修复工作流
-│   │   │   ├── pg-init-project/          # 首次项目初始化
-│   │   │   ├── pg-propose/               # 设计提案生成
-│   │   │   ├── pg-quick-build/           # 快速构建
-│   │   │   ├── pg-regression/            # 回归测试与修复
-│   │   │   ├── pg-systematic-diagnosing/ # 系统诊断调试
-│   │   │   ├── pg-verify-and-merge/      # 验证与合并
-│   │   │   └── pg-auto-pilot/          # 自动驾驶模式：不限定 LLM 编排，仅要求计划含验证、执行前确认环境
+│   │   ├── skills/               # 2 个 SKILL.md 定义
+│   │   │   ├── pg-auto-pilot/          # 自动驾驶模式：不限定 LLM 编排，仅要求计划含验证、执行前确认环境
+│   │   │   └── pg-init-project/        # 项目初始化：扫描仓库 → project.yaml + hooks + agent-protocol 注入
 │   │   │
 │   │   ├── agents/               # 子 agent 定义
 │   │   │   └── explore.md               # 代码探索子 agent
-│   │   │   # 更多 agent: pg-manager, pg-build/*, pg-fix-issue/* 等
 │   │   │
 │   │   └── scripts/              # 共享工具脚本
 │   │       ├── pg-parse-config.py        # SSOT 查询工具
-│   │       ├── pg-parse-test-results.py  # 测试结果解析
 │   │       └── tests/                    # 脚本测试
 │   │
 │   └── runtime/                  # 运行时层
@@ -141,7 +116,7 @@ pg-skills/
 │       └── tests/               # 运行时层测试
 │
 ├── examples/                    # 模板与示例
-│   ├── shell/
+│   └── shell/
 │   │   ├── agent-protocol.md          # Agent 协议 SSOT（必读）
 │   │   ├── agents-md-patches.md       # AGENTS.md 漂移检测与修补指南
 │   │   └── hooks/                     # 默认 hook 模板（7 文件）
@@ -153,27 +128,6 @@ pg-skills/
 │   │       ├── role-health-check.sh
 │   │       ├── lib/common.sh          # 共享 hook 库（236 行）
 │   │       └── tests/
-│   │
-│   └── code-review/            # 代码审查 profile 定义
-│       ├── code-review.yaml          # 5 个 profile（default/go/java-spring/security/vue3）
-│       ├── default/                  # 5 个检查项
-│       ├── go/                       # Go 特定检查
-│       ├── java-spring/              # Java/Spring 检查
-│       ├── security/                 # 安全检查
-│       └── vue3/                     # Vue3 检查
-│
-├── tools/                       # 开发者工具
-│   ├── README.md
-│   ├── project-editor.md
-│   └── project-editor/              # Vue 3 GUI 编辑器
-│       ├── src/
-│       │   ├── App.vue
-│       │   ├── views/               # Dashboard/FormView/CanvasView
-│       │   ├── components/          # 14 个 section 编辑器 + 字段组件
-│       │   ├── stores/              # Pinia 状态管理
-│       │   ├── utils/               # 工具函数（yaml/diff/hash/coerce）
-│       │   └── schema/              # 加载器
-│       └── package.json
 │
 └── docs/
     └── index.html
@@ -199,10 +153,8 @@ pg-skills/
 | 文件 | 职责 |
 |------|------|
 | `src/runtime/spec/error-categories.yaml` | 14 个错误分类：severity（recoverable/blocked）、agent-recoverable、retry_strategy |
-| `src/runtime/spec/hook-env-vars.yaml` | PG_* 环境变量 SSOT（v5）：always_injected（3 个）+ spec_injected（9 个）+ removed（5 个） |
-| `src/runtime/spec/project.schema.json` | `.pg/project.yaml` 的 JSON Schema（draft-07，556 行） |
-| `src/runtime/spec/env-description.schema.json` | `.pg/changes/<change-id>/env-description.yaml` 的 JSON Schema（6 段 + relations，474 行） |
-| `src/runtime/spec/define-summary.schema.json` | `.pg/changes/<change-id>/0-define/define-summary.yaml` 的 JSON Schema（schema v1，163 行）。pg-propose 阶段 1.8 校验，pg-1-define「定界后环境验证」环节落盘 |
+| `src/runtime/spec/hook-env-vars.yaml` | PG_* 环境变量 SSOT（v7）：always_injected（3 个）+ spec_injected（11 个）+ removed（5 个） |
+| `src/runtime/spec/project.schema.json` | `.pg/project.yaml` 的 JSON Schema（draft-07，208 行） |
 
 ### 4.3 Skill 层
 
@@ -255,12 +207,6 @@ pg-skills/
 # 运行时层测试
 pytest src/runtime/tests/
 
-# pg-build pipeline 测试（30+ 测试文件）
-pytest src/core/workflows/skills/pg-build/scripts/tests/
-
-# pg-propose 测试
-pytest src/core/workflows/skills/pg-propose/scripts/tests/
-
 # 配置解析测试
 pytest src/core/workflows/scripts/tests/
 
@@ -277,14 +223,7 @@ pytest
 python3 src/runtime/bin/pg doctor
 ```
 
-### 6.3 启动项目编辑器
-
-```bash
-cd tools/project-editor && pnpm install && pnpm dev    # 端口 3028
-cd tools/project-editor && pnpm build                   # 生产构建
-```
-
-### 6.4 开发约定
+### 6.3 开发约定
 
 - **分支策略**：1.0 之前使用单一线形分支（linear branch），所有变更直接提交到 master
 - **语言兼容性**：所有 Python 代码必须兼容 **Python 3.7+**（包括 3.7、3.8、3.9、3.10、3.11、3.12）。所有文件已统一添加 `from __future__ import annotations`，使 PEP 604 `X | Y` 联合类型语法（如 `str | None`）在注解中安全可用。禁止使用以下仅在更高版本引入的语法或标准库 API：
@@ -327,7 +266,7 @@ cd tools/project-editor && pnpm build                   # 生产构建
 | 拿单值 | `python3 .pg/skills/src/core/workflows/scripts/pg-parse-config.py --key <dotted.path>` |
 | 拿子树 | `python3 .pg/skills/src/core/workflows/scripts/pg-parse-config.py --prefix <top-level-key>` |
 
-**禁止**：直接读 `.pg/project.yaml`、使用 `pg-parse-config.py pg-build` 等 skill 模式（有噪声）。
+**禁止**：直接读 `.pg/project.yaml`、使用 `pg-parse-config.py pg-build` 等已移除的 skill 模式（有噪声）。
 
 ### 7.2 Hook 调用（必须通过 pg-invoke-hook.py）
 
@@ -350,9 +289,6 @@ python3 .pg/skills/src/runtime/bin/pg-invoke-hook.py \
 | caller | session 格式 | 日志路径 |
 |--------|--------------|----------|
 | `pg-agent` | `<iso-date>-<keyword>` | `.pg/agent/<session>/<env>/logs/` |
-| `pg-build` | `<change-id>` | `.pg/changes/<change-id>/2-build/<env>/logs/` |
-| `pg-fix-issue` | `<change-id>` | `.pg/fix-issue/<change-id>/<env>/logs/` |
-| `pg-regression` | `<suite>-<date>-<seq>` | `.pg/regression/<session>/<env>/logs/` |
 | `ad-hoc` | `auto-<date>-<pid>` | `.pg/ad-hoc/<session>/<env>/logs/` |
 
 ### 7.4 错误分类参考
