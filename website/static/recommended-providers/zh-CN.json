@@ -1,6 +1,6 @@
 {
-  "version": "2026-09-06",
-  "updated_at": "2026-09-06T08:00:00Z",
+  "version": "2026-09-15",
+  "updated_at": "2026-09-15T08:00:00Z",
   "bundles": [
     {
       "id": "coding",
@@ -34,7 +34,8 @@
         {
           "provider": "groq",
           "models": [
-            "llama-3.3-70b-versatile"
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b"
           ],
           "apply_url": "https://console.groq.com/keys",
           "apply_steps": [
@@ -42,7 +43,7 @@
             "申请 API Key"
           ],
           "is_keyless": false,
-          "notes": "免费额度，官方限流约 30 RPM / 1000 次/天"
+          "notes": "免费额度：30 RPM / 1000 次/天 / 8K TPM / 200K TPD（gpt-oss-120b、gpt-oss-20b；Llama 已退出免费层）"
         }
       ]
     },
@@ -66,7 +67,8 @@
         {
           "provider": "siliconflow",
           "models": [
-            "THUDM/GLM-Z1-9B-0414"
+            "THUDM/glm-4-9b-chat",
+            "Qwen/Qwen2-7B-Instruct"
           ],
           "apply_url": "https://cloud.siliconflow.cn",
           "apply_steps": [
@@ -74,7 +76,7 @@
             "申请 API Key"
           ],
           "is_keyless": false,
-          "notes": "免费模型：GLM-Z1-9B 推理模型"
+          "notes": "免费模型：GLM-4-9B、Qwen2-7B 等（限速免费）"
         },
         {
           "provider": "zhipu",
