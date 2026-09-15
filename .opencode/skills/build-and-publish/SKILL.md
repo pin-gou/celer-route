@@ -70,7 +70,8 @@ make build-ui
 bash .github/workflows/scripts/install-cross-compilers.sh
 
 # 交叉编译 5 平台（产物在 dist/<os>/<arch>/celer-route-http[.exe] + .sha256）
-bash .github/workflows/scripts/build-executables.sh "$version"
+# build-executables.sh 内部用 `-X main.Version=v${VERSION}` 加 v 前缀，所以这里传入裸版本号
+bash .github/workflows/scripts/build-executables.sh "${version#v}"
 ```
 
 产物校验：`ls dist/*/*/celer-route-http*` 应含 5 平台二进制 + 5 个 `.sha256`。
@@ -307,7 +308,7 @@ make docker-image-multiarch VERSION="$version"
 # 步骤 3.5：构建发布二进制（内嵌 UI + 交叉编译 5 平台 + 展平命名）
 make build-ui
 bash .github/workflows/scripts/install-cross-compilers.sh
-bash .github/workflows/scripts/build-executables.sh "$version"
+bash .github/workflows/scripts/build-executables.sh "${version#v}"
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 while IFS= read -r -d '' asset; do

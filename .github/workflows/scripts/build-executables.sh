@@ -13,7 +13,8 @@ if [[ -z "${1:-}" ]]; then
   echo "Usage: $0 <version> [platforms]" >&2
   exit 1
 fi
-VERSION="$1"
+# Accept either bare version (1.2.3) or v-prefixed (v1.2.3); the ldflag below prepends `v`.
+VERSION="${1#v}"
 PLATFORM_FILTER="${2:-}"
 
 echo "🔨 Building Go executables with version: $VERSION"
