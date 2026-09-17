@@ -80,6 +80,17 @@ environments:
         health_check:
           host: localhost
           script: .pg/hooks/celer-route-api-health-check.sh
+        logs:
+          script: .pg/hooks/celer-route-api-logs.sh
+          args:
+          - '{lines:100}'
+          timeout_seconds: 30
+          description: 输出 celer-route-api 实例最近 N 行日志（默认 100，可用 --tail-lines 覆盖）
+        tail:
+          script: .pg/hooks/celer-route-api-tail.sh
+          args:
+          - '{lines:100}'
+          description: 持续跟随 celer-route-api 实例日志 stream（Ctrl-C 结束；回放最近 N 行，可用 --tail-lines 覆盖）
     - name: ui-dev
       instances:
       - name: ui-dev-1
@@ -96,6 +107,17 @@ environments:
         health_check:
           host: localhost
           script: .pg/hooks/ui-dev-health-check.sh
+        logs:
+          script: .pg/hooks/ui-dev-logs.sh
+          args:
+          - '{lines:100}'
+          timeout_seconds: 30
+          description: 输出 ui-dev 实例最近 N 行日志（默认 100，可用 --tail-lines 覆盖）
+        tail:
+          script: .pg/hooks/ui-dev-tail.sh
+          args:
+          - '{lines:100}'
+          description: 持续跟随 ui-dev 实例日志 stream（Ctrl-C 结束；回放最近 N 行，可用 --tail-lines 覆盖）
 tracks:
   core:
     type: standard
