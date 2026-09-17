@@ -109,7 +109,7 @@ func (s *Store) SyncModelParamsFromURL(ctx context.Context) error {
 
 	s.applyModelParameters(paramsData)
 	if s.logger != nil {
-		s.logger.Info("successfully synced %d model parameters records", len(paramsData))
+		s.logger.Info("Model parameters sync completed: %d entries synced from %s", len(paramsData), s.ModelParametersURL())
 	}
 	return nil
 }
@@ -137,6 +137,9 @@ func (s *Store) LoadModelParamsFromURLIntoMemory(ctx context.Context) error {
 		}
 	}
 	s.applyModelParameters(paramsData)
+	if s.logger != nil {
+		s.logger.Info("Model parameters sync completed: %d entries synced from %s", len(paramsData), s.ModelParametersURL())
+	}
 	return nil
 }
 

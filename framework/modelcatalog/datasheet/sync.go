@@ -116,7 +116,7 @@ func (s *Store) SyncFromURL(ctx context.Context) error {
 	s.populateModelParamsFromPricing(pricingData)
 
 	if s.logger != nil {
-		s.logger.Debug("successfully synced %d pricing records", len(pricingData))
+		s.logger.Info("Pricing datasheet sync completed: %d entries synced from %s", len(pricingData), s.URL())
 	}
 	return nil
 }
@@ -172,6 +172,9 @@ func (s *Store) LoadFromURLIntoMemory(ctx context.Context) error {
 	}
 	s.applyPricingData(pricingData)
 	s.populateModelParamsFromPricing(pricingData)
+	if s.logger != nil {
+		s.logger.Info("Pricing datasheet sync completed: %d entries synced from %s", len(pricingData), s.URL())
+	}
 	return nil
 }
 
