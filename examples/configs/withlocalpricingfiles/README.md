@@ -26,8 +26,8 @@ The two sample datasheets contain a handful of models so the example boots
 quickly. For a full catalog, download the complete datasheets and replace them:
 
 ```bash
-curl -fsSL https://getbifrost.ai/datasheet -o pricing.json
-curl -fsSL https://getbifrost.ai/datasheet/model-parameters -o model-parameters.json
+curl -fsSL https://pin-gou.github.io/celer-route/datasheet/datasheet.json -o pricing.json
+curl -fsSL https://pin-gou.github.io/celer-route/datasheet/model-parameters.json -o model-parameters.json
 ```
 
 ## Run with Docker

@@ -16,8 +16,8 @@ import (
 // Defaults for sync configuration and timeouts. Exposed so the composer can
 // fall back to these when the framework Config leaves fields nil.
 const (
-	DefaultURL                    = "https://getbifrost.ai/datasheet"
-	DefaultModelParametersURL     = "https://getbifrost.ai/datasheet/model-parameters"
+	DefaultURL                    = "https://pin-gou.github.io/celer-route/datasheet/datasheet.json"
+	DefaultModelParametersURL     = "https://pin-gou.github.io/celer-route/datasheet/model-parameters.json"
 	DefaultSyncInterval           = 24 * time.Hour
 	DefaultPricingTimeout         = 5 * time.Second
 	DefaultModelParametersTimeout = 5 * time.Second

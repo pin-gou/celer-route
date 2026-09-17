@@ -50,9 +50,9 @@
   },
   "framework": {
     "pricing": {
-      "pricing_url": "https://getbifrost.ai/datasheet",
+      "pricing_url": "https://pin-gou.github.io/celer-route/datasheet/datasheet.json",
       "pricing_sync_interval": 86400,
-      "model_parameters_url": "https://getbifrost.ai/datasheet/model-parameters"
+      "model_parameters_url": "https://pin-gou.github.io/celer-route/datasheet/model-parameters.json"
     }
   }
 }

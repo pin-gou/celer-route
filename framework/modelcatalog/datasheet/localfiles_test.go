@@ -57,11 +57,11 @@ func fileURL(t *testing.T, rel string) string {
 // parameters datasheet load from local file:// URLs without any network access.
 // This is the air-gapped / behind-a-proxy path from issue #4305: when both URLs
 // point at local files, the store must read them off disk and never attempt to
-// resolve getbifrost.ai.
+// resolve pin-gou.github.io.
 //
 // The fixtures in testdata/ are real entries extracted from the public
-// datasheets at https://getbifrost.ai/datasheet and
-// https://getbifrost.ai/datasheet/model-parameters.
+// datasheets at https://pin-gou.github.io/celer-route/datasheet/datasheet.json and
+// https://pin-gou.github.io/celer-route/datasheet/model-parameters.json.
 func TestLoadFromLocalFiles(t *testing.T) {
 	logger := bifrost.NewDefaultLogger(schemas.LogLevelWarn)
 	ctx := context.Background()
@@ -108,7 +108,7 @@ func TestLoadFromLocalFiles(t *testing.T) {
 }
 
 // TestLoadFromLocalFiles_NeverResolvesHostname guards the regression in #4305:
-// even when the default getbifrost.ai URLs would be unreachable, a file:// URL
+// even when the default pin-gou.github.io URLs would be unreachable, a file:// URL
 // must be read straight off disk. We point at the local fixtures and assert the
 // load succeeds, which is only possible if the file scheme short-circuits the
 // external-URL validation (and its hostname lookup) entirely.

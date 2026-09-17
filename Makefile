@@ -350,6 +350,10 @@ build-ui: install-ui ## Build ui
 	@rm -rf ui/.next
 	@$(USE_NODE); cd ui && npm run build && npm run copy-build
 
+sync-datasheet: ## Regenerate the pricing/model-parameters datasheets (LiteLLM + custom merge). Usage: make sync-datasheet [LITELLM_LOCAL=path/to/prices.json] [CUSTOM=custom.json] [DRY_RUN=1]
+	@$(ECHO) "$(GREEN)Syncing pricing datasheets...$(NC)"
+	@python3 scripts/sync-datasheet/sync-datasheet.py $(if $(LITELLM_LOCAL),--litellm-local $(LITELLM_LOCAL)) $(if $(CUSTOM),--custom $(CUSTOM),--custom scripts/sync-datasheet/custom.json) $(if $(DRY_RUN),--dry-run)
+
 build: build-ui ## Build celer-route-http binary
 	@if [ -n "$(LOCAL)" ]; then \
 		$(ECHO) "$(GREEN)╔═══════════════════════════════════════════════╗$(NC)"; \
@@ -1983,7 +1987,7 @@ run-provider-harness-test: $(if $(HELP),,install-newman) ## Run the Bifrost prov
 		printf '  %-18s %s\n' "INCLUDE_SKIP=1"   "Run [SKIP]-tagged criss-cross cells (provider+modality pairs that return NewUnsupportedOperationError by design, e.g., anthropic embeddings, bedrock audio). Off by default."; \
 		printf '  %-18s %s\n' "PARALLEL=0"       "Disable per-provider parallelism (default: ON). When ON, forks one newman per provider (openai, anthropic, bedrock, gemini, vertex, azure) concurrently; reports merged into tmp/newman-report.json. The htmlextra report is only emitted in sequential mode (PARALLEL=0)."; \
 		printf '  %-18s %s\n' "SKIP_STREAM_CANCEL=1" "Skip the post-Newman stream-abort probes that verify server-side cancellation on client disconnect."; \
-		printf '  %-18s %s\n' "DB_VERIFY=0"      "Disable the dbverify reporter (ON by default). When on, [Costing]/[Accounting] requests assert the logs DB cost matches the getbifrost.ai/datasheet-computed cost (resolves DB from APP_DIR/config.json or BIFROST_LOGS_DB_URL); skips gracefully if no logs DB is reachable."; \
+		printf '  %-18s %s\n' "DB_VERIFY=0"      "Disable the dbverify reporter (ON by default). When on, [Costing]/[Accounting] requests assert the logs DB cost matches the pin-gou.github.io/celer-route/datasheet-computed cost (resolves DB from APP_DIR/config.json or BIFROST_LOGS_DB_URL); skips gracefully if no logs DB is reachable."; \
 		printf '  %-18s %s\n' "USE_INFISICAL=1" "Source secrets from Infisical CLI ('infisical export --path /local --format dotenv') instead of .env."; \
 		printf '  %-18s %s\n' "VERTEX_GCS_BUCKET" "Env-sourced (.env/Infisical): GCS bucket for Vertex file ops (forwarded to Newman as vertexGcsBucket)."; \
 		printf '  %-18s %s\n' "VERTEX_GCS_PREFIX" "Env-sourced: GCS object prefix for Vertex file ops (forwarded as vertexGcsPrefix)."; \

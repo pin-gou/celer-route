@@ -37,7 +37,7 @@ const skipCostCheck = args["no-cost-check"] === "true";
 const logsDbUrlArg = args["logs-db-url"] || process.env.BIFROST_LOGS_DB_URL || "";
 const configPathArg = args["config"] || process.env.BIFROST_CONFIG_PATH || "config.json";
 const pricingUrl =
-  args["pricing-url"] || process.env.BIFROST_PRICING_URL || "https://getbifrost.ai/datasheet";
+  args["pricing-url"] || process.env.BIFROST_PRICING_URL || "https://pin-gou.github.io/celer-route/datasheet/datasheet.json";
 // Providers that emit usage in the FIRST stream event → a cancel-after-first-byte
 // deterministically has billable usage, so cost MUST be > 0. Only native Anthropic
 // qualifies: its message_start event carries input_tokens + cache tokens immediately

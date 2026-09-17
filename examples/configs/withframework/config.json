@@ -12,7 +12,7 @@
     "pricing": {
       "pricing_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
       "pricing_sync_interval": 86400,
-      "model_parameters_url": "https://getbifrost.ai/datasheet/model-parameters"
+      "model_parameters_url": "https://pin-gou.github.io/celer-route/datasheet/model-parameters.json"
     }
   },
   "providers": {

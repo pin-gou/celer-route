@@ -599,7 +599,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ─── Datasheet pricing (cost-accuracy recompute) ──────────────────────────────
 // Authoritative pricing source — the same datasheet Bifrost itself syncs from
 // (framework/modelcatalog/datasheet/store.go DefaultURL). Override via env.
-const PRICING_URL = process.env.BIFROST_PRICING_URL || 'https://getbifrost.ai/datasheet';
+const PRICING_URL = process.env.BIFROST_PRICING_URL || 'https://pin-gou.github.io/celer-route/datasheet/datasheet.json';
 let _datasheetPromise; // fetched at most once per run
 
 function fetchJSON(url) {
@@ -737,7 +737,7 @@ async function verifyCostingRequest(db, reqId, name, results, silent) {
     console.log(`[dbverify]     model      : ${row.provider}/${row.model}`);
     console.log(`[dbverify]     tokens     : prompt=${row.prompt_tokens} completion=${row.completion_tokens} total=${tokens} cachedRead=${row.cached_read_tokens || 0}`);
     console.log(`[dbverify]     logged $   : ${cost}    (logs DB row)`);
-    console.log(`[dbverify]     expected $ : ${expectedStr}    (recomputed from getbifrost.ai/datasheet)`);
+    console.log(`[dbverify]     expected $ : ${expectedStr}    (recomputed from pin-gou.github.io/celer-route/datasheet)`);
     console.log(`[dbverify]     verdict    : ${result}${note ? ' — ' + note : ''}`);
   }
 }

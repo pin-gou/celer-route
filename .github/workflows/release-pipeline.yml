@@ -148,8 +148,9 @@ jobs:
         with:
           egress-policy: block
           # 127.0.0.1:8080 is the bifrost-http binary the harness drives.
-          # getbifrost.ai / www.getbifrost.ai serve the pricing datasheet the
-          # dbverify newman reporter checks logged costs against.
+          # pin-gou.github.io serves the default pricing datasheet the gateway
+          # syncs from; getbifrost.ai / www.getbifrost.ai are the legacy mirror
+          # the dbverify newman reporter can also check costs against.
           # dl.google.com / packages.cloud.google.com / objects.githubusercontent.com
           # are the gcloud CLI install; oauth2.googleapis.com + accounts.google.com
           # are the service-account token exchange for the Vertex parity cells.
@@ -195,6 +196,7 @@ jobs:
             files.pythonhosted.org:443
             pypi.org:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             huggingface.co:443
             iojs.org:443
@@ -404,6 +406,7 @@ jobs:
             files.pythonhosted.org:443
             pypi.org:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             huggingface.co:443
             iojs.org:443
@@ -706,6 +709,7 @@ jobs:
             fonts.googleapis.com:443
             fonts.gstatic.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             iojs.org:443
             files.pythonhosted.org:443
@@ -951,6 +955,7 @@ jobs:
             dl-cdn.alpinelinux.org:443
             esm.ubuntu.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             ghcr.io:443
             github.com:443
             packages.microsoft.com:443
@@ -1083,6 +1088,7 @@ jobs:
             fonts.googleapis.com:443
             fonts.gstatic.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             nodejs.org:443
             production.cloudflare.docker.com:443
@@ -1159,6 +1165,7 @@ jobs:
             auth.docker.io:443
             downloads.getmaxim.ai:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             nodejs.org:443
             production.cloudflare.docker.com:443
@@ -1259,6 +1266,7 @@ jobs:
             fonts.gstatic.com:443
             generativelanguage.googleapis.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             ghcr.io:443
             github.com:443
             huggingface.co:443
@@ -1398,6 +1406,7 @@ jobs:
             auth.docker.io:443
             codeload.github.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             objects.githubusercontent.com:443
             production.cloudflare.docker.com:443
@@ -1467,6 +1476,7 @@ jobs:
             bedrock.us-east-1.amazonaws.com:443
             codeload.github.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             huggingface.co:443
             objects.githubusercontent.com:443
@@ -1558,6 +1568,7 @@ jobs:
             fonts.gstatic.com:443
             generativelanguage.googleapis.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             ghcr.io:443
             github.com:443
             huggingface.co:443
@@ -1700,6 +1711,7 @@ jobs:
             fonts.gstatic.com:443
             generativelanguage.googleapis.com:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             ghcr.io:443
             github.com:443
             huggingface.co:443

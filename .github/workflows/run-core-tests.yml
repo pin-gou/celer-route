@@ -127,6 +127,7 @@ jobs:
             files.pythonhosted.org:443
             pypi.org:443
             getbifrost.ai:443
+            pin-gou.github.io:443
             github.com:443
             huggingface.co:443
             iam.cloud.ibm.com:443
