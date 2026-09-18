@@ -207,7 +207,6 @@ export default function ClientSettingsView() {
 		return (
 			localConfig.drop_excess_requests !== config.drop_excess_requests ||
 			localConfig.disable_db_pings_in_health !== config.disable_db_pings_in_health ||
-			localConfig.dump_errors_in_console_logs !== config.dump_errors_in_console_logs ||
 			localConfig.async_job_result_ttl !== config.async_job_result_ttl ||
 			!headerFilterConfigEqual(localConfig.header_filter_config, config.header_filter_config)
 		);
@@ -388,27 +387,6 @@ export default function ClientSettingsView() {
 									size="md"
 									checked={localConfig.disable_db_pings_in_health}
 									onCheckedChange={(checked) => handleConfigChange("disable_db_pings_in_health", checked)}
-									disabled={!hasSettingsUpdateAccess}
-								/>
-							</div>
-
-							{/* Dump Errors in Console Logs */}
-							<div className="flex items-start justify-between gap-4">
-								<div className="space-y-0.5">
-									<div className="flex items-center gap-1.5">
-										<Label htmlFor="dump-errors-in-console-logs" className="text-sm font-medium">
-											{t("clientSettings.dumpErrors")}
-										</Label>
-										<InfoTooltip description={t("clientSettings.dumpErrorsDesc")} />
-									</div>
-									<p className="text-muted-foreground text-sm">{t("clientSettings.dumpErrorsDesc")}</p>
-								</div>
-								<Switch
-									id="dump-errors-in-console-logs"
-									data-testid="client-settings-dump-errors-switch"
-									size="md"
-									checked={localConfig.dump_errors_in_console_logs}
-									onCheckedChange={(checked) => handleConfigChange("dump_errors_in_console_logs", checked)}
 									disabled={!hasSettingsUpdateAccess}
 								/>
 							</div>

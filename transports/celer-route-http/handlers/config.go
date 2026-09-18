@@ -71,6 +71,15 @@ type ConfigManager interface {
 	ReloadHeaderFilterConfig(ctx context.Context, config *configstoreTables.GlobalHeaderFilterConfig) error
 }
 
+// RuntimeLogSettingsProvider is implemented by servers that can report the
+// effective application log level and output style. Servers keep the boot-time
+// defaults (LOG_LEVEL / -log-level / -log-style) and apply any persisted
+// client_config override live at runtime; this accessor lets GET /api/config
+// surface the effective values so the UI can show what is actually in effect.
+type RuntimeLogSettingsProvider interface {
+	GetRuntimeLogSettings() (logLevel string, logOutputStyle string)
+}
+
 // ConfigHandler manages runtime configuration updates for Bifrost.
 // It provides endpoints to update and retrieve settings persisted via the ConfigStore backed by sql database.
 type ConfigHandler struct {
@@ -194,6 +203,15 @@ func (h *ConfigHandler) getConfig(ctx *fasthttp.RequestCtx) {
 	mapConfig["is_cache_connected"] = h.store.VectorStore != nil
 	mapConfig["is_logs_connected"] = h.store.LogsStore != nil
 	mapConfig["is_object_storage_connected"] = h.store.LogsStoreConfig != nil && h.store.LogsStoreConfig.ObjectStorage != nil
+	// Effective application log level/output style (persisted override applied
+	// over the boot-time default). Omitted when the config manager doesn't expose
+	// them (e.g. tests with a stub manager) so the UI can fall back to the values
+	// in client_config.
+	if provider, ok := h.configManager.(RuntimeLogSettingsProvider); ok {
+		logLevel, logOutputStyle := provider.GetRuntimeLogSettings()
+		mapConfig["runtime_log_level"] = logLevel
+		mapConfig["runtime_log_output_style"] = logOutputStyle
+	}
 	// Fetching proxy config
 	if h.store.ConfigStore != nil {
 		proxyConfig, err := h.store.ConfigStore.GetProxyConfig(ctx)
@@ -666,6 +684,18 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 			return
 		}
 	}
+
+	// Validate application log level and output style. Empty values are allowed
+	// (they reset to the boot-time LOG_LEVEL / -log-level / -log-style defaults);
+	// non-empty values must match the supported enums. Applied live to the shared
+	// logger, no restart needed.
+	if err := validateApplicationLogSettings(payload.ClientConfig.LogLevel, payload.ClientConfig.LogOutputStyle); err != nil {
+		logger.Warn("invalid application log settings: %v", err)
+		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		return
+	}
+	updatedConfig.LogLevel = payload.ClientConfig.LogLevel
+	updatedConfig.LogOutputStyle = payload.ClientConfig.LogOutputStyle
 
 	// Validate LogRetentionDays
 	if payload.ClientConfig.LogRetentionDays < 1 {
@@ -1154,6 +1184,24 @@ func headerFilterConfigEqual(a, b *configstoreTables.GlobalHeaderFilterConfig) b
 		return false
 	}
 	return slices.Equal(a.Allowlist, b.Allowlist) && slices.Equal(a.Denylist, b.Denylist)
+}
+
+// validateApplicationLogSettings validates the application log level and output
+// style. Empty values are allowed — they mean "follow the boot-time defaults"
+// (LOG_LEVEL / -log-level / -log-style) and reset any previously persisted
+// override. Non-empty values must match the supported enums.
+func validateApplicationLogSettings(logLevel, logOutputStyle string) error {
+	switch logLevel {
+	case "", "debug", "info", "warn", "error":
+	default:
+		return fmt.Errorf("log_level must be one of: debug, info, warn, error (or empty to follow boot args)")
+	}
+	switch logOutputStyle {
+	case "", "json", "pretty":
+	default:
+		return fmt.Errorf("log_output_style must be one of: json, pretty (or empty to follow boot args)")
+	}
+	return nil
 }
 
 // validateHeaderFilterConfig validates that no exact security header names are in the allowlist or denylist

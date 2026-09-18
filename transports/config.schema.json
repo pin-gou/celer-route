@@ -135,6 +135,26 @@
           "description": "Dump full error details to the server console logs. Useful for debugging; may be noisy in production.",
           "default": false
         },
+        "log_level": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "Application console log level. Empty/unset (recommended) keeps the boot-time value from the LOG_LEVEL env var or the -log-level flag; when set it is applied live at runtime (no restart needed) and persists across restarts.",
+          "default": ""
+        },
+        "log_output_style": {
+          "type": "string",
+          "enum": [
+            "json",
+            "pretty"
+          ],
+          "description": "Application console log output format. 'json' emits structured JSON (recommended for production), 'pretty' emits human-readable lines for local debugging. Empty/unset keeps the boot-time value from the -log-style flag; when set it is applied live at runtime (no restart needed) and persists across restarts.",
+          "default": ""
+        },
         "webhook_config": {
           "type": "object",
           "description": "Global webhook delivery settings; per-endpoint tuning lives on each endpoint. Read at server startup.",

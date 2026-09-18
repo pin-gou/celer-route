@@ -1244,6 +1244,10 @@ func (s *BifrostHTTPServer) ReloadClientConfigFromConfigStore(ctx context.Contex
 		return fmt.Errorf("client config not found")
 	}
 	*s.Config.ClientConfig = *config
+	// Apply persisted application log level / output style live (no restart
+	// needed). Empty values keep whatever the boot-time LOG_LEVEL / -log-level /
+	// -log-style flags configured.
+	s.applyApplicationLogSettings()
 	// Reloading whitelisted routes from the client config
 	if s.AuthMiddleware != nil {
 		s.AuthMiddleware.UpdateWhitelistedRoutes(config.WhitelistedRoutes)
@@ -1290,6 +1294,46 @@ func (s *BifrostHTTPServer) ReloadClientConfigFromConfigStore(ctx context.Contex
 		}
 	}
 	return nil
+}
+
+// applyApplicationLogSettings applies the effective application log level and
+// output style to the shared logger. The effective value is the persisted
+// client_config override when set, otherwise the boot-time default carried in
+// LogLevel/LogOutputStyle (set from LOG_LEVEL / -log-level / -log-style). The
+// boot-time fields are never mutated, so clearing the override (empty string)
+// correctly reverts to the boot defaults. Called at bootstrap (after client
+// config is loaded) and on every client-config reload, so changes made through
+// PUT /api/config take effect immediately without a restart.
+func (s *BifrostHTTPServer) applyApplicationLogSettings() {
+	if s.Config == nil || s.Config.ClientConfig == nil {
+		return
+	}
+	level, style := s.LogLevel, s.LogOutputStyle
+	if v := s.Config.ClientConfig.LogLevel; v != "" {
+		level = v
+	}
+	if v := s.Config.ClientConfig.LogOutputStyle; v != "" {
+		style = v
+	}
+	logger.SetLevel(schemas.LogLevel(level))
+	logger.SetOutputType(schemas.LoggerOutputType(style))
+}
+
+// GetRuntimeLogSettings reports the effective application log level and output
+// style: the persisted client_config override when set, otherwise the boot-time
+// default carried in LogLevel/LogOutputStyle. Implemented for
+// handlers.RuntimeLogSettingsProvider so GET /api/config can surface it.
+func (s *BifrostHTTPServer) GetRuntimeLogSettings() (string, string) {
+	level, style := s.LogLevel, s.LogOutputStyle
+	if s.Config != nil && s.Config.ClientConfig != nil {
+		if v := s.Config.ClientConfig.LogLevel; v != "" {
+			level = v
+		}
+		if v := s.Config.ClientConfig.LogOutputStyle; v != "" {
+			style = v
+		}
+	}
+	return level, style
 }
 
 // UpdateAuthConfig updates auth config in the config store and updates the AuthMiddleware's in-memory config
@@ -2790,6 +2834,11 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	if s.Config.KVStore != nil {
 		integrations.RegisterKVDecoders(s.Config.KVStore)
 	}
+	// Apply the persisted application log level / output style (client_config
+	// overrides the boot-time LOG_LEVEL / -log-level / -log-style values). This
+	// must run before the logging plugin initializes so the bootstrap logs below
+	// already use the configured verbosity.
+	s.applyApplicationLogSettings()
 	// Initialize WebSocket handler early so plugins can wire event broadcasters during Init.
 	// Log callbacks are registered later in RegisterAPIRoutes when logging plugin is available.
 	s.WebSocketHandler = handlers.NewWebSocketHandler(s.Ctx, s.Config.ClientConfig.AllowedOrigins)

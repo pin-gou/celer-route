@@ -35,6 +35,8 @@ type TableClientConfig struct {
 	RetainContentInObjectStorage          bool                           `gorm:"default:false" json:"retain_content_in_object_storage"` // When content logging is disabled, still offload content to object storage as hidden instead of dropping it
 	DisableDBPingsInHealth                bool                           `gorm:"default:false" json:"disable_db_pings_in_health"`
 	DumpErrorsInConsoleLogs               bool                           `gorm:"default:false" json:"dump_errors_in_console_logs"`         // Dump full error details to the server console logs
+	LogLevel                              string                         `gorm:"default:''" json:"log_level,omitempty"`                    // Application console log level (debug/info/warn/error); empty = follow boot args (LOG_LEVEL / -log-level)
+	LogOutputStyle                        string                         `gorm:"default:''" json:"log_output_style,omitempty"`             // Application console log output format (json/pretty); empty = follow boot args (-log-style)
 	LogRetentionDays                      int                            `gorm:"default:365" json:"log_retention_days" validate:"min=1"`   // Number of days to retain logs (minimum 1 day)
 	PayloadRetentionDays                  int                            `gorm:"default:0" json:"payload_retention_days" validate:"min=0"` // Number of days to keep full payload columns before stripping them (0 = disabled)
 	EnforceAuthOnInference                bool                           `gorm:"default:false" json:"enforce_auth_on_inference"`

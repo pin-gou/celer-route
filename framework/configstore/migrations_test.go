@@ -2801,6 +2801,46 @@ func TestFullMigration_UpgradeFromPreDumpErrorsSchema(t *testing.T) {
 	assert.NotEqual(t, "stale-hash", gotHash, "config_hash should have been recomputed by the chain")
 }
 
+// TestMigrationAddLogLevelAndOutputStyleColumns verifies that upgrading a
+// config_client that predates log_level / log_output_style re-adds both columns.
+// Without the migration, an upgraded deployment would carry struct columns the
+// physical table lacks and fail the config save/sync path.
+func TestMigrationAddLogLevelAndOutputStyleColumns(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Build the current schema, seed a row, then drop the columns to simulate a
+	// pre-feature config_client.
+	require.NoError(t, db.AutoMigrate(&tables.TableClientConfig{}))
+	seed := &tables.TableClientConfig{ConfigHash: "seed-hash"}
+	require.NoError(t, db.Create(seed).Error)
+
+	for _, column := range []string{"log_level", "log_output_style"} {
+		require.NoError(t, db.Migrator().DropColumn(&tables.TableClientConfig{}, column))
+		require.False(t, db.Migrator().HasColumn(&tables.TableClientConfig{}, column),
+			"precondition: %s must be absent to reproduce the upgrade path", column)
+	}
+
+	require.NoError(t, migrationAddLogLevelAndOutputStyleColumns(ctx, db, testMigrationLogger),
+		"migration should re-add the columns")
+
+	for _, column := range []string{"log_level", "log_output_style"} {
+		require.True(t, db.Migrator().HasColumn(&tables.TableClientConfig{}, column),
+			"migration should have added %s", column)
+	}
+
+	// The pre-existing row keeps the empty-string default ("follow boot args").
+	var gotLevel, gotStyle string
+	require.NoError(t, db.Raw("SELECT log_level FROM config_client WHERE id = ?", seed.ID).Scan(&gotLevel).Error)
+	require.NoError(t, db.Raw("SELECT log_output_style FROM config_client WHERE id = ?", seed.ID).Scan(&gotStyle).Error)
+	assert.Equal(t, "", gotLevel, "existing rows should default to empty log_level")
+	assert.Equal(t, "", gotStyle, "existing rows should default to empty log_output_style")
+
+	// Idempotency: re-running the migration is a no-op and must not error.
+	require.NoError(t, migrationAddLogLevelAndOutputStyleColumns(ctx, db, testMigrationLogger),
+		"re-running the migration should be idempotent")
+}
+
 // TestMigrationAddDualCredentialConflictBehaviorColumn verifies that upgrading a
 // config_client that predates dual_credential_conflict_behavior re-adds the column
 // and backfills existing rows with the NOT NULL default ('prefer_idp'). Without the

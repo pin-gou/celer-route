@@ -670,6 +670,10 @@ export interface BifrostConfig {
 	auth_token?: string;
 	metadata?: Record<string, unknown>;
 	env_label?: string;
+	/** Effective application log level (persisted client_config override applied over the boot-time LOG_LEVEL / -log-level default). */
+	runtime_log_level?: string;
+	/** Effective application log output style (persisted client_config override applied over the boot-time -log-style default). */
+	runtime_log_output_style?: string;
 }
 
 export interface CompatConfig {
@@ -692,6 +696,10 @@ export interface CoreConfig {
 	allow_direct_keys: boolean;
 	disable_db_pings_in_health: boolean;
 	dump_errors_in_console_logs: boolean;
+	/** Application console log level (debug/info/warn/error). Empty = follow boot args (LOG_LEVEL / -log-level). Applied live, no restart. */
+	log_level?: "" | "debug" | "info" | "warn" | "error";
+	/** Application console log output format (json/pretty). Empty = follow boot args (-log-style). Applied live, no restart. */
+	log_output_style?: "" | "json" | "pretty";
 	log_retention_days: number;
 	payload_retention_days: number;
 	enforce_auth_on_inference: boolean;
@@ -736,6 +744,8 @@ export const DefaultCoreConfig: CoreConfig = {
 	allow_direct_keys: false,
 	disable_db_pings_in_health: false,
 	dump_errors_in_console_logs: false,
+	log_level: "",
+	log_output_style: "",
 	log_retention_days: 365,
 	payload_retention_days: 0,
 	enforce_auth_on_inference: false,

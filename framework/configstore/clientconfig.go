@@ -106,6 +106,8 @@ type ClientConfig struct {
 	OAuth2ServerConfig                    *tables.OAuth2ServerConfig            `json:"oauth2_server_config,omitempty"`              // OAuth2 AS-specific settings (IssuerURL, token TTLs). Only relevant when MCPServerAuthMode is both or oauth.
 	ConfigHash                            string                                `json:"-"`                                           // Config hash for reconciliation (not serialized)
 	DumpErrorsInConsoleLogs               bool                                  `json:"dump_errors_in_console_logs"`                 // Dump error details in console logs
+	LogLevel                              string                                `json:"log_level,omitempty"`                         // Application console log level (debug/info/warn/error); empty = follow boot args (LOG_LEVEL / -log-level)
+	LogOutputStyle                        string                                `json:"log_output_style,omitempty"`                  // Application console log output format (json/pretty); empty = follow boot args (-log-style)
 	WebhookConfig                         *tables.WebhookConfig                 `json:"webhook_config,omitempty"`                    // Global webhook delivery settings; nil means all defaults
 }
 
@@ -263,6 +265,15 @@ func (c *ClientConfig) GenerateClientConfigHash() (string, error) {
 	// Only hash non-default value to avoid legacy config hash churn on upgrade.
 	if c.DumpErrorsInConsoleLogs {
 		hash.Write([]byte("dumpErrorsInConsoleLogs:true"))
+	}
+
+	// Only hash when explicitly set to avoid legacy config hash churn on upgrade.
+	// An empty LogLevel/LogOutputStyle means "follow boot args (LOG_LEVEL/-log-level/-log-style)".
+	if c.LogLevel != "" {
+		hash.Write([]byte("logLevel:" + c.LogLevel))
+	}
+	if c.LogOutputStyle != "" {
+		hash.Write([]byte("logOutputStyle:" + c.LogOutputStyle))
 	}
 
 	// Only hash when present to avoid legacy config hash churn on upgrade.

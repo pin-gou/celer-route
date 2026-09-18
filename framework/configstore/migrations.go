@@ -436,6 +436,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_oauth2_server_tables"}, run: migrationAddOAuth2ServerTables},
 	{IDs: []string{"add_oauth2_issuance_tables"}, run: migrationAddOAuth2IssuanceTables},
 	{IDs: []string{"add_dump_errors_in_console_logs_column"}, run: migrationAddDumpErrorsInConsoleLogsColumn},
+	{IDs: []string{"add_log_level_and_output_style_columns"}, run: migrationAddLogLevelAndOutputStyleColumns},
 	{IDs: []string{"add_bedrock_mantle_key_columns"}, run: migrationAddBedrockMantleKeyColumns},
 	{IDs: []string{"add_model_pricing_is_deprecated_column"}, run: migrationAddModelPricingIsDeprecatedColumn},
 	{IDs: []string{"add_mcp_client_tool_execution_timeout_column"}, run: migrationAddMCPClientToolExecutionTimeoutColumn},
@@ -4532,6 +4533,45 @@ func migrationAddDisableDBPingsInHealthColumn(ctx context.Context, db *gorm.DB, 
 		Rollback: func(tx *gorm.DB) error {
 			tx = tx.WithContext(ctx)
 			if err := dropColumnIfExists(tx, logger, &tables.TableClientConfig{}, "disable_db_pings_in_health"); err != nil {
+				return err
+			}
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddLogLevelAndOutputStyleColumns adds the log_level and log_output_style
+// columns to the client config table. Both are plain strings that default to empty,
+// which means "follow boot args (LOG_LEVEL / -log-level / -log-style)". They are
+// applied live at runtime, so no hash recompute is needed (the client config hash
+// only covers non-empty values to avoid legacy churn).
+func migrationAddLogLevelAndOutputStyleColumns(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_log_level_and_output_style_columns"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableClientConfig{}, "log_level"); err != nil {
+				return err
+			}
+			if err := addColumnIfNotExists(tx, logger, &tables.TableClientConfig{}, "log_output_style"); err != nil {
+				return err
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &tables.TableClientConfig{}, "log_level"); err != nil {
+				return err
+			}
+			if err := dropColumnIfExists(tx, logger, &tables.TableClientConfig{}, "log_output_style"); err != nil {
 				return err
 			}
 			return nil
