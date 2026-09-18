@@ -10,9 +10,12 @@ import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } f
 import { CoreConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { parseArrayFromText } from "@/lib/utils/array";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
+const LOGGING_TABS = ["requests", "app"] as const;
 
 // Radix Select treats an empty string as the placeholder state, so the "follow
 // startup default" option needs a real value; mapped back to "" before saving.
@@ -34,6 +37,7 @@ export default function LoggingView() {
 	const [localConfig, setLocalConfig] = useState<CoreConfig>(DefaultCoreConfig);
 	const [needsRestart, setNeedsRestart] = useState<boolean>(false);
 	const [loggingHeadersText, setLoggingHeadersText] = useState<string>("");
+	const [activeTab, setActiveTab] = useQueryState("tab", parseAsStringLiteral(LOGGING_TABS).withDefault("requests"));
 
 	useEffect(() => {
 		if (config) {
@@ -66,6 +70,10 @@ export default function LoggingView() {
 			setNeedsRestart(true);
 		}
 	}, []);
+
+	const handleTabChange = (value: string) => {
+		setActiveTab(value as (typeof LOGGING_TABS)[number]);
+	};
 
 	const handleLoggingHeadersChange = useCallback((value: string) => {
 		setLoggingHeadersText(value);
@@ -113,7 +121,7 @@ export default function LoggingView() {
 				<p className="text-muted-foreground text-sm">{t("descriptions.logsSettings")}</p>
 			</div>
 
-			<Tabs defaultValue="requests" className="gap-4">
+			<Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
 				<TabsList>
 					<TabsTrigger value="requests" data-testid="logging-tab-requests">
 						{t("logging.tabs.requests")}

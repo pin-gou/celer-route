@@ -13,11 +13,14 @@ import { CoreConfig, DefaultCoreConfig, DefaultGlobalHeaderFilterConfig, GlobalH
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 import { BookOpenText, Info, ShieldAlert, X } from "lucide-react";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
 import UserAgentMappingsView from "./userAgentMappingsView";
 import { SecretVarInput } from "@/components/ui/secretVarInput";
+
+const CLIENT_SETTINGS_TABS = ["common", "headerForwarding", "appRecognition"] as const;
 
 // Security headers that cannot be configured in allowlist/denylist
 // These headers are always blocked for security reasons regardless of configuration
@@ -183,6 +186,7 @@ export default function ClientSettingsView() {
 	const config = bifrostConfig?.client_config;
 	const [updateCoreConfig, { isLoading: isSavingCoreConfig }] = useUpdateCoreConfigMutation();
 	const [localConfig, setLocalConfig] = useState<CoreConfig>(DefaultCoreConfig);
+	const [activeTab, setActiveTab] = useQueryState("tab", parseAsStringLiteral(CLIENT_SETTINGS_TABS).withDefault("common"));
 
 	const isQueriesLoading = isCoreConfigLoading;
 	const isLoading = isSavingCoreConfig;
@@ -228,6 +232,10 @@ export default function ClientSettingsView() {
 	const handleConfigChange = useCallback((field: keyof CoreConfig, value: boolean | number | string[] | GlobalHeaderFilterConfig) => {
 		setLocalConfig((prev) => ({ ...prev, [field]: value }));
 	}, []);
+
+	const handleTabChange = (value: string) => {
+		setActiveTab(value as (typeof CLIENT_SETTINGS_TABS)[number]);
+	};
 
 	const handleSave = useCallback(async () => {
 		// Defense in depth - don't save if security headers are present
@@ -321,7 +329,7 @@ export default function ClientSettingsView() {
 				<p className="text-muted-foreground text-sm">{t("clientSettings.description")}</p>
 			</div>
 
-			<Tabs defaultValue="common" className="gap-4">
+			<Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
 				<TabsList>
 					<TabsTrigger value="common" data-testid="client-settings-tab-common">
 						{t("clientSettings.tabs.common")}
