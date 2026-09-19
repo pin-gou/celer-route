@@ -1253,6 +1253,17 @@ func TestPreProviderHookShortCircuitOnAllKeysCooled(t *testing.T) {
 	if v, ok := ctx.Value(schemas.BifrostContextKeyRetryAfterSeconds).(int64); !ok || v != sc.Error.ExtraFields.RetryAfterSeconds {
 		t.Fatalf("expected ctx retry-after stamp to match the error hint, got %v (error=%d)", v, sc.Error.ExtraFields.RetryAfterSeconds)
 	}
+	// The message must carry the provider + "all in cooldown" state plus an
+	// explicit retry hint — opencode renders error.message verbatim and its
+	// message-based retryability matcher keys off "retry", so the hint must be
+	// present even if the Retry-After header were stripped.
+	if sc.Error.Error == nil || sc.Error.Error.Message == "" {
+		t.Fatal("expected a client-facing error message")
+	}
+	wantMsg := schemas.NoEligibleKeysMessage(provider, sc.Error.ExtraFields.RetryAfterSeconds)
+	if sc.Error.Error.Message != wantMsg {
+		t.Fatalf("expected message %q, got %q", wantMsg, sc.Error.Error.Message)
+	}
 	if gotReq != req {
 		t.Fatal("PreProviderHook must return the SAME request pointer")
 	}

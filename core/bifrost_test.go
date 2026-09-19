@@ -3695,6 +3695,17 @@ func TestExecuteRequestWithRetries_StreamKeyFilterVetoSurfaces429NoEligibleKeys(
 		if got := atomic.LoadInt32(&handlerCalls); got != 0 {
 			t.Fatalf("provider requestHandler must not be invoked when every key is vetoed, called %d time(s)", got)
 		}
+		// Message must be the shared no-eligible-keys text (identical to the
+		// provider-cooldown PreProviderHook short-circuit) and embed the
+		// retry-after hint so clients that render error.message verbatim see it
+		// even if the Retry-After header is stripped.
+		if err.Error == nil {
+			t.Fatal("expected ErrorField on the synthetic no_eligible_keys error")
+		}
+		wantMsg := schemas.NoEligibleKeysMessage(schemas.OpenAI, err.ExtraFields.RetryAfterSeconds)
+		if err.Error.Message != wantMsg {
+			t.Fatalf("expected message %q, got %q", wantMsg, err.Error.Message)
+		}
 		return err
 	}
 

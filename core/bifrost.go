@@ -6510,8 +6510,14 @@ func executeRequestWithRetries[T any](
 						StatusCode:     &statusCode,
 						Type:           &errType,
 						Error: &schemas.ErrorField{
+							// Shared message format with the provider-cooldown
+							// PreProviderHook short-circuit (plugins/providercooldown/
+							// cooldown.go) so the wire text is identical no matter
+							// which raise site fired; retryAfter seconds baked in so
+							// clients see the retry hint even if the Retry-After header
+							// is stripped by an intermediary.
 							Type:    &errType,
-							Message: err.Error(),
+							Message: schemas.NoEligibleKeysMessage(providerKey, retryAfter),
 						},
 						ExtraFields: schemas.BifrostErrorExtraFields{
 							RetryAfterSeconds: retryAfter,

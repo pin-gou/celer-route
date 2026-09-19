@@ -192,3 +192,80 @@ func TestStreamRetryAfterFirstChunkError(t *testing.T) {
 		t.Fatalf("retried stream content = %q, want %q", content, "hello")
 	}
 }
+
+// TestStreamFallbackPreservesPrimaryRetryAfter pins the wire-visible contract
+// that a failing fallback does not clobber the primary provider's synthetic
+// 429 no_eligible_keys Retry-After hint. When the primary's KeyPoolFilter
+// suppresses every key (e.g. provider-cooldown on all keys), the worker
+// surfaces errAllKeysFiltered which core maps to 429 no_eligible_keys with
+// ExtraFields.RetryAfterSeconds = the shortest remaining cooldown stamped by
+// the filter. The configured fallback chain then runs; if every fallback also
+// fails (here an upstream HTTP 402, the same shape as the production
+// siliconflow fallback), the orchestrator returns the ORIGINAL primary error
+// (core/bifrost.go handleStreamRequest: "All fallback(s) exhausted; returning
+// primary error") — so the client must still receive the 429 + Retry-After
+// contract, not the fallback's error.
+func TestStreamFallbackPreservesPrimaryRetryAfter(t *testing.T) {
+	var fallbackHits atomic.Int32
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits.Add(1)
+		w.WriteHeader(http.StatusPaymentRequired)
+		fmt.Fprintln(w, `{"error":{"message":"billing required","type":"insufficient_quota","code":"insufficient_quota"}}`)
+	}))
+	defer fallback.Close()
+
+	account := NewMockAccount()
+	// Primary base URL is never contacted: every key is vetoed below.
+	account.AddProviderWithBaseURL(schemas.OpenAI, 1, 1, "")
+	account.AddProviderWithBaseURL(schemas.Anthropic, 1, 1, fallback.URL)
+	account.configs[schemas.OpenAI].NetworkConfig.MaxRetries = 0
+	account.configs[schemas.Anthropic].NetworkConfig.MaxRetries = 0
+	account.SetKeysForProvider(schemas.OpenAI, []schemas.Key{
+		{ID: "primary-key", Value: *schemas.NewSecretVar("sk-primary"), Models: schemas.WhiteList{"*"}, Weight: 100},
+	})
+	account.SetKeysForProvider(schemas.Anthropic, []schemas.Key{
+		{ID: "fallback-key", Value: *schemas.NewSecretVar("sk-fallback"), Models: schemas.WhiteList{"*"}, Weight: 100},
+	})
+
+	client := newStreamTestClient(t, account)
+	// KeyPoolFilter vetoes every key of the PRIMARY provider and stamps the
+	// shortest-remaining-cooldown hint, exactly as provider-cooldown's AsFilter
+	// does. The fallback provider's keys pass through so the fallback really
+	// attempts the upstream call.
+	client.SetKeyPoolFilter(func(ctx *schemas.BifrostContext, provider schemas.ModelProvider, _ string, keys []schemas.Key) ([]schemas.Key, error) {
+		if provider == schemas.OpenAI {
+			ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, int64(123))
+			return nil, nil
+		}
+		return keys, nil
+	})
+
+	ctx := schemas.NewBifrostContext(context.Background(), time.Now().Add(30*time.Second))
+	_, bifrostErr := client.ChatCompletionStreamRequest(ctx, &schemas.BifrostChatRequest{
+		Provider: schemas.OpenAI,
+		Model:    "gpt-4o-mini",
+		Input: []schemas.ChatMessage{
+			{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("hi")}},
+		},
+		Fallbacks: []schemas.Fallback{{Provider: schemas.Anthropic, Model: "claude-3-5-haiku-20241022"}},
+	})
+	if bifrostErr == nil {
+		t.Fatal("expected the primary's synthetic 429 no_eligible_keys to surface after the fallback also failed")
+	}
+	if got := fallbackHits.Load(); got != 1 {
+		t.Fatalf("fallback provider must be attempted once before the primary error is returned, got %d hits", got)
+	}
+	if bifrostErr.StatusCode == nil || *bifrostErr.StatusCode != 429 {
+		t.Fatalf("expected status 429 (the primary error), got %v", bifrostErr.StatusCode)
+	}
+	if bifrostErr.Type == nil || *bifrostErr.Type != noEligibleKeysErrorType {
+		t.Fatalf("expected type no_eligible_keys, got %v", bifrostErr.Type)
+	}
+	if bifrostErr.ExtraFields.RetryAfterSeconds != 123 {
+		t.Fatalf("expected the primary's RetryAfterSeconds to survive the failed fallback, got %d", bifrostErr.ExtraFields.RetryAfterSeconds)
+	}
+	wantMsg := schemas.NoEligibleKeysMessage(schemas.OpenAI, 123)
+	if bifrostErr.Error == nil || bifrostErr.Error.Message != wantMsg {
+		t.Fatalf("expected message %q, got %q", wantMsg, bifrostErr.Error.Message)
+	}
+}

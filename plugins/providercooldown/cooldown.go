@@ -1155,12 +1155,16 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 	// hint tells the caller when the soonest of these cooldowns lapses.
 	statusCode := 429
 	errType := "no_eligible_keys"
-	message := fmt.Sprintf("no eligible keys for provider %s (all in cooldown)", provider)
 	var retryAfter int64
 	if rem := p.State.ShortestRemainingCooldown(provider, model, keys); rem > 0 {
 		retryAfter = retryAfterSecondsHint(rem)
 		ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, retryAfter)
 	}
+	// Shared message format with core's worker path (core/bifrost.go
+	// executeRequestWithRetries) so the wire text is identical no matter
+	// which raise site fired — and includes the explicit retry hint opencode
+	// matches on.
+	message := schemas.NoEligibleKeysMessage(provider, retryAfter)
 	if p.logger != nil {
 		p.logger.Info("[provider-cooldown] short-circuit on %s/%s — all %d key(s) in cooldown (retry-after %ds)", provider, model, len(keys), retryAfter)
 	}

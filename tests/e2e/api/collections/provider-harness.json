@@ -50204,6 +50204,67 @@
               ]
             }
           }
+        },
+        {
+          "name": "provider-cooldown single-key strict 429 contract - Retry-After + no_eligible_keys message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Pins the wire contract of the synthetic 429 no_eligible_keys raised when every eligible key is in cooldown (provider-cooldown KeyPoolFilter).",
+                  "// Cooldown state is not controllable from the harness, so the strict assertions fire ONLY when that path actually returns a 429 no_eligible_keys;",
+                  "// any other outcome (success = no cooldown, auth/upstream errors) passes through without failing the live sweep.",
+                  "var code = pm.response.code;",
+                  "if (code < 400) { return; }",
+                  "if (code === 429) {",
+                  "  var j = pm.response.json();",
+                  "  if (!j || !j.error || j.error.type !== 'no_eligible_keys') { return; }",
+                  "  pm.test('no_eligible_keys 429 carries Retry-After header', function () {",
+                  "    pm.expect(parseInt(pm.response.headers.get('Retry-After'), 10), 'failed: ' + pm.response.text()).to.be.above(0);",
+                  "  });",
+                  "  pm.test('no_eligible_keys 429 message embeds retry-after hint', function () {",
+                  "    pm.expect(/no eligible keys for provider .+ \\(all in cooldown\\); retry after \\d+s/.test(j.error.message || ''), 'message=' + (j.error.message || '')).to.be.true;",
+                  "  });",
+                  "  pm.test('no_eligible_keys 429 carries retry_after_seconds in extra_fields', function () {",
+                  "    pm.expect(j.extra_fields && j.extra_fields.retry_after_seconds > 0, 'extra=' + JSON.stringify(j.extra_fields || {})).to.be.true;",
+                  "  });",
+                  "  return;",
+                  "}",
+                  "// auth / upstream / server errors: skip, not the contract under test"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{openaiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Reply with one word.\" }\n  ],\n  \"max_tokens\": 16\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/chat/completions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "chat",
+                "completions"
+              ]
+            }
+          }
         }
       ]
     },

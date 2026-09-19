@@ -2183,3 +2183,22 @@ type BifrostErrorExtraFields struct {
 	// "Retry-After" header. 0 means no hint is available.
 	RetryAfterSeconds int64 `json:"retry_after_seconds,omitempty"`
 }
+
+// NoEligibleKeysMessage returns the client-facing error message attached to
+// the synthetic 429 "no_eligible_keys" response raised when a KeyPoolFilter
+// (e.g. provider-cooldown) suppresses every eligible key for the provider.
+// Both raise sites — the provider-cooldown PreProviderHook short-circuit and
+// core's executeRequestWithRetries worker path — build the message through
+// this helper so the text is identical on the wire regardless of which path
+// fired. When retryAfterSeconds is positive it appends an explicit
+// "retry after <N>s" hint: clients (e.g. opencode) display error.message
+// verbatim, and opencode's message-based retryability matcher keys off words
+// like "retry" even if the Retry-After header were stripped by an
+// intermediary.
+func NoEligibleKeysMessage(provider ModelProvider, retryAfterSeconds int64) string {
+	msg := fmt.Sprintf("provider %s: no eligible keys (all in cooldown)", provider)
+	if retryAfterSeconds > 0 {
+		msg += fmt.Sprintf("; retry after %ds", retryAfterSeconds)
+	}
+	return msg
+}

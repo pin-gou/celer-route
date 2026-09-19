@@ -342,7 +342,7 @@ func TestPostLLMHookSilentShortCircuitNoPending(t *testing.T) {
 		Type:           &errType,
 		Error: &schemas.ErrorField{
 			Type:    &errType,
-			Message: "no eligible keys for provider minimax (all in cooldown)",
+			Message: schemas.NoEligibleKeysMessage(schemas.Minimax, 0),
 		},
 		ExtraFields: schemas.BifrostErrorExtraFields{
 			RequestType:            schemas.ChatCompletionRequest,
