@@ -1311,6 +1311,139 @@ export const ProviderIcons = {
 			/>
 		);
 	},
+
+	snowflake: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg
+				width={resolvedSize}
+				height={resolvedSize}
+				viewBox="0 0 120 120"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+				className={className}
+			>
+				<rect width="120" height="120" rx="24" fill="#00B4E0" />
+				<text x="60" y="80" textAnchor="middle" fontSize="52" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+					SF
+				</text>
+			</svg>
+		);
+	},
+
+	databricks: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg
+				width={resolvedSize}
+				height={resolvedSize}
+				viewBox="0 0 120 120"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+				className={className}
+			>
+				<rect width="120" height="120" rx="24" fill="#FF3621" />
+				<text x="60" y="80" textAnchor="middle" fontSize="52" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+					DB
+				</text>
+			</svg>
+		);
+	},
+
+	oci: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg
+				width={resolvedSize}
+				height={resolvedSize}
+				viewBox="0 0 120 120"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+				className={className}
+			>
+				<rect width="120" height="120" rx="24" fill="#F80000" />
+				<text x="60" y="78" textAnchor="middle" fontSize="44" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+					OCI
+				</text>
+			</svg>
+		);
+	},
+
+	sap: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg
+				width={resolvedSize}
+				height={resolvedSize}
+				viewBox="0 0 120 120"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+				className={className}
+			>
+				<rect width="120" height="120" rx="24" fill="#0FA5E2" />
+				<text x="60" y="78" textAnchor="middle" fontSize="44" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+					SAP
+				</text>
+			</svg>
+		);
+	},
+
+	modal: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg
+				width={resolvedSize}
+				height={resolvedSize}
+				viewBox="0 0 120 120"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+				className={className}
+			>
+				<rect width="120" height="120" rx="24" fill="#6D5AE6" />
+				<text x="60" y="84" textAnchor="middle" fontSize="64" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+					M
+				</text>
+			</svg>
+		);
+	},
+
+	baseten: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg
+				width={resolvedSize}
+				height={resolvedSize}
+				viewBox="0 0 120 120"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+				className={className}
+			>
+				<rect width="120" height="120" rx="24" fill="#EE5F21" />
+				<text x="60" y="84" textAnchor="middle" fontSize="64" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+					B
+				</text>
+			</svg>
+		);
+	},
+
+	longcat: ({ size = "md", className = "" }: IconProps) => {
+		const resolvedSize = resolveSize(size);
+		return (
+			<svg
+				width={resolvedSize}
+				height={resolvedSize}
+				viewBox="0 0 120 120"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+				className={className}
+			>
+				<rect width="120" height="120" rx="24" fill="#F59E0B" />
+				<text x="60" y="80" textAnchor="middle" fontSize="52" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+					LC
+				</text>
+			</svg>
+		);
+	},
 } as const;
 
 // Routing Engine Icons

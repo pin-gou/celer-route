@@ -67,6 +67,13 @@ jobs:
       AZURE_AI_API_KEY: ${{ secrets.AZURE_AI_API_KEY }}
       WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
       MINIMAX_CN_API_KEY: ${{ secrets.MINIMAX_CN_API_KEY }}
+      SNOWFLAKE_API_KEY: ${{ secrets.SNOWFLAKE_API_KEY }}
+      DATABRICKS_API_KEY: ${{ secrets.DATABRICKS_API_KEY }}
+      OCI_API_KEY: ${{ secrets.OCI_API_KEY }}
+      SAP_API_KEY: ${{ secrets.SAP_API_KEY }}
+      MODAL_API_KEY: ${{ secrets.MODAL_API_KEY }}
+      BASETEN_API_KEY: ${{ secrets.BASETEN_API_KEY }}
+      LONGCAT_API_KEY: ${{ secrets.LONGCAT_API_KEY }}
       SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
       COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
       FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}

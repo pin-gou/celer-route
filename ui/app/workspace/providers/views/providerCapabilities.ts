@@ -77,4 +77,11 @@ export const ProviderCapabilities: Record<ProviderName, Capability[]> = {
 	azure_ai: ["chat", "embed", "tools", "vision"],
 	watsonx: ["chat", "tools"],
 	minimax_cn: ["chat", "tools"],
+	snowflake: ["chat", "tools"],
+	databricks: ["chat", "tools"],
+	oci: ["chat", "tools"],
+	sap: ["chat", "tools"],
+	modal: ["chat", "tools"],
+	baseten: ["chat", "tools"],
+	longcat: ["chat", "tools"],
 };

@@ -671,6 +671,27 @@
         },
         "minimax_cn": {
           "$ref": "#/$defs/provider"
+        },
+        "snowflake": {
+          "$ref": "#/$defs/provider"
+        },
+        "databricks": {
+          "$ref": "#/$defs/provider"
+        },
+        "oci": {
+          "$ref": "#/$defs/provider"
+        },
+        "sap": {
+          "$ref": "#/$defs/provider"
+        },
+        "modal": {
+          "$ref": "#/$defs/provider"
+        },
+        "baseten": {
+          "$ref": "#/$defs/provider"
+        },
+        "longcat": {
+          "$ref": "#/$defs/provider"
         }
       },
       "additionalProperties": true

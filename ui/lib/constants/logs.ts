@@ -65,6 +65,13 @@ export const KnownProvidersNames = [
 	"azure_ai",
 	"watsonx",
 	"minimax_cn",
+	"snowflake",
+	"databricks",
+	"oci",
+	"sap",
+	"modal",
+	"baseten",
+	"longcat",
 ] as const;
 
 // Local Provider type derived from KNOWN_PROVIDERS constant
@@ -216,6 +223,13 @@ export const ProviderLabels: Record<ProviderName, string> = {
 	azure_ai: "Azure AI Foundry",
 	watsonx: "IBM watsonx.ai",
 	minimax_cn: "MiniMax 中国版",
+	snowflake: "Snowflake Cortex",
+	databricks: "Databricks",
+	oci: "OCI 生成式 AI",
+	sap: "SAP 生成式 AI Hub",
+	modal: "Modal",
+	baseten: "Baseten",
+	longcat: "LongCat AI",
 } as const;
 
 // Helper function to get provider label, supporting custom providers

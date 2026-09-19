@@ -166,6 +166,34 @@ cat > "$CONFIG_FILE" << 'CONFIGEOF'
       "keys": [{ "name": "Parasail API Key", "value": "env.PARASAIL_API_KEY", "weight": 1 }],
       "network_config": { "default_request_timeout_in_seconds": 300 }
     },
+    "snowflake": {
+      "keys": [{ "name": "Snowflake API Key", "value": "env.SNOWFLAKE_API_KEY", "weight": 1 }],
+      "network_config": { "default_request_timeout_in_seconds": 300 }
+    },
+    "databricks": {
+      "keys": [{ "name": "Databricks API Key", "value": "env.DATABRICKS_API_KEY", "weight": 1 }],
+      "network_config": { "default_request_timeout_in_seconds": 300 }
+    },
+    "oci": {
+      "keys": [{ "name": "OCI API Key", "value": "env.OCI_API_KEY", "weight": 1 }],
+      "network_config": { "default_request_timeout_in_seconds": 300 }
+    },
+    "sap": {
+      "keys": [{ "name": "SAP API Key", "value": "env.SAP_API_KEY", "weight": 1 }],
+      "network_config": { "default_request_timeout_in_seconds": 300 }
+    },
+    "modal": {
+      "keys": [{ "name": "Modal API Key", "value": "env.MODAL_API_KEY", "weight": 1 }],
+      "network_config": { "default_request_timeout_in_seconds": 300 }
+    },
+    "baseten": {
+      "keys": [{ "name": "Baseten API Key", "value": "env.BASETEN_API_KEY", "weight": 1 }],
+      "network_config": { "default_request_timeout_in_seconds": 300 }
+    },
+    "longcat": {
+      "keys": [{ "name": "LongCat API Key", "value": "env.LONGCAT_API_KEY", "weight": 1 }],
+      "network_config": { "default_request_timeout_in_seconds": 300 }
+    },
     "azure": {
       "keys": [{ "name": "Azure API Key", "value": "env.AZURE_API_KEY", "azure_key_config": { "endpoint": "env.AZURE_ENDPOINT", "api_version": "env.AZURE_API_VERSION" }, "weight": 1 }],
       "network_config": { "default_request_timeout_in_seconds": 300 }
@@ -252,6 +280,13 @@ docker run -d \
   -e CEREBRAS_API_KEY="${CEREBRAS_API_KEY:-}" \
   -e OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}" \
   -e PARASAIL_API_KEY="${PARASAIL_API_KEY:-}" \
+  -e SNOWFLAKE_API_KEY="${SNOWFLAKE_API_KEY:-}" \
+  -e DATABRICKS_API_KEY="${DATABRICKS_API_KEY:-}" \
+  -e OCI_API_KEY="${OCI_API_KEY:-}" \
+  -e SAP_API_KEY="${SAP_API_KEY:-}" \
+  -e MODAL_API_KEY="${MODAL_API_KEY:-}" \
+  -e BASETEN_API_KEY="${BASETEN_API_KEY:-}" \
+  -e LONGCAT_API_KEY="${LONGCAT_API_KEY:-}" \
   -e AZURE_API_KEY="${AZURE_API_KEY:-}" \
   -e AZURE_ENDPOINT="${AZURE_ENDPOINT:-}" \
   -e AZURE_API_VERSION="${AZURE_API_VERSION:-}" \

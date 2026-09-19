@@ -51420,5 +51420,292 @@
     }
   ]
 }
+,
+{
+  "name": "56. New Providers (snowflake/databricks/oci/sap/modal/baseten/longcat) Chat Completion",
+  "description": "Smoke-test the seven newly added OpenAI-compatible providers. Each case routes via the provider/model prefix convention (<provider>/<model>). Enterprise providers (snowflake/databricks/oci/sap/modal/baseten) require account-specific Base URL configuration; longcat is the fixed-host OpenAI-compatible endpoint.",
+  "item": [
+    {
+      "name": "Chat completion: snowflake/llama3.1-70b",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"model\": \"snowflake/llama3.1-70b\", \"max_tokens\": 64, \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: databricks/databricks-meta-llama-3-1-70b-instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"model\": \"databricks/databricks-meta-llama-3-1-70b-instruct\", \"max_tokens\": 64, \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: oci/meta.llama-3.1-70b-instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"model\": \"oci/meta.llama-3.1-70b-instruct\", \"max_tokens\": 64, \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: sap/llama3-70b-instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"model\": \"sap/llama3-70b-instruct\", \"max_tokens\": 64, \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: modal/meta-llama-3.1-70b-instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"model\": \"modal/meta-llama-3.1-70b-instruct\", \"max_tokens\": 64, \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: baseten/llama-3.3-70b-instruct",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"model\": \"baseten/llama-3.3-70b-instruct\", \"max_tokens\": 64, \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Chat completion: longcat/LongCat-2.0",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "if (pm.response.code < 400) { pm.test('response is a chat completion with content', function () { var j = pm.response.json(); var msg = j.choices && j.choices[0] && j.choices[0].message; pm.expect((msg && msg.content) || '').to.be.a('string'); }); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"model\": \"longcat/LongCat-2.0\", \"max_tokens\": 64, \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    }
+  ]
+}
   ]
 }

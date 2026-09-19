@@ -77,6 +77,13 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/vertex"
 	"github.com/pin-gou/celer-route/core/providers/vllm"
 	"github.com/pin-gou/celer-route/core/providers/volcengine"
+	"github.com/pin-gou/celer-route/core/providers/baseten"
+	"github.com/pin-gou/celer-route/core/providers/databricks"
+	"github.com/pin-gou/celer-route/core/providers/longcat"
+	"github.com/pin-gou/celer-route/core/providers/modal"
+	"github.com/pin-gou/celer-route/core/providers/oci"
+	"github.com/pin-gou/celer-route/core/providers/sap"
+	"github.com/pin-gou/celer-route/core/providers/snowflake"
 	"github.com/pin-gou/celer-route/core/providers/wafer"
 	"github.com/pin-gou/celer-route/core/providers/watsonx"
 	"github.com/pin-gou/celer-route/core/providers/xai"
@@ -4668,6 +4675,20 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return minimaxcn.NewMinimaxCNProvider(config, bifrost.logger)
 	case schemas.Watsonx:
 		return watsonx.NewWatsonxProvider(config, bifrost.logger)
+	case schemas.Snowflake:
+		return snowflake.NewSnowflakeProvider(config, bifrost.logger)
+	case schemas.Databricks:
+		return databricks.NewDatabricksProvider(config, bifrost.logger)
+	case schemas.OCI:
+		return oci.NewOCIProvider(config, bifrost.logger)
+	case schemas.SAP:
+		return sap.NewSAPProvider(config, bifrost.logger)
+	case schemas.Modal:
+		return modal.NewModalProvider(config, bifrost.logger)
+	case schemas.Baseten:
+		return baseten.NewBasetenProvider(config, bifrost.logger)
+	case schemas.LongCat:
+		return longcat.NewLongCatProvider(config, bifrost.logger)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}

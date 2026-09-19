@@ -127,6 +127,13 @@ const (
 	AzureAI          ModelProvider = "azure_ai"
 	Watsonx          ModelProvider = "watsonx"
 	MinimaxCN        ModelProvider = "minimax_cn"
+	Snowflake        ModelProvider = "snowflake"
+	Databricks       ModelProvider = "databricks"
+	OCI              ModelProvider = "oci"
+	SAP              ModelProvider = "sap"
+	Modal            ModelProvider = "modal"
+	Baseten          ModelProvider = "baseten"
+	LongCat          ModelProvider = "longcat"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
@@ -207,6 +214,13 @@ var StandardProviders = []ModelProvider{
 	AzureAI,
 	Watsonx,
 	MinimaxCN,
+	Snowflake,
+	Databricks,
+	OCI,
+	SAP,
+	Modal,
+	Baseten,
+	LongCat,
 }
 
 // KeylessProviders is the set of built-in (non-custom) providers that never
