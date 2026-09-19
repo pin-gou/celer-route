@@ -337,7 +337,7 @@ export default function ComplexityRouterPage() {
 
 	if (error && !data) {
 		return (
-			<div className="mx-auto w-full max-w-7xl space-y-4 px-14 pt-8">
+			<div className="mx-auto w-full max-w-7xl space-y-4">
 				<p className="text-destructive font-mono text-sm">{getErrorMessage(error)}</p>
 				<Button data-testid="complexity-router-fetch-retry-button" type="button" variant="outline" size="sm" onClick={() => refetch()}>
 					{t("common.action.retry")}
@@ -348,7 +348,7 @@ export default function ComplexityRouterPage() {
 
 	if (!data) {
 		return (
-			<div className="mx-auto w-full max-w-7xl space-y-4 px-14 pt-8">
+			<div className="mx-auto w-full max-w-7xl space-y-4">
 				<p className="text-muted-foreground font-mono text-sm">{t("complexityRouter.configUnavailable")}</p>
 				<Button data-testid="complexity-router-fetch-retry-button" type="button" variant="outline" size="sm" onClick={() => refetch()}>
 					{t("common.action.retry")}
@@ -362,7 +362,7 @@ export default function ComplexityRouterPage() {
 	const hasErrors = Boolean(boundaryErrors || keywordErrors);
 
 	return (
-		<ScrollArea className="no-padding-parent h-[calc(100vh_-_16px)] w-full px-14 pt-4">
+		<ScrollArea className="h-full w-full">
 			<form className="mx-auto w-full max-w-7xl space-y-8" onSubmit={handleSubmit(onValid)} noValidate>
 				{/* ── Page header ── */}
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

@@ -473,8 +473,8 @@ function formatExpiry(iso: string): string {
 
 function CenteredCard({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="mx-auto flex min-h-[calc(100dvh-6rem)] w-full max-w-xl items-center justify-center p-6">
-			<div className="bg-card w-full rounded-sm border p-8 shadow-sm">{children}</div>
+		<div className="mx-auto flex min-h-[calc(100dvh-6rem)] w-full max-w-7xl items-center justify-center">
+			<div className="bg-card w-full rounded-sm border p-8">{children}</div>
 		</div>
 	);
 }

@@ -26,7 +26,7 @@ export default function ModelCatalogView() {
 	}
 
 	return (
-		<div className="no-padding-parent mx-auto flex h-[calc(100dvh-1rem)] min-h-0 w-full max-w-7xl flex-col gap-4 overflow-hidden p-4">
+		<div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 overflow-hidden">
 			<h1 className="sr-only">{t("page.title")}</h1>
 			<SummaryCards
 				totalProviders={(providers ?? []).length}

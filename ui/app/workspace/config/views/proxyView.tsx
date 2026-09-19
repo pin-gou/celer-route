@@ -57,7 +57,7 @@ export default function ProxyView() {
 	const isTypeUnsupported = watchedType === "socks5" || watchedType === "tcp";
 
 	return (
-		<div className="mx-auto w-full max-w-4xl space-y-4">
+		<div className="mx-auto w-full max-w-7xl space-y-4">
 			<Form {...form}>
 				<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
 					<div>

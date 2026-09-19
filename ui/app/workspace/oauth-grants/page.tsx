@@ -143,10 +143,17 @@ export default function OAuthGrantsPage() {
 		</div>
 	);
 
-	// No grants at all and no active filters/search: render full-width without
-	// the filter sidebar, mirroring the MCP clients/sessions onboarding state.
+	// No grants at all and no active filters/search: render full-bleed without
+	// the filter sidebar, mirroring the populated-state wrapper so the page
+	// width never jumps.
 	if (!isLoading && totalCount === 0 && !hasActiveFilters) {
-		return <div className="mx-auto flex h-[calc(100dvh-50px)] w-full max-w-7xl flex-col">{content}</div>;
+		return (
+			<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100dvh_-_16px)]">
+				<div className="bg-card h-full w-full overflow-hidden rounded-l-md">
+					<div className="flex h-full flex-col p-4">{content}</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (

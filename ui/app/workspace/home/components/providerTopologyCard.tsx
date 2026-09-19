@@ -42,7 +42,7 @@ export default function ProviderTopologyCard() {
 	const isEmpty = summaries.length === 0;
 
 	return (
-		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-provider-topology">
+		<Card className="bg-card gap-0 border py-0" data-testid="home-provider-topology">
 			<CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-6 py-3">
 				<CardTitle className="text-sm font-semibold">{t("home.providers.title")}</CardTitle>
 				<Button size="sm" variant="outline" asChild>

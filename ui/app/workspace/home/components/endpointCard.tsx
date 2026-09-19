@@ -103,7 +103,7 @@ export default function EndpointCard({ endpointUrl }: Props) {
 	};
 
 	return (
-		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-endpoint-card">
+		<Card className="bg-card gap-0 border py-0" data-testid="home-endpoint-card">
 			<CardHeader className="flex flex-row items-start justify-between gap-3 border-b px-6 py-4">
 				<div className="space-y-1">
 					<CardTitle className="text-base font-semibold">{t("home.endpointCard.title")}</CardTitle>

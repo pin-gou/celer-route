@@ -312,7 +312,7 @@ function formatExpiry(iso: string): string {
 function Shell({ children }: { children: React.ReactNode }) {
 	return (
 		<div className="mx-auto flex min-h-screen w-full items-center justify-center p-4 sm:p-6">
-			<div className="bg-card w-full max-w-md rounded-sm border p-6 shadow-sm sm:p-8">{children}</div>
+			<div className="bg-card w-full max-w-md rounded-sm border p-6 sm:p-8">{children}</div>
 		</div>
 	);
 }

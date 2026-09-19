@@ -89,7 +89,7 @@ export default function OnboardingWizard() {
 
 	return (
 		<div className="flex items-start justify-center py-6">
-			<div className="w-full max-w-2xl space-y-6">
+			<div className="w-full max-w-7xl space-y-6">
 				{!isFirstTimeSetup && (
 					<div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
 						{t("alreadySetUpNotice")}
@@ -98,7 +98,7 @@ export default function OnboardingWizard() {
 
 				<ProgressIndicator currentStep={step} totalSteps={STEP_IDS.length} />
 
-				<Card className="bg-card gap-0 border py-0 shadow-sm">
+				<Card className="bg-card gap-0 border py-0">
 					<CardContent className="space-y-6 px-8 py-8">
 						{stepId === "welcome" && <WelcomeStep />}
 						{stepId === "admin" && <AdminSecurityStep />}

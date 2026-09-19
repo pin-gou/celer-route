@@ -132,7 +132,7 @@ export default function ProviderDetailPage() {
 	};
 
 	return (
-		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 p-6">
+		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6">
 			<div data-testid="providers2-detail-breadcrumb" className="text-muted-foreground flex items-center gap-2 text-sm">
 				<button
 					data-testid="providers2-breadcrumb-list-link"

@@ -250,7 +250,7 @@ export default function AgentSetupView() {
 	};
 
 	return (
-		<div className="mx-auto w-full max-w-4xl space-y-6 py-6">
+		<div className="mx-auto w-full max-w-7xl space-y-6">
 			<div className="space-y-1">
 				<h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
 					<TerminalSquare className="text-muted-foreground h-5 w-5" />
@@ -268,7 +268,7 @@ export default function AgentSetupView() {
 				onStepClick={handleStepClick}
 			/>
 
-			<Card className="bg-card gap-0 border py-0 shadow-sm">
+			<Card className="bg-card gap-0 border py-0">
 				<CardContent className="space-y-6 px-6 py-6">
 					{stepId === "client" && <ClientStep agent={agent} onAgentChange={setAgent} platform={platform} onPlatformChange={setPlatform} />}
 					{stepId === "endpoint" && (

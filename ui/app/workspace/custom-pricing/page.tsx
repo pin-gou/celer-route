@@ -4,7 +4,7 @@ import ModelSettingsView from "@/app/workspace/config/views/modelSettingsView";
 export default function CustomPricingPage() {
 	const { t } = useTranslation("config");
 	return (
-		<div className="no-padding-parent mx-auto flex w-full">
+		<div className="mx-auto flex w-full max-w-7xl">
 			<h1 className="sr-only">{t("customPricing.title")}</h1>
 			<ModelSettingsView />
 		</div>

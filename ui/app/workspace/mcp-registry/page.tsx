@@ -156,9 +156,19 @@ export default function MCPServersPage() {
 	);
 
 	// Onboarding empty state: no servers at all and no active filters/search.
-	// Render full-width without the filter sidebar (the table renders the CTA).
+	// Render full-bleed without the filter sidebar (the table renders the CTA),
+	// matching the populated-state wrapper so the page width never jumps.
 	if (totalCount === 0 && !filtersActive && !debouncedSearch && !urlState.server) {
-		return <div className="mx-auto flex h-[calc(100dvh-50px)] w-full max-w-7xl flex-col">{table}</div>;
+		return (
+			<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100dvh_-_16px)]">
+				<div className="bg-card h-full w-full overflow-hidden rounded-l-md">
+					<div className="flex h-full flex-col p-4">
+						<h1 className="sr-only">{t("registry.title")}</h1>
+						{table}
+					</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (

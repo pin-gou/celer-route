@@ -159,7 +159,7 @@ export default function ProvidersPage() {
 	}
 
 	return (
-		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 p-6">
+		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6">
 			{/* Page heading */}
 			<div data-testid="providers2-page-heading" className="sr-only">
 				{t("providers2.pageTitle")}

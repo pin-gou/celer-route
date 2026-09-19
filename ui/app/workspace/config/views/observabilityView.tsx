@@ -61,7 +61,7 @@ export default function ObservabilityView() {
 	}, [bifrostConfig, localConfig, updateCoreConfig, t]);
 
 	return (
-		<div className="mx-auto w-full max-w-4xl space-y-4">
+		<div className="mx-auto w-full max-w-7xl space-y-4">
 			<div>
 				<h2 className="text-lg font-semibold tracking-tight">{t("page.observability")}</h2>
 				<p className="text-muted-foreground text-sm">{t("observability.description")}</p>

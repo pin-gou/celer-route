@@ -323,7 +323,7 @@ export default function ClientSettingsView() {
 	}, []);
 
 	return (
-		<div className="mx-auto w-full max-w-4xl space-y-6" data-testid="client-settings-view">
+		<div className="mx-auto w-full max-w-7xl space-y-6" data-testid="client-settings-view">
 			<div>
 				<h2 className="text-lg font-semibold tracking-tight">{t("clientSettings.title")}</h2>
 				<p className="text-muted-foreground text-sm">{t("clientSettings.description")}</p>

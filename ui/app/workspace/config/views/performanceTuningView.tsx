@@ -88,7 +88,7 @@ export default function PerformanceTuningView() {
 	}, [bifrostConfig, localConfig, localValues, updateCoreConfig, t]);
 
 	return (
-		<div className="mx-auto w-full max-w-4xl space-y-4">
+		<div className="mx-auto w-full max-w-7xl space-y-4">
 			<div>
 				<h2 className="text-lg font-semibold tracking-tight">{t("page.performanceTuning")}</h2>
 				<p className="text-muted-foreground text-sm">{t("descriptions.performanceTuning")}</p>

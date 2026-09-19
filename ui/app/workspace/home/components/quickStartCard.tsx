@@ -13,7 +13,7 @@ const STEPS = [
 export default function QuickStartCard() {
 	const { t } = useTranslation("common");
 	return (
-		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-quickstart">
+		<Card className="bg-card gap-0 border py-0" data-testid="home-quickstart">
 			<CardHeader className="flex flex-row items-start justify-between gap-2 border-b px-6 py-3">
 				<div className="space-y-1">
 					<CardTitle className="text-sm font-semibold">{t("home.quickStart.title")}</CardTitle>

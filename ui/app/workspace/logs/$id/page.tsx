@@ -83,7 +83,7 @@ export default function LogDetailPage() {
 				</Button>
 			</div>
 			<div className="custom-scrollbar min-h-0 flex-1 overflow-auto">
-				<div className="mx-auto w-full max-w-5xl space-y-4 p-6">
+				<div className="mx-auto w-full max-w-7xl space-y-4 p-6">
 					{error ? (
 						<Alert variant="destructive" className="shrink-0">
 							<AlertCircle className="h-4 w-4" />

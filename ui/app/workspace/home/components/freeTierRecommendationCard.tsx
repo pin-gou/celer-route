@@ -20,7 +20,7 @@ import FreeTierProviderCard from "./freeTierProviderCard";
 function EmptyStateCard({ onRetry }: { onRetry: () => void }) {
 	const { t } = useTranslation("home");
 	return (
-		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-free-tier-empty">
+		<Card className="bg-card gap-0 border py-0" data-testid="home-free-tier-empty">
 			<CardContent className="flex flex-col items-center justify-center gap-3 py-10 text-center">
 				<Gift className="text-muted-foreground h-5 w-5 opacity-60" />
 				<p className="text-muted-foreground max-w-md text-sm">{t("freeTier.noBundles")}</p>
@@ -78,7 +78,7 @@ export default function FreeTierRecommendationCard() {
 
 	return (
 		<Card
-			className="gap-0 overflow-hidden border-orange-200/70 bg-gradient-to-br from-orange-50/60 via-amber-50/40 to-rose-50/60 py-0 shadow-sm dark:border-orange-900/40 dark:from-orange-950/20 dark:via-amber-950/15 dark:to-rose-950/20"
+			className="gap-0 overflow-hidden border-orange-200/70 bg-gradient-to-br from-orange-50/60 via-amber-50/40 to-rose-50/60 py-0 dark:border-orange-900/40 dark:from-orange-950/20 dark:via-amber-950/15 dark:to-rose-950/20"
 			data-testid="home-free-tier-card"
 		>
 			<CardHeader className="flex flex-row items-start justify-between gap-2 border-b border-orange-200/60 bg-gradient-to-r from-orange-100/70 via-amber-100/50 to-transparent px-6 py-3 dark:border-orange-900/40 dark:from-orange-950/40 dark:via-amber-950/30 dark:to-transparent">

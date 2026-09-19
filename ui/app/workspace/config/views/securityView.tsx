@@ -218,7 +218,7 @@ export default function SecurityView() {
 	}, [bifrostConfig, localConfig, authConfig, showPasswordSection, updateCoreConfig, isFirstTimeSetup]);
 
 	return (
-		<div className="mx-auto w-full max-w-4xl space-y-6">
+		<div className="mx-auto w-full max-w-7xl space-y-6">
 			<div>
 				<h2 className="text-lg font-semibold tracking-tight">{t("security.pageTitle")}</h2>
 				<p className="text-muted-foreground text-sm">{t("security.pageDescription")}</p>

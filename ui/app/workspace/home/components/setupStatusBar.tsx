@@ -16,7 +16,7 @@ export default function SetupStatusBar() {
 	const allDone = doneCount === steps.length;
 
 	return (
-		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-setup-status">
+		<Card className="bg-card gap-0 border py-0" data-testid="home-setup-status">
 			<CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-6 py-3">
 				<CardTitle className="text-sm font-semibold">{t("home.setupStatus.title")}</CardTitle>
 				<span className={["text-xs", allDone ? "font-medium text-emerald-600" : "text-muted-foreground"].join(" ")}>

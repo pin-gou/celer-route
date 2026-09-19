@@ -38,8 +38,8 @@ export default function MCPRegistryOAuthCallbackPage() {
 	const error = params?.get("error");
 
 	return (
-		<div className="mx-auto flex min-h-[60vh] w-full max-w-xl items-center justify-center p-6">
-			<div className="bg-card w-full rounded-lg border p-8 text-center shadow-sm">
+		<div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center">
+			<div className="bg-card w-full rounded-lg border p-8 text-center">
 				<h1 className="text-xl font-semibold">{status === "success" ? "Authorization complete" : "Authorization failed"}</h1>
 				{error && <p className="text-destructive mt-2 text-sm">{error}</p>}
 				<p className="text-muted-foreground mt-4 text-sm">{closeAttempted ? "You can close this tab." : "This window can be closed."}</p>

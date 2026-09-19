@@ -4,8 +4,8 @@ import { useQueryState } from "nuqs";
 export default function MCPSessionsAuthFailedPage() {
 	const [error] = useQueryState("error");
 	return (
-		<div className="mx-auto flex min-h-[60vh] w-full max-w-xl items-center justify-center p-6">
-			<div className="bg-card w-full rounded-sm border p-8 text-center shadow-sm">
+		<div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center">
+			<div className="bg-card w-full rounded-sm border p-8 text-center">
 				<div className="bg-destructive/10 mx-auto mb-5 flex size-12 items-center justify-center rounded-full">
 					<AlertCircle className="text-destructive size-6" />
 				</div>

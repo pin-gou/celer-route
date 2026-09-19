@@ -49,7 +49,7 @@ export default function SystemHealthCard() {
 	];
 
 	return (
-		<Card className="bg-card gap-0 border py-0 shadow-sm" data-testid="home-system-health">
+		<Card className="bg-card gap-0 border py-0" data-testid="home-system-health">
 			<CardHeader className="border-b px-6 py-3">
 				<CardTitle className="text-sm font-semibold">{t("home.systemHealth.title")}</CardTitle>
 			</CardHeader>

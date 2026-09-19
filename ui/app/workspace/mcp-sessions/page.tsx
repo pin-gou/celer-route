@@ -121,10 +121,20 @@ export default function MCPSessionsPage() {
 		/>
 	);
 
-	// No sessions at all and no active filters/search: render full-width
-	// without the filter sidebar, mirroring the MCP clients onboarding state.
+	// No sessions at all and no active filters/search: render full-bleed
+	// without the filter sidebar, mirroring the populated-state wrapper so the
+	// page width never jumps.
 	if (totalCount === 0 && !hasActiveFilters) {
-		return <div className="mx-auto flex h-[calc(100dvh-50px)] w-full max-w-7xl flex-col">{table}</div>;
+		return (
+			<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100dvh_-_16px)]">
+				<div className="bg-card h-full w-full overflow-hidden rounded-l-md">
+					<div className="flex h-full flex-col p-4">
+						<h1 className="sr-only">{t("sessions.title")}</h1>
+						{table}
+					</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (
