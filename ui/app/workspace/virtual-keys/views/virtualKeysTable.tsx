@@ -717,7 +717,7 @@ export default function VirtualKeysTable({
 				</div>
 
 				<div className="mb-2 min-h-0 grow overflow-hidden rounded-sm border">
-					<Table containerClassName="h-full overflow-auto" className="w-full min-w-[1528px] table-fixed" data-testid="vk-table">
+					<Table containerClassName="touch-pan-x h-full overflow-auto" className="w-full min-w-[1528px] table-fixed" data-testid="vk-table">
 						<TableHeader className="bg-muted sticky top-0 z-20">
 							<TableRow>
 								<TableHead className="w-[48px]">

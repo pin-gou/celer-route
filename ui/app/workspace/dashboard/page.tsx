@@ -406,8 +406,11 @@ export default function DashboardPage() {
 	const activeTab = (urlState.tab || "overview") as DashboardTab;
 
 	return (
-		<div id="dashboard-root" className="no-padding-parent no-border-parent bg-background flex h-[calc(100vh_-_16px)] w-full gap-3">
-			{/* Sidebar Filters */}
+		<div
+			id="dashboard-root"
+			className="no-padding-parent no-border-parent bg-background flex h-[calc(100vh_-_16px)] w-full flex-col gap-2 md:flex-row md:gap-3"
+		>
+			{/* Sidebar Filters — desktop: inline left rail. mobile: rendered as trigger + drawer. */}
 			<LogsFilterSidebar filters={filters} onFiltersChange={setFilters} />
 
 			{/* Main Content */}
@@ -443,7 +446,7 @@ export default function DashboardPage() {
 				<div className="p-4">
 					{/* Tabs */}
 					<Tabs value={activeTab} onValueChange={handleTabChange}>
-						<div className="mb-2 max-w-full overflow-x-auto">
+						<div className="mb-2 max-w-full touch-pan-x overflow-x-auto">
 							<TabsList className="w-max min-w-max">
 								<TabsTrigger className="shrink-0" value="overview" data-testid="dashboard-tab-overview">
 									{t("tabs.overview")}

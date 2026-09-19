@@ -454,8 +454,8 @@ export default function MCPLogsPage() {
 			) : showEmptyState ? (
 				<MCPEmptyState error={displayError} />
 			) : (
-				<div className="no-padding-parent no-border-parent bg-background flex h-[calc(100vh_-_16px)] w-full gap-3">
-					{/* Sidebar Filters */}
+				<div className="no-padding-parent no-border-parent bg-background flex h-[calc(100vh_-_16px)] w-full flex-col gap-2 md:flex-row md:gap-3">
+					{/* Sidebar Filters — desktop: inline left rail. mobile: rendered as trigger + drawer. */}
 					<MCPFilterSidebar filters={filters} onFiltersChange={setFilters} />
 
 					{/* Main Content */}

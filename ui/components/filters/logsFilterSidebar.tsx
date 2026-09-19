@@ -3,13 +3,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scrollArea";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TruncatedLabel } from "@/components/ui/truncatedLabel";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { RequestTypeLabels, RequestTypes, RoutingEngineUsedLabels, Statuses } from "@/lib/constants/logs";
 import { useGetAvailableFilterDataQuery, useGetProvidersQuery } from "@/lib/store";
 import type { LogFilters } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
-import { ChevronDown, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, Filter as FilterIcon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search } from "lucide-react";
 import { Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -26,7 +28,9 @@ interface LogsSidebarProps {
 
 export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps) {
 	const { t } = useTranslation("logs");
+	const isMobile = useIsMobile();
 	const [collapsed, setCollapsed] = useState(false);
+	const [mobileOpen, setMobileOpen] = useState(false);
 
 	// Load persisted collapsed state on mount
 	useEffect(() => {
@@ -82,6 +86,88 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 	const showFiltersLabel = t("filterSidebar.showFilters");
 	const hideFiltersLabel = t("filterSidebar.hideFilters");
 
+	// Reused filter body — same content for desktop panel and mobile drawer
+	const filterBody = (
+		<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
+			{/* Header */}
+			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
+				<span className="text-sm font-semibold">{t("filterSidebar.title")}</span>
+				<div className="flex items-center gap-1">
+					{activeFilterCount > 0 && (
+						<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
+							<RotateCcw className="size-3" />
+							{t("filterSidebar.reset")}
+						</Button>
+					)}
+					{!isMobile && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7"
+							onClick={toggleCollapsed}
+							title={hideFiltersLabel}
+							aria-label={hideFiltersLabel}
+						>
+							<PanelLeftClose className="size-4" />
+						</Button>
+					)}
+				</div>
+			</div>
+
+			<ScrollArea className="flex flex-1 overflow-y-auto p-2 pb-0" viewportClassName="no-table">
+				<div className="flex grow flex-col gap-1">
+					{/* First 2 open by default */}
+					<StatusFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
+					<ModelsFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
+					{/* Rest closed unless they have active filters */}
+					<SelectedKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<VirtualKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<ProvidersFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<AppFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<TypeFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<AliasesFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<RoutingEnginesFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<RoutingRulesFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<LocalCachingFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<SessionFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<StopReasonFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<MetadataFilters filters={filters} onFiltersChange={onFiltersChange} />
+				</div>
+			</ScrollArea>
+		</div>
+	);
+
+	// Mobile: a small inline "Filters" trigger pill (rendered at the sidebar's
+	// normal slot) plus a left-side drawer. The pill mirrors the active-filter
+	// count badge so the user can see at a glance whether any filters are on.
+	if (isMobile) {
+		return (
+			<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+				<Button
+					variant="outline"
+					size="sm"
+					className="text-muted-foreground h-7 gap-1.5 px-2 text-xs"
+					onClick={() => setMobileOpen(true)}
+					data-testid="logs-filter-trigger"
+					aria-label={showFiltersLabel}
+				>
+					<FilterIcon className="size-3.5" />
+					{t("filterSidebar.title")}
+					{activeFilterCount > 0 && (
+						<span className="bg-primary/10 text-primary flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums">
+							{activeFilterCount}
+						</span>
+					)}
+				</Button>
+				<SheetContent side="left" className="bg-card w-80 max-w-[90vw] gap-0 p-0" data-testid="logs-filter-sheet">
+					<SheetTitle className="sr-only">{t("filterSidebar.title")}</SheetTitle>
+					<SheetDescription className="sr-only">{t("filterSidebar.title")}</SheetDescription>
+					{filterBody}
+				</SheetContent>
+			</Sheet>
+		);
+	}
+
 	return (
 		<div className="flex h-full shrink-0">
 			{/* Collapsed rail — always mounted so the button is clickable even when expanded */}
@@ -102,54 +188,7 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 			</button>
 
 			{/* Expanded panel — width transitions between 0 and 256px */}
-			<div className={`overflow-hidden transition-[width] duration-300 ease-in-out ${collapsed ? "w-0" : "w-64"}`}>
-				<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
-					{/* Header */}
-					<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
-						<span className="text-sm font-semibold">{t("filterSidebar.title")}</span>
-						<div className="flex items-center gap-1">
-							{activeFilterCount > 0 && (
-								<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
-									<RotateCcw className="size-3" />
-									{t("filterSidebar.reset")}
-								</Button>
-							)}
-							<Button
-								variant="ghost"
-								size="icon"
-								className="size-7"
-								onClick={toggleCollapsed}
-								title={hideFiltersLabel}
-								aria-label={hideFiltersLabel}
-							>
-								<PanelLeftClose className="size-4" />
-							</Button>
-						</div>
-					</div>
-
-					{/* Scrollable filter sections */}
-					<ScrollArea className="flex flex-1 overflow-y-auto p-2 pb-0" viewportClassName="no-table">
-						<div className="flex grow flex-col gap-1">
-							{/* First 2 open by default */}
-							<StatusFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
-							<ModelsFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
-							{/* Rest closed unless they have active filters */}
-							<SelectedKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<VirtualKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<ProvidersFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<AppFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<TypeFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<AliasesFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<RoutingEnginesFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<RoutingRulesFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<LocalCachingFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<SessionFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<StopReasonFilter filters={filters} onFiltersChange={onFiltersChange} />
-							<MetadataFilters filters={filters} onFiltersChange={onFiltersChange} />
-						</div>
-					</ScrollArea>
-				</div>
-			</div>
+			<div className={`overflow-hidden transition-[width] duration-300 ease-in-out ${collapsed ? "w-0" : "w-64"}`}>{filterBody}</div>
 		</div>
 	);
 }

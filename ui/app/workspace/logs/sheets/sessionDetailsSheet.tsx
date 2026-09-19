@@ -250,7 +250,7 @@ export function SessionDetailsSheet({
 				</div>
 
 				<div className="min-h-0 flex-1 overflow-hidden rounded-sm border">
-					<Table containerClassName="h-full overflow-auto">
+					<Table containerClassName="touch-pan-x h-full overflow-auto">
 						<TableHeader className="sticky top-0 z-10 bg-[#f9f9f9] dark:bg-[#27272a]">
 							<TableRow>
 								<TableHead className="w-2"></TableHead>

@@ -3,13 +3,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scrollArea";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TruncatedLabel } from "@/components/ui/truncatedLabel";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Statuses } from "@/lib/constants/logs";
 import { useGetMCPLogsFilterDataQuery } from "@/lib/store";
 import type { MCPToolLogFilters } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
-import { ChevronDown, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, Filter as FilterIcon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search } from "lucide-react";
 import { Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const COLLAPSE_STORAGE_KEY = "mcp-filter-sidebar-collapsed";
@@ -24,7 +26,9 @@ interface MCPFilterSidebarProps {
 }
 
 export function MCPFilterSidebar({ filters, onFiltersChange }: MCPFilterSidebarProps) {
+	const isMobile = useIsMobile();
 	const [collapsed, setCollapsed] = useState(false);
+	const [mobileOpen, setMobileOpen] = useState(false);
 
 	// Load persisted collapsed state on mount
 	useEffect(() => {
@@ -60,6 +64,69 @@ export function MCPFilterSidebar({ filters, onFiltersChange }: MCPFilterSidebarP
 		});
 	}, [filters.start_time, filters.end_time, onFiltersChange]);
 
+	const filterBody = (
+		<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
+			{/* Header */}
+			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
+				<span className="text-sm font-semibold">Filters</span>
+				<div className="flex items-center gap-1">
+					{activeFilterCount > 0 && (
+						<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
+							<RotateCcw className="size-3" />
+							Reset
+						</Button>
+					)}
+					{!isMobile && (
+						<Button variant="ghost" size="icon" className="size-7" onClick={toggleCollapsed} title="Hide filters" aria-label="Hide filters">
+							<PanelLeftClose className="size-4" />
+						</Button>
+					)}
+				</div>
+			</div>
+
+			<ScrollArea className="flex flex-1 overflow-y-auto p-2 pb-0" viewportClassName="no-table">
+				<div className="flex grow flex-col gap-1">
+					{/* First 2 open by default */}
+					<StatusFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
+					<ToolNamesFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
+					{/* Rest closed unless they have active filters */}
+					<ServersFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<AppFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<VirtualKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
+				</div>
+			</ScrollArea>
+		</div>
+	);
+
+	// Mobile: inline trigger pill + left-side drawer.
+	if (isMobile) {
+		return (
+			<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+				<Button
+					variant="outline"
+					size="sm"
+					className="text-muted-foreground h-7 gap-1.5 px-2 text-xs"
+					onClick={() => setMobileOpen(true)}
+					data-testid="mcp-filter-trigger"
+					aria-label="Show filters"
+				>
+					<FilterIcon className="size-3.5" />
+					Filters
+					{activeFilterCount > 0 && (
+						<span className="bg-primary/10 text-primary flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums">
+							{activeFilterCount}
+						</span>
+					)}
+				</Button>
+				<SheetContent side="left" className="bg-card w-80 max-w-[90vw] gap-0 p-0" data-testid="mcp-filter-sheet">
+					<SheetTitle className="sr-only">Filters</SheetTitle>
+					<SheetDescription className="sr-only">Filters</SheetDescription>
+					{filterBody}
+				</SheetContent>
+			</Sheet>
+		);
+	}
+
 	// Collapsed: thin rail with vertical "Filters" label — whole rail is clickable to expand
 	if (collapsed) {
 		return (
@@ -81,38 +148,7 @@ export function MCPFilterSidebar({ filters, onFiltersChange }: MCPFilterSidebarP
 		);
 	}
 
-	return (
-		<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
-			{/* Header */}
-			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
-				<span className="text-sm font-semibold">Filters</span>
-				<div className="flex items-center gap-1">
-					{activeFilterCount > 0 && (
-						<Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleReset}>
-							<RotateCcw className="size-3" />
-							Reset
-						</Button>
-					)}
-					<Button variant="ghost" size="icon" className="size-7" onClick={toggleCollapsed} title="Hide filters" aria-label="Hide filters">
-						<PanelLeftClose className="size-4" />
-					</Button>
-				</div>
-			</div>
-
-			{/* Scrollable filter sections */}
-			<ScrollArea className="flex flex-1 overflow-y-auto p-2 pb-0" viewportClassName="no-table">
-				<div className="flex grow flex-col gap-1">
-					{/* First 2 open by default */}
-					<StatusFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
-					<ToolNamesFilter filters={filters} onFiltersChange={onFiltersChange} defaultOpen />
-					{/* Rest closed unless they have active filters */}
-					<ServersFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<AppFilter filters={filters} onFiltersChange={onFiltersChange} />
-					<VirtualKeysFilter filters={filters} onFiltersChange={onFiltersChange} />
-				</div>
-			</ScrollArea>
-		</div>
-	);
+	return <>{filterBody}</>;
 }
 
 // ---------------------------------------------------------------------------

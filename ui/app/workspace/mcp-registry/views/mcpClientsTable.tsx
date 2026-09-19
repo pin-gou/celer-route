@@ -811,7 +811,11 @@ export default function MCPClientsTable({
 
 			<div className="flex grow flex-col overflow-hidden">
 				<div className="mb-2 grow overflow-hidden rounded-sm border">
-					<Table data-testid="mcp-clients-table" containerClassName="h-full overflow-auto" className="w-full min-w-[1516px] table-fixed">
+					<Table
+						data-testid="mcp-clients-table"
+						containerClassName="touch-pan-x h-full overflow-auto"
+						className="w-full min-w-[1516px] table-fixed"
+					>
 						<TableHeader className="bg-muted sticky top-0 z-20">
 							<TableRow>
 								<TableHead className="w-[260px] font-semibold">Name</TableHead>

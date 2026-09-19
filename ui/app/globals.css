@@ -9,6 +9,47 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Mobile adaptation — Phase 1
+ * iPhone notch + dynamic island reserve (top/bottom).
+ * Only the workspace content container applies them; outside chrome already handles its own. */
+.safe-area-top {
+	padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+.safe-area-bottom {
+	padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+/* Disable iOS double-tap-to-zoom on interactive controls while keeping
+ * pinch-zoom available at the page level. */
+button,
+a,
+[role="button"] {
+	touch-action: manipulation;
+}
+
+/* Custom breakpoint to match useIsMobile (640px) — anything below is "phone",
+ * 640+ is "tablet/desktop" (the existing `md:` 768px still applies above that). */
+@custom-variant phone (@media (min-width: 640px));
+
+/* Mobile table scroll — preserve iOS momentum on horizontally scrolling
+ * tables (virtual-keys / mcp-clients use min-w-[~1500px]). On touch
+ * devices, hide the scrollbar so the wide table feels like a swipe
+ * gesture rather than a desktop-style scrollbar. */
+.touch-pan-x {
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: contain;
+}
+
+@media (hover: none) and (pointer: coarse) {
+	.touch-pan-x::-webkit-scrollbar {
+		display: none;
+	}
+	.touch-pan-x {
+		scrollbar-width: none;
+	}
+}
+
 /* ─── Local Geist fonts ───────────────────────────────────────────────────
  * Variable woff2 files self-hosted from public/static/fonts/.
  * Self-hosted variable woff2 files, replaces @fontsource-variable/geist.

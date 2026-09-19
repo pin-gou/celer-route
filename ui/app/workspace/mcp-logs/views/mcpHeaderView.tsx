@@ -75,7 +75,7 @@ export function McpHeaderView({
 	);
 
 	return (
-		<div className="flex grow items-center justify-between space-x-2">
+		<div className="flex grow flex-wrap items-center gap-x-2 gap-y-1.5">
 			<Button
 				variant="outline"
 				size="sm"

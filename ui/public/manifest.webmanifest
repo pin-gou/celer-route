@@ -1,0 +1,25 @@
+{
+	"name": "celer-route",
+	"short_name": "celer-route",
+	"description": "High-performance AI gateway for unified LLM provider access.",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "portrait",
+	"background_color": "#fafafa",
+	"theme_color": "#6366F1",
+	"icons": [
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any"
+		},
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "maskable"
+		}
+	]
+}

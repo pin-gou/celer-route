@@ -877,8 +877,8 @@ export default function LogsPage() {
 			{showEmptyState ? (
 				<EmptyState error={error ?? (logsError ? getErrorMessage(logsError as Parameters<typeof getErrorMessage>[0]) : null)} />
 			) : (
-				<div className="bg-background flex h-full w-full grow gap-3">
-					{/* Sidebar Filters */}
+				<div className="bg-background flex h-full w-full grow flex-col gap-2 md:flex-row md:gap-3">
+					{/* Sidebar Filters — desktop: inline left rail. mobile: rendered as trigger + drawer. */}
 					<LogsFilterSidebar filters={filters} onFiltersChange={setFilters} />
 
 					{/* Main Content */}

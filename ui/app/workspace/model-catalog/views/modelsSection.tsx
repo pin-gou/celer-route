@@ -145,7 +145,7 @@ export function ModelsSection() {
 				</div>
 
 				<div className="mb-2 min-h-0 grow overflow-hidden rounded-sm border" data-testid="model-catalog-attributes-table">
-					<Table containerClassName="h-full overflow-y-auto overflow-x-hidden" className="table-fixed">
+					<Table containerClassName="touch-pan-x h-full overflow-y-auto overflow-x-auto" className="min-w-[760px] table-fixed">
 						<TableHeader className="bg-muted sticky top-0 z-20">
 							<TableRow className="hover:bg-transparent">
 								<TableHead className="w-[116px] font-medium">{t("table.provider")}</TableHead>

@@ -3,16 +3,19 @@ import NotAvailableBanner from "@/components/notAvailableBanner";
 import OnboardingWidget from "@/components/onboardingWidget";
 import ProgressProvider from "@/components/progressBar";
 import Sidebar from "@/components/sidebar";
+import { Button } from "@/components/ui/button";
+import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/themeProvider";
 import TrialExpiryBanner from "@/components/trialExpiryBanner";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { useStoreSync } from "@/hooks/useStoreSync";
 import { WebSocketProvider } from "@/hooks/useWebSocket";
 import { getErrorMessage, ReduxProvider, useGetCoreConfigQuery, useIsAuthEnabledQuery } from "@/lib/store";
 import { BifrostConfig } from "@/lib/types/config";
 import { RbacProvider, useRbacContext } from "@/lib/rbac";
 import { useLocation, useMatches } from "@tanstack/react-router";
+import { Menu } from "lucide-react";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { CookiesProvider } from "react-cookie";
@@ -33,6 +36,29 @@ const DevProfiler = () => (
 function StoreSyncInitializer() {
 	useStoreSync();
 	return null;
+}
+
+// Mobile-only hamburger trigger — sits at the top of the workspace content
+// on phones so the user can open the Sheet-mode sidebar (which is hidden by
+// design on narrow viewports, see ui/components/ui/sidebar.tsx). Uses
+// useSidebar() so it shares state with the sidebar's Sheet drawer.
+function MobileSidebarTrigger() {
+	const isMobile = useIsMobile();
+	const { toggleSidebar } = useSidebar();
+	if (!isMobile) return null;
+	return (
+		<Button
+			type="button"
+			variant="ghost"
+			size="icon"
+			className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent -ml-1 size-8"
+			onClick={toggleSidebar}
+			data-testid="mobile-sidebar-trigger"
+			aria-label="Open navigation menu"
+		>
+			<Menu className="size-5" />
+		</Button>
+	);
 }
 
 function AppContent({ children }: { children: React.ReactNode }) {
@@ -135,9 +161,14 @@ function AppContent({ children }: { children: React.ReactNode }) {
 				<StoreSyncInitializer />
 				<SidebarProvider>
 					<Sidebar />
-					<div className="dark:bg-card custom-scrollbar content-container my-[0.5rem] mr-[0.5rem] h-[calc(100dvh-1rem)] w-full min-w-xl overflow-auto rounded-md border border-gray-200 bg-white px-10 dark:border-zinc-800">
-						<TrialExpiryBanner />
-						<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 flex-col overflow-y-hidden p-4">
+					<div className="dark:bg-card custom-scrollbar content-container safe-area-top safe-area-bottom mx-0 my-[0.5rem] h-[calc(100dvh-1rem)] w-full min-w-0 overflow-x-hidden rounded-md border border-gray-200 bg-white md:mx-0 md:mr-[0.5rem] md:min-w-xl md:overflow-auto dark:border-zinc-800">
+						<div className="flex items-center gap-1 px-3 pt-1 md:hidden">
+							<MobileSidebarTrigger />
+						</div>
+						<div className="px-4 md:px-10">
+							<TrialExpiryBanner />
+						</div>
+						<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 flex-col overflow-y-hidden p-3 md:p-4">
 							{isLoading ? <FullPageLoader /> : <FullPage config={bifrostConfig}>{children}</FullPage>}
 						</main>
 						{bifrostConfig?.is_db_connected && !suppressOnboardingWidget && <OnboardingWidget />}
@@ -154,8 +185,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
 // like the MCP per-user OAuth auth page.
 function MinimalShell({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="dark:bg-card custom-scrollbar content-container my-[0.5rem] h-[calc(100dvh-1rem)] w-full overflow-auto rounded-md border border-gray-200 bg-white px-10 dark:border-zinc-800">
-			<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 flex-col overflow-y-hidden p-4">
+		<div className="dark:bg-card custom-scrollbar content-container safe-area-top safe-area-bottom my-[0.5rem] h-[calc(100dvh-1rem)] w-full overflow-auto rounded-md border border-gray-200 bg-white px-4 md:px-10 dark:border-zinc-800">
+			<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 flex-col overflow-y-hidden p-3 md:p-4">
 				{children}
 			</main>
 		</div>
