@@ -478,6 +478,7 @@ _docker-push-check-version: # Internal: refuse docker-push without an explicit V
 
 DOCKERFILE ?= transports/Dockerfile
 USE_LOCAL_MODULES_FLAG := $(if $(LOCAL),1,0)
+DOCKER_GOPROXY ?= https://proxy.golang.org,direct
 
 docker-image: _docker-image-setup-builder ## Build Docker image. LOCAL=1: use go.work + local sources (pre-release). PLATFORMS=a,b: multi-arch -> local manifest list. VERSION=... sets binary version + image tag (e.g. VERSION=v0.9.0 = tag :v0.9.0, binary version v0.9.0)
 	@$(ECHO) "$(GREEN)Building Docker image (VERSION='$(VERSION)': tag=$(VERSION_TAG), arg=$(VERSION_ARG), PLATFORMS='$(PLATFORMS)', USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG))...$(NC)"
@@ -487,6 +488,7 @@ docker-image: _docker-image-setup-builder ## Build Docker image. LOCAL=1: use go
 			-f $(DOCKERFILE) --load \
 			--build-arg VERSION=$(VERSION_ARG) \
 			--build-arg USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG) \
+			--build-arg GOPROXY=$(DOCKER_GOPROXY) \
 			$(if $(NO_CACHE_UI),--no-cache-filter=ui-builder) \
 			-t $(DOCKER_IMAGE) -t $(DOCKER_IMAGE):$(VERSION_TAG) -t $(DOCKER_IMAGE):latest . ; \
 	else \
@@ -514,6 +516,7 @@ docker-image-multiarch: _docker-push-check-version _docker-image-setup-builder #
 		--provenance=false \
 		--build-arg VERSION=$(VERSION_ARG) \
 		--build-arg USE_LOCAL_MODULES=$(USE_LOCAL_MODULES_FLAG) \
+		--build-arg GOPROXY=$(DOCKER_GOPROXY) \
 		-t $(DOCKER_IMAGE):$(VERSION_TAG) \
 		-t $(DOCKER_IMAGE):latest \
 		.
@@ -528,6 +531,7 @@ _docker-image-build: # Internal: buildx multi-platform --output type=oci (tar) -
 		-f '$(DOCKERFILE)' --platform $(PLATFORMS) \
 		--build-arg VERSION='$(VERSION_ARG)' \
 		--build-arg USE_LOCAL_MODULES='$(USE_LOCAL_MODULES_FLAG)' \
+		--build-arg GOPROXY='$(DOCKER_GOPROXY)' \
 		$(if $(NO_CACHE_UI),--no-cache-filter=ui-builder) \
 		-t '$(DOCKER_IMAGE):$(VERSION_TAG)' \
 		-t '$(DOCKER_IMAGE):latest' \
