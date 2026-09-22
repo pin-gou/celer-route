@@ -6574,6 +6574,171 @@ func (s *RDBConfigStore) DeleteTeamMember(ctx context.Context, teamID, userID st
 	return s.DB().WithContext(ctx).Where("team_id = ? AND user_id = ?", teamID, userID).Delete(&tables.TableTeamMember{}).Error
 }
 
+// CreateInvitation inserts a new invitations row. The BeforeSave hook
+// normalizes the email and enforces role/status enums, so callers just
+// populate the read/write fields and pass the struct in.
+func (s *RDBConfigStore) CreateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return s.DB().WithContext(ctx).Create(inv).Error
+}
+
+// GetInvitationByToken fetches the unique row matching the supplied
+// token. Returns (nil, nil) when not found so callers can convert that
+// to a 404 without a sentinel-error dance.
+func (s *RDBConfigStore) GetInvitationByToken(ctx context.Context, token string) (*tables.TableInvitation, error) {
+	var inv tables.TableInvitation
+	err := s.DB().WithContext(ctx).First(&inv, "token = ?", token).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &inv, nil
+}
+
+// GetInvitationByID is the admin-side lookup (the token lookup is the
+// public / accept path; admin views fetch rows by primary key for the
+// "show all invitations" panel).
+func (s *RDBConfigStore) GetInvitationByID(ctx context.Context, id string) (*tables.TableInvitation, error) {
+	var inv tables.TableInvitation
+	err := s.DB().WithContext(ctx).First(&inv, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &inv, nil
+}
+
+// ListInvitations paginates invitations for a team (or, when teamID is
+// empty, every invitation across teams — admin-only call). status can be
+// empty to mean "any"; the limit/offset are clamp-guarded at the handler
+// layer so this method is a thin passthrough.
+func (s *RDBConfigStore) ListInvitations(ctx context.Context, teamID, status string, limit, offset int) ([]tables.TableInvitation, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableInvitation{})
+	if teamID != "" {
+		q = q.Where("team_id = ?", teamID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []tables.TableInvitation
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// UpdateInvitation writes the row back; the BeforeSave hook re-validates
+// any field the caller changed (notably status transitions on accept /
+// revoke). The token is treated as immutable after creation — handlers
+// that want to "rotate" an invitation should create a fresh row.
+func (s *RDBConfigStore) UpdateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return s.DB().WithContext(ctx).Save(inv).Error
+}
+
+// CreateKeyRequest inserts a new key_requests row. Status defaults to
+// 'pending' on insert; the BeforeSave hook enforces the kind enum.
+func (s *RDBConfigStore) CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return s.DB().WithContext(ctx).Create(req).Error
+}
+
+// GetKeyRequestByID fetches a single row. (nil, nil) on missing.
+func (s *RDBConfigStore) GetKeyRequestByID(ctx context.Context, id string) (*tables.TableKeyRequest, error) {
+	var req tables.TableKeyRequest
+	err := s.DB().WithContext(ctx).First(&req, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &req, nil
+}
+
+// ListKeyRequests paginates key_requests. The empty-string convention is
+// the same as ListInvitations: filters with empty values are skipped, so
+// admin/team-owner UI can render "all pending" with status='pending' and
+// the rest of the filters empty.
+func (s *RDBConfigStore) ListKeyRequests(ctx context.Context, status, userID, teamID string, limit, offset int) ([]tables.TableKeyRequest, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableKeyRequest{})
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if userID != "" {
+		q = q.Where("user_id = ?", userID)
+	}
+	if teamID != "" {
+		q = q.Where("team_id = ?", teamID)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []tables.TableKeyRequest
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// UpdateKeyRequest persists the row back. Approval flips Status + writes
+// the approver + decision_note; the matching virtual_key_id back-fill is
+// optional and only relevant for add_vk / extend_quota.
+func (s *RDBConfigStore) UpdateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return s.DB().WithContext(ctx).Save(req).Error
+}
+
+// DisableUserVKeys flips every active VK owned by the given user to
+// is_active=false. Returns the list of affected VK ids so the handler
+// can echo it back to the admin UI ("these VKs were disabled"). Does
+// NOT touch provider keys — provider keys stay under admin centralized
+// control, per the boundary spelled out in
+// temp/team/01-identity/data-model.md §5.1.
+func (s *RDBConfigStore) DisableUserVKeys(ctx context.Context, userID string) ([]string, error) {
+	var ids []string
+	if err := s.DB().WithContext(ctx).
+		Model(&tables.TableVirtualKey{}).
+		Where("user_id = ?", userID).
+		Pluck("id", &ids).Error; err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return ids, nil
+	}
+	if err := s.DB().WithContext(ctx).
+		Model(&tables.TableVirtualKey{}).
+		Where("user_id = ?", userID).
+		Update("is_active", false).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// ListVirtualKeysByUserID returns lightweight VK summaries (no provider
+// config / no key associations) for a single user, paginated. Used by
+// GET /api/governance/users/:id to render "VKs this user owns" without
+// ever surfacing the provider key details — the boundary from
+// data-model.md §5.1 says even admin sees provider keys only through
+// /api/providers/{provider}/keys, not through the user-detail view.
+func (s *RDBConfigStore) ListVirtualKeysByUserID(ctx context.Context, userID string, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableVirtualKey{}).Where("user_id = ?", userID)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []tables.TableVirtualKey
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
 // CreateTempToken inserts a new temp_tokens row. The plaintext token must be
 // set on the struct; the BeforeSave hook populates token_hash and (when
 // encryption is enabled) encrypts the plaintext in place. The optional tx

@@ -480,6 +480,35 @@ type ConfigStore interface {
 	UpdateTeamMember(ctx context.Context, member *tables.TableTeamMember) error
 	DeleteTeamMember(ctx context.Context, teamID, userID string) error
 
+	// Invitation CRUD (Phase 2). The token is the random half of the link;
+	// admin generates it, invitee accepts it. ListInvitations is
+	// paginated by status so the admin UI can render "pending" separately
+	// from "accepted / expired / revoked".
+	CreateInvitation(ctx context.Context, inv *tables.TableInvitation) error
+	GetInvitationByToken(ctx context.Context, token string) (*tables.TableInvitation, error)
+	GetInvitationByID(ctx context.Context, id string) (*tables.TableInvitation, error)
+	ListInvitations(ctx context.Context, teamID, status string, limit, offset int) ([]tables.TableInvitation, int64, error)
+	UpdateInvitation(ctx context.Context, inv *tables.TableInvitation) error
+
+	// KeyRequest CRUD (Phase 2). Approval happens at the handler layer
+	// where admin manually creates the VK; the row here is just the audit
+	// trail that names the resulting virtual_key_id.
+	CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error
+	GetKeyRequestByID(ctx context.Context, id string) (*tables.TableKeyRequest, error)
+	ListKeyRequests(ctx context.Context, status, userID, teamID string, limit, offset int) ([]tables.TableKeyRequest, int64, error)
+	UpdateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error
+
+	// DisableUserVKeys flips every active VK owned by the given user to
+	// is_active=false (used by the offboarding flow in flows.md §4). It
+	// does NOT touch provider keys — provider keys remain under admin
+	// centralized control, matching the boundary in §5.1.
+	DisableUserVKeys(ctx context.Context, userID string) ([]string, error)
+	// ListVirtualKeysByUserID returns the (lightweight) VK summary for a
+	// single user — used by GET /api/governance/users/:id so the admin
+	// UI can render "VKs this user owns" without exposing VK secrets or
+	// the provider key details they reference.
+	ListVirtualKeysByUserID(ctx context.Context, userID string, limit, offset int) ([]tables.TableVirtualKey, int64, error)
+
 	// Temp token CRUD
 	CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error
 	GetTempTokenByHash(ctx context.Context, tokenHash string) (*tables.TempToken, error)

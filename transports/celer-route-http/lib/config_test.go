@@ -1297,6 +1297,53 @@ func (m *MockConfigStore) DeleteTeamMember(ctx context.Context, teamID, userID s
 	return nil
 }
 
+// Invitation / KeyRequest / Offboarding stubs (Phase 2). All return
+// benign defaults — the tests that exercise the real paths live in
+// framework/configstore/rdb_phase2_test.go.
+func (m *MockConfigStore) CreateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return nil
+}
+
+func (m *MockConfigStore) GetInvitationByToken(ctx context.Context, token string) (*tables.TableInvitation, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetInvitationByID(ctx context.Context, id string) (*tables.TableInvitation, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListInvitations(ctx context.Context, teamID, status string, limit, offset int) ([]tables.TableInvitation, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) UpdateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return nil
+}
+
+func (m *MockConfigStore) CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return nil
+}
+
+func (m *MockConfigStore) GetKeyRequestByID(ctx context.Context, id string) (*tables.TableKeyRequest, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListKeyRequests(ctx context.Context, status, userID, teamID string, limit, offset int) ([]tables.TableKeyRequest, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) UpdateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return nil
+}
+
+func (m *MockConfigStore) DisableUserVKeys(ctx context.Context, userID string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListVirtualKeysByUserID(ctx context.Context, userID string, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	return nil, 0, nil
+}
+
 // Temp token
 func (m *MockConfigStore) CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error {
 	return nil

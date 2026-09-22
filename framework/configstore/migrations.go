@@ -477,6 +477,8 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_model_pricing_is_custom_column"}, run: migrationAddModelPricingIsCustomColumn},
 	{IDs: []string{"add_users_and_team_members_tables"}, run: migrationAddUsersAndTeamMembersTables},
 	{IDs: []string{"add_virtual_key_user_id_column"}, run: migrationAddVirtualKeyUserIDColumn},
+	{IDs: []string{"add_invitations_table"}, run: migrationAddInvitationsTable},
+	{IDs: []string{"add_key_requests_table"}, run: migrationAddKeyRequestsTable},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12243,6 +12245,82 @@ func migrationAddVirtualKeyUserIDColumn(ctx context.Context, db *gorm.DB, logger
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running add_virtual_key_user_id_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddInvitationsTable creates the invitations table for the
+// team-member invite flow. token is unique-indexed because the accept
+// endpoint looks up invitations by token; team_id + status are indexed
+// to keep the admin "pending invitations" list cheap.
+func migrationAddInvitationsTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_invitations_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableInvitation{}) {
+				logger.Info("[configstore] %s: creating table TableInvitation", migrationName)
+				if err := migrator.CreateTable(&tables.TableInvitation{}); err != nil {
+					return fmt.Errorf("failed to create invitations table: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TableInvitation{}) {
+				if err := migrator.DropTable(&tables.TableInvitation{}); err != nil {
+					return fmt.Errorf("failed to drop invitations table: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_invitations_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddKeyRequestsTable creates the key_requests table for the
+// member self-service path (join_team / extend_quota / add_vk). user_id,
+// team_id, status, and created_at are indexed so the pending list stays
+// fast as the table grows.
+func migrationAddKeyRequestsTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_key_requests_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableKeyRequest{}) {
+				logger.Info("[configstore] %s: creating table TableKeyRequest", migrationName)
+				if err := migrator.CreateTable(&tables.TableKeyRequest{}); err != nil {
+					return fmt.Errorf("failed to create key_requests table: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TableKeyRequest{}) {
+				if err := migrator.DropTable(&tables.TableKeyRequest{}); err != nil {
+					return fmt.Errorf("failed to drop key_requests table: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_key_requests_table migration: %s", err.Error())
 	}
 	return nil
 }

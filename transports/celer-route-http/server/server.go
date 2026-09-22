@@ -2611,6 +2611,24 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		// route and vice versa).
 		memberSessionHandler := handlers.NewMemberSessionHandler(s.Config.ConfigStore)
 		memberSessionHandler.RegisterRoutes(s.Router, s.MemberAuthMiddleware.APIMiddleware())
+
+		// Phase 2 — invitations (admin CRUD + public accept), key
+		// requests (member submit + admin decide), user management
+		// (admin CRUD + offboarding), member portal (member self-
+		// service). All four share the same config store but land on
+		// different middleware chains so a member cookie cannot satisfy
+		// an admin route.
+		invitationHandler := handlers.NewInvitationHandler(s.Config.ConfigStore)
+		invitationHandler.RegisterRoutes(s.Router, middlewares...)
+
+		keyRequestHandler := handlers.NewKeyRequestHandler(s.Config.ConfigStore)
+		keyRequestHandler.RegisterRoutes(s.Router, middlewares, s.MemberAuthMiddleware.APIMiddleware())
+
+		userManagementHandler := handlers.NewUserManagementHandler(s.Config.ConfigStore)
+		userManagementHandler.RegisterRoutes(s.Router, middlewares...)
+
+		memberPortalHandler := handlers.NewMemberPortalHandler(s.Config.ConfigStore)
+		memberPortalHandler.RegisterRoutes(s.Router, s.MemberAuthMiddleware.APIMiddleware())
 	}
 	if promptsHandler != nil {
 		promptsHandler.RegisterRoutes(s.Router, middlewares...)
