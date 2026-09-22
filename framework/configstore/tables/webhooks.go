@@ -25,12 +25,33 @@ const (
 	WebhookEventAsyncJobCompleted WebhookEvent = "async_job.completed"
 	// WebhookEventAsyncJobFailed fires when an async inference job reaches a terminal failure.
 	WebhookEventAsyncJobFailed WebhookEvent = "async_job.failed"
+	// WebhookEventAlertBudgetThreshold fires when an alert rule with metric
+	// budget_usage_percent or budget_usage_amount crosses its threshold
+	// (soft threshold; the request still goes through).
+	WebhookEventAlertBudgetThreshold WebhookEvent = "alert.budget_threshold"
+	// WebhookEventAlertSpendRate fires when the rolling spend-rate projection
+	// derived from budget_snapshots crosses a configured threshold.
+	WebhookEventAlertSpendRate WebhookEvent = "alert.spend_rate"
+	// WebhookEventAlertErrorRate fires when the rolling error-rate window
+	// (5-minute default) crosses a configured threshold. The metric is
+	// declared in P0 so admin tooling can wire the rule ahead of the
+	// telemetry roll-up; the error_rate sample source itself lives in the
+	// existing logs-dimension pipeline.
+	WebhookEventAlertErrorRate WebhookEvent = "alert.error_rate"
+	// WebhookEventBudgetExceeded fires when a request is hard-rejected at 402
+	// for hitting 100% budget usage. It is emitted asynchronously by the
+	// alert_notification_job so the 402 response is never gated on it.
+	WebhookEventBudgetExceeded WebhookEvent = "budget.exceeded"
 )
 
 // WebhookEvents lists every supported webhook event.
 var WebhookEvents = []WebhookEvent{
 	WebhookEventAsyncJobCompleted,
 	WebhookEventAsyncJobFailed,
+	WebhookEventAlertBudgetThreshold,
+	WebhookEventAlertSpendRate,
+	WebhookEventAlertErrorRate,
+	WebhookEventBudgetExceeded,
 }
 
 // IsValid reports whether e is a supported webhook event.
@@ -298,11 +319,19 @@ func (w *TableWebhookEndpoint) AfterFind(tx *gorm.DB) error {
 // delivery reaches a terminal outcome — so the table's steady-state size is
 // the number of concurrent in-flight deliveries. The row id doubles as the
 // delivery's stable `webhook-id` header value across attempts and redeliveries.
+//
+// PayloadJSON is set for non-async-job events (alert.budget_threshold,
+// alert.spend_rate, alert.error_rate, budget.exceeded) and carries the
+// pre-rendered delivery body. The dispatcher reads it as the wire payload
+// directly; for async_job.* rows it is empty and the dispatcher looks the
+// async job up by AsyncJobID. Keeping the payload inline avoids a second
+// store round-trip on the alert hot path.
 type TableWebhookJob struct {
 	ID         string       `gorm:"type:varchar(36);primaryKey" json:"id"`
 	EndpointID string       `gorm:"type:varchar(36);not null;index" json:"endpoint_id"`
 	AsyncJobID string       `gorm:"type:varchar(255);not null" json:"async_job_id"`
 	Event      WebhookEvent `gorm:"type:varchar(255);not null" json:"event"`
+	PayloadJSON string      `gorm:"type:text" json:"-"`
 
 	AttemptCount  int       `gorm:"not null;default:0" json:"attempt_count"`
 	NextAttemptAt time.Time `gorm:"not null;index" json:"next_attempt_at"`

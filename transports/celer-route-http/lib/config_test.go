@@ -2506,6 +2506,56 @@ func (m *MockConfigStore) RenamePromptSession(ctx context.Context, id uint, name
 }
 func (m *MockConfigStore) DeletePromptSession(ctx context.Context, id uint) error { return nil }
 
+// Phase 3 (02-alerting) stubs — the mock satisfies the ConfigStore
+// interface for tests that do not exercise alerting. Returning nil /
+// empty keeps the surface zero-cost while letting the interface compile.
+func (m *MockConfigStore) CreateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error {
+	return nil
+}
+func (m *MockConfigStore) GetAlertRuleByID(ctx context.Context, id string) (*tables.TableAlertRule, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) ListAlertRules(ctx context.Context, params configstore.AlertRulesQueryParams) ([]tables.TableAlertRule, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockConfigStore) ListAlertRulesForScope(ctx context.Context, scopeType, scopeID string) ([]tables.TableAlertRule, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) UpdateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error {
+	return nil
+}
+func (m *MockConfigStore) DeleteAlertRule(ctx context.Context, id string) error { return nil }
+func (m *MockConfigStore) CreateAlertEvent(ctx context.Context, event *tables.TableAlertEvent) error {
+	return nil
+}
+func (m *MockConfigStore) GetAlertEventByID(ctx context.Context, id string) (*tables.TableAlertEvent, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) ListAlertEvents(ctx context.Context, params configstore.AlertEventsQueryParams) ([]tables.TableAlertEvent, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockConfigStore) LatestAlertEventForRule(ctx context.Context, ruleID, scopeType, scopeID string, since time.Time) (*tables.TableAlertEvent, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) UpdateAlertEventDeliveryStatus(ctx context.Context, id, status string) error {
+	return nil
+}
+func (m *MockConfigStore) CreateBudgetSnapshot(ctx context.Context, snap *tables.TableBudgetSnapshot) error {
+	return nil
+}
+func (m *MockConfigStore) ListBudgetSnapshotsForBudget(ctx context.Context, budgetID string, limit int) ([]tables.TableBudgetSnapshot, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) LatestBudgetSnapshot(ctx context.Context, budgetID string) (*tables.TableBudgetSnapshot, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) AllBudgetIDs(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) GetBudgetByID(ctx context.Context, id string) (*tables.TableBudget, error) {
+	return nil, nil
+}
+
 // Helper functions for tests
 
 // createTempDir creates a temporary directory for test files

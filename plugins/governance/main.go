@@ -72,6 +72,11 @@ type GovernancePlugin struct {
 	tracker  *UsageTracker   // Business logic owner (updates, resets, persistence)
 	engine   *RoutingEngine  // Routing engine for dynamic routing
 
+	// AlertEvaluator (Phase 3 / 02-alerting) is optional and set by the
+	// transport layer once the configstore + dispatcher are wired. nil is
+	// a legitimate state for callers that have not opted in to alerting.
+	alertEvaluator *AlertEvaluator
+
 	// Dependencies
 	configStore  configstore.ConfigStore
 	modelCatalog *modelcatalog.ModelCatalog
@@ -1065,6 +1070,14 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		}
 	}
 
+	// Alert loop: soft-threshold rules are evaluated inline (5-15ms cost
+	// budget; failure logs but never blocks the request). The hard-block
+	// case fires its own async budget.exceeded emission below. The
+	// evaluator is nil when alert wiring is disabled.
+	if p.alertEvaluator != nil {
+		p.alertEvaluator.EvaluateSoftThresholds(ctx, result)
+	}
+
 	// Handle decision
 	switch result.Decision {
 	case DecisionAllow:
@@ -1096,6 +1109,21 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		}
 
 	case DecisionBudgetExceeded:
+		// Hard block: emit budget.exceeded asynchronously so the 402
+		// response is not gated on alert I/O. The relevant budget is in
+		// result.BudgetInfo; we check CurrentUsage >= EffectiveMaxLimit so
+		// the same evaluator that caught the request also fires the alert.
+		// EnqueueBudgetExceeded is fire-and-forget so latency stays unaffected.
+		if p.alertEvaluator != nil {
+			for _, b := range result.BudgetInfo {
+				if b == nil {
+					continue
+				}
+				if b.CurrentUsage >= b.EffectiveMaxLimit() && b.EffectiveMaxLimit() > 0 {
+					p.alertEvaluator.EnqueueBudgetExceeded(ctx, b)
+				}
+			}
+		}
 		return result, &schemas.BifrostError{
 			Type:       new(string(result.Decision)),
 			StatusCode: new(402),
@@ -1709,6 +1737,14 @@ func (p *GovernancePlugin) postHookWorker(result *schemas.BifrostResponse, bifro
 // GetGovernanceStore returns the governance store
 func (p *GovernancePlugin) GetGovernanceStore() GovernanceStore {
 	return p.store
+}
+
+// SetAlertEvaluator wires the alert loop into the governance plugin. Pass
+// nil to disable alerting. The plugin never spawns goroutines here; the
+// evaluator only does inline work on the request path (soft thresholds) or
+// fires the dispatcher (hard block async emission).
+func (p *GovernancePlugin) SetAlertEvaluator(evaluator *AlertEvaluator) {
+	p.alertEvaluator = evaluator
 }
 
 // GenerateVirtualKey is a helper function

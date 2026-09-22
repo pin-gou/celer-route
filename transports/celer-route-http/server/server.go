@@ -30,6 +30,7 @@ import (
 	"github.com/pin-gou/celer-route/framework/modelcatalog/live"
 	dynamicPlugins "github.com/pin-gou/celer-route/framework/plugins"
 	"github.com/pin-gou/celer-route/framework/sidekiq"
+	"github.com/pin-gou/celer-route/framework/sidekiq/jobs"
 	"github.com/pin-gou/celer-route/framework/temptoken"
 	"github.com/pin-gou/celer-route/framework/tracing"
 	"github.com/pin-gou/celer-route/framework/webhooks"
@@ -2639,6 +2640,12 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	}
 	webhookHandler := handlers.NewWebhookHandler(callbacks, s.Config, s.WebhookDispatcher)
 	webhookHandler.RegisterRoutes(s.Router, middlewares...)
+	// Phase 3 (02-alerting): alert-rule CRUD + alert-event queries +
+	// budget projection. The handler is safe to construct even when the
+	// sidekiq runner or dispatcher is nil — it just downgrades the
+	// "snapshot-now" and "test rule" endpoints to 503.
+	alertingHandler := handlers.NewAlertingHandler(s.Config.ConfigStore, s.WebhookDispatcher, s.SidekiqRunner)
+	alertingHandler.RegisterRoutes(s.Router, middlewares...)
 	skillsServingHandler := handlers.NewSkillsServingHandler(s.Config.ConfigStore, s.Config.ObjectStore)
 	if skillsServingHandler != nil {
 		skillsServingHandler.RegisterRoutes(s.Router, middlewares...)
@@ -3133,6 +3140,49 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	// Initialize Sidekiq runner for background jobs
 	if s.Config != nil && s.Config.ConfigStore != nil {
 		s.SidekiqRunner = sidekiq.New(s.Config.ConfigStore, logger, 4, "")
+	}
+
+	// Wire the alert loop (Phase 3 / 02-alerting). The AlertEvaluator
+	// sits between the governance decision and the wire response so soft
+	// thresholds can fire inline without ever blocking a request. The
+	// governance plugin must already be loaded by the time we get here;
+	// if it is missing (enterprise-only build), we silently skip the
+	// wiring and the alerting handler still serves its read-only paths.
+	if gov, gpErr := s.getGovernancePlugin(); gpErr == nil && gov != nil {
+		if gp, ok := gov.(*governance.GovernancePlugin); ok {
+			evaluator := governance.NewAlertEvaluator(s.Config.ConfigStore, logger, s.WebhookDispatcher)
+			gp.SetAlertEvaluator(evaluator)
+		}
+	}
+
+	// Register the alert-loop background jobs on the sidekiq runner. The
+	// budget snapshot job is the source of the projection endpoint's data;
+	// the alert notification job is the durable retry path for budget.exceeded
+	// emissions that lost their inline dispatcher connection.
+	if s.SidekiqRunner != nil && s.Config != nil && s.Config.ConfigStore != nil {
+		// budget_snapshot: register the handler so any enqueue is claimable.
+		snapJob := jobs.NewBudgetSnapshotJob(s.Config.ConfigStore)
+		s.SidekiqRunner.Register(snapJob.Kind(), snapJob.Handle)
+		// alert_notification: same, with dispatcher as a dependency.
+		notifJob := jobs.NewAlertNotificationJob(s.Config.ConfigStore, s.WebhookDispatcher)
+		s.SidekiqRunner.Register(notifJob.Kind(), notifJob.Handle)
+		// Periodic ticker: enqueue one budget_snapshot job every hour. We
+		// use a fresh job id per tick so retries don't dedupe against a
+		// healthy job that already ran.
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-s.Ctx.Done():
+					return
+				case <-ticker.C:
+					if err := jobs.EnqueueBudgetSnapshotNow(s.SidekiqRunner, s.Config.ConfigStore); err != nil {
+						logger.Warn("failed to enqueue periodic budget snapshot: %v", err)
+					}
+				}
+			}
+		}()
 	}
 
 	// Register routes

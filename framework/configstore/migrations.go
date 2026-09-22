@@ -479,6 +479,8 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_virtual_key_user_id_column"}, run: migrationAddVirtualKeyUserIDColumn},
 	{IDs: []string{"add_invitations_table"}, run: migrationAddInvitationsTable},
 	{IDs: []string{"add_key_requests_table"}, run: migrationAddKeyRequestsTable},
+	{IDs: []string{"add_alert_tables"}, run: migrationAddAlertTables},
+	{IDs: []string{"add_webhook_jobs_payload_json_column"}, run: migrationAddWebhookJobsPayloadJSONColumn},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12321,6 +12323,97 @@ func migrationAddKeyRequestsTable(ctx context.Context, db *gorm.DB, logger schem
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running add_key_requests_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddAlertTables creates the three tables backing the alert loop:
+// alert_rules (admin-configured thresholds + delivery channels),
+// alert_events (per-firing history row, written inline for soft thresholds
+// and asynchronously for hard blocks), and budget_snapshots (periodic
+// usage samples that feed the projection endpoint).
+//
+// Idempotent: each table is created only if missing. Drop order on rollback
+// is leaves-first (events → snapshots → rules) so we never have a foreign
+// key pointing at a vanished parent.
+func migrationAddAlertTables(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_alert_tables"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableAlertRule{}) {
+				logger.Info("[configstore] %s: creating table TableAlertRule", migrationName)
+				if err := mg.CreateTable(&tables.TableAlertRule{}); err != nil {
+					return fmt.Errorf("create alert_rules: %w", err)
+				}
+			}
+			if !mg.HasTable(&tables.TableAlertEvent{}) {
+				logger.Info("[configstore] %s: creating table TableAlertEvent", migrationName)
+				if err := mg.CreateTable(&tables.TableAlertEvent{}); err != nil {
+					return fmt.Errorf("create alert_events: %w", err)
+				}
+			}
+			if !mg.HasTable(&tables.TableBudgetSnapshot{}) {
+				logger.Info("[configstore] %s: creating table TableBudgetSnapshot", migrationName)
+				if err := mg.CreateTable(&tables.TableBudgetSnapshot{}); err != nil {
+					return fmt.Errorf("create budget_snapshots: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			// Drop leaves first so no foreign-key relationship outlives the parent.
+			if mg.HasTable(&tables.TableAlertEvent{}) {
+				if err := mg.DropTable(&tables.TableAlertEvent{}); err != nil {
+					return fmt.Errorf("drop alert_events: %w", err)
+				}
+			}
+			if mg.HasTable(&tables.TableBudgetSnapshot{}) {
+				if err := mg.DropTable(&tables.TableBudgetSnapshot{}); err != nil {
+					return fmt.Errorf("drop budget_snapshots: %w", err)
+				}
+			}
+			if mg.HasTable(&tables.TableAlertRule{}) {
+				if err := mg.DropTable(&tables.TableAlertRule{}); err != nil {
+					return fmt.Errorf("drop alert_rules: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_alert_tables migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddWebhookJobsPayloadJSONColumn adds the payload_json column to
+// webhook_jobs so the dispatcher can ship alert / budget-exceeded bodies
+// without doing a second store lookup. Async-job deliveries leave the
+// column empty and the existing async_job lookup path stays in charge.
+func migrationAddWebhookJobsPayloadJSONColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_webhook_jobs_payload_json_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return addColumnIfNotExists(tx, logger, &tables.TableWebhookJob{}, "payload_json")
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return dropColumnIfExists(tx, logger, &tables.TableWebhookJob{}, "payload_json")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_webhook_jobs_payload_json_column migration: %s", err.Error())
 	}
 	return nil
 }

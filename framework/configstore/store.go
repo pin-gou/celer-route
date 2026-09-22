@@ -987,6 +987,28 @@ type ConfigStore interface {
 	RescheduleWebhookJob(ctx context.Context, id, runnerID string, leaseUntil, nextAttemptAt time.Time) error
 	DeleteWebhookJob(ctx context.Context, id, runnerID string, leaseUntil time.Time) error
 
+	// Alert rules (Phase 3 / 02-alerting)
+	CreateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error
+	GetAlertRuleByID(ctx context.Context, id string) (*tables.TableAlertRule, error)
+	ListAlertRules(ctx context.Context, params AlertRulesQueryParams) ([]tables.TableAlertRule, int64, error)
+	ListAlertRulesForScope(ctx context.Context, scopeType, scopeID string) ([]tables.TableAlertRule, error)
+	UpdateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error
+	DeleteAlertRule(ctx context.Context, id string) error
+
+	// Alert events (Phase 3 / 02-alerting)
+	CreateAlertEvent(ctx context.Context, event *tables.TableAlertEvent) error
+	GetAlertEventByID(ctx context.Context, id string) (*tables.TableAlertEvent, error)
+	ListAlertEvents(ctx context.Context, params AlertEventsQueryParams) ([]tables.TableAlertEvent, int64, error)
+	LatestAlertEventForRule(ctx context.Context, ruleID, scopeType, scopeID string, since time.Time) (*tables.TableAlertEvent, error)
+	UpdateAlertEventDeliveryStatus(ctx context.Context, id, status string) error
+
+	// Budget snapshots (Phase 3 / 02-alerting projection source)
+	CreateBudgetSnapshot(ctx context.Context, snap *tables.TableBudgetSnapshot) error
+	ListBudgetSnapshotsForBudget(ctx context.Context, budgetID string, limit int) ([]tables.TableBudgetSnapshot, error)
+	LatestBudgetSnapshot(ctx context.Context, budgetID string) (*tables.TableBudgetSnapshot, error)
+	AllBudgetIDs(ctx context.Context) ([]string, error)
+	GetBudgetByID(ctx context.Context, id string) (*tables.TableBudget, error)
+
 	// DB returns the underlying database connection.
 	DB() *gorm.DB
 
