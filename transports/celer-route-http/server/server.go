@@ -252,6 +252,7 @@ type BifrostHTTPServer struct {
 	IntegrationHandler *handlers.IntegrationHandler
 
 	AuthMiddleware       *handlers.AuthMiddleware
+	MemberAuthMiddleware *handlers.MemberAuthMiddleware
 	CORSMiddleware       *handlers.CorsMiddleware
 	TracingMiddleware    *handlers.TracingMiddleware
 	WSTicketStore        *handlers.WSTicketStore
@@ -2602,6 +2603,15 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	if sessionHandler != nil {
 		sessionHandler.RegisterRoutes(s.Router, middlewares...)
 	}
+	if s.MemberAuthMiddleware != nil {
+		// Member routes share no middleware with the admin path. Login +
+		// auth-status are public; logout + me are guarded by the member
+		// middleware alone (admin AuthMiddleware is intentionally NOT
+		// chained so a valid admin cookie does not satisfy a member-only
+		// route and vice versa).
+		memberSessionHandler := handlers.NewMemberSessionHandler(s.Config.ConfigStore)
+		memberSessionHandler.RegisterRoutes(s.Router, s.MemberAuthMiddleware.APIMiddleware())
+	}
 	if promptsHandler != nil {
 		promptsHandler.RegisterRoutes(s.Router, middlewares...)
 	}
@@ -3085,6 +3095,15 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 		}
 		if ctx.Value(schemas.BifrostContextKeyIsEnterprise) == nil {
 			apiMiddlewares = append(apiMiddlewares, s.AuthMiddleware.APIMiddleware())
+		}
+		// Phase 1 /temp/team: the member-only login path runs alongside the
+		// admin AuthMiddleware. It uses a separate cookie (bf_member_session)
+		// so admin and member sessions can coexist on the same browser; it
+		// never sets IsLocalAdminContextKey so downstream RBAC retains its
+		// existing meaning.
+		s.MemberAuthMiddleware, err = handlers.InitMemberAuthMiddleware(s.Config.ConfigStore)
+		if err != nil {
+			return fmt.Errorf("failed to initialize member auth middleware: %v", err)
 		}
 	}
 	// Add semantic cache plugin embedding request executor if it exists

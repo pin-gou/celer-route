@@ -446,6 +446,40 @@ type ConfigStore interface {
 	DeleteSession(ctx context.Context, token string) error
 	FlushSessions(ctx context.Context) error
 
+	// User CRUD (Phase 1 /temp/team — member-only login path).
+	// Admin login continues to use AuthConfig.AdminUserName; this interface
+	// exists so the member-login flow can look up users by email, fetch their
+	// team memberships, and (in Phase 2) provision new users via invitations.
+	// GetUserByID returns (nil, nil) when no such user exists so callers can
+	// distinguish "missing" from "error" without an extra errors.Is check.
+	GetUserByID(ctx context.Context, id string) (*tables.TableUser, error)
+	// GetUserByEmail is the member-login lookup path; emails are stored
+	// lowercased so callers must normalize before calling.
+	GetUserByEmail(ctx context.Context, email string) (*tables.TableUser, error)
+	// ListUsers returns users matching the given status/role filter,
+	// paginated. Used by GET /api/governance/users (Phase 2).
+	ListUsers(ctx context.Context, status, role string, limit, offset int) ([]tables.TableUser, int64, error)
+	CreateUser(ctx context.Context, user *tables.TableUser) error
+	UpdateUser(ctx context.Context, user *tables.TableUser) error
+	// UpdateUserLastLoginAt is a targeted column update so the session
+	// middleware doesn't need to read-modify-write the entire user row.
+	UpdateUserLastLoginAt(ctx context.Context, id string, at time.Time) error
+	DeleteUser(ctx context.Context, id string) error
+
+	// Team-member CRUD (Phase 1).
+	// GetTeamMembership returns a single (team_id, user_id) row, used by the
+	// member portal to look up which team the user belongs to.
+	GetTeamMembership(ctx context.Context, teamID, userID string) (*tables.TableTeamMember, error)
+	// GetUserTeamMemberships returns every membership row for a user, used
+	// by GET /api/member/me to render the member's team list.
+	GetUserTeamMemberships(ctx context.Context, userID string) ([]tables.TableTeamMember, error)
+	// ListTeamMembers returns every membership row in a team, used by
+	// GET /api/governance/teams/:id/members (Phase 2).
+	ListTeamMembers(ctx context.Context, teamID string) ([]tables.TableTeamMember, error)
+	CreateTeamMember(ctx context.Context, member *tables.TableTeamMember) error
+	UpdateTeamMember(ctx context.Context, member *tables.TableTeamMember) error
+	DeleteTeamMember(ctx context.Context, teamID, userID string) error
+
 	// Temp token CRUD
 	CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error
 	GetTempTokenByHash(ctx context.Context, tokenHash string) (*tables.TempToken, error)

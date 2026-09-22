@@ -475,6 +475,8 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_provider_default_parameters_json_column"}, run: migrationAddProviderDefaultParametersJSONColumn},
 	{IDs: []string{"add_model_list_cache_table"}, run: migrationAddModelListCacheTable},
 	{IDs: []string{"add_model_pricing_is_custom_column"}, run: migrationAddModelPricingIsCustomColumn},
+	{IDs: []string{"add_users_and_team_members_tables"}, run: migrationAddUsersAndTeamMembersTables},
+	{IDs: []string{"add_virtual_key_user_id_column"}, run: migrationAddVirtualKeyUserIDColumn},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12157,6 +12159,90 @@ func migrationAddModelListCacheTable(ctx context.Context, db *gorm.DB, logger sc
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddUsersAndTeamMembersTables creates the users and team_members
+// tables for the team-member self-service path. This is Phase 1 of the
+// /temp/team plan; later phases will reuse these tables to add invitations,
+// key_requests, and portal endpoints on top.
+//
+// We create the tables directly via GORM's migrator so the (team_id, user_id)
+// unique index on team_members — which enforces "one user is at most one
+// team-member row per team" — lands in the same step as the table itself.
+// Rolling back drops both tables (children first to keep FKs happy).
+func migrationAddUsersAndTeamMembersTables(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_users_and_team_members_tables"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableUser{}) {
+				logger.Info("[configstore] %s: creating table TableUser", migrationName)
+				if err := migrator.CreateTable(&tables.TableUser{}); err != nil {
+					return fmt.Errorf("failed to create users table: %w", err)
+				}
+			}
+			if !migrator.HasTable(&tables.TableTeamMember{}) {
+				logger.Info("[configstore] %s: creating table TableTeamMember", migrationName)
+				if err := migrator.CreateTable(&tables.TableTeamMember{}); err != nil {
+					return fmt.Errorf("failed to create team_members table: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			// Drop children before parents to leave no dangling FKs.
+			if migrator.HasTable(&tables.TableTeamMember{}) {
+				if err := migrator.DropTable(&tables.TableTeamMember{}); err != nil {
+					return fmt.Errorf("failed to drop team_members table: %w", err)
+				}
+			}
+			if migrator.HasTable(&tables.TableUser{}) {
+				if err := migrator.DropTable(&tables.TableUser{}); err != nil {
+					return fmt.Errorf("failed to drop users table: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddVirtualKeyUserIDColumn adds the nullable user_id column to
+// governance_virtual_keys so a VK can be owned by an individual member
+// (US15: member sees only their own VK). The BeforeSave hook now enforces
+// the ternary mutual exclusion (UserID / TeamID / CustomerID), so adding
+// the column is sufficient — no separate constraint migration is needed.
+func migrationAddVirtualKeyUserIDColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_virtual_key_user_id_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableVirtualKey{}, "user_id"); err != nil {
+				return fmt.Errorf("failed to add user_id column to governance_virtual_keys: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return dropColumnIfExists(tx, logger, &tables.TableVirtualKey{}, "user_id")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_virtual_key_user_id_column migration: %s", err.Error())
 	}
 	return nil
 }

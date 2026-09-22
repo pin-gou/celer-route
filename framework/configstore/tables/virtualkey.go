@@ -225,7 +225,12 @@ type TableVirtualKey struct {
 	ProviderConfigs []TableVirtualKeyProviderConfig `gorm:"foreignKey:VirtualKeyID;constraint:OnDelete:CASCADE" json:"provider_configs"` // Empty means no providers allowed (deny-by-default)
 	MCPConfigs      []TableVirtualKeyMCPConfig      `gorm:"foreignKey:VirtualKeyID;constraint:OnDelete:CASCADE" json:"mcp_configs"`
 
-	// Foreign key relationships (mutually exclusive: either TeamID or CustomerID, not both)
+	// Foreign key relationships (mutually exclusive: at most one of UserID,
+	// TeamID, CustomerID can be set — enforced by BeforeSave; all-nil legacy
+	// "untyped" VKs remain loadable). UserID scopes a VK to a single member
+	// for the team-member self-service path; TeamID continues to back shared
+	// team-level VKs; CustomerID stays untouched.
+	UserID      *string `gorm:"type:varchar(255);index:idx_virtual_key_user_id" json:"user_id,omitempty"`
 	TeamID      *string `gorm:"type:varchar(255);index" json:"team_id,omitempty"`
 	CustomerID  *string `gorm:"type:varchar(255);index" json:"customer_id,omitempty"`
 	RateLimitID *string `gorm:"type:varchar(255);index" json:"rate_limit_id,omitempty"`
@@ -302,11 +307,30 @@ func (vk *TableVirtualKey) IsExpiredAt(now time.Time) bool {
 	return !now.UTC().Before(vk.ExpiresAt.UTC())
 }
 
-// BeforeSave is a GORM hook that enforces mutual exclusion (team vs customer), computes
-// a SHA-256 hash of the plaintext value for indexed lookups, and encrypts the virtual key
+// BeforeSave is a GORM hook that enforces mutual exclusion across the three
+// ownership dimensions (user / team / customer), computes a SHA-256 hash of
+// the plaintext value for indexed lookups, and encrypts the virtual key
 // value before writing to the database.
+//
+// Mutual exclusion here means "no two of {UserID, TeamID, CustomerID} may
+// be set at once" — the prior binary check on (TeamID, CustomerID) is now
+// generalized to the ternary set. A VK with all three dimensions nil is
+// still permitted (legacy "untyped VK" rows in the database remain valid;
+// the Phase 1 schema migration adds UserID as nullable, so existing rows
+// keep their prior shape), but the API surface for new VK creation will
+// require exactly one to be set at the handler layer.
 func (vk *TableVirtualKey) BeforeSave(tx *gorm.DB) error {
-	// Enforce mutual exclusion: VK can belong to either Team OR Customer, not both
+	// Enforce ternary mutual exclusion: no two of UserID / TeamID /
+	// CustomerID may be set. Setting all three nil is the legacy "untyped"
+	// shape and is allowed for backward compatibility with rows persisted
+	// before Phase 1; the create-side enforcement happens at the handler
+	// layer where the user-facing requirement is "exactly one".
+	if vk.UserID != nil && vk.TeamID != nil {
+		return fmt.Errorf("virtual key cannot belong to both user and team")
+	}
+	if vk.UserID != nil && vk.CustomerID != nil {
+		return fmt.Errorf("virtual key cannot belong to both user and customer")
+	}
 	if vk.TeamID != nil && vk.CustomerID != nil {
 		return fmt.Errorf("virtual key cannot belong to both team and customer")
 	}

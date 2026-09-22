@@ -6419,6 +6419,161 @@ func (s *RDBConfigStore) FlushSessions(ctx context.Context) error {
 	return s.DB().WithContext(ctx).Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&tables.SessionsTable{}).Error
 }
 
+// ============================================================================
+// User CRUD — Phase 1 of /temp/team (member login path).
+//
+// The admin login path (AuthConfig.AdminUserName / AdminPassword) is
+// untouched: those credentials back the dashboard admin session and the
+// IsLocalAdminContextKey RBAC bypass. The TableUser rows here back the
+// parallel member-only login, which is keyed by email + bcrypt hash and
+// gated by status='active'. See temp/team/01-identity for the full split.
+// ============================================================================
+
+// GetUserByID returns (nil, nil) when no such user exists so callers can
+// distinguish "missing" from a real DB error without an errors.Is check.
+func (s *RDBConfigStore) GetUserByID(ctx context.Context, id string) (*tables.TableUser, error) {
+	var user tables.TableUser
+	if err := s.DB().WithContext(ctx).First(&user, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// GetUserByEmail looks up a user by email. The BeforeSave hook normalizes
+// emails to lowercase at write time, so callers must also pass the email
+// in lowercased form here; the Login handler is the canonical example.
+func (s *RDBConfigStore) GetUserByEmail(ctx context.Context, email string) (*tables.TableUser, error) {
+	var user tables.TableUser
+	if err := s.DB().WithContext(ctx).First(&user, "email = ?", email).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// ListUsers returns paginated user rows filtered by optional status/role.
+// Either filter is empty ⇒ no constraint on that column. Total count is
+// returned alongside the page so the admin UI can render pagination.
+func (s *RDBConfigStore) ListUsers(ctx context.Context, status, role string, limit, offset int) ([]tables.TableUser, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableUser{})
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if role != "" {
+		q = q.Where("role = ?", role)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var users []tables.TableUser
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+	return users, total, nil
+}
+
+// CreateUser inserts a new user row. Caller must populate ID + Email +
+// Status before calling; the BeforeSave hook will normalize the email and
+// reject malformed rows.
+func (s *RDBConfigStore) CreateUser(ctx context.Context, user *tables.TableUser) error {
+	return s.DB().WithContext(ctx).Create(user).Error
+}
+
+// UpdateUser saves all fields of an existing user row. The standard GORM
+// Save() is intentional here (rather than a targeted column update) so the
+// admin user-management endpoint can flip status / role / display_name in a
+// single call without a per-column method.
+func (s *RDBConfigStore) UpdateUser(ctx context.Context, user *tables.TableUser) error {
+	return s.DB().WithContext(ctx).Save(user).Error
+}
+
+// UpdateUserLastLoginAt is a targeted column update for the member-login
+// path so we don't need to read-modify-write the entire user row on every
+// successful authentication.
+func (s *RDBConfigStore) UpdateUserLastLoginAt(ctx context.Context, id string, at time.Time) error {
+	return s.DB().WithContext(ctx).Model(&tables.TableUser{}).
+		Where("id = ?", id).
+		Update("last_login_at", at).Error
+}
+
+// DeleteUser hard-deletes a user row. Callers are responsible for cascading
+// dependent state (team_members rows, VK is_active flags) — the simpler
+// option is to set status='disabled' instead of deleting, which preserves
+// historical usage attribution.
+func (s *RDBConfigStore) DeleteUser(ctx context.Context, id string) error {
+	return s.DB().WithContext(ctx).Delete(&tables.TableUser{}, "id = ?", id).Error
+}
+
+// GetTeamMembership returns the single membership row for (team_id,
+// user_id) or (nil, nil) when no row exists. The unique index on
+// (team_id, user_id) guarantees at most one row per pair.
+func (s *RDBConfigStore) GetTeamMembership(ctx context.Context, teamID, userID string) (*tables.TableTeamMember, error) {
+	var m tables.TableTeamMember
+	err := s.DB().WithContext(ctx).First(&m, "team_id = ? AND user_id = ?", teamID, userID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &m, nil
+}
+
+// GetUserTeamMemberships returns every team membership row for a user.
+// Order is by joined_at desc so the most recently joined team surfaces
+// first in the member-portal rendering.
+func (s *RDBConfigStore) GetUserTeamMemberships(ctx context.Context, userID string) ([]tables.TableTeamMember, error) {
+	var rows []tables.TableTeamMember
+	if err := s.DB().WithContext(ctx).Where("user_id = ?", userID).Order("joined_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// ListTeamMembers returns every membership row for a team. Removed-status
+// rows are included so the admin UI can show former members and keep
+// historical cost attribution; callers filter as needed.
+func (s *RDBConfigStore) ListTeamMembers(ctx context.Context, teamID string) ([]tables.TableTeamMember, error) {
+	var rows []tables.TableTeamMember
+	if err := s.DB().WithContext(ctx).Where("team_id = ?", teamID).Order("joined_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// CreateTeamMember inserts a membership row. The unique index on
+// (team_id, user_id) raises a duplicate-key error if the same pair is
+// inserted twice; callers convert that into a 409.
+func (s *RDBConfigStore) CreateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return s.DB().WithContext(ctx).Create(member).Error
+}
+
+// UpdateTeamMember saves all fields of an existing team_member row.
+func (s *RDBConfigStore) UpdateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return s.DB().WithContext(ctx).Save(member).Error
+}
+
+// DeleteTeamMember hard-deletes the (team_id, user_id) row. Prefer
+// status='removed' for offboarding so usage history survives.
+func (s *RDBConfigStore) DeleteTeamMember(ctx context.Context, teamID, userID string) error {
+	return s.DB().WithContext(ctx).Where("team_id = ? AND user_id = ?", teamID, userID).Delete(&tables.TableTeamMember{}).Error
+}
+
 // CreateTempToken inserts a new temp_tokens row. The plaintext token must be
 // set on the struct; the BeforeSave hook populates token_hash and (when
 // encryption is enabled) encrypts the plaintext in place. The optional tx

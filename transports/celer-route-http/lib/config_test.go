@@ -1241,6 +1241,62 @@ func (m *MockConfigStore) DeleteSession(ctx context.Context, token string) error
 	return nil
 }
 
+// Phase 1 /temp/team — user + team-member CRUD stubs. Real tests in
+// transports/celer-route-http/handlers/member_auth_test.go exercise these
+// via a focused fake; this mock just satisfies the interface so other
+// lib-level tests continue to compile.
+func (m *MockConfigStore) GetUserByID(ctx context.Context, id string) (*tables.TableUser, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetUserByEmail(ctx context.Context, email string) (*tables.TableUser, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListUsers(ctx context.Context, status, role string, limit, offset int) ([]tables.TableUser, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) CreateUser(ctx context.Context, user *tables.TableUser) error {
+	return nil
+}
+
+func (m *MockConfigStore) UpdateUser(ctx context.Context, user *tables.TableUser) error {
+	return nil
+}
+
+func (m *MockConfigStore) UpdateUserLastLoginAt(ctx context.Context, id string, at time.Time) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteUser(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *MockConfigStore) GetTeamMembership(ctx context.Context, teamID, userID string) (*tables.TableTeamMember, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetUserTeamMemberships(ctx context.Context, userID string) ([]tables.TableTeamMember, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListTeamMembers(ctx context.Context, teamID string) ([]tables.TableTeamMember, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) CreateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return nil
+}
+
+func (m *MockConfigStore) UpdateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteTeamMember(ctx context.Context, teamID, userID string) error {
+	return nil
+}
+
 // Temp token
 func (m *MockConfigStore) CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error {
 	return nil
