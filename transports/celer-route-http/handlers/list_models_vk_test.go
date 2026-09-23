@@ -247,9 +247,10 @@ func TestApplyListModelsVirtualKeyProviderFilterFailsClosedOnTeamPolicyLookupErr
 	}
 }
 
-// TestApplyListModelsTeamACLFilterNarrowsModelsForExplicitProvider covers the
-// model-level narrowing available when the caller names a provider
-// (?provider=openai), where attribution is unambiguous.
+// TestApplyListModelsTeamACLFilterNarrowsModelsForExplicitProvider covers
+// model-level team ACL narrowing on both listing paths: ?provider=X (attribution
+// from the query value) and the aggregate fan-out (attribution from the Provider
+// field core stamps while merging).
 func TestApplyListModelsTeamACLFilterNarrowsModelsForExplicitProvider(t *testing.T) {
 	bifrostCtx := schemas.NewBifrostContext(context.Background(), time.Time{})
 	bifrostCtx.SetValue(listModelsTeamPoliciesKey, map[string]configstoreTables.TableTeamModelPolicy{
@@ -280,11 +281,41 @@ func TestApplyListModelsTeamACLFilterNarrowsModelsForExplicitProvider(t *testing
 		}
 	})
 
-	t.Run("no explicit provider leaves the response untouched", func(t *testing.T) {
+	t.Run("aggregate entries are filtered by their stamped provider", func(t *testing.T) {
+		// The aggregate fan-out carries no ?provider=, so attribution comes from
+		// the Provider field core stamps while merging (Bifrost.ListAllModels).
+		resp := &schemas.BifrostListModelsResponse{Data: []schemas.Model{
+			{ID: "openai/gpt-4o", Provider: schemas.OpenAI},
+			{ID: "openai/o1", Provider: schemas.OpenAI},
+			{ID: "anthropic/claude-opus-4-7", Provider: schemas.Anthropic},
+		}}
+		applyListModelsTeamACLFilter(resp, bifrostCtx, "")
+		got := make([]string, 0, len(resp.Data))
+		for _, m := range resp.Data {
+			got = append(got, m.ID)
+		}
+		// openai is narrowed to the allowlist; anthropic has no policy so it
+		// inherits global and survives untouched.
+		want := []string{"openai/gpt-4o", "anthropic/claude-opus-4-7"}
+		if len(got) != len(want) {
+			t.Fatalf("expected %#v, got %#v", want, got)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("expected %#v, got %#v", want, got)
+			}
+		}
+	})
+
+	t.Run("unattributed entry with no explicit provider fails closed", func(t *testing.T) {
+		// Defensive branch: unreachable today (core stamps the aggregate path,
+		// ?provider=X supplies the fallback, and the cache path is never
+		// VK-scoped). Pinned so a future path that forgets attribution surfaces
+		// as an empty list rather than silently advertising blocked models.
 		resp := newResp()
 		applyListModelsTeamACLFilter(resp, bifrostCtx, "")
-		if len(resp.Data) != 3 {
-			t.Fatalf("aggregate path must not be filtered per model, got %#v", resp.Data)
+		if len(resp.Data) != 0 {
+			t.Fatalf("expected unattributed entries to be dropped, got %#v", resp.Data)
 		}
 	})
 

@@ -183,6 +183,18 @@ type Model struct {
 	OwnedBy          *string  `json:"owned_by,omitempty"`
 	SupportedMethods []string `json:"supported_methods,omitempty"`
 
+	// Provider records which provider listed this model. Never serialized — the
+	// wire ID already carries the provider prefix ("openai/gpt-4o") and OpenAI
+	// clients do not expect extra fields.
+	//
+	// It exists because ListAllModels merges every provider's models into one flat
+	// []Model, after which nothing on the entry says where it came from. Consumers
+	// that apply per-provider policy to the merged list — the transport's team ACL
+	// narrowing on GET /v1/models is the concrete case — cannot work without it,
+	// and re-deriving attribution from the model catalog is ambiguous for models
+	// several providers serve. Stamped by Bifrost.ListAllModels.
+	Provider ModelProvider `json:"-"`
+
 	// ProviderExtra carries opaque provider-specific data (e.g. Anthropic capabilities)
 	// through the Bifrost pipeline for integration reverse-conversion. Never serialized.
 	ProviderExtra json.RawMessage `json:"-"`

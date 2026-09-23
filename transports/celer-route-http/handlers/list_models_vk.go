@@ -212,15 +212,21 @@ func teamModelPoliciesFromBifrostContext(bifrostCtx *schemas.BifrostContext) map
 // It shares its predicate with the governance resolver's per-request gate
 // (governanceplugin.TeamPolicyAllowsModel) — the two must not disagree.
 //
-// explicitProvider is the ?provider= query value. Model-level filtering needs to
-// know which provider each entry came from, and that attribution is only
-// available when the caller named one: the aggregate fan-out merges every
-// provider's models into a single flat []schemas.Model and schemas.Model carries
-// no provider tag. Providers the team cannot use at all are therefore dropped
-// wholesale up-front in applyListModelsVirtualKeyProviderFilter, which covers the
-// aggregate path at provider granularity.
+// Each entry is attributed to a provider before being checked against that
+// provider's policy:
 //
-// The policies it reads are stashed by applyListModelsVirtualKeyProviderFilter
+//   - the aggregate fan-out merges every provider's models into one flat
+//     []schemas.Model, and core stamps schemas.Model.Provider on each entry while
+//     collecting (Bifrost.ListAllModels) — the last point at which the origin is
+//     unambiguous;
+//   - the ?provider=X path goes through ListModelsRequest, which does not stamp,
+//     so explicitProvider (the raw query value) is the fallback.
+//
+// Providers the team cannot use at all are additionally dropped from the fan-out
+// up-front in applyListModelsVirtualKeyProviderFilter, so core never even queries
+// them.
+//
+// The policies are stashed on the context by applyListModelsVirtualKeyProviderFilter
 // (aggregate path) or applyListModelsTeamACLForExplicitProvider (?provider=X).
 //
 // A no-op when the request has no team policies, which keeps the unscoped and
@@ -229,21 +235,31 @@ func applyListModelsTeamACLFilter(resp *schemas.BifrostListModelsResponse, bifro
 	if resp == nil || len(resp.Data) == 0 {
 		return
 	}
-	provider := strings.ToLower(strings.TrimSpace(string(explicitProvider)))
-	if provider == "" {
-		return
-	}
 	policies := teamModelPoliciesFromBifrostContext(bifrostCtx)
 	if len(policies) == 0 {
 		return
 	}
-	policy, ok := policies[provider]
-	if !ok {
-		// No policy for this provider = inherit global.
-		return
-	}
+	explicit := strings.ToLower(strings.TrimSpace(string(explicitProvider)))
+
 	kept := make([]schemas.Model, 0, len(resp.Data))
 	for _, model := range resp.Data {
+		provider := strings.ToLower(strings.TrimSpace(string(model.Provider)))
+		if provider == "" {
+			provider = explicit
+		}
+		if provider == "" {
+			// Defensive, unreachable today: aggregate entries are stamped by core,
+			// the explicit path always carries a provider, and the cache path is
+			// never VK-scoped so it never reaches here. Fail closed rather than
+			// advertise a model whose policy could not be resolved.
+			continue
+		}
+		policy, ok := policies[provider]
+		if !ok {
+			// No policy for this provider = inherit global.
+			kept = append(kept, model)
+			continue
+		}
 		// Listed IDs are provider-prefixed ("deepseek/deepseek-flash") while ACL
 		// entries are bare model names. Normalize exactly the way governance does
 		// before gating a request (plugins/governance/main.go) and the way

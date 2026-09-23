@@ -51767,6 +51767,384 @@
       }
     }
   ]
-}
+},
+    {
+      "name": "57. Team Model ACL narrows GET /v1/models (Phase 6 / D6)",
+      "description": "Wire-visible pin for team-level model ACL narrowing of the model listing. Before this change the D6 team ACL (team_model_policies) was enforced only per-request by the governance resolver, so GET /v1/models advertised every model of every provider the caller's virtual key could reach - a member saw models their requests would be denied. The aggregate path could not be filtered at all: Bifrost.ListAllModels merges every provider's models into one flat []schemas.Model and schemas.Model carried no provider attribution, so the transport could not tell which team policy applied to a given entry. Production path: core stamps the internal json:\"-\" schemas.Model.Provider while merging (Bifrost.ListAllModels); the transport resolves the caller's team policies (applyListModelsVirtualKeyProviderFilter for the aggregate fan-out, applyListModelsTeamACLForExplicitProvider for ?provider=X) and narrows the response with governanceplugin.TeamPolicyAllowsModel - the same predicate the resolver's per-request gate uses, so the list and the gate cannot drift. Providers a team cannot use at all (empty allowlist = deny-by-default, matching schemas.WhiteList) are dropped from the fan-out before core queries them. Cases here pin (1) the explicit-provider path and (2) the aggregate fan-out, both narrowed from the provider's full list to the single allowed model; case 2 is the one that was impossible before the core attribution field. Red before: both listed every openai model. Green after: both list only openai/gpt-4o-mini. Also pinned implicitly: listed IDs are provider-prefixed ('openai/gpt-4o-mini') while ACL entries are bare names, and the filter normalizes with schemas.ParseModelString exactly as governance does before gating a request - comparing raw IDs emptied the list. Go-level tests in transports/celer-route-http/handlers/list_models_vk_test.go, handlers/providers_test.go and plugins/governance/teammodelpolicy_test.go cover the filter, the provider-drop and the predicate in isolation.",
+      "item": [
+        {
+          "name": "Resolve a real openai key id for the ACL virtual key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers/openai/keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers",
+                "openai",
+                "keys"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A virtual key provider config needs concrete key_ids: allow_all_keys is not",
+                  "// persisted by the create endpoint, so a keyless VK later fails /v1/models with",
+                  "// 'no keys found for provider: openai'. Read one from the harness environment.",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "pm.expect(j.keys && j.keys.length, 'expected at least one configured openai key: ' + pm.response.text()).to.be.above(0);",
+                  "pm.collectionVariables.set('hAclKeyId', j.keys[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create harness team for the model ACL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"harness-team-acl-{{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/teams",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "teams"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'create failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "pm.expect(j && j.team && j.team.id, 'expected team.id in create response: ' + pm.response.text()).to.be.ok;",
+                  "pm.collectionVariables.set('hAclTeamId', j.team.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create team-scoped virtual key (openai, all models)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"harness-vk-acl-{{$timestamp}}\",\n  \"team_id\": \"{{hAclTeamId}}\",\n  \"provider_configs\": [\n    {\n      \"provider\": \"openai\",\n      \"key_ids\": [\"{{hAclKeyId}}\"],\n      \"allowed_models\": [\"*\"],\n      \"blacklisted_models\": []\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/virtual-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "virtual-keys"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The VK's own allowlist is wide open so everything the listing shows is",
+                  "// attributable to the team ACL under test, not to VK-level filtering.",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'create failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "pm.expect(j && j.virtual_key && j.virtual_key.value, 'expected virtual_key.value: ' + pm.response.text()).to.be.ok;",
+                  "pm.collectionVariables.set('hAclVkId', j.virtual_key.id);",
+                  "pm.collectionVariables.set('hAclVkValue', j.virtual_key.value);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create team model policy: allow only gpt-4o-mini on openai",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"allowed_models\": [\"gpt-4o-mini\"],\n  \"blacklisted_models\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/teams/{{hAclTeamId}}/model-policies/openai",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "teams",
+                "{{hAclTeamId}}",
+                "model-policies",
+                "openai"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// D6: effective allowlist = VK allowed_models INTERSECT team allowed_models.",
+                  "// With the VK wide open, the team policy is the only thing narrowing here.",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'policy write failed: ' + pm.response.text()).to.be.below(400);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/models?provider=openai is narrowed to the team allowlist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hAclVkValue}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/models?provider=openai",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "models"
+              ],
+              "query": [
+                {
+                  "key": "provider",
+                  "value": "openai"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Explicit-provider path: attribution comes from the ?provider= value, so the",
+                  "// handler resolves the caller's team policies in",
+                  "// applyListModelsTeamACLForExplicitProvider and filters per model.",
+                  "// Red before: every openai model the key could reach was listed.",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "var ids = (j.data || []).map(function (m) { return String(m.id); });",
+                  "var openaiIds = ids.filter(function (id) { return id.indexOf('openai/') === 0; });",
+                  "// The team policy allows exactly one model, so the listing must surface exactly",
+                  "// that one and nothing else from the provider. Listed IDs are provider-prefixed",
+                  "('openai/gpt-4o-mini') while the ACL stores bare names, so this also pins the",
+                  "// schemas.ParseModelString normalization the filter shares with the resolver.",
+                  "pm.expect(openaiIds.length, 'expected the team ACL to leave exactly one openai model, got ' + JSON.stringify(openaiIds) + ' body=' + pm.response.text()).to.eql(1);",
+                  "pm.expect(openaiIds[0], 'wrong model survived the team ACL: ' + JSON.stringify(openaiIds)).to.eql('openai/gpt-4o-mini');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/models (aggregate fan-out) is narrowed to the team allowlist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hAclVkValue}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/models",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "models"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// THE core-change pin. The aggregate path merges every provider's models into",
+                  "// one flat []schemas.Model via Bifrost.ListAllModels, and schemas.Model carried",
+                  "// no provider attribution, so the transport could not tell which team policy",
+                  "// applied to a given entry and an allowlist-subset policy left the provider's",
+                  "// full list visible ('listed but unusable' - the per-request gate still denied",
+                  "// it). core now stamps the internal json:\"-\" schemas.Model.Provider while",
+                  "// merging, and applyListModelsTeamACLFilter filters on it.",
+                  "// Red before: every openai model was listed. Green after: only gpt-4o-mini.",
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "var j = pm.response.json();",
+                  "var ids = (j.data || []).map(function (m) { return String(m.id); });",
+                  "var openaiIds = ids.filter(function (id) { return id.indexOf('openai/') === 0; });",
+                  "// The team policy allows exactly one model, so the listing must surface exactly",
+                  "// that one and nothing else from the provider. Listed IDs are provider-prefixed",
+                  "('openai/gpt-4o-mini') while the ACL stores bare names, so this also pins the",
+                  "// schemas.ParseModelString normalization the filter shares with the resolver.",
+                  "pm.expect(openaiIds.length, 'expected the team ACL to leave exactly one openai model, got ' + JSON.stringify(openaiIds) + ' body=' + pm.response.text()).to.eql(1);",
+                  "pm.expect(openaiIds[0], 'wrong model survived the team ACL: ' + JSON.stringify(openaiIds)).to.eql('openai/gpt-4o-mini');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Teardown: delete the harness virtual key",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/virtual-keys/{{hAclVkId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "virtual-keys",
+                "{{hAclVkId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Team deletion only nulls virtual_keys.team_id, so the key itself must go",
+                  "// explicitly or re-runs leak a live credential.",
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'delete failed: ' + pm.response.text()).to.be.below(400);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Teardown: delete the team model policy",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/teams/{{hAclTeamId}}/model-policies/openai",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "teams",
+                "{{hAclTeamId}}",
+                "model-policies",
+                "openai"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'delete failed: ' + pm.response.text()).to.be.below(400);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Teardown: delete the harness team",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/governance/teams/{{hAclTeamId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "governance",
+                "teams",
+                "{{hAclTeamId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Also pins the cascade: DeleteTeam removes team_model_policies and",
+                  "// team_pricing_profiles rows explicitly (neither declares a FK on team_id),",
+                  "// so re-runs do not accumulate orphans.",
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.expect(pm.response.code, 'delete failed: ' + pm.response.text()).to.be.below(400);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
   ]
 }
