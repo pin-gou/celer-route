@@ -1,6 +1,6 @@
 ---
 name: build-and-publish
-description: 构建 multi-arch Docker 镜像并推送到 GHCR，然后自动分析 Git 变更生成 CHANGELOG，最后在 GitHub 创建 Release。接受一个 version 参数（格式 vX.Y.Z）。
+description: 基于当前分支构建 multi-arch Docker 镜像并推送到 GHCR，然后自动分析 Git 变更生成 CHANGELOG，最后在 GitHub 创建 Release。执行前会就当前分支与相较上一版本的新增 commit 与用户二次确认。接受一个 version 参数（格式 vX.Y.Z）。
 license: MIT
 compatibility: 需要 gh CLI 已登录、docker login ghcr.io 已配置、当前目录为 Bifrost 仓库根目录
 metadata:
@@ -12,6 +12,8 @@ metadata:
 
 构建 multi-arch Docker 镜像并推送到 GHCR → 自动生成 CHANGELOG → 创建 GitHub Release。
 
+发布**基于当前所在分支**（不强制 `main`）。执行任何构建/发布动作前，必须先与用户二次确认当前发布分支及相较上一版本新增的 commit。
+
 ## 前置条件
 
 | 项 | 要求 | 校验失败行为 |
@@ -19,6 +21,7 @@ metadata:
 | `gh` CLI 已登录 | `gh auth status` 通过 | 终止并提示登录 |
 | `docker login ghcr.io` 已配置 | 可推送至 ghcr.io | 终止并提示登录 |
 | 当前目录为仓库根目录 | `Makefile` 存在 | 终止并提示 |
+| 当前分支 | 非 detached HEAD（发布基于当前分支，不强制 `main`） | 终止并提示切换到具体分支 |
 | git 工作区干净 | `git status --porcelain` 为空 | 终止并提示提交或 stash |
 | 参数 `version` | 格式 `vX.Y.Z`（如 `v1.2.3`） | 终止并提示正确格式 |
 | 交叉编译工具链 | `bash .github/workflows/scripts/install-cross-compilers.sh` 可自动安装（需 sudo，或已手动装好）；产物校验见步骤 3.5 | 工具链不可用且无法安装时终止——二进制为硬依赖，不发二进制不建 release |
@@ -43,12 +46,62 @@ if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
 fi
 ```
 
-### 步骤 2：切换到 main 分支并拉取最新代码
+### 步骤 2：确认当前发布分支
+
+发布**基于当前所在分支**，不强制切换到 `main`。仅需确保处于具体分支（非 detached HEAD），并在有上游时快进到上游最新：
 
 ```bash
-git checkout main
-git pull origin main
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$branch" == "HEAD" ]]; then
+  echo "ERROR: 处于 detached HEAD，无法确定发布分支——请先切换到一个具体分支"
+  exit 1
+fi
+
+# 若当前分支有上游，快进到上游最新（无上游则跳过，仅使用本地提交）
+if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  git pull --ff-only
+else
+  echo "WARN: 当前分支 ${branch} 无上游，使用本地提交发布"
+fi
+
+echo "当前发布分支: ${branch}"
 ```
+
+### 步骤 2.5：二次确认发布分支与新增提交（必须用户确认）
+
+在**任何构建/发布动作之前**，必须把「当前分支」和「相较上一发布版本新增的 commit」呈现给用户，并取得明确确认；用户未确认或选择终止时立即停止。
+
+```bash
+current_tag="$version"
+prev_tag=$(git tag --sort=-version:refname | grep -vE '\-(rc|alpha|beta)' | head -n 2 | tail -n 1)
+
+# 当前 tag 已存在（本地重复执行）时，对比基准回退到 HEAD
+if git rev-parse "$current_tag" >/dev/null 2>&1; then
+  current_tag="HEAD"
+fi
+
+if [[ -z "$prev_tag" ]]; then
+  log_range="HEAD"
+  prev_tag="（首次发布）"
+else
+  log_range="${prev_tag}..HEAD"
+fi
+
+echo "=== 发布分支: ${branch} ==="
+echo "=== 对比范围: ${prev_tag} → ${version} ==="
+git log --oneline --no-decorate "$log_range"
+echo ""
+echo "--- commit subjects ---"
+git log --format="%s" "$log_range"
+```
+
+确认内容必须包含：
+
+- **发布分支**：`${branch}`（tag 将指向该分支当前 HEAD）
+- **对比范围**：`${prev_tag} → ${version}`
+- **新增 commit 清单**：上述 `git log` 输出
+
+用户确认后，`prev_tag` 与 `log_range` 沿用至步骤 4，不再重新推导。
 
 ### 步骤 3：构建 multi-arch Docker 镜像并推送
 
@@ -101,28 +154,7 @@ done < <(find dist -type f -name "celer-route-http*" ! -name "*.sha256" -print0)
 
 ### 步骤 4：分析变更并生成 CHANGELOG
 
-获取当前 tag 和上一个 tag，对比 git log 并生成用户视角的 CHANGELOG：
-
-```bash
-# 获取当前 tag 和上一个 tag
-current_tag="$version"
-prev_tag=$(git tag --sort=-version:refname | grep -v '\-rc' | grep -v '\-alpha' | grep -v '\-beta' | head -n 2 | tail -n 1)
-
-# 如果当前 tag 已存在（本地重复执行），则 fallback 到基于 HEAD 的最近 tag
-if git rev-parse "$current_tag" >/dev/null 2>&1; then
-  current_tag="HEAD"
-fi
-
-if [[ -z "$prev_tag" ]]; then
-  # 没有上一个 tag，取所有变更
-  log_range="HEAD"
-  prev_tag="（首次发布）"
-else
-  log_range="${prev_tag}..HEAD"
-fi
-```
-
-然后使用 `git log` 提取结构化变更：
+对比范围 `${prev_tag} → ${version}`（`log_range`）已在步骤 2.5 确定并经用户确认，直接据此提取结构化变更：
 
 ```bash
 git log --oneline --no-decorate "$log_range"
@@ -298,9 +330,28 @@ docker info
 [[ -f Makefile ]] || { echo "ERROR: 不在仓库根目录"; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo "ERROR: 工作区不干净"; exit 1; }
 
-# 步骤 2：切换分支
-git checkout main
-git pull origin main
+# 步骤 2：确认当前发布分支（不切换分支）
+branch="$(git rev-parse --abbrev-ref HEAD)"
+[[ "$branch" != "HEAD" ]] || { echo "ERROR: detached HEAD"; exit 1; }
+if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  git pull --ff-only
+else
+  echo "WARN: 当前分支 ${branch} 无上游，使用本地提交发布"
+fi
+
+# 步骤 2.5：二次确认（展示分支与新增 commit，等待用户明确确认后才继续）
+current_tag="$version"
+prev_tag=$(git tag --sort=-version:refname | grep -vE '\-(rc|alpha|beta)' | head -n 2 | tail -n 1)
+git rev-parse "$current_tag" >/dev/null 2>&1 && current_tag="HEAD"
+if [[ -z "$prev_tag" ]]; then
+  log_range="HEAD"; prev_tag="（首次发布）"
+else
+  log_range="${prev_tag}..HEAD"
+fi
+echo "=== 发布分支: ${branch} ==="
+echo "=== 对比范围: ${prev_tag} → ${version} ==="
+git log --oneline --no-decorate "$log_range"
+# >>> agent 必须在此处向用户展示「分支 + 新增 commit 清单」并取得明确确认，未确认则终止 <<<
 
 # 步骤 3：构建镜像
 make docker-image-multiarch VERSION="$version"
@@ -323,20 +374,7 @@ done < <(find dist -type f -name "celer-route-http*" ! -name "*.sha256" -print0)
 (cd "$STAGE" && for f in celer-route-http-*; do [ -f "$f" ] && shasum -a 256 "$f" > "$f.sha256"; done)
 [ "$(ls "$STAGE" | wc -l)" -eq 10 ] || { echo "ERROR: 展平产物数量异常（应为 5 二进制 + 5 校验和）"; exit 1; }
 
-# 步骤 4：分析变更
-current_tag="$version"
-prev_tag=$(git tag --sort=-version:refname | grep -vE '\-(rc|alpha|beta)' | head -n 2 | tail -n 1)
-if git rev-parse "$current_tag" >/dev/null 2>&1; then
-  current_tag="HEAD"
-fi
-if [[ -z "$prev_tag" ]]; then
-  log_range="HEAD"
-  prev_tag="（首次发布）"
-else
-  log_range="${prev_tag}..HEAD"
-fi
-
-echo "=== 对比范围: ${prev_tag} → ${version} ==="
+# 步骤 4：分析变更（log_range / prev_tag 已在步骤 2.5 确定）
 git log --oneline --no-decorate "$log_range"
 echo ""
 
@@ -380,6 +418,7 @@ rm -f /tmp/changelog-${version}.md
 ## 构建与发布完成
 
 **版本：** {{version}}
+**发布分支：** {{branch}}
 **工作流：** build-and-publish
 
 ### 构建产物
@@ -419,7 +458,9 @@ rm -f /tmp/changelog-${version}.md
 
 ## 安全规则
 
-- 仅在 `main` 分支上执行发布流程
+- 发布基于当前所在分支（不强制 `main`），但必须处于具体分支（非 detached HEAD）
+- 执行任何构建/发布动作前，必须向用户二次确认「发布分支 + 相较上一版本新增的 commit」，用户未确认不得继续
+- tag 将指向当前分支 HEAD；若该提交尚未推送到远端，`git push origin "$version"` 会随 tag 一并推送该提交对象
 - 本地 tag 创建后立即 `git push origin`，避免本地残留
 - 工作区不干净时拒绝执行，防止误提交未完成的变更
 - `gh release create` 使用 `--notes-file` 而非 `--notes`，避免 shell 转义问题
@@ -433,5 +474,5 @@ rm -f /tmp/changelog-${version}.md
 - 不做代码审查或测试——发布前应已通过 CI
 - 不修改 `AGENTS.md` 或版本文件——由发布流程独立管理
 - 不推送 `latest` tag 以外的 Docker 标签——`make docker-image-multiarch` 已经处理
-- 不创建 PR——发布流程直接从 main 分支进行
+- 不创建 PR——发布流程直接从当前分支进行
 - 不重复创建 `transports/vX` release（避免与 CI 路径冲突）——二进制只挂仓库级 `vX`
