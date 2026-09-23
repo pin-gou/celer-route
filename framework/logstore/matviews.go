@@ -961,6 +961,7 @@ func canUseMatViewFilters(f SearchFilters) bool {
 		f.MinCost == nil && f.MaxCost == nil &&
 		!f.MissingCostOnly &&
 		len(f.CacheHitTypes) == 0 &&
+		len(f.CostAccuracy) == 0 &&
 		len(f.UserAgents) == 0 &&
 		len(f.TeamIDs) == 0 &&
 		len(f.BusinessUnitIDs) == 0 &&

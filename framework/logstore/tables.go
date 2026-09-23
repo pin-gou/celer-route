@@ -46,36 +46,42 @@ const (
 
 // SearchFilters represents the available filters for log searches
 type SearchFilters struct {
-	Providers         []string          `json:"providers,omitempty"`
-	Models            []string          `json:"models,omitempty"`
-	Aliases           []string          `json:"aliases,omitempty"`
-	Status            []string          `json:"status,omitempty"`
-	StopReasons       []string          `json:"stop_reasons,omitempty"` // For filtering by stop reason (stop, length, content_filter, refusal, tool_calls, etc.)
-	Objects           []string          `json:"objects,omitempty"`      // For filtering by request type (chat.completion, text.completion, embedding)
-	ParentRequestID   string            `json:"parent_request_id,omitempty"`
-	RootsOnly         bool              `json:"roots_only,omitempty"` // Hide rows whose parent_request_id points at another row matching these same filters, so each chain lists as its root request only. Ignored when ParentRequestID is set.
-	SelectedKeyIDs    []string          `json:"selected_key_ids,omitempty"`
-	VirtualKeyIDs     []string          `json:"virtual_key_ids,omitempty"`
-	RoutingRuleIDs    []string          `json:"routing_rule_ids,omitempty"`
-	TeamIDs           []string          `json:"team_ids,omitempty"`
-	CustomerIDs       []string          `json:"customer_ids,omitempty"`
-	UserIDs           []string          `json:"user_ids,omitempty"`
-	BusinessUnitIDs   []string          `json:"business_unit_ids,omitempty"`
-	RoutingEngineUsed []string          `json:"routing_engine_used,omitempty"` // For filtering by routing engine (routing-rule, governance, loadbalancing)
-	Apps              []string          `json:"apps,omitempty"`                // Backend-detected client apps
-	UserAgents        []string          `json:"user_agents,omitempty"`         // Raw User-Agent strings; kept for compatibility/debug filtering
-	StartTime         *time.Time        `json:"start_time,omitempty"`
-	EndTime           *time.Time        `json:"end_time,omitempty"`
-	MinLatency        *float64          `json:"min_latency,omitempty"`
-	MaxLatency        *float64          `json:"max_latency,omitempty"`
-	MinTokens         *int              `json:"min_tokens,omitempty"`
-	MaxTokens         *int              `json:"max_tokens,omitempty"`
-	MinCost           *float64          `json:"min_cost,omitempty"`
-	MaxCost           *float64          `json:"max_cost,omitempty"`
-	MissingCostOnly   bool              `json:"missing_cost_only,omitempty"`
-	CacheHitTypes     []string          `json:"cache_hit_types,omitempty"` // For filtering by local-cache hit type ("direct", "semantic")
-	ContentSearch     string            `json:"content_search,omitempty"`
-	MetadataFilters   map[string]string `json:"metadata_filters,omitempty"` // key=metadataKey, value=metadataValue for filtering by metadata
+	Providers         []string   `json:"providers,omitempty"`
+	Models            []string   `json:"models,omitempty"`
+	Aliases           []string   `json:"aliases,omitempty"`
+	Status            []string   `json:"status,omitempty"`
+	StopReasons       []string   `json:"stop_reasons,omitempty"` // For filtering by stop reason (stop, length, content_filter, refusal, tool_calls, etc.)
+	Objects           []string   `json:"objects,omitempty"`      // For filtering by request type (chat.completion, text.completion, embedding)
+	ParentRequestID   string     `json:"parent_request_id,omitempty"`
+	RootsOnly         bool       `json:"roots_only,omitempty"` // Hide rows whose parent_request_id points at another row matching these same filters, so each chain lists as its root request only. Ignored when ParentRequestID is set.
+	SelectedKeyIDs    []string   `json:"selected_key_ids,omitempty"`
+	VirtualKeyIDs     []string   `json:"virtual_key_ids,omitempty"`
+	RoutingRuleIDs    []string   `json:"routing_rule_ids,omitempty"`
+	TeamIDs           []string   `json:"team_ids,omitempty"`
+	CustomerIDs       []string   `json:"customer_ids,omitempty"`
+	UserIDs           []string   `json:"user_ids,omitempty"`
+	BusinessUnitIDs   []string   `json:"business_unit_ids,omitempty"`
+	RoutingEngineUsed []string   `json:"routing_engine_used,omitempty"` // For filtering by routing engine (routing-rule, governance, loadbalancing)
+	Apps              []string   `json:"apps,omitempty"`                // Backend-detected client apps
+	UserAgents        []string   `json:"user_agents,omitempty"`         // Raw User-Agent strings; kept for compatibility/debug filtering
+	StartTime         *time.Time `json:"start_time,omitempty"`
+	EndTime           *time.Time `json:"end_time,omitempty"`
+	MinLatency        *float64   `json:"min_latency,omitempty"`
+	MaxLatency        *float64   `json:"max_latency,omitempty"`
+	MinTokens         *int       `json:"min_tokens,omitempty"`
+	MaxTokens         *int       `json:"max_tokens,omitempty"`
+	MinCost           *float64   `json:"min_cost,omitempty"`
+	MaxCost           *float64   `json:"max_cost,omitempty"`
+	MissingCostOnly   bool       `json:"missing_cost_only,omitempty"`
+	CacheHitTypes     []string   `json:"cache_hit_types,omitempty"` // For filtering by local-cache hit type ("direct", "semantic")
+	// CostAccuracy narrows rows to the given cost-confidence bands
+	// ("provider_reported" / "gateway_estimated" / "unknown"). Reconciliation
+	// and gateway-delta reports use it to compare like-for-like against a
+	// provider invoice — see Log.CostAccuracy and 03-cost-allocation
+	// data-model §5. Unknown values are dropped by the filter applier.
+	CostAccuracy    []string          `json:"cost_accuracy,omitempty"`
+	ContentSearch   string            `json:"content_search,omitempty"`
+	MetadataFilters map[string]string `json:"metadata_filters,omitempty"` // key=metadataKey, value=metadataValue for filtering by metadata
 	// RankingLimit caps the number of rows returned by the ranking queries
 	// (GetModelRankings / GetUserRankings / GetDimensionRankings). nil means
 	// "use the store default" (defaultMaxRankingsLimit); a value <= 0 means
@@ -169,6 +175,29 @@ func (u *UserAgentMapping) BeforeCreate(tx *gorm.DB) error {
 		return errors.New("id is required")
 	}
 	return nil
+}
+
+// Cost-accuracy bands mirrored from framework/modelcatalog/datasheet
+// (CostAccuracyProviderReported / …GatewayEstimated / …Unknown). logstore
+// cannot import datasheet — datasheet's overrides.go imports configstore,
+// which imports logstore, so the edge would cycle. These literals are the
+// whitelist the SearchFilters.CostAccuracy applier uses to keep arbitrary
+// query strings out of the SQL text; keep them in sync with the writer.
+const (
+	CostAccuracyProviderReported = "provider_reported"
+	CostAccuracyGatewayEstimated = "gateway_estimated"
+	CostAccuracyUnknown          = "unknown"
+)
+
+// IsValidCostAccuracy reports whether v is one of the three bands the cost
+// writer can produce. Handlers use it to reject a bad `accuracy` query param
+// with a 400 before it ever reaches the store.
+func IsValidCostAccuracy(v string) bool {
+	switch v {
+	case CostAccuracyProviderReported, CostAccuracyGatewayEstimated, CostAccuracyUnknown:
+		return true
+	}
+	return false
 }
 
 // Log represents a complete log entry for a request/response cycle

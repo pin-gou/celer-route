@@ -393,6 +393,22 @@ func (s *RDBLogStore) applyFilters(baseQuery *gorm.DB, filters SearchFilters) *g
 			}
 		}
 	}
+	if len(filters.CostAccuracy) > 0 {
+		// Only keep the three bands the cost writer can produce so an
+		// arbitrary query string never reaches the SQL text.
+		valid := make([]string, 0, len(filters.CostAccuracy))
+		for _, a := range filters.CostAccuracy {
+			switch a {
+			case CostAccuracyProviderReported,
+				CostAccuracyGatewayEstimated,
+				CostAccuracyUnknown:
+				valid = append(valid, a)
+			}
+		}
+		if len(valid) > 0 {
+			baseQuery = baseQuery.Where("cost_accuracy IN ?", valid)
+		}
+	}
 	if filters.ContentSearch != "" {
 		dialect := s.db.Dialector.Name()
 		if dialect == "postgres" {

@@ -22,6 +22,8 @@ func setupReportsTestStore(t *testing.T) *RDBConfigStore {
 	if err := db.AutoMigrate(
 		&tables.TableStandardPrice{},
 		&tables.TableTeamPricingProfile{},
+		&tables.TableBillingReconciliation{},
+		&tables.TableBillingReconItem{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -202,5 +204,221 @@ func TestListTeamPricingProfiles(t *testing.T) {
 	}
 	if len(rows) != 3 {
 		t.Errorf("rows = %d, want 3", len(rows))
+	}
+}
+
+// TestCreateReconciliationWritesBatchAndItems covers the transactional
+// write path. A reconciliation is meaningless without its items (the
+// gateway-delta view needs both numbers) so the test fails if either side
+// of the transaction silently drops.
+func TestCreateReconciliationWritesBatchAndItems(t *testing.T) {
+	s := setupReportsTestStore(t)
+	ctx := context.Background()
+	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	row := &tables.TableBillingReconciliation{
+		Provider:     "OpenAI",
+		PeriodStart:  start,
+		PeriodEnd:    end,
+		Source:       tables.ReconciliationSourceUsageAPI,
+		GatewayCost:  100,
+		ProviderCost: 102.5,
+		Delta:        2.5,
+		Status:       tables.ReconciliationStatusMatched,
+	}
+	items := []tables.TableBillingReconItem{
+		{Model: "gpt-4o", GatewayRequests: 100, ProviderRequests: 100, GatewayCost: 80, ProviderCost: 82},
+		{Model: "gpt-4o-mini", GatewayRequests: 200, ProviderRequests: 200, GatewayCost: 20, ProviderCost: 20.5},
+	}
+	if err := s.CreateReconciliation(ctx, row, items); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if row.ID == "" {
+		t.Fatalf("id not assigned")
+	}
+	if row.Provider != "openai" {
+		t.Errorf("provider should be lower-cased, got %q", row.Provider)
+	}
+	got, err := s.GetReconciliationByID(ctx, row.ID)
+	if err != nil || got == nil {
+		t.Fatalf("get: %v / %v", err, got)
+	}
+	if got.Status != tables.ReconciliationStatusMatched {
+		t.Errorf("status = %q, want matched", got.Status)
+	}
+	gotItems, err := s.ListReconciliationItems(ctx, row.ID)
+	if err != nil {
+		t.Fatalf("list items: %v", err)
+	}
+	if len(gotItems) != 2 {
+		t.Errorf("items = %d, want 2", len(gotItems))
+	}
+}
+
+// TestReconciliationBeforeSaveRejectsBadRows exercises the validation path
+// so callers get the sentinel error rather than a 500.
+func TestReconciliationBeforeSaveRejectsBadRows(t *testing.T) {
+	cases := []struct {
+		name string
+		row  *tables.TableBillingReconciliation
+	}{
+		{
+			name: "missing provider",
+			row: &tables.TableBillingReconciliation{
+				PeriodStart: time.Now(), PeriodEnd: time.Now().Add(time.Hour),
+				Source: tables.ReconciliationSourceUsageAPI,
+			},
+		},
+		{
+			name: "bad source",
+			row: &tables.TableBillingReconciliation{
+				Provider:    "openai",
+				PeriodStart: time.Now(), PeriodEnd: time.Now().Add(time.Hour),
+				Source: "telemetry_only",
+			},
+		},
+		{
+			name: "period inverted",
+			row: &tables.TableBillingReconciliation{
+				Provider:    "openai",
+				PeriodStart: time.Now().Add(time.Hour), PeriodEnd: time.Now(),
+				Source: tables.ReconciliationSourceUsageAPI,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.row.BeforeSave(nil); err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+		})
+	}
+}
+
+// TestUpdateReconciliationWritesOperatorFields covers the limited-field
+// update path. Status / notes / costs are mutable; immutable fields
+// (id, period, provider) must not silently shift under Update.
+func TestUpdateReconciliationWritesOperatorFields(t *testing.T) {
+	s := setupReportsTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	row := &tables.TableBillingReconciliation{
+		Provider: "openai", PeriodStart: now, PeriodEnd: now.Add(time.Hour),
+		Source: tables.ReconciliationSourceUsageAPI, Status: tables.ReconciliationStatusMatched,
+	}
+	if err := s.CreateReconciliation(ctx, row, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	row.Status = tables.ReconciliationStatusApplied
+	note := "applied after credit adjustment"
+	row.Notes = &note
+	row.GatewayCost = 110
+	row.ProviderCost = 115
+	row.Delta = 5
+	if err := s.UpdateReconciliation(ctx, row); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	got, _ := s.GetReconciliationByID(ctx, row.ID)
+	if got.Status != tables.ReconciliationStatusApplied {
+		t.Errorf("status = %q, want applied", got.Status)
+	}
+	if got.Notes == nil || *got.Notes != note {
+		t.Errorf("notes lost after update")
+	}
+	if got.Delta != 5 {
+		t.Errorf("delta = %v, want 5", got.Delta)
+	}
+}
+
+// TestListReconciliationsFiltersAndPages covers the list endpoint's filter
+// combinations: provider-only, status-only, source-only, period window, and
+// pagination metadata.
+func TestListReconciliationsFiltersAndPages(t *testing.T) {
+	s := setupReportsTestStore(t)
+	ctx := context.Background()
+	q3Start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	q3End := q3Start.AddDate(0, 3, 0)
+	q4Start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	q4End := q4Start.AddDate(0, 3, 0)
+	openaiQ3 := &tables.TableBillingReconciliation{
+		Provider: "openai", PeriodStart: q3Start, PeriodEnd: q3End,
+		Source: tables.ReconciliationSourceUsageAPI, Status: tables.ReconciliationStatusMatched,
+	}
+	openaiQ4 := &tables.TableBillingReconciliation{
+		Provider: "openai", PeriodStart: q4Start, PeriodEnd: q4End,
+		Source: tables.ReconciliationSourceUsageAPI, Status: tables.ReconciliationStatusApplied,
+	}
+	anthropicQ3 := &tables.TableBillingReconciliation{
+		Provider: "anthropic", PeriodStart: q3Start, PeriodEnd: q3End,
+		Source: tables.ReconciliationSourceUsageAPI, Status: tables.ReconciliationStatusMatched,
+	}
+	for _, r := range []*tables.TableBillingReconciliation{openaiQ3, openaiQ4, anthropicQ3} {
+		if err := s.CreateReconciliation(ctx, r, nil); err != nil {
+			t.Fatalf("create %v: %v", r.Provider, err)
+		}
+	}
+	t.Run("provider filter", func(t *testing.T) {
+		rows, total, err := s.ListReconciliations(ctx, ReconciliationQueryParams{Provider: "openai"})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if total != 2 || len(rows) != 2 {
+			t.Errorf("total=%d rows=%d, want 2/2", total, len(rows))
+		}
+	})
+	t.Run("status filter", func(t *testing.T) {
+		rows, _, err := s.ListReconciliations(ctx, ReconciliationQueryParams{Status: tables.ReconciliationStatusMatched})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(rows) != 2 {
+			t.Errorf("rows = %d, want 2", len(rows))
+		}
+	})
+	t.Run("period window narrows", func(t *testing.T) {
+		rows, _, err := s.ListReconciliations(ctx, ReconciliationQueryParams{
+			PeriodStart: q3Start, PeriodEnd: q4Start,
+		})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		// Q3 ends Sep 30, Q4 starts Oct 1; windowing on (q3Start,q4Start)
+		// should keep both since their windows intersect.
+		if len(rows) != 3 {
+			t.Errorf("rows = %d, want 3", len(rows))
+		}
+	})
+	t.Run("pagination", func(t *testing.T) {
+		rows, total, err := s.ListReconciliations(ctx, ReconciliationQueryParams{Limit: 2, Offset: 0})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if total != 3 || len(rows) != 2 {
+			t.Errorf("total=%d rows=%d, want 3/2", total, len(rows))
+		}
+	})
+}
+
+// TestIsReconciliationUsageAPISupported confirms the first-wave list keeps
+// the documented set. A drift between this set and the calibration job's
+// allow-list would silently drop usage-API pulls.
+func TestIsReconciliationUsageAPISupported(t *testing.T) {
+	cases := []struct {
+		provider string
+		want     bool
+	}{
+		{"openai", true},
+		{"OpenAI", true},
+		{"anthropic", true},
+		{"deepseek", true},
+		{"azure", false},
+		{"vertex", false},
+		{"bedrock", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := tables.IsReconciliationUsageAPISupported(tc.provider); got != tc.want {
+			t.Errorf("IsReconciliationUsageAPISupported(%q) = %v, want %v", tc.provider, got, tc.want)
+		}
 	}
 }

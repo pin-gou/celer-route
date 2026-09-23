@@ -2347,6 +2347,35 @@ func (a *rtkAccessor) Histogram(start, end, bucketSize int64) []rtk.RtkHistogram
 	return a.p.Histogram(start, end, bucketSize)
 }
 
+// cacheStatsProviderFunc adapts the semanticcache plugin's process-lifetime
+// snapshot to the handler-local shape. A func-typed adapter keeps the
+// handlers package free of a dependency on the plugin package while still
+// letting the resolver below hand back a live provider.
+type cacheStatsProviderFunc func() handlers.CacheStatsSnapshotShape
+
+func (f cacheStatsProviderFunc) Stats() handlers.CacheStatsSnapshotShape { return f() }
+
+// resolveCacheStats returns a live view over the semantic_cache plugin's
+// counters, or nil when the plugin isn't loaded. Resolved per call for the
+// same reload-safety reason as the cache-clear resolver: /api/plugins can
+// swap the plugin out without a restart.
+func (s *BifrostHTTPServer) resolveCacheStats() handlers.CacheStatsProvider {
+	p, err := lib.FindPluginAs[*semanticcache.Plugin](s.Config, semanticcache.PluginName)
+	if err != nil || p == nil {
+		return nil
+	}
+	return cacheStatsProviderFunc(func() handlers.CacheStatsSnapshotShape {
+		snap := p.Stats()
+		return handlers.CacheStatsSnapshotShape{
+			Hits:             snap.Hits,
+			Misses:           snap.Misses,
+			HitRate:          snap.HitRate,
+			SavedInputTokens: snap.SavedInputTokens,
+			SavedCost:        snap.SavedCost,
+		}
+	})
+}
+
 // ResolveRtkPlugin returns an RtkPluginAccessor over the live RTK plugin
 // when it is loaded, or (nil, false) when it is not. It is safe to call
 // from any goroutine — the underlying pointer is replaced atomically when
@@ -2659,6 +2688,35 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	}
 	reportsCostHandler := handlers.NewReportsCostHandler(s.Config.ConfigStore, reportsLogStore)
 	reportsCostHandler.RegisterRoutes(s.Router, middlewares...)
+	// Phase 5 (03-cost-allocation §7 + 04-security cache-observability):
+	// the admin-only financial surface — gateway delta (Σactual − Σstandard,
+	// by provider and by provider+model) and billing reconciliation
+	// (usage-API calibration + invoice CSV fallback) — plus the cache
+	// observability pair (/api/cache/stats and /api/reports/cache/savings).
+	//
+	// All four are constructed unconditionally: every store dependency is
+	// optional and the handlers degrade to empty/annotated responses with a
+	// clear note rather than 500ing when one is missing.
+	gatewayDeltaHandler := handlers.NewReportsGatewayDeltaHandler(s.Config.ConfigStore, reportsLogStore)
+	gatewayDeltaHandler.RegisterRoutes(s.Router, middlewares...)
+
+	// The reconciliation handler's store dependencies are the config store
+	// split into two narrow interfaces; a store that doesn't implement them
+	// (a read-only / nil store) leaves the handler mounted but degrading.
+	reconciliationStore, _ := s.Config.ConfigStore.(handlers.ReconciliationStore)
+	reconciliationDatasheet, _ := s.Config.ConfigStore.(handlers.ReconciliationDatasheetStore)
+	reconciliationHandler := handlers.NewReportsReconciliationHandler(
+		reconciliationStore,
+		reportsLogStore,
+		reconciliationDatasheet,
+		nil, // usage API client: wired per provider once the credentials land (Phase 5 ships the data path)
+	)
+	reconciliationHandler.RegisterRoutes(s.Router, middlewares...)
+
+	cacheStatsHandler := handlers.NewCacheStatsHandler(s.resolveCacheStats)
+	cacheStatsHandler.RegisterRoutes(s.Router, middlewares...)
+	reportsCacheHandler := handlers.NewReportsCacheHandler(reportsLogStore, s.resolveCacheStats)
+	reportsCacheHandler.RegisterRoutes(s.Router, middlewares...)
 	skillsServingHandler := handlers.NewSkillsServingHandler(s.Config.ConfigStore, s.Config.ObjectStore)
 	if skillsServingHandler != nil {
 		skillsServingHandler.RegisterRoutes(s.Router, middlewares...)

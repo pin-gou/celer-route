@@ -206,3 +206,153 @@ func (s *RDBConfigStore) DeleteTeamPricingProfile(ctx context.Context, teamID st
 	}
 	return nil
 }
+
+// ReconciliationQueryParams narrows ListReconciliations. Provider / Status
+// / Source can each be empty (== no filter); Limit/Offset drive pagination.
+// PeriodStart / PeriodEnd, when both set, narrow to batches whose window
+// intersects the requested range (handy for "show me Q3 calibrations").
+type ReconciliationQueryParams struct {
+	Provider    string
+	Status      string
+	Source      string
+	PeriodStart time.Time
+	PeriodEnd   time.Time
+	Limit       int
+	Offset      int
+}
+
+// ListReconciliations returns calibration batches filtered by params. Sorted
+// newest-first so the admin UI shows the most recent calibration at the top.
+// A total is included for the pagination footer.
+func (s *RDBConfigStore) ListReconciliations(ctx context.Context, params ReconciliationQueryParams) ([]tables.TableBillingReconciliation, int64, error) {
+	query := s.DB().WithContext(ctx).Model(&tables.TableBillingReconciliation{})
+	if v := strings.TrimSpace(params.Provider); v != "" {
+		query = query.Where("provider = ?", strings.ToLower(v))
+	}
+	if v := strings.TrimSpace(params.Status); v != "" {
+		query = query.Where("status = ?", v)
+	}
+	if v := strings.TrimSpace(params.Source); v != "" {
+		query = query.Where("source = ?", v)
+	}
+	if !params.PeriodStart.IsZero() && !params.PeriodEnd.IsZero() {
+		query = query.Where("period_end >= ? AND period_start <= ?", params.PeriodStart, params.PeriodEnd)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, s.parseGormError(err)
+	}
+	if params.Limit > 0 {
+		query = query.Limit(params.Limit)
+	}
+	if params.Offset > 0 {
+		query = query.Offset(params.Offset)
+	}
+	var rows []tables.TableBillingReconciliation
+	if err := query.Order("created_at DESC, id DESC").Find(&rows).Error; err != nil {
+		return nil, 0, s.parseGormError(err)
+	}
+	return rows, total, nil
+}
+
+// GetReconciliationByID returns the parent batch row, or ErrNotFound. Items
+// are loaded separately via ListReconciliationItems so the parent lookup
+// stays allocation-free on list pages.
+func (s *RDBConfigStore) GetReconciliationByID(ctx context.Context, id string) (*tables.TableBillingReconciliation, error) {
+	var row tables.TableBillingReconciliation
+	if err := s.DB().WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, s.parseGormError(err)
+	}
+	return &row, nil
+}
+
+// ListReconciliationItems returns every breakdown row for the given batch
+// in stable (model asc) order. An empty slice + nil error signals the batch
+// exists but produced no per-model breakdown (e.g. unsupported provider).
+func (s *RDBConfigStore) ListReconciliationItems(ctx context.Context, reconciliationID string) ([]tables.TableBillingReconItem, error) {
+	if strings.TrimSpace(reconciliationID) == "" {
+		return nil, nil
+	}
+	var rows []tables.TableBillingReconItem
+	if err := s.DB().WithContext(ctx).
+		Where("reconciliation_id = ?", reconciliationID).
+		Order("model ASC").
+		Find(&rows).Error; err != nil {
+		return nil, s.parseGormError(err)
+	}
+	return rows, nil
+}
+
+// CreateReconciliation atomically writes a parent batch and its item rows.
+// The atomicity matters: the calibration job runs once per cycle and a
+// half-written batch would surface in the UI as "matched but with no
+// per-model numbers" — a confusing state worth a transaction for.
+func (s *RDBConfigStore) CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error {
+	if row == nil {
+		return errors.New("reconciliation row is required")
+	}
+	if strings.TrimSpace(row.ID) == "" {
+		row.ID = uuid.NewString()
+	}
+	now := time.Now().UTC()
+	row.CreatedAt = now
+	row.UpdatedAt = now
+	if row.Status == "" {
+		row.Status = tables.ReconciliationStatusPending
+	}
+	// Recon items have their own timestamps but they all share the batch's
+	// wall-clock so a downstream query "items in the same second as the
+	// batch header" returns the right set without joining on a window.
+	for i := range items {
+		if items[i].ReconciliationID == "" {
+			items[i].ReconciliationID = row.ID
+		}
+		items[i].CreatedAt = now
+		items[i].UpdatedAt = now
+	}
+	err := s.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(row).Error; err != nil {
+			return err
+		}
+		if len(items) > 0 {
+			if err := tx.Create(&items).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return s.parseGormError(err)
+	}
+	return nil
+}
+
+// UpdateReconciliation mutates an existing batch — only the operator-facing
+// fields (status / notes / provider+gateway cost) are writable; id,
+// period_start, provider are immutable after creation so audit trail stays
+// stable. The update uses Exec + raw column writes (rather than GORM
+// .Updates on a struct) so the BeforeSave hook is bypassed — otherwise the
+// partial row passed in would fail the "provider required" check.
+func (s *RDBConfigStore) UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error {
+	if row == nil {
+		return errors.New("reconciliation row is required")
+	}
+	if strings.TrimSpace(row.ID) == "" {
+		return errors.New("reconciliation id is required")
+	}
+	row.UpdatedAt = time.Now().UTC()
+	res := s.DB().WithContext(ctx).Exec(
+		`UPDATE billing_reconciliations SET status = ?, notes = ?, gateway_cost = ?, provider_cost = ?, delta = ?, updated_at = ? WHERE id = ?`,
+		row.Status, row.Notes, row.GatewayCost, row.ProviderCost, row.Delta, row.UpdatedAt, row.ID,
+	)
+	if res.Error != nil {
+		return s.parseGormError(res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

@@ -565,6 +565,17 @@ type ConfigStore interface {
 	UpsertTeamPricingProfile(ctx context.Context, row *tables.TableTeamPricingProfile) error
 	DeleteTeamPricingProfile(ctx context.Context, teamID string) error
 
+	// Billing-reconciliations (Phase 5 cost-allocation §6) — calibration
+	// batches pairing gateway Σactual against provider Σactual. The handler
+	// side never reads items directly except through the parent batch id,
+	// so Get/Update only need to surface the parent row. Items are written
+	// in one go from the calibration job.
+	ListReconciliations(ctx context.Context, params ReconciliationQueryParams) ([]tables.TableBillingReconciliation, int64, error)
+	GetReconciliationByID(ctx context.Context, id string) (*tables.TableBillingReconciliation, error)
+	ListReconciliationItems(ctx context.Context, reconciliationID string) ([]tables.TableBillingReconItem, error)
+	CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error
+	UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error
+
 	// Model parameters
 	GetModelParameters(ctx context.Context) ([]tables.TableModelParameters, error)
 	GetModelParametersByModel(ctx context.Context, model string) (*tables.TableModelParameters, error)

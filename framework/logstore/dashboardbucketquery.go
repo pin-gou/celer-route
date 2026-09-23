@@ -139,6 +139,11 @@ func (r *DashboardBucketReader) SupportsFilters(filters SearchFilters) bool {
 	if len(filters.CacheHitTypes) > 0 {
 		return false
 	}
+	if len(filters.CostAccuracy) > 0 {
+		// mv_dashboard_buckets has no cost_accuracy column — the band is a
+		// per-row property that only survives in the raw logs table.
+		return false
+	}
 	return true
 }
 

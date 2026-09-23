@@ -483,6 +483,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_webhook_jobs_payload_json_column"}, run: migrationAddWebhookJobsPayloadJSONColumn},
 	{IDs: []string{"add_standard_prices_table"}, run: migrationAddStandardPricesTable},
 	{IDs: []string{"add_team_pricing_profiles_table"}, run: migrationAddTeamPricingProfilesTable},
+	{IDs: []string{"add_billing_reconciliations_tables"}, run: migrationAddBillingReconciliationsTables},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12489,6 +12490,61 @@ func migrationAddTeamPricingProfilesTable(ctx context.Context, db *gorm.DB, logg
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running add_team_pricing_profiles_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddBillingReconciliationsTables creates the two tables backing
+// the Phase 5 reconciliation feature (data-model §6). The pair is created in
+// a single migration because they are written as a unit by the calibration
+// job — splitting them across migrations would leave an orphaned batch
+// header with no items if the second migration ever failed half-way.
+//
+// `billing_recon_items.reconciliation_id` is intentionally left without an
+// FK at the DB layer: a soft-delete path that purges old batches can sweep
+// the items with a single transaction later without juggling ON DELETE
+// CASCADE rules on SQLite.
+func migrationAddBillingReconciliationsTables(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_billing_reconciliations_tables"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableBillingReconciliation{}) {
+				logger.Info("[configstore] %s: creating table TableBillingReconciliation", migrationName)
+				if err := mg.CreateTable(&tables.TableBillingReconciliation{}); err != nil {
+					return fmt.Errorf("create billing_reconciliations: %w", err)
+				}
+			}
+			if !mg.HasTable(&tables.TableBillingReconItem{}) {
+				logger.Info("[configstore] %s: creating table TableBillingReconItem", migrationName)
+				if err := mg.CreateTable(&tables.TableBillingReconItem{}); err != nil {
+					return fmt.Errorf("create billing_recon_items: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableBillingReconItem{}) {
+				if err := mg.DropTable(&tables.TableBillingReconItem{}); err != nil {
+					return fmt.Errorf("drop billing_recon_items: %w", err)
+				}
+			}
+			if mg.HasTable(&tables.TableBillingReconciliation{}) {
+				if err := mg.DropTable(&tables.TableBillingReconciliation{}); err != nil {
+					return fmt.Errorf("drop billing_reconciliations: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_billing_reconciliations_tables migration: %s", err.Error())
 	}
 	return nil
 }
