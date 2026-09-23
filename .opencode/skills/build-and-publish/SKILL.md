@@ -72,13 +72,12 @@ echo "当前发布分支: ${branch}"
 在**任何构建/发布动作之前**，必须把「当前分支」和「相较上一发布版本新增的 commit」呈现给用户，并取得明确确认；用户未确认或选择终止时立即停止。
 
 ```bash
-current_tag="$version"
-prev_tag=$(git tag --sort=-version:refname | grep -vE '\-(rc|alpha|beta)' | head -n 2 | tail -n 1)
-
-# 当前 tag 已存在（本地重复执行）时，对比基准回退到 HEAD
-if git rev-parse "$current_tag" >/dev/null 2>&1; then
-  current_tag="HEAD"
-fi
+# 上一个发布 tag = 版本序最新、且不等于本次 version 的非预发布 tag
+# （本次 tag 可能尚未创建，也可能已存在，两种情况下此写法都正确）
+prev_tag=$(git tag --sort=-version:refname \
+  | grep -vE '\-(rc|alpha|beta)' \
+  | grep -vx "$version" \
+  | head -n 1)
 
 if [[ -z "$prev_tag" ]]; then
   log_range="HEAD"
@@ -340,9 +339,10 @@ else
 fi
 
 # 步骤 2.5：二次确认（展示分支与新增 commit，等待用户明确确认后才继续）
-current_tag="$version"
-prev_tag=$(git tag --sort=-version:refname | grep -vE '\-(rc|alpha|beta)' | head -n 2 | tail -n 1)
-git rev-parse "$current_tag" >/dev/null 2>&1 && current_tag="HEAD"
+prev_tag=$(git tag --sort=-version:refname \
+  | grep -vE '\-(rc|alpha|beta)' \
+  | grep -vx "$version" \
+  | head -n 1)
 if [[ -z "$prev_tag" ]]; then
   log_range="HEAD"; prev_tag="（首次发布）"
 else
