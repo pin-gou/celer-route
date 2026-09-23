@@ -25,6 +25,11 @@ func setupReportsTestStore(t *testing.T) *RDBConfigStore {
 		&tables.TableBillingReconciliation{},
 		&tables.TableBillingReconItem{},
 		&tables.TableTeamModelPolicy{},
+		// Needed by DeleteTeam, which the team-cascade test exercises: it loads
+		// the team with its RateLimit preloaded and nulls team_id on virtual keys.
+		&tables.TableTeam{},
+		&tables.TableVirtualKey{},
+		&tables.TableRateLimit{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -551,5 +556,73 @@ func TestIsReconciliationUsageAPISupported(t *testing.T) {
 		if got := tables.IsReconciliationUsageAPISupported(tc.provider); got != tc.want {
 			t.Errorf("IsReconciliationUsageAPISupported(%q) = %v, want %v", tc.provider, got, tc.want)
 		}
+	}
+}
+
+// TestDeleteTeam_CascadesSideTables pins that deleting a team also removes its
+// team-scoped side-table rows.
+//
+// Neither team_pricing_profiles nor team_model_policies declares a foreign key on
+// team_id, and TableTeam carries no has-many relation for them, so nothing at the
+// DB level cleans them up. Without an explicit delete the rows orphan and
+// accumulate forever: unreachable through the API, yet still returned by the
+// report/policy list endpoints and re-synced into the governance cache on boot.
+func TestDeleteTeam_CascadesSideTables(t *testing.T) {
+	s := setupReportsTestStore(t)
+	ctx := context.Background()
+
+	const teamID = "team-cascade"
+	if err := s.DB().Create(&tables.TableTeam{ID: teamID, Name: "Cascade Team"}).Error; err != nil {
+		t.Fatalf("create team: %v", err)
+	}
+	if err := s.UpsertTeamPricingProfile(ctx, &tables.TableTeamPricingProfile{
+		TeamID: teamID, Mode: "standard", MarginMultiplier: 1.2,
+	}); err != nil {
+		t.Fatalf("upsert pricing profile: %v", err)
+	}
+	if err := s.UpsertTeamModelPolicy(ctx, &tables.TableTeamModelPolicy{
+		TeamID: teamID, Provider: "openai", AllowedModels: []string{"gpt-4o"},
+	}); err != nil {
+		t.Fatalf("upsert model policy: %v", err)
+	}
+
+	// Sanity: both rows exist before the delete, so a pass cannot be a false
+	// negative from a failed setup.
+	if p, err := s.GetTeamPricingProfile(ctx, teamID); err != nil || p == nil {
+		t.Fatalf("expected pricing profile to exist before delete (row=%v err=%v)", p, err)
+	}
+	if p, err := s.GetTeamModelPolicy(ctx, teamID, "openai"); err != nil || p == nil {
+		t.Fatalf("expected model policy to exist before delete (row=%v err=%v)", p, err)
+	}
+
+	if err := s.DeleteTeam(ctx, teamID); err != nil {
+		t.Fatalf("delete team: %v", err)
+	}
+
+	profile, err := s.GetTeamPricingProfile(ctx, teamID)
+	if err != nil {
+		t.Fatalf("get pricing profile after delete: %v", err)
+	}
+	if profile != nil {
+		t.Fatalf("pricing profile must not survive team deletion, got %+v", profile)
+	}
+
+	policy, err := s.GetTeamModelPolicy(ctx, teamID, "openai")
+	if err != nil {
+		t.Fatalf("get model policy after delete: %v", err)
+	}
+	if policy != nil {
+		t.Fatalf("model policy must not survive team deletion, got %+v", policy)
+	}
+
+	var profileCount, policyCount int64
+	if err := s.DB().Model(&tables.TableTeamPricingProfile{}).Where("team_id = ?", teamID).Count(&profileCount).Error; err != nil {
+		t.Fatalf("count profiles: %v", err)
+	}
+	if err := s.DB().Model(&tables.TableTeamModelPolicy{}).Where("team_id = ?", teamID).Count(&policyCount).Error; err != nil {
+		t.Fatalf("count policies: %v", err)
+	}
+	if profileCount != 0 || policyCount != 0 {
+		t.Fatalf("expected 0 orphan rows, got profiles=%d policies=%d", profileCount, policyCount)
 	}
 }

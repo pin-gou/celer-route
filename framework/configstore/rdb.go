@@ -4774,6 +4774,17 @@ func (s *RDBConfigStore) DeleteTeam(ctx context.Context, id string, tx ...*gorm.
 	if err := txDB.WithContext(ctx).Model(&tables.TableVirtualKey{}).Where("team_id = ?", id).Update("team_id", nil).Error; err != nil {
 		return err
 	}
+	// Team-scoped side tables that declare no FK on team_id and have no has-many
+	// relation on TableTeam, so neither the DB nor GORM cleans them up for us.
+	// Delete them explicitly or the rows orphan permanently — unreachable through
+	// the API, yet still surfaced by the report/policy list endpoints and
+	// re-synced into the governance cache on every boot.
+	if err := txDB.WithContext(ctx).Where("team_id = ?", id).Delete(&tables.TableTeamPricingProfile{}).Error; err != nil {
+		return err
+	}
+	if err := txDB.WithContext(ctx).Where("team_id = ?", id).Delete(&tables.TableTeamModelPolicy{}).Error; err != nil {
+		return err
+	}
 	rateLimitID := team.RateLimitID
 	// Delete the team - owned budgets cascade via FK on governance_budgets.team_id
 	if err := txDB.WithContext(ctx).Delete(&tables.TableTeam{}, "id = ?", id).Error; err != nil {
