@@ -3,6 +3,7 @@ package logstore
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -73,8 +74,15 @@ func TestMigrationAddPayloadStrippedColumn(t *testing.T) {
 const pgTestSchema = "logstore_test"
 
 // postgresDSN matches the postgres service in tests/docker-compose.yml and
-// framework/docker-compose.yml.
-const postgresDSN = "host=localhost user=bifrost password=bifrost_password dbname=bifrost port=5432 sslmode=disable search_path=" + pgTestSchema
+// framework/docker-compose.yml. BIFROST_TEST_POSTGRES_DSN overrides it, so a
+// developer can point the suite at an already-running Postgres without editing
+// the const (the DSN must include search_path=<pgTestSchema> when overridden).
+var postgresDSN = func() string {
+	if v := os.Getenv("BIFROST_TEST_POSTGRES_DSN"); v != "" {
+		return v
+	}
+	return "host=localhost user=bifrost password=bifrost_password dbname=bifrost port=5432 sslmode=disable search_path=" + pgTestSchema
+}()
 
 // trySetupPostgresDB attempts to connect to Postgres and returns the connection.
 // Returns nil if Postgres is unavailable.
