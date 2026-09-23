@@ -53,6 +53,11 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 
 ENV CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH
 
+# Go module proxy override (default matches `go env GOPROXY`). Builds behind
+# firewalls can pass --build-arg GOPROXY=https://goproxy.cn etc.
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=$GOPROXY
+
 # Module source selection:
 #   USE_LOCAL_MODULES=1 -> go.work with ./core ./framework ./plugins/* ./transports
 #                          (for pre-release CI / local builds before modules are published)
