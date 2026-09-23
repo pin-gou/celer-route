@@ -2,6 +2,7 @@ package logstore
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -141,4 +142,52 @@ func TestErrorPatterns_ProviderFilterIsolatesBuckets(t *testing.T) {
 	require.Equal(t, int64(1), total, "openai-only query must not include sensenova rows")
 	require.Len(t, patterns, 1)
 	require.Equal(t, int64(1), patterns[0].Count)
+}
+
+// TestErrorPatterns_LocalTimezoneDoesNotSkewWindow pins the bug where the
+// bucket query embedded the window's lower bound as a naive local wall-clock
+// string while the DB compares in UTC. On a UTC+8 server the "1h" window was
+// therefore pushed 7h into the future and matched nothing (and the oldest 8h
+// of "24h" was silently dropped), even though the separate total_errors count
+// — which binds the interval — was non-zero. Both queries must now agree.
+//
+// Postgres is the backend that exposed this: its timestamp column is
+// timestamptz and a naive literal is interpreted in the session timezone
+// (UTC). SQLite can't reproduce it because both comparisons go through the
+// same lexicographic text encoding. Skips when Postgres is unavailable.
+func TestErrorPatterns_LocalTimezoneDoesNotSkewWindow(t *testing.T) {
+	origLocal := time.Local
+	time.Local = time.FixedZone("CST", 8*3600)
+	t.Cleanup(func() { time.Local = origLocal })
+
+	db := trySetupPostgresDB(t)
+	if db == nil {
+		t.Skip("Postgres not available, skipping timezone-skew regression test")
+	}
+	require.NoError(t, db.AutoMigrate(&Log{}))
+	store := &RDBLogStore{db: db}
+	ctx := context.Background()
+
+	const provider = "tzskew"
+	require.NoError(t, db.Where("provider = ?", provider).Delete(&Log{}).Error)
+	t.Cleanup(func() { _ = db.Where("provider = ?", provider).Delete(&Log{}).Error })
+
+	// Errors that happened "just now" in absolute terms, stored as UTC (as the
+	// DB does). The process local zone is UTC+8, so a naive local literal would
+	// be 7h ahead of these rows for the 1h window.
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		seedErrorLog(t, store,
+			fmt.Sprintf("tzskew-%d", i),
+			provider,
+			`{"status_code":429,"error":{"type":"rate_limit_error","code":"8","message":"tpm exhausted"}}`,
+			now.UTC().Add(-time.Duration(i)*time.Minute),
+		)
+	}
+
+	patterns, total, err := store.ErrorPatterns(ctx, schemas.ModelProvider(provider), "1h", 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), total, "total_errors must see the rows regardless of local timezone")
+	require.Len(t, patterns, 1, "the bucket query must not be skewed by the server's local timezone")
+	require.Equal(t, int64(3), patterns[0].Count)
 }

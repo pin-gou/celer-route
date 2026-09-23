@@ -72,11 +72,14 @@ func (s *RDBLogStore) ErrorPatterns(ctx context.Context, provider schemas.ModelP
 	// while still distinguishing genuinely different errors. The LEFT(message, 200)
 	// is the dialect-specific part — see errorPatternsSQL.
 	//
-	// The dialect-specific SQL embeds the provider + interval literal directly
-	// (not as a placeholder) because errorPatternsSQL also embeds them in
-	// window-function PARTITION BY clauses that gorm cannot parameterise.
-	bucketSQL := errorPatternsSQL(s.db.Dialector.Name(), string(provider), interval, limit)
-	rows, err := s.db.WithContext(ctx).Raw(bucketSQL).Rows()
+	// provider and interval are bound as parameters (never interpolated as
+	// literals): the interval in particular must go through the driver so the
+	// comparison is absolute. Formatting it into the SQL as a naive local
+	// wall-clock string shifts the window by the server's UTC offset on every
+	// backend (the DB stores/compares UTC), which silently emptied the "1h"
+	// window and dropped the oldest 8h of "24h" on a UTC+8 server.
+	bucketSQL := errorPatternsSQL(s.db.Dialector.Name(), limit)
+	rows, err := s.db.WithContext(ctx).Raw(bucketSQL, string(provider), interval).Rows()
 	if err != nil {
 		return nil, 0, fmt.Errorf("aggregate error patterns: %w", err)
 	}
@@ -185,9 +188,12 @@ func parseAggregateTimestamp(value any) time.Time {
 //
 // The status_code column lives inside the JSON (BifrostError.StatusCode)
 // since the Log struct doesn't expose it as a top-level column.
-func errorPatternsSQL(dialect, provider string, interval time.Time, limit int) string {
-	// interval is passed through time.Time; each branch formats the SQL
-	// timestamp literal the way its driver prefers.
+//
+// The query takes exactly two bind parameters, in order: the provider and the
+// window's lower-bound timestamp. Both are passed through the driver (see the
+// caller) rather than embedded, so the timestamp comparison stays absolute
+// regardless of the server's local timezone.
+func errorPatternsSQL(dialect string, limit int) string {
 	switch dialect {
 	case "postgres":
 		return fmt.Sprintf(`
@@ -208,9 +214,9 @@ WITH bucketed AS (
       ORDER BY timestamp DESC
     ) AS rn
   FROM logs
-  WHERE provider = '%s'
+  WHERE provider = ?
     AND status = 'error'
-    AND timestamp > '%s'
+    AND timestamp > ?
     AND error_details IS NOT NULL AND error_details != ''
 )
 SELECT
@@ -222,7 +228,7 @@ SELECT
 FROM bucketed
 GROUP BY status_code, error_type, error_code, sample_message
 ORDER BY count DESC
-LIMIT %d`, provider, interval.Format("2006-01-02 15:04:05.000"), limit)
+LIMIT %d`, limit)
 	case "clickhouse":
 		return fmt.Sprintf(`
 SELECT
@@ -235,13 +241,13 @@ SELECT
   MAX(timestamp) AS last_seen,
   argMax(id, timestamp) AS example_request_id
 FROM logs
-WHERE provider = '%s'
+WHERE provider = ?
   AND status = 'error'
-  AND timestamp > toDateTime('%s')
+  AND timestamp > ?
   AND error_details != ''
 GROUP BY status_code, error_type, error_code, sample_message
 ORDER BY count DESC
-LIMIT %d`, provider, interval.Format("2006-01-02 15:04:05"), limit)
+LIMIT %d`, limit)
 	default: // sqlite (and mysql fallback if someone wires it up later)
 		return fmt.Sprintf(`
 WITH bucketed AS (
@@ -261,9 +267,9 @@ WITH bucketed AS (
       ORDER BY timestamp DESC
     ) AS rn
   FROM logs
-  WHERE provider = '%s'
+  WHERE provider = ?
     AND status = 'error'
-    AND timestamp > '%s'
+    AND timestamp > ?
     AND error_details IS NOT NULL AND error_details != ''
 )
 SELECT
@@ -275,7 +281,7 @@ SELECT
 FROM bucketed
 GROUP BY status_code, error_type, error_code, sample_message
 ORDER BY count DESC
-LIMIT %d`, provider, interval.Format("2006-01-02 15:04:05"), limit)
+LIMIT %d`, limit)
 	}
 }
 
