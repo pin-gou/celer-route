@@ -576,6 +576,15 @@ type ConfigStore interface {
 	CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error
 	UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error
 
+	// Team-model-policies (Phase 6 / D6) — per-team allow/deny lists used as
+	// the upper bound on what any of the team's VKs can call. List returns
+	// every policy for the team so the admin UI can render the full table;
+	// GetByTeamProvider is the resolver's hot path lookup.
+	ListTeamModelPolicies(ctx context.Context, teamID string) ([]tables.TableTeamModelPolicy, error)
+	GetTeamModelPolicy(ctx context.Context, teamID, provider string) (*tables.TableTeamModelPolicy, error)
+	UpsertTeamModelPolicy(ctx context.Context, policy *tables.TableTeamModelPolicy) error
+	DeleteTeamModelPolicy(ctx context.Context, teamID, provider string) error
+
 	// Model parameters
 	GetModelParameters(ctx context.Context) ([]tables.TableModelParameters, error)
 	GetModelParametersByModel(ctx context.Context, model string) (*tables.TableModelParameters, error)

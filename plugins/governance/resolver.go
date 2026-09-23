@@ -362,38 +362,83 @@ func (r *BudgetResolver) EvaluateVirtualKeyRequest(ctx *schemas.BifrostContext, 
 // isModelAllowed checks if the requested model is allowed for this VK.
 // Blacklisted models win over allowed models (same semantics as provider-key enforcement).
 // Two-pass: blacklist scan across all matching configs first, then allowlist scan.
+// Team ACL (D6 / Phase 6) is the upper bound: when a team policy exists for this
+// provider, both VK allow AND team allow must hold (intersection).
 func (r *BudgetResolver) isModelAllowed(vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider, model string) bool {
 	// Empty ProviderConfigs means no models are allowed (deny-by-default)
 	if len(vk.ProviderConfigs) == 0 {
 		return false
 	}
 
-	// Pass 1: if any matching provider config blacklists the model, block immediately.
+	// Resolve the team ACL for this provider up-front; nil = "inherit global",
+	// in which case the VK allowlist is the only constraint.
+	var teamPolicy *configstoreTables.TableTeamModelPolicy
+	if vk.Team != nil && vk.Team.ID != "" {
+		if tp, _ := r.getTeamModelPolicy(vk.Team.ID, string(provider)); tp != nil {
+			teamPolicy = tp
+		}
+	}
+
+	// Pass 1: blacklist check. VK and team blacklists both block (union semantics).
+	// Blacklists always win — applied before any allowlist scan.
+	if teamPolicy != nil && schemas.BlackList(teamPolicy.BlacklistedModels).IsBlocked(model) {
+		return false
+	}
 	for _, pc := range vk.ProviderConfigs {
 		if pc.Provider == string(provider) && pc.BlacklistedModels.IsBlocked(model) {
 			return false
 		}
 	}
 
-	// Pass 2: allowlist check — model is allowed if any matching config permits it.
+	// Pass 2: allowlist check — model is allowed if any matching config permits it
+	// AND the team policy (when set) also permits it (intersection / D6).
 	for _, pc := range vk.ProviderConfigs {
-		if pc.Provider == string(provider) {
-			if r.modelCatalog != nil && r.governanceInMemoryStore != nil {
-				providerConfig, ok := r.governanceInMemoryStore.GetConfiguredProviders()[provider]
-				providerConfigPtr := &providerConfig
-				if !ok {
-					providerConfigPtr = nil
-				}
-				if r.modelCatalog.IsModelAllowedForProvider(provider, model, providerConfigPtr, pc.AllowedModels) {
-					return true
-				}
-			} else if pc.AllowedModels.IsAllowed(model) {
-				return true
+		if pc.Provider != string(provider) {
+			continue
+		}
+		vkAllows := false
+		if r.modelCatalog != nil && r.governanceInMemoryStore != nil {
+			providerConfig, ok := r.governanceInMemoryStore.GetConfiguredProviders()[provider]
+			providerConfigPtr := &providerConfig
+			if !ok {
+				providerConfigPtr = nil
 			}
+			vkAllows = r.modelCatalog.IsModelAllowedForProvider(provider, model, providerConfigPtr, pc.AllowedModels)
+		} else {
+			vkAllows = pc.AllowedModels.IsAllowed(model)
+		}
+		if !vkAllows {
+			continue
+		}
+		// VK allows — gate on team ACL (intersection / D6). An empty/unrestricted
+		// team policy is a no-op here (VK allow alone suffices). Delegates to the
+		// shared predicate so this per-request gate and the GET /v1/models listing
+		// filter can never disagree about what a team may use.
+		if TeamPolicyAllowsModel(teamPolicy, model) {
+			return true
 		}
 	}
 
 	return false
+}
+
+// getTeamModelPolicy fetches the per-team ACL row for a provider, going through
+// the in-memory cache on LocalGovernanceStore when available. Returns (nil,
+// nil) when the cache does not surface a row — the "inherit global" case.
+//
+// We avoid going through the existing GovernanceStore interface because the
+// hot path here is one allow/deny decision per request and team ACL is
+// overwhelmingly rare; a sync.Map lookup keeps the common (no-policy) case
+// to a single pointer read.
+//
+// The store path is used as a fallback so a cluster where the local cache is
+// empty (e.g. immediately after restart, before the first reload completes)
+// still returns a correct answer without an extra handler route.
+func (r *BudgetResolver) getTeamModelPolicy(teamID, provider string) (*configstoreTables.TableTeamModelPolicy, error) {
+	if local, ok := r.store.(*LocalGovernanceStore); ok {
+		return local.GetTeamModelPolicy(teamID, provider), nil
+	}
+	return nil, nil
 }
 
 // isProviderAllowed checks if the requested provider is allowed for this VK

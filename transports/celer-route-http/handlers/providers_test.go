@@ -1706,11 +1706,11 @@ func TestListProviders_NoLogAggregation(t *testing.T) {
 			},
 		},
 		logStats: &mockProviderLogStats{
-			hourlyRequests: 50,
-			hourlyErrors:   2,
-			lastUsedAt:     "2026-08-15T01:42:00Z",
-			lastErrorAt:    "2026-08-15T00:15:22Z",
-			avgLatencyMs:   200,
+			hourlyRequests:  50,
+			hourlyErrors:    2,
+			lastUsedAt:      "2026-08-15T01:42:00Z",
+			lastErrorAt:     "2026-08-15T00:15:22Z",
+			avgLatencyMs:    200,
 			singleCallCount: &singleCalls,
 		},
 	}
@@ -2160,4 +2160,107 @@ func (m *mockProviderLogStats) AggregateProviderLogStats(_ context.Context, _ sc
 		return 0, 0, "", "", 0, m.err
 	}
 	return m.hourlyRequests, m.hourlyErrors, m.lastUsedAt, m.lastErrorAt, m.avgLatencyMs, nil
+}
+
+// TestListModels_TeamACLNarrowsModelsPerProvider covers the management
+// /api/models path: the team ACL (Phase 6 / D6) narrows models on top of the VK
+// allowlist, per provider, through the same shared predicate the governance
+// resolver uses for per-request gating. A provider with no team policy inherits
+// global and is left untouched.
+func TestListModels_TeamACLNarrowsModelsPerProvider(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.OpenAI:    {Keys: []schemas.Key{{ID: "key-a"}}},
+				schemas.Anthropic: {Keys: []schemas.Key{{ID: "key-b"}}},
+			},
+		},
+		modelsManager: &mockModelsManager{
+			filtered: map[schemas.ModelProvider][]string{
+				schemas.OpenAI:    {"gpt-4o", "gpt-4o-mini", "o1"},
+				schemas.Anthropic: {"claude-3-5-sonnet"},
+			},
+		},
+	}
+
+	query := modelListQuery{
+		Limit:       100,
+		HasVKFilter: true,
+		VKProviderConfigs: []configstoreTables.TableVirtualKeyProviderConfig{
+			{Provider: "openai", AllowedModels: schemas.WhiteList{"*"}},
+			{Provider: "anthropic", AllowedModels: schemas.WhiteList{"*"}},
+		},
+		TeamModelPolicies: map[string]configstoreTables.TableTeamModelPolicy{
+			"openai": {
+				TeamID:        "team-1",
+				Provider:      "openai",
+				AllowedModels: []string{"gpt-4o"},
+			},
+		},
+	}
+
+	models, _, err := h.listManagementModels(query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	names := map[string]bool{}
+	for _, m := range models {
+		names[m.Name] = true
+	}
+	if !names["gpt-4o"] {
+		t.Fatalf("expected gpt-4o to survive the team ACL, got %v", models)
+	}
+	if names["gpt-4o-mini"] || names["o1"] {
+		t.Fatalf("models outside the team allowlist should be dropped, got %v", models)
+	}
+	if !names["claude-3-5-sonnet"] {
+		t.Fatalf("expected anthropic model to survive (no team policy = inherit global), got %v", models)
+	}
+}
+
+// TestListModels_TeamACLBlacklistOnlyDeniesWholeProvider documents the
+// deny-by-default consequence on the listing path: a team policy that sets only
+// a blacklist permits no models at all, so the provider contributes nothing.
+// Matches TeamPolicyAllowsModel / the resolver's per-request gate.
+func TestListModels_TeamACLBlacklistOnlyDeniesWholeProvider(t *testing.T) {
+	SetLogger(&mockLogger{})
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.OpenAI: {Keys: []schemas.Key{{ID: "key-a"}}},
+			},
+		},
+		modelsManager: &mockModelsManager{
+			filtered: map[schemas.ModelProvider][]string{
+				schemas.OpenAI: {"gpt-4o", "o1"},
+			},
+		},
+	}
+
+	query := modelListQuery{
+		Limit:       100,
+		HasVKFilter: true,
+		VKProviderConfigs: []configstoreTables.TableVirtualKeyProviderConfig{
+			{Provider: "openai", AllowedModels: schemas.WhiteList{"*"}},
+		},
+		TeamModelPolicies: map[string]configstoreTables.TableTeamModelPolicy{
+			"openai": {
+				TeamID:            "team-1",
+				Provider:          "openai",
+				BlacklistedModels: []string{"o1"},
+			},
+		},
+	}
+
+	models, total, err := h.listManagementModels(query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 0 || len(models) != 0 {
+		t.Fatalf("expected no models to survive an empty team allowlist, got total=%d models=%v", total, models)
+	}
 }

@@ -3,6 +3,7 @@ package configstore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -179,19 +180,46 @@ func (s *RDBConfigStore) GetTeamPricingProfile(ctx context.Context, teamID strin
 // UpsertTeamPricingProfile inserts or replaces the row for a team. Teams
 // only ever have one profile at a time; the uniqueIndex on team_id makes
 // the insert-or-replace race-free under concurrent admin writes.
+//
+// GORM's plain Save with a primary key set behaves as UPDATE-WHERE-id (it
+// emits ON CONFLICT (id), not ON CONFLICT (team_id)), so a caller that builds
+// a fresh struct per request — which the HTTP handler does on every PUT —
+// gets a brand-new UUID, a genuine INSERT, and a UNIQUE constraint violation
+// on team_id for every edit after the first. We do an explicit First-or-Create
+// inside a transaction instead, matching UpsertTeamModelPolicy: lock the row
+// for the duration of the upsert, reuse its ID and CreatedAt, then save.
+// CreatedAt is preserved across updates so the profile can be audited by
+// creation time.
 func (s *RDBConfigStore) UpsertTeamPricingProfile(ctx context.Context, row *tables.TableTeamPricingProfile) error {
 	if row == nil {
 		return errors.New("team pricing profile is required")
 	}
-	if strings.TrimSpace(row.ID) == "" {
-		row.ID = uuid.NewString()
+	if strings.TrimSpace(row.TeamID) == "" {
+		return errors.New("team pricing profile: team_id is required")
 	}
 	now := time.Now().UTC()
-	if row.CreatedAt.IsZero() {
-		row.CreatedAt = now
-	}
-	row.UpdatedAt = now
-	return s.DB().WithContext(ctx).Save(row).Error
+	return s.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing tables.TableTeamPricingProfile
+		err := dbForUpdate(tx).
+			Where("team_id = ?", row.TeamID).
+			First(&existing).Error
+		switch {
+		case err == nil:
+			row.ID = existing.ID
+			row.CreatedAt = existing.CreatedAt
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			if row.ID == "" {
+				row.ID = uuid.NewString()
+			}
+			if row.CreatedAt.IsZero() {
+				row.CreatedAt = now
+			}
+		default:
+			return fmt.Errorf("failed to query existing team pricing profile: %w", err)
+		}
+		row.UpdatedAt = now
+		return tx.Save(row).Error
+	})
 }
 
 // DeleteTeamPricingProfile removes the row for a team. Returning the row to
@@ -348,6 +376,97 @@ func (s *RDBConfigStore) UpdateReconciliation(ctx context.Context, row *tables.T
 		`UPDATE billing_reconciliations SET status = ?, notes = ?, gateway_cost = ?, provider_cost = ?, delta = ?, updated_at = ? WHERE id = ?`,
 		row.Status, row.Notes, row.GatewayCost, row.ProviderCost, row.Delta, row.UpdatedAt, row.ID,
 	)
+	if res.Error != nil {
+		return s.parseGormError(res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListTeamModelPolicies returns every ACL row for a team. The admin UI
+// renders this as the "model policies" tab on the team detail page. Sorted
+// by provider so the rendering order is stable across requests.
+func (s *RDBConfigStore) ListTeamModelPolicies(ctx context.Context, teamID string) ([]tables.TableTeamModelPolicy, error) {
+	var rows []tables.TableTeamModelPolicy
+	if err := s.DB().WithContext(ctx).
+		Where("team_id = ?", teamID).
+		Order("provider").
+		Find(&rows).Error; err != nil {
+		return nil, s.parseGormError(err)
+	}
+	return rows, nil
+}
+
+// GetTeamModelPolicy returns the ACL row for a (team, provider) pair, or
+// (nil, nil) when no row exists so the resolver can short-circuit on the
+// "inherit global" case without an errors.Is check.
+func (s *RDBConfigStore) GetTeamModelPolicy(ctx context.Context, teamID, provider string) (*tables.TableTeamModelPolicy, error) {
+	var row tables.TableTeamModelPolicy
+	if err := s.DB().WithContext(ctx).
+		Where("team_id = ? AND provider = ?", teamID, provider).
+		First(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, s.parseGormError(err)
+	}
+	return &row, nil
+}
+
+// UpsertTeamModelPolicy inserts or replaces the ACL row for a (team,
+// provider) pair. The unique index on (team_id, provider) makes the write
+// race-free under concurrent admin edits.
+//
+// GORM's plain Save with a primary key set behaves as UPDATE-WHERE-id, not
+// as upsert, so a re-submit would trip the UNIQUE constraint on the second
+// attempt. We do an explicit First-or-Create inside a transaction instead,
+// matching the pattern used by UpsertMCPPerUserHeaderCredential: lock the
+// row for the duration of the upsert, mutate, save. CreatedAt is preserved
+// across updates so the table can be audited by upload time.
+func (s *RDBConfigStore) UpsertTeamModelPolicy(ctx context.Context, policy *tables.TableTeamModelPolicy) error {
+	if policy == nil {
+		return errors.New("team model policy is required")
+	}
+	if strings.TrimSpace(policy.TeamID) == "" {
+		return errors.New("team model policy: team_id is required")
+	}
+	if strings.TrimSpace(policy.Provider) == "" {
+		return errors.New("team model policy: provider is required")
+	}
+	now := time.Now().UTC()
+	return s.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing tables.TableTeamModelPolicy
+		err := dbForUpdate(tx).
+			Where("team_id = ? AND provider = ?", policy.TeamID, policy.Provider).
+			First(&existing).Error
+		switch {
+		case err == nil:
+			policy.ID = existing.ID
+			policy.CreatedAt = existing.CreatedAt
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			if policy.ID == "" {
+				policy.ID = uuid.NewString()
+			}
+			if policy.CreatedAt.IsZero() {
+				policy.CreatedAt = now
+			}
+		default:
+			return fmt.Errorf("failed to query existing team model policy: %w", err)
+		}
+		policy.UpdatedAt = now
+		return tx.Save(policy).Error
+	})
+}
+
+// DeleteTeamModelPolicy removes the ACL row for a (team, provider) pair,
+// returning the team to "inherit global" semantics for that provider.
+// Returns ErrNotFound when no row matched the pair so the handler can
+// surface 404 instead of a silent no-op.
+func (s *RDBConfigStore) DeleteTeamModelPolicy(ctx context.Context, teamID, provider string) error {
+	res := s.DB().WithContext(ctx).
+		Delete(&tables.TableTeamModelPolicy{}, "team_id = ? AND provider = ?", teamID, provider)
 	if res.Error != nil {
 		return s.parseGormError(res.Error)
 	}

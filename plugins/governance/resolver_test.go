@@ -561,6 +561,98 @@ func TestBudgetResolver_IsModelAllowed(t *testing.T) {
 	}
 }
 
+// TestBudgetResolver_IsModelAllowed_TeamACL exercises the D6 intersection:
+// VK allowlist (lower bound) AND team ACL (upper bound). The cache holds the
+// team policies directly so we don't need a config store.
+func TestBudgetResolver_IsModelAllowed_TeamACL(t *testing.T) {
+	logger := NewMockLogger()
+
+	team := buildTeam("team1", "Team 1", nil)
+	vk := buildVirtualKeyWithProviders("vk1", "sk-bf-test", "Test",
+		[]configstoreTables.TableVirtualKeyProviderConfig{
+			buildProviderConfig("openai", []string{"gpt-4o", "gpt-4o-mini", "o1"}),
+		})
+	vk.TeamID = &team.ID
+	vk.Team = team
+
+	tests := []struct {
+		name            string
+		teamPolicy      *configstoreTables.TableTeamModelPolicy
+		model           string
+		shouldBeAllowed bool
+	}{
+		{
+			name:            "no team policy — VK alone decides",
+			teamPolicy:      nil,
+			model:           "gpt-4o",
+			shouldBeAllowed: true,
+		},
+		{
+			name: "team allows subset — VK allow AND team allow pass",
+			teamPolicy: &configstoreTables.TableTeamModelPolicy{
+				TeamID:        "team1",
+				Provider:      "openai",
+				AllowedModels: []string{"gpt-4o-mini", "gpt-4o"},
+			},
+			model:           "gpt-4o-mini",
+			shouldBeAllowed: true,
+		},
+		{
+			name: "team allows superset — VK narrows further",
+			teamPolicy: &configstoreTables.TableTeamModelPolicy{
+				TeamID:        "team1",
+				Provider:      "openai",
+				AllowedModels: []string{"gpt-4o", "gpt-4o-mini", "o1", "gpt-5"},
+			},
+			model:           "o1",
+			shouldBeAllowed: true,
+		},
+		{
+			name: "VK allows gpt-4o but team does not — intersection blocks",
+			teamPolicy: &configstoreTables.TableTeamModelPolicy{
+				TeamID:        "team1",
+				Provider:      "openai",
+				AllowedModels: []string{"gpt-4o-mini"},
+			},
+			model:           "gpt-4o",
+			shouldBeAllowed: false,
+		},
+		{
+			name: "team blacklist blocks regardless of VK allow",
+			teamPolicy: &configstoreTables.TableTeamModelPolicy{
+				TeamID:            "team1",
+				Provider:          "openai",
+				BlacklistedModels: []string{"o1"},
+			},
+			model:           "o1",
+			shouldBeAllowed: false,
+		},
+		{
+			name: "unrestricted team policy = inherit global",
+			teamPolicy: &configstoreTables.TableTeamModelPolicy{
+				TeamID:   "team1",
+				Provider: "openai",
+			},
+			model:           "gpt-4o",
+			shouldBeAllowed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Fresh cache per case to keep state isolated.
+			store, err := NewLocalGovernanceStore(context.Background(), logger, nil, &configstore.GovernanceConfig{}, nil)
+			require.NoError(t, err)
+			if tt.teamPolicy != nil {
+				store.UpsertTeamModelPolicy(tt.teamPolicy)
+			}
+			r := NewBudgetResolver(store, nil, logger, nil)
+			allowed := r.isModelAllowed(vk, schemas.OpenAI, tt.model)
+			assert.Equal(t, tt.shouldBeAllowed, allowed, "model=%s", tt.model)
+		})
+	}
+}
+
 // TestBudgetResolver_ContextPopulation tests context values are set correctly
 func TestBudgetResolver_ContextPopulation(t *testing.T) {
 	logger := NewMockLogger()

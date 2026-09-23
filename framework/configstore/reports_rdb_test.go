@@ -24,6 +24,7 @@ func setupReportsTestStore(t *testing.T) *RDBConfigStore {
 		&tables.TableTeamPricingProfile{},
 		&tables.TableBillingReconciliation{},
 		&tables.TableBillingReconItem{},
+		&tables.TableTeamModelPolicy{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -180,6 +181,58 @@ func TestUpsertTeamPricingProfile(t *testing.T) {
 	}
 }
 
+// TestUpsertTeamPricingProfile_FreshStructPerCall reproduces how the HTTP
+// handler actually calls this: every PUT builds a brand-new struct with an
+// empty ID. A plain GORM Save then mints a fresh UUID and INSERTs, tripping
+// the UNIQUE constraint on team_id on every edit after the first — the team
+// pricing page could never be saved twice.
+//
+// TestUpsertTeamPricingProfile above does not catch this because it re-upserts
+// the *same* pointer, whose ID was back-filled by the first Save.
+func TestUpsertTeamPricingProfile_FreshStructPerCall(t *testing.T) {
+	s := setupReportsTestStore(t)
+	ctx := context.Background()
+
+	first := &tables.TableTeamPricingProfile{TeamID: "t-fresh", Mode: tables.TeamPricingModeStandard, MarginMultiplier: 1.0}
+	if err := s.UpsertTeamPricingProfile(ctx, first); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	createdUnix := first.CreatedAt.Unix()
+
+	// Sleep so a regression that overwrites created_at is distinguishable at
+	// second granularity regardless of how the driver round-trips precision.
+	time.Sleep(1100 * time.Millisecond)
+
+	second := &tables.TableTeamPricingProfile{TeamID: "t-fresh", Mode: tables.TeamPricingModeActual, MarginMultiplier: 1.25}
+	if err := s.UpsertTeamPricingProfile(ctx, second); err != nil {
+		t.Fatalf("re-upsert with a fresh struct: %v", err)
+	}
+
+	rows, err := s.ListTeamPricingProfiles(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	matches := 0
+	for _, r := range rows {
+		if r.TeamID != "t-fresh" {
+			continue
+		}
+		matches++
+		if r.Mode != tables.TeamPricingModeActual {
+			t.Errorf("mode = %q, want actual", r.Mode)
+		}
+		if r.ID != first.ID {
+			t.Errorf("id changed across upsert: %q -> %q", first.ID, r.ID)
+		}
+		if r.CreatedAt.Unix() != createdUnix {
+			t.Errorf("created_at was overwritten across upsert: %d -> %d", createdUnix, r.CreatedAt.Unix())
+		}
+	}
+	if matches != 1 {
+		t.Errorf("found %d rows for t-fresh, want exactly 1", matches)
+	}
+}
+
 func TestDeleteTeamPricingProfile(t *testing.T) {
 	s := setupReportsTestStore(t)
 	ctx := context.Background()
@@ -204,6 +257,84 @@ func TestListTeamPricingProfiles(t *testing.T) {
 	}
 	if len(rows) != 3 {
 		t.Errorf("rows = %d, want 3", len(rows))
+	}
+}
+
+func TestUpsertTeamModelPolicy(t *testing.T) {
+	s := setupReportsTestStore(t)
+	ctx := context.Background()
+
+	// nil → error
+	if err := s.UpsertTeamModelPolicy(ctx, nil); err == nil {
+		t.Fatalf("expected nil policy to be rejected")
+	}
+	// missing team → error
+	if err := s.UpsertTeamModelPolicy(ctx, &tables.TableTeamModelPolicy{Provider: "openai"}); err == nil {
+		t.Fatalf("expected missing team_id to be rejected")
+	}
+	// missing provider → error
+	if err := s.UpsertTeamModelPolicy(ctx, &tables.TableTeamModelPolicy{TeamID: "t1"}); err == nil {
+		t.Fatalf("expected missing provider to be rejected")
+	}
+
+	// first write — row is created with a server-minted UUID
+	p := &tables.TableTeamModelPolicy{
+		TeamID:            "t1",
+		Provider:          "openai",
+		AllowedModels:     []string{"gpt-4o"},
+		BlacklistedModels: []string{"gpt-3.5-turbo"},
+	}
+	if err := s.UpsertTeamModelPolicy(ctx, p); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	if p.ID == "" {
+		t.Fatalf("expected server to mint an ID on first upsert")
+	}
+	firstID := p.ID
+	firstCreated := p.CreatedAt
+	if firstCreated.IsZero() {
+		t.Fatalf("expected CreatedAt to be set on first upsert")
+	}
+
+	// re-upsert with new model lists — must not trip UNIQUE constraint
+	p.AllowedModels = []string{"gpt-4o", "gpt-4o-mini"}
+	p.BlacklistedModels = nil
+	if err := s.UpsertTeamModelPolicy(ctx, p); err != nil {
+		t.Fatalf("re-upsert: %v", err)
+	}
+	if p.ID != firstID {
+		t.Errorf("id changed across upsert: got %q, want %q", p.ID, firstID)
+	}
+	if !p.CreatedAt.Equal(firstCreated) {
+		t.Errorf("CreatedAt changed across upsert: got %v, want %v", p.CreatedAt, firstCreated)
+	}
+	if !p.UpdatedAt.After(firstCreated) {
+		t.Errorf("UpdatedAt (%v) should be after CreatedAt (%v)", p.UpdatedAt, firstCreated)
+	}
+
+	// independent second team/provider pair — both rows coexist
+	p2 := &tables.TableTeamModelPolicy{TeamID: "t1", Provider: "anthropic", AllowedModels: []string{"*"}}
+	if err := s.UpsertTeamModelPolicy(ctx, p2); err != nil {
+		t.Fatalf("upsert anthropic: %v", err)
+	}
+	rows, err := s.ListTeamModelPolicies(ctx, "t1")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Errorf("rows = %d, want 2", len(rows))
+	}
+
+	// delete one row, the other stays
+	if err := s.DeleteTeamModelPolicy(ctx, "t1", "openai"); err != nil {
+		t.Fatalf("delete openai: %v", err)
+	}
+	if err := s.DeleteTeamModelPolicy(ctx, "t1", "openai"); err != ErrNotFound {
+		t.Errorf("second delete openai = %v, want ErrNotFound", err)
+	}
+	rows, _ = s.ListTeamModelPolicies(ctx, "t1")
+	if len(rows) != 1 || rows[0].Provider != "anthropic" {
+		t.Errorf("after delete, rows = %+v, want [anthropic]", rows)
 	}
 }
 

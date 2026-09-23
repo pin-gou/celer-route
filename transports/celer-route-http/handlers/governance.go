@@ -1309,6 +1309,16 @@ func (h *GovernanceHandler) registerTeamRoutes(r *router.Router, overrides *Gove
 	r.GET("/api/governance/teams/{team_id}", lib.ChainMiddlewares(getHandler, middlewares...))
 	r.PUT("/api/governance/teams/{team_id}", lib.ChainMiddlewares(updateHandler, middlewares...))
 	r.DELETE("/api/governance/teams/{team_id}", lib.ChainMiddlewares(deleteHandler, middlewares...))
+
+	// Team model policies (Phase 6 / D6) — per-team model ACL. Routes are
+	// registered through a dedicated handler so enterprise overrides can
+	// swap them in via the same Extensions hook used for /teams.
+	teamPolicyHandler := &TeamModelPoliciesHandler{configStore: h.configStore}
+	r.GET("/api/governance/teams/{team_id}/model-policies", lib.ChainMiddlewares(teamPolicyHandler.ListTeamModelPolicies, middlewares...))
+	r.GET("/api/governance/teams/{team_id}/model-policies/{provider}", lib.ChainMiddlewares(teamPolicyHandler.GetTeamModelPolicy, middlewares...))
+	r.PUT("/api/governance/teams/{team_id}/model-policies/{provider}", lib.ChainMiddlewares(teamPolicyHandler.UpsertTeamModelPolicy, middlewares...))
+	r.DELETE("/api/governance/teams/{team_id}/model-policies/{provider}", lib.ChainMiddlewares(teamPolicyHandler.DeleteTeamModelPolicy, middlewares...))
+
 	if overrides != nil && overrides.Extensions != nil {
 		overrides.Extensions(r, middlewares...)
 	}

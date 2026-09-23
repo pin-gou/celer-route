@@ -792,6 +792,11 @@ type modelListQuery struct {
 	// HasVKFilter=true restricts providers/models to those allowed by the VK.
 	HasVKFilter       bool
 	VKProviderConfigs []tables.TableVirtualKeyProviderConfig
+	// TeamModelPolicies holds the team ACL rows (Phase 6 / D6) for the VK's team,
+	// keyed by lowercased provider name. Nil/absent for a provider means "inherit
+	// global". Narrowing happens per provider inside listManagementModelsForProvider,
+	// where model attribution is unambiguous.
+	TeamModelPolicies map[string]tables.TableTeamModelPolicy
 }
 
 type listedModel struct {
@@ -966,6 +971,25 @@ func (h *ProviderHandler) parseModelListQuery(ctx *fasthttp.RequestCtx, defaultL
 		if vk != nil {
 			query.HasVKFilter = true
 			query.VKProviderConfigs = vk.ProviderConfigs
+
+			// Team ACL (Phase 6 / D6): the model list must be narrowed by the
+			// team's policies too, not just the VK allowlist — otherwise the
+			// endpoint advertises models that every request through this VK would
+			// be denied. Fail closed on a lookup error: listing too much is the
+			// unsafe direction.
+			if vk.Team != nil && vk.Team.ID != "" {
+				policies, err := h.dbStore.ListTeamModelPolicies(ctx, vk.Team.ID)
+				if err != nil {
+					SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to resolve team model policies: %v", err))
+					return query, false
+				}
+				if len(policies) > 0 {
+					query.TeamModelPolicies = make(map[string]tables.TableTeamModelPolicy, len(policies))
+					for _, policy := range policies {
+						query.TeamModelPolicies[strings.ToLower(strings.TrimSpace(policy.Provider))] = policy
+					}
+				}
+			}
 		}
 	}
 
@@ -1037,6 +1061,18 @@ func (h *ProviderHandler) listManagementModelsForProvider(
 			allowedModels := query.VKProviderConfigs[idx].AllowedModels
 			models = slices.DeleteFunc(models, func(m string) bool { return !allowedModels.IsAllowed(m) })
 		}
+	}
+
+	// Apply team ACL narrowing (Phase 6 / D6) on top of the VK filter. Uses the
+	// same shared predicate as the governance resolver's per-request gate, so the
+	// list an admin or member sees here can never advertise a model that requests
+	// through this VK would be denied. Providers with no policy are untouched
+	// ("inherit global").
+	if policy, ok := query.TeamModelPolicies[strings.ToLower(string(provider))]; ok {
+		teamPolicy := policy
+		models = slices.DeleteFunc(models, func(m string) bool {
+			return !governanceplugin.TeamPolicyAllowsModel(&teamPolicy, m)
+		})
 	}
 
 	if len(query.KeyIDs) == 0 || query.Unfiltered {

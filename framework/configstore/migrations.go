@@ -484,6 +484,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_standard_prices_table"}, run: migrationAddStandardPricesTable},
 	{IDs: []string{"add_team_pricing_profiles_table"}, run: migrationAddTeamPricingProfilesTable},
 	{IDs: []string{"add_billing_reconciliations_tables"}, run: migrationAddBillingReconciliationsTables},
+	{IDs: []string{"add_team_model_policies_table"}, run: migrationAddTeamModelPoliciesTable},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12545,6 +12546,46 @@ func migrationAddBillingReconciliationsTables(ctx context.Context, db *gorm.DB, 
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running add_billing_reconciliations_tables migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddTeamModelPoliciesTable creates the per-team model ACL table
+// (Phase 6 / D6). One row per (team_id, provider); allowed_models and
+// blacklisted_models follow the same WhiteList/BlackList semantics as
+// TableVirtualKeyProviderConfig so the resolver can compose them via the
+// existing helpers. The unique index on (team_id, provider) lets the API
+// use a simple PUT/DELETE keyed by the pair.
+func migrationAddTeamModelPoliciesTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_team_model_policies_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableTeamModelPolicy{}) {
+				logger.Info("[configstore] %s: creating table TableTeamModelPolicy", migrationName)
+				if err := mg.CreateTable(&tables.TableTeamModelPolicy{}); err != nil {
+					return fmt.Errorf("create team_model_policies: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableTeamModelPolicy{}) {
+				if err := mg.DropTable(&tables.TableTeamModelPolicy{}); err != nil {
+					return fmt.Errorf("drop team_model_policies: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_team_model_policies_table migration: %s", err.Error())
 	}
 	return nil
 }
