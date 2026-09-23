@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/pin-gou/celer-route/core/schemas"
 	"golang.org/x/crypto/argon2"
@@ -19,9 +20,42 @@ import (
 )
 
 var encryptionKey []byte
-var logger schemas.Logger	
+var logger schemas.Logger
 
+// allowPlaintextStorage records whether the operator has explicitly opted in
+// to storing sensitive columns in plaintext. Phase 6 / D9 changes the default
+// behaviour so that unset-opt-in + unset-key is rejected at startup; the policy
+// is a process-global atomic so callers can read it lock-free from hot paths.
+//
+// The default is false (deny plaintext). Call SetAllowPlaintextStorage(true)
+// from the configuration loader after parsing config.json / BIFROST_ALLOW_PLAINTEXT_STORAGE.
+var allowPlaintextStorage atomic.Bool
+
+// ErrEncryptionKeyNotInitialized is returned by Decrypt when no encryption key
+// has been derived via Init. It signals a read against a database whose rows
+// were never encrypted; this is recoverable only by either providing the key
+// or accepting the row as plaintext via AllowPlaintextStorage + re-encrypt.
 var ErrEncryptionKeyNotInitialized = errors.New("encryption key is not initialized")
+
+// ErrPlaintextWriteForbidden is returned by Encrypt when a write is attempted
+// while the encryption key is unset AND the operator has not opted in to
+// plaintext storage (the D9 default). Callers must surface this to the
+// operator as a configuration error rather than swallowing it.
+var ErrPlaintextWriteForbidden = errors.New("plaintext storage is not allowed: set encryption_key in config.json (or BIFROST_ENCRYPTION_KEY) or set BIFROST_ALLOW_PLAINTEXT_STORAGE=true to explicitly opt in")
+
+// SetAllowPlaintextStorage updates the operator-driven opt-in flag. Call this
+// once during configuration loading; reads from BeforeSave/AfterFind paths use
+// AllowPlaintextStorage() which is lock-free.
+func SetAllowPlaintextStorage(allowed bool) {
+	allowPlaintextStorage.Store(allowed)
+}
+
+// AllowPlaintextStorage reports whether the operator has explicitly opted in
+// to storing sensitive columns as plaintext when no encryption key is set.
+// D9 makes this opt-in (default false).
+func AllowPlaintextStorage() bool {
+	return allowPlaintextStorage.Load()
+}
 
 // Init initializes the encryption key using Argon2id KDF to derive a secure 32-byte key
 // from the provided passphrase. This ensures strong entropy regardless of passphrase length.
@@ -30,7 +64,14 @@ func Init(key string, _logger schemas.Logger) {
 	logger = _logger
 	if key == "" {
 		encryptionKey = nil
-		logger.Warn("encryption key is not set, encryption will be disabled. To set encryption key: use the encryption_key field in the configuration file or set the BIFROST_ENCRYPTION_KEY environment variable. Note that - once encryption key is set, it cannot be changed later unless you clean up the database.")
+		if !AllowPlaintextStorage() {
+			// D9 fail-closed: log loudly so a misconfigured boot leaves a trace
+			// in the journal; the server's startup guard converts this into a
+			// hard exit once it sees an existing sensitive row.
+			logger.Warn("encryption key is not set and BIFROST_ALLOW_PLAINTEXT_STORAGE=false; sensitive rows will be rejected until encryption_key is provided or plaintext storage is explicitly opted in")
+		} else {
+			logger.Warn("encryption key is not set and BIFROST_ALLOW_PLAINTEXT_STORAGE=true; sensitive rows will be stored in plaintext. To switch to encrypted storage: provide encryption_key (or BIFROST_ENCRYPTION_KEY), restart, and run 'celer-route-admin re-encrypt' to migrate existing rows.")
+		}
 		return
 	}
 
@@ -68,13 +109,24 @@ func Hash(password string) (string, error) {
 	return string(hashedPassword), nil
 }
 
-// Encrypt encrypts a plaintext string using AES-256-GCM and returns a base64-encoded ciphertext
+// Encrypt encrypts a plaintext string using AES-256-GCM and returns a base64-encoded ciphertext.
+//
+// When the encryption key is unset, behaviour is governed by D9:
+//   - Plaintext opt-in (SetAllowPlaintextStorage(true)): the plaintext is returned
+//     unchanged so existing dev/test setups keep working.
+//   - Default (opt-out): ErrPlaintextWriteForbidden is returned so callers can
+//     refuse to write sensitive rows rather than silently leaking them.
+//
+// Empty plaintext is always returned as the empty string regardless of policy.
 func Encrypt(plaintext string) (string, error) {
-	if encryptionKey == nil {
-		return plaintext, nil
-	}
 	if plaintext == "" {
 		return "", nil
+	}
+	if encryptionKey == nil {
+		if !AllowPlaintextStorage() {
+			return "", ErrPlaintextWriteForbidden
+		}
+		return plaintext, nil
 	}
 
 	block, err := aes.NewCipher(encryptionKey)
@@ -125,13 +177,23 @@ func HashSHA256(value string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// Decrypt decrypts a base64-encoded ciphertext using AES-256-GCM and returns the plaintext
+// Decrypt decrypts a base64-encoded ciphertext using AES-256-GCM and returns the plaintext.
+//
+// When the encryption key is unset, Decrypt returns the input unchanged
+// (treating it as plaintext) only when the operator has explicitly opted in
+// to plaintext storage. With D9's default opt-out, the key being unset while
+// there is a non-empty ciphertext is a configuration error.
+//
+// Empty input always returns "".
 func Decrypt(ciphertext string) (string, error) {
-	if encryptionKey == nil {
-		return ciphertext, ErrEncryptionKeyNotInitialized
-	}
 	if ciphertext == "" {
-		return ciphertext, nil
+		return "", nil
+	}
+	if encryptionKey == nil {
+		if AllowPlaintextStorage() {
+			return ciphertext, nil
+		}
+		return ciphertext, ErrEncryptionKeyNotInitialized
 	}
 
 	// Decode from base64

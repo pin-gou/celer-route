@@ -3,6 +3,8 @@ package configstore
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1388,4 +1390,199 @@ func TestEncryptPlaintextOAuthTokens_EmptyRefreshToken(t *testing.T) {
 	require.NoError(t, db.First(&found, "id = ?", "tok-no-refresh").Error)
 	assert.Equal(t, "access-only-startup", found.AccessToken)
 	assert.Equal(t, "", found.RefreshToken)
+}
+
+// ============================================================================
+// Phase 6 / D9: re-encrypt command plumbing
+// ============================================================================
+
+// TestEncryptionNotConfiguredError_Message pins the D9 error contract: it must
+// name both escape hatches (encryption_key / allow_plaintext_storage) and, when
+// counts are supplied, list the tables deterministically with the re-encrypt hint.
+func TestEncryptionNotConfiguredError_Message(t *testing.T) {
+	// No counts → the message still names both escape hatches.
+	base := (&EncryptionNotConfiguredError{}).Error()
+	assert.Contains(t, base, "encryption_key")
+	assert.Contains(t, base, "allow_plaintext_storage")
+	assert.NotContains(t, base, "plaintext sensitive rows")
+
+	// With counts → deterministic, sorted table breakdown + re-encrypt hint.
+	err := &EncryptionNotConfiguredError{Counts: PlaintextRowCounts{
+		"config_keys":        7,
+		"config_providers":   4,
+		"config_mcp_clients": 2,
+	}}
+	msg := err.Error()
+	assert.Contains(t, msg, "13 plaintext sensitive rows")
+	assert.Contains(t, msg, "config_keys=7")
+	assert.Contains(t, msg, "config_mcp_clients=2")
+	assert.Contains(t, msg, "config_providers=4")
+	assert.Contains(t, msg, "celer-route-admin admin re-encrypt")
+	// Sorted order: config_keys < config_mcp_clients < config_providers.
+	assert.Less(t, strings.Index(msg, "config_keys=7"), strings.Index(msg, "config_mcp_clients=2"))
+	assert.Less(t, strings.Index(msg, "config_mcp_clients=2"), strings.Index(msg, "config_providers=4"))
+}
+
+// TestCountPlaintextRows_TableBreakdown confirms per-table counts reflect the
+// actual rows left in plaintext after partial migration.
+func TestCountPlaintextRows_TableBreakdown(t *testing.T) {
+	store, db := setupEncryptionTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	for i, name := range []string{"count-key-a", "count-key-b", "count-key-c"} {
+		insertPlaintextRow(t, db,
+			`INSERT INTO config_keys (name, provider_id, provider, key_id, value, encryption_status, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, 'plain_text', ?, ?)`,
+			name, i+1, "openai", fmt.Sprintf("k-%d", i), fmt.Sprintf("sk-%d", i), now, now)
+	}
+
+	counts, err := store.CountPlaintextRows(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), counts["config_keys"])
+}
+
+// TestCountPlaintextRows_IgnoresEmptyPayload pins the count/migration
+// consistency fix: a row marked plain_text whose sensitive column is empty has
+// nothing to migrate, so it must not be counted. Before the fix it was counted
+// but never flipped, so `re-encrypt` reported work it could not do and its
+// "after" count never reached zero — misleading output for the operator.
+func TestCountPlaintextRows_IgnoresEmptyPayload(t *testing.T) {
+	store, db := setupEncryptionTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+
+	// Plain status but empty payload: nothing to migrate → not counted.
+	insertPlaintextRow(t, db,
+		`INSERT INTO config_providers (name, proxy_config_json, encryption_status, created_at, updated_at)
+		 VALUES (?, '', 'plain_text', ?, ?)`,
+		"empty-provider", now, now)
+	// Plain status with a payload: counted.
+	insertPlaintextRow(t, db,
+		`INSERT INTO config_providers (name, proxy_config_json, encryption_status, created_at, updated_at)
+		 VALUES (?, ?, 'plain_text', ?, ?)`,
+		"proxy-provider", `{"url":"https://proxy.example.com"}`, now, now)
+
+	counts, err := store.CountPlaintextRows(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), counts["config_providers"], "only the row with a non-empty payload should be counted")
+
+	// Count and migration must agree: after running, nothing is left to count.
+	require.NoError(t, store.EncryptPlaintextRows(ctx))
+	after, err := store.CountPlaintextRows(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, after["config_providers"], "after migration the count must be zero (count and migration must agree)")
+}
+
+// TestReencryptPlaintextRows_DryRun confirms --dry-run returns counts without
+// mutating any row.
+func TestReencryptPlaintextRows_DryRun(t *testing.T) {
+	store, db := setupEncryptionTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	insertPlaintextRow(t, db,
+		`INSERT INTO config_keys (name, provider_id, provider, key_id, value, encryption_status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 'plain_text', ?, ?)`,
+		"dry-run-key", 1, "openai", "dry-1", "sk-dry", now, now)
+
+	res, err := store.ReencryptPlaintextRows(ctx, ReencryptOptions{Mode: ReencryptModePlaintextToEncrypted, BatchSize: 10, DryRun: true})
+	require.NoError(t, err)
+	assert.True(t, res.DryRun)
+	assert.Equal(t, int64(1), res.PlaintextBefore["config_keys"])
+	assert.Empty(t, res.Encrypted, "DryRun must not change any row")
+
+	// Sanity: the row should still be plaintext.
+	var row map[string]any
+	require.NoError(t, db.Table("config_keys").Where("name = ?", "dry-run-key").Take(&row).Error)
+	assert.Equal(t, "plain_text", row["encryption_status"])
+}
+
+// TestReencryptPlaintextRows_EndToEnd confirms a non-dry-run run actually
+// flips encryption_status to encrypted and leaves no plaintext behind.
+func TestReencryptPlaintextRows_EndToEnd(t *testing.T) {
+	store, db := setupEncryptionTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	for i, name := range []string{"re-key-a", "re-key-b"} {
+		insertPlaintextRow(t, db,
+			`INSERT INTO config_keys (name, provider_id, provider, key_id, value, encryption_status, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, 'plain_text', ?, ?)`,
+			name, i+1, "openai", fmt.Sprintf("rk-%d", i), fmt.Sprintf("sk-r-%d", i), now, now)
+	}
+
+	res, err := store.ReencryptPlaintextRows(ctx, ReencryptOptions{Mode: ReencryptModePlaintextToEncrypted, BatchSize: 50})
+	require.NoError(t, err)
+	assert.Equal(t, ReencryptModePlaintextToEncrypted, res.Mode)
+	assert.Equal(t, int64(2), res.PlaintextBefore["config_keys"])
+	assert.Equal(t, int64(2), res.Encrypted["config_keys"])
+
+	// Every row should now be encrypted.
+	var remaining int64
+	require.NoError(t, db.Table("config_keys").Where("encryption_status = ? OR encryption_status IS NULL OR encryption_status = ''", "plain_text").Count(&remaining).Error)
+	assert.Equal(t, int64(0), remaining)
+}
+
+// TestReencryptPlaintextRows_RequiresKey confirms re-encrypt refuses to run
+// when encryption is not enabled, regardless of any existing plaintext rows.
+func TestReencryptPlaintextRows_RequiresKey(t *testing.T) {
+	store, _ := setupEncryptionTestStore(t)
+	// Disable encryption by re-initialising with empty key.
+	encrypt.Init("", bifrost.NewDefaultLogger(schemas.LogLevelWarn))
+	defer encrypt.Init(testEncryptionKey, bifrost.NewDefaultLogger(schemas.LogLevelInfo))
+
+	_, err := store.ReencryptPlaintextRows(context.Background(), ReencryptOptions{Mode: ReencryptModePlaintextToEncrypted})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "encryption key is not set")
+}
+
+// TestReencryptPlaintextRows_RotateKeyUnsupported pins the current behaviour:
+// rotate-key mode is reserved for a future key-rotation PR.
+func TestReencryptPlaintextRows_RotateKeyUnsupported(t *testing.T) {
+	store, _ := setupEncryptionTestStore(t)
+	_, err := store.ReencryptPlaintextRows(context.Background(), ReencryptOptions{Mode: ReencryptModeRotateKey})
+	require.ErrorIs(t, err, ErrReencryptModeUnsupported)
+}
+
+// TestNewConfigStore_SkipStartupEncryptionSync pins the contract the admin
+// `re-encrypt` command depends on: with the option set, opening the store must
+// NOT migrate plaintext rows, so --dry-run can count them and --confirm remains
+// the only way to write. The default (no option) still migrates eagerly.
+func TestNewConfigStore_SkipStartupEncryptionSync(t *testing.T) {
+	ctx := context.Background()
+	require.True(t, encrypt.IsEnabled(), "this test needs the suite key to be configured")
+
+	dbPath := filepath.Join(t.TempDir(), "config.db")
+	log := bifrost.NewDefaultLogger(schemas.LogLevelError)
+
+	// 1. Open with the eager sync skipped and seed a plaintext row.
+	store, err := newSqliteConfigStore(ctx, &SQLiteConfig{Path: dbPath}, log, true)
+	require.NoError(t, err)
+	rdb, ok := store.(*RDBConfigStore)
+	require.True(t, ok, "newSqliteConfigStore must return *RDBConfigStore")
+
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	insertPlaintextRow(t, rdb.DB(),
+		`INSERT INTO config_providers (name, proxy_config_json, encryption_status, created_at, updated_at)
+		 VALUES (?, ?, 'plain_text', ?, ?)`,
+		"openai", `{"url":"https://proxy.example.com"}`, now, now)
+
+	counts, err := store.CountPlaintextRows(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), counts["config_providers"], "skipped open must leave the plaintext row untouched")
+	require.NoError(t, store.Close(ctx))
+
+	// 2. Re-open with the sync skipped again — still plaintext.
+	store2, err := newSqliteConfigStore(ctx, &SQLiteConfig{Path: dbPath}, log, true)
+	require.NoError(t, err)
+	counts2, err := store2.CountPlaintextRows(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), counts2["config_providers"], "second skipped open must not migrate either")
+	require.NoError(t, store2.Close(ctx))
+
+	// 3. Open with the default (sync enabled) — the row is migrated.
+	store3, err := newSqliteConfigStore(ctx, &SQLiteConfig{Path: dbPath}, log, false)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store3.Close(ctx)) }()
+	counts3, err := store3.CountPlaintextRows(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, counts3["config_providers"], "default open must still migrate plaintext rows")
 }

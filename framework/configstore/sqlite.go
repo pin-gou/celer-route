@@ -15,8 +15,12 @@ type SQLiteConfig struct {
 	Path string `json:"path"`
 }
 
-// newSqliteConfigStore creates a new SQLite config store.
-func newSqliteConfigStore(ctx context.Context, config *SQLiteConfig, logger schemas.Logger) (ConfigStore, error) {
+// newSqliteConfigStore creates a new SQLite config store. When
+// skipStartupEncryptionSync is true the constructor does not run the eager
+// plaintext→encrypted pass; the caller is then responsible for driving the
+// migration explicitly (used by the admin re-encrypt command so --dry-run and
+// --confirm stay meaningful).
+func newSqliteConfigStore(ctx context.Context, config *SQLiteConfig, logger schemas.Logger, skipStartupEncryptionSync bool) (ConfigStore, error) {
 	if _, err := os.Stat(config.Path); os.IsNotExist(err) {
 		// Create DB file
 		f, err := os.Create(config.Path)
@@ -58,9 +62,12 @@ func newSqliteConfigStore(ctx context.Context, config *SQLiteConfig, logger sche
 	if err := triggerMigrations(ctx, db, logger); err != nil {
 		return nil, err
 	}
-	// Encrypt any plaintext rows if encryption is enabled
-	if err := s.EncryptPlaintextRows(ctx); err != nil {
-		return nil, fmt.Errorf("failed to encrypt plaintext rows: %w", err)
+	// Encrypt any plaintext rows if encryption is enabled. Skipped when the
+	// caller drives the migration explicitly (admin re-encrypt --dry-run).
+	if !skipStartupEncryptionSync {
+		if err := s.EncryptPlaintextRows(ctx); err != nil {
+			return nil, fmt.Errorf("failed to encrypt plaintext rows: %w", err)
+		}
 	}
 	return s, nil
 }

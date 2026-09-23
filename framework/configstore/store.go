@@ -216,6 +216,47 @@ type PricingOverridesQueryParams struct {
 	ProviderKeyID *string
 }
 
+// ReencryptMode selects which migration the re-encrypt command performs.
+type ReencryptMode string
+
+const (
+	// ReencryptModePlaintextToEncrypted walks every sensitive table and
+	// re-saves rows whose encryption_status is plain_text so their
+	// sensitive columns are encrypted under the current key. Idempotent.
+	ReencryptModePlaintextToEncrypted ReencryptMode = "plaintext-to-encrypted"
+	// ReencryptModeRotateKey is reserved for a future key-rotation flow
+	// (re-encrypt already-encrypted rows under a newly activated key).
+	// Today it is a no-op that returns ErrReencryptModeUnsupported.
+	ReencryptModeRotateKey ReencryptMode = "rotate-key"
+)
+
+// ReencryptOptions drives a single re-encrypt run. Defaults apply when a
+// field is zero: BatchSize falls back to 100 rows/transaction; Mode falls
+// back to ReencryptModePlaintextToEncrypted.
+type ReencryptOptions struct {
+	// Mode selects which migration to perform. Default: plaintext-to-encrypted.
+	Mode ReencryptMode
+	// BatchSize caps rows per transaction. Default: 100.
+	BatchSize int
+	// DryRun, when true, returns the counts without writing any change.
+	DryRun bool
+}
+
+// PlaintextRowCounts reports how many rows still carry encryption_status='plain_text'
+// per table. Zero values are elided from the rendered CLI output.
+type PlaintextRowCounts map[string]int64
+
+// ReencryptResult is the structured outcome of a re-encrypt run. The CLI
+// prints the per-table counts; the server uses Encrypted > 0 to assert the
+// migration actually happened.
+type ReencryptResult struct {
+	DryRun          bool
+	Mode            ReencryptMode
+	BatchSize       int
+	PlaintextBefore PlaintextRowCounts
+	Encrypted       PlaintextRowCounts
+}
+
 // ConfigStore is the interface for the config store.
 type ConfigStore interface {
 	// Health check
@@ -223,6 +264,17 @@ type ConfigStore interface {
 
 	// Encryption
 	EncryptPlaintextRows(ctx context.Context) error
+	// ReencryptPlaintextRows runs a one-shot plaintext→encrypted migration
+	// across every sensitive table with the given batch size. When
+	// DryRun is true the function returns the number of rows that WOULD be
+	// migrated without writing any change. When Mode is "rotate-key" the
+	// function re-encrypts already-encrypted rows under the current key
+	// (no-op when the key hasn't changed; used by future key rotation).
+	ReencryptPlaintextRows(ctx context.Context, opts ReencryptOptions) (ReencryptResult, error)
+	// CountPlaintextRows returns how many sensitive rows are still stored
+	// in plaintext. Used by the CLI re-encrypt --dry-run path and by the
+	// D9 startup policy to size the migration. Cheap: SELECT COUNT(*) per table.
+	CountPlaintextRows(ctx context.Context) (PlaintextRowCounts, error)
 
 	// Client config CRUD
 	UpdateClientConfig(ctx context.Context, config *ClientConfig) error
@@ -1130,24 +1182,45 @@ type ConfigStore interface {
 	Close(ctx context.Context) error
 }
 
+// ConfigStoreOption tunes behaviour of NewConfigStore that is orthogonal to the
+// connection itself. Options are applied in order.
+type ConfigStoreOption func(*configStoreOptions)
+
+type configStoreOptions struct {
+	skipStartupEncryptionSync bool
+}
+
+// WithSkipStartupEncryptionSync disables the eager plaintext→encrypted pass the
+// store normally runs during construction. The admin `re-encrypt` command uses
+// it so `--dry-run` can count rows without mutating them and so the migration
+// only runs when the operator passes `--confirm`. Every other caller should let
+// the default (sync enabled) stand.
+func WithSkipStartupEncryptionSync() ConfigStoreOption {
+	return func(o *configStoreOptions) { o.skipStartupEncryptionSync = true }
+}
+
 // NewConfigStore creates a new config store based on the configuration
-func NewConfigStore(ctx context.Context, config *Config, logger schemas.Logger) (ConfigStore, error) {
+func NewConfigStore(ctx context.Context, config *Config, logger schemas.Logger, opts ...ConfigStoreOption) (ConfigStore, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 	if !config.Enabled {
 		return nil, nil
 	}
+	var settings configStoreOptions
+	for _, opt := range opts {
+		opt(&settings)
+	}
 	logger.Info("connecting to %s database", config.Type)
 	switch config.Type {
 	case ConfigStoreTypeSQLite:
 		if sqliteConfig, ok := config.Config.(*SQLiteConfig); ok {
-			return newSqliteConfigStore(ctx, sqliteConfig, logger)
+			return newSqliteConfigStore(ctx, sqliteConfig, logger, settings.skipStartupEncryptionSync)
 		}
 		return nil, fmt.Errorf("invalid sqlite config: %T", config.Config)
 	case ConfigStoreTypePostgres:
 		if postgresConfig, ok := config.Config.(*PostgresConfig); ok {
-			return newPostgresConfigStore(ctx, postgresConfig, logger)
+			return newPostgresConfigStore(ctx, postgresConfig, logger, settings.skipStartupEncryptionSync)
 		}
 		return nil, fmt.Errorf("invalid postgres config: %T", config.Config)
 	}

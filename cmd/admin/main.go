@@ -23,11 +23,14 @@ import (
 const usage = `celer-route-admin — direct admin account management for celer-route.
 
 Subcommands:
-  reset    Create the initial admin account or reset the password of an existing one.
+  reset       Create the initial admin account or reset the password of an existing one.
+  re-encrypt  Migrate plaintext rows in the config store to encrypted storage (Phase 6 / D9).
 
 Examples:
   celer-route-admin admin reset --config /path/to/config.json
   celer-route-admin admin reset --app-dir /app/data
+  celer-route-admin admin re-encrypt --config /path/to/config.json --dry-run
+  celer-route-admin admin re-encrypt --config /path/to/config.json --confirm
 
 Run 'celer-route-admin <subcommand> --help' for subcommand-specific flags.
 `
@@ -40,15 +43,21 @@ func main() {
 	switch os.Args[1] {
 	case "admin":
 		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "missing subcommand: expected one of 'reset'")
+			fmt.Fprintln(os.Stderr, "missing subcommand: expected one of 'reset', 're-encrypt'")
 			fmt.Fprint(os.Stderr, usage)
 			os.Exit(2)
 		}
 		switch os.Args[2] {
 		case "reset":
+			if len(os.Args) > 3 && (os.Args[3] == "-h" || os.Args[3] == "--help" || os.Args[3] == "help") {
+				fmt.Fprint(os.Stderr, resetUsage)
+				os.Exit(0)
+			}
 			os.Exit(runAdminReset(context.Background(), os.Args[3:]))
+		case "re-encrypt":
+			os.Exit(runAdminReencryptMain(context.Background(), os.Args[3:]))
 		case "-h", "--help", "help":
-			fmt.Fprint(os.Stderr, resetUsage)
+			fmt.Fprint(os.Stderr, adminUsage)
 			os.Exit(0)
 		default:
 			fmt.Fprintf(os.Stderr, "unknown admin subcommand %q\n", os.Args[2])
@@ -64,6 +73,72 @@ func main() {
 		os.Exit(2)
 	}
 }
+
+// adminUsage is the per-subcommand help text for `celer-route-admin admin --help`.
+// The full per-command help (with all flags) is shown by `admin <subcommand> --help`.
+const adminUsage = `celer-route-admin admin — manage admin accounts and storage encryption.
+
+Subcommands:
+  reset       Create the initial admin account or reset the password of an existing one.
+  re-encrypt  Migrate plaintext rows to encrypted storage (Phase 6 / D9).
+
+See:
+  celer-route-admin admin reset --help
+  celer-route-admin admin re-encrypt --help
+`
+
+// runAdminReencryptMain parses the args and dispatches to runReencrypt.
+// Splitting the parse/run split keeps runReencrypt unit-testable.
+func runAdminReencryptMain(ctx context.Context, args []string) int {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help" || args[0] == "help") {
+		fmt.Fprint(os.Stderr, reencryptUsage)
+		return 0
+	}
+	if err := runReencrypt(ctx, args); err != nil {
+		fmt.Fprintf(os.Stderr, "celer-route-admin: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+const reencryptUsage = `celer-route-admin admin re-encrypt — migrate plaintext rows in the config
+store to encrypted storage (Phase 6 / D9).
+
+Usage:
+  celer-route-admin admin re-encrypt [flags]
+
+Flags:
+  --config PATH        Path to the celer-route config.json file. When omitted,
+                       the CLI uses a default SQLite database at <app-dir>/config.db.
+  --app-dir PATH       Application data directory (default: current directory,
+                       used only when --config is omitted).
+  --mode MODE          Migration mode:
+                         plaintext-to-encrypted  (default) — encrypt rows whose
+                                                  encryption_status is plain_text.
+                         rotate-key               (reserved) — re-encrypt already-
+                                                  encrypted rows under a new key.
+                       Today's build supports plaintext-to-encrypted only;
+                       rotate-key returns ErrReencryptModeUnsupported.
+  --batch-size N       Rows per transaction (default 100). Larger batches are
+                       faster but hold a transaction open longer.
+  --dry-run            Only print the row counts that WOULD be migrated; do not
+                       write anything. Safe to run any time.
+  --confirm            Required to perform a non-dry-run migration. Without it
+                       the command exits with a reminder rather than touching
+                       the database. There is no other way to apply the change.
+
+Typical D9 upgrade flow:
+  1. Set allow_plaintext_storage=true in config.json (or BIFROST_ALLOW_PLAINTEXT_STORAGE=true).
+  2. Export a plaintext backup of every config_key and VK value to an external vault.
+  3. Remove the opt-in, set encryption_key (or BIFROST_ENCRYPTION_KEY).
+  4. celer-route-admin admin re-encrypt --dry-run    # sanity-check the row counts.
+  5. celer-route-admin admin re-encrypt --confirm    # apply the migration.
+  6. Restart the server; the startup guard no longer complains.
+
+Examples:
+  celer-route-admin admin re-encrypt --app-dir /app/data --dry-run
+  celer-route-admin admin re-encrypt --config /app/data/config.json --confirm
+`
 
 const resetUsage = `celer-route-admin admin reset — create the first admin account or reset
 the password of an existing one, writing directly to the config store.

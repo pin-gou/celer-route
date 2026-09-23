@@ -50,7 +50,12 @@
     },
     "encryption_key": {
       "type": "string",
-      "description": "You can set the value as env.<ENV_VAR_NAME> to use an environment variable. We also read encryption key from BIFROST_ENCRYPTION_KEY environment variable. Note: once set, the encryption key cannot be changed unless you clean up the database. Accepts any string; a secure 32-byte AES-256 key will be derived using Argon2id KDF. If not provided, data will be saved in plain text. Recommended: use a passphrase of at least 16 bytes for better security"
+      "description": "You can set the value as env.<ENV_VAR_NAME> to use an environment variable. We also read encryption key from BIFROST_ENCRYPTION_KEY environment variable. Note: once set, the encryption key cannot be changed unless you clean up the database. Accepts any string; a secure 32-byte AES-256 key will be derived using Argon2id KDF. If not provided AND allow_plaintext_storage is false, the server will refuse to start (Phase 6 / D9). Recommended: use a passphrase of at least 16 bytes for better security"
+    },
+    "allow_plaintext_storage": {
+      "type": "boolean",
+      "default": false,
+      "description": "Phase 6 / D9: explicit opt-in for storing sensitive rows (provider keys, virtual keys, sessions, OAuth tokens, etc.) in plaintext when no encryption_key is configured. Defaults to false. When false AND encryption_key is unset AND the database contains plaintext rows, the server refuses to boot — the operator is directed at the re-encrypt command. Also readable from the BIFROST_ALLOW_PLAINTEXT_STORAGE env var (true/false/1/0/yes/no/on/off). Tip: set to true only for local dev; production deployments should always provide encryption_key and run `celer-route-admin admin re-encrypt --confirm` to migrate any pre-D9 plaintext rows."
     },
     "env_label": {
       "type": "string",

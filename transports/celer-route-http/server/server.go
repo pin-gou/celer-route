@@ -2930,6 +2930,13 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config %v", err)
 	}
+	// D9 (Phase 6): refuse to serve traffic when no encryption key is configured
+	// and the operator has not explicitly opted in to plaintext storage. This is
+	// a deployment-level decision, kept out of LoadConfig so config-parsing tests
+	// and the admin CLI remain unaffected.
+	if err := s.Config.EnforceEncryptionStartupPolicy(ctx); err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 	// Propagate the app data directory to the config so built-in plugins that
 	// default their on-disk roots to <appDir>/<subdir> (e.g. RTK raw-output)
 	// resolve them inside the app dir rather than the process CWD — in

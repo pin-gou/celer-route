@@ -510,9 +510,17 @@ func (m *MockConfigStore) RevokeOAuth2Session(ctx context.Context, id string) er
 }
 func (m *MockConfigStore) Ping(ctx context.Context) error                 { return nil }
 func (m *MockConfigStore) EncryptPlaintextRows(ctx context.Context) error { return nil }
-func (m *MockConfigStore) Close(ctx context.Context) error                { return nil }
-func (m *MockConfigStore) DB() *gorm.DB                                   { return nil }
-func (m *MockConfigStore) ScopedDB(ctx context.Context) *gorm.DB          { return nil }
+
+// Phase 6 D9: stub Count/Reencrypt for vet.
+func (m *MockConfigStore) CountPlaintextRows(ctx context.Context) (configstore.PlaintextRowCounts, error) {
+	return configstore.PlaintextRowCounts{}, nil
+}
+func (m *MockConfigStore) ReencryptPlaintextRows(ctx context.Context, opts configstore.ReencryptOptions) (configstore.ReencryptResult, error) {
+	return configstore.ReencryptResult{Mode: opts.Mode, BatchSize: opts.BatchSize, DryRun: opts.DryRun}, nil
+}
+func (m *MockConfigStore) Close(ctx context.Context) error       { return nil }
+func (m *MockConfigStore) DB() *gorm.DB                          { return nil }
+func (m *MockConfigStore) ScopedDB(ctx context.Context) *gorm.DB { return nil }
 func (m *MockConfigStore) ExecuteTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
 	return fn(nil)
 }
@@ -2600,6 +2608,41 @@ func (m *MockConfigStore) GetBudgetByID(ctx context.Context, id string) (*tables
 	return nil, nil
 }
 
+// Reconciliation stubs (Phase 5) — kept minimal so MockConfigStore still
+// satisfies the ConfigStore interface. Tests that exercise reconciliation
+// logic substitute the real RDBConfigStore.
+func (m *MockConfigStore) ListReconciliations(ctx context.Context, params configstore.ReconciliationQueryParams) ([]tables.TableBillingReconciliation, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockConfigStore) GetReconciliationByID(ctx context.Context, id string) (*tables.TableBillingReconciliation, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) ListReconciliationItems(ctx context.Context, reconciliationID string) ([]tables.TableBillingReconItem, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error {
+	return nil
+}
+func (m *MockConfigStore) UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error {
+	return nil
+}
+
+// Team model policies (Phase 6 / D6) — same minimal-stub rationale as the
+// reconciliation methods above; the real RDBConfigStore owns the actual
+// table and CRUD logic.
+func (m *MockConfigStore) ListTeamModelPolicies(ctx context.Context, teamID string) ([]tables.TableTeamModelPolicy, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) GetTeamModelPolicy(ctx context.Context, teamID, provider string) (*tables.TableTeamModelPolicy, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) UpsertTeamModelPolicy(ctx context.Context, policy *tables.TableTeamModelPolicy) error {
+	return nil
+}
+func (m *MockConfigStore) DeleteTeamModelPolicy(ctx context.Context, teamID, provider string) error {
+	return nil
+}
+
 // Helper functions for tests
 
 // createTempDir creates a temporary directory for test files
@@ -4143,8 +4186,8 @@ func TestGenerateProviderConfigHash(t *testing.T) {
 		SendBackRawResponse: true,
 		CooldownPolicy: &schemas.CooldownPolicy{
 			RateLimit: &schemas.CooldownPolicyRule{
-				Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
-				MatchMode: "any",
+				Match:      []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+				MatchMode:  "any",
 				TTLSeconds: 60,
 			},
 		},
@@ -18186,14 +18229,14 @@ var excludedGoFields = map[string]map[string]bool{
 		"virtual_keys": true, // GORM relation
 	},
 	"tables.TableVirtualKey": {
-		"config_hash":              true,
-		"created_at":               true,
-		"updated_at":               true,
-		"created_by_user_id":       true, // DB ownership metadata; set by API/session layer
-		"budgets":                  true, // GORM relation (budgets have virtual_key_id FK)
-		"rate_limit":               true, // GORM relation
-		"team":                     true, // GORM relation
-		"customer":                 true, // GORM relation
+		"config_hash":               true,
+		"created_at":                true,
+		"updated_at":                true,
+		"created_by_user_id":        true, // DB ownership metadata; set by API/session layer
+		"budgets":                   true, // GORM relation (budgets have virtual_key_id FK)
+		"rate_limit":                true, // GORM relation
+		"team":                      true, // GORM relation
+		"customer":                  true, // GORM relation
 		"is_access_profile_managed": true, // Enterprise feature; server-computed field, not in OSS schema
 	},
 	"tables.TableVirtualKeyProviderConfig": {
@@ -18248,7 +18291,7 @@ var excludedSchemaFields = map[string]map[string]bool{
 	"client": {
 		"allowed_headers": true, // Not in ClientConfig
 	},
-	
+
 	"auth_config": {
 		"disable_auth_on_inference": true, // Deprecated and ignored; kept in schema for backward-compatible config.json validation. Use enforce_auth_on_inference.
 	},
@@ -18258,7 +18301,7 @@ var excludedSchemaFields = map[string]map[string]bool{
 	"governance.teams": {
 		"budget_id": true, // Replaced by budgets[] relationship with team_id FK on TableBudget
 	},
-	
+
 	"governance.virtual_keys.provider_configs": {
 		"keys":    true, // Complex nested type, validated separately
 		"key_ids": true, // Config-file format; handled via custom UnmarshalJSON into allow_all_keys/keys
@@ -18266,7 +18309,7 @@ var excludedSchemaFields = map[string]map[string]bool{
 	"governance.virtual_keys.mcp_configs": {
 		"mcp_client_name": true, // Config-file format; captured via custom UnmarshalJSON and resolved to mcp_client_id at startup
 	},
-	
+
 	"mcp.client_configs": {
 		"websocket_config": true, // Schema documents all connection types
 		"http_config":      true, // Schema documents all connection types
@@ -21267,4 +21310,102 @@ func TestResolveSetupToken_TrimsSurroundingWhitespace(t *testing.T) {
 	t.Setenv("BIFROST_SETUP_TOKEN", "")
 	configData := &ConfigData{SetupToken: schemas.NewSecretVar("  my-token  ")}
 	assert.Equal(t, "my-token", resolveSetupToken(configData))
+}
+
+// countingMockStore embeds MockConfigStore but returns a canned plaintext-row
+// breakdown so the D9 count-enrichment path can be asserted.
+type countingMockStore struct {
+	*MockConfigStore
+	counts configstore.PlaintextRowCounts
+}
+
+func (c *countingMockStore) CountPlaintextRows(ctx context.Context) (configstore.PlaintextRowCounts, error) {
+	return c.counts, nil
+}
+
+// TestEnforceEncryptionStartupPolicy_DeniesWithoutKeyOrOptIn pins the D9 default:
+// no key + no explicit opt-in is fatal.
+func TestEnforceEncryptionStartupPolicy_DeniesWithoutKeyOrOptIn(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(false)
+	encrypt.Init("", logger)
+
+	err := (&Config{}).EnforceEncryptionStartupPolicy(context.Background())
+	require.Error(t, err)
+	var policyErr *configstore.EncryptionNotConfiguredError
+	require.ErrorAs(t, err, &policyErr)
+	assert.Contains(t, err.Error(), "encryption_key")
+	assert.Contains(t, err.Error(), "allow_plaintext_storage")
+}
+
+// TestEnforceEncryptionStartupPolicy_AllowsWithOptIn confirms the explicit
+// plaintext opt-in is honoured.
+func TestEnforceEncryptionStartupPolicy_AllowsWithOptIn(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(true)
+	encrypt.Init("", logger)
+
+	require.NoError(t, (&Config{}).EnforceEncryptionStartupPolicy(context.Background()))
+}
+
+// TestEnforceEncryptionStartupPolicy_AllowsWithKey confirms a configured key
+// satisfies the policy regardless of the opt-in flag.
+func TestEnforceEncryptionStartupPolicy_AllowsWithKey(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(false)
+	encrypt.Init("a-long-enough-test-passphrase-32b!", logger)
+
+	require.NoError(t, (&Config{}).EnforceEncryptionStartupPolicy(context.Background()))
+}
+
+// TestEnforceEncryptionStartupPolicy_EnrichesWithRowCounts verifies the refusal
+// names the tables that still hold plaintext, so the operator can size the
+// re-encrypt run.
+func TestEnforceEncryptionStartupPolicy_EnrichesWithRowCounts(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(false)
+	encrypt.Init("", logger)
+
+	cfg := &Config{ConfigStore: &countingMockStore{
+		MockConfigStore: NewMockConfigStore(),
+		counts:          configstore.PlaintextRowCounts{"config_keys": 7, "config_providers": 4},
+	}}
+	err := cfg.EnforceEncryptionStartupPolicy(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "11 plaintext sensitive rows")
+	assert.Contains(t, err.Error(), "config_keys=7")
+	assert.Contains(t, err.Error(), "config_providers=4")
+	assert.Contains(t, err.Error(), "celer-route-admin admin re-encrypt")
+}
+
+// TestInitEncryption_PlaintextPolicyPrecedence pins precedence: config.json
+// overrides the env var, which overrides the deny-by-default. Unknown env values
+// fail closed.
+func TestInitEncryption_PlaintextPolicyPrecedence(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+
+	// config true, env false → env wins (false)
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "false")
+	require.NoError(t, initEncryption(&ConfigData{AllowPlaintextStorage: true}))
+	assert.False(t, encrypt.AllowPlaintextStorage(), "explicit env false must override config true")
+
+	// config false, env true → env wins (true)
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "true")
+	require.NoError(t, initEncryption(&ConfigData{}))
+	assert.True(t, encrypt.AllowPlaintextStorage(), "env true must enable plaintext")
+
+	// unset env, config false → deny
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "")
+	require.NoError(t, initEncryption(&ConfigData{}))
+	assert.False(t, encrypt.AllowPlaintextStorage(), "default must be deny")
+
+	// unknown env value → fail closed (deny)
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "maybe")
+	require.NoError(t, initEncryption(&ConfigData{AllowPlaintextStorage: true}))
+	assert.False(t, encrypt.AllowPlaintextStorage(), "unrecognised env value must fail closed")
 }
