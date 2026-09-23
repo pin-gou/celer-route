@@ -304,6 +304,19 @@ type Log struct {
 	Speed        *string `gorm:"type:varchar(32)" json:"speed,omitempty"`         // Anthropic served speed: "fast" / "standard"
 	InferenceGeo *string `gorm:"type:varchar(32)" json:"inference_geo,omitempty"` // Anthropic data residency, e.g. "us"
 
+	// CostAccuracy tags the actual-cost figure on this row with a confidence
+	// band so admins can filter reconciliation reports to high-fidelity rows
+	// before comparing against provider invoices:
+	//   - provider_reported: response carried usage → cost comes straight from
+	//     the provider; highest fidelity.
+	//   - gateway_estimated: no provider usage (failed / cancelled / stream
+	//     truncated), gateway counted tokens itself → fidelity typically
+	//     within 5%, worse on long-context / multilingual payloads.
+	//   - unknown: no usage, no token estimate → not safe to bill.
+	// Reports and gateway-delta filter on this column (see 03-cost-allocation
+	// data-model §5); cost_actual is meaningless without it.
+	CostAccuracy string `gorm:"type:varchar(32);default:'unknown';index" json:"cost_accuracy"`
+
 	CreatedAt time.Time `gorm:"index;not null" json:"created_at"`
 
 	// Virtual fields for JSON output - these will be populated when needed

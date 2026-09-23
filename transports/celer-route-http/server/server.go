@@ -2646,6 +2646,19 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	// "snapshot-now" and "test rule" endpoints to 503.
 	alertingHandler := handlers.NewAlertingHandler(s.Config.ConfigStore, s.WebhookDispatcher, s.SidekiqRunner)
 	alertingHandler.RegisterRoutes(s.Router, middlewares...)
+	// Phase 4 (03-cost-allocation): standard_prices + team_pricing_profiles
+	// admin surface, plus the cost-allocation reports (summary / trend /
+	// details / forecast / cost-by-member / cost-by-vk). Both handlers are
+	// safe to construct when the underlying stores are nil — read paths
+	// degrade to empty rows with a clear error rather than 500.
+	standardPriceHandler := handlers.NewStandardPriceHandler(s.Config.ConfigStore)
+	standardPriceHandler.RegisterRoutes(s.Router, middlewares...)
+	var reportsLogStore logstore.LogStore
+	if s.Config.LogsStore != nil {
+		reportsLogStore = s.Config.LogsStore
+	}
+	reportsCostHandler := handlers.NewReportsCostHandler(s.Config.ConfigStore, reportsLogStore)
+	reportsCostHandler.RegisterRoutes(s.Router, middlewares...)
 	skillsServingHandler := handlers.NewSkillsServingHandler(s.Config.ConfigStore, s.Config.ObjectStore)
 	if skillsServingHandler != nil {
 		skillsServingHandler.RegisterRoutes(s.Router, middlewares...)

@@ -548,6 +548,23 @@ type ConfigStore interface {
 	UpdatePricingOverride(ctx context.Context, override *tables.TablePricingOverride, tx ...*gorm.DB) error
 	DeletePricingOverride(ctx context.Context, id string, tx ...*gorm.DB) error
 
+	// Standard-prices (Phase 4 cost-allocation D7) — the team ledger's
+	// versioned price book. Reports pick the active row per (provider,
+	// model, request time); admin edits append a new effective_from row.
+	ListStandardPrices(ctx context.Context, params StandardPriceQueryParams) ([]tables.TableStandardPrice, int64, error)
+	GetStandardPriceByID(ctx context.Context, id string) (*tables.TableStandardPrice, error)
+	GetActiveStandardPrice(ctx context.Context, provider, model string, at time.Time) (*tables.TableStandardPrice, error)
+	CreateStandardPrice(ctx context.Context, row *tables.TableStandardPrice) error
+	BulkCreateStandardPrices(ctx context.Context, rows []tables.TableStandardPrice) error
+	DeleteStandardPrice(ctx context.Context, id string) error
+
+	// Team-pricing-profiles — per-team overrides (mode=standard/actual,
+	// margin_multiplier). Defaults are implicit when the row is absent.
+	ListTeamPricingProfiles(ctx context.Context) ([]tables.TableTeamPricingProfile, error)
+	GetTeamPricingProfile(ctx context.Context, teamID string) (*tables.TableTeamPricingProfile, error)
+	UpsertTeamPricingProfile(ctx context.Context, row *tables.TableTeamPricingProfile) error
+	DeleteTeamPricingProfile(ctx context.Context, teamID string) error
+
 	// Model parameters
 	GetModelParameters(ctx context.Context) ([]tables.TableModelParameters, error)
 	GetModelParametersByModel(ctx context.Context, model string) (*tables.TableModelParameters, error)

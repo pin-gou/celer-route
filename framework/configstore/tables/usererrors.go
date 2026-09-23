@@ -27,4 +27,12 @@ var (
 	errEmptyKeyRequestPurpose  = errors.New("key_request purpose is required")
 	errInvalidKeyRequestKind   = errors.New("key_request kind must be one of join_team/extend_quota/add_vk")
 	errInvalidKeyRequestStatus = errors.New("key_request status must be one of pending/approved/rejected/cancelled")
+	// Phase 4 — cost allocation price-book.
+	errEmptyStandardPriceProvider       = errors.New("standard_price provider is required")
+	errEmptyStandardPriceModel          = errors.New("standard_price model is required")
+	errNonUSDStandardPrice              = errors.New("standard_price currency must be USD (D11-A)")
+	errNegativeStandardPrice            = errors.New("standard_price components must be non-negative")
+	errEmptyTeamPricingProfileTeam      = errors.New("team_pricing_profile team_id is required")
+	errInvalidTeamPricingProfileMode    = errors.New("team_pricing_profile mode must be one of standard/actual")
+	errInvalidTeamPricingProfileMargin  = errors.New("team_pricing_profile margin_multiplier must be >= 1.0")
 )

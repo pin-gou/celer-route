@@ -1414,6 +1414,50 @@ func (m *MockConfigStore) DeletePricingOverride(ctx context.Context, id string, 
 	return nil
 }
 
+// Standard prices (Phase 4 cost-allocation D7)
+
+func (m *MockConfigStore) ListStandardPrices(ctx context.Context, params configstore.StandardPriceQueryParams) ([]tables.TableStandardPrice, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) GetStandardPriceByID(ctx context.Context, id string) (*tables.TableStandardPrice, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetActiveStandardPrice(ctx context.Context, provider, model string, at time.Time) (*tables.TableStandardPrice, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) CreateStandardPrice(ctx context.Context, row *tables.TableStandardPrice) error {
+	return nil
+}
+
+func (m *MockConfigStore) BulkCreateStandardPrices(ctx context.Context, rows []tables.TableStandardPrice) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteStandardPrice(ctx context.Context, id string) error {
+	return nil
+}
+
+// Team pricing profiles
+
+func (m *MockConfigStore) ListTeamPricingProfiles(ctx context.Context) ([]tables.TableTeamPricingProfile, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetTeamPricingProfile(ctx context.Context, teamID string) (*tables.TableTeamPricingProfile, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) UpsertTeamPricingProfile(ctx context.Context, row *tables.TableTeamPricingProfile) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteTeamPricingProfile(ctx context.Context, teamID string) error {
+	return nil
+}
+
 // Model parameters
 
 func (m *MockConfigStore) GetModelParameters(ctx context.Context) ([]tables.TableModelParameters, error) {

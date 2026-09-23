@@ -481,6 +481,8 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_key_requests_table"}, run: migrationAddKeyRequestsTable},
 	{IDs: []string{"add_alert_tables"}, run: migrationAddAlertTables},
 	{IDs: []string{"add_webhook_jobs_payload_json_column"}, run: migrationAddWebhookJobsPayloadJSONColumn},
+	{IDs: []string{"add_standard_prices_table"}, run: migrationAddStandardPricesTable},
+	{IDs: []string{"add_team_pricing_profiles_table"}, run: migrationAddTeamPricingProfilesTable},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12414,6 +12416,79 @@ func migrationAddWebhookJobsPayloadJSONColumn(ctx context.Context, db *gorm.DB, 
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running add_webhook_jobs_payload_json_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddStandardPricesTable creates the standard_prices table backing
+// the team-allocation price book. One row per (provider, model, effective_from);
+// older rows are kept for historical report snapshots. Idempotent.
+func migrationAddStandardPricesTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_standard_prices_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableStandardPrice{}) {
+				logger.Info("[configstore] %s: creating table TableStandardPrice", migrationName)
+				if err := mg.CreateTable(&tables.TableStandardPrice{}); err != nil {
+					return fmt.Errorf("create standard_prices: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableStandardPrice{}) {
+				if err := mg.DropTable(&tables.TableStandardPrice{}); err != nil {
+					return fmt.Errorf("drop standard_prices: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_standard_prices_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddTeamPricingProfilesTable creates the per-team pricing-profile
+// table (mode = standard | actual, margin_multiplier ≥ 1.0). Idempotent.
+func migrationAddTeamPricingProfilesTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_team_pricing_profiles_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableTeamPricingProfile{}) {
+				logger.Info("[configstore] %s: creating table TableTeamPricingProfile", migrationName)
+				if err := mg.CreateTable(&tables.TableTeamPricingProfile{}); err != nil {
+					return fmt.Errorf("create team_pricing_profiles: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableTeamPricingProfile{}) {
+				if err := mg.DropTable(&tables.TableTeamPricingProfile{}); err != nil {
+					return fmt.Errorf("drop team_pricing_profiles: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_team_pricing_profiles_table migration: %s", err.Error())
 	}
 	return nil
 }
