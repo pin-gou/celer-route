@@ -541,6 +541,15 @@ type ConfigStore interface {
 	GetInvitationByID(ctx context.Context, id string) (*tables.TableInvitation, error)
 	ListInvitations(ctx context.Context, teamID, status string, limit, offset int) ([]tables.TableInvitation, int64, error)
 	UpdateInvitation(ctx context.Context, inv *tables.TableInvitation) error
+	// AcceptInvitationTx applies one invitation acceptance atomically:
+	// resolve-or-create the user, upsert the team_members row, and burn the
+	// token in a single transaction. Any failure rolls all three back, so a
+	// mid-flight error can never leave an orphan active user with no team or
+	// a still-pending invitation that a retry would double-apply.
+	//
+	// Returns ErrInvitationNotFound / ErrInvitationNotUsable (both map to 410
+	// Gone at the handler layer) when the token is unknown or already spent.
+	AcceptInvitationTx(ctx context.Context, in AcceptInvitationInput) (*AcceptInvitationOutput, error)
 
 	// KeyRequest CRUD (Phase 2). Approval happens at the handler layer
 	// where admin manually creates the VK; the row here is just the audit

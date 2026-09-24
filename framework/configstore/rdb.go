@@ -6653,6 +6653,176 @@ func (s *RDBConfigStore) UpdateInvitation(ctx context.Context, inv *tables.Table
 	return s.DB().WithContext(ctx).Save(inv).Error
 }
 
+// AcceptInvitationInput carries the caller-validated inputs for one
+// invitation acceptance.
+//
+// PasswordHash is a pre-computed bcrypt digest rather than the plaintext so
+// the expensive KDF stays OUTSIDE the database transaction. Holding a write
+// lock across a ~100ms bcrypt call would serialize every other writer on
+// SQLite and waste a Postgres connection for no reason. Callers compute it
+// with encrypt.Hash after applying their own password policy.
+//
+// DisplayName is only consulted when the acceptance has to create a brand-new
+// user row; an existing user keeps their current display name.
+type AcceptInvitationInput struct {
+	Token        string
+	PasswordHash string
+	DisplayName  string
+	Now          time.Time
+}
+
+// AcceptInvitationOutput is the post-commit state the handler renders. All
+// three pointers are non-nil on success and are copies, so the caller cannot
+// mutate persisted rows through them.
+type AcceptInvitationOutput struct {
+	User       *tables.TableUser
+	TeamMember *tables.TableTeamMember
+	Invitation *tables.TableInvitation
+}
+
+// AcceptInvitationTx applies one invitation acceptance atomically: resolve or
+// create the user, upsert the team_members row, and burn the token — all in a
+// single transaction.
+//
+// Why this exists (C-3): the accept endpoint used to issue those three writes
+// as independent statements. A failure on the middle step left a live,
+// password-set user belonging to no team, with the invitation still marked
+// pending — so a retry created a SECOND membership row for the same
+// (team_id, user_id) and the orphan account could log in to an empty portal.
+// Wrapping the sequence means any failure rolls all three back.
+//
+// The invitation row is re-read and re-validated INSIDE the transaction, under
+// a FOR UPDATE lock on Postgres (a no-op on SQLite, whose writer serialization
+// already prevents the interleave). That closes the double-accept race the
+// handler-level pre-check alone cannot: two concurrent requests both pass the
+// handler's IsUsable check, but only the one that wins the row lock sees a
+// pending invitation — the other observes accepted_at already stamped and
+// returns ErrInvitationNotUsable.
+//
+// Sentinel errors the handler maps to HTTP status codes:
+//   - ErrInvitationNotFound  → 410 Gone
+//   - ErrInvitationNotUsable → 410 Gone
+func (s *RDBConfigStore) AcceptInvitationTx(ctx context.Context, in AcceptInvitationInput) (*AcceptInvitationOutput, error) {
+	if strings.TrimSpace(in.Token) == "" {
+		return nil, ErrInvitationNotFound
+	}
+	if in.PasswordHash == "" {
+		return nil, errors.New("accept invitation: password hash is required")
+	}
+	if in.Now.IsZero() {
+		in.Now = time.Now().UTC()
+	}
+
+	var out AcceptInvitationOutput
+	err := s.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 1. Lock + re-read the invitation. The lock makes the single-use
+		//    guarantee hold under concurrency rather than being a
+		//    check-then-act race against the handler's pre-check.
+		var inv tables.TableInvitation
+		err := dbForUpdate(tx).First(&inv, "token = ?", in.Token).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInvitationNotFound
+			}
+			return err
+		}
+		if !inv.IsUsable(in.Now) {
+			return ErrInvitationNotUsable
+		}
+
+		// 2. Resolve or create the user. Looking up by email first lets an
+		//    existing account re-accept (e.g. after a password reset)
+		//    without producing a duplicate row.
+		email := strings.ToLower(strings.TrimSpace(inv.Email))
+		var user tables.TableUser
+		userExists := true
+		err = tx.Where("email = ?", email).First(&user).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			userExists = false
+			displayName := strings.TrimSpace(in.DisplayName)
+			if displayName == "" {
+				displayName = email
+			}
+			user = tables.TableUser{
+				ID:          uuid.New().String(),
+				Email:       email,
+				DisplayName: displayName,
+				Status:      tables.UserStatusPending,
+				Role:        tables.UserRoleMember,
+				CreatedAt:   in.Now,
+				UpdatedAt:   in.Now,
+			}
+		}
+		hash := in.PasswordHash
+		user.PasswordHash = &hash
+		user.Status = tables.UserStatusActive
+		user.UpdatedAt = in.Now
+		if userExists {
+			if err := tx.Save(&user).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+		}
+
+		// 3. Upsert the membership. A previously-removed member is promoted
+		//    back to active rather than duplicated; the (team_id, user_id)
+		//    unique index is the backstop.
+		var member tables.TableTeamMember
+		memberExists := true
+		err = tx.Where("team_id = ? AND user_id = ?", inv.TeamID, user.ID).First(&member).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			memberExists = false
+			member = tables.TableTeamMember{
+				ID:        uuid.New().String(),
+				TeamID:    inv.TeamID,
+				UserID:    user.ID,
+				JoinedAt:  in.Now,
+				CreatedAt: in.Now,
+			}
+		}
+		member.RoleInTeam = inv.RoleInTeam
+		member.Status = tables.TeamMemberStatusActive
+		member.UpdatedAt = in.Now
+		if memberExists {
+			if err := tx.Save(&member).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Create(&member).Error; err != nil {
+				return err
+			}
+		}
+
+		// 4. Burn the token — single-use, per the design contract.
+		inv.MarkAccepted(in.Now)
+		inv.UpdatedAt = in.Now
+		if err := tx.Save(&inv).Error; err != nil {
+			return err
+		}
+
+		userOut := user
+		memberOut := member
+		invOut := inv
+		out.User = &userOut
+		out.TeamMember = &memberOut
+		out.Invitation = &invOut
+		return nil
+	})
+	if err != nil {
+		return nil, s.parseGormError(err)
+	}
+	return &out, nil
+}
+
 // CreateKeyRequest inserts a new key_requests row. Status defaults to
 // 'pending' on insert; the BeforeSave hook enforces the kind enum.
 func (s *RDBConfigStore) CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {

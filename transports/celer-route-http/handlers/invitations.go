@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/pin-gou/celer-route/framework/configstore"
 	"github.com/pin-gou/celer-route/framework/configstore/tables"
+	"github.com/pin-gou/celer-route/framework/encrypt"
 	"github.com/pin-gou/celer-route/transports/celer-route-http/lib"
 	"github.com/valyala/fasthttp"
 )
@@ -311,95 +313,53 @@ func (h *InvitationHandler) acceptInvitation(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to load invitation: %v", err))
 		return
 	}
-	if inv == nil || !inv.IsUsable(time.Now().UTC()) {
+	now := time.Now().UTC()
+	if inv == nil || !inv.IsUsable(now) {
 		SendError(ctx, fasthttp.StatusGone, "Invitation is no longer valid")
 		return
 	}
 
-	// Resolve / create the user. We deliberately look up by email first
-	// so an existing user can re-accept an invitation (e.g. after a
-	// password reset) without producing a duplicate.
-	user, err := h.store.GetUserByEmail(ctx, inv.Email)
+	// Hash the password BEFORE opening the transaction. bcrypt is
+	// deliberately CPU-bound and slow; running it inside the tx would hold a
+	// write lock (SQLite) or a pooled connection (Postgres) for the whole
+	// KDF. The store re-validates the token under a row lock, so moving the
+	// hash out does not weaken the single-use guarantee.
+	if strings.TrimSpace(payload.Password) == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "password is required")
+		return
+	}
+	passwordHash, err := encrypt.Hash(payload.Password)
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to load user: %v", err))
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to hash password: %v", err))
 		return
 	}
-	now := time.Now().UTC()
-	if user == nil {
-		user = &tables.TableUser{
-			ID:          uuid.New().String(),
-			Email:       inv.Email,
-			DisplayName: defaultIfEmpty(payload.DisplayName, inv.Email),
-			Status:      tables.UserStatusPending,
-			Role:        tables.UserRoleMember,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
-	}
-	if err := user.SetPassword(payload.Password); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid password: %v", err))
-		return
-	}
-	user.Status = tables.UserStatusActive
-	user.UpdatedAt = now
 
-	if user.CreatedAt.IsZero() {
-		if err := h.store.CreateUser(ctx, user); err != nil {
-			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to create user: %v", err))
-			return
-		}
-	} else {
-		if err := h.store.UpdateUser(ctx, user); err != nil {
-			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to update user: %v", err))
-			return
-		}
-	}
-
-	// Upsert the team_members row. The (team_id, user_id) unique index
-	// keeps us from inserting twice; on a duplicate we just promote the
-	// existing row back to active.
-	member, err := h.store.GetTeamMembership(ctx, inv.TeamID, user.ID)
+	// Single atomic transaction so a mid-flight failure can't leave a
+	// half-accepted invite (C-3). The store re-reads and re-locks the
+	// invitation row, which also closes the double-accept race the pre-check
+	// above cannot: two concurrent requests both pass IsUsable here, but only
+	// the row-lock winner sees a pending invitation.
+	result, err := h.store.AcceptInvitationTx(ctx, configstore.AcceptInvitationInput{
+		Token:        token,
+		PasswordHash: passwordHash,
+		DisplayName:  payload.DisplayName,
+		Now:          now,
+	})
 	if err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to load team membership: %v", err))
-		return
-	}
-	if member == nil {
-		member = &tables.TableTeamMember{
-			ID:         uuid.New().String(),
-			TeamID:     inv.TeamID,
-			UserID:     user.ID,
-			RoleInTeam: inv.RoleInTeam,
-			Status:     tables.TeamMemberStatusActive,
-			JoinedAt:   now,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+		switch {
+		case errors.Is(err, configstore.ErrInvitationNotFound),
+			errors.Is(err, configstore.ErrInvitationNotUsable):
+			SendError(ctx, fasthttp.StatusGone, "Invitation is no longer valid")
+		default:
+			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to accept invitation: %v", err))
 		}
-		if err := h.store.CreateTeamMember(ctx, member); err != nil {
-			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to create team member: %v", err))
-			return
-		}
-	} else {
-		member.Status = tables.TeamMemberStatusActive
-		member.RoleInTeam = inv.RoleInTeam
-		member.UpdatedAt = now
-		if err := h.store.UpdateTeamMember(ctx, member); err != nil {
-			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to update team member: %v", err))
-			return
-		}
-	}
-
-	// Burn the token — single-use, per the design contract.
-	inv.MarkAccepted(now)
-	inv.UpdatedAt = now
-	if err := h.store.UpdateInvitation(ctx, inv); err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to update invitation: %v", err))
 		return
 	}
 
 	SendJSONWithStatus(ctx, map[string]any{
 		"message": "Invitation accepted",
-		"user":    memberUserView(user),
-		"team_id": inv.TeamID,
+		"user":    memberUserView(result.User),
+		"team_id": result.Invitation.TeamID,
 	}, fasthttp.StatusCreated)
 }
 
@@ -471,13 +431,6 @@ func intFromQuery(ctx *fasthttp.RequestCtx, key string, def int) int {
 	var v int
 	if _, err := fmt.Sscanf(raw, "%d", &v); err != nil {
 		return def
-	}
-	return v
-}
-
-func defaultIfEmpty(v, fallback string) string {
-	if strings.TrimSpace(v) == "" {
-		return fallback
 	}
 	return v
 }

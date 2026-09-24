@@ -10,6 +10,22 @@ import (
 var ErrNotFound = errors.New("not found")
 var ErrAlreadyExists = errors.New("already exists")
 
+// ErrInvitationNotFound is returned by AcceptInvitationTx when no invitation
+// row carries the supplied token. The handler maps it to 410 Gone — the same
+// response as an unusable token — so token validity is never an oracle that
+// lets a caller enumerate which invite links exist.
+var ErrInvitationNotFound = errors.New("invitation not found")
+
+// ErrInvitationNotUsable is returned by AcceptInvitationTx when the token
+// exists but can no longer be accepted (already accepted, revoked, or past
+// its expiry). Also mapped to 410 Gone.
+//
+// The check runs INSIDE the transaction, against a row locked FOR UPDATE on
+// Postgres, so two concurrent accepts of the same single-use token cannot
+// both succeed: the loser observes accepted_at already stamped and returns
+// this error instead of creating a duplicate team_members row.
+var ErrInvitationNotUsable = errors.New("invitation is no longer valid")
+
 // ErrReencryptModeUnsupported is returned by ReencryptPlaintextRows when the
 // caller asks for a mode the implementation does not yet support (e.g.
 // rotate-key until key versioning lands). The CLI surfaces it as-is.

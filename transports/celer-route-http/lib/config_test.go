@@ -1328,6 +1328,10 @@ func (m *MockConfigStore) UpdateInvitation(ctx context.Context, inv *tables.Tabl
 	return nil
 }
 
+func (m *MockConfigStore) AcceptInvitationTx(ctx context.Context, in configstore.AcceptInvitationInput) (*configstore.AcceptInvitationOutput, error) {
+	return nil, configstore.ErrInvitationNotFound
+}
+
 func (m *MockConfigStore) CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
 	return nil
 }
