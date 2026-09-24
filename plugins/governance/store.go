@@ -27,11 +27,11 @@ type EntityWiseRateLimits map[string][]*configstoreTables.TableRateLimit
 // model in [...]). It is the unit of work the /v1/models backfill path
 // aggregates per rule, then unions across scopes.
 type RoutingRuleModelLiteral struct {
-	ModelID        string   // the bare virtual model name (e.g. "pg-expert")
-	Alias          *string  // first target.model from the source rule, if any
-	RuleID         string   // id of the source rule (for UI "jump to rule" links)
-	RuleName       string   // display name of the source rule
-	TargetProvider *string  // first target.provider from the source rule, if any
+	ModelID        string  // the bare virtual model name (e.g. "pg-expert")
+	Alias          *string // first target.model from the source rule, if any
+	RuleID         string  // id of the source rule (for UI "jump to rule" links)
+	RuleName       string  // display name of the source rule
+	TargetProvider *string // first target.provider from the source rule, if any
 }
 
 // LocalGovernanceStore provides in-memory cache for governance data with fast, non-blocking access
@@ -327,6 +327,65 @@ func (gs *LocalGovernanceStore) LoadBudget(ctx context.Context, budgetID string)
 		}
 	}
 	return nil
+}
+
+// CollectBudgetsForVK flattens the budget hierarchy (ProviderConfig → VK →
+// Team → Customer) for one virtual key and the provider of the inbound
+// request into a single deduped slice of live budget rows.
+//
+// It reuses the same in-memory walk CheckVirtualKeyBudget performs — the
+// walk that already powers the enforcement path — so the alert consumers
+// (EvaluateSoftThresholds and EnqueueBudgetExceeded) always see the same
+// rows that drove the decision. Doing the walk a second time here costs
+// one sync.Map traversal with no DB read; the budget set for a single VK
+// is small (≤ tens of rows at the largest deployments) so the duplicate
+// work is in the microsecond range.
+//
+// Returned pointers are the live rows; callers must treat them as
+// read-only.
+func (gs *LocalGovernanceStore) CollectBudgetsForVK(ctx context.Context, vk *configstoreTables.TableVirtualKey, requestedProvider schemas.ModelProvider) []*configstoreTables.TableBudget {
+	if vk == nil {
+		return nil
+	}
+	hierarchy := gs.collectBudgetsFromHierarchy(ctx, vk, requestedProvider)
+	out := make([]*configstoreTables.TableBudget, 0, len(hierarchy))
+	for _, group := range hierarchy {
+		out = append(out, group...)
+	}
+	return out
+}
+
+// CollectBudgetsForModelConfig returns the live budget rows owned by one
+// model config, in the same way the enforcement path resolves them via
+// loadModelConfigBudgets. Used by the resolver when populating BudgetInfo
+// for a model-scoped violation/allow result.
+func (gs *LocalGovernanceStore) CollectBudgetsForModelConfig(ctx context.Context, mc *configstoreTables.TableModelConfig) []*configstoreTables.TableBudget {
+	return gs.loadModelConfigBudgets(ctx, mc)
+}
+
+// CollectBudgetsForModelConfigs returns the union of live budget rows
+// owned by the given model configs. The set is deduped by budget ID so a
+// budget that appears in two model configs (rare but legal) is surfaced
+// once. Order matches the input order.
+func (gs *LocalGovernanceStore) CollectBudgetsForModelConfigs(ctx context.Context, mcs []*configstoreTables.TableModelConfig) []*configstoreTables.TableBudget {
+	if len(mcs) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(mcs))
+	out := make([]*configstoreTables.TableBudget, 0, len(mcs))
+	for _, mc := range mcs {
+		if mc == nil {
+			continue
+		}
+		for _, b := range gs.loadModelConfigBudgets(ctx, mc) {
+			if b == nil || seen[b.ID] {
+				continue
+			}
+			seen[b.ID] = true
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // storeBudget publishes a budget into the shared budgets map after re-deriving its

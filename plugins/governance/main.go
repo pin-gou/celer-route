@@ -926,6 +926,34 @@ func (p *GovernancePlugin) pruneMCPIncludeToolsFromContext(ctx *schemas.BifrostC
 //   - *EvaluationResult: The governance evaluation result
 //   - *schemas.BifrostError: The error to return if request is not allowed, nil if allowed
 func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext, evaluationRequest *EvaluationRequest, requestType schemas.RequestType) (*EvaluationResult, *schemas.BifrostError) {
+	// mergeBudgetInfo unions prior.BudgetInfo into next without duplication.
+	// Each evaluation step (Provider/Model → VK → Customer → Team → User)
+	// reassigns result wholesale, so a budget visible to an upstream step
+	// would otherwise vanish by the time the alert loop runs. The dedup is
+	// stable and order-preserving: the prior step's budgets are seen first
+	// so the alert consumer's view matches the order they were evaluated.
+	mergeBudgetInfo := func(prior, next *EvaluationResult) *EvaluationResult {
+		if prior == nil || len(prior.BudgetInfo) == 0 || next == prior {
+			return next
+		}
+		if next == nil {
+			next = prior
+		}
+		seen := make(map[string]bool, len(next.BudgetInfo))
+		for _, b := range next.BudgetInfo {
+			if b != nil {
+				seen[b.ID] = true
+			}
+		}
+		for _, b := range prior.BudgetInfo {
+			if b == nil || seen[b.ID] {
+				continue
+			}
+			seen[b.ID] = true
+			next.BudgetInfo = append(next.BudgetInfo, b)
+		}
+		return next
+	}
 	// Check if authentication is mandatory (either VK or user auth)
 	// Checking if the virtual key is valid or not
 	isVirtualKeyValid := false
@@ -967,7 +995,7 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		Reason:   "Provider-level and model-level checks skipped for read-only request",
 	}
 	if !skipBudgetsAndRateLimits {
-		result = p.resolver.EvaluateModelAndProviderRequest(ctx, evaluationRequest.Provider, evaluationRequest.Model)
+		result = mergeBudgetInfo(result, p.resolver.EvaluateModelAndProviderRequest(ctx, evaluationRequest.Provider, evaluationRequest.Model))
 	}
 
 	// The flow for governance checks is:
@@ -991,7 +1019,7 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 	// we touch Customer / Team / User.
 	if result.Decision == DecisionAllow && evaluationRequest.VirtualKey != "" {
 		skipVKBudgetLimit := evaluationRequest.UserID != "" || skipBudgetsAndRateLimits
-		result = p.resolver.EvaluateVirtualKeyRequest(ctx, evaluationRequest.VirtualKey, evaluationRequest.Provider, evaluationRequest.Model, requestType, skipVKBudgetLimit)
+		result = mergeBudgetInfo(result, p.resolver.EvaluateVirtualKeyRequest(ctx, evaluationRequest.VirtualKey, evaluationRequest.Provider, evaluationRequest.Model, requestType, skipVKBudgetLimit))
 	}
 
 	// Step 2: Customer-level budget (customer attached directly to VK, or via the VK's team).
@@ -1010,7 +1038,7 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 			customerID = hierarchyVK.Team.Customer.ID
 		}
 		if customerID != "" {
-			result = p.resolver.EvaluateCustomerRequest(ctx, customerID, evaluationRequest)
+			result = mergeBudgetInfo(result, p.resolver.EvaluateCustomerRequest(ctx, customerID, evaluationRequest))
 		}
 	}
 
@@ -1025,13 +1053,13 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 			teamID = hierarchyVK.Team.ID
 		}
 		if teamID != "" {
-			result = p.resolver.EvaluateTeamRequest(ctx, teamID, evaluationRequest)
+			result = mergeBudgetInfo(result, p.resolver.EvaluateTeamRequest(ctx, teamID, evaluationRequest))
 		}
 	}
 
 	// Step 4: User-level governance.
 	if !skipBudgetsAndRateLimits && result.Decision == DecisionAllow {
-		result = p.resolver.EvaluateUserRequest(ctx, evaluationRequest.UserID, evaluationRequest)
+		result = mergeBudgetInfo(result, p.resolver.EvaluateUserRequest(ctx, evaluationRequest.UserID, evaluationRequest))
 	}
 
 	// Check the actual MCP tools injected into the request against the VK MCPConfigs.

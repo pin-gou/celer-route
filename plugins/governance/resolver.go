@@ -61,6 +61,66 @@ type UsageInfo struct {
 	CustomerBudgetUsage int64 `json:"customer_budget_usage"`
 }
 
+// populateBudgetInfo fills result.BudgetInfo with the deduped union of every
+// source slice, leaving existing entries intact. Used at every resolver return
+// site so the alert consumers (EvaluateSoftThresholds and the
+// DecisionBudgetExceeded handler in main.go) always see the budgets that drove
+// the decision — without it, the BudgetInfo field has no producer and both
+// alerting paths are silently dead.
+//
+// When the resolver cannot reach the in-memory store (no LocalGovernanceStore
+// concrete type), it falls back to the caller's pre-collected rows (rare; the
+// production wiring always exposes LocalGovernanceStore). The merge is stable:
+// source order is preserved and within each source the budget order is the
+// same the store returned.
+func (r *BudgetResolver) populateBudgetInfo(result *EvaluationResult, sources ...[]*configstoreTables.TableBudget) {
+	if result == nil || len(sources) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(sources[0]))
+	for _, existing := range result.BudgetInfo {
+		if existing != nil {
+			seen[existing.ID] = true
+		}
+	}
+	for _, source := range sources {
+		for _, b := range source {
+			if b == nil || seen[b.ID] {
+				continue
+			}
+			seen[b.ID] = true
+			result.BudgetInfo = append(result.BudgetInfo, b)
+		}
+	}
+}
+
+// budgetsForVKHierarchy walks the same in-memory hierarchy CheckVirtualKeyBudget
+// walks and returns the flat deduped slice of live budget rows. Goes through
+// the concrete LocalGovernanceStore when available; returns nil otherwise
+// (callers must not assume presence — they only feed the alert consumers).
+func (r *BudgetResolver) budgetsForVKHierarchy(ctx context.Context, vk *configstoreTables.TableVirtualKey, provider schemas.ModelProvider) []*configstoreTables.TableBudget {
+	if vk == nil {
+		return nil
+	}
+	if local, ok := r.store.(*LocalGovernanceStore); ok {
+		return local.CollectBudgetsForVK(ctx, vk, provider)
+	}
+	return nil
+}
+
+// budgetsForModelConfig returns the live budget rows owned by one model
+// config, mirroring the model-scope enforcement path. Returns nil when the
+// store does not expose the LocalGovernanceStore shape.
+func (r *BudgetResolver) budgetsForModelConfig(ctx context.Context, mc *configstoreTables.TableModelConfig) []*configstoreTables.TableBudget {
+	if mc == nil {
+		return nil
+	}
+	if local, ok := r.store.(*LocalGovernanceStore); ok {
+		return local.CollectBudgetsForModelConfig(ctx, mc)
+	}
+	return nil
+}
+
 // BudgetResolver provides decision logic for the new hierarchical governance system
 type BudgetResolver struct {
 	store                   GovernanceStore
@@ -90,41 +150,79 @@ func (r *BudgetResolver) EvaluateModelAndProviderRequest(ctx *schemas.BifrostCon
 	// 1. Check provider-level rate limits FIRST (before model-level checks)
 	if provider != "" {
 		if decision, err := r.store.CheckProviderRateLimit(ctx, request, nil, nil); err != nil || isRateLimitViolation(decision) {
-			return &EvaluationResult{
+			result := &EvaluationResult{
 				Decision: decision,
 				Reason:   fmt.Sprintf("Provider-level rate limit check failed: %s", reasonFromErr(err, decision)),
 			}
+			r.attachGlobalBudgetInfo(ctx, result, provider, model)
+			return result
 		}
 		// 2. Check provider-level budgets FIRST (before model-level checks)
 		if decision, err := r.store.CheckProviderBudget(ctx, request, nil); err != nil || isBudgetViolation(decision) {
-			return &EvaluationResult{
+			result := &EvaluationResult{
 				Decision: decision,
 				Reason:   fmt.Sprintf("Provider-level budget exceeded: %s", reasonFromErr(err, decision)),
 			}
+			r.attachGlobalBudgetInfo(ctx, result, provider, model)
+			return result
 		}
 	}
 	// 3. Check model-level rate limits (after provider-level checks)
 	if model != "" {
 		if decision, err := r.store.CheckModelRateLimit(ctx, request, nil, nil); err != nil || isRateLimitViolation(decision) {
-			return &EvaluationResult{
+			result := &EvaluationResult{
 				Decision: decision,
 				Reason:   fmt.Sprintf("Model-level rate limit check failed: %s", reasonFromErr(err, decision)),
 			}
+			r.attachGlobalBudgetInfo(ctx, result, provider, model)
+			return result
 		}
 
 		// 4. Check model-level budgets (after provider-level checks)
 		if decision, err := r.store.CheckModelBudget(ctx, request, nil); err != nil || isBudgetViolation(decision) {
-			return &EvaluationResult{
+			result := &EvaluationResult{
 				Decision: decision,
 				Reason:   fmt.Sprintf("Model-level budget exceeded: %s", reasonFromErr(err, decision)),
 			}
+			r.attachGlobalBudgetInfo(ctx, result, provider, model)
+			return result
 		}
 	}
 	// All provider-level and model-level checks passed
-	return &EvaluationResult{
+	result := &EvaluationResult{
 		Decision: DecisionAllow,
 		Reason:   "Request allowed by governance policy (provider-level and model-level checks passed)",
 	}
+	r.attachGlobalBudgetInfo(ctx, result, provider, model)
+	return result
+}
+
+// attachGlobalBudgetInfo populates BudgetInfo with the model-scope budgets
+// applicable to (provider, model) — the global-scope rows that the
+// EvaluateModelAndProviderRequest enforcement path consulted. Used by both
+// the violation and allow paths of that single method so the alert consumers
+// always have a populated BudgetInfo regardless of decision.
+//
+// Mirrors collectModelConfigsFor's exact scope/provider filter so we cannot
+// disagree with the enforcement path about which rows are "applicable".
+func (r *BudgetResolver) attachGlobalBudgetInfo(ctx context.Context, result *EvaluationResult, provider schemas.ModelProvider, model string) {
+	if result == nil {
+		return
+	}
+	local, ok := r.store.(*LocalGovernanceStore)
+	if !ok {
+		return
+	}
+	var providerStr *string
+	if provider != "" {
+		p := string(provider)
+		providerStr = &p
+	}
+	mcs := local.collectModelConfigsFor(ctx, configstoreTables.ModelConfigScopeGlobal, "", model, providerStr)
+	if len(mcs) == 0 {
+		return
+	}
+	r.populateBudgetInfo(result, local.CollectBudgetsForModelConfigs(ctx, mcs))
 }
 
 func (r *BudgetResolver) EvaluateCustomerRequest(ctx *schemas.BifrostContext, customerID string, request *EvaluationRequest) *EvaluationResult {
@@ -137,24 +235,43 @@ func (r *BudgetResolver) EvaluateCustomerRequest(ctx *schemas.BifrostContext, cu
 	}
 	// Check customer-level rate limits
 	if decision, err := r.store.CheckCustomerRateLimit(ctx, customerID, request, nil, nil); err != nil || isRateLimitViolation(decision) {
-		return &EvaluationResult{
+		result := &EvaluationResult{
 			Decision: decision,
 			Reason:   fmt.Sprintf("Customer-level rate limit exceeded: %s", reasonFromErr(err, decision)),
 		}
+		r.populateBudgetInfo(result, r.budgetsForCustomer(ctx, customerID))
+		return result
 	}
 
 	// Check customer-level budget
 	if decision, err := r.store.CheckCustomerBudget(ctx, customerID, request, nil); err != nil || isBudgetViolation(decision) {
-		return &EvaluationResult{
+		result := &EvaluationResult{
 			Decision: decision,
 			Reason:   fmt.Sprintf("Customer-level budget exceeded: %s", reasonFromErr(err, decision)),
 		}
+		r.populateBudgetInfo(result, r.budgetsForCustomer(ctx, customerID))
+		return result
 	}
 
-	return &EvaluationResult{
+	result := &EvaluationResult{
 		Decision: DecisionAllow,
 		Reason:   "Customer-level checks passed",
 	}
+	r.populateBudgetInfo(result, r.budgetsForCustomer(ctx, customerID))
+	return result
+}
+
+// budgetsForCustomer returns the live customer-owned budgets via the local
+// in-memory store. Returns nil when the store shape doesn't expose the local
+// collectors (callers treat nil as "no info to populate").
+func (r *BudgetResolver) budgetsForCustomer(ctx context.Context, customerID string) []*configstoreTables.TableBudget {
+	if customerID == "" {
+		return nil
+	}
+	if local, ok := r.store.(*LocalGovernanceStore); ok {
+		return local.CollectCustomerBudgets(ctx, customerID)
+	}
+	return nil
 }
 
 func (r *BudgetResolver) EvaluateTeamRequest(ctx *schemas.BifrostContext, teamID string, request *EvaluationRequest) *EvaluationResult {
@@ -167,25 +284,42 @@ func (r *BudgetResolver) EvaluateTeamRequest(ctx *schemas.BifrostContext, teamID
 	}
 	// Check team-level rate limits
 	if decision, err := r.store.CheckTeamRateLimit(ctx, teamID, request, nil, nil); err != nil || isRateLimitViolation(decision) {
-		return &EvaluationResult{
+		result := &EvaluationResult{
 			Decision: decision,
 			Reason:   fmt.Sprintf("Team-level rate limit exceeded: %s", reasonFromErr(err, decision)),
 		}
+		r.populateBudgetInfo(result, r.budgetsForTeam(ctx, teamID))
+		return result
 	}
 
 	// Check team-level budget
 	if decision, err := r.store.CheckTeamBudget(ctx, teamID, request, nil); err != nil || isBudgetViolation(decision) {
-		return &EvaluationResult{
+		result := &EvaluationResult{
 			Decision: decision,
 			Reason:   fmt.Sprintf("Team-level budget exceeded: %s", reasonFromErr(err, decision)),
 		}
+		r.populateBudgetInfo(result, r.budgetsForTeam(ctx, teamID))
+		return result
 	}
 
-	return &EvaluationResult{
+	result := &EvaluationResult{
 		Decision: DecisionAllow,
 		Reason:   "Team-level checks passed",
 	}
+	r.populateBudgetInfo(result, r.budgetsForTeam(ctx, teamID))
+	return result
+}
 
+// budgetsForTeam returns the live team-owned budgets via the local in-memory
+// store. Returns nil when the store shape doesn't expose the local collectors.
+func (r *BudgetResolver) budgetsForTeam(ctx context.Context, teamID string) []*configstoreTables.TableBudget {
+	if teamID == "" {
+		return nil
+	}
+	if local, ok := r.store.(*LocalGovernanceStore); ok {
+		return local.CollectTeamBudgets(ctx, teamID)
+	}
+	return nil
 }
 
 // EvaluateUserRequest evaluates user-level rate limits and budgets
@@ -202,18 +336,22 @@ func (r *BudgetResolver) EvaluateUserRequest(ctx *schemas.BifrostContext, userID
 
 	// Check user-level rate limits
 	if decision, err := r.store.CheckUserRateLimit(ctx, userID, request, nil, nil); err != nil || isRateLimitViolation(decision) {
-		return &EvaluationResult{
+		result := &EvaluationResult{
 			Decision: decision,
 			Reason:   fmt.Sprintf("User-level rate limit exceeded: %s", reasonFromErr(err, decision)),
 		}
+		r.attachScopedModelBudgetInfo(ctx, result, request, configstoreTables.ModelConfigScopeUser, userID)
+		return result
 	}
 
 	// Check user-level budget
 	if decision, err := r.store.CheckUserBudget(ctx, userID, request, nil); err != nil || isBudgetViolation(decision) {
-		return &EvaluationResult{
+		result := &EvaluationResult{
 			Decision: decision,
 			Reason:   fmt.Sprintf("User-level budget exceeded: %s", reasonFromErr(err, decision)),
 		}
+		r.attachScopedModelBudgetInfo(ctx, result, request, configstoreTables.ModelConfigScopeUser, userID)
+		return result
 	}
 
 	// Check per-user-scoped model config rate limits and budgets. Mirrors the
@@ -221,23 +359,54 @@ func (r *BudgetResolver) EvaluateUserRequest(ctx *schemas.BifrostContext, userID
 	// MCP tool execution (no model) is excluded naturally by this guard.
 	if request.Model != "" {
 		if decision, err := r.store.CheckScopedModelRateLimit(ctx, configstoreTables.ModelConfigScopeUser, userID, request, nil, nil); err != nil || isRateLimitViolation(decision) {
-			return &EvaluationResult{
+			result := &EvaluationResult{
 				Decision: decision,
 				Reason:   fmt.Sprintf("User-level model rate limit exceeded: %s", reasonFromErr(err, decision)),
 			}
+			r.attachScopedModelBudgetInfo(ctx, result, request, configstoreTables.ModelConfigScopeUser, userID)
+			return result
 		}
 		if decision, err := r.store.CheckScopedModelBudget(ctx, configstoreTables.ModelConfigScopeUser, userID, request, nil); err != nil || isBudgetViolation(decision) {
-			return &EvaluationResult{
+			result := &EvaluationResult{
 				Decision: decision,
 				Reason:   fmt.Sprintf("User-level model budget exceeded: %s", reasonFromErr(err, decision)),
 			}
+			r.attachScopedModelBudgetInfo(ctx, result, request, configstoreTables.ModelConfigScopeUser, userID)
+			return result
 		}
 	}
 
-	return &EvaluationResult{
+	result := &EvaluationResult{
 		Decision: DecisionAllow,
 		Reason:   "User-level checks passed",
 	}
+	r.attachScopedModelBudgetInfo(ctx, result, request, configstoreTables.ModelConfigScopeUser, userID)
+	return result
+}
+
+// attachScopedModelBudgetInfo populates BudgetInfo with the live budgets owned
+// by the model configs that match (scope, scopeID, provider, model) — the
+// same set CheckScopedModelBudget walks. Used by both the violation and
+// allow paths of the user-scoped and VK-scoped evaluations so the alert
+// consumers always have a populated BudgetInfo regardless of decision.
+func (r *BudgetResolver) attachScopedModelBudgetInfo(ctx context.Context, result *EvaluationResult, request *EvaluationRequest, scope, scopeID string) {
+	if result == nil || request == nil || request.Model == "" {
+		return
+	}
+	local, ok := r.store.(*LocalGovernanceStore)
+	if !ok {
+		return
+	}
+	var providerStr *string
+	if request.Provider != "" {
+		p := string(request.Provider)
+		providerStr = &p
+	}
+	mcs := local.collectModelConfigsFor(ctx, scope, scopeID, request.Model, providerStr)
+	if len(mcs) == 0 {
+		return
+	}
+	r.populateBudgetInfo(result, local.CollectBudgetsForModelConfigs(ctx, mcs))
 }
 
 // EvaluateVirtualKeyRequest evaluates virtual key-specific checks including validation, filtering, rate limits, and budgets
@@ -306,6 +475,11 @@ func (r *BudgetResolver) EvaluateVirtualKeyRequest(ctx *schemas.BifrostContext, 
 	// 4. Check rate limits hierarchy (VK level)
 	if !skipRateLimitsAndBudgets {
 		if rateLimitResult := r.checkRateLimitHierarchy(ctx, vk, evaluationRequest); rateLimitResult != nil {
+			// Rate-limit results carry the VK's applicable budgets as a
+			// convenience for alert correlation; the alert loop ignores them
+			// when decision is rate-limited, but it costs nothing to populate
+			// and keeps the field from ever being nil between sibling paths.
+			r.populateBudgetInfo(rateLimitResult, r.budgetsForVKHierarchy(ctx, vk, evaluationRequest.Provider))
 			return rateLimitResult
 		}
 
@@ -320,18 +494,22 @@ func (r *BudgetResolver) EvaluateVirtualKeyRequest(ctx *schemas.BifrostContext, 
 		// mirroring the global model checks.
 		if model != "" {
 			if decision, err := r.store.CheckScopedModelRateLimit(ctx, configstoreTables.ModelConfigScopeVirtualKey, vk.ID, evaluationRequest, nil, nil); err != nil || isRateLimitViolation(decision) {
-				return &EvaluationResult{
+				result := &EvaluationResult{
 					Decision:   decision,
 					Reason:     fmt.Sprintf("Model-level rate limit check failed (virtual key scope): %s", reasonFromErr(err, decision)),
 					VirtualKey: vk,
 				}
+				r.attachScopedModelBudgetInfo(ctx, result, evaluationRequest, configstoreTables.ModelConfigScopeVirtualKey, vk.ID)
+				return result
 			}
 			if decision, err := r.store.CheckScopedModelBudget(ctx, configstoreTables.ModelConfigScopeVirtualKey, vk.ID, evaluationRequest, nil); err != nil || isBudgetViolation(decision) {
-				return &EvaluationResult{
+				result := &EvaluationResult{
 					Decision:   decision,
 					Reason:     fmt.Sprintf("Model-level budget exceeded (virtual key scope): %s", reasonFromErr(err, decision)),
 					VirtualKey: vk,
 				}
+				r.attachScopedModelBudgetInfo(ctx, result, evaluationRequest, configstoreTables.ModelConfigScopeVirtualKey, vk.ID)
+				return result
 			}
 		}
 	}
@@ -351,12 +529,18 @@ func (r *BudgetResolver) EvaluateVirtualKeyRequest(ctx *schemas.BifrostContext, 
 		}
 	}
 
-	// All checks passed
-	return &EvaluationResult{
+	// All checks passed. BudgetInfo carries the VK hierarchy budgets so
+	// EvaluateSoftThresholds can match them against alert rules on the happy
+	// path — soft-threshold alerts are only useful when there are budgets to
+	// compare against, and the field has to be set before EvaluateSoftThresholds
+	// runs in main.go.
+	result := &EvaluationResult{
 		Decision:   DecisionAllow,
 		Reason:     "Request allowed by governance policy",
 		VirtualKey: vk,
 	}
+	r.populateBudgetInfo(result, r.budgetsForVKHierarchy(ctx, vk, provider))
+	return result
 }
 
 // isModelAllowed checks if the requested model is allowed for this VK.
@@ -489,11 +673,15 @@ func (r *BudgetResolver) checkBudgetHierarchy(ctx context.Context, vk *configsto
 	// Use atomic budget checking to prevent race conditions
 	if decision, err := r.store.CheckVirtualKeyBudget(ctx, vk, request, nil); err != nil || isBudgetViolation(decision) {
 		r.logger.Debug(fmt.Sprintf("Atomic budget exceeded for VK %s: %s", vk.ID, reasonFromErr(err, decision)))
-		return &EvaluationResult{
+		result := &EvaluationResult{
 			Decision:   decision,
 			Reason:     fmt.Sprintf("Budget exceeded: %s", reasonFromErr(err, decision)),
 			VirtualKey: vk,
 		}
+		// Without this populate, BudgetInfo stays nil on the 402 path and the
+		// EnqueueBudgetExceeded loop in main.go has nothing to enqueue (M-2).
+		r.populateBudgetInfo(result, r.budgetsForVKHierarchy(ctx, vk, request.Provider))
+		return result
 	}
 	return nil // No budget violations
 }
