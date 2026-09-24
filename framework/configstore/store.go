@@ -636,6 +636,15 @@ type ConfigStore interface {
 	ListReconciliationItems(ctx context.Context, reconciliationID string) ([]tables.TableBillingReconItem, error)
 	CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error
 	UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error
+	// ApplyReconciliationTx commits a calibration batch atomically: the
+	// corrected datasheet rows and the batch's `applied` status flip land in
+	// one transaction, so a mid-flight failure can never leave the price book
+	// half re-priced with the batch still readable as `matched` (which would
+	// let a retry compound the multiplicative correction).
+	//
+	// Returns ErrReconciliationAlreadyApplied when the batch was already
+	// applied — including when a concurrent apply won the row lock first.
+	ApplyReconciliationTx(ctx context.Context, row *tables.TableBillingReconciliation, correctedRows []tables.TableModelPricing) error
 
 	// Team-model-policies (Phase 6 / D6) — per-team allow/deny lists used as
 	// the upper bound on what any of the team's VKs can call. List returns

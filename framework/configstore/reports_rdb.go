@@ -385,6 +385,86 @@ func (s *RDBConfigStore) UpdateReconciliation(ctx context.Context, row *tables.T
 	return nil
 }
 
+// ApplyReconciliationTx commits a calibration batch atomically: it writes
+// every corrected datasheet row and flips the batch to `applied` in a single
+// transaction.
+//
+// Why this exists (H-2): apply() used to issue one UpsertModelPrices per
+// corrected row and only then update the batch. Two failure modes followed,
+// and both corrupt the price book because the correction is multiplicative:
+//
+//   - a failure mid-loop left the earlier rows permanently re-priced while
+//     the batch stayed `matched`, so a retry scaled them a second time;
+//   - a failure on the final batch update left the WHOLE book re-priced with
+//     the batch still reading `matched` — the `applied` guard that exists to
+//     prevent compounding never engaged.
+//
+// Wrapping the sequence means either everything lands or nothing does.
+//
+// The batch status is additionally re-read under a row lock (FOR UPDATE on
+// Postgres; a no-op on SQLite, whose writer serialization already prevents
+// the interleave) so two concurrent applies cannot both pass a stale
+// handler-level pre-check and double-scale the book. The loser gets
+// ErrReconciliationAlreadyApplied.
+//
+// correctedRows must be the full datasheet rows to upsert, already scaled by
+// the caller's correction plan; this method performs no pricing arithmetic.
+func (s *RDBConfigStore) ApplyReconciliationTx(
+	ctx context.Context,
+	batch *tables.TableBillingReconciliation,
+	correctedRows []tables.TableModelPricing,
+) error {
+	if batch == nil {
+		return errors.New("reconciliation row is required")
+	}
+	if strings.TrimSpace(batch.ID) == "" {
+		return errors.New("reconciliation id is required")
+	}
+
+	now := time.Now().UTC()
+	batch.UpdatedAt = now
+	status := batch.Status
+	notes := batch.Notes
+	gatewayCost := batch.GatewayCost
+	providerCost := batch.ProviderCost
+	delta := batch.Delta
+
+	return s.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Re-read under lock and re-check the one-way guard.
+		var current tables.TableBillingReconciliation
+		if err := dbForUpdate(tx).First(&current, "id = ?", batch.ID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrNotFound
+			}
+			return s.parseGormError(err)
+		}
+		if current.Status == tables.ReconciliationStatusApplied {
+			return ErrReconciliationAlreadyApplied
+		}
+
+		// Write the corrected datasheet rows inside this transaction so a
+		// later failure rolls them back together with the batch flip.
+		for i := range correctedRows {
+			if err := s.UpsertModelPrices(ctx, &correctedRows[i], tx); err != nil {
+				return err
+			}
+		}
+
+		// Same raw column write as UpdateReconciliation, on the tx handle.
+		res := tx.Exec(
+			`UPDATE billing_reconciliations SET status = ?, notes = ?, gateway_cost = ?, provider_cost = ?, delta = ?, updated_at = ? WHERE id = ?`,
+			status, notes, gatewayCost, providerCost, delta, now, batch.ID,
+		)
+		if res.Error != nil {
+			return s.parseGormError(res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
+}
+
 // ListTeamModelPolicies returns every ACL row for a team. The admin UI
 // renders this as the "model policies" tab on the team detail page. Sorted
 // by provider so the rendering order is stable across requests.

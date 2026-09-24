@@ -60,6 +60,11 @@ type ReconciliationStore interface {
 	ListReconciliationItems(ctx context.Context, reconciliationID string) ([]tables.TableBillingReconItem, error)
 	CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error
 	UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error
+	// ApplyReconciliationTx commits the corrected datasheet rows and the
+	// batch's `applied` flip in one transaction (H-2). correctedRows are the
+	// full, already-scaled datasheet rows; the store performs no pricing
+	// arithmetic of its own.
+	ApplyReconciliationTx(ctx context.Context, row *tables.TableBillingReconciliation, correctedRows []tables.TableModelPricing) error
 }
 
 // ReconciliationDatasheetStore is the cost-side slice used by preview/apply.
@@ -462,15 +467,23 @@ func (h *ReportsReconciliationHandler) apply(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Write each corrected row back. UpsertModelPrices takes the full row, so
-	// we start from the current one and only move the two text cost columns.
+	// Stage every corrected row first, then commit the whole batch in one
+	// transaction (H-2). UpsertModelPrices takes the full row, so we start
+	// from the current one and only move the two text cost columns.
+	//
+	// Staging-then-committing matters because the correction is
+	// multiplicative: a per-row write that fails halfway leaves the earlier
+	// rows permanently re-priced while the batch still reads `matched`, so the
+	// operator's retry scales them a second time and the price book silently
+	// compounds. The same trap applies if the final status flip fails after
+	// every row landed — the `applied` guard never engages.
 	rows, err := h.datasheet.GetModelPrices(ctx)
 	if err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, "load datasheet: "+err.Error())
 		return
 	}
 	index := indexDatasheet(rows)
-	var changed int
+	corrected := make([]tables.TableModelPricing, 0, len(plan.Changes))
 	for _, change := range plan.Changes {
 		row, ok := index[datasheetKey{provider: change.Provider, model: change.Model, mode: change.Mode}]
 		if !ok {
@@ -480,12 +493,9 @@ func (h *ReportsReconciliationHandler) apply(ctx *fasthttp.RequestCtx) {
 		out := change.OutputAfter
 		row.InputCostPerToken = &in
 		row.OutputCostPerToken = &out
-		if err := h.datasheet.UpsertModelPrices(ctx, &row); err != nil {
-			SendError(ctx, fasthttp.StatusInternalServerError, "write datasheet row "+change.Provider+"/"+change.Model+": "+err.Error())
-			return
-		}
-		changed++
+		corrected = append(corrected, row)
 	}
+	changed := len(corrected)
 
 	// Snapshot the pre-change rates into the batch so the audit trail carries
 	// what the correction was applied on top of.
@@ -501,8 +511,13 @@ func (h *ReportsReconciliationHandler) apply(ctx *fasthttp.RequestCtx) {
 	batch.Status = tables.ReconciliationStatusApplied
 	batch.Notes = &note
 	batch.Delta = batch.ProviderCost - batch.GatewayCost
-	if err := h.store.UpdateReconciliation(ctx, batch); err != nil {
-		SendError(ctx, fasthttp.StatusInternalServerError, "mark reconciliation applied: "+err.Error())
+
+	if err := h.store.ApplyReconciliationTx(ctx, batch, corrected); err != nil {
+		if errors.Is(err, configstore.ErrReconciliationAlreadyApplied) {
+			SendError(ctx, fasthttp.StatusConflict, "batch is already applied; re-applying would compound the correction")
+			return
+		}
+		SendError(ctx, fasthttp.StatusInternalServerError, "apply calibration: "+err.Error())
 		return
 	}
 

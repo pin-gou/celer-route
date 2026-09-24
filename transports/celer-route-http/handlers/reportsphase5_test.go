@@ -40,6 +40,20 @@ type fakeReconciliationStore struct {
 	createCalls []*tables.TableBillingReconciliation
 	updateCalls []*tables.TableBillingReconciliation
 	lookupErr   error
+	// applyErr injects a failure into ApplyReconciliationTx so tests can
+	// assert the batch is not marked applied when the commit fails.
+	applyErr error
+	// applyCalls counts successful atomic applies; appliedRows holds the
+	// datasheet rows that actually became durable.
+	applyCalls  int
+	appliedRows []tables.TableModelPricing
+	// persistedStatus mirrors the DURABLE batch status, as opposed to the
+	// in-memory `batch` struct the handler mutates in place before it calls
+	// ApplyReconciliationTx. The real store re-reads the row inside its
+	// transaction, so the already-applied guard must compare against what was
+	// committed — reading `batch.Status` here would see the handler's own
+	// pending write (same pointer) and refuse every legitimate apply.
+	persistedStatus string
 }
 
 func (f *fakeReconciliationStore) ListReconciliations(context.Context, configstore.ReconciliationQueryParams) ([]tables.TableBillingReconciliation, int64, error) {
@@ -56,6 +70,12 @@ func (f *fakeReconciliationStore) GetReconciliationByID(context.Context, string)
 	if f.batch == nil {
 		return nil, configstore.ErrNotFound
 	}
+	// Snapshot the durable status on first read. From here on the handler owns
+	// the `batch` pointer and mutates it pre-commit, so this is the only place
+	// the persisted value can be captured faithfully.
+	if f.persistedStatus == "" {
+		f.persistedStatus = f.batch.Status
+	}
 	return f.batch, nil
 }
 
@@ -70,12 +90,43 @@ func (f *fakeReconciliationStore) CreateReconciliation(_ context.Context, row *t
 	f.createCalls = append(f.createCalls, row)
 	f.batch = row
 	f.items = items
+	f.persistedStatus = row.Status
 	return nil
 }
 
 func (f *fakeReconciliationStore) UpdateReconciliation(_ context.Context, row *tables.TableBillingReconciliation) error {
 	f.updateCalls = append(f.updateCalls, row)
 	f.batch = row
+	f.persistedStatus = row.Status
+	return nil
+}
+
+// ApplyReconciliationTx models the H-2 atomic commit: the corrected datasheet
+// rows and the batch status flip either both land or neither does.
+//
+// applyErr lets a test inject a commit failure, and appliedRows records the
+// rows that actually became durable so a rollback assertion can distinguish
+// "staged" from "committed".
+func (f *fakeReconciliationStore) ApplyReconciliationTx(_ context.Context, row *tables.TableBillingReconciliation, correctedRows []tables.TableModelPricing) error {
+	// Mirrors the store's in-transaction re-read of the durable row. Compare
+	// against persistedStatus, NOT row.Status — the handler already flipped
+	// that in place before committing.
+	if f.persistedStatus == "" && f.batch != nil {
+		f.persistedStatus = f.batch.Status
+	}
+	if f.persistedStatus == tables.ReconciliationStatusApplied {
+		return configstore.ErrReconciliationAlreadyApplied
+	}
+	if f.applyErr != nil {
+		return f.applyErr
+	}
+	f.appliedRows = append(f.appliedRows, correctedRows...)
+	f.applyCalls++
+	cp := *row
+	cp.Status = tables.ReconciliationStatusApplied
+	f.batch = &cp
+	f.persistedStatus = tables.ReconciliationStatusApplied
+	f.updateCalls = append(f.updateCalls, &cp)
 	return nil
 }
 
@@ -436,6 +487,9 @@ func TestReconciliationApplyRefusesAlreadyApplied(t *testing.T) {
 	if len(datasheet.upserts) != 0 {
 		t.Errorf("a refused apply must not write the datasheet (%d writes)", len(datasheet.upserts))
 	}
+	if store.applyCalls != 0 {
+		t.Errorf("a refused apply must not open the atomic commit (%d calls)", store.applyCalls)
+	}
 	if len(store.updateCalls) != 0 {
 		t.Errorf("a refused apply must not touch the batch (%d updates)", len(store.updateCalls))
 	}
@@ -466,11 +520,19 @@ func TestReconciliationApplyWritesDatasheetAndMarksApplied(t *testing.T) {
 	if ctx.Response.StatusCode() != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", ctx.Response.StatusCode(), ctx.Response.Body())
 	}
-	if len(datasheet.upserts) != 1 {
-		t.Fatalf("datasheet writes = %d, want 1", len(datasheet.upserts))
+	// Since H-2 the datasheet writes go through the atomic apply, so the
+	// corrected rows land on the store rather than on the datasheet fake.
+	if len(store.appliedRows) != 1 {
+		t.Fatalf("committed datasheet rows = %d, want 1", len(store.appliedRows))
 	}
-	if got := *datasheet.upserts[0].InputCostPerToken; got != in*1.1 {
+	if store.applyCalls != 1 {
+		t.Errorf("atomic apply calls = %d, want exactly 1", store.applyCalls)
+	}
+	if got := *store.appliedRows[0].InputCostPerToken; got != in*1.1 {
 		t.Errorf("input after = %v, want %v", got, in*1.1)
+	}
+	if got := *store.appliedRows[0].OutputCostPerToken; got != out*1.1 {
+		t.Errorf("output after = %v, want %v", got, out*1.1)
 	}
 	if len(store.updateCalls) != 1 || store.updateCalls[0].Status != tables.ReconciliationStatusApplied {
 		t.Fatalf("batch not marked applied: %+v", store.updateCalls)

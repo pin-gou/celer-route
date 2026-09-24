@@ -26,6 +26,17 @@ var ErrInvitationNotFound = errors.New("invitation not found")
 // this error instead of creating a duplicate team_members row.
 var ErrInvitationNotUsable = errors.New("invitation is no longer valid")
 
+// ErrReconciliationAlreadyApplied is returned by ApplyReconciliationTx when
+// the batch has already been applied. Applying is one-way: the correction is
+// a multiplicative scale on the datasheet, so a second pass compounds it.
+// The handler maps this to 409 Conflict.
+//
+// The status is re-read INSIDE the transaction under a row lock, which is
+// what makes the guard hold when two operators click apply concurrently —
+// a handler-level pre-check alone reads a stale `matched` for both callers
+// and lets both scale the price book.
+var ErrReconciliationAlreadyApplied = errors.New("reconciliation batch is already applied")
+
 // ErrReencryptModeUnsupported is returned by ReencryptPlaintextRows when the
 // caller asks for a mode the implementation does not yet support (e.g.
 // rotate-key until key versioning lands). The CLI surfaces it as-is.
