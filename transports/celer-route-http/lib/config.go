@@ -7143,6 +7143,30 @@ func (c *Config) WebhookEndpointByID(id string) (*configstoreTables.TableWebhook
 	return endpoint, ok
 }
 
+// WebhookEndpoints enumerates every endpoint held in memory. It backs
+// Dispatcher.EndpointIDsForEvent, which needs to discover subscribers for an
+// event rather than look one up by id.
+//
+// The slice is built under the read lock and the pointers are the same ones
+// SetWebhookEndpoint stored, so callers must treat them as read-only — the
+// same contract WebhookEndpointByID already documents. Iteration order is map
+// order; the dispatcher sorts the resulting ids itself.
+func (c *Config) WebhookEndpoints() []*configstoreTables.TableWebhookEndpoint {
+	c.muWebhooks.RLock()
+	defer c.muWebhooks.RUnlock()
+	if len(c.webhookEndpoints) == 0 {
+		return nil
+	}
+	out := make([]*configstoreTables.TableWebhookEndpoint, 0, len(c.webhookEndpoints))
+	for _, endpoint := range c.webhookEndpoints {
+		if endpoint == nil {
+			continue
+		}
+		out = append(out, endpoint)
+	}
+	return out
+}
+
 // WebhookEndpointByName returns the endpoint with the given unique name, or
 // false when it does not exist. Callers must treat the returned endpoint as
 // read-only.

@@ -41,6 +41,14 @@ type LogStore interface {
 // attempt without a database read.
 type EndpointResolver interface {
 	WebhookEndpointByID(id string) (*tables.TableWebhookEndpoint, bool)
+	// WebhookEndpoints enumerates every known endpoint. It backs the
+	// event-fanout path (see Dispatcher.EndpointIDsForEvent), where the caller
+	// does not already hold an id and must discover which endpoints subscribe.
+	//
+	// Implementations serve this from the same in-memory map as
+	// WebhookEndpointByID, so it costs no database read on the request path.
+	// Returned pointers must be treated as read-only by callers.
+	WebhookEndpoints() []*tables.TableWebhookEndpoint
 }
 
 // Default delivery tuning, applied when an endpoint does not set its own
@@ -320,6 +328,42 @@ func (d *Dispatcher) WebhookEndpointByID(id string) (*tables.TableWebhookEndpoin
 		return nil, false
 	}
 	return d.resolver.WebhookEndpointByID(id)
+}
+
+// EndpointIDsForEvent returns the ids of every enabled endpoint subscribed to
+// the given event, sorted for deterministic fanout.
+//
+// This is the discovery half of the enqueue contract: EnqueueAlertEvent and
+// EnqueueBudgetExceeded both take an explicit id list and deliver to nothing
+// when it is empty, so a caller that cannot name the ids up front — the
+// budget.exceeded path, which is triggered by a budget row rather than by an
+// alert rule with configured channels — must resolve them here. Returning an
+// empty list previously meant "notify nobody", silently.
+//
+// Filtering reuses subscribesTo and the Disabled flag rather than
+// reimplementing them, so the enqueue-time and discovery-time notions of
+// "this endpoint wants this event" cannot drift apart. The resolver is
+// in-memory, so this costs no database read on the request path.
+func (d *Dispatcher) EndpointIDsForEvent(event tables.WebhookEvent) []string {
+	if d == nil || d.resolver == nil {
+		return nil
+	}
+	endpoints := d.resolver.WebhookEndpoints()
+	if len(endpoints) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if endpoint == nil || endpoint.ID == "" || endpoint.Disabled {
+			continue
+		}
+		if !subscribesTo(endpoint, event) {
+			continue
+		}
+		ids = append(ids, endpoint.ID)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 func (d *Dispatcher) run() {

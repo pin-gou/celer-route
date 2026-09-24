@@ -86,11 +86,22 @@ func (e *AlertEvaluator) EnqueueBudgetExceeded(ctx context.Context, budget *conf
 	if e == nil || budget == nil || e.dispatcher == nil {
 		return
 	}
-	endpointIDs, err := e.subscribedEndpoints(ctx, configstoreTables.WebhookEventBudgetExceeded)
-	if err != nil {
-		e.logger.Warn("alert: listing endpoints for budget.exceeded failed: %v", err)
-		return
-	}
+	// M-2: resolve the subscribers from the dispatcher's in-memory registry.
+	//
+	// This used to go through a subscribedEndpoints stub that returned an
+	// empty list unconditionally, on the reasoning that the dispatcher filters
+	// endpoints anyway — but the guard below treats an empty list as "nobody to
+	// notify" and returns before the dispatcher is ever called, so that filter
+	// never ran and budget.exceeded was delivered to no one. That is the only
+	// signal an operator gets when a hard block starts answering 402, so the
+	// failure was silent in exactly the case it exists for.
+	//
+	// EndpointIDsForEvent shares subscribesTo and the Disabled check with the
+	// enqueue path, so discovery and delivery cannot disagree about who wants
+	// this event. It reads memory, not the database, keeping the 402 path free
+	// of a store round-trip. An empty result now genuinely means "no endpoint
+	// subscribes".
+	endpointIDs := e.dispatcher.EndpointIDsForEvent(configstoreTables.WebhookEventBudgetExceeded)
 	if len(endpointIDs) == 0 {
 		return
 	}
@@ -191,29 +202,6 @@ func (e *AlertEvaluator) fireAndEnqueue(
 	} else {
 		_ = e.store.UpdateAlertEventDeliveryStatus(ctx, event.ID, configstoreTables.AlertEventDeliveryStatusFailed)
 	}
-}
-
-// subscribedEndpoints returns the set of endpoint ids subscribed to the
-// given event. The dispatcher filters them further (disabled / not in
-// memory) so this is just a DB-side narrowing.
-func (e *AlertEvaluator) subscribedEndpoints(ctx context.Context, event configstoreTables.WebhookEvent) ([]string, error) {
-	if e.store == nil {
-		return nil, nil
-	}
-	type endpointLister interface {
-		// NoSuchMethod — AlertEvaluatorStore doesn't expose this. Fall
-		// back to a wider contract via the dispatcher.
-	}
-	_ = endpointLister(nil)
-	// The dispatcher's WebhookEndpointByID would do this, but pulling it
-	// into the evaluator duplicates the resolver interface. The handler
-	// layer (alerting.go) keeps the resolve step where it belongs and
-	// passes resolved ids down; for the inline path the resolver is
-	// available via the dispatcher's perspective, so we just return an
-	// empty list and rely on the dispatcher's endpoint filtering inside
-	// EnqueueAlertEvent.
-	_ = ctx
-	return nil, nil
 }
 
 // resolveChannelEndpoints collects every endpoint id the rule's webhook

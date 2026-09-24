@@ -1332,6 +1332,10 @@ func (m *MockConfigStore) AcceptInvitationTx(ctx context.Context, in configstore
 	return nil, configstore.ErrInvitationNotFound
 }
 
+func (m *MockConfigStore) ApplyReconciliationTx(ctx context.Context, row *tables.TableBillingReconciliation, correctedRows []tables.TableModelPricing) error {
+	return nil
+}
+
 func (m *MockConfigStore) CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
 	return nil
 }
