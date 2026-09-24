@@ -45,6 +45,23 @@ func (h *KeyRequestHandler) RegisterRoutes(r *router.Router, adminMW []schemas.B
 // submit handles POST /api/member/key-requests. kind comes from the
 // three values in tables.KeyRequestKind*; requested_models + budget_limit
 // are optional and only validated against the relevant kind.
+//
+// Authorization (Phase C-2 / C2-fix): the caller may only target a team
+// they have a legitimate relationship with. Without this rule any
+// authenticated member could file a join_team request against an
+// arbitrary team_id and, on admin approval, leverage the auto-create
+// membership side-effect in approve() to acquire team access they were
+// never invited to. The rule is intentionally asymmetric:
+//
+//   - join_team: caller must NOT be an active member. The legitimate
+//     path into a team is the invitation flow; the self-service
+//     request exists only to surface "I want in" to admin.
+//   - extend_quota / add_vk: caller MUST already be an active member.
+//     A non-member has nothing to extend and nothing to add a VK to.
+//
+// Returns 409 for the join_team-already-member case (the user's status
+// conflicts with what they asked for) and 403 for the missing-membership
+// case (the caller is forbidden from requesting against this team).
 func (h *KeyRequestHandler) submit(ctx *fasthttp.RequestCtx) {
 	userID, ok := ctx.UserValue(schemas.BifrostContextKeyMemberUserID).(string)
 	if !ok || userID == "" {
@@ -72,6 +89,38 @@ func (h *KeyRequestHandler) submit(ctx *fasthttp.RequestCtx) {
 	default:
 		SendError(ctx, fasthttp.StatusBadRequest, "kind must be join_team, extend_quota, or add_vk")
 		return
+	}
+
+	// Authorization gate: confirm the caller's membership state matches
+	// the kind's expectation. We deliberately check via
+	// GetTeamMembership (single-row lookup keyed by the unique index)
+	// rather than GetUserTeamMemberships so an unrelated team membership
+	// cannot accidentally satisfy this check. The store returns
+	// (nil, nil) when no row exists, so a missing membership is a clean
+	// "no access" rather than an error path.
+	membership, err := h.store.GetTeamMembership(ctx, payload.TeamID, userID)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to look up team membership: %v", err))
+		return
+	}
+	switch payload.Kind {
+	case tables.KeyRequestKindJoinTeam:
+		// Already an active member (including pending/invited) cannot
+		// legitimately file a fresh join request. The legitimate path
+		// for "I want in" without an invite is the request itself; the
+		// path from invite to active membership is accept-invitation.
+		if membership != nil && membership.Status != tables.TeamMemberStatusRemoved {
+			SendError(ctx, fasthttp.StatusConflict, fmt.Sprintf("already a member of this team (status=%s); accept your invitation or contact admin instead of filing a duplicate request", membership.Status))
+			return
+		}
+	case tables.KeyRequestKindExtendQuota, tables.KeyRequestKindAddVK:
+		// Quota extensions and new VKs only make sense inside a team
+		// the caller already belongs to. A non-member has no team-
+		// scoped budget or VK to extend.
+		if membership == nil || membership.Status != tables.TeamMemberStatusActive {
+			SendError(ctx, fasthttp.StatusForbidden, "must be an active member of this team to file this request")
+			return
+		}
 	}
 
 	now := time.Now().UTC()
