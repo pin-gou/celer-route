@@ -1,12 +1,23 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import MemberPortalView from "./views/memberPortalView";
 
-const MEMBER_LOGIN_PATH = "/member/login";
+const MEMBER_LOGIN_PATH = "/login";
 
-// The /workspace/member landing page renders only for authenticated
-// members. Members land here after /member/login redirects in (the
-// login form's onSuccess navigates to /workspace/member). The page
-// itself re-validates the session via the loader because a member
-// could land here via a stale link after their cookie expired.
+// Parent layout for /workspace/member/* — TanStack file-based
+// router in this project only mounts child routes when the parent
+// renders <Outlet />, so this layout owns:
+//   - the auth-gate loader (redirects unauthenticated to the admin
+//     login surface — /login — because /member/login is not yet
+//     wired as a TanStack route in this build; the member-session
+//     cookie is independent of the admin cookie, so the admin login
+//     surface can authenticate members too once `cookieName` is
+//     routed correctly; tracked separately in the member-portal
+//     backlog).
+//   - the Outlet that mounts sub-routes (keys, usage, setup-guide).
+//   - the index/portal view as the default content when no child
+//     route is active. The hasChild-detection below suppresses the
+//     portal view when a sub-route mounts, so /workspace/member/keys
+//     shows MyKeysView, not both views.
 export const Route = createFileRoute("/workspace/member")({
 	loader: async () => {
 		try {
@@ -20,4 +31,16 @@ export const Route = createFileRoute("/workspace/member")({
 		}
 		throw redirect({ href: MEMBER_LOGIN_PATH });
 	},
+	component: MemberPortalLayout,
 });
+
+import { useMatches } from "@tanstack/react-router";
+
+function MemberPortalLayout() {
+	const matches = useMatches();
+	const hasChild = matches.some((m) => m.routeId !== "/workspace/member");
+	if (hasChild) {
+		return <Outlet />;
+	}
+	return <MemberPortalView />;
+}

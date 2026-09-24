@@ -143,19 +143,19 @@ export default function MemberPortalView() {
 					<CardDescription>{t("users.memberPortal.quickActionsHint")}</CardDescription>
 				</CardHeader>
 				<CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
-					<Button asChild variant="outline" disabled>
-						<Link to="/workspace/member" data-testid="member-portal-key-requests">
+					<Button asChild variant="outline">
+						<Link to="/workspace/member/keys" data-testid="member-portal-key-requests">
 							{t("users.memberPortal.keyRequests")}
 						</Link>
 					</Button>
-					<Button asChild variant="outline" disabled>
-						<Link to="/workspace/member" data-testid="member-portal-usage">
+					<Button asChild variant="outline">
+						<Link to="/workspace/member/usage" data-testid="member-portal-usage">
 							{t("users.memberPortal.usage")}
 						</Link>
 					</Button>
-					<Button asChild variant="outline" disabled>
-						<Link to="/workspace/member" data-testid="member-portal-billing">
-							{t("users.memberPortal.billing")}
+					<Button asChild variant="outline">
+						<Link to="/workspace/member/setup-guide" data-testid="member-portal-billing">
+							{t("users.memberPortal.setupGuide")}
 						</Link>
 					</Button>
 				</CardContent>
