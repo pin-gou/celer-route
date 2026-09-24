@@ -47,7 +47,12 @@
 		"performanceTuning": "Performance Tuning",
 		"featureFlags": "Feature Flags",
 		"promptRepository": "Prompt Repository",
-		"skillsRepository": "Skills Repository"
+		"skillsRepository": "Skills Repository",
+		"members": "Members",
+		"alerting": "Alerting",
+		"reports": "Reports",
+		"reportsStandardPrices": "Standard Prices",
+		"reportsGatewayDelta": "Gateway Delta"
 	},
 	"action": {
 		"save": "Save",

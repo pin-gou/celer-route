@@ -47,7 +47,12 @@
 		"performanceTuning": "性能调优",
 		"featureFlags": "功能开关",
 		"promptRepository": "提示词仓库",
-		"skillsRepository": "技能仓库"
+		"skillsRepository": "技能仓库",
+		"members": "成员",
+		"alerting": "告警",
+		"reports": "报表",
+		"reportsStandardPrices": "标准价格",
+		"reportsGatewayDelta": "网关偏差"
 	},
 	"action": {
 		"save": "保存",

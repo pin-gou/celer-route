@@ -1,5 +1,7 @@
 import {
 	ArrowUpRight,
+	BarChart3,
+	BellRing,
 	BookOpenText,
 	Boxes,
 	BoxIcon,
@@ -29,6 +31,7 @@ import {
 	SlidersHorizontal,
 	Telescope,
 	Terminal,
+	Users,
 	Wallet,
 	Webhook,
 } from "lucide-react";
@@ -708,6 +711,43 @@ export default function AppSidebar() {
 				icon: Webhook,
 				description: "Async job webhook endpoints",
 				hasAccess: false, // hidden
+			},
+			{
+				title: t("nav.members"),
+				url: "/workspace/governance/users",
+				icon: Users,
+				description: "Manage member accounts & invitations",
+				hasAccess: isDbConnected ? hasSettingsAccess : false,
+			},
+			{
+				title: t("nav.alerting"),
+				url: "/workspace/alerting",
+				icon: BellRing,
+				description: "Alert rules & incident delivery",
+				hasAccess: isDbConnected ? hasSettingsAccess : false,
+			},
+			{
+				title: t("nav.reports"),
+				url: "/workspace/reports",
+				icon: BarChart3,
+				description: "Cost reconciliation & price drift reports",
+				hasAccess: isDbConnected ? hasSettingsAccess : false,
+				subItems: [
+					{
+						title: t("nav.reportsStandardPrices"),
+						url: "/workspace/reports/standard-prices",
+						icon: BarChart3,
+						description: "Standard price snapshots",
+						hasAccess: isDbConnected ? hasSettingsAccess : false,
+					},
+					{
+						title: t("nav.reportsGatewayDelta"),
+						url: "/workspace/reports/gateway-delta",
+						icon: BarChart3,
+						description: "Gateway price drift delta",
+						hasAccess: isDbConnected ? hasSettingsAccess : false,
+					},
+				],
 			},
 			...(isDbConnected
 				? [
