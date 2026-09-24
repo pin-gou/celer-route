@@ -42,6 +42,12 @@ func (h *InvitationHandler) RegisterRoutes(r *router.Router, adminMW ...schemas.
 	r.POST("/api/governance/teams/{team_id}/invitations", lib.ChainMiddlewares(h.createInvitation, adminMW...))
 	r.GET("/api/governance/teams/{team_id}/invitations", lib.ChainMiddlewares(h.listInvitations, adminMW...))
 	r.POST("/api/governance/teams/{team_id}/invitations/{inv_id}/revoke", lib.ChainMiddlewares(h.revokeInvitation, adminMW...))
+	// Batch C-D: team members listing, used by the /workspace/governance/teams/[id]
+	// detail page. The store-side ListTeamMembers already returns rows
+	// filtered by status (admin/user-management/spec §5.3); this handler is
+	// a thin pass-through that resolves user display info alongside the
+	// membership row.
+	r.GET("/api/governance/teams/{team_id}/members", lib.ChainMiddlewares(h.listTeamMembers, adminMW...))
 
 	// Public token endpoints: accept is already whitelisted in
 	// MemberAuthMiddleware.memberUnauthPrefixes (see member_auth.go) so
@@ -185,6 +191,56 @@ func (h *InvitationHandler) revokeInvitation(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	SendJSON(ctx, map[string]any{"invitation": invitationView(inv)})
+}
+
+// listTeamMembers handles GET /api/governance/teams/:team_id/members.
+// Returns every membership row joined with the underlying TableUser so
+// the admin team-detail UI can show display_name / email / status
+// without an N+1 fetch. The store-level ListTeamMembers already filters
+// out removed-status rows (rdb.go), so the on-wire list only contains
+// invited + active members.
+//
+// We deliberately do NOT surface password_hash (TableUser.PasswordHash
+// is `json:"-"`), team-policy IDs, or provider-key metadata — the team
+// detail view is admin-scoped but should still observe the data-model.md
+// §5.1 "member-side views never expose Provider Key metadata" rule.
+func (h *InvitationHandler) listTeamMembers(ctx *fasthttp.RequestCtx) {
+	teamID := ctx.UserValue("team_id").(string)
+	if teamID == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "team_id is required")
+		return
+	}
+	rows, err := h.store.ListTeamMembers(ctx, teamID)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to list team members: %v", err))
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for i := range rows {
+		m := rows[i]
+		view := map[string]any{
+			"id":           m.ID,
+			"team_id":      m.TeamID,
+			"user_id":      m.UserID,
+			"role_in_team": m.RoleInTeam,
+			"status":       m.Status,
+			"joined_at":    m.JoinedAt.UTC().Format(time.RFC3339),
+		}
+		// Resolve the user row best-effort: a member that exists in
+		// team_members but was hard-deleted from TableUser should still
+		// appear in the list (so admin sees a "missing user" gap) rather
+		// than vanishing silently.
+		if user, uerr := h.store.GetUserByID(ctx, m.UserID); uerr == nil && user != nil {
+			view["email"] = user.Email
+			view["display_name"] = user.DisplayName
+			view["user_status"] = user.Status
+		}
+		out = append(out, view)
+	}
+	SendJSON(ctx, map[string]any{
+		"members": out,
+		"total":   len(out),
+	})
 }
 
 // getInvitationByToken handles GET /api/invitations/:token. Returns
