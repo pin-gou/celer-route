@@ -52,6 +52,10 @@
       "type": "string",
       "description": "You can set the value as env.<ENV_VAR_NAME> to use an environment variable. We also read encryption key from BIFROST_ENCRYPTION_KEY environment variable. Note: once set, the encryption key cannot be changed unless you clean up the database. Accepts any string; a secure 32-byte AES-256 key will be derived using Argon2id KDF. If not provided AND allow_plaintext_storage is false, the server will refuse to start (Phase 6 / D9). Recommended: use a passphrase of at least 16 bytes for better security"
     },
+    "encryption_salt": {
+      "type": "string",
+      "description": "Phase 7 / G7 (C-1): per-deployment Argon2id salt, base64-encoded. When unset the historical DefaultSalt is reused so rows written before this field existed keep decrypting. When set, new ciphertext is written under salt_version=1 (decoded-length ≥ 16 bytes) so deployments are cryptographically isolated even if two operators happened to pick the same encryption_key passphrase. Decrypt always falls back to the no-header legacy format for older rows. Also readable from the BIFROST_ENCRYPTION_SALT env var. Generate with: `head -c 32 /dev/urandom | base64`."
+    },
     "allow_plaintext_storage": {
       "type": "boolean",
       "default": false,

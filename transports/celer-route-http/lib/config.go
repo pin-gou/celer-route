@@ -4,6 +4,7 @@ package lib
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -183,6 +184,14 @@ type ConfigData struct {
 	SourceOfTruth string                    `json:"source_of_truth,omitempty"`
 	Client        *configstore.ClientConfig `json:"client"`
 	EncryptionKey *schemas.SecretVar        `json:"encryption_key"`
+	// EncryptionSalt is a base64-encoded per-deployment Argon2id salt
+	// used to derive a second AES key (G7/C-1). When unset, encryption
+	// reuses the historical DefaultSalt for compatibility with rows
+	// written before the salt was configurable. The minimum decoded
+	// length is 16 bytes; shorter values cause startup to fail loudly
+	// so a typo can't silently fall back to the historical default.
+	// Also readable from the BIFROST_ENCRYPTION_SALT env var.
+	EncryptionSalt string `json:"encryption_salt,omitempty"`
 	// AllowPlaintextStorage explicitly opts in to storing sensitive rows in plaintext
 	// when no encryption_key is configured. Phase 6 / D9 inverts the previous default:
 	// without this flag, an empty encryption_key combined with any existing sensitive row
@@ -502,6 +511,7 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 		Server                *ServerConfig                         `json:"server,omitempty"`
 		Client                *configstore.ClientConfig             `json:"client"`
 		EncryptionKey         *schemas.SecretVar                    `json:"encryption_key"`
+		EncryptionSalt        string                                `json:"encryption_salt,omitempty"`
 		AllowPlaintextStorage bool                                  `json:"allow_plaintext_storage,omitempty"`
 		AuthConfig            *configstore.AuthConfig               `json:"auth_config,omitempty"`
 		SetupToken            *schemas.SecretVar                    `json:"setup_token,omitempty"`
@@ -531,6 +541,7 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 	cd.Client = temp.Client
 	cd.Server = temp.Server
 	cd.EncryptionKey = temp.EncryptionKey
+	cd.EncryptionSalt = temp.EncryptionSalt
 	cd.AllowPlaintextStorage = temp.AllowPlaintextStorage
 	cd.AuthConfig = temp.AuthConfig
 	cd.SetupToken = temp.SetupToken
@@ -5116,6 +5127,13 @@ func initFrameworkConfig(ctx context.Context, config *Config, configData *Config
 // overrides the process default of "deny plaintext". The resulting flag is pushed
 // into framework/encrypt via SetAllowPlaintextStorage before Init() runs so the
 // warning lines reflect the actual effective policy.
+//
+// G7/C-1: encryption_salt (config.json / BIFROST_ENCRYPTION_SALT) is also
+// pulled in here. Pass nil when the operator wants to keep the historical
+// DefaultSalt; pass a non-nil salt to derive a second AES key so new
+// ciphertext carries salt_version=1 and stays cryptographically isolated
+// per deployment. Existing rows (no header byte) keep decrypting via the
+// legacy-format fallback in Decrypt.
 func initEncryption(configData *ConfigData) error {
 	// Policy precedence: config.json > env > default (false). Reading the env
 	// unconditionally also catches the case where config.json omits the field
@@ -5142,15 +5160,50 @@ func initEncryption(configData *ConfigData) error {
 			configData.EncryptionKey = schemas.NewSecretVar("env.BIFROST_ENCRYPTION_KEY")
 		}
 	}
+	// Salt resolution: config.json > env > default (no custom salt).
+	// Both sources are base64-decoded; an undecodable value surfaces
+	// immediately so a typo in config.json can't silently fall back to
+	// the historical DefaultSalt (which would defeat the per-deployment
+	// isolation the feature exists to provide).
+	customSalt, err := resolveEncryptionSalt(configData)
+	if err != nil {
+		return err
+	}
+
 	// Checking if encryption key is set
 	if configData.EncryptionKey != nil && configData.EncryptionKey.GetValue() != "" {
-		encrypt.Init(configData.EncryptionKey.GetValue(), logger)
+		encrypt.InitWithSalt(configData.EncryptionKey.GetValue(), customSalt, logger)
 	} else {
 		// Init() also reads the policy and emits the appropriate warning; calling
 		// it with an empty key keeps that warning + the atomic state in sync.
-		encrypt.Init("", logger)
+		encrypt.InitWithSalt("", customSalt, logger)
 	}
 	return nil
+}
+
+// resolveEncryptionSalt picks the operator-supplied salt from config.json
+// (configData.EncryptionSalt) or the BIFROST_ENCRYPTION_SALT env var. The
+// config.json value wins on a tie. An empty result means "no custom salt;
+// use DefaultSalt" — never an error.
+func resolveEncryptionSalt(configData *ConfigData) ([]byte, error) {
+	var raw string
+	switch {
+	case configData != nil && configData.EncryptionSalt != "":
+		raw = strings.TrimSpace(configData.EncryptionSalt)
+	case strings.TrimSpace(os.Getenv("BIFROST_ENCRYPTION_SALT")) != "":
+		raw = strings.TrimSpace(os.Getenv("BIFROST_ENCRYPTION_SALT"))
+	}
+	if raw == "" {
+		return nil, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid encryption_salt: must be base64-encoded (got %q)", raw)
+	}
+	if len(decoded) < 16 {
+		return nil, fmt.Errorf("invalid encryption_salt: decoded length %d bytes; minimum is 16 bytes (256 bits) for Argon2id salt strength", len(decoded))
+	}
+	return decoded, nil
 }
 
 // resolveSetupToken resolves the bootstrap setup token required to create the very

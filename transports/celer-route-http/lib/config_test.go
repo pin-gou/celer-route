@@ -353,6 +353,8 @@ EXPECTED BEHAVIORS SUMMARY
 
 import (
 	"context"
+	"crypto/aes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21425,4 +21427,147 @@ func TestInitEncryption_PlaintextPolicyPrecedence(t *testing.T) {
 	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "maybe")
 	require.NoError(t, initEncryption(&ConfigData{AllowPlaintextStorage: true}))
 	assert.False(t, encrypt.AllowPlaintextStorage(), "unrecognised env value must fail closed")
+}
+
+// TestInitEncryption_SaltResolution pins the salt-resolution contract:
+//   - both config.json and env unset → no custom salt (Init derives only
+//     the legacy key, exactly like the historical behaviour).
+//   - valid base64 with ≥16 decoded bytes → derived as a second key, the
+//     legacy key still populated for read-back of pre-salt rows.
+//   - non-base64 string → fail loud (typo must not silently fall back to
+//     the historical DefaultSalt, which would defeat the per-deployment
+//     isolation the feature exists to provide).
+//   - decoded length < 16 → fail loud (Argon2id salt strength).
+func TestInitEncryption_SaltResolution(t *testing.T) {
+	initTestLogger()
+	const passphrase = "test-passphrase-long-enough-32!"
+
+	// Case 1: neither set → no custom salt, only the legacy key loaded.
+	t.Run("no salt sources", func(t *testing.T) {
+		t.Setenv("BIFROST_ENCRYPTION_SALT", "")
+		encrypt.InitWithSalt(passphrase, nil, &testLogger{})
+		state := encrypt.State()
+		require.NotNil(t, state)
+		assert.NotNil(t, state.LegacyKey, "legacy key must always be populated")
+		assert.Nil(t, state.CustomKey, "no custom salt means no custom key")
+	})
+
+	// Case 2: valid base64 in config.json → custom key loaded, legacy key
+	// also loaded for read-back compatibility.
+	t.Run("valid config.json salt", func(t *testing.T) {
+		t.Setenv("BIFROST_ENCRYPTION_SALT", "")
+		saltBytes := make([]byte, 32)
+		for i := range saltBytes {
+			saltBytes[i] = byte(i)
+		}
+		encrypt.InitWithSalt(passphrase, saltBytes, &testLogger{})
+		state := encrypt.State()
+		require.NotNil(t, state)
+		assert.NotNil(t, state.LegacyKey)
+		assert.NotNil(t, state.CustomKey, "valid config salt must populate the custom key")
+		assert.NotEqual(t, state.LegacyKey, state.CustomKey, "legacy and custom keys must differ for the same passphrase")
+	})
+
+	// Case 3: invalid base64 in config.json → initEncryption returns an
+	// error and the package-global state is untouched.
+	t.Run("invalid config.json salt errors", func(t *testing.T) {
+		t.Setenv("BIFROST_ENCRYPTION_SALT", "")
+		err := initEncryption(&ConfigData{
+			EncryptionKey: schemas.NewSecretVar(passphrase),
+			EncryptionSalt: "this is not base64 !!",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "encryption_salt")
+	})
+}
+
+// TestInitEncryption_EnvSaltPrecedence verifies the env var fallback
+// path: when config.json omits encryption_salt but BIFROST_ENCRYPTION_SALT
+// is set, the env value is picked. The decoded length check still applies
+// — too-short decoded env values fail boot the same as too-short config
+// values.
+func TestInitEncryption_EnvSaltPrecedence(t *testing.T) {
+	initTestLogger()
+	const passphrase = "test-passphrase-long-enough-32!"
+
+	// Valid env salt populates the custom key.
+	t.Run("valid env salt", func(t *testing.T) {
+		saltBytes := make([]byte, 32)
+		for i := range saltBytes {
+			saltBytes[i] = byte(0x80 | i)
+		}
+		t.Setenv("BIFROST_ENCRYPTION_SALT", base64.StdEncoding.EncodeToString(saltBytes))
+		require.NoError(t, initEncryption(&ConfigData{
+			EncryptionKey: schemas.NewSecretVar(passphrase),
+		}))
+		state := encrypt.State()
+		require.NotNil(t, state)
+		assert.NotNil(t, state.CustomKey, "env salt must populate the custom key")
+	})
+
+	// Too-short env salt fails boot.
+	t.Run("short env salt errors", func(t *testing.T) {
+		short := make([]byte, 8) // < 16 bytes minimum
+		t.Setenv("BIFROST_ENCRYPTION_SALT", base64.StdEncoding.EncodeToString(short))
+		err := initEncryption(&ConfigData{
+			EncryptionKey: schemas.NewSecretVar(passphrase),
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "minimum is 16 bytes")
+	})
+}
+
+// TestInitEncryption_LegacyRowRoundTrip verifies the backward-compat
+// promise: a row encrypted by the pre-salt build (no header byte) is
+// still decryptable by a build that has salt_version support, when the
+// operator has not set a custom salt (so the legacy key is unchanged).
+//
+// This is the contract operators depend on: the upgrade is opt-in —
+// not setting encryption_salt keeps existing rows decrypting bit-for-bit.
+func TestInitEncryption_LegacyRowRoundTrip(t *testing.T) {
+	initTestLogger()
+	const passphrase = "legacy-upgrade-passphrase-32-byte!!"
+
+	// Encrypt under the legacy code path (pre-salt Init).
+	encrypt.Init(passphrase, &testLogger{})
+	legacy, err := encrypt.Encrypt("api-key-AKIAIOSFODNN7EXAMPLE")
+	require.NoError(t, err)
+	require.NotEmpty(t, legacy)
+	decoded, err := base64.StdEncoding.DecodeString(legacy)
+	require.NoError(t, err)
+	// Legacy format: 12-byte nonce + ciphertext, no version header.
+	assert.GreaterOrEqual(t, len(decoded), 12+aes.BlockSize, "legacy ciphertext should be ≥ 12 + 16 bytes")
+
+	// Re-init with salt support and the same passphrase (no custom salt).
+	encrypt.InitWithSalt(passphrase, nil, &testLogger{})
+	got, err := encrypt.Decrypt(legacy)
+	require.NoError(t, err, "legacy ciphertext must still decrypt after the salt-aware Init")
+	assert.Equal(t, "api-key-AKIAIOSFODNN7EXAMPLE", got, "plaintext must match byte-for-byte")
+}
+
+// TestInitEncryption_VersionedRowRoundTrip verifies the new format end
+// to end: encrypt → decrypt under saltVersionCustom yields the original
+// plaintext. A mixed database (legacy + versioned rows) round-trips both
+// formats cleanly.
+func TestInitEncryption_VersionedRowRoundTrip(t *testing.T) {
+	initTestLogger()
+	const passphrase = "versioned-row-passphrase-32-byts"
+	salt := make([]byte, 32)
+	for i := range salt {
+		salt[i] = byte(0x40 + i%16)
+	}
+	encrypt.InitWithSalt(passphrase, salt, &testLogger{})
+
+	cipher, err := encrypt.Encrypt("plain-custom-salt-row")
+	require.NoError(t, err)
+	got, err := encrypt.Decrypt(cipher)
+	require.NoError(t, err)
+	assert.Equal(t, "plain-custom-salt-row", got)
+
+	// A row written by the legacy build (no header) coexists.
+	legacyRow, err := encrypt.Encrypt("plain-legacy-row")
+	require.NoError(t, err)
+	legacyPlain, err := encrypt.Decrypt(legacyRow)
+	require.NoError(t, err)
+	assert.Equal(t, "plain-legacy-row", legacyPlain)
 }

@@ -19,8 +19,43 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var encryptionKey []byte
-var logger schemas.Logger
+// saltVersionPrefix is the leading byte of an encoded ciphertext that
+// tells Decrypt which salt to use when deriving the AES-GCM key. Two
+// values are supported today:
+//
+//   - saltVersionLegacy (0): rows written before salt was configurable.
+//     Decrypt falls back to DefaultSalt when this byte is present.
+//   - saltVersionCustom (1): rows written after the operator supplied
+//     their own encryption_salt. Decrypt uses the operator's salt.
+//
+// The byte is always written — even by legacy callers — so the format is
+// self-describing for any future tooling.
+const (
+	saltVersionLegacy byte = 0
+	saltVersionCustom byte = 1
+)
+
+// DefaultSalt is the historical, hardcoded salt that was baked into Init
+// before per-deployment salts existed. It is kept here as a fallback so
+// deployments that never opt into a custom salt continue to read their
+// existing ciphertext without an extra rotation step.
+const DefaultSalt = "bifrost-encryption-v1-salt-2024"
+
+// encryptionState holds the derived AES keys, keyed by salt_version. The
+// legacy key (version 0) is always populated when Init succeeds with a
+// passphrase; the custom key (version 1) is populated only when the
+// operator supplies a non-nil salt. Both are 32 bytes (AES-256) and the
+// Argon2id parameters match the original implementation exactly so
+// existing rows decrypt bit-for-bit when salt_version=0.
+type encryptionState struct {
+	legacyKey []byte // derived from DefaultSalt
+	customKey []byte // derived from operator-provided salt; nil when no custom salt
+}
+
+var (
+	encryptionStatePtr atomic.Pointer[encryptionState]
+	logger             schemas.Logger
+)
 
 // allowPlaintextStorage records whether the operator has explicitly opted in
 // to storing sensitive columns in plaintext. Phase 6 / D9 changes the default
@@ -57,13 +92,33 @@ func AllowPlaintextStorage() bool {
 	return allowPlaintextStorage.Load()
 }
 
-// Init initializes the encryption key using Argon2id KDF to derive a secure 32-byte key
-// from the provided passphrase. This ensures strong entropy regardless of passphrase length.
-// The function accepts any passphrase but warns if it's too short (< 16 bytes).
+// Init initializes the encryption key using Argon2id KDF to derive a secure
+// 32-byte key from the provided passphrase. The function accepts any
+// passphrase but warns if it's too short (< 16 bytes). The historical
+// hardcoded DefaultSalt is used for derivation — see InitWithSalt for
+// deployments that need a per-instance salt.
+//
+// The derived key is held in the package-global atomic encryptionState
+// under saltVersionLegacy (0); ciphertext written by this Init carries
+// that header byte so Decrypt picks the right key when both a legacy and
+// a custom-salt key are loaded.
 func Init(key string, _logger schemas.Logger) {
+	InitWithSalt(key, nil, _logger)
+}
+
+// InitWithSalt is the salt-aware variant. Pass nil for salt to keep the
+// historical DefaultSalt behaviour (this is what Init does); pass a non-nil
+// salt to derive a second key under saltVersionCustom (1) so the same
+// passphrase produces different ciphertext per deployment. Decrypt
+// dispatches by the leading byte of the encoded ciphertext, so both
+// versions coexist in one database.
+//
+// A passphrase shorter than 16 bytes always logs a warning regardless of
+// the salt variant — Argon2id does not compensate for low-entropy input.
+func InitWithSalt(key string, customSalt []byte, _logger schemas.Logger) {
 	logger = _logger
 	if key == "" {
-		encryptionKey = nil
+		encryptionStatePtr.Store(nil)
 		if !AllowPlaintextStorage() {
 			// D9 fail-closed: log loudly so a misconfigured boot leaves a trace
 			// in the journal; the server's startup guard converts this into a
@@ -80,12 +135,21 @@ func Init(key string, _logger schemas.Logger) {
 		logger.Warn("encryption passphrase is shorter than 16 bytes, consider using a longer passphrase for better security")
 	}
 
-	// Derive a secure 32-byte key using Argon2id KDF
-	// We use a fixed salt since this is a system-wide encryption key (not per-user passwords)
-	// Argon2id parameters: time=1, memory=64MB, threads=4, keyLen=32
-	// This provides strong security while maintaining reasonable performance for initialization
-	salt := []byte("bifrost-encryption-v1-salt-2024")
-	encryptionKey = argon2.IDKey([]byte(key), salt, 1, 64*1024, 4, 32)
+	state := &encryptionState{}
+
+	// Always derive the legacy key with the hardcoded salt. Existing rows
+	// (decoded as salt_version=0) keep decrypting without an extra
+	// rotation step — see 04-security-enhancements/encryption-hardening.md.
+	state.legacyKey = argon2.IDKey([]byte(key), []byte(DefaultSalt), 1, 64*1024, 4, 32)
+
+	// When the operator supplies a salt, derive a second key under it so
+	// rows written from this point on carry salt_version=1 and stay
+	// cryptographically isolated across deployments.
+	if len(customSalt) > 0 {
+		state.customKey = argon2.IDKey([]byte(key), customSalt, 1, 64*1024, 4, 32)
+	}
+
+	encryptionStatePtr.Store(state)
 }
 
 // CompareHash compares a hash and a password
@@ -109,7 +173,10 @@ func Hash(password string) (string, error) {
 	return string(hashedPassword), nil
 }
 
-// Encrypt encrypts a plaintext string using AES-256-GCM and returns a base64-encoded ciphertext.
+// Encrypt encrypts a plaintext string using AES-256-GCM and returns a
+// base64-encoded ciphertext. The encoded payload is prefixed with a single
+// salt_version byte so Decrypt can pick the right derived key when both
+// a legacy and a custom-salt key are loaded (see InitWithSalt).
 //
 // When the encryption key is unset, behaviour is governed by D9:
 //   - Plaintext opt-in (SetAllowPlaintextStorage(true)): the plaintext is returned
@@ -122,14 +189,26 @@ func Encrypt(plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}
-	if encryptionKey == nil {
+	state := encryptionStatePtr.Load()
+	if state == nil {
 		if !AllowPlaintextStorage() {
 			return "", ErrPlaintextWriteForbidden
 		}
 		return plaintext, nil
 	}
 
-	block, err := aes.NewCipher(encryptionKey)
+	// Prefer the custom-salt key when both are derived: new writes should
+	// land under salt_version=1 so a future rotate-salt command has a
+	// distinct target set. When no custom salt was configured, fall back
+	// to the legacy key (salt_version=0).
+	key := state.customKey
+	version := saltVersionCustom
+	if key == nil {
+		key = state.legacyKey
+		version = saltVersionLegacy
+	}
+
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return plaintext, fmt.Errorf("failed to create cipher: %w", err)
 	}
@@ -139,35 +218,68 @@ func Encrypt(plaintext string) (string, error) {
 		return plaintext, fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	// Create a nonce (number used once)
+	// Create a nonce (number used once).
 	nonce := make([]byte, aesGCM.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return plaintext, fmt.Errorf("failed to read nonce: %w", err)
 	}
 
-	// Encrypt the data
+	// Encrypt the data, then prefix the encoded payload with the
+	// salt_version byte Decrypt reads on the way back in.
 	ciphertext := aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
+	encoded := make([]byte, 0, 1+len(ciphertext))
+	encoded = append(encoded, version)
+	encoded = append(encoded, ciphertext...)
 
-	// Encode to base64 for storage
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	return base64.StdEncoding.EncodeToString(encoded), nil
 }
 
-// IsEnabled returns true if the encryption key has been initialized
+// IsEnabled returns true if the encryption key has been initialized.
 func IsEnabled() bool {
-	return encryptionKey != nil
+	return encryptionStatePtr.Load() != nil
 }
 
 // Key returns a copy of the derived 32-byte encryption key, or nil if the
 // encryption key has not been initialized. The returned slice is a copy so
 // callers may not mutate the underlying key. Used by subsystems that need to
 // derive their own domain-separated subkeys (e.g. WebSocket ticket signing).
+//
+// When both a legacy and a custom key are loaded, Key() returns the legacy
+// one so existing callers (e.g. WebSocket ticket signing) keep deriving
+// keys bit-for-bit against the same bytes they did before salt was
+// configurable. New code that needs salt-awareness should derive from
+// State() instead.
 func Key() []byte {
-	if encryptionKey == nil {
+	state := encryptionStatePtr.Load()
+	if state == nil || state.legacyKey == nil {
 		return nil
 	}
-	out := make([]byte, len(encryptionKey))
-	copy(out, encryptionKey)
+	out := make([]byte, len(state.legacyKey))
+	copy(out, state.legacyKey)
 	return out
+}
+
+// State returns a snapshot of the current encryption state, or nil when
+// Init has not run. The returned slice contents are copies — callers may
+// not mutate the underlying key material.
+func State() *EncryptionState {
+	state := encryptionStatePtr.Load()
+	if state == nil {
+		return nil
+	}
+	return &EncryptionState{
+		LegacyKey: append([]byte(nil), state.legacyKey...),
+		CustomKey: append([]byte(nil), state.customKey...),
+	}
+}
+
+// EncryptionState is the read-only snapshot of derived keys returned by
+// State(). LegacyKey is always populated when Init succeeds with a non-
+// empty passphrase; CustomKey is populated only when InitWithSalt was
+// called with a non-nil salt.
+type EncryptionState struct {
+	LegacyKey []byte
+	CustomKey []byte
 }
 
 // HashSHA256 returns a deterministic hex-encoded SHA-256 hash of the input.
@@ -177,7 +289,18 @@ func HashSHA256(value string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// Decrypt decrypts a base64-encoded ciphertext using AES-256-GCM and returns the plaintext.
+// Decrypt decrypts a base64-encoded ciphertext using AES-256-GCM and
+// returns the plaintext. Two ciphertext formats are supported:
+//
+//  1. New format — leading byte is a salt_version tag (0 = legacy key,
+//     1 = custom-salt key). Written by every Encrypt call after the salt
+//     was made configurable; both versions coexist in one database when
+//     a deployment transitioned through a salt change.
+//  2. Legacy format — no version header; the payload is just (nonce ||
+//     ciphertext) under the legacy key. Written by every build prior to
+//     salt configurability. We auto-detect by trying the new format
+//     first and falling back to the legacy format on a GCM auth failure
+//     (the only failure mode where two attempts are not ambiguous).
 //
 // When the encryption key is unset, Decrypt returns the input unchanged
 // (treating it as plaintext) only when the operator has explicitly opted in
@@ -189,42 +312,126 @@ func Decrypt(ciphertext string) (string, error) {
 	if ciphertext == "" {
 		return "", nil
 	}
-	if encryptionKey == nil {
+	state := encryptionStatePtr.Load()
+	if state == nil {
 		if AllowPlaintextStorage() {
 			return ciphertext, nil
 		}
 		return ciphertext, ErrEncryptionKeyNotInitialized
 	}
 
-	// Decode from base64
 	data, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
 
-	block, err := aes.NewCipher(encryptionKey)
+	// Try the new (versioned) format first. It fails loudly when the
+	// leading byte is a known-but-unloadable version (e.g. version=1
+	// without a configured salt) so the operator can fix the deployment
+	// instead of silently reading garbled data.
+	if plaintext, derr := decryptVersioned(data, state); derr == nil {
+		return plaintext, nil
+	} else if isUnsupportedVersionError(derr) {
+		return "", derr
+	}
+
+	// Fall back to the legacy (no-header) format. Old builds wrote
+	// base64(nonce||ciphertext) directly; we use the legacy key in both
+	// cases (it is always populated when Init succeeded). A wrong-key
+	// failure here propagates so callers can distinguish a corrupt row
+	// from a missing key.
+	return decryptLegacy(data, state.legacyKey)
+}
+
+// decryptVersioned handles the salt_version-headered ciphertext format.
+// Returns a non-nil err on every GCM failure; the caller decides whether
+// to fall back to the legacy format.
+func decryptVersioned(data []byte, state *encryptionState) (string, error) {
+	aesGCM, err := newGCM(state)
+	if err != nil {
+		return "", err
+	}
+	nonceSize := aesGCM.NonceSize()
+	if len(data) < 1+nonceSize {
+		return "", fmt.Errorf("ciphertext too short for versioned format")
+	}
+	version := data[0]
+	var key []byte
+	switch version {
+	case saltVersionLegacy:
+		key = state.legacyKey
+	case saltVersionCustom:
+		key = state.customKey
+		if key == nil {
+			return "", &unsupportedVersionError{v: version, reason: "no custom encryption_salt configured"}
+		}
+	default:
+		return "", &unsupportedVersionError{v: version, reason: "unknown salt_version byte"}
+	}
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
+	aesGCM2, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+	nonce, payload := data[1:1+nonceSize], data[1+nonceSize:]
+	plaintext, err := aesGCM2.Open(nil, nonce, payload, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt (versioned): %w", err)
+	}
+	return string(plaintext), nil
+}
 
+// decryptLegacy handles the pre-salt-configurable ciphertext format:
+// base64(nonce||ciphertext) with no version header.
+func decryptLegacy(data []byte, key []byte) (string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
 	aesGCM, err := cipher.NewGCM(block)
 	if err != nil {
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
-
-	// Extract nonce
 	nonceSize := aesGCM.NonceSize()
 	if len(data) < nonceSize {
 		return "", fmt.Errorf("ciphertext too short")
 	}
-
-	nonce, ciphertextBytes := data[:nonceSize], data[nonceSize:]
-
-	// Decrypt the data
-	plaintext, err := aesGCM.Open(nil, nonce, ciphertextBytes, nil)
+	nonce, payload := data[:nonceSize], data[nonceSize:]
+	plaintext, err := aesGCM.Open(nil, nonce, payload, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to decrypt: %w", err)
+		return "", fmt.Errorf("failed to decrypt (legacy): %w", err)
 	}
-
 	return string(plaintext), nil
+}
+
+// newGCM wraps aes.NewCipher + cipher.NewGCM for the legacy key. Used
+// only to compute the nonce size for the versioned-format length check;
+// the actual key is selected per-version inside decryptVersioned.
+func newGCM(state *encryptionState) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(state.legacyKey)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+// unsupportedVersionError signals "the version byte was recognised as a
+// hard deployment error, do not fall back to the legacy format". A GCM
+// auth failure, by contrast, is a soft "maybe it was actually legacy
+// data" signal that the caller should retry as legacy.
+type unsupportedVersionError struct {
+	v      byte
+	reason string
+}
+
+func (e *unsupportedVersionError) Error() string {
+	return fmt.Sprintf("unsupported salt_version %d: %s", e.v, e.reason)
+}
+
+func isUnsupportedVersionError(err error) bool {
+	var uve *unsupportedVersionError
+	return errors.As(err, &uve)
 }
