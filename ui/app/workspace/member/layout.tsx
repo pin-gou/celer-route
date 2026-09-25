@@ -1,18 +1,15 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import MemberPortalView from "./views/memberPortalView";
 
-const MEMBER_LOGIN_PATH = "/login";
+const MEMBER_LOGIN_PATH = "/member";
 
 // Parent layout for /workspace/member/* — TanStack file-based
 // router in this project only mounts child routes when the parent
 // renders <Outlet />, so this layout owns:
-//   - the auth-gate loader (redirects unauthenticated to the admin
-//     login surface — /login — because /member/login is not yet
-//     wired as a TanStack route in this build; the member-session
-//     cookie is independent of the admin cookie, so the admin login
-//     surface can authenticate members too once `cookieName` is
-//     routed correctly; tracked separately in the member-portal
-//     backlog).
+//   - the auth-gate loader (redirects unauthenticated to the member
+//     login surface at /member — the same path Batch C-A registered
+//     as a top-level route, not /member/login; the route file is
+//     ui/app/member/{layout,page}.tsx and it renders MemberLoginView).
 //   - the Outlet that mounts sub-routes (keys, usage, setup-guide).
 //   - the index/portal view as the default content when no child
 //     route is active. The hasChild-detection below suppresses the
@@ -38,7 +35,11 @@ import { useMatches } from "@tanstack/react-router";
 
 function MemberPortalLayout() {
 	const matches = useMatches();
-	const hasChild = matches.some((m) => m.routeId !== "/workspace/member");
+	// Detect whether the active route has a child under /workspace/member
+	// (such as /workspace/member/keys). The matches array always
+	// includes the parent chain (/workspace, /workspace/member), so
+	// we compare against a strict descendant routeId prefix.
+	const hasChild = matches.some((m) => m.routeId.startsWith("/workspace/member/"));
 	if (hasChild) {
 		return <Outlet />;
 	}
