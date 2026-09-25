@@ -447,6 +447,20 @@
 			"adminSignIn": "Administrator sign-in",
 			"checkingSession": "Checking your session…",
 			"githubRepository": "GitHub repository"
+		},
+		"userDetail": {
+			"profileTitle": "Profile",
+			"vksDesc": "Virtual keys owned by this user. Provider-key secrets are never shown here.",
+			"teamScope": "Team: {{team}}",
+			"userScope": "Owned by user",
+			"disableUser": "Disable account",
+			"disableVks": "Disable virtual keys",
+			"disableVksTitle": "Disable all virtual keys?",
+			"disableVksDesc": "Disable every active virtual key owned by {{email}}? Provider keys are not affected. ({{count}} VKs will be disabled.)",
+			"disableVksConfirm": "Disable VKs",
+			"notFoundTitle": "User not found",
+			"notFoundDesc": "The requested user does not exist or has been removed.",
+			"backToList": "Back to user list"
 		}
 	},
 	"alerting": {
@@ -651,6 +665,24 @@
 		"inviteStatus_pending": "Pending",
 		"inviteStatus_accepted": "Accepted",
 		"inviteStatus_revoked": "Revoked",
-		"inviteStatus_expired": "Expired"
+		"inviteStatus_expired": "Expired",
+		"teamPolicies": {
+			"title": "Model policies",
+			"subtitle": "Per-provider model ACL",
+			"subtitleDesc": "When set, the resolver narrows VK allowlists to the union of these lists. Team-wide rules apply to every VK under this team.",
+			"empty": "No per-provider policy set yet. VKs will fall back to their own allowlist.",
+			"d6Hint": "Hint: leaving \"Allowed models\" empty denies every model of that provider (deny-by-default). If you only want to blacklist specific models, also fill in \"*\" or list the allowed models explicitly.",
+			"d6AutoFillWarning": "Only blacklisted models were set; \"allowed_models\" was auto-filled with [\"*\"] so the blacklist works as intended. Edit the row to override.",
+			"colProvider": "Provider",
+			"colAllowed": "Allowed models",
+			"colBlacklisted": "Blacklisted models",
+			"allowedPlaceholder": "comma-separated, e.g. gpt-4o-mini, gpt-4o or * for all",
+			"blacklistedPlaceholder": "comma-separated, e.g. o1",
+			"addPlaceholder": "Add a provider rule…",
+			"addRule": "Add rule",
+			"saveSuccess": "Saved policy for {{provider}}.",
+			"deleteSuccess": "Removed policy for {{provider}}."
+		},
+		"manageMembers": "Manage members"
 	}
 }

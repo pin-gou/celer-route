@@ -188,6 +188,7 @@ export const baseApi = createApi({
 		"GatewayDelta",
 		"TeamMembers",
 		"TeamInvitations",
+		"TeamModelPolicies",
 		"MCPPerUserHeaderCredentials",
 		"MCPLibrary",
 		"FeatureFlags",

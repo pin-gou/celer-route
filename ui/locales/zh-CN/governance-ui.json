@@ -447,6 +447,20 @@
 			"adminSignIn": "管理员登录入口",
 			"checkingSession": "正在验证会话…",
 			"githubRepository": "GitHub 仓库"
+		},
+		"userDetail": {
+			"profileTitle": "账号信息",
+			"vksDesc": "该用户名下的虚拟密钥。Provider Key 明文不会显示在这里。",
+			"teamScope": "所属团队：{{team}}",
+			"userScope": "用户私有",
+			"disableUser": "停用账号",
+			"disableVks": "禁用虚拟密钥",
+			"disableVksTitle": "禁用所有虚拟密钥？",
+			"disableVksDesc": "禁用 {{email}} 名下所有激活的虚拟密钥？Provider Key 不受影响。（将禁用 {{count}} 个 VK）",
+			"disableVksConfirm": "禁用 VK",
+			"notFoundTitle": "用户不存在",
+			"notFoundDesc": "请求的用户不存在或已被删除。",
+			"backToList": "返回用户列表"
 		}
 	},
 	"alerting": {
@@ -651,6 +665,24 @@
 		"inviteStatus_pending": "待接受",
 		"inviteStatus_accepted": "已接受",
 		"inviteStatus_revoked": "已撤销",
-		"inviteStatus_expired": "已过期"
+		"inviteStatus_expired": "已过期",
+		"teamPolicies": {
+			"title": "模型策略",
+			"subtitle": "按 provider 配置模型 ACL",
+			"subtitleDesc": "设置后，求解器会把 VK 白名单与此处取交集。团队级策略对该团队下所有 VK 生效。",
+			"empty": "尚未配置 provider 策略，VK 将按自身白名单生效。",
+			"d6Hint": "提示：「允许模型」留空等同于禁止该 provider 的全部模型（默认拒绝）。如果只想屏蔽部分模型，请同时填「*」或显式列出允许的模型。",
+			"d6AutoFillWarning": "只设置了黑名单，已自动补「允许模型」为 [\"*\"] 以保证黑名单按预期生效。可在行内继续编辑。",
+			"colProvider": "Provider",
+			"colAllowed": "允许模型",
+			"colBlacklisted": "禁用模型",
+			"allowedPlaceholder": "逗号分隔，如 gpt-4o-mini, gpt-4o 或 * 表示全部",
+			"blacklistedPlaceholder": "逗号分隔，如 o1",
+			"addPlaceholder": "新增 provider 策略…",
+			"addRule": "新增策略",
+			"saveSuccess": "已保存 {{provider}} 的策略。",
+			"deleteSuccess": "已移除 {{provider}} 的策略。"
+		},
+		"manageMembers": "管理成员"
 	}
 }

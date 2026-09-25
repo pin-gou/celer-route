@@ -28,5 +28,6 @@ export * from "./alertingApi";
 export * from "./sessionApi";
 export * from "./skillsApi";
 export * from "./teamsApi";
+export * from "./teamModelPoliciesApi";
 export * from "./usersApi";
 export * from "./webhooksApi";

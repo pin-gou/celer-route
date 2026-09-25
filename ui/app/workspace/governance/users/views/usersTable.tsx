@@ -28,13 +28,13 @@ import {
 	useDeleteUserMutation,
 	useDisableUserMutation,
 	useDisableUserVksMutation,
-	useGetUserQuery,
 	useListUsersQuery,
 	useResetUserPasswordTokenMutation,
 } from "@/lib/store";
 import type { AdminUserView } from "@/lib/store/apis/usersApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useDebouncedValue } from "@/hooks/useDebounce";
+import { Link } from "@tanstack/react-router";
 import { Copy, KeyRound, Loader2, MoreHorizontal, RefreshCw, Search, ShieldOff, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -68,7 +68,6 @@ export default function UsersTable() {
 	const [roleFilter, setRoleFilter] = useState<"all" | AdminUserView["role"]>("all");
 	const [offset, setOffset] = useState(0);
 
-	const [selectedUserID, setSelectedUserID] = useState<string | null>(null);
 	const [pendingDelete, setPendingDelete] = useState<AdminUserView | null>(null);
 	const [pendingDisable, setPendingDisable] = useState<AdminUserView | null>(null);
 	const [pendingReset, setPendingReset] = useState<AdminUserView | null>(null);
@@ -86,7 +85,6 @@ export default function UsersTable() {
 	);
 
 	const { data, isLoading, isFetching, error, refetch } = useListUsersQuery(queryParams, { skip: !hasViewAccess });
-	const { data: detail } = useGetUserQuery(selectedUserID as string, { skip: !selectedUserID });
 
 	const [disableUser] = useDisableUserMutation();
 	const [disableUserVks] = useDisableUserVksMutation();
@@ -120,7 +118,6 @@ export default function UsersTable() {
 			await deleteUser(user.id).unwrap();
 			toast.success(t("users.deleteSuccess", { email: user.email }));
 			setPendingDelete(null);
-			if (selectedUserID === user.id) setSelectedUserID(null);
 		} catch (e) {
 			toast.error(getErrorMessage(e));
 		}
@@ -262,14 +259,22 @@ export default function UsersTable() {
 							</TableRow>
 						) : (
 							users.map((user) => (
-								<TableRow
-									key={user.id}
-									data-testid={`users-row-${user.id}`}
-									className={selectedUserID === user.id ? "bg-muted/50" : undefined}
-									onClick={() => setSelectedUserID(user.id === selectedUserID ? null : user.id)}
-								>
-									<TableCell className="font-mono text-xs">{user.email}</TableCell>
-									<TableCell>{user.display_name || <span className="text-muted-foreground">—</span>}</TableCell>
+								<TableRow key={user.id} data-testid={`users-row-${user.id}`}>
+									<TableCell className="font-mono text-xs">
+										<Link
+											to="/workspace/governance/users/$userId"
+											params={{ userId: user.id }}
+											className="hover:underline"
+											data-testid={`users-row-link-${user.id}`}
+										>
+											{user.email}
+										</Link>
+									</TableCell>
+									<TableCell>
+										<Link to="/workspace/governance/users/$userId" params={{ userId: user.id }} className="hover:underline">
+											{user.display_name || <span className="text-muted-foreground">—</span>}
+										</Link>
+									</TableCell>
 									<TableCell>
 										<Badge variant="outline" data-testid={`users-role-${user.id}`}>
 											{t(`role_${user.role}`)}
@@ -286,7 +291,7 @@ export default function UsersTable() {
 									<TableCell className="text-right">
 										<DropdownMenu>
 											<DropdownMenuTrigger asChild>
-												<Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()} data-testid={`users-actions-${user.id}`}>
+												<Button variant="ghost" size="icon" data-testid={`users-actions-${user.id}`}>
 													<MoreHorizontal className="h-4 w-4" />
 												</Button>
 											</DropdownMenuTrigger>
@@ -333,75 +338,6 @@ export default function UsersTable() {
 
 			{users.length > 0 && (
 				<Pagination offset={offset} limit={PAGE_SIZE} totalCount={total} onOffsetChange={(next) => setOffset(next)} showItemsInfo />
-			)}
-
-			{selectedUserID && detail && (
-				<aside className="border-border bg-card space-y-3 rounded-sm border p-4" data-testid={`users-detail-${selectedUserID}`}>
-					<header className="flex items-center justify-between">
-						<div>
-							<h2 className="text-base font-semibold">{detail.user.display_name || detail.user.email}</h2>
-							<p className="text-muted-foreground font-mono text-xs">{detail.user.id}</p>
-						</div>
-						<Button variant="ghost" size="icon" onClick={() => setSelectedUserID(null)} data-testid="users-detail-close">
-							<X className="h-4 w-4" />
-						</Button>
-					</header>
-					<div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-						<div>
-							<div className="text-muted-foreground text-xs">{t("users.col_email")}</div>
-							<div className="font-mono text-xs">{detail.user.email}</div>
-						</div>
-						<div>
-							<div className="text-muted-foreground text-xs">{t("users.col_role")}</div>
-							<div>{t(`role_${detail.user.role}`)}</div>
-						</div>
-						<div>
-							<div className="text-muted-foreground text-xs">{t("users.col_status")}</div>
-							<div>
-								<Badge variant={statusVariant(detail.user.status)}>{t(`status_${detail.user.status}`)}</Badge>
-							</div>
-						</div>
-						<div>
-							<div className="text-muted-foreground text-xs">{t("users.col_last_login")}</div>
-							<div>{detail.user.last_login_at ? new Date(detail.user.last_login_at).toLocaleString() : t("users.never")}</div>
-						</div>
-					</div>
-					<div>
-						<h3 className="mb-2 text-sm font-semibold">
-							{t("users.detailTeams")} <span className="text-muted-foreground">({detail.memberships.length})</span>
-						</h3>
-						{detail.memberships.length === 0 ? (
-							<p className="text-muted-foreground text-xs">{t("users.noTeams")}</p>
-						) : (
-							<ul className="space-y-1 text-xs">
-								{detail.memberships.map((m) => (
-									<li key={m.team_id} className="font-mono">
-										{m.team_id} · {m.role_in_team} · {m.status}
-									</li>
-								))}
-							</ul>
-						)}
-					</div>
-					<div>
-						<h3 className="mb-2 text-sm font-semibold">
-							{t("users.detailVirtualKeys")} <span className="text-muted-foreground">({detail.virtual_keys.length})</span>
-						</h3>
-						{detail.virtual_keys.length === 0 ? (
-							<p className="text-muted-foreground text-xs">{t("users.noVks")}</p>
-						) : (
-							<ul className="space-y-1 text-xs">
-								{detail.virtual_keys.map((vk) => (
-									<li key={vk.id} className="flex items-center justify-between">
-										<span className="font-mono">{vk.name}</span>
-										<Badge variant={vk.is_active ? "default" : "secondary"}>
-											{vk.is_active ? t("users.vkActive") : t("users.vkInactive")}
-										</Badge>
-									</li>
-								))}
-							</ul>
-						)}
-					</div>
-				</aside>
 			)}
 
 			<AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
