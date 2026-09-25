@@ -200,9 +200,9 @@ export default function AlertRuleDetailView() {
 										{projection.risk_level}
 									</Badge>
 									<p className="text-muted-foreground mt-1 text-xs">
-										{projection.has_projection && projection.predicted_exhaustion
+										{projection.has_projection && projection.projection?.window_ends_at
 											? t("budgetProjection.exhaustion", {
-													when: new Date(projection.predicted_exhaustion).toLocaleDateString(),
+													when: new Date(projection.projection.window_ends_at).toLocaleDateString(),
 												})
 											: (projection.reason ?? t("budgetProjection.noProjection"))}
 									</p>

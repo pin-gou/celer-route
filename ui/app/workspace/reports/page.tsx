@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, ChartColumn, Coins, Database, FileBarChart, KeyRound, Scale } from "lucide-react";
+import { ArrowRight, ChartColumn, Coins, Database, FileBarChart, KeyRound, Scale, TrendingDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const SECTIONS = [
@@ -28,6 +28,12 @@ const SECTIONS = [
 		icon: Database,
 		titleKey: "cacheSavingsTitle" as const,
 		descKey: "cacheSavingsDesc" as const,
+	},
+	{
+		to: "/workspace/reports/budget-forecast" as const,
+		icon: TrendingDown,
+		titleKey: "budgetForecastTitle" as const,
+		descKey: "budgetForecastDesc" as const,
 	},
 	{
 		to: "/workspace/reports/idle-keys" as const,

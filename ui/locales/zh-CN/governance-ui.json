@@ -586,6 +586,8 @@
 		"costDesc": "按团队 / 成员 / 虚拟密钥的月度拆分。汇总卡片显示观察到的总额 + 预测支出 + 风险等级。",
 		"cacheSavingsTitle": "缓存节省",
 		"cacheSavingsDesc": "窗口内有多少请求由语义缓存服务，以及对应的估算节省。",
+		"budgetForecastTitle": "预算预测",
+		"budgetForecastDesc": "基于每小时花费快照预测各预算的耗尽时间。",
 		"idleKeysTitle": "闲置密钥",
 		"idleKeysDesc": "在 N 天内未被使用的虚拟密钥。包含从未分发过的新密钥。",
 		"open": "打开",
@@ -638,7 +640,22 @@
 				"low": "低风险",
 				"medium": "中风险",
 				"high": "高风险"
-			}
+			},
+			"budgetForecastLink": "查看预算预测 →"
+		},
+		"budgetForecast": {
+			"title": "预算预测",
+			"subtitle": "根据每小时预算快照预测每个预算的耗尽时间。",
+			"usage": "使用率",
+			"used": "已用",
+			"ratePerHour": "速率",
+			"exhaustion": "预计耗尽",
+			"exhausted": "已耗尽",
+			"lastSampled": "最近采样",
+			"noProjectionReason": "暂无快照——首次每小时采样后开始预测。",
+			"empty": "尚未配置任何预算。",
+			"notesTitle": "说明",
+			"note1": "预测对最近的每小时 budget_snapshots 做线性拟合。样本不足 2 个时退化为当前已用/上限百分比。"
 		},
 		"idleKeys": {
 			"title": "闲置密钥",

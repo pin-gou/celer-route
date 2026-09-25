@@ -586,6 +586,8 @@
 		"costDesc": "Monthly team / member / virtual-key split. The summary card shows observed total + projected spend + risk level.",
 		"cacheSavingsTitle": "Cache savings",
 		"cacheSavingsDesc": "How many requests were served from the semantic cache in the window and what they would have cost.",
+		"budgetForecastTitle": "Budget forecast",
+		"budgetForecastDesc": "Predict when each budget runs dry from hourly spend snapshots.",
 		"idleKeysTitle": "Idle keys",
 		"idleKeysDesc": "Virtual keys that haven't been used in N days. Includes brand-new keys that have never been shared.",
 		"open": "Open",
@@ -638,7 +640,22 @@
 				"low": "Low risk",
 				"medium": "Medium risk",
 				"high": "High risk"
-			}
+			},
+			"budgetForecastLink": "View budget forecasts →"
+		},
+		"budgetForecast": {
+			"title": "Budget forecast",
+			"subtitle": "Per-budget predicted exhaustion time from hourly budget snapshots.",
+			"usage": "Usage",
+			"used": "Used",
+			"ratePerHour": "Rate",
+			"exhaustion": "Exhausts",
+			"exhausted": "Exhausted now",
+			"lastSampled": "Last sampled",
+			"noProjectionReason": "No snapshots yet — projection will populate after the first hourly sample.",
+			"empty": "No budgets configured yet.",
+			"notesTitle": "Notes",
+			"note1": "Projection fits a line through the trailing hourly budget_snapshots. With fewer than 2 samples it falls back to the current used/max percentage."
 		},
 		"idleKeys": {
 			"title": "Idle keys",

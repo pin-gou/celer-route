@@ -2,9 +2,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getErrorMessage, useGetCostForecastQuery, useGetCostSummaryQuery } from "@/lib/store";
-import { AlertTriangle, BarChart3, Coins, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, BarChart3, Coins, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "@tanstack/react-router";
 
 function formatNumber(n: number | undefined): string {
 	if (n === undefined || n === null) return "—";
@@ -128,6 +129,14 @@ export default function CostView() {
 								<p className={`mt-1 text-xs ${riskColor}`} data-testid="cost-report-risk">
 									{t(`cost.risk.${risk}`)}
 								</p>
+								<Link
+									to="/workspace/reports/budget-forecast"
+									className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-blue-400"
+									data-testid="cost-report-forecast-link"
+								>
+									<TrendingDown className="h-3 w-3" />
+									{t("cost.budgetForecastLink")}
+								</Link>
 							</CardContent>
 						</Card>
 

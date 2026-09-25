@@ -195,6 +195,19 @@ export interface CacheSavingsResponse {
 }
 
 // ── Budget projection ─────────────────────────────────────────────
+// GET /api/governance/budgets/{id}/projection — US17. Mirrors
+// handlers/alerting.go budgetProjection + BudgetProjection: with ≥2
+// hourly budget_snapshots it fits a line and reports the predicted
+// exhaustion time + risk; otherwise it degrades to used/max + risk
+// (has_projection=false) with a reason string.
+
+export interface BudgetProjection {
+	rate_per_hour: number;
+	predicted_used_at_exhaustion: number;
+	hours_to_exhaustion?: number;
+	window_ends_at?: string;
+	risk_level: string;
+}
 
 export interface BudgetProjectionResponse {
 	budget_id: string;
@@ -202,8 +215,10 @@ export interface BudgetProjectionResponse {
 	max_amount: number;
 	usage_percent: number;
 	risk_level: string;
+	sampled_at?: string;
+	sample_count?: number;
+	projection?: BudgetProjection;
 	has_projection: boolean;
-	predicted_exhaustion?: string;
 	reason?: string;
 }
 
