@@ -55,6 +55,7 @@ func (h *StandardPriceHandler) RegisterRoutes(r *router.Router, middlewares ...s
 	r.GET("/api/reports/standard-prices/preview", lib.ChainMiddlewares(h.preview, middlewares...))
 	r.GET("/api/reports/team-pricing-profiles", lib.ChainMiddlewares(h.listProfiles, middlewares...))
 	r.PUT("/api/reports/team-pricing-profiles/{team_id}", lib.ChainMiddlewares(h.upsertProfile, middlewares...))
+	r.DELETE("/api/reports/team-pricing-profiles/{team_id}", lib.ChainMiddlewares(h.deleteProfile, middlewares...))
 }
 
 // standardPriceRequest is the caller-editable shape. The id is server-minted
@@ -323,6 +324,30 @@ func (h *StandardPriceHandler) upsertProfile(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	SendJSON(ctx, row)
+}
+
+// deleteProfile handles DELETE /api/reports/team-pricing-profiles/:team_id
+// (L-1). Removes the team's custom pricing profile and falls back to the
+// shared standard_prices book. 404 when the team has no profile row.
+func (h *StandardPriceHandler) deleteProfile(ctx *fasthttp.RequestCtx) {
+	if h.store == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "config store unavailable")
+		return
+	}
+	teamID := ctx.UserValue("team_id").(string)
+	if teamID == "" {
+		SendError(ctx, fasthttp.StatusBadRequest, "team_id is required")
+		return
+	}
+	if err := h.store.DeleteTeamPricingProfile(ctx, teamID); err != nil {
+		if errors.Is(err, configstore.ErrNotFound) {
+			SendError(ctx, fasthttp.StatusNotFound, "team pricing profile not found")
+			return
+		}
+		SendError(ctx, fasthttp.StatusInternalServerError, "failed to delete team pricing profile: "+err.Error())
+		return
+	}
+	SendJSON(ctx, map[string]any{"ok": true})
 }
 
 // parseQueryInt reads a query parameter as int; returns (0, false) when the

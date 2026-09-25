@@ -193,14 +193,20 @@ func (e *AlertEvaluator) fireAndEnqueue(
 	}
 	endpointIDs := e.resolveChannelEndpoints(ctx, rule)
 	if len(endpointIDs) == 0 {
-		_ = e.store.UpdateAlertEventDeliveryStatus(ctx, event.ID, configstoreTables.AlertEventDeliveryStatusSkipped)
+		if err := e.store.UpdateAlertEventDeliveryStatus(ctx, event.ID, configstoreTables.AlertEventDeliveryStatusSkipped); err != nil {
+			e.logger.Warn("alert: mark event %s delivery as skipped failed: %v", event.ID, err)
+		}
 		return
 	}
 	queued := e.dispatcher.EnqueueAlertEvent(ctx, rule, event, endpointIDs)
 	if queued > 0 {
-		_ = e.store.UpdateAlertEventDeliveryStatus(ctx, event.ID, configstoreTables.AlertEventDeliveryStatusDelivered)
+		if err := e.store.UpdateAlertEventDeliveryStatus(ctx, event.ID, configstoreTables.AlertEventDeliveryStatusDelivered); err != nil {
+			e.logger.Warn("alert: mark event %s delivery as delivered failed: %v", event.ID, err)
+		}
 	} else {
-		_ = e.store.UpdateAlertEventDeliveryStatus(ctx, event.ID, configstoreTables.AlertEventDeliveryStatusFailed)
+		if err := e.store.UpdateAlertEventDeliveryStatus(ctx, event.ID, configstoreTables.AlertEventDeliveryStatusFailed); err != nil {
+			e.logger.Warn("alert: mark event %s delivery as failed failed: %v", event.ID, err)
+		}
 	}
 }
 

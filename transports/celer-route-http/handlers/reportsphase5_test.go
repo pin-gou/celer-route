@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/pin-gou/celer-route/framework/configstore"
 	"github.com/pin-gou/celer-route/framework/configstore/tables"
 	"github.com/pin-gou/celer-route/framework/logstore"
+	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
 )
 
@@ -654,5 +657,105 @@ func TestCacheStatsHandlerWithoutPlugin(t *testing.T) {
 	}
 	if body["hits"].(float64) != 0 {
 		t.Errorf("expected zeroed snapshot, got %#v", body)
+	}
+}
+
+// TestReconciliationPlanBlocksOnUnreasonableRatio (M-4): a provider/gateway
+// ratio beyond the 5× sanity ceiling must refuse to apply and leave the
+// datasheet untouched. This pins the guard that stops a wrong invoice
+// (mismatched period/provider) from scaling every datasheet row by a
+// nonsense factor.
+func TestReconciliationPlanBlocksOnUnreasonableRatio(t *testing.T) {
+	store := &fakeReconciliationStore{
+		batch: &tables.TableBillingReconciliation{
+			ID:           "recon-ratio",
+			Provider:     "openai",
+			PeriodStart:  time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+			PeriodEnd:    time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC),
+			Status:       tables.ReconciliationStatusMatched,
+			GatewayCost:  10,  // tiny gateway side
+			ProviderCost: 100, // 10× the gateway — way past the 5× ceiling
+		},
+		items: []tables.TableBillingReconItem{{Model: "gpt-4o", GatewayCost: 10, ProviderCost: 100}},
+	}
+	h := NewReportsReconciliationHandler(store, nil, &fakeDatasheetStore{}, nil)
+	plan, err := h.plan(newReportsCtx(), "recon-ratio")
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if plan.CanApply {
+		t.Fatal("expected can_apply=false for a 10× provider/gateway ratio")
+	}
+	if !strings.Contains(plan.BlockedReason, "sanity ceiling") {
+		t.Errorf("blocked reason = %q", plan.BlockedReason)
+	}
+	if len(plan.Changes) != 0 {
+		t.Errorf("changes = %d, want 0 (datasheet must be untouched)", len(plan.Changes))
+	}
+}
+
+// buildUploadCtx constructs a fasthttp RequestCtx with a multipart form
+// containing an invoice CSV file plus optional provider/period fields. Used
+// by the H-3 upload boundary tests below.
+func buildUploadCtx(t *testing.T, provider, period, csvContent string) *fasthttp.RequestCtx {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", "invoice.csv")
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := fw.Write([]byte(csvContent)); err != nil {
+		t.Fatalf("write file content: %v", err)
+	}
+	if provider != "" {
+		_ = mw.WriteField("provider", provider)
+	}
+	if period != "" {
+		_ = mw.WriteField("period", period)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+	ctx := newReportsCtx()
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.Header.SetContentType(mw.FormDataContentType())
+	ctx.Request.SetBody(buf.Bytes())
+	return ctx
+}
+
+// TestReconciliationUploadRejectsOversizeCSV (H-3): a CSV larger than the
+// 10 MB byte cap is rejected with 413 before the store is touched.
+func TestReconciliationUploadRejectsOversizeCSV(t *testing.T) {
+	// Build a single-row CSV whose payload alone is > 10 MB so the byte
+	// cap trip-wires before parseInvoiceCSV ever runs.
+	hugeCSV := "model,cost\ngpt-4o," + strings.Repeat("0", 11_000_000) + ".0\n"
+	ctx := buildUploadCtx(t, "openai", "2026-09", hugeCSV)
+	h := &ReportsReconciliationHandler{}
+	h.upload(ctx)
+	if ctx.Response.StatusCode() != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", ctx.Response.StatusCode())
+	}
+	if !strings.Contains(string(ctx.Response.Body()), "size limit") {
+		t.Errorf("body = %s", ctx.Response.Body())
+	}
+}
+
+// TestReconciliationUploadRejectsTooManyRows (H-3): a CSV under the byte cap
+// but with more than 50k data rows is rejected with 413.
+func TestReconciliationUploadRejectsTooManyRows(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("model,cost\n")
+	for i := 0; i < 50001; i++ {
+		b.WriteString("gpt-4o,1.0\n")
+	}
+	ctx := buildUploadCtx(t, "openai", "2026-09", b.String())
+	h := &ReportsReconciliationHandler{}
+	h.upload(ctx)
+	if ctx.Response.StatusCode() != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", ctx.Response.StatusCode())
+	}
+	if !strings.Contains(string(ctx.Response.Body()), "row limit") {
+		t.Errorf("body = %s", ctx.Response.Body())
 	}
 }

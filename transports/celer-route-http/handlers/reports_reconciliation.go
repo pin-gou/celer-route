@@ -52,6 +52,23 @@ import (
 // keeps the before/after numbers comparable across batches.
 const datasheetChatMode = "chat"
 
+// maxReasonableRatio is the sanity ceiling for provider/gateway cost ratio
+// (M-4). A ratio beyond 5× almost always means the wrong invoice was
+// uploaded (mismatched period/provider) or the usage API returned garbage —
+// applying it would scale every datasheet row by a nonsense factor. The
+// preview refuses to apply in that case and leaves the datasheet untouched.
+const maxReasonableRatio = 5.0
+
+// maxInvoiceUploadBytes caps the raw invoice CSV upload at 10 MB (H-3).
+// The gateway's default body cap is far larger (100 MB); a malformed
+// multipart upload should not drag that whole budget into memory.
+const maxInvoiceUploadBytes = 10 << 20
+
+// maxInvoiceUploadRows caps a single invoice at 50k data rows. Supplier
+// invoices for a month of a provider fit comfortably under this; anything
+// beyond it is either a multi-month dump or a botched export.
+const maxInvoiceUploadRows = 50_000
+
 // ReconciliationStore is the narrow configstore surface this handler needs.
 // Declared as an interface so tests can drive the handler without a DB.
 type ReconciliationStore interface {
@@ -305,9 +322,16 @@ func (h *ReportsReconciliationHandler) upload(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	defer f.Close()
-	body, err := io.ReadAll(f)
+	// H-3: bound the upload — 10 MB raw bytes, 50k data rows. io.LimitReader
+	// reads one byte past the cap so we can distinguish "over the limit"
+	// from "exactly the limit"; the size check below then rejects.
+	body, err := io.ReadAll(io.LimitReader(f, maxInvoiceUploadBytes+1))
 	if err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, "read upload")
+		return
+	}
+	if len(body) > maxInvoiceUploadBytes {
+		SendError(ctx, fasthttp.StatusRequestEntityTooLarge, fmt.Sprintf("invoice CSV exceeds the %d MB size limit", maxInvoiceUploadBytes/(1<<20)))
 		return
 	}
 	records, err := parseInvoiceCSV(body)
@@ -317,6 +341,10 @@ func (h *ReportsReconciliationHandler) upload(ctx *fasthttp.RequestCtx) {
 	}
 	if len(records) == 0 {
 		SendError(ctx, fasthttp.StatusBadRequest, "invoice CSV has no data rows")
+		return
+	}
+	if len(records) > maxInvoiceUploadRows {
+		SendError(ctx, fasthttp.StatusRequestEntityTooLarge, fmt.Sprintf("invoice CSV exceeds the %d data-row limit", maxInvoiceUploadRows))
 		return
 	}
 
@@ -573,6 +601,14 @@ func (h *ReportsReconciliationHandler) plan(ctx *fasthttp.RequestCtx, id string)
 	}
 
 	ratio := batch.ProviderCost / batch.GatewayCost
+	if ratio > maxReasonableRatio {
+		// M-4: refuse a wildly-off calibration instead of scaling every
+		// datasheet row by a nonsense factor. CanApply stays false and
+		// the datasheet is untouched — the operator must re-check the
+		// invoice period/provider before retrying.
+		plan.BlockedReason = fmt.Sprintf("provider/gateway cost ratio %.2f exceeds the %.1fx sanity ceiling; refusing to apply a correction this large — verify the invoice period and provider first", ratio, maxReasonableRatio)
+		return plan, nil
+	}
 	plan.CorrectionRatio = ratio
 
 	rows, err := h.datasheet.GetModelPrices(ctx)
