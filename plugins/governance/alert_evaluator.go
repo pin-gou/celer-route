@@ -19,8 +19,12 @@ import (
 // at warn and swallowed. This is the "失败绝不阻断" contract from
 // temp/team/02-alerting/data-model.md §7, and it matches the webhook
 // dispatcher's own behaviour for queue / delivery failures.
+//
+// rules is the in-process TTL cache in front of ListAlertRulesForScope —
+// see alertrulecache.go for the rationale (G6/C-4).
 type AlertEvaluator struct {
 	store      AlertEvaluatorStore
+	rules      *AlertRuleCache
 	logger     schemas.Logger
 	dispatcher *webhooks.Dispatcher
 	now        func() time.Time
@@ -46,13 +50,41 @@ type AlertEvaluatorStore interface {
 // NewAlertEvaluator builds a stopped evaluator. dispatcher may be nil when
 // delivery is not configured; the evaluator still records events but skips
 // the webhook enqueue, matching the dispatcher's nil-tolerant pattern.
+//
+// rules may be nil for legacy callers (the cache will be created lazily
+// on first use); production code wires a shared cache via SetRulesCache
+// so write-path handlers can invalidate it.
 func NewAlertEvaluator(store AlertEvaluatorStore, logger schemas.Logger, dispatcher *webhooks.Dispatcher) *AlertEvaluator {
 	return &AlertEvaluator{
 		store:      store,
+		rules:      NewAlertRuleCache(60 * time.Second),
 		logger:     logger,
 		dispatcher: dispatcher,
 		now:        func() time.Time { return time.Now().UTC() },
 	}
+}
+
+// SetRulesCache replaces the in-process cache used on the hot path. Pass
+// the same instance the write-path handlers invalidate so a rule CRUD
+// immediately affects the next soft-threshold evaluation. The default
+// cache created by NewAlertEvaluator is fine when no write-path handler
+// can reach the evaluator (e.g. tests).
+func (e *AlertEvaluator) SetRulesCache(cache *AlertRuleCache) {
+	if e == nil || cache == nil {
+		return
+	}
+	e.rules = cache
+}
+
+// Rules returns the cache the evaluator is using. Callers that mutate
+// alert rules (createAlertRule / updateAlertRule / deleteAlertRule /
+// config reload) call Invalidate() on it so the next EvaluateSoftThresholds
+// re-fetches.
+func (e *AlertEvaluator) Rules() *AlertRuleCache {
+	if e == nil {
+		return nil
+	}
+	return e.rules
 }
 
 // EvaluateSoftThresholds inspects every budget in the result against the
@@ -119,7 +151,13 @@ func (e *AlertEvaluator) evaluateOne(ctx context.Context, scopeType, scopeID str
 		return
 	}
 	percent := budget.CurrentUsage / max * 100
-	rules, err := e.store.ListAlertRulesForScope(ctx, scopeType, scopeID)
+	// G6/C-4: route the rule lookup through the in-process TTL cache so the
+	// hot path doesn't hit the DB on every request. evaluateOne is called
+	// once per (budget × scope) pair, and most pairs hit the same scope
+	// repeatedly — the cache cuts N × M sync reads down to roughly N+M
+	// per TTL window. The cache is invalidated by the write-path handlers
+	// (createAlertRule / updateAlertRule / deleteAlertRule / config reload).
+	rules, err := e.rules.Get(ctx, e.store, scopeType, scopeID)
 	if err != nil {
 		e.logger.Warn("alert: list rules for %s/%s failed: %v", scopeType, scopeID, err)
 		return

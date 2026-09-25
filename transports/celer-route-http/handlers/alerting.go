@@ -34,6 +34,17 @@ type AlertingHandler struct {
 	store      configstore.ConfigStore
 	dispatcher *webhooks.Dispatcher
 	sidekiq    *sidekiq.Runner
+	rulesCache AlertRulesInvalidator // optional — see InvalidateRules below
+}
+
+// AlertRulesInvalidator is the tiny seam the handlers package depends on
+// from the governance plugin: writing to alert_rules must drop the in-
+// process cache so the next soft-threshold evaluation repopulates. The
+// concrete *governance.AlertRuleCache satisfies this; declaring it here
+// (instead of importing plugins/governance) keeps the layering rule
+// transports → plugins intact.
+type AlertRulesInvalidator interface {
+	Invalidate()
 }
 
 // NewAlertingHandler builds the handler. dispatcher and sidekiq may be
@@ -42,6 +53,22 @@ type AlertingHandler struct {
 // rule-test and snapshot-now return 503 with a clear error.
 func NewAlertingHandler(store configstore.ConfigStore, dispatcher *webhooks.Dispatcher, runner *sidekiq.Runner) *AlertingHandler {
 	return &AlertingHandler{store: store, dispatcher: dispatcher, sidekiq: runner}
+}
+
+// SetRulesCache wires the alert-rules cache so write-path handlers can
+// invalidate it after a successful CRUD. Pass nil to disable (handlers
+// silently skip invalidation when no cache is set, so an enterprise-only
+// build without alert rules keeps working).
+func (h *AlertingHandler) SetRulesCache(c AlertRulesInvalidator) {
+	h.rulesCache = c
+}
+
+// invalidateRules is the single invalidation point. nil-safe: handlers
+// that run before SetRulesCache (e.g. legacy callers) keep working.
+func (h *AlertingHandler) invalidateRules() {
+	if h.rulesCache != nil {
+		h.rulesCache.Invalidate()
+	}
 }
 
 // RegisterRoutes mounts the alert rule + event + projection endpoints.
@@ -111,6 +138,7 @@ func (h *AlertingHandler) createAlertRule(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusBadRequest, "Failed to create alert rule: "+err.Error())
 		return
 	}
+	h.invalidateRules()
 	SendJSON(ctx, rule)
 }
 
@@ -145,6 +173,7 @@ func (h *AlertingHandler) updateAlertRule(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusBadRequest, "Failed to update alert rule: "+err.Error())
 		return
 	}
+	h.invalidateRules()
 	SendJSON(ctx, merged)
 }
 
@@ -166,6 +195,7 @@ func (h *AlertingHandler) deleteAlertRule(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to delete alert rule: "+err.Error())
 		return
 	}
+	h.invalidateRules()
 	SendJSON(ctx, map[string]any{"deleted": id})
 }
 

@@ -23,6 +23,10 @@ type fakeAlertStore struct {
 
 	createCalls int
 	updateCalls int
+	// listCallsScope records (scopeType, scopeID) for each ListAlertRulesForScope
+	// call, so cache tests can assert "the DB was hit exactly once for this
+	// scope across N hot-path evaluations".
+	listCallsScope []string
 }
 
 func newFakeAlertStore() *fakeAlertStore {
@@ -33,6 +37,7 @@ func newFakeAlertStore() *fakeAlertStore {
 
 func (f *fakeAlertStore) ListAlertRulesForScope(_ context.Context, scopeType, scopeID string) ([]tables.TableAlertRule, error) {
 	f.mu.Lock()
+	f.listCallsScope = append(f.listCallsScope, scopeType+"\x00"+scopeID)
 	defer f.mu.Unlock()
 	var out []tables.TableAlertRule
 	for _, r := range f.rules {
@@ -263,4 +268,122 @@ func TestAlertEvaluatorEmptyBudgetInfoShortcircuits(t *testing.T) {
 	// We assert no panics; the fake doesn't count List calls but the
 	// absence of panic + create is enough.
 	assert.Equal(t, 0, store.createCalls)
+}
+
+// ── AlertRuleCache tests (G6/C-4) ─────────────────────────────────────
+
+// TestAlertRuleCacheServesFromMemoryWithinTTL asserts the hot path pays
+// exactly one DB read per (scope_type, scope_id) per TTL window. Without
+// the cache the same scope would be hit N times for N requests, which
+// the 5-15ms latency budget can't absorb.
+func TestAlertRuleCacheServesFromMemoryWithinTTL(t *testing.T) {
+	store := newFakeAlertStore()
+	store.rules = []tables.TableAlertRule{
+		{ID: "r1", Name: "team-soft", ScopeType: "team", ScopeID: "t-1",
+			Status: tables.AlertStatusEnabled, Metric: tables.AlertMetricBudgetUsagePercent, Threshold: 80, Comparison: tables.AlertComparisonGTE, CooldownMinutes: 60},
+	}
+	cache := NewAlertRuleCache(time.Minute)
+
+	// First Get → store hit (count = 1).
+	if _, err := cache.Get(context.Background(), store, "team", "t-1"); err != nil {
+		t.Fatalf("first Get: %v", err)
+	}
+	// Nine more Gets → zero DB hits; cache is still warm.
+	for i := 0; i < 9; i++ {
+		if _, err := cache.Get(context.Background(), store, "team", "t-1"); err != nil {
+			t.Fatalf("subsequent Get %d: %v", i, err)
+		}
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.listCallsScope) != 1 {
+		t.Errorf("store.ListAlertRulesForScope call count = %d, want 1 (only the first Get should hit the DB)", len(store.listCallsScope))
+	}
+}
+
+// TestAlertRuleCacheInvalidateDropsAllEntries covers the write-path
+// invalidation contract: after SetRulesCache / Invalidate, the next Get
+// repopulates from the store. Without this, a freshly created rule
+// wouldn't fire until its key's TTL elapsed.
+func TestAlertRuleCacheInvalidateDropsAllEntries(t *testing.T) {
+	store := newFakeAlertStore()
+	store.rules = []tables.TableAlertRule{
+		{ID: "r1", ScopeType: "team", ScopeID: "t-1", Status: tables.AlertStatusEnabled},
+	}
+	cache := NewAlertRuleCache(time.Minute)
+	// Warm cache.
+	if _, err := cache.Get(context.Background(), store, "team", "t-1"); err != nil {
+		t.Fatalf("warm Get: %v", err)
+	}
+	if cache.Len() != 1 {
+		t.Fatalf("cache.Len() = %d, want 1 after warm", cache.Len())
+	}
+	// Simulate a write-path handler calling Invalidate().
+	cache.Invalidate()
+	if cache.Len() != 0 {
+		t.Fatalf("cache.Len() = %d, want 0 after Invalidate", cache.Len())
+	}
+	// Next Get must hit the store again.
+	if _, err := cache.Get(context.Background(), store, "team", "t-1"); err != nil {
+		t.Fatalf("post-invalidate Get: %v", err)
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.listCallsScope) != 2 {
+		t.Errorf("store call count = %d, want 2 (warm + post-invalidate)", len(store.listCallsScope))
+	}
+}
+
+// TestAlertRuleCacheScopeIsolation pins the cache key contract: a team
+// scope and the global scope must live in distinct entries even when the
+// underlying store returns the same union of rules. ListAlertRulesForScope
+// always folds global rules into the result for any non-global scope; the
+// cache must keep each call site separate so InvalidateScope() can target
+// one without flushing the other.
+func TestAlertRuleCacheScopeIsolation(t *testing.T) {
+	store := newFakeAlertStore()
+	// Two distinct rules; one global, one for a team. The fake returns
+	// the union (global + matching scope) for any query.
+	store.rules = []tables.TableAlertRule{
+		{ID: "g1", ScopeType: tables.AlertScopeGlobal, ScopeID: "", Status: tables.AlertStatusEnabled},
+		{ID: "t1", ScopeType: "team", ScopeID: "t-1", Status: tables.AlertStatusEnabled},
+	}
+	cache := NewAlertRuleCache(time.Minute)
+	globalRules, err := cache.Get(context.Background(), store, tables.AlertScopeGlobal, "")
+	if err != nil {
+		t.Fatalf("global Get: %v", err)
+	}
+	teamRules, err := cache.Get(context.Background(), store, "team", "t-1")
+	if err != nil {
+		t.Fatalf("team Get: %v", err)
+	}
+	// global scope: just g1 (no team rule applies to "global").
+	if len(globalRules) != 1 || globalRules[0].ID != "g1" {
+		t.Errorf("global rules = %+v, want only g1", globalRules)
+	}
+	// team scope: union of global + matching team rule.
+	if len(teamRules) != 2 {
+		t.Errorf("team rules count = %d, want 2 (g1 + t1)", len(teamRules))
+	}
+	// Keys must be two distinct entries — no cross-contamination under
+	// the cache's internal keying (the test for that is the Len/Keys
+	// counts below, not the rule contents).
+	keys := cache.Keys()
+	if len(keys) != 2 {
+		t.Errorf("cache keys = %v, want 2 distinct scope entries", keys)
+	}
+	// InvalidateScope(team) must drop only the team entry; global survives.
+	cache.InvalidateScope("team", "t-1")
+	if cache.Len() != 1 {
+		t.Errorf("cache.Len() after InvalidateScope(team) = %d, want 1", cache.Len())
+	}
+	// And the surviving entry's rules must still be the global-only set
+	// (no team rule leaks across the invalidation).
+	got, err := cache.Get(context.Background(), store, tables.AlertScopeGlobal, "")
+	if err != nil {
+		t.Fatalf("survivor Get: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "g1" {
+		t.Errorf("survivor rules = %+v, want only g1", got)
+	}
 }

@@ -2672,8 +2672,21 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	// Phase 3 (02-alerting): alert-rule CRUD + alert-event queries +
 	// budget projection. The handler is safe to construct even when the
 	// sidekiq runner or dispatcher is nil — it just downgrades the
-	// "snapshot-now" and "test rule" endpoints to 503.
+	// "snapshot-now" and "test rule" endpoints to 503. The rule cache is
+	// wired below (G6/C-4) so writes to alert_rules invalidate the in-
+	// process cache the hot path reads.
 	alertingHandler := handlers.NewAlertingHandler(s.Config.ConfigStore, s.WebhookDispatcher, s.SidekiqRunner)
+	if gov, gpErr := s.getGovernancePlugin(); gpErr == nil && gov != nil {
+		if gp, ok := gov.(*governance.GovernancePlugin); ok {
+			// Share the evaluator's cache with the handler: both are
+			// constructed here, so the same instance can be flipped into
+			// both without any extra plumbing. Without this seam a freshly
+			// created rule wouldn't fire until the cache TTL elapsed.
+			evaluator := governance.NewAlertEvaluator(s.Config.ConfigStore, logger, s.WebhookDispatcher)
+			gp.SetAlertEvaluator(evaluator)
+			alertingHandler.SetRulesCache(evaluator.Rules())
+		}
+	}
 	alertingHandler.RegisterRoutes(s.Router, middlewares...)
 	// Phase 4 (03-cost-allocation): standard_prices + team_pricing_profiles
 	// admin surface, plus the cost-allocation reports (summary / trend /
@@ -3226,18 +3239,12 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 		s.SidekiqRunner = sidekiq.New(s.Config.ConfigStore, logger, 4, "")
 	}
 
-	// Wire the alert loop (Phase 3 / 02-alerting). The AlertEvaluator
-	// sits between the governance decision and the wire response so soft
-	// thresholds can fire inline without ever blocking a request. The
-	// governance plugin must already be loaded by the time we get here;
-	// if it is missing (enterprise-only build), we silently skip the
-	// wiring and the alerting handler still serves its read-only paths.
-	if gov, gpErr := s.getGovernancePlugin(); gpErr == nil && gov != nil {
-		if gp, ok := gov.(*governance.GovernancePlugin); ok {
-			evaluator := governance.NewAlertEvaluator(s.Config.ConfigStore, logger, s.WebhookDispatcher)
-			gp.SetAlertEvaluator(evaluator)
-		}
-	}
+	// G6/C-4: AlertEvaluator is wired in RegisterAPIRoutes (along with the
+// rules-cache invalidation channel into the alerting handler). The HTTP
+// build is the only build that ever uses alert rules today — SDK-only
+// deployments have no admin surface to mutate rules and so neither
+// require the evaluator nor the cache invalidation. Re-introduce an
+// unconditional SetAlertEvaluator here when an SDK-only alert path lands.
 
 	// Register the alert-loop background jobs on the sidekiq runner. The
 	// budget snapshot job is the source of the projection endpoint's data;
