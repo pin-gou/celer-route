@@ -8,6 +8,7 @@ import (
 	"github.com/fasthttp/router"
 	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/logstore"
 	"github.com/pin-gou/celer-route/transports/celer-route-http/lib"
 	"github.com/valyala/fasthttp"
 )
@@ -20,12 +21,15 @@ import (
 // these handlers; the boundary from data-model.md §5.1 is enforced
 // here at the wire layer, not just at the store.
 type MemberPortalHandler struct {
-	store configstore.ConfigStore
+	store    configstore.ConfigStore
+	logStore logstore.LogStore
 }
 
 // NewMemberPortalHandler builds the handler. store must be non-nil.
-func NewMemberPortalHandler(store configstore.ConfigStore) *MemberPortalHandler {
-	return &MemberPortalHandler{store: store}
+// logStore may be nil — when the gateway runs without log persistence,
+// the /usage endpoint degrades to counts only (no cost / token histogram).
+func NewMemberPortalHandler(store configstore.ConfigStore, logStore logstore.LogStore) *MemberPortalHandler {
+	return &MemberPortalHandler{store: store, logStore: logStore}
 }
 
 // RegisterRoutes wires the four member-only endpoints. The setup-guide
@@ -115,11 +119,16 @@ func (h *MemberPortalHandler) virtualKeyQuota(ctx *fasthttp.RequestCtx) {
 	})
 }
 
-// usage handles GET /api/member/usage. Phase 2 surfaces the basic
-// shape only — counts and last_active are read directly from the user
-// row. The detailed histogram lands when the UI wires up (it's the
-// same call as /api/logs/histogram with user_id filter, just delegated
-// in a follow-up).
+// usage handles GET /api/member/usage. Returns the current month's cost
+// and token histograms for the member's own virtual keys. The handler
+// fetches the member's VKs from the config store, then queries the log
+// store filtered by those VK IDs — so a member can never see another
+// member's usage, and the data comes from the same source the admin
+// /api/logs/histogram uses (no separate aggregation pipeline).
+//
+// When the log store is nil (gateway running without log persistence),
+// the handler degrades to just the user profile + VK count; the UI
+// renders an empty state instead of erroring.
 func (h *MemberPortalHandler) usage(ctx *fasthttp.RequestCtx) {
 	userID, ok := ctx.UserValue(schemas.BifrostContextKeyMemberUserID).(string)
 	if !ok || userID == "" {
@@ -135,14 +144,81 @@ func (h *MemberPortalHandler) usage(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusUnauthorized, "Unauthorized")
 		return
 	}
+
+	// Get the member's VKs — we filter the log query by these IDs so
+	// the member never sees traffic from VKs they don't own.
+	vks, vkCount, err := h.store.ListVirtualKeysByUserID(ctx, userID, 100, 0)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to list virtual keys: %v", err))
+		return
+	}
+
+	// Build the "current calendar month" window for the histogram.
+	now := time.Now().UTC()
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	filters := logstore.SearchFilters{
+		StartTime: &monthStart,
+		EndTime:   &now,
+	}
+	vkIDs := make([]string, 0, len(vks))
+	for _, vk := range vks {
+		vkIDs = append(vkIDs, vk.ID)
+	}
+	filters.VirtualKeyIDs = vkIDs
+
+	usage := map[string]any{
+		"vk_count":     vkCount,
+		"period_start": monthStart.Format(time.RFC3339),
+		"period_end":   now.Format(time.RFC3339),
+	}
+
+	if h.logStore != nil && len(vkIDs) > 0 {
+		bucket := calculateBucketSize(&monthStart, &now)
+
+		// Cost histogram: total cost per bucket with model breakdown.
+		costHist, err := h.logStore.GetCostHistogram(ctx, filters, bucket)
+		if err == nil && costHist != nil {
+			totalCost := 0.0
+			for _, b := range costHist.Buckets {
+				totalCost += b.TotalCost
+			}
+			usage["total_cost"] = totalCost
+			usage["cost_buckets"] = costHist.Buckets
+			usage["bucket_size_seconds"] = costHist.BucketSizeSeconds
+			usage["models"] = costHist.Models
+		}
+
+		// Token histogram: prompt / completion / total per bucket.
+		tokenHist, err := h.logStore.GetTokenHistogram(ctx, filters, bucket)
+		if err == nil && tokenHist != nil {
+			var prompt, completion, total int64
+			for _, b := range tokenHist.Buckets {
+				prompt += b.PromptTokens
+				completion += b.CompletionTokens
+				total += b.TotalTokens
+			}
+			usage["prompt_tokens"] = prompt
+			usage["completion_tokens"] = completion
+			usage["total_tokens"] = total
+			usage["token_buckets"] = tokenHist.Buckets
+		}
+
+		// Request count histogram.
+		reqHist, err := h.logStore.GetHistogram(ctx, filters, bucket)
+		if err == nil && reqHist != nil {
+			var requestCount int64
+			for _, b := range reqHist.Buckets {
+				requestCount += b.Count
+			}
+			usage["request_count"] = requestCount
+		}
+	}
+
 	SendJSON(ctx, map[string]any{
 		"user_id":       user.ID,
 		"email":         user.Email,
 		"last_login_at": timeOrNil(user.LastLoginAt),
-		// Histogram payload lands when /api/logs/histogram is
-		// delegated; intentionally empty for Phase 2 so the wire
-		// shape stays stable.
-		"usage": map[string]any{},
+		"usage":         usage,
 	})
 }
 

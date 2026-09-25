@@ -4,10 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Pagination } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getErrorMessage, useGetAlertRuleQuery, useListAlertEventsQuery, useTestAlertRuleMutation } from "@/lib/store";
+import {
+	getErrorMessage,
+	useGetAlertRuleQuery,
+	useGetBudgetProjectionQuery,
+	useListAlertEventsQuery,
+	useTestAlertRuleMutation,
+} from "@/lib/store";
 import type { AlertEvent } from "@/lib/store/apis/alertingApi";
 import { Link, useParams } from "@tanstack/react-router";
-import { ArrowLeft, BellRing, Loader2, Send } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BellRing, Loader2, Send, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -45,17 +51,16 @@ export default function AlertRuleDetailView() {
 		offset,
 		status: statusFilter === "all" ? undefined : statusFilter,
 	});
+	// US17: budget_consumption rules attach to a specific budget_id. The
+	// projection endpoint powers the "predicted exhaustion" card on the
+	// rule detail page so the admin sees the budget's risk level + ETA
+	// alongside the event history.
+	const showBudgetProjection = rule?.metric === "budget_consumption";
+	const { data: projection, isLoading: projectionLoading } = useGetBudgetProjectionQuery(ruleId, {
+		skip: !showBudgetProjection,
+	});
 
 	const [testAlertRule, { isLoading: isTesting }] = useTestAlertRuleMutation();
-
-	const onTest = async () => {
-		try {
-			await testAlertRule(ruleId).unwrap();
-			toast.success(t("ruleTestSent", { name: rule?.name }));
-		} catch (e) {
-			toast.error(getErrorMessage(e));
-		}
-	};
 
 	if (ruleLoading) {
 		return (
@@ -67,18 +72,14 @@ export default function AlertRuleDetailView() {
 
 	if (ruleError || !rule) {
 		return (
-			<div className="p-8">
-				<Card>
-					<CardHeader>
-						<CardTitle>{t("loadFailed")}</CardTitle>
-						<CardDescription>{ruleError ? getErrorMessage(ruleError) : t("ruleNotFound")}</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<Button asChild variant="outline">
-							<Link to="/workspace/alerting">{t("backToList")}</Link>
-						</Button>
-					</CardContent>
-				</Card>
+			<div className="mx-auto max-w-3xl space-y-4 p-8" data-testid="alerting-detail-error">
+				<h1 className="text-foreground text-xl font-semibold">{t("ruleNotFound")}</h1>
+				<p className="text-muted-foreground text-sm">{getErrorMessage(ruleError)}</p>
+				<Button asChild variant="outline">
+					<Link to="/workspace/alerting">
+						<ArrowLeft className="mr-2 h-4 w-4" /> {t("backToList")}
+					</Link>
+				</Button>
 			</div>
 		);
 	}
@@ -86,21 +87,28 @@ export default function AlertRuleDetailView() {
 	const eventsList = events?.events ?? [];
 	const totalEvents = events?.total ?? 0;
 
+	const onTest = async () => {
+		try {
+			await testAlertRule(rule.id).unwrap();
+			toast.success(t("ruleTestSent", { name: rule.name }));
+		} catch (e) {
+			toast.error(getErrorMessage(e));
+		}
+	};
+
 	return (
-		<div className="flex h-full flex-col gap-4 p-6" data-testid={`alerting-detail-${ruleId}`}>
+		<div className="mx-auto max-w-5xl space-y-6 p-6" data-testid="alerting-detail">
 			<header className="flex flex-wrap items-start justify-between gap-3">
-				<div className="flex items-center gap-3">
-					<Button asChild variant="ghost" size="icon">
-						<Link to="/workspace/alerting" data-testid="alerting-detail-back">
-							<ArrowLeft className="h-4 w-4" />
+				<div>
+					<Button asChild variant="ghost" size="sm" className="mb-2">
+						<Link to="/workspace/alerting">
+							<ArrowLeft className="mr-1 h-3 w-3" /> {t("backToList")}
 						</Link>
 					</Button>
-					<div>
-						<h1 className="text-foreground flex items-center gap-2 text-2xl font-semibold">
-							<BellRing className="h-6 w-6" /> {rule.name}
-						</h1>
-						<p className="text-muted-foreground mt-1 font-mono text-xs">{rule.id}</p>
-					</div>
+					<h1 className="text-foreground flex items-center gap-2 text-2xl font-semibold">
+						<BellRing className="h-6 w-6" /> {rule.name}
+					</h1>
+					<p className="text-muted-foreground mt-1 font-mono text-xs">{rule.id}</p>
 				</div>
 				<div className="flex items-center gap-2">
 					<Badge variant="outline">{t(`scope_${rule.scope_type}`)}</Badge>
@@ -148,6 +156,64 @@ export default function AlertRuleDetailView() {
 					</CardContent>
 				</Card>
 			</div>
+
+			{showBudgetProjection && (
+				<Card data-testid="alerting-detail-budget-projection">
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2 text-base">
+							<TrendingUp className="h-4 w-4" />
+							{t("budgetProjection.title")}
+						</CardTitle>
+						<CardDescription>{t("budgetProjection.subtitle")}</CardDescription>
+					</CardHeader>
+					<CardContent>
+						{projectionLoading ? (
+							<p className="text-muted-foreground text-sm">
+								<Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+								{t("loading")}
+							</p>
+						) : projection ? (
+							<div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+								<div>
+									<p className="text-muted-foreground text-xs">{t("budgetProjection.used")}</p>
+									<p className="text-xl font-semibold">${projection.used_amount.toFixed(2)}</p>
+									<p className="text-muted-foreground text-xs">
+										{t("budgetProjection.max")} ${projection.max_amount.toFixed(2)}
+									</p>
+								</div>
+								<div>
+									<p className="text-muted-foreground text-xs">{t("budgetProjection.usagePercent")}</p>
+									<p className="text-xl font-semibold">{projection.usage_percent.toFixed(1)}%</p>
+									<div className="bg-muted mt-1 h-2 w-full overflow-hidden rounded">
+										<div className="bg-primary h-full" style={{ width: `${Math.min(projection.usage_percent, 100)}%` }} />
+									</div>
+								</div>
+								<div>
+									<p className="text-muted-foreground text-xs">{t("budgetProjection.riskLevel")}</p>
+									<Badge
+										variant={
+											projection.risk_level === "high" ? "destructive" : projection.risk_level === "medium" ? "default" : "secondary"
+										}
+										className="mt-1"
+									>
+										{projection.risk_level === "high" && <AlertTriangle className="mr-1 h-3 w-3" />}
+										{projection.risk_level}
+									</Badge>
+									<p className="text-muted-foreground mt-1 text-xs">
+										{projection.has_projection && projection.predicted_exhaustion
+											? t("budgetProjection.exhaustion", {
+													when: new Date(projection.predicted_exhaustion).toLocaleDateString(),
+												})
+											: (projection.reason ?? t("budgetProjection.noProjection"))}
+									</p>
+								</div>
+							</div>
+						) : (
+							<p className="text-muted-foreground text-sm">{t("budgetProjection.unavailable")}</p>
+						)}
+					</CardContent>
+				</Card>
+			)}
 
 			<section className="flex flex-col gap-3">
 				<header className="flex items-center justify-between">

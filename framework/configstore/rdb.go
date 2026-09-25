@@ -9842,3 +9842,71 @@ func (s *RDBConfigStore) DeleteWebhookJob(ctx context.Context, id, runnerID stri
 	}
 	return nil
 }
+
+// TouchVirtualKeyLastUsedAt bulk-updates last_used_at = now for the given
+// VK ids. Used by the idle-VK sidekiq job (US24) — the job only ever calls
+// this with ids it saw in the trailing log sweep, so the bulk path is the
+// only realistic shape. Returns the number of rows actually updated so the
+// caller can record drift (e.g. ids present in logs but not in the VK
+// table — should never happen, but is useful telemetry).
+//
+// We do NOT update UpdatedAt — touching last_used_at on every successful
+// inference would invalidate any UI / cache that keys off UpdatedAt.
+func (s *RDBConfigStore) TouchVirtualKeyLastUsedAt(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	now := time.Now().UTC()
+	res := s.ScopedDB(ctx).Model(&tables.TableVirtualKey{}).
+		Where("id IN ?", ids).
+		Update("last_used_at", now)
+	if res.Error != nil {
+		return 0, fmt.Errorf("touch virtual key last_used_at: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+// ListIdleVirtualKeys returns VKs whose last_used_at is NULL or older than
+// the threshold. Powers the US24 idle-key report: admin clicks "scan" on
+// the workspace/keys page, sees a list of VKs nobody has used for N days.
+//
+// The order is "longest-idle first" so the UI can show the most-overdue
+// keys at the top. limit / offset match the rest of the page-style
+// ConfigStore methods so the UI can paginate without bespoke code.
+func (s *RDBConfigStore) ListIdleVirtualKeys(ctx context.Context, threshold time.Time, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	db := s.ScopedDB(ctx)
+	base := db.Model(&tables.TableVirtualKey{}).
+		Where("last_used_at IS NULL OR last_used_at < ?", threshold.UTC())
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count idle virtual keys: %w", err)
+	}
+	var rows []tables.TableVirtualKey
+	err := base.
+		Order(idleVKOrderClause(db.Dialector.Name())).
+		Limit(limit).
+		Offset(offset).
+		Find(&rows).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("list idle virtual keys: %w", err)
+	}
+	return rows, total, nil
+}
+
+// idleVKOrderClause returns a dialect-aware ORDER BY that puts NULL
+// last_used_at first ("never used") followed by the oldest non-null
+// timestamp. SQLite and MySQL don't accept the standard
+// `NULLS FIRST` clause, so we expand it to `IS NULL` + `ASC` for them.
+func idleVKOrderClause(dialect string) string {
+	if dialect == "postgres" {
+		return "last_used_at ASC NULLS FIRST, updated_at ASC"
+	}
+	// SQLite, MySQL, ClickHouse all accept the IS NULL ... ASC expansion.
+	return "last_used_at IS NULL DESC, last_used_at ASC, updated_at ASC"
+}

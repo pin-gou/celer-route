@@ -27,6 +27,7 @@ export * from "./reportsApi";
 export * from "./alertingApi";
 export * from "./sessionApi";
 export * from "./skillsApi";
+export * from "./keyRequestsApi";
 export * from "./teamsApi";
 export * from "./teamModelPoliciesApi";
 export * from "./usersApi";

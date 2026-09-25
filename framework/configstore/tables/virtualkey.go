@@ -222,6 +222,7 @@ type TableVirtualKey struct {
 	Value           schemas.SecretVar               `gorm:"uniqueIndex:idx_virtual_key_value;type:text;not null" json:"value"`
 	IsActive        *bool                           `gorm:"default:true" json:"is_active,omitempty"`                                     // Nil means true (DB default); false means inactive
 	ExpiresAt       *time.Time                      `gorm:"type:timestamp;null" json:"expires_at,omitempty"`                             // Optional expiry; nil means never expires
+	LastUsedAt      *time.Time                      `gorm:"type:timestamp;null;index:idx_virtual_key_last_used_at" json:"last_used_at,omitempty"` // Touched on every successful inference; nil until first call. Powers the idle-VK report (US24).
 	ProviderConfigs []TableVirtualKeyProviderConfig `gorm:"foreignKey:VirtualKeyID;constraint:OnDelete:CASCADE" json:"provider_configs"` // Empty means no providers allowed (deny-by-default)
 	MCPConfigs      []TableVirtualKeyMCPConfig      `gorm:"foreignKey:VirtualKeyID;constraint:OnDelete:CASCADE" json:"mcp_configs"`
 

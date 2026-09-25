@@ -20,9 +20,7 @@ vi.mock("@/lib/store", () => ({
 				created_at: "2026-01-01T00:00:00Z",
 				updated_at: "2026-01-01T00:00:00Z",
 			},
-			memberships: [
-				{ team_id: "t-smoke", role_in_team: "member", status: "active", joined_at: "2026-01-01T00:00:00Z" },
-			],
+			memberships: [{ team_id: "t-smoke", role_in_team: "member", status: "active", joined_at: "2026-01-01T00:00:00Z" }],
 			virtual_keys: [
 				{
 					id: "vk-smoke",

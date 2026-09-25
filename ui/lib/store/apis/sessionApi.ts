@@ -90,15 +90,36 @@ export interface MemberVirtualKeyQuotaResponse {
 	expires_at: string | null;
 }
 
+export interface MemberUsageBucket {
+	timestamp: string;
+	total_cost?: number;
+	by_model?: Record<string, number>;
+	prompt_tokens?: number;
+	completion_tokens?: number;
+	total_tokens?: number;
+	count?: number;
+	success?: number;
+	error?: number;
+}
+
 export interface MemberUsageResponse {
 	user_id: string;
 	email: string;
 	last_login_at: string | null;
-	// Phase 2 returns an empty histogram map. The detailed numbers
-	// land when /api/logs/histogram is delegated to this surface
-	// (tracked as a follow-up; the empty shape is intentional so the
-	// wire stays stable across that change).
-	usage: Record<string, never>;
+	usage: {
+		vk_count?: number;
+		period_start?: string;
+		period_end?: string;
+		total_cost?: number;
+		cost_buckets?: MemberUsageBucket[];
+		bucket_size_seconds?: number;
+		models?: string[];
+		prompt_tokens?: number;
+		completion_tokens?: number;
+		total_tokens?: number;
+		token_buckets?: MemberUsageBucket[];
+		request_count?: number;
+	};
 }
 
 export interface MemberSetupGuideResponse {
@@ -196,11 +217,9 @@ export const sessionApi = baseApi.injectEndpoints({
 			query: ({ vkID }) => ({ url: `/member/virtual-keys/${encodeURIComponent(vkID)}/quota`, method: "GET" }),
 			providesTags: (_r, _e, { vkID }) => [{ type: "MemberSession", id: `vk-quota:${vkID}` }],
 		}),
-		// GET /api/member/usage — Phase-2 stub returns counts +
-		// last_login; the histogram payload lands in a follow-up
-		// (see handler comment). The empty shape is a stable wire
-		// contract so the UI does not need a second migration when
-		// the histogram lands.
+		// GET /api/member/usage — current month cost + token histograms
+		// for the member's own VKs. Returns empty usage fields when the
+		// log store is not configured or the member has no VKs.
 		memberUsage: builder.query<MemberUsageResponse, void>({
 			query: () => ({ url: "/member/usage", method: "GET" }),
 			providesTags: ["MemberSession"],

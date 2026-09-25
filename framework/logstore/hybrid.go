@@ -1551,6 +1551,12 @@ func (h *HybridLogStore) GetAvailableMCPVirtualKeys(ctx context.Context, limit i
 	return h.inner.GetAvailableMCPVirtualKeys(ctx, limit, query)
 }
 
+// DistinctVirtualKeyIDsSince returns the distinct VK ids observed since the
+// given timestamp. Used by the idle-VK sidekiq job (US24).
+func (h *HybridLogStore) DistinctVirtualKeyIDsSince(ctx context.Context, since time.Time) ([]string, error) {
+	return h.inner.DistinctVirtualKeyIDsSince(ctx, since)
+}
+
 // Async Job methods — delegated directly.
 
 // CreateAsyncJob creates a new async job.

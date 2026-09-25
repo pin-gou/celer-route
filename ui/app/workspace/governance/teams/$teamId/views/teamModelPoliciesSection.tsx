@@ -286,10 +286,7 @@ export function parseCsv(allowed: string, blacklisted: string): UpsertTeamModelP
 // silent.
 //
 // Exported for vitest at ui/src/__tests__/components/governance/teamModelPoliciesSection.test.tsx
-export function d6Guard(
-	body: UpsertTeamModelPolicyRequest,
-	toaster: typeof toast | null,
-): UpsertTeamModelPolicyRequest {
+export function d6Guard(body: UpsertTeamModelPolicyRequest, toaster: typeof toast | null): UpsertTeamModelPolicyRequest {
 	if (body.blacklisted_models.length > 0 && body.allowed_models.length === 0) {
 		if (toaster) {
 			toaster.warning("teams.teamPolicies.d6AutoFillWarning");

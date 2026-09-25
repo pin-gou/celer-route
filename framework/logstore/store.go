@@ -148,6 +148,12 @@ type LogStore interface {
 	GetAvailableMCPApps(ctx context.Context, limit int, query string) ([]string, error)
 	GetAvailableMCPVirtualKeys(ctx context.Context, limit int, query string) ([]MCPToolLog, error)
 
+	// DistinctVirtualKeyIDsSince returns every distinct virtual_key_id that
+	// has at least one log row with timestamp >= since. Used by the idle-VK
+	// sidekiq job (US24) to bulk-update last_used_at without scanning every
+	// VK row. Returning an empty slice is the "no traffic" signal.
+	DistinctVirtualKeyIDsSince(ctx context.Context, since time.Time) ([]string, error)
+
 	// Async Job methods
 	CreateAsyncJob(ctx context.Context, job *AsyncJob) error
 	FindAsyncJobByID(ctx context.Context, id string) (*AsyncJob, error)

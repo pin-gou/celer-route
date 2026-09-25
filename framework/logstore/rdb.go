@@ -5309,6 +5309,25 @@ func (s *RDBLogStore) GetAvailableMCPVirtualKeys(ctx context.Context, limit int,
 	return logs, nil
 }
 
+// DistinctVirtualKeyIDsSince returns every distinct non-empty virtual_key_id
+// with at least one row whose timestamp >= since. Powers the idle-VK sidekiq
+// job (US24): instead of walking every VK row, the job asks the log store
+// "which VKs saw traffic since my last sweep?" and only touches those. NULL
+// virtual_key_id (legacy / pre-Phase-1 rows) and empty strings are filtered
+// out so the bulk UPDATE never tries to write a sentinel id.
+func (s *RDBLogStore) DistinctVirtualKeyIDsSince(ctx context.Context, since time.Time) ([]string, error) {
+	var ids []string
+	result := s.ScopedDB(ctx).
+		Model(&Log{}).
+		Where("virtual_key_id IS NOT NULL AND virtual_key_id != '' AND timestamp >= ?", since.UTC()).
+		Distinct("virtual_key_id").
+		Pluck("virtual_key_id", &ids)
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to get distinct virtual key ids since %s: %w", since.Format(time.RFC3339), result.Error)
+	}
+	return ids, nil
+}
+
 // GetMCPHistogram returns time-bucketed MCP tool call volume for the given filters.
 func (s *RDBLogStore) GetMCPHistogram(ctx context.Context, filters MCPToolLogSearchFilters, bucketSizeSeconds int64) (*MCPHistogramResult, error) {
 	if bucketSizeSeconds <= 0 {

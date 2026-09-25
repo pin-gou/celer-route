@@ -2657,7 +2657,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		userManagementHandler := handlers.NewUserManagementHandler(s.Config.ConfigStore)
 		userManagementHandler.RegisterRoutes(s.Router, middlewares...)
 
-		memberPortalHandler := handlers.NewMemberPortalHandler(s.Config.ConfigStore)
+		memberPortalHandler := handlers.NewMemberPortalHandler(s.Config.ConfigStore, s.Config.LogsStore)
 		memberPortalHandler.RegisterRoutes(s.Router, s.MemberAuthMiddleware.APIMiddleware())
 	}
 	if promptsHandler != nil {
@@ -2717,6 +2717,12 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	cacheStatsHandler.RegisterRoutes(s.Router, middlewares...)
 	reportsCacheHandler := handlers.NewReportsCacheHandler(reportsLogStore, s.resolveCacheStats)
 	reportsCacheHandler.RegisterRoutes(s.Router, middlewares...)
+	// US24 idle-VK report. Admin-only endpoint that lists VKs whose
+	// last_used_at is NULL or older than the requested threshold; the
+	// underlying column is kept fresh by the sidekiq job registered
+	// alongside the budget snapshot job above.
+	idleKeysHandler := handlers.NewIdleKeysHandler(s.Config.ConfigStore)
+	idleKeysHandler.RegisterRoutes(s.Router, middlewares...)
 	skillsServingHandler := handlers.NewSkillsServingHandler(s.Config.ConfigStore, s.Config.ObjectStore)
 	if skillsServingHandler != nil {
 		skillsServingHandler.RegisterRoutes(s.Router, middlewares...)
@@ -3244,6 +3250,29 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 		// alert_notification: same, with dispatcher as a dependency.
 		notifJob := jobs.NewAlertNotificationJob(s.Config.ConfigStore, s.WebhookDispatcher)
 		s.SidekiqRunner.Register(notifJob.Kind(), notifJob.Handle)
+		// idle_vk_sweep (US24): bulk-refresh governance_virtual_keys.last_used_at
+		// by walking the log store. Wired when the log store is available;
+		// without a log store the job no-ops (it advances its cursor so the
+		// next tick after the log store comes back doesn't replay a huge
+		// window).
+		if s.Config.LogsStore != nil {
+			idleJob := jobs.NewIdleVKJob(s.Config.LogsStore, s.Config.ConfigStore, 30*time.Minute)
+			s.SidekiqRunner.Register(idleJob.Kind(), idleJob.Handle)
+			go func() {
+				ticker := time.NewTicker(30 * time.Minute)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-s.Ctx.Done():
+						return
+					case <-ticker.C:
+						if err := jobs.EnqueueIdleVKSweep(s.SidekiqRunner, idleJob); err != nil {
+							logger.Warn("failed to enqueue periodic idle-vk sweep: %v", err)
+						}
+					}
+				}
+			}()
+		}
 		// Periodic ticker: enqueue one budget_snapshot job every hour. We
 		// use a fresh job id per tick so retries don't dedupe against a
 		// healthy job that already ran.

@@ -38,10 +38,7 @@ vi.mock("@/lib/store", () => ({
 		vi.fn().mockResolvedValue({ message: "ok", count: 0, disabled_virtual_key_ids: [] }),
 		{ isLoading: false },
 	],
-	useResetUserPasswordTokenMutation: () => [
-		vi.fn().mockResolvedValue({ message: "ok", token: "tok" }),
-		{ isLoading: false },
-	],
+	useResetUserPasswordTokenMutation: () => [vi.fn().mockResolvedValue({ message: "ok", token: "tok" }), { isLoading: false }],
 	getErrorMessage: () => "x",
 }));
 

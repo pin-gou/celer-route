@@ -485,6 +485,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_team_pricing_profiles_table"}, run: migrationAddTeamPricingProfilesTable},
 	{IDs: []string{"add_billing_reconciliations_tables"}, run: migrationAddBillingReconciliationsTables},
 	{IDs: []string{"add_team_model_policies_table"}, run: migrationAddTeamModelPoliciesTable},
+	{IDs: []string{"add_virtual_key_last_used_at_column"}, run: migrationAddVirtualKeyLastUsedAtColumn},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12586,6 +12587,36 @@ func migrationAddTeamModelPoliciesTable(ctx context.Context, db *gorm.DB, logger
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running add_team_model_policies_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddVirtualKeyLastUsedAtColumn adds the last_used_at column to
+// governance_virtual_keys. Touched on every successful inference; the
+// idle-VK sidekiq job (framework/sidekiq/jobs/idlevkjob.go) reads the
+// column to emit the US24 idle-key report. NULL means "never used" — the
+// report treats NULL as the maximum idle duration so brand-new keys don't
+// show up as idle on day 1 unless they're also already past the threshold.
+func migrationAddVirtualKeyLastUsedAtColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_virtual_key_last_used_at_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableVirtualKey{}, "last_used_at"); err != nil {
+				return fmt.Errorf("failed to add last_used_at column to governance_virtual_keys: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return dropColumnIfExists(tx, logger, &tables.TableVirtualKey{}, "last_used_at")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_virtual_key_last_used_at_column migration: %s", err.Error())
 	}
 	return nil
 }

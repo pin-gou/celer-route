@@ -147,15 +147,116 @@ func (h *ReportsCostHandler) details(ctx *fasthttp.RequestCtx) {
 	if limit > 1000 {
 		limit = 1000
 	}
+	offset := 0
+	if v, ok := parseQueryInt(ctx, "offset"); ok && v >= 0 {
+		offset = v
+	}
+
+	if h.logStore == nil {
+		SendJSON(ctx, map[string]any{
+			"dimension":    dim,
+			"dimension_id": id,
+			"period":       map[string]any{"start": start, "end": end},
+			"page": map[string]any{
+				"rows":  []any{},
+				"total": int64(0),
+				"limit": limit,
+				"note":  "log store not configured",
+			},
+		})
+		return
+	}
+
+	// Build filters from the dimension + dimension_id. The dimension
+	// maps to a SearchFilters field: team → TeamIDs, user → UserIDs,
+	// virtual_key → VirtualKeyIDs, provider → Providers, model → Models.
+	// An unrecognized dimension returns an empty page (not a 400) so
+	// the UI can render "no data" without erroring.
+	filters := logstore.SearchFilters{StartTime: &start, EndTime: &end}
+	switch strings.ToLower(dim) {
+	case "team":
+		if id != "" {
+			filters.TeamIDs = []string{id}
+		}
+	case "user", "member":
+		if id != "" {
+			filters.UserIDs = []string{id}
+		}
+	case "virtual_key", "vk":
+		if id != "" {
+			filters.VirtualKeyIDs = []string{id}
+		}
+	case "provider":
+		if id != "" {
+			filters.Providers = []string{id}
+		}
+	case "model":
+		if id != "" {
+			filters.Models = []string{id}
+		}
+	case "app", "apps":
+		if id != "" && id != "Other" {
+			filters.Apps = []string{id}
+		}
+	case "user_agent", "user_agents":
+		if id != "" && id != "Other" {
+			filters.UserAgents = []string{id}
+		}
+	default:
+		// Unknown dimension — return empty page with the filter info
+		// so the UI knows what it asked for.
+		SendJSON(ctx, map[string]any{
+			"dimension":    dim,
+			"dimension_id": id,
+			"period":       map[string]any{"start": start, "end": end},
+			"page": map[string]any{
+				"rows":  []any{},
+				"total": int64(0),
+				"limit": limit,
+				"note":  "unsupported dimension: " + dim,
+			},
+		})
+		return
+	}
+
+	pagination := logstore.PaginationOptions{Limit: limit, Offset: offset}
+	result, err := h.logStore.SearchLogs(ctx, filters, pagination)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "details query failed: "+err.Error())
+		return
+	}
+
+	rows := make([]map[string]any, 0, len(result.Logs))
+	for i := range result.Logs {
+		log := result.Logs[i]
+		row := map[string]any{
+			"id":                log.ID,
+			"timestamp":         log.Timestamp.UTC().Format(time.RFC3339),
+			"provider":          log.Provider,
+			"model":             log.Model,
+			"virtual_key_id":    strOrNil(log.VirtualKeyID),
+			"virtual_key_name":  strOrNil(log.VirtualKeyName),
+			"status":            log.Status,
+			"prompt_tokens":     log.PromptTokens,
+			"completion_tokens": log.CompletionTokens,
+			"total_tokens":      log.TotalTokens,
+			"cost":              float64OrNil(log.Cost),
+			"latency_ms":        float64OrNil(log.Latency),
+			"team_id":           strOrNil(log.TeamID),
+			"user_id":           strOrNil(log.UserID),
+			"customer_id":       strOrNil(log.CustomerID),
+		}
+		rows = append(rows, row)
+	}
+
 	SendJSON(ctx, map[string]any{
 		"dimension":    dim,
 		"dimension_id": id,
 		"period":       map[string]any{"start": start, "end": end},
 		"page": map[string]any{
-			"rows":  []any{},
-			"total": int64(0),
+			"rows":  rows,
+			"total": result.Pagination.TotalCount,
 			"limit": limit,
-			"note":  "details is a thin wrapper over /api/logs — see handler/logging.go for filter parity",
 		},
 	})
 }
@@ -278,6 +379,23 @@ func buildTotal(rows []map[string]any, includeActual bool) map[string]any {
 		out["delta"] = totalActual - total
 	}
 	return out
+}
+
+// strOrNil dereferences a *string for JSON serialization; nil pointer → nil
+// (omitted by encoding/json when the map value is nil).
+func strOrNil(s *string) any {
+	if s == nil {
+		return nil
+	}
+	return *s
+}
+
+// float64OrNil dereferences a *float64 for JSON serialization.
+func float64OrNil(f *float64) any {
+	if f == nil {
+		return nil
+	}
+	return *f
 }
 
 func projectRows(rows []map[string]any, perRowActual bool) []map[string]any {

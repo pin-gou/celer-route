@@ -1360,6 +1360,15 @@ func (m *MockConfigStore) ListVirtualKeysByUserID(ctx context.Context, userID st
 	return nil, 0, nil
 }
 
+// US24 idle-VK methods
+func (m *MockConfigStore) TouchVirtualKeyLastUsedAt(ctx context.Context, ids []string) (int64, error) {
+	return 0, nil
+}
+
+func (m *MockConfigStore) ListIdleVirtualKeys(ctx context.Context, threshold time.Time, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	return nil, 0, nil
+}
+
 // Temp token
 func (m *MockConfigStore) CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error {
 	return nil

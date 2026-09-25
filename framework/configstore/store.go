@@ -570,6 +570,18 @@ type ConfigStore interface {
 	// the provider key details they reference.
 	ListVirtualKeysByUserID(ctx context.Context, userID string, limit, offset int) ([]tables.TableVirtualKey, int64, error)
 
+	// TouchVirtualKeyLastUsedAt bulk-updates governance_virtual_keys.last_used_at
+	// = now for the given VK ids. Powers the US24 idle-VK report: the
+	// sidekiq job queries the log store for VKs touched since the last
+	// sweep, then calls this to refresh the column in one round-trip.
+	TouchVirtualKeyLastUsedAt(ctx context.Context, ids []string) (int64, error)
+
+	// ListIdleVirtualKeys returns VKs whose last_used_at is NULL or older
+	// than the threshold. NULL means "never used" — surfaced alongside
+	// timed-out rows so a brand-new key the admin never shared still
+	// shows up on the first scan. Ordered longest-idle first.
+	ListIdleVirtualKeys(ctx context.Context, threshold time.Time, limit, offset int) ([]tables.TableVirtualKey, int64, error)
+
 	// Temp token CRUD
 	CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error
 	GetTempTokenByHash(ctx context.Context, tokenHash string) (*tables.TempToken, error)

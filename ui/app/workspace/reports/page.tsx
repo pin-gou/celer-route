@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, ChartColumn, FileBarChart, Scale } from "lucide-react";
+import { ArrowRight, ChartColumn, Coins, Database, FileBarChart, KeyRound, Scale } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const SECTIONS = [
@@ -16,6 +16,24 @@ const SECTIONS = [
 		icon: ChartColumn,
 		titleKey: "gatewayDeltaTitle" as const,
 		descKey: "gatewayDeltaDesc" as const,
+	},
+	{
+		to: "/workspace/reports/cost" as const,
+		icon: Coins,
+		titleKey: "costTitle" as const,
+		descKey: "costDesc" as const,
+	},
+	{
+		to: "/workspace/reports/cache-savings" as const,
+		icon: Database,
+		titleKey: "cacheSavingsTitle" as const,
+		descKey: "cacheSavingsDesc" as const,
+	},
+	{
+		to: "/workspace/reports/idle-keys" as const,
+		icon: KeyRound,
+		titleKey: "idleKeysTitle" as const,
+		descKey: "idleKeysDesc" as const,
 	},
 ];
 

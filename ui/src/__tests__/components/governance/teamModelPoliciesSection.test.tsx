@@ -7,10 +7,7 @@
 // is deny-by-default and would silently forbid every model of that
 // provider — the opposite of what the admin almost certainly meant).
 import { describe, it, expect } from "vitest";
-import {
-	parseCsv,
-	d6Guard,
-} from "@/app/workspace/governance/teams/$teamId/views/teamModelPoliciesSection";
+import { parseCsv, d6Guard } from "@/app/workspace/governance/teams/$teamId/views/teamModelPoliciesSection";
 
 describe("teamModelPoliciesSection helpers — D6 兜底", () => {
 	it("parseCsv splits comma- and newline-separated values, drops blanks, dedupes case-insensitively", () => {
@@ -21,7 +18,7 @@ describe("teamModelPoliciesSection helpers — D6 兜底", () => {
 		expect(out.blacklisted_models).toEqual(["b", "c"]);
 	});
 
-	it("d6Guard: blacklisted-only submission gets allowed_models auto-filled to [\"*\"]", () => {
+	it('d6Guard: blacklisted-only submission gets allowed_models auto-filled to ["*"]', () => {
 		const guarded = d6Guard({ allowed_models: [], blacklisted_models: ["o1"] }, null);
 		expect(guarded.allowed_models).toEqual(["*"]);
 		expect(guarded.blacklisted_models).toEqual(["o1"]);

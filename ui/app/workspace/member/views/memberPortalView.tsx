@@ -2,9 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getErrorMessage, useMemberLogoutMutation, useMemberMeQuery } from "@/lib/store";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { LogOut, RefreshCw, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { JoinTeamSheet } from "./joinTeamSheet";
 
 // Member portal landing page — what members see after signing in.
 // This is intentionally minimal in Batch C-A (sub-batch A: identity
@@ -25,6 +27,7 @@ export default function MemberPortalView() {
 	const navigate = useNavigate();
 	const { data, isLoading, isError, error, refetch, isFetching } = useMemberMeQuery();
 	const [memberLogout, { isLoading: isLoggingOut }] = useMemberLogoutMutation();
+	const [joinSheetOpen, setJoinSheetOpen] = useState(false);
 
 	const onSignOut = async () => {
 		try {
@@ -142,21 +145,25 @@ export default function MemberPortalView() {
 					<CardTitle className="text-base">{t("users.memberPortal.quickActions")}</CardTitle>
 					<CardDescription>{t("users.memberPortal.quickActionsHint")}</CardDescription>
 				</CardHeader>
-				<CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
-					<Button asChild variant="outline">
-						<Link to="/workspace/member/keys" data-testid="member-portal-key-requests">
-							{t("users.memberPortal.keyRequests")}
-						</Link>
-					</Button>
+				<CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
 					<Button asChild variant="outline">
 						<Link to="/workspace/member/usage" data-testid="member-portal-usage">
 							{t("users.memberPortal.usage")}
 						</Link>
 					</Button>
 					<Button asChild variant="outline">
-						<Link to="/workspace/member/setup-guide" data-testid="member-portal-billing">
+						<Link to="/workspace/member/setup-guide" data-testid="member-portal-setup-guide">
 							{t("users.memberPortal.setupGuide")}
 						</Link>
+					</Button>
+					<Button asChild variant="outline">
+						<Link to="/workspace/member/keys" data-testid="member-portal-keys">
+							{t("users.memberPortal.keyRequests")}
+						</Link>
+					</Button>
+					<Button variant="outline" onClick={() => setJoinSheetOpen(true)} data-testid="member-portal-join-team">
+						<UserPlus className="mr-2 h-4 w-4" />
+						{t("users.keyRequests.joinTitle")}
 					</Button>
 				</CardContent>
 				{is_admin ? (
@@ -165,6 +172,8 @@ export default function MemberPortalView() {
 					</CardContent>
 				) : null}
 			</Card>
+
+			<JoinTeamSheet open={joinSheetOpen} onOpenChange={setJoinSheetOpen} onSubmitted={() => refetch()} />
 		</div>
 	);
 }
