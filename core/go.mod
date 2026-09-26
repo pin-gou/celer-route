@@ -18,7 +18,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/fasthttp/websocket v1.5.12
 	github.com/google/uuid v1.6.0
-	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/klauspost/compress v1.18.6
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/rs/zerolog v1.34.0
