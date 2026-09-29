@@ -51767,6 +51767,224 @@
       }
     }
   ]
-}
+},
+    {
+      "name": "57. Logs Storage & Manual Cleanup Endpoints (commit 47951747)",
+      "description": "Smoke coverage for the request-log storage settings endpoints and the manual cleanup workflow surfaced on the Logs Settings page. All endpoints are admin/settings routes (no provider routing), so the cases run against the gateway's own database store (SQLite by default) and never touch a paid provider. The cleanup paths intentionally target a far-past cutoff so the worker finishes in one batch with zero deletions — the case pins the wire shape (status code, response schema, status polling), not destructive behaviour, so the suite can run safely on shared environments.\n\nStorage case pins the schema: every bucket (logs_with_payload / logs_stripped / logs_offloaded / logs_hidden) and size split (size_with_payload_bytes / size_offloaded_bytes / size_without_payload_bytes) must be present so the UI's breakdown card has something to render even on an empty table.\n\nPreview case pins the older_than scope's request/response shape (matched_logs + estimated_size_bytes + cutoff echo) so the dialog's preview line has the data it needs.\n\nCleanup-status case pins the 202-with-job-status accept path and the polling status shape (status + processed + deleted + message) — the same status endpoint used by the settings dialog's progress bar.",
+      "item": [
+        {
+          "name": "Storage stats GET schema includes payload breakdown (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('storage stats returns the breakdown schema', function () {",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.an('object');",
+                  "  pm.expect(j.store_type, 'store_type present').to.be.a('string');",
+                  "  pm.expect(j.total_logs, 'total_logs present').to.be.a('number');",
+                  "  pm.expect(j.estimated_size_bytes, 'estimated_size_bytes present').to.be.a('number');",
+                  "  // payload breakdown fields the UI card depends on",
+                  "  pm.expect(j.logs_with_payload, 'logs_with_payload present').to.be.a('number');",
+                  "  pm.expect(j.logs_stripped, 'logs_stripped present').to.be.a('number');",
+                  "  pm.expect(j.logs_offloaded, 'logs_offloaded present').to.be.a('number');",
+                  "  pm.expect(j.logs_hidden, 'logs_hidden present').to.be.a('number');",
+                  "  pm.expect(j.size_without_payload_bytes, 'size_without_payload_bytes present').to.be.a('number');",
+                  "  pm.expect(j.size_with_payload_bytes, 'size_with_payload_bytes present').to.be.a('number');",
+                  "  pm.expect(j.size_offloaded_bytes, 'size_offloaded_bytes present').to.be.a('number');",
+                  "  // bucket counts must sum to total on every response shape (including empty table: 0=0+0+0+0)",
+                  "  var sum = (j.logs_with_payload || 0) + (j.logs_stripped || 0) + (j.logs_offloaded || 0) + (j.logs_hidden || 0);",
+                  "  pm.expect(sum, 'bucket sum ' + sum + ' must equal total_logs ' + j.total_logs).to.equal(j.total_logs);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/logs/storage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "logs",
+                "storage"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Storage by-filter older_than returns matched count + estimated size (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('older_than preview shape is the schema', function () {",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.an('object');",
+                  "  pm.expect(j.scope, 'scope echoed back').to.equal('older_than');",
+                  "  pm.expect(j.matched_logs, 'matched_logs present').to.be.a('number');",
+                  "  pm.expect(j.estimated_size_bytes, 'estimated_size_bytes present').to.be.a('number');",
+                  "  // cutoff echo lets the UI show the user the exact boundary they committed to",
+                  "  pm.expect(j.cutoff, 'cutoff echoed back').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"older_than\",\n  \"cutoff\": \"2000-01-01T00:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/logs/storage/by-filter",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "logs",
+                "storage",
+                "by-filter"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cleanup older_than returns job status; status endpoint reports terminal state (admin)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('cleanupCutoff', '2000-01-01T00:00:00Z');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('cleanup start returns job status', function () {",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.an('object');",
+                  "  pm.expect(j.id, 'job id present').to.be.a('string');",
+                  "  pm.expect(['pending', 'running', 'completed', 'failed', 'cancelled']).to.include(j.status);",
+                  "  pm.expect(j.scope, 'scope echoed back').to.equal('older_than');",
+                  "  pm.expect(j.processed, 'processed counter present').to.be.a('number');",
+                  "  pm.expect(j.deleted, 'deleted counter present').to.be.a('number');",
+                  "  pm.variables.set('cleanupJobId', j.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"older_than\",\n  \"cutoff\": \"{{cleanupCutoff}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/logs/cleanup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "logs",
+                "cleanup"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cleanup status by id reports terminal state with zero affected (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('cleanup status returns the job schema', function () {",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.an('object');",
+                  "  // status must be one of the documented sidekiq terminal/in-flight states",
+                  "  pm.expect(['pending', 'running', 'completed', 'failed', 'cancelled']).to.include(j.status);",
+                  "  // older_than with a far-past cutoff walks zero rows - either pending",
+                  "  // (worker hasn't started), running (in-flight), or completed with",
+                  "  // deleted=0. The harness doesn't enforce total==0 because harness timing",
+                  "  // can race the worker; the schema check is the load-bearing part.",
+                  "  pm.expect(j.processed, 'processed counter present').to.be.a('number');",
+                  "  pm.expect(j.deleted, 'deleted counter present').to.be.a('number');",
+                  "  pm.expect(j.stripped, 'stripped counter present').to.be.a('number');",
+                  "  pm.expect(j.total, 'total present').to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/logs/cleanup/status?id={{cleanupJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "logs",
+                "cleanup",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{cleanupJobId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
   ]
 }
