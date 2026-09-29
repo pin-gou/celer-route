@@ -11,6 +11,8 @@ import {
 	useLazyPreviewCleanupByFilterQuery,
 	useStartCleanupMutation,
 } from "@/lib/store";
+import { baseApi } from "@/lib/store/apis/baseApi";
+import { useAppDispatch } from "@/lib/store/hooks";
 import type { CleanupJobStatus, CleanupPreview, CleanupRequest, LogFilters } from "@/lib/types/logs";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { AlertTriangle, Info, Loader2, Trash2 } from "lucide-react";
@@ -45,6 +47,7 @@ const SAFETY_SIZE_BYTES = 5 * 1024 * 1024 * 1024;
 export default function LogCleanupDialog({ open, onOpenChange, filters }: Props) {
 	const { t } = useTranslation("config");
 	const hasSettingsUpdate = useRbac(RbacResource.Settings, RbacOperation.Update);
+	const dispatch = useAppDispatch();
 
 	const [scope, setScope] = useState<Scope>("older_than");
 	const [cutoff, setCutoff] = useState<string>(() => {
@@ -77,15 +80,18 @@ export default function LogCleanupDialog({ open, onOpenChange, filters }: Props)
 		if (!jobId || !status) return;
 		if (status.status === "completed") {
 			toast.success(t("logging.cleanupRunningDone") + (status.message ? " · " + status.message : ""));
+			dispatch(baseApi.util.invalidateTags(["LogsStorage"]));
 			setJobId(null);
+			onOpenChange(false);
 		} else if (status.status === "failed") {
 			toast.error(t("logging.cleanupRunningFailed") + (status.last_error ? " · " + status.last_error : ""));
 			setJobId(null);
 		} else if (status.status === "cancelled") {
 			toast.info(t("logging.cleanupRunningCancelled"));
+			dispatch(baseApi.util.invalidateTags(["LogsStorage"]));
 			setJobId(null);
 		}
-	}, [jobId, status, t]);
+	}, [jobId, status, t, dispatch, onOpenChange]);
 
 	const buildRequest = useCallback((): CleanupRequest | null => {
 		if (scope === "all") return { scope: "all", strip_payloads_only: false };

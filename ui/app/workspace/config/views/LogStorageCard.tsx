@@ -1,7 +1,22 @@
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGetLogsStorageStatsQuery } from "@/lib/store";
 import type { LogStorageStats } from "@/lib/types/logs";
-import { HardDrive, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import {
+	Calendar,
+	CloudUpload,
+	Database,
+	Eraser,
+	EyeOff,
+	FileText,
+	HardDrive,
+	Info,
+	Layers,
+	Loader2,
+	RefreshCw,
+	Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface Props {
@@ -30,40 +45,90 @@ function formatDate(iso?: string): string {
 	}
 }
 
+interface StatCardProps {
+	title: string;
+	value: React.ReactNode;
+	subValue?: React.ReactNode;
+	description?: string;
+	icon: React.ReactNode;
+}
+
+function StatCard({ title, value, subValue, description, icon }: StatCardProps) {
+	return (
+		<Card className="py-4 shadow-none">
+			<CardContent className="flex items-center justify-between px-4">
+				<div className="w-full min-w-0">
+					<div className="text-muted-foreground flex items-center gap-1 text-xs">
+						{icon}
+						<span className="truncate">{title}</span>
+						{description && (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<button
+										type="button"
+										aria-label={`${title} info`}
+										data-testid={`logs-storage-info-${title.toLowerCase().replace(/\s+/g, "-")}`}
+										className="inline-flex items-center"
+									>
+										<Info className="size-3 cursor-help" />
+									</button>
+								</TooltipTrigger>
+								<TooltipContent className="max-w-80 text-left text-xs text-wrap whitespace-pre-line">{description}</TooltipContent>
+							</Tooltip>
+						)}
+					</div>
+					<div className="truncate font-mono text-xl font-medium sm:text-2xl">{value}</div>
+					{subValue && <div className="truncate font-mono text-[10.5px] tabular-nums">{subValue}</div>}
+				</div>
+			</CardContent>
+		</Card>
+	);
+}
+
 function StatsBody({ stats }: { stats: LogStorageStats }) {
 	const { t } = useTranslation("config");
 	return (
-		<dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-			<dt className="text-muted-foreground">{t("logging.storageTotalLogs")}</dt>
-			<dd className="font-mono tabular-nums">{stats.total_logs.toLocaleString()}</dd>
-			<dt className="text-muted-foreground">{t("logging.storageSize")}</dt>
-			<dd className="font-mono tabular-nums">
-				{formatBytes(stats.estimated_size_bytes)} <span className="text-muted-foreground text-xs">({t("logging.storageEstimate")})</span>
-			</dd>
-			<dt className="text-muted-foreground">{t("logging.storageStoreType")}</dt>
-			<dd className="font-mono">{stats.store_type}</dd>
-			<dt className="text-muted-foreground">{t("logging.storageRange")}</dt>
-			<dd className="font-mono text-xs">
-				{formatDate(stats.oldest_log_at)} → {formatDate(stats.newest_log_at)}
-			</dd>
-		</dl>
+		<div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+			<StatCard title={t("logging.storageTotalLogs")} value={stats.total_logs.toLocaleString()} icon={<Layers className="size-4" />} />
+			<StatCard
+				title={t("logging.storageSize")}
+				value={formatBytes(stats.estimated_size_bytes)}
+				description={stats.estimate_caveat}
+				icon={<HardDrive className="size-4" />}
+			/>
+			<StatCard
+				title={t("logging.storageStoreType")}
+				value={<span className="font-mono">{stats.store_type}</span>}
+				icon={<Database className="size-4" />}
+			/>
+			<StatCard
+				title={t("logging.storageRange")}
+				value={
+					<span className="font-mono text-base sm:text-lg">
+						{formatDate(stats.oldest_log_at)} → {formatDate(stats.newest_log_at)}
+					</span>
+				}
+				icon={<Calendar className="size-4" />}
+			/>
+		</div>
 	);
 }
 
 function AutoCleanupSection({ stats }: { stats: LogStorageStats }) {
 	const { t } = useTranslation("config");
-	const hasLastRun = !!stats.last_auto_cleanup_at;
+	const hasLastRun = !!stats.last_cleanup_at;
+	const deleted = (stats.last_cleanup_deleted ?? 0) + (stats.last_cleanup_stripped ?? 0);
 	return (
 		<div className="rounded-sm border p-3">
 			<div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{t("logging.storageAutoTitle")}</div>
 			{hasLastRun ? (
 				<div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
 					<dt className="text-muted-foreground">{t("logging.storageAutoLastRun")}</dt>
-					<dd className="font-mono text-xs">{formatDate(stats.last_auto_cleanup_at)}</dd>
+					<dd className="font-mono text-xs">{formatDate(stats.last_cleanup_at)}</dd>
 					<dt className="text-muted-foreground">{t("logging.storageAutoDeleted")}</dt>
-					<dd className="font-mono tabular-nums">{stats.last_auto_cleanup_deleted?.toLocaleString() ?? 0}</dd>
+					<dd className="font-mono tabular-nums">{deleted.toLocaleString()}</dd>
 					<dt className="text-muted-foreground">{t("logging.storageAutoDuration")}</dt>
-					<dd className="font-mono tabular-nums">{((stats.last_auto_cleanup_duration_ms ?? 0) / 1000).toFixed(1)}s</dd>
+					<dd className="font-mono tabular-nums">{((stats.last_cleanup_duration_ms ?? 0) / 1000).toFixed(1)}s</dd>
 				</div>
 			) : (
 				<div className="text-muted-foreground mt-2 text-sm">{t("logging.storageAutoNever")}</div>
@@ -77,9 +142,9 @@ function PayloadBreakdownSection({ stats }: { stats: LogStorageStats }) {
 	const total = stats.total_logs;
 	if (total === 0) {
 		return (
-			<div className="rounded-sm border p-3">
-				<div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{t("logging.storageBreakdownTitle")}</div>
-				<div className="text-muted-foreground mt-2 text-sm">{t("logging.storageBreakdownNone")}</div>
+			<div className="space-y-3">
+				<h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{t("logging.storageBreakdownTitle")}</h3>
+				<div className="text-muted-foreground text-sm">{t("logging.storageBreakdownNone")}</div>
 			</div>
 		);
 	}
@@ -90,6 +155,7 @@ function PayloadBreakdownSection({ stats }: { stats: LogStorageStats }) {
 			hint: t("logging.storageBreakdownWithPayloadHint"),
 			count: stats.logs_with_payload,
 			size: stats.size_with_payload_bytes,
+			icon: <FileText className="size-4" />,
 		},
 		{
 			key: "stripped",
@@ -97,6 +163,7 @@ function PayloadBreakdownSection({ stats }: { stats: LogStorageStats }) {
 			hint: t("logging.storageBreakdownStrippedHint"),
 			count: stats.logs_stripped,
 			size: 0,
+			icon: <Eraser className="size-4" />,
 		},
 		{
 			key: "offloaded",
@@ -104,6 +171,7 @@ function PayloadBreakdownSection({ stats }: { stats: LogStorageStats }) {
 			hint: t("logging.storageBreakdownOffloadedHint"),
 			count: stats.logs_offloaded,
 			size: stats.size_offloaded_bytes,
+			icon: <CloudUpload className="size-4" />,
 		},
 		{
 			key: "hidden",
@@ -111,29 +179,24 @@ function PayloadBreakdownSection({ stats }: { stats: LogStorageStats }) {
 			hint: t("logging.storageBreakdownHiddenHint"),
 			count: stats.logs_hidden,
 			size: 0,
+			icon: <EyeOff className="size-4" />,
 		},
 	];
 	return (
-		<div className="rounded-sm border p-3">
-			<div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{t("logging.storageBreakdownTitle")}</div>
-			<div className="mt-2 space-y-2 text-sm">
+		<div className="space-y-3">
+			<h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{t("logging.storageBreakdownTitle")}</h3>
+			<div className="grid grid-cols-2 gap-4 md:grid-cols-4">
 				{buckets.map((b) => (
-					<div key={b.key} className="flex items-start justify-between gap-2" data-testid={`logs-storage-bucket-${b.key}`}>
-						<div className="min-w-0">
-							<div className="font-medium">{b.label}</div>
-							<div className="text-muted-foreground text-xs">{b.hint}</div>
-						</div>
-						<div className="text-right font-mono text-xs tabular-nums">
-							<div>{b.count.toLocaleString()} 条</div>
-							{b.size > 0 && <div className="text-muted-foreground">≈ {formatBytes(b.size)}</div>}
-						</div>
-					</div>
+					<StatCard
+						key={b.key}
+						title={b.label}
+						value={`${b.count.toLocaleString()} 条`}
+						subValue={b.size > 0 ? <span className="text-muted-foreground">≈ {formatBytes(b.size)}</span> : undefined}
+						description={b.hint}
+						icon={b.icon}
+					/>
 				))}
 			</div>
-			<p className="text-muted-foreground mt-2 text-xs">
-				{t("logging.storageBreakdownStrippedHint")}: {formatBytes(stats.size_with_payload_bytes)} ·{" "}
-				{t("logging.storageBreakdownOffloadedHint")}: {formatBytes(stats.size_offloaded_bytes)}
-			</p>
 		</div>
 	);
 }
@@ -156,24 +219,15 @@ export default function LogStorageCard({ onOpenCleanup }: Props) {
 				)}
 				{data && (
 					<div className="space-y-4">
-						<div className="flex items-start justify-between gap-3">
-							<div className="flex items-center gap-2 font-medium">
-								<HardDrive className="h-4 w-4" />
-								<span>{formatBytes(data.estimated_size_bytes)}</span>
-								<span className="text-muted-foreground text-xs">
-									· {data.total_logs.toLocaleString()} {t("logging.storageTotalLogs")}
-								</span>
-							</div>
-							<div className="flex items-center gap-2">
-								<Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} data-testid="logs-storage-refresh">
-									{isFetching ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
-									{t("logging.storageRefresh")}
-								</Button>
-								<Button size="sm" variant="outline" onClick={onOpenCleanup} data-testid="logs-storage-cleanup-open">
-									<Trash2 className="mr-1 h-3 w-3" />
-									{t("logging.storageManualCleanup")}
-								</Button>
-							</div>
+						<div className="flex items-center justify-end gap-2">
+							<Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} data-testid="logs-storage-refresh">
+								{isFetching ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+								{t("logging.storageRefresh")}
+							</Button>
+							<Button size="sm" variant="outline" onClick={onOpenCleanup} data-testid="logs-storage-cleanup-open">
+								<Trash2 className="mr-1 h-3 w-3" />
+								{t("logging.storageManualCleanup")}
+							</Button>
 						</div>
 						<StatsBody stats={data} />
 						<PayloadBreakdownSection stats={data} />

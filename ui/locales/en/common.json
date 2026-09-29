@@ -9,6 +9,24 @@
 		"node": "Node.js",
 		"go": "Go"
 	},
+	"integrationPanel": {
+		"title": "Your endpoint",
+		"subtitle": "Use this URL with any OpenAI-compatible client.",
+		"bareTitle": "Send your first request",
+		"bareSubtitle": "Pick a provider, model, and virtual key — we'll generate ready-to-run code for your stack.",
+		"copyLabel": "Copy URL",
+		"copied": "Copied to clipboard",
+		"providerLabel": "Provider",
+		"providerPlaceholder": "Select a provider",
+		"modelLabel": "Model",
+		"modelPlaceholder": "Select a model",
+		"modelEmpty": "No models available. Configure models on the providers page.",
+		"vkLabel": "Virtual key",
+		"vkPlaceholder": "Select a virtual key",
+		"vkEmpty": "No API keys yet. Create one in Governance → API Keys.",
+		"agentSetupLink": "Connect an AI client →",
+		"connectClientCta": "Connect AI client"
+	},
 	"nav": {
 		"home": "Home",
 		"observability": "Observability",

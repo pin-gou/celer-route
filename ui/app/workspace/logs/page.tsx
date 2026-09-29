@@ -1,8 +1,8 @@
 import { SessionDetailsSheet } from "@/app/workspace/logs/sheets/sessionDetailsSheet";
 import { createColumns } from "@/app/workspace/logs/views/columns";
 import { formatLatency } from "@/app/workspace/dashboard/utils/chartUtils";
-import { EmptyState } from "@/app/workspace/logs/views/emptyState";
 import { LogsHeaderView } from "@/app/workspace/logs/views/logsHeaderView";
+import { EndpointPanel } from "@/components/integrationPanel/EndpointPanel";
 import { LogsDataTable } from "@/app/workspace/logs/views/logsTable";
 import { LogsVolumeChart } from "@/app/workspace/logs/views/logsVolumeChart";
 import { LogsFilterSidebar } from "@/components/filters/logsFilterSidebar";
@@ -875,7 +875,18 @@ export default function LogsPage() {
 		<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100vh_-_16px)]">
 			<h1 className="sr-only">{t("page.title")}</h1>
 			{showEmptyState ? (
-				<EmptyState error={error ?? (logsError ? getErrorMessage(logsError as Parameters<typeof getErrorMessage>[0]) : null)} />
+				error || logsError ? (
+					<div className="flex h-full w-full items-center justify-center p-4">
+						<Alert variant="destructive" className="max-w-xl">
+							<AlertCircle className="h-4 w-4" />
+							<AlertDescription>
+								{error ?? (logsError ? getErrorMessage(logsError as Parameters<typeof getErrorMessage>[0]) : "")}
+							</AlertDescription>
+						</Alert>
+					</div>
+				) : (
+					<EndpointPanel variant="bare" />
+				)
 			) : (
 				<div className="bg-background flex h-full w-full grow flex-col gap-2 md:flex-row md:gap-3">
 					{/* Sidebar Filters — desktop: inline left rail. mobile: rendered as trigger + drawer. */}

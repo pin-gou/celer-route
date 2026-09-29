@@ -528,6 +528,25 @@ func (s *fakeSidekiqStore) GetInFlightSidekiqJobByKind(ctx context.Context, kind
 	return nil, nil
 }
 
+func (s *fakeSidekiqStore) GetLastCompletedJobByKind(ctx context.Context, kind string) (*tables.TableSidekiqJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var best *tables.TableSidekiqJob
+	for _, j := range s.jobs {
+		if j.Kind != kind {
+			continue
+		}
+		if j.Status != tables.SidekiqStatusCompleted && j.Status != tables.SidekiqStatusCancelled {
+			continue
+		}
+		if best == nil || (j.CompletedAt != nil && best.CompletedAt != nil && j.CompletedAt.After(*best.CompletedAt)) {
+			cp := *j
+			best = &cp
+		}
+	}
+	return best, nil
+}
+
 func (s *fakeSidekiqStore) ClaimSidekiqJob(ctx context.Context, id, runnerID string, staleBefore time.Time) (bool, error) {
 	return true, nil
 }

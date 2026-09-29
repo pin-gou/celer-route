@@ -161,7 +161,7 @@ export default function LoggingView() {
 					{/* Basic */}
 					<section className="space-y-4">
 						<SectionTitle>{t("logging.section.basic")}</SectionTitle>
-						<div>
+						<div className="space-y-4">
 							<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
 								<div className="space-y-0.5">
 									<label htmlFor="enable-logging" className="text-sm font-medium">
@@ -185,6 +185,27 @@ export default function LoggingView() {
 								/>
 							</div>
 							{needsRestart && <RestartWarning />}
+							{loggingEnabled && (
+								<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
+									<div className="space-y-0.5">
+										<Label htmlFor="log-retention-days" className="text-sm font-medium">
+											{t("logging.logRetentionDays")}
+										</Label>
+										<p className="text-muted-foreground text-sm">{t("logging.logRetentionDaysDesc")}</p>
+									</div>
+									<Input
+										id="log-retention-days"
+										type="number"
+										min="1"
+										value={localConfig.log_retention_days}
+										onChange={(e) => {
+											const value = parseInt(e.target.value) || 1;
+											handleConfigChange("log_retention_days", Math.max(1, value));
+										}}
+										className="w-24"
+									/>
+								</div>
+							)}
 						</div>
 					</section>
 
@@ -205,26 +226,6 @@ export default function LoggingView() {
 									size="md"
 									checked={contentLoggingOn}
 									onCheckedChange={(checked) => handleConfigChange("disable_content_logging", !checked)}
-								/>
-							</div>
-
-							<div className="flex items-center justify-between space-x-2 rounded-sm border p-4">
-								<div className="space-y-0.5">
-									<Label htmlFor="log-retention-days" className="text-sm font-medium">
-										{t("logging.logRetentionDays")}
-									</Label>
-									<p className="text-muted-foreground text-sm">{t("logging.logRetentionDaysDesc")}</p>
-								</div>
-								<Input
-									id="log-retention-days"
-									type="number"
-									min="1"
-									value={localConfig.log_retention_days}
-									onChange={(e) => {
-										const value = parseInt(e.target.value) || 1;
-										handleConfigChange("log_retention_days", Math.max(1, value));
-									}}
-									className="w-24"
 								/>
 							</div>
 

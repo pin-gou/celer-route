@@ -9,6 +9,24 @@
 		"node": "Node.js",
 		"go": "Go"
 	},
+	"integrationPanel": {
+		"title": "你的端点",
+		"subtitle": "使用此 URL 配合任何 OpenAI 兼容客户端。",
+		"bareTitle": "发送你的第一个请求",
+		"bareSubtitle": "选择提供商、模型和虚拟 key，我们会为你的技术栈生成可立即运行的代码。",
+		"copyLabel": "复制 URL",
+		"copied": "已复制到剪贴板",
+		"providerLabel": "提供商",
+		"providerPlaceholder": "选择提供商",
+		"modelLabel": "模型",
+		"modelPlaceholder": "选择模型",
+		"modelEmpty": "暂无可用模型，请前往提供商页面配置。",
+		"vkLabel": "虚拟 key",
+		"vkPlaceholder": "选择虚拟 key",
+		"vkEmpty": "暂无虚拟 key，请先在治理页面创建。",
+		"agentSetupLink": "接入 AI 客户端 →",
+		"connectClientCta": "接入 AI 客户端"
+	},
 	"nav": {
 		"home": "首页",
 		"observability": "日志与监控",

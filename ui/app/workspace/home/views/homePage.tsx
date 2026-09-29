@@ -1,8 +1,8 @@
 import { useOnboardingChecklist } from "@/hooks/useOnboardingChecklist";
+import { EndpointPanel } from "@/components/integrationPanel/EndpointPanel";
 import { Navigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import EndpointCard from "../components/endpointCard";
 import FreeTierRecommendationCard from "../components/freeTierRecommendationCard";
 import ProviderTopologyCard from "../components/providerTopologyCard";
 import SystemHealthCard from "../components/systemHealthCard";
@@ -35,7 +35,7 @@ export default function HomePage() {
 			<SystemHealthCard />
 			<FreeTierRecommendationCard />
 			<ProviderTopologyCard />
-			<EndpointCard endpointUrl={endpoint} />
+			<EndpointPanel endpointUrl={endpoint} variant="card" />
 		</div>
 	);
 }

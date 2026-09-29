@@ -473,8 +473,11 @@ export const logsApi = baseApi.injectEndpoints({
 		// settings page is open.
 		getLogsStorageStats: builder.query<LogStorageStats, void>({
 			query: () => "/logs/storage",
-			// Don't tie this to "Logs": it's not invalidated by log writes/deletes,
-			// only by the cleanup job itself invalidating the storage tag below.
+			// Tied to "LogsStorage" (not "Logs") so log writes/deletes don't
+			// trigger a refetch — only cleanup job completion does, via
+			// dispatch(baseApi.util.invalidateTags(["LogsStorage"]) in
+			// LogCleanupDialog when status === "completed".
+			providesTags: ["LogsStorage"],
 		}),
 
 		// Preview a cleanup scope before the user commits. Cheap, single-call

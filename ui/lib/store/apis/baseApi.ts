@@ -205,6 +205,7 @@ export const baseApi = createApi({
 		"RtkCavemanRules",
 		"RtkRenderers",
 		"CatalogBundles",
+		"LogsStorage",
 	],
 	endpoints: () => ({}),
 });

@@ -903,6 +903,7 @@ type ConfigStore interface {
 	FinalizeCancelledSidekiqJob(ctx context.Context, id, runnerID, metadata string) error
 	ListClaimableSidekiqJobs(ctx context.Context, staleBefore time.Time) ([]tables.TableSidekiqJob, error)
 	GetInFlightSidekiqJobByKind(ctx context.Context, kind string) (*tables.TableSidekiqJob, error)
+	GetLastCompletedJobByKind(ctx context.Context, kind string) (*tables.TableSidekiqJob, error)
 	MarkStaleSidekiqJobsFailed(ctx context.Context, staleBefore time.Time) (int64, error)
 
 	// Webhook Endpoints

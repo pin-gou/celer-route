@@ -309,6 +309,25 @@ func (s *RDBConfigStore) GetInFlightSidekiqJobByKind(ctx context.Context, kind s
 	return &job, nil
 }
 
+// GetLastCompletedJobByKind returns the most recently completed (or cancelled)
+// job of the given kind, or nil when none exists. Used by the storage-stats
+// endpoint to surface "last cleanup" information from the sidekiq job table,
+// covering both manual and (future) automatic cleanup runs.
+func (s *RDBConfigStore) GetLastCompletedJobByKind(ctx context.Context, kind string) (*tables.TableSidekiqJob, error) {
+	var job tables.TableSidekiqJob
+	err := s.DB().WithContext(ctx).
+		Where("kind = ? AND status IN ?", kind, []string{tables.SidekiqStatusCompleted, tables.SidekiqStatusCancelled}).
+		Order("completed_at DESC").
+		First(&job).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &job, nil
+}
+
 // MarkStaleSidekiqJobsFailed flips any running job whose heartbeat (updated_at) is
 // older than staleBefore to failed. This is the safety net for a goroutine or node
 // that died without marking its job: the job stops looking "running" and becomes

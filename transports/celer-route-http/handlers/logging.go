@@ -73,6 +73,7 @@ type LoggingHandler struct {
 type SidekiqJobStore interface {
 	GetSidekiqJob(ctx context.Context, id string) (*tables.TableSidekiqJob, error)
 	GetInFlightSidekiqJobByKind(ctx context.Context, kind string) (*tables.TableSidekiqJob, error)
+	GetLastCompletedJobByKind(ctx context.Context, kind string) (*tables.TableSidekiqJob, error)
 }
 
 // SetSidekiqBackend wires the sidekiq runner and job store, and registers the
@@ -2504,11 +2505,31 @@ func (h *LoggingHandler) getLogsStorageStats(ctx *fasthttp.RequestCtx) {
 		"size_offloaded_bytes":       stats.SizeOffloadedBytes,
 	}
 
-	if h.lastAutoCleanup != nil {
-		lastRun, deleted, durMs := h.lastAutoCleanup()
-		resp["last_auto_cleanup_at"] = lastRun
-		resp["last_auto_cleanup_deleted"] = deleted
-		resp["last_auto_cleanup_duration_ms"] = durMs
+	// Surface the most recent completed (or cancelled) cleanup job from the
+	// sidekiq table, covering both manual and (future) automatic runs. The
+	// metadata carries deleted/stripped counts and a message; the row carries
+	// timestamps for computing duration. Nil when no cleanup has run yet, so
+	// the UI hides the section.
+	if h.sidekiqStore != nil {
+		if job, err := h.sidekiqStore.GetLastCompletedJobByKind(ctx, logging.LogCleanupJobKind); err != nil {
+			logger.Warn("failed to read last cleanup job: %v", err)
+		} else if job != nil {
+			resp["last_cleanup_at"] = job.CompletedAt
+			resp["last_cleanup_status"] = job.Status
+			if job.Metadata != "" {
+				var meta logstore.CleanupJobMeta
+				if err := sonic.Unmarshal([]byte(job.Metadata), &meta); err == nil {
+					resp["last_cleanup_deleted"] = meta.Deleted
+					resp["last_cleanup_stripped"] = meta.Stripped
+					resp["last_cleanup_message"] = meta.Message
+				}
+			}
+			// Duration = completed_at - started_at (both may be nil for
+			// cancelled jobs that never started).
+			if job.StartedAt != nil && job.CompletedAt != nil {
+				resp["last_cleanup_duration_ms"] = job.CompletedAt.Sub(*job.StartedAt).Milliseconds()
+			}
+		}
 	}
 
 	SendJSON(ctx, resp)

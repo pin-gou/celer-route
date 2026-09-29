@@ -917,12 +917,15 @@ export interface LogStorageStats {
 	oldest_log_at?: string;
 	newest_log_at?: string;
 	estimate_caveat: string;
-	// Optional: most recent auto-cleaner sweep. Absent when the wiring
-	// (SetLastCleanupReporter) is not active, in which case the UI hides
-	// the "last cleanup" section rather than rendering "never".
-	last_auto_cleanup_at?: string;
-	last_auto_cleanup_deleted?: number;
-	last_auto_cleanup_duration_ms?: number;
+	// Optional: most recent cleanup job (manual or automatic) from the
+	// sidekiq job table. Absent when no cleanup has ever run, in which case
+	// the UI hides the "last cleanup" section.
+	last_cleanup_at?: string;
+	last_cleanup_status?: string;
+	last_cleanup_deleted?: number;
+	last_cleanup_stripped?: number;
+	last_cleanup_duration_ms?: number;
+	last_cleanup_message?: string;
 	// Payload-state breakdown. Each row falls into exactly one of these
 	// buckets (Hidden > Stripped > Offloaded > WithPayload) and the four
 	// counts together sum to total_logs. size_without_payload_bytes +
