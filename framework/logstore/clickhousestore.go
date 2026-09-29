@@ -648,3 +648,172 @@ func (s *ClickHouseLogStore) UpdateAsyncJob(ctx context.Context, id string, upda
 	}
 	return s.chReinsert(ctx, &existing)
 }
+
+// ---------------------------------------------------------------------------
+// Manual cleanup support (UI-facing cleanup dialog)
+// ---------------------------------------------------------------------------
+
+// cleanupBatchSize matches RDBLogStore.cleanupBatchSize so a manual run
+// behaves the same as the periodic cleaner regardless of backend.
+const cleanupBatchSizeCH = 100
+
+// StorageStats implements LogCleanupManager for ClickHouse. The on-disk size
+// is the sum of bytes_on_disk across the logs table's active parts — the
+// same number system.parts reports, so the user sees a number consistent with
+// the column-store's own monitoring.
+//
+// Payload breakdown uses countIf(...) — ClickHouse's per-condition counter
+// — instead of CASE-WHEN for clarity and to skip predicate evaluation on
+// rows that don't qualify. The precedence rule (Hidden > Stripped >
+// Offloaded > WithPayload) is encoded by ordering the countIfs.
+func (s *ClickHouseLogStore) StorageStats(ctx context.Context) (*StorageStats, error) {
+	var total int64
+	if err := s.db.WithContext(ctx).Model(&Log{}).Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	var oldest, newest *time.Time
+	if total > 0 {
+		type tsBound struct {
+			Min *time.Time
+			Max *time.Time
+		}
+		var bound tsBound
+		if err := s.db.WithContext(ctx).Raw(
+			"SELECT MIN(timestamp) AS min, MAX(timestamp) AS max FROM logs",
+		).Scan(&bound).Error; err == nil {
+			oldest = bound.Min
+			newest = bound.Max
+		}
+	}
+
+	var size int64
+	// ClickHouse keeps metadata on every part in system.parts. Sum the
+	// bytes_on_disk for parts belonging to the logs table only; columns
+	// shared with matviews (none today, but the same query keeps it safe
+	// for future additions) are counted by their table name.
+	if err := s.db.WithContext(ctx).Raw(
+		"SELECT COALESCE(SUM(bytes_on_disk), 0) FROM system.parts WHERE table = 'logs' AND active",
+	).Scan(&size).Error; err != nil {
+		// Parts metadata can lag the actual table; fall back to the
+		// best-effort row estimate so the UI still has a number.
+		size = total * 1024
+	}
+
+	stats := &StorageStats{
+		StoreType:          "clickhouse",
+		TotalLogs:          total,
+		EstimatedSizeBytes: size,
+		OldestLogAt:        oldest,
+		NewestLogAt:        newest,
+	}
+
+	// Payload-state breakdown. ClickHouse counts per condition; ordering
+	// predicates from highest precedence to lowest guarantees each row is
+	// counted exactly once. The struct field order matches the SELECT
+	// order; column names are decorative (GORM Scan binds by position).
+	if total > 0 {
+		var counts struct {
+			Hidden      int64
+			Stripped    int64
+			Offloaded   int64
+			WithPayload int64
+		}
+		if err := s.db.WithContext(ctx).Raw(`
+			SELECT
+			  countIf(content_hidden = 1)                                          AS hidden,
+			  countIf(content_hidden = 0 AND payload_stripped = 1)                 AS stripped,
+			  countIf(content_hidden = 0 AND payload_stripped = 0 AND has_object = 1) AS offloaded,
+			  countIf(content_hidden = 0 AND payload_stripped = 0 AND has_object = 0) AS with_payload
+			FROM logs
+		`).Scan(&counts).Error; err == nil {
+			stats.LogsHidden = counts.Hidden
+			stats.LogsStripped = counts.Stripped
+			stats.LogsOffloaded = counts.Offloaded
+			stats.LogsWithPayload = counts.WithPayload
+		}
+
+		// Per-row size apportionment. ClickHouse rows are typically
+		// narrower per-row than RDB rows because the column store compresses
+		// repeating values; use the conservative RDB-side estimates so the
+		// "free by stripping" number isn't overstated.
+		sizes := estimateRowSizes("clickhouse")
+		stats.SizeWithoutPayloadBytes = total * sizes.MetadataBytes
+		stats.SizeWithPayloadBytes = stats.LogsWithPayload * sizes.PayloadBytes
+		stats.SizeOffloadedBytes = stats.LogsOffloaded * sizes.PayloadBytes
+	}
+
+	return stats, nil
+}
+
+// CountByFilter implements LogCleanupManager. Reuses the same filter SQL the
+// RDB store applies so the preview number equals what the worker will
+// process.
+func (s *ClickHouseLogStore) CountByFilter(ctx context.Context, filters SearchFilters) (*CleanupPreview, error) {
+	query := s.db.WithContext(ctx).Model(&Log{})
+	query = s.applyFilters(query, filters)
+
+	var matched int64
+	if err := query.Count(&matched).Error; err != nil {
+		return nil, err
+	}
+
+	preview := &CleanupPreview{MatchedLogs: matched}
+	if matched == 0 {
+		return preview, nil
+	}
+
+	tsQuery := s.db.WithContext(ctx).Model(&Log{})
+	tsQuery = s.applyFilters(tsQuery, filters)
+	type tsBound struct {
+		Min *time.Time
+		Max *time.Time
+	}
+	var bound tsBound
+	if err := tsQuery.Select("MIN(timestamp) AS min, MAX(timestamp) AS max").Scan(&bound).Error; err == nil {
+		preview.Oldest = bound.Min
+		preview.Newest = bound.Max
+	}
+
+	stats, err := s.StorageStats(ctx)
+	if err == nil && stats.TotalLogs > 0 {
+		preview.EstimatedSizeBytes = stats.EstimatedSizeBytes * matched / stats.TotalLogs
+	}
+	return preview, nil
+}
+
+// DeleteByFilterBatch selects up to batchSize matching ids, deletes them, and
+// returns the count. Mirrors DeleteLogsBatch's id-first contract because the
+// ClickHouse driver reports 0 rows affected for mutations.
+func (s *ClickHouseLogStore) DeleteByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = cleanupBatchSizeCH
+	}
+
+	idQuery := s.db.WithContext(ctx).Model(&Log{}).Select("id")
+	idQuery = s.applyFilters(idQuery, filters).Order("timestamp ASC").Limit(batchSize)
+
+	var ids []string
+	if err := idQuery.Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&Log{}).Error; err != nil {
+		return 0, err
+	}
+	return int64(len(ids)), nil
+}
+
+// StripPayloadsByFilterBatch is intentionally a no-op on ClickHouse. Columnar
+// storage plus TTL-based retention already keep the footprint small, and the
+// re-insert-after-update path costs more than it saves. The cleanup worker
+// checks StripPayloadsOnly=false in the UI for this backend.
+func (s *ClickHouseLogStore) StripPayloadsByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (int64, error) {
+	return 0, nil
+}

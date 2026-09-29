@@ -578,6 +578,7 @@ type dashboardLogManager struct {
 	lastMCPFilters         logstore.MCPToolLogSearchFilters
 	lastRecalculateFilters logstore.SearchFilters
 	lastRecalculateContext chan context.Context
+	lastCleanupMeta        logstore.CleanupJobMeta
 
 	// Timeline test fields
 	log            *logstore.Log
@@ -732,6 +733,13 @@ func (m *dashboardLogManager) BuildCostRecalcJobMeta(ctx context.Context, filter
 	return "{}", nil
 }
 func (m *dashboardLogManager) RunCostRecalcJob(ctx context.Context, metaJSON string, checkpoint func(string) error) (string, error) {
+	return metaJSON, nil
+}
+func (m *dashboardLogManager) BuildLogCleanupJobMeta(ctx context.Context, meta logstore.CleanupJobMeta) (string, error) {
+	m.lastCleanupMeta = meta
+	return "{}", nil
+}
+func (m *dashboardLogManager) RunLogCleanupJob(ctx context.Context, metaJSON string, checkpoint func(string) error) (string, error) {
 	return metaJSON, nil
 }
 func (m *dashboardLogManager) GetMCPToolLog(ctx context.Context, id string) (*logstore.MCPToolLog, error) {

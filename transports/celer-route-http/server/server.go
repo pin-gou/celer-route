@@ -2494,6 +2494,10 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		if s.SidekiqRunner != nil && s.Config != nil && s.Config.ConfigStore != nil {
 			loggingHandler.SetSidekiqBackend(s.SidekiqRunner, s.Config.ConfigStore)
 		}
+		// Wire the underlying log store so the manual-cleanup endpoints
+		// (storage stats / by-filter preview / cleanup job) can read row counts
+		// and start batched deletes.
+		loggingHandler.SetLogStore(loggerPlugin.GetLogStore())
 		govLogManager = loggerPlugin.GetPluginLogManager()
 	}
 	var governanceHandler *handlers.GovernanceHandler

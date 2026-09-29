@@ -48,6 +48,18 @@ type LoggingHandler struct {
 	sidekiqRunner *sidekiq.Runner
 	sidekiqStore  SidekiqJobStore
 
+	// lastAutoCleanup tracks the most recent auto-cleaner sweep so the settings
+	// page can show "last cleanup: …" without having to subscribe to log lines.
+	// nil until SetLastCleanupReporter wires a function returning the metadata
+	// from the auto-cleaner goroutine.
+	lastAutoCleanup func() (lastRun *time.Time, deleted int64, durationMs int64)
+
+	// logStore is the underlying log store reference used by the storage and
+	// cleanup endpoints. Held separately from logManager so a future manager
+	// refactor (e.g. moving cleanup to a different plugin) doesn't ripple into
+	// these endpoints.
+	logStore logstore.LogStore
+
 	// recentRoutingRulesStore serves GET /api/logs/recent-routing-rules. It is
 	// nil until SetRecentRoutingRulesStore wires a store (see
 	// recentRoutingRulesGormStore); the endpoint answers LOGS_QUERY_FAILED
@@ -74,6 +86,26 @@ func (h *LoggingHandler) SetSidekiqBackend(runner *sidekiq.Runner, store Sidekiq
 			return progress(meta)
 		})
 	})
+	// Manual log-cleanup worker. Same shape as recalc-cost so the dedup /
+	// status / cancel endpoints can reuse the sidekiq scaffolding.
+	runner.Register(logging.LogCleanupJobKind, func(ctx context.Context, job tables.TableSidekiqJob, progress sidekiq.ProgressFunc) (string, error) {
+		return h.logManager.RunLogCleanupJob(ctx, job.Metadata, func(meta string) error {
+			return progress(meta)
+		})
+	})
+}
+
+// SetLastCleanupReporter wires a function the storage-stats endpoint uses to
+// report the auto-cleaner's last sweep. nil disables the section in the
+// response (the UI hides "last cleanup" when the value is absent).
+func (h *LoggingHandler) SetLastCleanupReporter(fn func() (lastRun *time.Time, deleted int64, durationMs int64)) {
+	h.lastAutoCleanup = fn
+}
+
+// SetLogStore wires the log store reference used by the storage and cleanup
+// endpoints. Required for those endpoints; missing wiring returns 503.
+func (h *LoggingHandler) SetLogStore(store logstore.LogStore) {
+	h.logStore = store
 }
 
 // Keep session log page size in one place so the session sheet limit is easy to tune later.
@@ -415,6 +447,15 @@ func (h *LoggingHandler) RegisterRoutes(r *router.Router, middlewares ...schemas
 	r.POST("/api/logs/recalculate-cost", lib.ChainMiddlewares(h.recalculateLogCosts, middlewares...))
 	r.GET("/api/logs/recalculate-cost/status", lib.ChainMiddlewares(h.getRecalculateCostStatus, middlewares...))
 	r.POST("/api/logs/recalculate-cost/cancel", lib.ChainMiddlewares(h.cancelRecalculateCost, middlewares...))
+
+	// Manual log-cleanup workflow (settings page). StorageStats + CountByFilter
+	// are cheap, single-call reads; cleanup itself runs through the sidekiq
+	// runner with the same dedup/cancel shape as recalculate-cost.
+	r.GET("/api/logs/storage", lib.ChainMiddlewares(h.getLogsStorageStats, middlewares...))
+	r.POST("/api/logs/storage/by-filter", lib.ChainMiddlewares(h.postLogsStorageByFilter, middlewares...))
+	r.POST("/api/logs/cleanup", lib.ChainMiddlewares(h.startLogCleanup, middlewares...))
+	r.GET("/api/logs/cleanup/status", lib.ChainMiddlewares(h.getLogCleanupStatus, middlewares...))
+	r.POST("/api/logs/cleanup/cancel", lib.ChainMiddlewares(h.cancelLogCleanup, middlewares...))
 
 	// MCP Tool Log retrieval with filtering, search, and pagination
 	r.GET("/api/mcp-logs", lib.ChainMiddlewares(h.getMCPLogs, middlewares...))
@@ -2419,6 +2460,398 @@ func (h *LoggingHandler) cancelRecalculateCost(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	SendJSON(ctx, recalcJobStatus{ID: job.ID, Status: tables.SidekiqStatusCancelled})
+}
+
+// ---------------------------------------------------------------------------
+// Manual log-cleanup endpoints (settings page).
+//
+// The storage endpoints (storage, storage/by-filter) are cheap single-call
+// reads that run synchronously. The cleanup itself is asynchronous and goes
+// through the same sidekiq runner used for cost recalculation, so a long run
+// does not block the UI and can be cancelled mid-flight.
+// ---------------------------------------------------------------------------
+
+// getLogsStorageStats handles GET /api/logs/storage. Returns a snapshot of the
+// request log store's row count, on-disk size estimate, and timestamp window.
+// Plus the auto-cleaner's most recent sweep if SetLastCleanupReporter has
+// wired one. Cheap enough to call on every UI poll (~1 second of DB work
+// worst case).
+func (h *LoggingHandler) getLogsStorageStats(ctx *fasthttp.RequestCtx) {
+	if h.logStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "Logs store is not configured")
+		return
+	}
+	stats, err := h.logStore.StorageStats(ctx)
+	if err != nil {
+		logger.Error("failed to read log storage stats: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to read storage stats")
+		return
+	}
+
+	resp := map[string]interface{}{
+		"store_type":               stats.StoreType,
+		"total_logs":               stats.TotalLogs,
+		"estimated_size_bytes":     stats.EstimatedSizeBytes,
+		"oldest_log_at":            stats.OldestLogAt,
+		"newest_log_at":            stats.NewestLogAt,
+		"estimate_caveat":          "size is estimated; actual on-disk usage may differ slightly",
+		"logs_with_payload":        stats.LogsWithPayload,
+		"logs_stripped":            stats.LogsStripped,
+		"logs_offloaded":           stats.LogsOffloaded,
+		"logs_hidden":              stats.LogsHidden,
+		"size_without_payload_bytes": stats.SizeWithoutPayloadBytes,
+		"size_with_payload_bytes":    stats.SizeWithPayloadBytes,
+		"size_offloaded_bytes":       stats.SizeOffloadedBytes,
+	}
+
+	if h.lastAutoCleanup != nil {
+		lastRun, deleted, durMs := h.lastAutoCleanup()
+		resp["last_auto_cleanup_at"] = lastRun
+		resp["last_auto_cleanup_deleted"] = deleted
+		resp["last_auto_cleanup_duration_ms"] = durMs
+	}
+
+	SendJSON(ctx, resp)
+}
+
+// postLogsStorageByFilter handles POST /api/logs/storage/by-filter. Returns
+// the matched row count, an estimated size for that slice of the table, and
+// the matched timestamp window — enough to render the dialog's preview line
+// before the user commits to a real cleanup. No row data is returned.
+func (h *LoggingHandler) postLogsStorageByFilter(ctx *fasthttp.RequestCtx) {
+	if h.logStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "Logs store is not configured")
+		return
+	}
+	var req struct {
+		Scope   string                  `json:"scope"`
+		Cutoff  *time.Time              `json:"cutoff,omitempty"`
+		Filters *cleanupFiltersWrapper  `json:"filters,omitempty"`
+	}
+	if err := sonic.Unmarshal(ctx.PostBody(), &req); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	scope := logstore.CleanupScope(req.Scope)
+	switch scope {
+	case logstore.CleanupScopeAll:
+		// Whole-table preview: StorageStats is the source of truth, no
+		// filter aggregation needed. The UI shows "all N rows".
+		stats, err := h.logStore.StorageStats(ctx)
+		if err != nil {
+			logger.Error("failed to read storage stats for all-scope preview: %v", err)
+			SendError(ctx, fasthttp.StatusInternalServerError, "Failed to read storage stats")
+			return
+		}
+		SendJSON(ctx, map[string]interface{}{
+			"scope":                scope,
+			"matched_logs":         stats.TotalLogs,
+			"estimated_size_bytes": stats.EstimatedSizeBytes,
+			"oldest":               stats.OldestLogAt,
+			"newest":               stats.NewestLogAt,
+		})
+		return
+
+	case logstore.CleanupScopeOlderThan:
+		if req.Cutoff == nil {
+			SendError(ctx, fasthttp.StatusBadRequest, "older_than scope requires cutoff")
+			return
+		}
+		preview, err := h.logStore.CountByFilter(ctx, logstore.SearchFilters{EndTime: req.Cutoff})
+		if err != nil {
+			logger.Error("failed to preview older_than cleanup: %v", err)
+			SendError(ctx, fasthttp.StatusInternalServerError, "Failed to preview scope")
+			return
+		}
+		SendJSON(ctx, map[string]interface{}{
+			"scope":                scope,
+			"matched_logs":         preview.MatchedLogs,
+			"estimated_size_bytes": preview.EstimatedSizeBytes,
+			"oldest":               preview.Oldest,
+			"newest":               preview.Newest,
+			"cutoff":               req.Cutoff,
+		})
+		return
+
+	case logstore.CleanupScopeFilter:
+		if req.Filters == nil {
+			SendError(ctx, fasthttp.StatusBadRequest, "filter scope requires filters")
+			return
+		}
+		filters := req.Filters.SearchFilters
+		if req.Filters.Period != "" {
+			// Period resolves to a frozen time range on the server side so
+			// the preview matches what the worker walks. The cleanup worker
+			// expects StartTime/EndTime on the filters; period strings
+			// would otherwise be ignored.
+			if start, end := ResolvePeriod(req.Filters.Period); start != nil {
+				if filters.StartTime == nil {
+					filters.StartTime = start
+				}
+				if filters.EndTime == nil {
+					filters.EndTime = end
+				}
+			}
+		}
+		preview, err := h.logStore.CountByFilter(ctx, filters)
+		if err != nil {
+			logger.Error("failed to preview filter cleanup: %v", err)
+			SendError(ctx, fasthttp.StatusInternalServerError, "Failed to preview scope")
+			return
+		}
+		SendJSON(ctx, map[string]interface{}{
+			"scope":                scope,
+			"matched_logs":         preview.MatchedLogs,
+			"estimated_size_bytes": preview.EstimatedSizeBytes,
+			"oldest":               preview.Oldest,
+			"newest":               preview.Newest,
+		})
+		return
+
+	default:
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("unknown scope %q", req.Scope))
+		return
+	}
+}
+
+// startLogCleanupRequest is the wire shape for POST /api/logs/cleanup. Kept
+// in one place so the handler body stays close to the field documentation.
+type startLogCleanupRequest struct {
+	Scope             string                 `json:"scope"`
+	Cutoff            *time.Time             `json:"cutoff,omitempty"`
+	Filters           *cleanupFiltersWrapper `json:"filters,omitempty"`
+	StripPayloadsOnly bool                   `json:"strip_payloads_only"`
+}
+
+// cleanupFiltersWrapper embeds SearchFilters and adds Period as a wire-level
+// convenience: the UI sends {filters:{period:"7d",providers:["openai"]}} and
+// the server resolves the period into StartTime/EndTime so the worker walks
+// the same window the user just previewed.
+type cleanupFiltersWrapper struct {
+	logstore.SearchFilters
+	Period string `json:"period,omitempty"`
+}
+
+// startLogCleanup handles POST /api/logs/cleanup. Enqueues a sidekiq job that
+// walks the matched rows in batches and either deletes them or zeros out
+// payload columns, depending on StripPayloadsOnly. The endpoint returns 202
+// with the job status, mirroring recalculate-cost's shape so the UI can reuse
+// its polling infrastructure.
+func (h *LoggingHandler) startLogCleanup(ctx *fasthttp.RequestCtx) {
+	if h.sidekiqRunner == nil || h.sidekiqStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "Background job runner is not available")
+		return
+	}
+	if h.logStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "Logs store is not configured")
+		return
+	}
+
+	var req startLogCleanupRequest
+	if err := sonic.Unmarshal(ctx.PostBody(), &req); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid JSON")
+		return
+	}
+	scope := logstore.CleanupScope(req.Scope)
+	switch scope {
+	case logstore.CleanupScopeAll, logstore.CleanupScopeOlderThan, logstore.CleanupScopeFilter:
+	default:
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("unknown scope %q", req.Scope))
+		return
+	}
+	if scope == logstore.CleanupScopeOlderThan && req.Cutoff == nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "older_than scope requires cutoff")
+		return
+	}
+	if scope == logstore.CleanupScopeFilter && req.Filters == nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "filter scope requires filters")
+		return
+	}
+
+	meta := logstore.CleanupJobMeta{
+		Scope:             scope,
+		Cutoff:            req.Cutoff,
+		StripPayloadsOnly: req.StripPayloadsOnly,
+	}
+	if req.Filters != nil {
+		meta.Filters = req.Filters.SearchFilters
+		// Mirror the preview handler's period-to-time-range resolution so
+		// the worker walks the same window the user just previewed.
+		if req.Filters.Period != "" {
+			if start, end := ResolvePeriod(req.Filters.Period); start != nil {
+				if meta.Filters.StartTime == nil {
+					meta.Filters.StartTime = start
+				}
+				if meta.Filters.EndTime == nil {
+					meta.Filters.EndTime = end
+				}
+			}
+		}
+	}
+	if scope == logstore.CleanupScopeOlderThan && meta.Filters.StartTime == nil && meta.Filters.EndTime == nil {
+		meta.Filters.EndTime = meta.Cutoff
+	}
+
+	metaJSON, err := h.logManager.BuildLogCleanupJobMeta(ctx, meta)
+	if err != nil {
+		logger.Error("failed to prepare cleanup job: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to prepare cleanup: %v", err))
+		return
+	}
+
+	// Dedup: at most one cleanup at a time. The user can wait or cancel.
+	if existing, err := h.sidekiqStore.GetInFlightSidekiqJobByKind(ctx, logging.LogCleanupJobKind); err != nil {
+		logger.Error("failed to check in-flight cleanup job: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to check running jobs")
+		return
+	} else if existing != nil {
+		ctx.SetStatusCode(fasthttp.StatusConflict)
+		SendJSON(ctx, cleanupJobStatusFromRow(existing))
+		return
+	}
+
+	jobID := uuid.NewString()
+	createdBy := ""
+	if err := h.sidekiqRunner.Enqueue(ctx, jobID, logging.LogCleanupJobKind, metaJSON, createdBy); err != nil {
+		logger.Error("failed to enqueue cleanup job: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to start cleanup: %v", err))
+		return
+	}
+
+	ctx.SetStatusCode(fasthttp.StatusAccepted)
+	if job, err := h.sidekiqStore.GetSidekiqJob(ctx, jobID); err == nil && job != nil {
+		SendJSON(ctx, cleanupJobStatusFromRow(job))
+		return
+	}
+	SendJSON(ctx, cleanupJobStatus{ID: jobID, Status: tables.SidekiqStatusPending})
+}
+
+// cleanupJobStatus is the API view of a log-cleanup job: the durable sidekiq
+// row fields plus the progress counters decoded from the job metadata. Shape
+// mirrors recalcJobStatus so a single status component can render both.
+type cleanupJobStatus struct {
+	ID        string     `json:"id,omitempty"`
+	Status    string     `json:"status"`
+	Scope     string     `json:"scope,omitempty"`
+	Total     int64      `json:"total"`
+	Processed int64      `json:"processed"`
+	Deleted   int64      `json:"deleted"`
+	Stripped  int64      `json:"stripped"`
+	Message   string     `json:"message,omitempty"`
+	LastError string     `json:"last_error,omitempty"`
+	StartedAt *time.Time `json:"started_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+// cleanupJobStatusFromRow projects a sidekiq row into the API status,
+// decoding progress from the job metadata (best effort).
+func cleanupJobStatusFromRow(job *tables.TableSidekiqJob) cleanupJobStatus {
+	updatedAt := job.UpdatedAt
+	status := cleanupJobStatus{
+		ID:        job.ID,
+		Status:    job.Status,
+		LastError: job.LastError,
+		StartedAt: job.StartedAt,
+		UpdatedAt: &updatedAt,
+	}
+	if job.Metadata != "" {
+		var meta logstore.CleanupJobMeta
+		if err := sonic.Unmarshal([]byte(job.Metadata), &meta); err == nil {
+			status.Scope = string(meta.Scope)
+			status.Total = meta.Total
+			status.Processed = meta.Processed
+			status.Deleted = meta.Deleted
+			status.Stripped = meta.Stripped
+			status.Message = meta.Message
+		}
+	}
+	return status
+}
+
+// getLogCleanupStatus handles GET /api/logs/cleanup/status. Same shape as
+// recalculate-cost/status: with an ?id= it returns that job, otherwise the
+// most recent in-flight job, or "idle" when none.
+func (h *LoggingHandler) getLogCleanupStatus(ctx *fasthttp.RequestCtx) {
+	if h.sidekiqStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "Background job runner is not available")
+		return
+	}
+
+	if id := strings.TrimSpace(string(ctx.QueryArgs().Peek("id"))); id != "" {
+		job, err := h.sidekiqStore.GetSidekiqJob(ctx, id)
+		if err != nil {
+			logger.Error("failed to fetch cleanup job %s: %v", id, err)
+			SendError(ctx, fasthttp.StatusInternalServerError, "Failed to fetch job status")
+			return
+		}
+		if job == nil {
+			SendError(ctx, fasthttp.StatusNotFound, "Job not found")
+			return
+		}
+		SendJSON(ctx, cleanupJobStatusFromRow(job))
+		return
+	}
+
+	job, err := h.sidekiqStore.GetInFlightSidekiqJobByKind(ctx, logging.LogCleanupJobKind)
+	if err != nil {
+		logger.Error("failed to fetch in-flight cleanup job: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to fetch job status")
+		return
+	}
+	if job == nil {
+		SendJSON(ctx, cleanupJobStatus{Status: "idle"})
+		return
+	}
+	SendJSON(ctx, cleanupJobStatusFromRow(job))
+}
+
+// cancelLogCleanup handles POST /api/logs/cleanup/cancel. Stops the
+// background worker mid-flight; rows already deleted/stripped stay that way.
+// Resolves with the job's post-cancel status so the UI can settle from a
+// single response.
+func (h *LoggingHandler) cancelLogCleanup(ctx *fasthttp.RequestCtx) {
+	if h.sidekiqRunner == nil || h.sidekiqStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "Background job runner is not available")
+		return
+	}
+
+	var (
+		job *tables.TableSidekiqJob
+		err error
+	)
+	if id := strings.TrimSpace(string(ctx.QueryArgs().Peek("id"))); id != "" {
+		job, err = h.sidekiqStore.GetSidekiqJob(ctx, id)
+	} else {
+		job, err = h.sidekiqStore.GetInFlightSidekiqJobByKind(ctx, logging.LogCleanupJobKind)
+	}
+	if err != nil {
+		logger.Error("failed to look up cleanup job to cancel: %v", err)
+		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to look up the cleanup job")
+		return
+	}
+	if job == nil {
+		SendError(ctx, fasthttp.StatusNotFound, "No cleanup job to cancel")
+		return
+	}
+	if job.Kind != logging.LogCleanupJobKind {
+		SendError(ctx, fasthttp.StatusBadRequest, "Job is not a log cleanup")
+		return
+	}
+	if tables.IsSidekiqTerminalStatus(job.Status) {
+		SendJSON(ctx, cleanupJobStatusFromRow(job))
+		return
+	}
+	if _, err := h.sidekiqRunner.Cancel(ctx, job.ID); err != nil {
+		logger.Error("failed to cancel cleanup job %s: %v", job.ID, err)
+		SendError(ctx, fasthttp.StatusInternalServerError, "Failed to cancel the cleanup")
+		return
+	}
+	if fresh, ferr := h.sidekiqStore.GetSidekiqJob(ctx, job.ID); ferr == nil && fresh != nil {
+		SendJSON(ctx, cleanupJobStatusFromRow(fresh))
+		return
+	}
+	SendJSON(ctx, cleanupJobStatus{ID: job.ID, Status: tables.SidekiqStatusCancelled})
 }
 
 // recalcJobStatus is the API view of a cost-recalculation job: the durable sidekiq

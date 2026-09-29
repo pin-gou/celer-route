@@ -1,5 +1,8 @@
 import { RedactedDBKey, VirtualKey } from "@/lib/types/governance";
 import {
+	CleanupJobStatus,
+	CleanupPreview,
+	CleanupRequest,
 	CostHistogramResponse,
 	DimensionRankingsResponse,
 	LatencyHistogramResponse,
@@ -7,8 +10,9 @@ import {
 	LogFilters,
 	LogSessionDetailResponse,
 	LogSessionSummaryResponse,
-	LogsHistogramResponse,
 	LogStats,
+	LogStorageStats,
+	LogsHistogramResponse,
 	ModelHistogramResponse,
 	ModelRankingsResponse,
 	Pagination,
@@ -463,6 +467,55 @@ export const logsApi = baseApi.injectEndpoints({
 			invalidatesTags: ["Logs"],
 		}),
 
+		// ---- Manual log cleanup (settings page) ----
+
+		// Storage stats snapshot. Cheap enough to poll every 30 s while the
+		// settings page is open.
+		getLogsStorageStats: builder.query<LogStorageStats, void>({
+			query: () => "/logs/storage",
+			// Don't tie this to "Logs": it's not invalidated by log writes/deletes,
+			// only by the cleanup job itself invalidating the storage tag below.
+		}),
+
+		// Preview a cleanup scope before the user commits. Cheap, single-call
+		// read returning matched row count + size estimate.
+		previewCleanupByFilter: builder.query<CleanupPreview, CleanupRequest>({
+			query: (req) => ({
+				url: "/logs/storage/by-filter",
+				method: "POST",
+				body: req,
+			}),
+		}),
+
+		// Start a background cleanup job. Returns 202 with the job status on
+		// success or 409 if one is already in flight (so the UI can attach).
+		startCleanup: builder.mutation<CleanupJobStatus, CleanupRequest>({
+			query: (req) => ({
+				url: "/logs/cleanup",
+				method: "POST",
+				body: req,
+			}),
+			invalidatesTags: ["Logs"],
+		}),
+
+		// Status of a background cleanup job. Polled while a job is running.
+		getCleanupStatus: builder.query<CleanupJobStatus, { id?: string } | void>({
+			query: (arg) => ({
+				url: "/logs/cleanup/status",
+				params: arg?.id ? { id: arg.id } : {},
+			}),
+		}),
+
+		// Stop a running cleanup. Rows already committed stay deleted/stripped.
+		cancelCleanup: builder.mutation<CleanupJobStatus, { id?: string } | void>({
+			query: (arg) => ({
+				url: "/logs/cleanup/cancel",
+				method: "POST",
+				params: arg?.id ? { id: arg.id } : {},
+			}),
+			invalidatesTags: ["Logs"],
+		}),
+
 		// Get a single log entry by ID (includes raw_request and raw_response)
 		getLogById: builder.query<LogEntry, string>({
 			query: (id) => `/logs/${encodeURIComponent(id)}`,
@@ -522,6 +575,11 @@ export const {
 	useRecalculateLogCostsMutation,
 	useGetRecalculateCostStatusQuery,
 	useCancelRecalculateCostJobMutation,
+	useGetLogsStorageStatsQuery,
+	useLazyPreviewCleanupByFilterQuery,
+	useStartCleanupMutation,
+	useGetCleanupStatusQuery,
+	useCancelCleanupMutation,
 	useLazyGetLogByIdQuery,
 	useGetLogByIdQuery,
 	useGetLogTimelineQuery,

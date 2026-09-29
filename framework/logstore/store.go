@@ -107,6 +107,13 @@ type LogStore interface {
 	DeleteLog(ctx context.Context, id string) error
 	DeleteLogs(ctx context.Context, ids []string) error
 	DeleteLogsBatch(ctx context.Context, cutoff time.Time, batchSize int) (deletedCount int64, err error)
+	// StorageStats / CountByFilter / DeleteByFilterBatch / StripPayloadsByFilterBatch
+	// power the manual-cleanup UI flow. Implementations honour ctx cancellation
+	// and only commit one batch per call so a checkpointed run can resume cleanly.
+	StorageStats(ctx context.Context) (*StorageStats, error)
+	CountByFilter(ctx context.Context, filters SearchFilters) (*CleanupPreview, error)
+	DeleteByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (deletedCount int64, err error)
+	StripPayloadsByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (strippedCount int64, err error)
 
 	CreateUserAgentMapping(ctx context.Context, mapping *UserAgentMapping) error
 	UpdateUserAgentMapping(ctx context.Context, id string, mapping *UserAgentMapping) error

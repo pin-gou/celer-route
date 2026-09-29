@@ -10,6 +10,9 @@ import { getErrorMessage, useGetCoreConfigQuery, useUpdateCoreConfigMutation } f
 import { CoreConfig, DefaultCoreConfig } from "@/lib/types/config";
 import { parseArrayFromText } from "@/lib/utils/array";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
+import AppLogNotManagedCard from "@/app/workspace/config/views/AppLogNotManagedCard";
+import LogCleanupDialog from "@/app/workspace/config/views/LogCleanupDialog";
+import LogStorageCard from "@/app/workspace/config/views/LogStorageCard";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -38,6 +41,11 @@ export default function LoggingView() {
 	const [needsRestart, setNeedsRestart] = useState<boolean>(false);
 	const [loggingHeadersText, setLoggingHeadersText] = useState<string>("");
 	const [activeTab, setActiveTab] = useQueryState("tab", parseAsStringLiteral(LOGGING_TABS).withDefault("requests"));
+	// Manual cleanup dialog state. The dialog owns its scope/inputs; this
+	// state only tracks open/close. Empty filters means the "by filter" scope
+	// option will be disabled in the dialog (cleanest behaviour for a brand-new
+	// session: ask for time/date by default).
+	const [cleanupOpen, setCleanupOpen] = useState(false);
 
 	useEffect(() => {
 		if (config) {
@@ -144,6 +152,11 @@ export default function LoggingView() {
 							{t("logging.introRequestsStorage")}
 						</p>
 					</div>
+
+					{/* Storage stats + manual cleanup entry point. The card hosts the
+					    "open cleanup dialog" button; cleanup is destructive and never
+					    rides the Save Changes flow at the bottom of the page. */}
+					<LogStorageCard onOpenCleanup={() => setCleanupOpen(true)} />
 
 					{/* Basic */}
 					<section className="space-y-4">
@@ -361,6 +374,11 @@ export default function LoggingView() {
 							{t("logging.introAppStorage")}
 						</p>
 					</div>
+
+					{/* App logs are NOT managed by the gateway — show an honest
+					    "managed by your deployment platform" card with platform-
+					    specific commands, instead of a fake "disk usage" gauge. */}
+					<AppLogNotManagedCard />
 					<section className="space-y-4">
 						<SectionTitle>{t("logging.section.appEffective")}</SectionTitle>
 						<div className="rounded-sm border p-4 text-sm">
@@ -454,6 +472,11 @@ export default function LoggingView() {
 					{isLoading ? t("logging.saving") : t("logging.saveChanges")}
 				</Button>
 			</div>
+
+			{/* Manual cleanup dialog. Lives outside the Save Changes flow by
+			    design: cleanup is destructive + asynchronous and would be
+			    misleading to bundle under "save settings". */}
+			<LogCleanupDialog open={cleanupOpen} onOpenChange={setCleanupOpen} filters={null} />
 		</div>
 	);
 }

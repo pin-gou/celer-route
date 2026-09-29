@@ -149,6 +149,16 @@ type LogManager interface {
 	// the final metadata JSON to persist.
 	RunCostRecalcJob(ctx context.Context, metaJSON string, checkpoint func(string) error) (string, error)
 
+	// BuildLogCleanupJobMeta counts the rows in scope for a manual log-cleanup
+	// job and returns the durable metadata JSON to enqueue. The caller must
+	// have already resolved any period into filters.StartTime/EndTime and
+	// frozen the cutoff time.
+	BuildLogCleanupJobMeta(ctx context.Context, meta logstore.CleanupJobMeta) (string, error)
+	// RunLogCleanupJob executes one background log-cleanup job, walking the
+	// scope in batches and checkpointing after each batch. Returns the final
+	// metadata JSON to persist.
+	RunLogCleanupJob(ctx context.Context, metaJSON string, checkpoint func(string) error) (string, error)
+
 	// ErrorPatterns returns aggregated error buckets for a provider in the
 	// given window. Used by the CooldownPolicy UI's error-sample browser.
 	ErrorPatterns(ctx context.Context, provider schemas.ModelProvider, window string, limit int) ([]logstore.ErrorPattern, int64, error)
@@ -490,6 +500,23 @@ func (p *PluginLogManager) RunCostRecalcJob(ctx context.Context, metaJSON string
 	return p.plugin.RunCostRecalcJob(ctx, metaJSON, checkpoint)
 }
 
+// BuildLogCleanupJobMeta delegates to the plugin. It exists so LoggingHandler
+// can call the same surface used for cost recalculation.
+func (p *PluginLogManager) BuildLogCleanupJobMeta(ctx context.Context, meta logstore.CleanupJobMeta) (string, error) {
+	if p.plugin == nil {
+		return "", fmt.Errorf("logging plugin not initialized")
+	}
+	return p.plugin.BuildLogCleanupJobMeta(ctx, meta)
+}
+
+// RunLogCleanupJob delegates to the plugin.
+func (p *PluginLogManager) RunLogCleanupJob(ctx context.Context, metaJSON string, checkpoint func(string) error) (string, error) {
+	if p.plugin == nil {
+		return metaJSON, fmt.Errorf("logging plugin not initialized")
+	}
+	return p.plugin.RunLogCleanupJob(ctx, metaJSON, checkpoint)
+}
+
 // GetMCPToolLog retrieves a single MCP tool log entry by ID.
 func (p *PluginLogManager) GetMCPToolLog(ctx context.Context, id string) (*logstore.MCPToolLog, error) {
 	if p.plugin == nil || p.plugin.store == nil {
@@ -644,6 +671,15 @@ func (p *LoggerPlugin) GetPluginLogManager() *PluginLogManager {
 	return &PluginLogManager{
 		plugin: p,
 	}
+}
+
+// GetLogStore returns the underlying log store reference. Used by the HTTP
+// layer to wire the manual-cleanup endpoints (which need raw access to
+// StorageStats / CountByFilter / DeleteByFilterBatch). Returns nil if the
+// plugin was initialised without a store, in which case the cleanup endpoints
+// will return 503.
+func (p *LoggerPlugin) GetLogStore() logstore.LogStore {
+	return p.store
 }
 
 // retryOnNotFound retries a function up to 3 times with 1-second delays if it returns logstore.ErrNotFound

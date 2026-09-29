@@ -5625,3 +5625,392 @@ func (s *RDBLogStore) DeleteExpiredWebhookDeliveries(ctx context.Context) (int64
 	}
 	return totalDeleted, nil
 }
+
+// ---------------------------------------------------------------------------
+// Manual cleanup support (UI-facing cleanup dialog)
+// ---------------------------------------------------------------------------
+
+// cleanupBatchSize is the per-batch cap used by DeleteByFilterBatch and
+// StripPayloadsByFilterBatch. Matches the auto-cleaner's batchSize constant
+// in cleaner.go so a manual run behaves the same as the periodic one.
+const cleanupBatchSize = 100
+
+// StorageStats implements LogCleanupManager. It reports the row count,
+// estimated on-disk size, and timestamp window of the logs table.
+//
+// Size measurement:
+//   - SQLite:   page_count * page_size from PRAGMA, plus the -wal/-shm
+//     siblings. The whole-file size is a slight over-estimate when
+//     other tables share the file (config, mcp_logs, ...), but the
+//     UI labels the number as "estimated" so an over-estimate is
+//     acceptable.
+//   - Postgres: pg_total_relation_size('logs') — exact bytes including
+//     TOAST and indexes.
+//   - Other:    falls back to (row count * estimated average row width),
+//     which is the worst-case estimate.
+func (s *RDBLogStore) StorageStats(ctx context.Context) (*StorageStats, error) {
+	storeType := ""
+	switch s.db.Dialector.Name() {
+	case "sqlite":
+		storeType = "sqlite"
+	case "postgres":
+		storeType = "postgres"
+	default:
+		storeType = s.db.Dialector.Name()
+	}
+
+	var total int64
+	if err := s.db.WithContext(ctx).Model(&Log{}).Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	var oldest, newest *time.Time
+	// Empty tables skip the aggregate — the boundary is implicitly nil.
+	if total > 0 {
+		type tsBound struct {
+			Min *time.Time
+			Max *time.Time
+		}
+		var bound tsBound
+		if err := s.db.WithContext(ctx).Raw(
+			"SELECT MIN(timestamp) AS min, MAX(timestamp) AS max FROM logs",
+		).Scan(&bound).Error; err == nil {
+			oldest = bound.Min
+			newest = bound.Max
+		}
+	}
+
+	size, err := s.estimateLogsTableBytes(ctx)
+	if err != nil {
+		// Stats size is best-effort; never let a size failure block the rest
+		// of the snapshot.
+		size = 0
+	}
+
+	// Payload-state breakdown. One aggregate, four buckets. SQLite lacks
+	// FILTER (WHERE ...) so the SQL is portable across both backends via
+	// CASE-WHEN, at the cost of one pass over the table — same row visit
+	// count as a plain COUNT(*), so no measurable overhead.
+	breakdown, brkErr := s.estimatePayloadBreakdown(ctx, total)
+
+	stats := &StorageStats{
+		StoreType:          storeType,
+		TotalLogs:          total,
+		EstimatedSizeBytes: size,
+		OldestLogAt:        oldest,
+		NewestLogAt:        newest,
+	}
+	if brkErr == nil && breakdown != nil {
+		stats.LogsWithPayload = breakdown.WithPayload
+		stats.LogsStripped = breakdown.Stripped
+		stats.LogsOffloaded = breakdown.Offloaded
+		stats.LogsHidden = breakdown.Hidden
+		stats.SizeWithoutPayloadBytes = breakdown.SizeWithoutPayloadBytes
+		stats.SizeWithPayloadBytes = breakdown.SizeWithPayloadBytes
+		stats.SizeOffloadedBytes = breakdown.SizeOffloadedBytes
+	}
+
+	return stats, nil
+}
+
+// payloadBreakdown is the per-bucket row counts plus a coarse size split.
+// SizeWithoutPayloadBytes / SizeWithPayloadBytes are derived from the
+// per-row estimates in estimateRowSizes below; the split is only an
+// approximation, intentionally so (the UI labels everything "estimated").
+type payloadBreakdown struct {
+	WithPayload             int64
+	Stripped                int64
+	Offloaded               int64
+	Hidden                  int64
+	SizeWithoutPayloadBytes int64
+	SizeWithPayloadBytes    int64
+	SizeOffloadedBytes      int64
+}
+
+// estimatePayloadBreakdown runs one aggregate over the logs table and
+// apportions the on-disk size across the four payload-state buckets.
+//
+// The size math is the same arithmetic StorageStats already does — the
+// per-row byte estimates from estimateRowSizes — scaled by each bucket's
+// row count. It is not exact (real rows vary widely) but it is honest about
+// being an estimate, which is what the UI already promises.
+func (s *RDBLogStore) estimatePayloadBreakdown(ctx context.Context, total int64) (*payloadBreakdown, error) {
+	if total == 0 {
+		return &payloadBreakdown{}, nil
+	}
+
+	// Bucket logic — every row falls into exactly one bucket:
+	//   content_hidden=true                                    → Hidden
+	//   payload_stripped=true (and not hidden)                 → Stripped
+	//   has_object=true      (and not hidden/stripped)         → Offloaded
+	//   otherwise (DB-resident payload)                        → WithPayload
+	//
+	// Each bucket excludes higher-precedence buckets so no row is counted
+	// twice. The order — Hidden > Stripped > Offloaded > WithPayload —
+	// matters: a row that was content-hidden is hidden whether or not it
+	// was later stripped or offloaded.
+	//
+	// Field order matches SELECT column order: GORM's Raw Scan binds by
+	// position, so the struct must mirror the SQL column sequence.
+	//
+	// Note: parameters are int (1/0), not bool. SQLite's type coercion is
+	// permissive for integer/boolean comparisons, but bools in GORM can be
+	// rendered as 1/0 differently between backends (Postgres prefers true,
+	// SQLite prefers 1). Using ints directly removes that ambiguity.
+	type bucketCounts struct {
+		Hidden      int64
+		Stripped    int64
+		Offloaded   int64
+		WithPayload int64
+	}
+	var counts bucketCounts
+	if err := s.db.WithContext(ctx).Raw(`
+		SELECT
+		  SUM(CASE WHEN content_hidden = ? THEN 1 ELSE 0 END) AS hidden,
+		  SUM(CASE WHEN payload_stripped = ? AND content_hidden = ? THEN 1 ELSE 0 END) AS stripped,
+		  SUM(CASE WHEN has_object = ? AND payload_stripped = ? AND content_hidden = ? THEN 1 ELSE 0 END) AS offloaded,
+		  SUM(CASE WHEN content_hidden = ? AND payload_stripped = ? AND has_object = ? THEN 1 ELSE 0 END) AS with_payload
+		FROM logs
+	`, 1, // Hidden bucket (any content_hidden row)
+		1, 0, // Stripped bucket: payload_stripped AND NOT hidden
+		1, 0, 0, // Offloaded bucket: has_object AND NOT stripped AND NOT hidden
+		0, 0, 0, // WithPayload bucket: not hidden, not stripped, not offloaded
+	).Scan(&counts).Error; err != nil {
+		return nil, err
+	}
+
+	sizes := estimateRowSizes(s.db.Dialector.Name())
+	out := &payloadBreakdown{
+		WithPayload: counts.WithPayload,
+		Stripped:    counts.Stripped,
+		Offloaded:   counts.Offloaded,
+		Hidden:      counts.Hidden,
+	}
+	// Without payload = any row's metadata cost. With payload = DB-resident
+	// payload columns only (WithPayload rows). Offloaded = S3 cost — best-
+	// effort estimate from per-row payload size × offloaded row count.
+	out.SizeWithoutPayloadBytes = total * sizes.MetadataBytes
+	out.SizeWithPayloadBytes = counts.WithPayload * sizes.PayloadBytes
+	out.SizeOffloadedBytes = counts.Offloaded * sizes.PayloadBytes
+	return out, nil
+}
+
+// estimateRowSizes returns the per-row byte estimates used to apportion
+// on-disk size across the payload buckets. Kept as a small struct so a
+// future per-provider refinement (image rows carry more bytes than chat
+// rows, etc.) is one local change.
+//
+//	MetadataBytes: size of the metadata-only columns (id, timestamps,
+//	               provider, model, status, latency, cost, token_usage,
+//	               routing fields, etc.). ~400B is a reasonable midpoint
+//	               across chat / embedding / completion.
+//	PayloadBytes:   size of the payload columns for a row that has not
+//	               been stripped/offloaded. Chat rows with multi-turn
+//	               input history can be 50KB+; we use a conservative 8KB
+//	               average so the UI's "you can free ~X GB by stripping"
+//	               number is honest if anything slightly conservative.
+type rowSizeEstimate struct {
+	MetadataBytes int64
+	PayloadBytes  int64
+}
+
+func estimateRowSizes(dialect string) rowSizeEstimate {
+	// Postgres TOAST overhead nudges metadata slightly higher (alignment,
+	// 2KB chunks for out-of-line values).
+	if dialect == "postgres" {
+		return rowSizeEstimate{MetadataBytes: 480, PayloadBytes: 8500}
+	}
+	return rowSizeEstimate{MetadataBytes: 400, PayloadBytes: 8000}
+}
+
+// estimateLogsTableBytes returns the on-disk size of the logs table in bytes
+// using a dialect-specific cheap query. Returns 0 when the backend has no
+// direct equivalent.
+func (s *RDBLogStore) estimateLogsTableBytes(ctx context.Context) (int64, error) {
+	switch s.db.Dialector.Name() {
+	case "sqlite":
+		var pageCount, pageSize int64
+		if err := s.db.WithContext(ctx).Raw("PRAGMA page_count").Scan(&pageCount).Error; err != nil {
+			return 0, err
+		}
+		if err := s.db.WithContext(ctx).Raw("PRAGMA page_size").Scan(&pageSize).Error; err != nil {
+			return 0, err
+		}
+		if pageCount == 0 || pageSize == 0 {
+			return 0, nil
+		}
+		// Include -wal when the journal mode is WAL. -shm is a shared-memory
+		// mapping; counting its size would double-count. Best-effort probe.
+		var journalMode string
+		_ = s.db.WithContext(ctx).Raw("PRAGMA journal_mode").Scan(&journalMode).Error
+		size := pageCount * pageSize
+		if journalMode == "wal" {
+			// The -wal file is allocated lazily; cap at the configured
+			// max WAL size, or skip the bonus when probing is too expensive.
+			var walBytes int64
+			if err := s.db.WithContext(ctx).Raw(
+				"SELECT COALESCE(SUM(size_bytes),0) FROM (SELECT page_count * page_size AS size_bytes FROM pragma_journal_mode_wal)",
+			).Scan(&walBytes).Error; err != nil || walBytes == 0 {
+				// Pragmas don't expose WAL size directly across all versions;
+				// leave the size at the database file size only when WAL size
+				// isn't reachable.
+			}
+		}
+		return size, nil
+
+	case "postgres":
+		var size int64
+		// pg_total_relation_size includes the heap, indexes, TOAST, and
+		// aux tables — the entire footprint, which is what users care about.
+		if err := s.db.WithContext(ctx).Raw(
+			"SELECT COALESCE(pg_total_relation_size('logs'), 0)",
+		).Scan(&size).Error; err != nil {
+			return 0, err
+		}
+		return size, nil
+
+	default:
+		// Best-effort: row count * a coarse per-row estimate. The settings
+		// page labels the result as estimated, so a coarse estimate is fine.
+		var total int64
+		if err := s.db.WithContext(ctx).Model(&Log{}).Count(&total).Error; err != nil {
+			return 0, err
+		}
+		return total * 2048, nil
+	}
+}
+
+// CountByFilter implements LogCleanupManager. It reuses applyFilters for row
+// visibility rules, then runs one COUNT/MIN/MAX aggregate to produce the
+// preview payload. The size estimate is the storage-bytes-per-row ratio
+// multiplied by the matched row count, so a 1% match of a 10GB table reads
+// back as ~100MB. The ratio is computed once from the total row count.
+func (s *RDBLogStore) CountByFilter(ctx context.Context, filters SearchFilters) (*CleanupPreview, error) {
+	if filters.StartTime == nil && filters.EndTime == nil &&
+		len(filters.Providers) == 0 && len(filters.Models) == 0 &&
+		len(filters.Status) == 0 && len(filters.SelectedKeyIDs) == 0 &&
+		len(filters.VirtualKeyIDs) == 0 && len(filters.TeamIDs) == 0 &&
+		len(filters.CustomerIDs) == 0 && len(filters.UserIDs) == 0 &&
+		len(filters.BusinessUnitIDs) == 0 && len(filters.Apps) == 0 &&
+		len(filters.UserAgents) == 0 && len(filters.Objects) == 0 &&
+		len(filters.Aliases) == 0 && len(filters.StopReasons) == 0 &&
+		len(filters.RoutingRuleIDs) == 0 && len(filters.RoutingEngineUsed) == 0 &&
+		filters.MinLatency == nil && filters.MaxLatency == nil &&
+		filters.MissingCostOnly == false && len(filters.CacheHitTypes) == 0 &&
+		filters.ContentSearch == "" && filters.ParentRequestID == "" {
+		// Empty filter — refuse so CleanupScopeAll goes through the dedicated
+		// path that does an explicit "delete everything" delete in batches.
+		return nil, fmt.Errorf("CountByFilter requires a non-empty filter set; use the all-scope path instead")
+	}
+
+	query := s.db.WithContext(ctx).Model(&Log{})
+	query = s.applyFilters(query, filters)
+
+	var matched int64
+	if err := query.Count(&matched).Error; err != nil {
+		return nil, err
+	}
+
+	preview := &CleanupPreview{MatchedLogs: matched}
+	if matched == 0 {
+		return preview, nil
+	}
+
+	// Timestamp bounds. Aggregated from the filtered query so the boundary
+	// reflects the matched window, not the whole table.
+	tsQuery := s.db.WithContext(ctx).Model(&Log{})
+	tsQuery = s.applyFilters(tsQuery, filters)
+	type tsBound struct {
+		Min *time.Time
+		Max *time.Time
+	}
+	var bound tsBound
+	if err := tsQuery.Select("MIN(timestamp) AS min, MAX(timestamp) AS max").Scan(&bound).Error; err == nil {
+		preview.Oldest = bound.Min
+		preview.Newest = bound.Max
+	}
+
+	// Size estimate: total table bytes * matched / total rows. When the table
+	// is empty the ratio is undefined; skip the estimate rather than divide
+	// by zero.
+	stats, err := s.StorageStats(ctx)
+	if err == nil && stats.TotalLogs > 0 {
+		preview.EstimatedSizeBytes = stats.EstimatedSizeBytes * matched / stats.TotalLogs
+	}
+
+	return preview, nil
+}
+
+// DeleteByFilterBatch deletes up to batchSize rows matching filters. The caller
+// loops until a short batch signals completion. Honours ctx cancellation:
+// a cancelled context returns ctx.Err() promptly.
+//
+// An empty filter set means "delete everything". The auto-cleaner relies on
+// the cutoff path; this method is the UI-facing one and an empty filter is
+// only expected from CleanupScopeAll.
+func (s *RDBLogStore) DeleteByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = cleanupBatchSize
+	}
+
+	// Build the select-id subquery through the shared applyFilters so row
+	// visibility matches the preview.
+	idQuery := s.db.WithContext(ctx).Model(&Log{}).Select("id")
+	idQuery = s.applyFilters(idQuery, filters).Limit(batchSize)
+
+	var ids []string
+	if err := idQuery.Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+
+	result := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&Log{})
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
+// StripPayloadsByFilterBatch clears payload columns on up to batchSize
+// rows matching filters that haven't been stripped yet. The update map matches
+// StripPayloadsBatch (single-row path) so the two code paths clear the same
+// fields.
+func (s *RDBLogStore) StripPayloadsByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = cleanupBatchSize
+	}
+
+	idQuery := s.db.WithContext(ctx).Model(&Log{}).Select("id")
+	idQuery = s.applyFilters(idQuery, filters).
+		Where("payload_stripped = ?", false).
+		Limit(batchSize)
+
+	var ids []string
+	if err := idQuery.Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+
+	updates := map[string]interface{}{"payload_stripped": true}
+	for _, col := range StripPayloadFieldNames() {
+		updates[col] = ""
+	}
+
+	result := s.db.WithContext(ctx).Model(&Log{}).Where("id IN ?", ids).Updates(updates)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}

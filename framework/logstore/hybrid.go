@@ -566,6 +566,52 @@ func (h *HybridLogStore) StripPayloadsBatch(ctx context.Context, cutoff time.Tim
 	return 0, nil
 }
 
+// ---------------------------------------------------------------------------
+// Manual cleanup support — hybrid stores forward to the inner store, matching
+// the existing DeleteLogsBatch / StripPayloadsBatch delegation pattern. Object
+// storage payloads are NOT deleted here; the bucket's lifecycle policy is
+// expected to expire them on the same schedule.
+// ---------------------------------------------------------------------------
+
+// StorageStats delegates to the inner store. When the inner store does not
+// implement LogCleanupManager (defensive), returns an empty stats with the
+// store type set to "hybrid" so the UI can still render a "stats unavailable"
+// state instead of failing the request.
+func (h *HybridLogStore) StorageStats(ctx context.Context) (*StorageStats, error) {
+	if mgr, ok := h.inner.(LogCleanupManager); ok {
+		return mgr.StorageStats(ctx)
+	}
+	return &StorageStats{StoreType: "hybrid"}, nil
+}
+
+// CountByFilter delegates to the inner store. An empty inner implementation
+// (i.e. non-RDB / non-ClickHouse backends) returns a zero preview so the UI
+// can render an "unavailable" state.
+func (h *HybridLogStore) CountByFilter(ctx context.Context, filters SearchFilters) (*CleanupPreview, error) {
+	if mgr, ok := h.inner.(LogCleanupManager); ok {
+		return mgr.CountByFilter(ctx, filters)
+	}
+	return &CleanupPreview{}, nil
+}
+
+// DeleteByFilterBatch delegates to the inner store. Object-store entries are
+// intentionally left for lifecycle-policy cleanup, matching DeleteLogsBatch.
+func (h *HybridLogStore) DeleteByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (int64, error) {
+	if mgr, ok := h.inner.(LogCleanupManager); ok {
+		return mgr.DeleteByFilterBatch(ctx, filters, batchSize)
+	}
+	return 0, nil
+}
+
+// StripPayloadsByFilterBatch delegates to the inner store, matching the
+// existing StripPayloadsBatch delegation.
+func (h *HybridLogStore) StripPayloadsByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (int64, error) {
+	if mgr, ok := h.inner.(LogCleanupManager); ok {
+		return mgr.StripPayloadsByFilterBatch(ctx, filters, batchSize)
+	}
+	return 0, nil
+}
+
 // Close shuts the store down cleanly: marks the store closed (so further
 // enqueues are dropped), closes the upload queue, waits for workers to drain
 // any in-flight uploads, then closes the object store and the inner store.

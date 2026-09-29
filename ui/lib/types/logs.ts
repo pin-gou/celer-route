@@ -904,6 +904,82 @@ export interface RecalcJobStatus {
 	updated_at?: string;
 }
 
+// LogStorageStats describes the on-disk footprint of the request log store.
+// Returned by GET /api/logs/storage. The estimate is intentionally labelled
+// estimated_size_bytes (not size_bytes): SQLite shares the database file
+// with config/mcp_logs, Postgres' pg_total_relation_size includes indexes,
+// ClickHouse's bytes_on_disk may lag actual table size — all honest
+// estimates, never exact.
+export interface LogStorageStats {
+	store_type: string;
+	total_logs: number;
+	estimated_size_bytes: number;
+	oldest_log_at?: string;
+	newest_log_at?: string;
+	estimate_caveat: string;
+	// Optional: most recent auto-cleaner sweep. Absent when the wiring
+	// (SetLastCleanupReporter) is not active, in which case the UI hides
+	// the "last cleanup" section rather than rendering "never".
+	last_auto_cleanup_at?: string;
+	last_auto_cleanup_deleted?: number;
+	last_auto_cleanup_duration_ms?: number;
+	// Payload-state breakdown. Each row falls into exactly one of these
+	// buckets (Hidden > Stripped > Offloaded > WithPayload) and the four
+	// counts together sum to total_logs. size_without_payload_bytes +
+	// size_with_payload_bytes covers what the DB actually holds;
+	// size_offloaded_bytes is the S3 footprint of offloaded payloads
+	// (zero when hybrid mode is off).
+	logs_with_payload: number;
+	logs_stripped: number;
+	logs_offloaded: number;
+	logs_hidden: number;
+	size_without_payload_bytes: number;
+	size_with_payload_bytes: number;
+	size_offloaded_bytes: number;
+}
+
+// CleanupPreview is returned by POST /api/logs/storage/by-filter before the
+// user commits to a real cleanup. It carries the matched row count and a
+// coarse size estimate so the dialog can show "this will affect X rows /
+// approximately Y MB".
+export interface CleanupPreview {
+	scope: "all" | "older_than" | "filter";
+	matched_logs: number;
+	estimated_size_bytes: number;
+	oldest?: string;
+	newest?: string;
+	cutoff?: string;
+}
+
+// CleanupRequest is the body shape for POST /api/logs/cleanup. The
+// server-side defaults strip_payloads_only=false (hard delete) and resolves
+// any period into a frozen start_time/end_time window.
+export interface CleanupRequest {
+	scope: "all" | "older_than" | "filter";
+	cutoff?: string;
+	filters?: LogFilters;
+	strip_payloads_only?: boolean;
+}
+
+// CleanupJobStatus mirrors the server's cleanupJobStatus. Same shape as
+// RecalcJobStatus so a single status component can render both, with the
+// addition of `scope` (visible at completion so the UI can recap what was
+// just cleaned) and the deleted/stripped counters (only one is meaningful
+// per run, depending on strip_payloads_only).
+export interface CleanupJobStatus {
+	id?: string;
+	status: "idle" | "pending" | "running" | "completed" | "failed" | "cancelled";
+	scope?: "all" | "older_than" | "filter";
+	total: number;
+	processed: number;
+	deleted: number;
+	stripped: number;
+	message?: string;
+	last_error?: string;
+	started_at?: string;
+	updated_at?: string;
+}
+
 // Responses API types (for responses_output field)
 
 // Message roles for responses
