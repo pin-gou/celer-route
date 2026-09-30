@@ -3487,6 +3487,11 @@
                       },
                       "default": ["read_file", "Read", "Glob", "Grep", "get_file_info", "list_dir", "find_files", "read_file_range", "ReadFile", "ReadRange", "GetFileInfo", "ListDir", "FindFiles", "search_files", "read_pdf", "ReadPdf"]
                     },
+                    "shell_tools_only": {
+                      "type": "boolean",
+                      "description": "Limit RTK compression to command-line / shell tool outputs only (bash, sh, exec, run, terminal, ...). When true, outputs whose tool name is NOT a known shell tool bypass the pipeline verbatim — the same contract as skip_read_file_tools (no compression, no raw-output persistence, no ScannedIndices entry, no token-count impact). ShellToolsOnly is a strictly broader skip than skip_read_file_tools, so the whitelist is ignored while this is on. Default true — operators explicitly opt in to compress non-shell tool outputs by toggling this off",
+                      "default": true
+                    },
                     "enable_renderers": {
                       "type": "boolean",
                       "description": "Enable semantic renderers (opt-in). When true, structured outputs (git diff, test suites, terraform plan, JSON tables) are rewritten to a more compact form after line filtering. Renderers are fail-open — a panic or no-op leaves the original text unchanged",

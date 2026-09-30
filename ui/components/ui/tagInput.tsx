@@ -14,7 +14,7 @@ interface TagInputProps extends OmittedInputProps {
 }
 
 export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
-	({ className, value, onValueChange, collapsedTagLimit, expandButtonTestId, ...props }, ref) => {
+	({ className, value, onValueChange, collapsedTagLimit, expandButtonTestId, disabled, ...props }, ref) => {
 		const [inputValue, setInputValue] = React.useState("");
 		const [tagsExpanded, setTagsExpanded] = React.useState(false);
 
@@ -34,6 +34,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
 		};
 
 		const addCurrentTag = () => {
+			if (disabled) return;
 			const newTag = inputValue.trim();
 			if (newTag && !value.includes(newTag)) {
 				onValueChange([...value, newTag]);
@@ -42,6 +43,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
 		};
 
 		const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+			if (disabled) return;
 			if (e.key === "Enter" || e.key === ",") {
 				e.preventDefault();
 				addCurrentTag();
@@ -51,10 +53,12 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
 		};
 
 		const handleBlur = () => {
+			if (disabled) return;
 			addCurrentTag();
 		};
 
 		const removeTag = (tagToRemove: string) => {
+			if (disabled) return;
 			onValueChange(value.filter((tag) => tag !== tagToRemove));
 		};
 
@@ -67,7 +71,8 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
 							<button
 								aria-label={`Remove ${tag}`}
 								type="button"
-								className="ring-offset-background focus:ring-ring cursor-pointer rounded-sm outline-none focus:ring-2 focus:ring-offset-2"
+								disabled={disabled}
+								className="ring-offset-background focus:ring-ring cursor-pointer rounded-sm outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
 								onClick={() => removeTag(tag)}
 							>
 								<X className="h-3 w-3" />
@@ -81,7 +86,11 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
 						onChange={handleInputChange}
 						onKeyDown={handleKeyDown}
 						onBlur={handleBlur}
-						className={cn("dark:bg-accent h-7 min-w-32 flex-1 border-0 py-0 px-2 text-xs shadow-none focus-visible:ring-0")}
+						disabled={disabled}
+						className={cn(
+							"dark:bg-accent h-7 min-w-32 flex-1 border-0 py-0 px-2 text-xs shadow-none focus-visible:ring-0",
+							disabled && "cursor-not-allowed opacity-50",
+						)}
 						{...props}
 					/>
 				</div>
@@ -104,7 +113,8 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
 							<button
 								aria-label={`Remove ${tag}`}
 								type="button"
-								className="ring-offset-background focus:ring-ring cursor-pointer rounded-sm outline-none focus:ring-2 focus:ring-offset-2"
+								disabled={disabled}
+								className="ring-offset-background focus:ring-ring cursor-pointer rounded-sm outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
 								onClick={() => removeTag(tag)}
 							>
 								<X className="h-3 w-3" />
@@ -145,11 +155,13 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
 							onChange={handleInputChange}
 							onKeyDown={handleKeyDown}
 							onBlur={handleBlur}
+							disabled={disabled}
 							className={cn(
 								"dark:bg-accent h-7 w-full min-w-0 rounded-sm border-0 py-0 px-2 text-xs shadow-none transition-[background-color,color,opacity] duration-200 focus-visible:ring-0",
 								isCollapsed
 									? "text-muted-foreground/25 placeholder:text-muted-foreground/15 bg-transparent opacity-70 group-hover:bg-background/70 group-hover:text-foreground/80 group-hover:placeholder:text-muted-foreground/60 group-hover:opacity-100 group-focus-within:bg-background group-focus-within:text-foreground group-focus-within:placeholder:text-muted-foreground/70 group-focus-within:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100"
 									: undefined,
+								disabled && "cursor-not-allowed opacity-50",
 							)}
 							{...props}
 						/>

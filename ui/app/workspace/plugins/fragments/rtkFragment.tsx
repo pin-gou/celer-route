@@ -752,49 +752,80 @@ function RtkEnginePanel({
 				<fieldset className="rounded-lg border p-4" data-testid="rtk-independent-advanced-section">
 					<legend className="bg-background px-2 text-sm font-semibold">{t("rtk.independentAdvancedSection")}</legend>
 					<div className="mt-2 space-y-4">
+						{/* shell_tools_only is the broader skip — when on, every
+						    non-shell tool bypasses RTK, so the read-file whitelist
+						    is redundant and hidden. The whitelist is kept on the
+						    wire so toggling the shell switch off restores the prior
+						    configuration verbatim. */}
 						<FormField
 							control={form.control}
-							name="skip_read_file_tools"
-							render={({ field }) => {
-								const current: string[] = Array.isArray(field.value) ? field.value : [];
-								const isDefaults =
-									current.length === DEFAULT_SKIP_READ_FILE_TOOLS.length &&
-									DEFAULT_SKIP_READ_FILE_TOOLS.every((name) => current.includes(name));
-								return (
-									<FormItem>
+							name="shell_tools_only"
+							render={({ field }) => (
+								<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+									<div className="space-y-0.5">
 										<div className="flex items-center gap-1.5">
-											<FormLabel>{t("rtk.skipReadFileToolsLabel")}</FormLabel>
-											<HelpHint>{t("rtk.skipReadFileToolsWhen")}</HelpHint>
+											<FormLabel>{t("rtk.shellToolsOnlyLabel")}</FormLabel>
+											<HelpHint>{t("rtk.shellToolsOnlyWhen")}</HelpHint>
 										</div>
-										<div className="flex items-center gap-2">
-											<FormControl className="min-w-0 flex-1">
-												<TagInput
-													data-testid="rtk-field-skip-read-file-tools"
-													value={current}
-													onValueChange={field.onChange}
-													placeholder={t("rtk.skipReadFileToolsPlaceholder")}
-													collapsedTagLimit={5}
-												/>
-											</FormControl>
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												onClick={() => field.onChange([...DEFAULT_SKIP_READ_FILE_TOOLS])}
-												disabled={!hasUpdateAccess || isDefaults}
-												data-testid="rtk-field-skip-read-file-tools-reset"
-												className="shrink-0"
-											>
-												<RotateCcw className="h-4 w-4" />
-												{t("rtk.skipReadFileToolsReset")}
-											</Button>
-										</div>
-										<FormDescription>{t("rtk.skipReadFileToolsDescription")}</FormDescription>
-										<FormMessage />
-									</FormItem>
-								);
-							}}
+										<FormDescription>{t("rtk.shellToolsOnlyDescription")}</FormDescription>
+									</div>
+									<FormControl>
+										<Switch
+											data-testid="rtk-field-shell-tools-only"
+											checked={field.value}
+											onCheckedChange={field.onChange}
+											disabled={!hasUpdateAccess}
+										/>
+									</FormControl>
+								</FormItem>
+							)}
 						/>
+						{!form.watch("shell_tools_only") && (
+							<FormField
+								control={form.control}
+								name="skip_read_file_tools"
+								render={({ field }) => {
+									const current: string[] = Array.isArray(field.value) ? field.value : [];
+									const isDefaults =
+										current.length === DEFAULT_SKIP_READ_FILE_TOOLS.length &&
+										DEFAULT_SKIP_READ_FILE_TOOLS.every((name) => current.includes(name));
+									return (
+										<FormItem>
+											<div className="flex items-center gap-1.5">
+												<FormLabel>{t("rtk.skipReadFileToolsLabel")}</FormLabel>
+												<HelpHint>{t("rtk.skipReadFileToolsWhen")}</HelpHint>
+											</div>
+											<div className="flex items-center gap-2">
+												<FormControl className="min-w-0 flex-1">
+													<TagInput
+														data-testid="rtk-field-skip-read-file-tools"
+														value={current}
+														onValueChange={field.onChange}
+														placeholder={t("rtk.skipReadFileToolsPlaceholder")}
+														collapsedTagLimit={5}
+														disabled={!hasUpdateAccess}
+													/>
+												</FormControl>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => field.onChange([...DEFAULT_SKIP_READ_FILE_TOOLS])}
+													disabled={!hasUpdateAccess || isDefaults}
+													data-testid="rtk-field-skip-read-file-tools-reset"
+													className="shrink-0"
+												>
+													<RotateCcw className="h-4 w-4" />
+													{t("rtk.skipReadFileToolsReset")}
+												</Button>
+											</div>
+											<FormDescription>{t("rtk.skipReadFileToolsDescription")}</FormDescription>
+											<FormMessage />
+										</FormItem>
+									);
+								}}
+							/>
+						)}
 					</div>
 				</fieldset>
 
@@ -1288,6 +1319,7 @@ function ConfigForm({
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			skip_read_file_tools:
 				pluginConfig.skip_read_file_tools === undefined ? [...DEFAULT_SKIP_READ_FILE_TOOLS] : pluginConfig.skip_read_file_tools,
+			shell_tools_only: pluginConfig.shell_tools_only ?? true,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			caveman: {
@@ -1609,6 +1641,7 @@ function FormFieldsHost({
 			min_tokens_to_compress: pluginConfig.min_tokens_to_compress ?? 0,
 			skip_read_file_tools:
 				pluginConfig.skip_read_file_tools === undefined ? [...DEFAULT_SKIP_READ_FILE_TOOLS] : pluginConfig.skip_read_file_tools,
+			shell_tools_only: pluginConfig.shell_tools_only ?? true,
 			enable_renderers: pluginConfig.enable_renderers ?? true,
 			disabled_renderers: pluginConfig.disabled_renderers ?? [],
 			caveman: {

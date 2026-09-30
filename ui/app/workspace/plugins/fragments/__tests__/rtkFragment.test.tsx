@@ -620,9 +620,15 @@ describe("RtkFragment — skip_read_file_tools default-echo + reset", () => {
 		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
 	};
 
+	// shell_tools_only defaults to true → the read-file whitelist is hidden.
+	// These tests need the whitelist visible, so they explicitly opt back in
+	// to non-shell compression via shell_tools_only=false on every fixture.
+	const pluginWithWhitelist = (overrides: Record<string, unknown> = {}) =>
+		makePlugin({ config: { shell_tools_only: false, ...overrides } as any });
+
 	it("echoes the 16-entry default list when pluginConfig.skip_read_file_tools is undefined", () => {
 		// makePlugin() does NOT include skip_read_file_tools → undefined on the wire.
-		render(<RtkFragment plugin={makePlugin()} />);
+		render(<RtkFragment plugin={pluginWithWhitelist()} />);
 		openRtkTab();
 
 		// TagInput collapses above 5; expand before asserting to cover all 16 names.
@@ -634,7 +640,7 @@ describe("RtkFragment — skip_read_file_tools default-echo + reset", () => {
 	});
 
 	it("disables the Reset-to-defaults button when the list already matches the defaults", () => {
-		render(<RtkFragment plugin={makePlugin()} />);
+		render(<RtkFragment plugin={pluginWithWhitelist()} />);
 		openRtkTab();
 
 		const reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
@@ -642,7 +648,7 @@ describe("RtkFragment — skip_read_file_tools default-echo + reset", () => {
 	});
 
 	it("enables the Reset-to-defaults button when the operator diverges from the defaults", () => {
-		render(<RtkFragment plugin={makePlugin({ config: { skip_read_file_tools: ["only_one"] } as any })} />);
+		render(<RtkFragment plugin={pluginWithWhitelist({ skip_read_file_tools: ["only_one"] })} />);
 		openRtkTab();
 
 		const reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
@@ -650,7 +656,7 @@ describe("RtkFragment — skip_read_file_tools default-echo + reset", () => {
 	});
 
 	it("honors an explicit empty list (operator opts out of the skip list)", () => {
-		render(<RtkFragment plugin={makePlugin({ config: { skip_read_file_tools: [] } as any })} />);
+		render(<RtkFragment plugin={pluginWithWhitelist({ skip_read_file_tools: [] })} />);
 		openRtkTab();
 
 		const input = screen.getByTestId("rtk-field-skip-read-file-tools");
@@ -662,7 +668,7 @@ describe("RtkFragment — skip_read_file_tools default-echo + reset", () => {
 	});
 
 	it("clicking Reset-to-defaults restores the 16-entry default list", () => {
-		render(<RtkFragment plugin={makePlugin({ config: { skip_read_file_tools: ["only_one"] } as any })} />);
+		render(<RtkFragment plugin={pluginWithWhitelist({ skip_read_file_tools: ["only_one"] })} />);
 		openRtkTab();
 
 		fireEvent.click(screen.getByTestId("rtk-field-skip-read-file-tools-reset"));
@@ -672,5 +678,86 @@ describe("RtkFragment — skip_read_file_tools default-echo + reset", () => {
 		for (const name of DEFAULT_SKIP_READ_FILE_TOOLS) {
 			expect(screen.getByText(name)).toBeTruthy();
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// shell_tools_only — strictly broader skip than skip_read_file_tools. When
+// on, the read-file whitelist is irrelevant, so the UI hides the field
+// entirely (cleaner than a disabled-but-still-rendered control) while
+// keeping the whitelist on the wire so toggling the shell switch off
+// restores the prior configuration verbatim.
+//
+// Default is true: a fresh config / never-saved row defaults to
+// shell_tools_only=true and the read-file whitelist is hidden.
+// ---------------------------------------------------------------------------
+
+describe("RtkFragment — shell_tools_only hides the read-file whitelist by default", () => {
+	beforeEach(() => {
+		mocks.updatePlugin.mockReset();
+	});
+
+	const openRtkTab = () => {
+		fireEvent.mouseDown(screen.getByTestId("rtk-tab-rtk"));
+	};
+
+	it("renders the switch in the on position by default", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		openRtkTab();
+
+		const sw = screen.getByTestId("rtk-field-shell-tools-only") as HTMLButtonElement;
+		expect(sw.getAttribute("aria-checked")).toBe("true");
+	});
+
+	it("hides the read-file whitelist when the switch is on (the default)", () => {
+		render(<RtkFragment plugin={makePlugin()} />);
+		openRtkTab();
+
+		expect(screen.queryByTestId("rtk-field-skip-read-file-tools")).toBeNull();
+		expect(screen.queryByTestId("rtk-field-skip-read-file-tools-reset")).toBeNull();
+	});
+
+	it("reflects shell_tools_only=false from the wire", () => {
+		render(<RtkFragment plugin={makePlugin({ config: { shell_tools_only: false } as any })} />);
+		openRtkTab();
+
+		const sw = screen.getByTestId("rtk-field-shell-tools-only") as HTMLButtonElement;
+		expect(sw.getAttribute("aria-checked")).toBe("false");
+	});
+
+	it("shows the read-file whitelist when the switch is explicitly off", () => {
+		render(<RtkFragment plugin={makePlugin({ config: { shell_tools_only: false } as any })} />);
+		openRtkTab();
+
+		const input = screen.getByTestId("rtk-field-skip-read-file-tools") as HTMLInputElement;
+		expect(input).toBeTruthy();
+		expect(input.disabled).toBe(false);
+
+		const reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
+		expect(reset.disabled).toBe(true); // list matches defaults → reset disabled, but input is editable
+	});
+
+	it("flipping the switch on hides the whitelist; flipping back off restores it", () => {
+		// Start with the switch explicitly off and a non-default whitelist.
+		render(<RtkFragment plugin={makePlugin({ config: { shell_tools_only: false, skip_read_file_tools: ["only_one"] } as any })} />);
+		openRtkTab();
+
+		// Reset is enabled because the list diverges from defaults.
+		let reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
+		expect(reset.disabled).toBe(false);
+
+		// Flip the shell switch on — whitelist is hidden.
+		const sw = screen.getByTestId("rtk-field-shell-tools-only");
+		fireEvent.click(sw);
+
+		expect(screen.queryByTestId("rtk-field-skip-read-file-tools")).toBeNull();
+		expect(screen.queryByTestId("rtk-field-skip-read-file-tools-reset")).toBeNull();
+
+		// Flip the shell switch back off — the field reappears and the
+		// whitelist is restored verbatim (the form state survived the hide).
+		fireEvent.click(sw);
+
+		reset = screen.getByTestId("rtk-field-skip-read-file-tools-reset") as HTMLButtonElement;
+		expect(reset.disabled).toBe(false);
 	});
 });

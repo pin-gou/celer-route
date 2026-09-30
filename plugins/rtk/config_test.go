@@ -213,10 +213,10 @@ func TestConfigGroupingFieldsValidates(t *testing.T) {
 	}
 
 	valid := &Config{
-		Enabled:          true,
-		EnableGrouping:   true,
+		Enabled:           true,
+		EnableGrouping:    true,
 		GroupingThreshold: 3,
-		Intensity:        "standard",
+		Intensity:         "standard",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Errorf("Config.Validate() unexpected error for valid grouping config: %v", err)
@@ -486,8 +486,6 @@ func TestConfigPipelineAndMinTokensValidate(t *testing.T) {
 	})
 }
 
-
-
 // TestLooksLikeAllZero exercises the heuristic that drives the all-zero
 // safeguard in applyConfigDefaults. The predicate is intentionally tight:
 // it must fire on a fully-default Config (the post-mortem signature) and
@@ -504,7 +502,7 @@ func TestLooksLikeAllZero(t *testing.T) {
 		{name: "all booleans false, all ints zero, all strings empty", cfg: Config{
 			Enabled: false, EnableGrouping: false,
 			CustomFiltersEnabled: false,
-			TrustProjectFilters: false, EnableRenderers: false,
+			TrustProjectFilters:  false, EnableRenderers: false,
 		}, want: true},
 		{name: "operator set Intensity", cfg: Config{Intensity: "aggressive"}, want: false},
 		{name: "operator set MaxLinesPerResult", cfg: Config{MaxLinesPerResult: 50}, want: false},
@@ -527,6 +525,84 @@ func TestLooksLikeAllZero(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestConfigShellToolsOnlyValidates verifies ShellToolsOnly=true with a
+// otherwise-valid config passes Validate(), and a config with both
+// ShellToolsOnly=true and an invalid intensity is still rejected.
+func TestConfigShellToolsOnlyValidates(t *testing.T) {
+	t.Run("valid_config_with_shell_tools_only", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:        true,
+			Intensity:      "standard",
+			ShellToolsOnly: true,
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Config.Validate() rejected valid ShellToolsOnly config: %v", err)
+		}
+	})
+	t.Run("invalid_intensity_with_shell_tools_only_still_rejected", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:        true,
+			Intensity:      "bogus-intensity",
+			ShellToolsOnly: true,
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("Config.Validate() should reject invalid intensity even with ShellToolsOnly set")
+		}
+	})
+}
+
+// TestLooksLikeAllZero_ShellToolsOnlySet verifies that a config whose only
+// non-zero field is ShellToolsOnly=true is NOT classified as all-zero —
+// otherwise the zero-detect safeguard would promote Enabled back to true
+// and clobber an operator's explicit Enabled=false with only the shell
+// switch flipped on.
+func TestLooksLikeAllZero_ShellToolsOnlySet(t *testing.T) {
+	cfg := &Config{ShellToolsOnly: true}
+	if looksLikeAllZero(cfg) {
+		t.Error("looksLikeAllZero({ShellToolsOnly: true}) = true, want false (operator intent)")
+	}
+}
+
+// TestApplyConfigDefaults_ZeroConfigEnablesShellToolsOnly verifies the
+// fresh-install default: an all-zero config (i.e. no operator has ever
+// touched the form) is promoted to ShellToolsOnly=true alongside the
+// existing Enabled=true promotion. Once any operator tunable is set,
+// the guard no longer fires and the operator's explicit value wins.
+func TestApplyConfigDefaults_ZeroConfigEnablesShellToolsOnly(t *testing.T) {
+	t.Run("literal zero config flips ShellToolsOnly to true", func(t *testing.T) {
+		cfg := Config{}
+		applyConfigDefaults(&cfg)
+		if !cfg.ShellToolsOnly {
+			t.Fatalf("applyConfigDefaults on zero-value Config left ShellToolsOnly=false; want true (fresh-install default)")
+		}
+	})
+	t.Run("explicit ShellToolsOnly=false on zero config still flips to true", func(t *testing.T) {
+		// All-zero + explicit false = same post-mortem shape as Enabled:
+		// storage held null, the round-trip produced ShellToolsOnly=false.
+		// We promote it back to true for the fresh-install experience.
+		cfg := Config{ShellToolsOnly: false}
+		applyConfigDefaults(&cfg)
+		if !cfg.ShellToolsOnly {
+			t.Fatalf("applyConfigDefaults on zero-value Config{ShellToolsOnly:false} left ShellToolsOnly=false; want true")
+		}
+	})
+	t.Run("explicit ShellToolsOnly=false with any operator-tunable is preserved", func(t *testing.T) {
+		// The operator touched the config deliberately — honour their opt-out.
+		cfg := Config{Intensity: "aggressive", ShellToolsOnly: false}
+		applyConfigDefaults(&cfg)
+		if cfg.ShellToolsOnly {
+			t.Fatalf("applyConfigDefaults overrode explicit ShellToolsOnly=false when Intensity is set; want false (operator intent)")
+		}
+	})
+	t.Run("explicit ShellToolsOnly=true on zero config stays true", func(t *testing.T) {
+		cfg := Config{ShellToolsOnly: true}
+		applyConfigDefaults(&cfg)
+		if !cfg.ShellToolsOnly {
+			t.Fatalf("applyConfigDefaults flipped an explicit ShellToolsOnly=true to false")
+		}
+	})
 }
 
 // TestApplyConfigDefaults_ZeroConfigEnables verifies the post-mortem fix:
@@ -590,6 +666,11 @@ func TestApplyConfigDefaults_ZeroConfigEnables(t *testing.T) {
 		}
 		if cfg.MaxLinesPerResult != 120 {
 			t.Errorf("MaxLinesPerResult = %d, want 120", cfg.MaxLinesPerResult)
+		}
+		// Fresh-install default: a never-saved config now also defaults to
+		// ShellToolsOnly=true. The test pins the shape after the round-trip.
+		if !cfg.ShellToolsOnly {
+			t.Errorf("post-round-trip config left ShellToolsOnly=false; want true (fresh-install default)")
 		}
 	})
 }

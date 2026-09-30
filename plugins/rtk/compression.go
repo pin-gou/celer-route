@@ -122,6 +122,21 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 				}
 			}
 
+			// ShellToolsOnly mode: any non-shell tool bypasses the
+			// pipeline. Resolution is conservative — when the tool name
+			// cannot be resolved (lookup miss) we skip the output rather
+			// than compress it. See shouldSkipNonShellTool for the full
+			// rationale.
+			if msg.ChatToolMessage != nil && msg.ChatToolMessage.ToolCallID != nil {
+				if entry, ok := lookup[*msg.ChatToolMessage.ToolCallID]; ok && entry != nil {
+					if shouldSkipNonShellTool(entry.ToolName, p.config) {
+						continue
+					}
+				} else if shouldSkipNonShellTool("", p.config) {
+					continue
+				}
+			}
+
 			origTokens := estimateTokens(text)
 			originalTotal += origTokens
 
@@ -228,6 +243,24 @@ func applyRtkCompression(ctx *schemas.BifrostContext, req *schemas.BifrostReques
 						pendingName = *pending.Function.Name
 					}
 					if shouldSkipReadFileTool(pendingName, pending.Function.Arguments, p.config) {
+						blockIndex++
+						continue
+					}
+				}
+
+				// ShellToolsOnly mode (Anthropic path). Mirrors the
+				// OpenAI-style guard above: when the correlated tool_use
+				// is not a known shell tool, the block passes through
+				// untouched. blockIndex still advances below so the
+				// positional correlation stays aligned with the
+				// assistant's tool_use list.
+				if blockIndex < len(pendingToolCalls) {
+					pending := pendingToolCalls[blockIndex]
+					pendingName := ""
+					if pending.Function.Name != nil {
+						pendingName = *pending.Function.Name
+					}
+					if shouldSkipNonShellTool(pendingName, p.config) {
 						blockIndex++
 						continue
 					}
@@ -539,6 +572,19 @@ func applyRtkCompressionResponses(ctx *schemas.BifrostContext, req *schemas.Bifr
 		if callIdx < len(callMetas) {
 			m := callMetas[callIdx]
 			if shouldSkipReadFileTool(m.Name, m.Args, config) {
+				callIdx++
+				continue
+			}
+		}
+
+		// ShellToolsOnly mode (Responses path). Mirrors the OpenAI-style
+		// guard. The Responses call-meta lookup is unconditional (it does
+		// not filter by isShellTool — see buildResponsesCallMetaLookup),
+		// so the tool name is always available here, unlike the chat
+		// paths where lookup misses fall through to "skip on unknown".
+		if callIdx < len(callMetas) {
+			m := callMetas[callIdx]
+			if shouldSkipNonShellTool(m.Name, config) {
 				callIdx++
 				continue
 			}

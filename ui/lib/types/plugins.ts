@@ -121,6 +121,17 @@ export const rtkConfigSchema = z.object({
 	// Default list targets Read/Glob/Grep/list_dir/find_files family.
 	skip_read_file_tools: z.array(z.string()).optional(),
 
+	// ShellToolsOnly limits RTK compression to command-line / shell tool
+	// outputs only (bash, sh, exec, run, terminal, ...). When true, every
+	// non-shell tool output bypasses the pipeline verbatim — a strictly
+	// broader skip than skip_read_file_tools, which is ignored while this
+	// is on. The UI surfaces this by hiding the skip_read_file_tools
+	// field when the switch is on (the field is preserved on the wire so
+	// toggling the shell switch off restores the prior configuration).
+	// Default true — operators explicitly opt back in to compress
+	// non-shell tool outputs by toggling this off.
+	shell_tools_only: z.boolean().default(true),
+
 	// EnableRenderers enables semantic renderers (opt-in, default true on fresh install).
 	// When true, structured outputs (git diff, test suites, terraform plan,
 	// JSON tables) are rewritten to a more compact form after line filtering.

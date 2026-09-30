@@ -164,3 +164,34 @@ func shouldSkipReadFileTool(toolName, args string, cfg *Config) bool {
 	}
 	return false
 }
+
+// shouldSkipNonShellTool reports whether a tool_result with the given
+// correlated tool name should bypass the RTK compression pipeline under
+// ShellToolsOnly mode. The function is the strictly-broader cousin of
+// shouldSkipReadFileTool — every tool that the read-file whitelist covers
+// is also bypassed here, plus every other non-shell tool.
+//
+// Resolution rules:
+//
+//   - cfg nil / ShellToolsOnly=false → false (compression path runs as usual).
+//   - toolName empty → true (no correlation available; conservative default
+//     under ShellToolsOnly is "do not compress an unknown tool"). See the
+//     ShellToolsOnly doc on Config for the rationale (a false negative is
+//     recoverable; a false positive could eat content the LLM needed).
+//   - toolName is a known shell tool (isShellTool) → false (let the
+//     pipeline compress the shell output as usual).
+//   - otherwise → true (bypass the pipeline; same contract as the read-file
+//     skip path).
+//
+// Case sensitivity: shell-tool classification is case-sensitive (matches
+// isShellTool's switch), matching the existing command-detection contract.
+// Tool-name resolution upstream of this call is already case-preserving.
+func shouldSkipNonShellTool(toolName string, cfg *Config) bool {
+	if cfg == nil || !cfg.ShellToolsOnly {
+		return false
+	}
+	if toolName == "" {
+		return true
+	}
+	return !isShellTool(toolName)
+}

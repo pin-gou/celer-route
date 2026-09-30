@@ -121,6 +121,38 @@ type Config struct {
 	// Defaulting: nil → applyConfigDefaults fills in DefaultSkipReadFileTools.
 	// Explicit empty slice ([]) → skip list disabled.
 	SkipReadFileTools []string `json:"skip_read_file_tools,omitempty"`
+
+	// ShellToolsOnly limits RTK compression to command-line / shell tool
+	// outputs only (see isShellTool — bash, sh, exec, run, terminal, ...).
+	// When true, outputs whose tool name is NOT a known shell tool bypass
+	// the pipeline verbatim — the same contract as the read-file skip path
+	// (no compression, no raw-output persistence, no ScannedIndices entry,
+	// no token-count impact).
+	//
+	// ShellToolsOnly is a STRICTLY BROADER skip than SkipReadFileTools: any
+	// tool the read-file whitelist covers (Read, Glob, Grep, ...) is also
+	// bypassed by ShellToolsOnly, plus the rest of the tool ecosystem. So
+	// when ShellToolsOnly is on, the SkipReadFileTools whitelist is ignored
+	// — operators do not need to maintain two lists in lockstep. The UI
+	// surfaces this by disabling the read-file whitelist field while the
+	// shell-only switch is on (the field stays on the wire so toggling the
+	// shell switch off restores the prior configuration verbatim).
+	//
+	// Tool-name resolution: when the tool name is unavailable (no
+	// correlated assistant tool_use / function_call for a given output),
+	// the conservative default is "do not compress" — fail-open for the
+	// shell-only restriction in the opposite direction of the read-file
+	// skip (which fails closed = runs the pipeline on unknown names).
+	// Rationale: an unknown tool in shell-only mode is far more likely to
+	// be a non-shell helper than a shell command, and a false negative on
+	// compression is recoverable (the LLM still sees the full output),
+	// whereas a false positive could eat content the LLM needed.
+	//
+	// Default: false at the JSON wire shape; applyConfigDefaults promotes a
+	// never-saved (all-zero) config to ShellToolsOnly=true so the gateway
+	// ships with the broader skip enabled out of the box. Operators flip
+	// it off from the UI to opt back into compressing non-shell tools.
+	ShellToolsOnly bool `json:"shell_tools_only,omitempty"`
 }
 
 // Validate checks the config for valid values and returns an error if any field
@@ -220,6 +252,7 @@ func looksLikeAllZero(c *Config) bool {
 		!c.CustomFiltersEnabled &&
 		!c.TrustProjectFilters &&
 		!c.EnableRenderers &&
+		!c.ShellToolsOnly &&
 		c.RawOutputRetention == "" &&
 		c.RawOutputMaxBytes == 0 &&
 		c.MinTokensToCompress == 0 &&
@@ -247,6 +280,14 @@ func applyConfigDefaults(c *Config) {
 	// leave it disabled. See looksLikeAllZero for the rationale.
 	if looksLikeAllZero(c) && !c.Enabled {
 		c.Enabled = true
+	}
+	// Fresh-install default: an all-zero config (i.e. no operator has ever
+	// touched the form) should also default to ShellToolsOnly=true so the
+	// gateway ships with the broader skip enabled out of the box. Operators
+	// can flip it back off from the UI; once any tunable is set, the guard
+	// no longer fires and the operator's explicit value is preserved.
+	if looksLikeAllZero(c) && !c.ShellToolsOnly {
+		c.ShellToolsOnly = true
 	}
 	if c.Intensity == "" {
 		c.Intensity = "standard"
