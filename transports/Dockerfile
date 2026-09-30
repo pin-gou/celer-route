@@ -31,6 +31,11 @@ FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
 WORKDIR /build
 ARG TARGETARCH
 ARG USE_LOCAL_MODULES
+# Cap Go's per-build compile parallelism so a single go build can't OOM a small
+# host. Platform builds are already serialized by the buildx builder config
+# (buildkitd.serial.toml, max-parallelism=1); -p additionally caps the internal
+# parallelism of each compile. Tunable via --build-arg GO_BUILD_PARALLELISM=N.
+ARG GO_BUILD_PARALLELISM=2
 
 # On native build (target == host arch) gcc itself works.
 # On amd64 host cross-compiling to arm64, install gcc-aarch64-linux-gnu.
@@ -124,6 +129,7 @@ RUN cd /build/transports && \
          elif [ "$TARGETARCH" = "amd64" ]; then echo x86_64-linux-gnu-gcc; \
          else echo "unknown"; fi) \
     go build \
+      -p ${GO_BUILD_PARALLELISM} \
       -ldflags="-w -s -X main.Version=v${VERSION} -extldflags '-static'" \
       -trimpath \
       -tags "sqlite_static" \
@@ -142,6 +148,7 @@ RUN cd /build/cmd/admin && \
          elif [ "$TARGETARCH" = "amd64" ]; then echo x86_64-linux-gnu-gcc; \
          else echo "unknown"; fi) \
     go build \
+      -p ${GO_BUILD_PARALLELISM} \
       -ldflags="-w -s -extldflags '-static'" \
       -trimpath \
       -tags "sqlite_static" \

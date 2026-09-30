@@ -1,0 +1,14 @@
+# buildkitd.serial.toml — 串行化 buildx 多平台构建
+#
+# docker buildx build --platform linux/amd64,linux/arm64 默认由 BuildKit 并行执行
+# 两个平台的完整 multi-stage 构建（每平台各含 1×npm build + 2×go build）。
+# 在内存有限的宿主机上，同一时刻 2×npm + 4×go build 同时运行会导致 OOM / 系统卡死。
+#
+# 将 max-parallelism 设为 1 后，两个平台在 BuildKit 内排队串行执行——
+# 同一时刻只有一个平台在构建，multi-arch manifest 仍由单条 buildx 命令正常产出。
+# （oci 与 containerd 两段都设置，覆盖 docker-container 驱动实际启用的 worker 类型。）
+[worker.oci]
+  max-parallelism = 1
+
+[worker.containerd]
+  max-parallelism = 1

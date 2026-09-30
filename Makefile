@@ -24,6 +24,10 @@ COMPAT ?=
 # Docker image build settings
 PLATFORMS ?=
 DOCKER_BUILDER ?= celer-route-builder
+# buildkitd config that serializes multi-platform builds (max-parallelism=1):
+# without it buildx builds linux/amd64 + linux/arm64 concurrently, and the
+# simultaneous 2×npm + 4×go build load can OOM/freeze low-memory hosts.
+DOCKER_BUILDKITD_CONFIG ?= .github/workflows/scripts/buildkitd.serial.toml
 DOCKER_MULTIARCH_PLATFORMS ?= linux/amd64,linux/arm64
 
 # Colors for output
@@ -466,9 +470,10 @@ _build-with-docker: # Internal target for Docker-based cross-compilation
 
 DOCKER_IMAGE ?= ghcr.io/pin-gou/celer-route
 
-_docker-image-setup-builder: # Internal: ensure a named buildx builder exists (idempotent)
+_docker-image-setup-builder: # Internal: ensure a named buildx builder exists (idempotent). Recreates missing builders with the serial buildkitd config (max-parallelism=1) so multi-platform builds run one platform at a time. NOTE: an existing builder created BEFORE this config was added must be migrated once with `docker buildx rm $(DOCKER_BUILDER)` — the `inspect || create` guard never reconfigures it.
 	@docker buildx inspect $(DOCKER_BUILDER) >/dev/null 2>&1 || \
-		docker buildx create --name $(DOCKER_BUILDER) --driver docker-container --bootstrap
+		docker buildx create --name $(DOCKER_BUILDER) --driver docker-container \
+			--config $(DOCKER_BUILDKITD_CONFIG) --bootstrap
 
 _docker-push-check-version: # Internal: refuse docker-push without an explicit VERSION (runs before buildx bootstrap to avoid wasted buildkit pulls)
 	@if [ -z "$(VERSION)" ] || [ "$(VERSION)" = "dev-build" ]; then \
