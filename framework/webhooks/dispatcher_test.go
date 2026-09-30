@@ -227,6 +227,16 @@ func (r *fakeResolver) WebhookEndpointByID(id string) (*tables.TableWebhookEndpo
 	return endpoint, ok
 }
 
+func (r *fakeResolver) WebhookEndpoints() []*tables.TableWebhookEndpoint {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*tables.TableWebhookEndpoint, 0, len(r.endpoints))
+	for _, endpoint := range r.endpoints {
+		out = append(out, endpoint)
+	}
+	return out
+}
+
 // --- helpers ---------------------------------------------------------------
 
 func testEndpoint(id, url string) *tables.TableWebhookEndpoint {

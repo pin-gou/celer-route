@@ -287,6 +287,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"logs_add_payload_stripped_column"}, run: migrationAddPayloadStrippedColumn},
 	{IDs: []string{"logs_add_server_side_fallback_model_column"}, run: migrationAddServerSideFallbackModelColumn},
 	{IDs: []string{"logs_add_billing_fidelity_columns"}, run: migrationAddBillingFidelityColumns},
+	{IDs: []string{"logs_add_cost_accuracy_column"}, run: migrationAddCostAccuracyColumn},
 	{IDs: []string{"logs_recreate_matviews_with_user_agent_column"}, run: migrationRecreateMatViewsWithUserAgentColumn},
 	{IDs: []string{"logs_add_user_agent_column"}, run: migrationAddUserAgentColumn},
 	{IDs: []string{"mcp_tool_logs_add_user_agent_column"}, run: migrationAddUserAgentColumnToMCPToolLogs},
@@ -4502,6 +4503,35 @@ func migrationAddBillingFidelityColumns(ctx context.Context, db *gorm.DB, logger
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while adding billing fidelity columns: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddCostAccuracyColumn adds the cost_accuracy column to the logs
+// table so the actual-cost column can carry a per-row confidence band
+// (provider_reported / gateway_estimated / unknown). The accuracy stamp is
+// the input that lets admins filter reports to high-confidence rows before
+// reconciling against provider invoices (see 03-cost-allocation/data-model §5).
+func migrationAddCostAccuracyColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_add_cost_accuracy_column"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &Log{}, "cost_accuracy"); err != nil {
+				return fmt.Errorf("failed to add cost_accuracy column: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return dropColumnIfExists(tx, logger, &Log{}, "cost_accuracy")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while adding cost_accuracy column: %s", err.Error())
 	}
 	return nil
 }

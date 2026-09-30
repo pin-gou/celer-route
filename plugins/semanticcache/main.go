@@ -162,6 +162,12 @@ type Plugin struct {
 	// invokes Cleanup more than once (e.g. plugin registered against multiple
 	// interface caches).
 	cleanupOnce sync.Once
+
+	// statsTracker is the Phase 5 cache-observability counter. Always
+	// non-nil after Init so PreLLMHook / PostLLMHook can call without a
+	// nil-check; the methods themselves short-circuit on nil-receiver for
+	// test fixtures that construct Plugin{} directly.
+	statsTracker *CacheStatsTracker
 }
 
 // Plugin constants
@@ -284,10 +290,11 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, store vect
 	}
 
 	plugin := &Plugin{
-		store:  store,
-		config: config,
-		logger: logger,
-		stopCh: make(chan struct{}),
+		store:        store,
+		config:       config,
+		logger:       logger,
+		stopCh:       make(chan struct{}),
+		statsTracker: NewCacheStatsTracker(),
 	}
 
 	if config.Provider == "" && config.Dimension == 1 {
@@ -314,6 +321,42 @@ func Init(ctx context.Context, config *Config, logger schemas.Logger, store vect
 // GetName returns the canonical name used for plugin identification and logging.
 func (plugin *Plugin) GetName() string {
 	return PluginName
+}
+
+// Stats returns the process-lifetime cache counters for the Phase 5
+// observability endpoint. Returns the zero snapshot for an uninitialised
+// plugin (the same nil-tolerance policy the Hit/Miss methods follow).
+func (plugin *Plugin) Stats() CacheStatsSnapshot {
+	if plugin == nil || plugin.statsTracker == nil {
+		return CacheStatsSnapshot{}
+	}
+	return plugin.statsTracker.Snapshot()
+}
+
+// recordCacheHit is the single funnel for the Phase 5 stats counter on a
+// cache hit. The saved-token estimate prefers the embedding input (what the
+// cache actually indexed); falling back to 0 keeps the counter monotonic
+// without inventing a number. The cost saved is currently a stub (0) —
+// wiring it to the standard-prices book is left for Phase 6 once the
+// semantic cache + cost layer agrees on token schemas.
+func (plugin *Plugin) recordCacheHit(_ *schemas.BifrostContext, _ *schemas.BifrostRequest, state *cacheState) {
+	if plugin == nil || plugin.statsTracker == nil {
+		return
+	}
+	var savedTokens int64
+	if state != nil && state.EmbeddingsInputTokens > 0 {
+		savedTokens = int64(state.EmbeddingsInputTokens)
+	}
+	plugin.statsTracker.Hit(savedTokens, 0)
+}
+
+// recordCacheMiss is the funnel for misses. Centralised so the count paths
+// stay aligned — every shortCircuit-not-returned branch should call this.
+func (plugin *Plugin) recordCacheMiss() {
+	if plugin == nil || plugin.statsTracker == nil {
+		return
+	}
+	plugin.statsTracker.Miss()
 }
 
 // HTTPTransportPreHook is not used by the semantic cache plugin.
@@ -417,6 +460,7 @@ func (plugin *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifro
 			plugin.logger.Warn(msg)
 			ctx.Log(schemas.LogLevelWarn, msg)
 		} else if shortCircuit != nil {
+			plugin.recordCacheHit(ctx, req, state)
 			return req, shortCircuit, nil
 		}
 	}
@@ -437,6 +481,7 @@ func (plugin *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifro
 				plugin.logger.Warn(msg)
 				ctx.Log(schemas.LogLevelWarn, msg)
 			} else if shortCircuit != nil {
+				plugin.recordCacheHit(ctx, req, state)
 				return req, shortCircuit, nil
 			}
 		}
@@ -449,6 +494,13 @@ func (plugin *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.Bifro
 		plugin.setPlaceholderVectorIfRequired(state)
 	}
 
+	// Neither path produced a hit. Count the miss so the hit-rate stays
+	// meaningful (a 100% hit-rate with no miss counter would otherwise be
+	// indistinguishable from "cache disabled"). The Hit() helper is
+	// recorded inside the shortCircuit branches above; this is the
+	// fallback for the common case where both paths were tried and both
+	// missed cleanly.
+	plugin.recordCacheMiss()
 	return req, nil, nil
 }
 

@@ -14,6 +14,7 @@ export enum RbacResource {
 	APIKeys = "APIKeys",
 	PromptRepository = "PromptRepository",
 	SkillsRepository = "SkillsRepository",
+	Users = "Users",
 }
 
 export enum RbacOperation {

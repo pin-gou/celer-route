@@ -475,6 +475,17 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_provider_default_parameters_json_column"}, run: migrationAddProviderDefaultParametersJSONColumn},
 	{IDs: []string{"add_model_list_cache_table"}, run: migrationAddModelListCacheTable},
 	{IDs: []string{"add_model_pricing_is_custom_column"}, run: migrationAddModelPricingIsCustomColumn},
+	{IDs: []string{"add_users_and_team_members_tables"}, run: migrationAddUsersAndTeamMembersTables},
+	{IDs: []string{"add_virtual_key_user_id_column"}, run: migrationAddVirtualKeyUserIDColumn},
+	{IDs: []string{"add_invitations_table"}, run: migrationAddInvitationsTable},
+	{IDs: []string{"add_key_requests_table"}, run: migrationAddKeyRequestsTable},
+	{IDs: []string{"add_alert_tables"}, run: migrationAddAlertTables},
+	{IDs: []string{"add_webhook_jobs_payload_json_column"}, run: migrationAddWebhookJobsPayloadJSONColumn},
+	{IDs: []string{"add_standard_prices_table"}, run: migrationAddStandardPricesTable},
+	{IDs: []string{"add_team_pricing_profiles_table"}, run: migrationAddTeamPricingProfilesTable},
+	{IDs: []string{"add_billing_reconciliations_tables"}, run: migrationAddBillingReconciliationsTables},
+	{IDs: []string{"add_team_model_policies_table"}, run: migrationAddTeamModelPoliciesTable},
+	{IDs: []string{"add_virtual_key_last_used_at_column"}, run: migrationAddVirtualKeyLastUsedAtColumn},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -12157,6 +12168,455 @@ func migrationAddModelListCacheTable(ctx context.Context, db *gorm.DB, logger sc
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddUsersAndTeamMembersTables creates the users and team_members
+// tables for the team-member self-service path. This is Phase 1 of the
+// /temp/team plan; later phases will reuse these tables to add invitations,
+// key_requests, and portal endpoints on top.
+//
+// We create the tables directly via GORM's migrator so the (team_id, user_id)
+// unique index on team_members — which enforces "one user is at most one
+// team-member row per team" — lands in the same step as the table itself.
+// Rolling back drops both tables (children first to keep FKs happy).
+func migrationAddUsersAndTeamMembersTables(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_users_and_team_members_tables"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableUser{}) {
+				logger.Info("[configstore] %s: creating table TableUser", migrationName)
+				if err := migrator.CreateTable(&tables.TableUser{}); err != nil {
+					return fmt.Errorf("failed to create users table: %w", err)
+				}
+			}
+			if !migrator.HasTable(&tables.TableTeamMember{}) {
+				logger.Info("[configstore] %s: creating table TableTeamMember", migrationName)
+				if err := migrator.CreateTable(&tables.TableTeamMember{}); err != nil {
+					return fmt.Errorf("failed to create team_members table: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			// Drop children before parents to leave no dangling FKs.
+			if migrator.HasTable(&tables.TableTeamMember{}) {
+				if err := migrator.DropTable(&tables.TableTeamMember{}); err != nil {
+					return fmt.Errorf("failed to drop team_members table: %w", err)
+				}
+			}
+			if migrator.HasTable(&tables.TableUser{}) {
+				if err := migrator.DropTable(&tables.TableUser{}); err != nil {
+					return fmt.Errorf("failed to drop users table: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddVirtualKeyUserIDColumn adds the nullable user_id column to
+// governance_virtual_keys so a VK can be owned by an individual member
+// (US15: member sees only their own VK). The BeforeSave hook now enforces
+// the ternary mutual exclusion (UserID / TeamID / CustomerID), so adding
+// the column is sufficient — no separate constraint migration is needed.
+func migrationAddVirtualKeyUserIDColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_virtual_key_user_id_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableVirtualKey{}, "user_id"); err != nil {
+				return fmt.Errorf("failed to add user_id column to governance_virtual_keys: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return dropColumnIfExists(tx, logger, &tables.TableVirtualKey{}, "user_id")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_virtual_key_user_id_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddInvitationsTable creates the invitations table for the
+// team-member invite flow. token is unique-indexed because the accept
+// endpoint looks up invitations by token; team_id + status are indexed
+// to keep the admin "pending invitations" list cheap.
+func migrationAddInvitationsTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_invitations_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableInvitation{}) {
+				logger.Info("[configstore] %s: creating table TableInvitation", migrationName)
+				if err := migrator.CreateTable(&tables.TableInvitation{}); err != nil {
+					return fmt.Errorf("failed to create invitations table: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TableInvitation{}) {
+				if err := migrator.DropTable(&tables.TableInvitation{}); err != nil {
+					return fmt.Errorf("failed to drop invitations table: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_invitations_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddKeyRequestsTable creates the key_requests table for the
+// member self-service path (join_team / extend_quota / add_vk). user_id,
+// team_id, status, and created_at are indexed so the pending list stays
+// fast as the table grows.
+func migrationAddKeyRequestsTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_key_requests_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if !migrator.HasTable(&tables.TableKeyRequest{}) {
+				logger.Info("[configstore] %s: creating table TableKeyRequest", migrationName)
+				if err := migrator.CreateTable(&tables.TableKeyRequest{}); err != nil {
+					return fmt.Errorf("failed to create key_requests table: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+			if migrator.HasTable(&tables.TableKeyRequest{}) {
+				if err := migrator.DropTable(&tables.TableKeyRequest{}); err != nil {
+					return fmt.Errorf("failed to drop key_requests table: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_key_requests_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddAlertTables creates the three tables backing the alert loop:
+// alert_rules (admin-configured thresholds + delivery channels),
+// alert_events (per-firing history row, written inline for soft thresholds
+// and asynchronously for hard blocks), and budget_snapshots (periodic
+// usage samples that feed the projection endpoint).
+//
+// Idempotent: each table is created only if missing. Drop order on rollback
+// is leaves-first (events → snapshots → rules) so we never have a foreign
+// key pointing at a vanished parent.
+func migrationAddAlertTables(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_alert_tables"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableAlertRule{}) {
+				logger.Info("[configstore] %s: creating table TableAlertRule", migrationName)
+				if err := mg.CreateTable(&tables.TableAlertRule{}); err != nil {
+					return fmt.Errorf("create alert_rules: %w", err)
+				}
+			}
+			if !mg.HasTable(&tables.TableAlertEvent{}) {
+				logger.Info("[configstore] %s: creating table TableAlertEvent", migrationName)
+				if err := mg.CreateTable(&tables.TableAlertEvent{}); err != nil {
+					return fmt.Errorf("create alert_events: %w", err)
+				}
+			}
+			if !mg.HasTable(&tables.TableBudgetSnapshot{}) {
+				logger.Info("[configstore] %s: creating table TableBudgetSnapshot", migrationName)
+				if err := mg.CreateTable(&tables.TableBudgetSnapshot{}); err != nil {
+					return fmt.Errorf("create budget_snapshots: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			// Drop leaves first so no foreign-key relationship outlives the parent.
+			if mg.HasTable(&tables.TableAlertEvent{}) {
+				if err := mg.DropTable(&tables.TableAlertEvent{}); err != nil {
+					return fmt.Errorf("drop alert_events: %w", err)
+				}
+			}
+			if mg.HasTable(&tables.TableBudgetSnapshot{}) {
+				if err := mg.DropTable(&tables.TableBudgetSnapshot{}); err != nil {
+					return fmt.Errorf("drop budget_snapshots: %w", err)
+				}
+			}
+			if mg.HasTable(&tables.TableAlertRule{}) {
+				if err := mg.DropTable(&tables.TableAlertRule{}); err != nil {
+					return fmt.Errorf("drop alert_rules: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_alert_tables migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddWebhookJobsPayloadJSONColumn adds the payload_json column to
+// webhook_jobs so the dispatcher can ship alert / budget-exceeded bodies
+// without doing a second store lookup. Async-job deliveries leave the
+// column empty and the existing async_job lookup path stays in charge.
+func migrationAddWebhookJobsPayloadJSONColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_webhook_jobs_payload_json_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return addColumnIfNotExists(tx, logger, &tables.TableWebhookJob{}, "payload_json")
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return dropColumnIfExists(tx, logger, &tables.TableWebhookJob{}, "payload_json")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_webhook_jobs_payload_json_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddStandardPricesTable creates the standard_prices table backing
+// the team-allocation price book. One row per (provider, model, effective_from);
+// older rows are kept for historical report snapshots. Idempotent.
+func migrationAddStandardPricesTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_standard_prices_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableStandardPrice{}) {
+				logger.Info("[configstore] %s: creating table TableStandardPrice", migrationName)
+				if err := mg.CreateTable(&tables.TableStandardPrice{}); err != nil {
+					return fmt.Errorf("create standard_prices: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableStandardPrice{}) {
+				if err := mg.DropTable(&tables.TableStandardPrice{}); err != nil {
+					return fmt.Errorf("drop standard_prices: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_standard_prices_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddTeamPricingProfilesTable creates the per-team pricing-profile
+// table (mode = standard | actual, margin_multiplier ≥ 1.0). Idempotent.
+func migrationAddTeamPricingProfilesTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_team_pricing_profiles_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableTeamPricingProfile{}) {
+				logger.Info("[configstore] %s: creating table TableTeamPricingProfile", migrationName)
+				if err := mg.CreateTable(&tables.TableTeamPricingProfile{}); err != nil {
+					return fmt.Errorf("create team_pricing_profiles: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableTeamPricingProfile{}) {
+				if err := mg.DropTable(&tables.TableTeamPricingProfile{}); err != nil {
+					return fmt.Errorf("drop team_pricing_profiles: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_team_pricing_profiles_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddBillingReconciliationsTables creates the two tables backing
+// the Phase 5 reconciliation feature (data-model §6). The pair is created in
+// a single migration because they are written as a unit by the calibration
+// job — splitting them across migrations would leave an orphaned batch
+// header with no items if the second migration ever failed half-way.
+//
+// `billing_recon_items.reconciliation_id` is intentionally left without an
+// FK at the DB layer: a soft-delete path that purges old batches can sweep
+// the items with a single transaction later without juggling ON DELETE
+// CASCADE rules on SQLite.
+func migrationAddBillingReconciliationsTables(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_billing_reconciliations_tables"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableBillingReconciliation{}) {
+				logger.Info("[configstore] %s: creating table TableBillingReconciliation", migrationName)
+				if err := mg.CreateTable(&tables.TableBillingReconciliation{}); err != nil {
+					return fmt.Errorf("create billing_reconciliations: %w", err)
+				}
+			}
+			if !mg.HasTable(&tables.TableBillingReconItem{}) {
+				logger.Info("[configstore] %s: creating table TableBillingReconItem", migrationName)
+				if err := mg.CreateTable(&tables.TableBillingReconItem{}); err != nil {
+					return fmt.Errorf("create billing_recon_items: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableBillingReconItem{}) {
+				if err := mg.DropTable(&tables.TableBillingReconItem{}); err != nil {
+					return fmt.Errorf("drop billing_recon_items: %w", err)
+				}
+			}
+			if mg.HasTable(&tables.TableBillingReconciliation{}) {
+				if err := mg.DropTable(&tables.TableBillingReconciliation{}); err != nil {
+					return fmt.Errorf("drop billing_reconciliations: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_billing_reconciliations_tables migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddTeamModelPoliciesTable creates the per-team model ACL table
+// (Phase 6 / D6). One row per (team_id, provider); allowed_models and
+// blacklisted_models follow the same WhiteList/BlackList semantics as
+// TableVirtualKeyProviderConfig so the resolver can compose them via the
+// existing helpers. The unique index on (team_id, provider) lets the API
+// use a simple PUT/DELETE keyed by the pair.
+func migrationAddTeamModelPoliciesTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_team_model_policies_table"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if !mg.HasTable(&tables.TableTeamModelPolicy{}) {
+				logger.Info("[configstore] %s: creating table TableTeamModelPolicy", migrationName)
+				if err := mg.CreateTable(&tables.TableTeamModelPolicy{}); err != nil {
+					return fmt.Errorf("create team_model_policies: %w", err)
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			mg := tx.Migrator()
+			if mg.HasTable(&tables.TableTeamModelPolicy{}) {
+				if err := mg.DropTable(&tables.TableTeamModelPolicy{}); err != nil {
+					return fmt.Errorf("drop team_model_policies: %w", err)
+				}
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_team_model_policies_table migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddVirtualKeyLastUsedAtColumn adds the last_used_at column to
+// governance_virtual_keys. Touched on every successful inference; the
+// idle-VK sidekiq job (framework/sidekiq/jobs/idlevkjob.go) reads the
+// column to emit the US24 idle-key report. NULL means "never used" — the
+// report treats NULL as the maximum idle duration so brand-new keys don't
+// show up as idle on day 1 unless they're also already past the threshold.
+func migrationAddVirtualKeyLastUsedAtColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_virtual_key_last_used_at_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableVirtualKey{}, "last_used_at"); err != nil {
+				return fmt.Errorf("failed to add last_used_at column to governance_virtual_keys: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			return dropColumnIfExists(tx, logger, &tables.TableVirtualKey{}, "last_used_at")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while running add_virtual_key_last_used_at_column migration: %s", err.Error())
 	}
 	return nil
 }

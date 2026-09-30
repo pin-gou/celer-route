@@ -745,6 +745,15 @@ func (bifrost *Bifrost) ListAllModels(ctx *schemas.BifrostContext, req *schemas.
 					break
 				}
 
+				// Stamp provider attribution before merging. Below, every provider's
+				// models are concatenated into one flat list and schemas.Model carries
+				// no provider on the wire, so this is the last point at which the
+				// origin is unambiguously known. Per-provider policy consumers (the
+				// transport's team ACL narrowing) depend on it.
+				for i := range response.Data {
+					response.Data[i].Provider = providerKey
+				}
+
 				providerModels = append(providerModels, response.Data...)
 
 				if len(response.KeyStatuses) > 0 {

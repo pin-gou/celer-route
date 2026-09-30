@@ -4,6 +4,7 @@ package lib
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -183,6 +184,21 @@ type ConfigData struct {
 	SourceOfTruth string                    `json:"source_of_truth,omitempty"`
 	Client        *configstore.ClientConfig `json:"client"`
 	EncryptionKey *schemas.SecretVar        `json:"encryption_key"`
+	// EncryptionSalt is a base64-encoded per-deployment Argon2id salt
+	// used to derive a second AES key (G7/C-1). When unset, encryption
+	// reuses the historical DefaultSalt for compatibility with rows
+	// written before the salt was configurable. The minimum decoded
+	// length is 16 bytes; shorter values cause startup to fail loudly
+	// so a typo can't silently fall back to the historical default.
+	// Also readable from the BIFROST_ENCRYPTION_SALT env var.
+	EncryptionSalt string `json:"encryption_salt,omitempty"`
+	// AllowPlaintextStorage explicitly opts in to storing sensitive rows in plaintext
+	// when no encryption_key is configured. Phase 6 / D9 inverts the previous default:
+	// without this flag, an empty encryption_key combined with any existing sensitive row
+	// causes the server to refuse to boot (and Encrypt() refuses to write anything).
+	// Set to true to permit plaintext storage for dev / single-node setups.
+	// Also readable from the BIFROST_ALLOW_PLAINTEXT_STORAGE env var.
+	AllowPlaintextStorage bool `json:"allow_plaintext_storage,omitempty"`
 	// Deprecated: Use GovernanceConfig.AuthConfig instead
 	AuthConfig *configstore.AuthConfig `json:"auth_config,omitempty"`
 	// SetupToken is the operator-provisioned bootstrap secret required to create the
@@ -488,27 +504,29 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 
 	// First, unmarshal into a temporary struct to get all fields except the complex configs
 	type TempConfigData struct {
-		Version           int                                   `json:"version,omitempty"`
-		EnvLabel          string                                `json:"env_label,omitempty"`
-		SourceOfTruth     string                                `json:"source_of_truth,omitempty"`
-		FrameworkConfig   json.RawMessage                       `json:"framework,omitempty"`
-		Server            *ServerConfig                         `json:"server,omitempty"`
-		Client            *configstore.ClientConfig             `json:"client"`
-		EncryptionKey     *schemas.SecretVar                    `json:"encryption_key"`
-		AuthConfig        *configstore.AuthConfig               `json:"auth_config,omitempty"`
-		SetupToken        *schemas.SecretVar                    `json:"setup_token,omitempty"`
-		Providers         map[string]configstore.ProviderConfig `json:"providers"`
-		MCP               *schemas.MCPConfig                    `json:"mcp,omitempty"`
-		Webhooks          []*WebhookEndpointConfig              `json:"webhooks,omitempty"`
-		Governance        *configstore.GovernanceConfig         `json:"governance,omitempty"`
-		VectorStoreConfig json.RawMessage                       `json:"vector_store,omitempty"`
-		ConfigStoreConfig json.RawMessage                       `json:"config_store,omitempty"`
-		LogsStoreConfig   json.RawMessage                       `json:"logs_store,omitempty"`
-		Plugins           []*schemas.PluginConfig               `json:"plugins,omitempty"`
-		WebSocket         *schemas.WebSocketConfig              `json:"websocket,omitempty"`
-		FeatureFlags      *FeatureFlagsFileConfig               `json:"feature_flags,omitempty"`
-		SkillsRegistry    *SkillsRegistryConfig                 `json:"skills_registry,omitempty"`
-		RemoteCatalog     *RemoteCatalogConfig                  `json:"remote_catalog,omitempty"`
+		Version               int                                   `json:"version,omitempty"`
+		EnvLabel              string                                `json:"env_label,omitempty"`
+		SourceOfTruth         string                                `json:"source_of_truth,omitempty"`
+		FrameworkConfig       json.RawMessage                       `json:"framework,omitempty"`
+		Server                *ServerConfig                         `json:"server,omitempty"`
+		Client                *configstore.ClientConfig             `json:"client"`
+		EncryptionKey         *schemas.SecretVar                    `json:"encryption_key"`
+		EncryptionSalt        string                                `json:"encryption_salt,omitempty"`
+		AllowPlaintextStorage bool                                  `json:"allow_plaintext_storage,omitempty"`
+		AuthConfig            *configstore.AuthConfig               `json:"auth_config,omitempty"`
+		SetupToken            *schemas.SecretVar                    `json:"setup_token,omitempty"`
+		Providers             map[string]configstore.ProviderConfig `json:"providers"`
+		MCP                   *schemas.MCPConfig                    `json:"mcp,omitempty"`
+		Webhooks              []*WebhookEndpointConfig              `json:"webhooks,omitempty"`
+		Governance            *configstore.GovernanceConfig         `json:"governance,omitempty"`
+		VectorStoreConfig     json.RawMessage                       `json:"vector_store,omitempty"`
+		ConfigStoreConfig     json.RawMessage                       `json:"config_store,omitempty"`
+		LogsStoreConfig       json.RawMessage                       `json:"logs_store,omitempty"`
+		Plugins               []*schemas.PluginConfig               `json:"plugins,omitempty"`
+		WebSocket             *schemas.WebSocketConfig              `json:"websocket,omitempty"`
+		FeatureFlags          *FeatureFlagsFileConfig               `json:"feature_flags,omitempty"`
+		SkillsRegistry        *SkillsRegistryConfig                 `json:"skills_registry,omitempty"`
+		RemoteCatalog         *RemoteCatalogConfig                  `json:"remote_catalog,omitempty"`
 	}
 
 	var temp TempConfigData
@@ -523,6 +541,8 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 	cd.Client = temp.Client
 	cd.Server = temp.Server
 	cd.EncryptionKey = temp.EncryptionKey
+	cd.EncryptionSalt = temp.EncryptionSalt
+	cd.AllowPlaintextStorage = temp.AllowPlaintextStorage
 	cd.AuthConfig = temp.AuthConfig
 	cd.SetupToken = temp.SetupToken
 	cd.Providers = temp.Providers
@@ -5101,18 +5121,89 @@ func initFrameworkConfig(ctx context.Context, config *Config, configData *Config
 
 // initEncryption initializes encryption from config data or environment variables.
 // When configData.EncryptionKey is nil (no config file), falls through to env var check.
+//
+// Phase 6 / D9 also applies the allow_plaintext_storage policy: configData.AllowPlaintextStorage
+// (config.json) overrides the BIFROST_ALLOW_PLAINTEXT_STORAGE env var, which itself
+// overrides the process default of "deny plaintext". The resulting flag is pushed
+// into framework/encrypt via SetAllowPlaintextStorage before Init() runs so the
+// warning lines reflect the actual effective policy.
+//
+// G7/C-1: encryption_salt (config.json / BIFROST_ENCRYPTION_SALT) is also
+// pulled in here. Pass nil when the operator wants to keep the historical
+// DefaultSalt; pass a non-nil salt to derive a second AES key so new
+// ciphertext carries salt_version=1 and stays cryptographically isolated
+// per deployment. Existing rows (no header byte) keep decrypting via the
+// legacy-format fallback in Decrypt.
 func initEncryption(configData *ConfigData) error {
+	// Policy precedence: config.json > env > default (false). Reading the env
+	// unconditionally also catches the case where config.json omits the field
+	// but the operator flipped the env var for ops convenience.
+	allowPlaintext := configData.AllowPlaintextStorage
+	if envVal := strings.TrimSpace(os.Getenv("BIFROST_ALLOW_PLAINTEXT_STORAGE")); envVal != "" {
+		switch strings.ToLower(envVal) {
+		case "1", "true", "yes", "on":
+			allowPlaintext = true
+		case "0", "false", "no", "off":
+			allowPlaintext = false
+		default:
+			// Unknown values default to deny (D9 fail-closed) and warn so a
+			// typo'd env var doesn't silently disable encryption.
+			logger.Warn("BIFROST_ALLOW_PLAINTEXT_STORAGE=%q is not a recognised boolean; treating as deny (D9 default)", envVal)
+			allowPlaintext = false
+		}
+	}
+	encrypt.SetAllowPlaintextStorage(allowPlaintext)
+
 	if configData.EncryptionKey == nil || configData.EncryptionKey.GetValue() == "" {
 		// Checking if BIFROST_ENCRYPTION_KEY environment variable is set
 		if os.Getenv("BIFROST_ENCRYPTION_KEY") != "" {
 			configData.EncryptionKey = schemas.NewSecretVar("env.BIFROST_ENCRYPTION_KEY")
 		}
 	}
+	// Salt resolution: config.json > env > default (no custom salt).
+	// Both sources are base64-decoded; an undecodable value surfaces
+	// immediately so a typo in config.json can't silently fall back to
+	// the historical DefaultSalt (which would defeat the per-deployment
+	// isolation the feature exists to provide).
+	customSalt, err := resolveEncryptionSalt(configData)
+	if err != nil {
+		return err
+	}
+
 	// Checking if encryption key is set
 	if configData.EncryptionKey != nil && configData.EncryptionKey.GetValue() != "" {
-		encrypt.Init(configData.EncryptionKey.GetValue(), logger)
+		encrypt.InitWithSalt(configData.EncryptionKey.GetValue(), customSalt, logger)
+	} else {
+		// Init() also reads the policy and emits the appropriate warning; calling
+		// it with an empty key keeps that warning + the atomic state in sync.
+		encrypt.InitWithSalt("", customSalt, logger)
 	}
 	return nil
+}
+
+// resolveEncryptionSalt picks the operator-supplied salt from config.json
+// (configData.EncryptionSalt) or the BIFROST_ENCRYPTION_SALT env var. The
+// config.json value wins on a tie. An empty result means "no custom salt;
+// use DefaultSalt" — never an error.
+func resolveEncryptionSalt(configData *ConfigData) ([]byte, error) {
+	var raw string
+	switch {
+	case configData != nil && configData.EncryptionSalt != "":
+		raw = strings.TrimSpace(configData.EncryptionSalt)
+	case strings.TrimSpace(os.Getenv("BIFROST_ENCRYPTION_SALT")) != "":
+		raw = strings.TrimSpace(os.Getenv("BIFROST_ENCRYPTION_SALT"))
+	}
+	if raw == "" {
+		return nil, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid encryption_salt: must be base64-encoded (got %q)", raw)
+	}
+	if len(decoded) < 16 {
+		return nil, fmt.Errorf("invalid encryption_salt: decoded length %d bytes; minimum is 16 bytes (256 bits) for Argon2id salt strength", len(decoded))
+	}
+	return decoded, nil
 }
 
 // resolveSetupToken resolves the bootstrap setup token required to create the very
@@ -5132,8 +5223,15 @@ func resolveSetupToken(configData *ConfigData) string {
 	return configured
 }
 
-// syncEncryption encrypts all plaintext rows in the config store if encryption is enabled.
-// Called during bootup after encryption key is initialized and all config data has been loaded.
+// syncEncryption encrypts all plaintext rows in the config store when encryption
+// is enabled. Called during bootup after the encryption key is initialized and all
+// config data has been loaded.
+//
+// When encryption is disabled this is a no-op: the D9 decision (refuse to boot vs.
+// accept plaintext) is enforced separately by Config.EnforceEncryptionStartupPolicy,
+// which the server calls at the deployment boot boundary. Keeping the two apart means
+// config-parsing tests and the admin CLI — which legitimately run without a key — are
+// unaffected by the deployment policy.
 func syncEncryption(ctx context.Context, config *Config) {
 	if !encrypt.IsEnabled() || config.ConfigStore == nil {
 		return
@@ -5141,6 +5239,34 @@ func syncEncryption(ctx context.Context, config *Config) {
 	if err := config.ConfigStore.EncryptPlaintextRows(ctx); err != nil {
 		logger.Error("failed to sync encryption for plaintext rows: %v", err)
 	}
+}
+
+// EnforceEncryptionStartupPolicy implements D9: a deployment must either provide an
+// encryption key or explicitly opt in to plaintext storage. When neither is true the
+// server refuses to boot — silently running with plaintext secrets is exactly the
+// failure mode D9 exists to prevent.
+//
+// The error is enriched with the per-table plaintext row counts (best effort) so the
+// operator can size the migration before configuring the key and running
+// `celer-route-admin admin re-encrypt`.
+//
+// Deliberately NOT part of LoadConfig: LoadConfig is also used by config-parsing
+// tests and callers that never serve traffic. Enforcing the policy there would couple
+// a deployment decision to the parser.
+func (c *Config) EnforceEncryptionStartupPolicy(ctx context.Context) error {
+	if encrypt.IsEnabled() || encrypt.AllowPlaintextStorage() {
+		return nil
+	}
+	var counts configstore.PlaintextRowCounts
+	if c.ConfigStore != nil {
+		got, err := c.ConfigStore.CountPlaintextRows(ctx)
+		if err != nil {
+			logger.Warn("encryption startup policy: could not count plaintext rows: %v", err)
+		} else {
+			counts = got
+		}
+	}
+	return &configstore.EncryptionNotConfiguredError{Counts: counts}
 }
 
 // resolveMCPConfigClientIDs resolves MCPClientName to MCPClientID for each MCP config.
@@ -7068,6 +7194,30 @@ func (c *Config) WebhookEndpointByID(id string) (*configstoreTables.TableWebhook
 	defer c.muWebhooks.RUnlock()
 	endpoint, ok := c.webhookEndpoints[id]
 	return endpoint, ok
+}
+
+// WebhookEndpoints enumerates every endpoint held in memory. It backs
+// Dispatcher.EndpointIDsForEvent, which needs to discover subscribers for an
+// event rather than look one up by id.
+//
+// The slice is built under the read lock and the pointers are the same ones
+// SetWebhookEndpoint stored, so callers must treat them as read-only — the
+// same contract WebhookEndpointByID already documents. Iteration order is map
+// order; the dispatcher sorts the resulting ids itself.
+func (c *Config) WebhookEndpoints() []*configstoreTables.TableWebhookEndpoint {
+	c.muWebhooks.RLock()
+	defer c.muWebhooks.RUnlock()
+	if len(c.webhookEndpoints) == 0 {
+		return nil
+	}
+	out := make([]*configstoreTables.TableWebhookEndpoint, 0, len(c.webhookEndpoints))
+	for _, endpoint := range c.webhookEndpoints {
+		if endpoint == nil {
+			continue
+		}
+		out = append(out, endpoint)
+	}
+	return out
 }
 
 // WebhookEndpointByName returns the endpoint with the given unique name, or

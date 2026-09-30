@@ -1,6 +1,7 @@
 package encrypt
 
 import (
+	"errors"
 	"testing"
 
 	bifrost "github.com/pin-gou/celer-route/core"
@@ -241,5 +242,92 @@ func TestKDFDeterministic(t *testing.T) {
 
 	if decrypted2 != plaintext {
 		t.Errorf("Second decryption does not match original.\nExpected: %s\nGot: %s", plaintext, decrypted2)
+	}
+}
+
+// TestPlaintextPolicy_D9 verifies the D9 fail-closed behaviour: when no
+// encryption key is initialised and the operator has not opted in to plaintext
+// storage, Encrypt must refuse to write the secret rather than silently
+// returning the plaintext. Decrypt must return ErrEncryptionKeyNotInitialized
+// so callers can detect a misconfigured boot.
+func TestPlaintextPolicy_D9(t *testing.T) {
+	// Reset to "no key, no opt-in" — this mirrors a fresh process with an
+	// empty config.json. The package-level state persists across tests in
+	// this binary, so we have to defend against leakage from earlier tests.
+	SetAllowPlaintextStorage(false)
+	Init("", bifrost.NewDefaultLogger(schemas.LogLevelWarn))
+
+	out, err := Encrypt("sk-live-secret")
+	if !errors.Is(err, ErrPlaintextWriteForbidden) {
+		t.Fatalf("expected ErrPlaintextWriteForbidden when key unset + opt-out, got err=%v out=%q", err, out)
+	}
+	if out != "" {
+		t.Errorf("expected empty output on refused write, got %q", out)
+	}
+
+	// Empty plaintext never raises the policy error.
+	if out, err := Encrypt(""); err != nil || out != "" {
+		t.Errorf("Encrypt(\"\") = (%q, %v), want (\"\", nil)", out, err)
+	}
+
+	// Decrypt with no key + no opt-in must surface the missing-key error.
+	if _, err := Decrypt("anything"); !errors.Is(err, ErrEncryptionKeyNotInitialized) {
+		t.Fatalf("expected ErrEncryptionKeyNotInitialized, got %v", err)
+	}
+
+	// Decrypt of empty input is always "".
+	if out, err := Decrypt(""); err != nil || out != "" {
+		t.Errorf("Decrypt(\"\") = (%q, %v), want (\"\", nil)", out, err)
+	}
+}
+
+// TestPlaintextPolicy_OptIn flips the policy explicitly and confirms
+// Encrypt/Decrypt now silently pass through the plaintext. This is the dev
+// / opt-in mode the docs document for fast local setup.
+func TestPlaintextPolicy_OptIn(t *testing.T) {
+	SetAllowPlaintextStorage(true)
+	Init("", bifrost.NewDefaultLogger(schemas.LogLevelWarn))
+
+	out, err := Encrypt("sk-dev-secret")
+	if err != nil {
+		t.Fatalf("Encrypt with opt-in: %v", err)
+	}
+	if out != "sk-dev-secret" {
+		t.Errorf("Encrypt with opt-in should pass through unchanged, got %q", out)
+	}
+
+	back, err := Decrypt("sk-dev-secret")
+	if err != nil {
+		t.Fatalf("Decrypt with opt-in: %v", err)
+	}
+	if back != "sk-dev-secret" {
+		t.Errorf("Decrypt with opt-in should pass through unchanged, got %q", back)
+	}
+
+	// Reset for the next test in the suite.
+	SetAllowPlaintextStorage(false)
+}
+
+// TestPlaintextPolicy_Restore confirms that once an encryption key is set,
+// the policy opt-in is irrelevant: Encrypt always produces ciphertext,
+// Decrypt always recovers plaintext.
+func TestPlaintextPolicy_Restore(t *testing.T) {
+	SetAllowPlaintextStorage(false)
+	Init("a-test-passphrase-32-bytes-long!!", bifrost.NewDefaultLogger(schemas.LogLevelWarn))
+
+	cipher, err := Encrypt("sk-live-secret")
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	if cipher == "sk-live-secret" {
+		t.Errorf("expected ciphertext, got plaintext through")
+	}
+
+	back, err := Decrypt(cipher)
+	if err != nil {
+		t.Fatalf("Decrypt: %v", err)
+	}
+	if back != "sk-live-secret" {
+		t.Errorf("round-trip mismatch: got %q want %q", back, "sk-live-secret")
 	}
 }

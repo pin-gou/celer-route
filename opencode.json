@@ -3,7 +3,6 @@
   "permission": "allow",
   "lsp": true,
   "model": "pg-router/pg-expert",
-  "plugin": ["list"],
   "agent": {
     "explore": {
       "model": "pg-router/pg-associate"

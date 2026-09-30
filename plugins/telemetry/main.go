@@ -166,6 +166,9 @@ type PrometheusPlugin struct {
 	InputTokensTotal               *prometheus.CounterVec
 	OutputTokensTotal              *prometheus.CounterVec
 	CacheHitsTotal                 *prometheus.CounterVec
+	CacheMissesTotal               *prometheus.CounterVec
+	CacheSavedInputTokensTotal     *prometheus.CounterVec
+	CacheSavedCostTotal            *prometheus.CounterVec
 	CacheReadInputTokensTotal      *prometheus.CounterVec
 	CacheWriteInputTokensTotal     *prometheus.CounterVec
 	CacheWriteInputTokens5mTotal   *prometheus.CounterVec
@@ -428,6 +431,32 @@ func Init(config *Config, pricingManager *modelcatalog.ModelCatalog, logger sche
 		append(append(defaultBifrostLabels, "cache_type"), filteredCustomLabels...),
 	)
 
+	// Phase 5 cache-observability (US12). Mirror the bifrost semantic-cache
+	// counters from plugins/semanticcache/cache_stats_tracker.go so the same
+	// hit/miss ratio is queryable both through the in-memory tracker (for
+	// /api/cache/stats) and as a Prometheus time series (for dashboards).
+	bifrostCacheMissesTotal := factory.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "bifrost_cache_misses_total",
+			Help: "Total number of semantic-cache misses. Pair with bifrost_cache_hits_total to compute hit rate.",
+		},
+		append(defaultBifrostLabels, filteredCustomLabels...),
+	)
+	bifrostCacheSavedInputTokensTotal := factory.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "bifrost_cache_saved_input_tokens_total",
+			Help: "Sum of input tokens that would have been billed if not served from cache.",
+		},
+		append(defaultBifrostLabels, filteredCustomLabels...),
+	)
+	bifrostCacheSavedCostTotal := factory.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "bifrost_cache_saved_cost_total",
+			Help: "Sum of USD cost saved by serving from cache, estimated at the standard price book.",
+		},
+		append(defaultBifrostLabels, filteredCustomLabels...),
+	)
+
 	// Provider-side prompt cache tokens (Anthropic/OpenAI/Gemini prompt caching). Distinct
 	// from bifrost_cache_hits_total, which counts Bifrost's own semantic-cache hits.
 	bifrostCacheReadInputTokensTotal := factory.NewCounterVec(
@@ -556,6 +585,9 @@ func Init(config *Config, pricingManager *modelcatalog.ModelCatalog, logger sche
 		InputTokensTotal:               bifrostInputTokensTotal,
 		OutputTokensTotal:              bifrostOutputTokensTotal,
 		CacheHitsTotal:                 bifrostCacheHitsTotal,
+		CacheMissesTotal:               bifrostCacheMissesTotal,
+		CacheSavedInputTokensTotal:     bifrostCacheSavedInputTokensTotal,
+		CacheSavedCostTotal:            bifrostCacheSavedCostTotal,
 		CacheReadInputTokensTotal:      bifrostCacheReadInputTokensTotal,
 		CacheWriteInputTokensTotal:     bifrostCacheWriteInputTokensTotal,
 		CacheWriteInputTokens5mTotal:   bifrostCacheWriteInputTokens5mTotal,
@@ -761,17 +793,17 @@ func (p *PrometheusPlugin) PostMCPHook(ctx *schemas.BifrostContext, resp *schema
 	}
 
 	labelValues := map[string]string{
-		"mcp_client":         clientName,
-		"mcp_tool_name":      toolName,
-		"mcp_method":         mcpReqType.OTelMethodName(),
-		"error_type":         errorType,
-		"virtual_key_id":     bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID),
-		"virtual_key_name":   bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName),
-		"team_id":            bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamID),
-		"team_name":          bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamName),
-		"customer_id":        bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID),
-		"customer_name":      bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerName),
-		}
+		"mcp_client":       clientName,
+		"mcp_tool_name":    toolName,
+		"mcp_method":       mcpReqType.OTelMethodName(),
+		"error_type":       errorType,
+		"virtual_key_id":   bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID),
+		"virtual_key_name": bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName),
+		"team_id":          bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamID),
+		"team_name":        bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceTeamName),
+		"customer_id":      bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerID),
+		"customer_name":    bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceCustomerName),
+	}
 	p.applyCustomLabels(ctx, labelValues)
 
 	promLabelValues := getPrometheusLabelValues(append(p.defaultMCPLabels, p.customLabels...), labelValues)
@@ -829,6 +861,7 @@ func extractProviderCacheTokens(result *schemas.BifrostResponse) (read, write, w
 // It records:
 //   - Request latency
 //   - Total request count
+//
 // canonicalEntitySet resolves one entity dimension from context: plural arrays,
 // else scalar as a set of one, canonicalized.
 func canonicalEntitySet(ctx context.Context, idsKey, namesKey, scalarIDKey, scalarNameKey schemas.BifrostContextKey) (idsCSV, namesCSV string) {
@@ -1090,19 +1123,48 @@ func (p *PrometheusPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 
 			// Record cache hits with cache type
 			extraFields := result.GetExtraFields()
-			if extraFields.CacheDebug != nil && extraFields.CacheDebug.CacheHit {
-				cacheType := "unknown"
-				if extraFields.CacheDebug.HitType != nil {
-					cacheType = *extraFields.CacheDebug.HitType
+			if extraFields.CacheDebug != nil {
+				// Phase 5 cache-observability (US12): mirror the semantic
+				// cache's hit/miss decision as Prometheus counters. The
+				// semanticcache plugin stamps CacheDebug on BOTH outcomes
+				// (see stampCacheDebugForMiss), so `CacheDebug != nil` means
+				// "the cache was consulted" — that is the denominator the
+				// hit-rate dashboard needs.
+				if !extraFields.CacheDebug.CacheHit {
+					p.CacheMissesTotal.WithLabelValues(promLabelValues...).Inc()
+				} else {
+					cacheType := "unknown"
+					if extraFields.CacheDebug.HitType != nil {
+						cacheType = *extraFields.CacheDebug.HitType
+					}
+
+					// Add cache_type to label values (create new slice to avoid modifying original)
+					cacheHitLabelValues := make([]string, 0, len(promLabelValues)+1)
+					cacheHitLabelValues = append(cacheHitLabelValues, promLabelValues[:len(p.defaultBifrostLabels)]...) // all default labels
+					cacheHitLabelValues = append(cacheHitLabelValues, cacheType)                                        // cache_type
+					cacheHitLabelValues = append(cacheHitLabelValues, promLabelValues[len(p.defaultBifrostLabels):]...) // then custom labels
+
+					p.CacheHitsTotal.WithLabelValues(cacheHitLabelValues...).Inc()
+
+					// Saved input tokens: the cache debug's own count is the
+					// authoritative figure (it is what the lookup indexed);
+					// fall back to the response usage when the cache didn't
+					// stamp it (direct-hash hits don't run an embedding).
+					savedTokens := inputTokens
+					if v := extraFields.CacheDebug.InputTokens; v != nil && *v > 0 {
+						savedTokens = *v
+					}
+					if savedTokens > 0 {
+						p.CacheSavedInputTokensTotal.WithLabelValues(promLabelValues...).Add(float64(savedTokens))
+					}
+					// bifrost_cache_saved_cost_total stays at 0 here on
+					// purpose: the cost saved is a function of the standard
+					// price book, which this plugin cannot read. The
+					// /api/reports/cache/savings endpoint derives it from the
+					// log store instead, and the metric will be driven from
+					// here once the cost layer exposes a per-response
+					// standard-price figure.
 				}
-
-				// Add cache_type to label values (create new slice to avoid modifying original)
-				cacheHitLabelValues := make([]string, 0, len(promLabelValues)+1)
-				cacheHitLabelValues = append(cacheHitLabelValues, promLabelValues[:len(p.defaultBifrostLabels)]...) // all default labels
-				cacheHitLabelValues = append(cacheHitLabelValues, cacheType)                                        // cache_type
-				cacheHitLabelValues = append(cacheHitLabelValues, promLabelValues[len(p.defaultBifrostLabels):]...) // then custom labels
-
-				p.CacheHitsTotal.WithLabelValues(cacheHitLabelValues...).Inc()
 			}
 		}
 	}()

@@ -27,11 +27,11 @@ type EntityWiseRateLimits map[string][]*configstoreTables.TableRateLimit
 // model in [...]). It is the unit of work the /v1/models backfill path
 // aggregates per rule, then unions across scopes.
 type RoutingRuleModelLiteral struct {
-	ModelID        string   // the bare virtual model name (e.g. "pg-expert")
-	Alias          *string  // first target.model from the source rule, if any
-	RuleID         string   // id of the source rule (for UI "jump to rule" links)
-	RuleName       string   // display name of the source rule
-	TargetProvider *string  // first target.provider from the source rule, if any
+	ModelID        string  // the bare virtual model name (e.g. "pg-expert")
+	Alias          *string // first target.model from the source rule, if any
+	RuleID         string  // id of the source rule (for UI "jump to rule" links)
+	RuleName       string  // display name of the source rule
+	TargetProvider *string // first target.provider from the source rule, if any
 }
 
 // LocalGovernanceStore provides in-memory cache for governance data with fast, non-blocking access
@@ -50,6 +50,11 @@ type LocalGovernanceStore struct {
 	modelConfigs    sync.Map // string -> *ModelConfig (key: "modelName" or "modelName:provider" -> ModelConfig)
 	providers       sync.Map // string -> *Provider (Provider name -> Provider with preloaded relationships)
 	routingRules    sync.Map // string -> []*TableRoutingRule (key: "scope:scopeID" -> rules, scopeID="" for global)
+	// teamModelPolicies caches per-(team, provider) ACL rows. The composite
+	// key "teamID\x00provider" keeps the map flat — sync.Map has no nested
+	// type, and the join key is small enough to allocate on every read.
+	// Phase 6 / D6 — D6 intersection is computed in resolver.isModelAllowed.
+	teamModelPolicies sync.Map // string -> *TableTeamModelPolicy
 
 	// Last DB usages for budgets and rate limits
 	LastDBUsagesBudgetsMu            sync.RWMutex       // Last DB usages for budgets
@@ -322,6 +327,65 @@ func (gs *LocalGovernanceStore) LoadBudget(ctx context.Context, budgetID string)
 		}
 	}
 	return nil
+}
+
+// CollectBudgetsForVK flattens the budget hierarchy (ProviderConfig → VK →
+// Team → Customer) for one virtual key and the provider of the inbound
+// request into a single deduped slice of live budget rows.
+//
+// It reuses the same in-memory walk CheckVirtualKeyBudget performs — the
+// walk that already powers the enforcement path — so the alert consumers
+// (EvaluateSoftThresholds and EnqueueBudgetExceeded) always see the same
+// rows that drove the decision. Doing the walk a second time here costs
+// one sync.Map traversal with no DB read; the budget set for a single VK
+// is small (≤ tens of rows at the largest deployments) so the duplicate
+// work is in the microsecond range.
+//
+// Returned pointers are the live rows; callers must treat them as
+// read-only.
+func (gs *LocalGovernanceStore) CollectBudgetsForVK(ctx context.Context, vk *configstoreTables.TableVirtualKey, requestedProvider schemas.ModelProvider) []*configstoreTables.TableBudget {
+	if vk == nil {
+		return nil
+	}
+	hierarchy := gs.collectBudgetsFromHierarchy(ctx, vk, requestedProvider)
+	out := make([]*configstoreTables.TableBudget, 0, len(hierarchy))
+	for _, group := range hierarchy {
+		out = append(out, group...)
+	}
+	return out
+}
+
+// CollectBudgetsForModelConfig returns the live budget rows owned by one
+// model config, in the same way the enforcement path resolves them via
+// loadModelConfigBudgets. Used by the resolver when populating BudgetInfo
+// for a model-scoped violation/allow result.
+func (gs *LocalGovernanceStore) CollectBudgetsForModelConfig(ctx context.Context, mc *configstoreTables.TableModelConfig) []*configstoreTables.TableBudget {
+	return gs.loadModelConfigBudgets(ctx, mc)
+}
+
+// CollectBudgetsForModelConfigs returns the union of live budget rows
+// owned by the given model configs. The set is deduped by budget ID so a
+// budget that appears in two model configs (rare but legal) is surfaced
+// once. Order matches the input order.
+func (gs *LocalGovernanceStore) CollectBudgetsForModelConfigs(ctx context.Context, mcs []*configstoreTables.TableModelConfig) []*configstoreTables.TableBudget {
+	if len(mcs) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(mcs))
+	out := make([]*configstoreTables.TableBudget, 0, len(mcs))
+	for _, mc := range mcs {
+		if mc == nil {
+			continue
+		}
+		for _, b := range gs.loadModelConfigBudgets(ctx, mc) {
+			if b == nil || seen[b.ID] {
+				continue
+			}
+			seen[b.ID] = true
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // storeBudget publishes a budget into the shared budgets map after re-deriving its
@@ -2918,9 +2982,30 @@ func (gs *LocalGovernanceStore) loadFromDatabase(ctx context.Context) error {
 		return fmt.Errorf("failed to load routing rules: %w", err)
 	}
 
+	// Load team model policies (Phase 6 / D6). We do not paginate — the table
+	// is one row per (team, provider) and the count stays small even at the
+	// largest deployments (≤ teams × providers). Iterate per team rather than
+	// fetching the whole table so future cluster-shard layouts (per-team
+	// scoping) remain compatible.
+	teamModelPoliciesByTeam := make(map[string][]configstoreTables.TableTeamModelPolicy, len(teams))
+	for i := range teams {
+		team := &teams[i]
+		if team == nil || team.ID == "" {
+			continue
+		}
+		policies, perr := gs.configStore.ListTeamModelPolicies(ctx, team.ID)
+		if perr != nil {
+			gs.logger.Warn("[governance] failed to load team_model_policies for team %s: %v", team.ID, perr)
+			continue
+		}
+		if len(policies) > 0 {
+			teamModelPoliciesByTeam[team.ID] = policies
+		}
+	}
+
 	// Rebuild in-memory structures (lock-free)
 	rebuildStart := time.Now()
-	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules)
+	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules, teamModelPoliciesByTeam)
 	gs.logger.Info("[startup-timing] loadFromDatabase rebuildInMemoryStructures took %v", time.Since(rebuildStart))
 
 	return nil
@@ -3061,14 +3146,16 @@ func (gs *LocalGovernanceStore) loadFromConfigMemory(ctx context.Context, config
 		virtualKeys[i] = *vk
 	}
 
-	// Rebuild in-memory structures (lock-free)
-	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules)
+	// Rebuild in-memory structures (lock-free). Team model policies only live
+	// in the DB-backed path; the config-memory path (legacy / OSS startup)
+	// passes a nil map and gets the "inherit global" default for every team.
+	gs.rebuildInMemoryStructures(ctx, customers, teams, virtualKeys, budgets, rateLimits, modelConfigs, providers, routingRules, nil)
 
 	return nil
 }
 
 // rebuildInMemoryStructures rebuilds all in-memory data structures (lock-free)
-func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, customers []configstoreTables.TableCustomer, teams []configstoreTables.TableTeam, virtualKeys []configstoreTables.TableVirtualKey, budgets []configstoreTables.TableBudget, rateLimits []configstoreTables.TableRateLimit, modelConfigs []configstoreTables.TableModelConfig, providers []configstoreTables.TableProvider, routingRules []configstoreTables.TableRoutingRule) {
+func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, customers []configstoreTables.TableCustomer, teams []configstoreTables.TableTeam, virtualKeys []configstoreTables.TableVirtualKey, budgets []configstoreTables.TableBudget, rateLimits []configstoreTables.TableRateLimit, modelConfigs []configstoreTables.TableModelConfig, providers []configstoreTables.TableProvider, routingRules []configstoreTables.TableRoutingRule, teamModelPoliciesByTeam map[string][]configstoreTables.TableTeamModelPolicy) {
 	// Clear existing data by creating new sync.Maps
 	gs.virtualKeys = sync.Map{}
 	gs.virtualKeysByID = sync.Map{}
@@ -3079,6 +3166,7 @@ func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, c
 	gs.modelConfigs = sync.Map{}
 	gs.providers = sync.Map{}
 	gs.routingRules = sync.Map{}
+	gs.teamModelPolicies = sync.Map{}
 
 	// Build customers map
 	for i := range customers {
@@ -3231,6 +3319,19 @@ func (gs *LocalGovernanceStore) rebuildInMemoryStructures(ctx context.Context, c
 	}
 	gs.LastDBUsagesRateLimitsTokensMu.Unlock()
 	gs.LastDBUsagesRateLimitsRequestsMu.Unlock()
+
+	// Build team model policies (Phase 6 / D6). Iterate the per-team slice
+	// we loaded up-front; nil map means the load path had no policies to
+	// surface (config-memory startup), which is the expected default.
+	for teamID, policies := range teamModelPoliciesByTeam {
+		for i := range policies {
+			policy := &policies[i]
+			if policy.TeamID == "" {
+				policy.TeamID = teamID
+			}
+			gs.teamModelPolicies.Store(teamModelPolicyKey(policy.TeamID, policy.Provider), policy)
+		}
+	}
 }
 
 // collectRateLimitsFromHierarchy collects rate limits and their metadata from the hierarchy (Provider Configs → VK → Team → Customer)
@@ -3993,6 +4094,78 @@ func (gs *LocalGovernanceStore) DeleteTeamInMemory(ctx context.Context, teamID s
 	})
 
 	gs.teams.Delete(teamID)
+
+	// Drop the team's model policies so a teardown also clears its ACL
+	// footprint. Done last so any in-flight lookup during the range callback
+	// still sees a populated teams map.
+	gs.DeleteTeamModelPoliciesForTeam(teamID)
+}
+
+// teamModelPolicyKey is the composite sync.Map key used to store a
+// TableTeamModelPolicy. NUL is not a valid byte in either the team ID or the
+// provider name, so the join is unambiguous.
+func teamModelPolicyKey(teamID, provider string) string {
+	return teamID + "\x00" + provider
+}
+
+// GetTeamModelPolicy returns the cached per-(team, provider) ACL row, or nil
+// when no policy exists (the "inherit global" case the resolver treats as a
+// no-op). Errors are intentionally not surfaced — the resolver must keep
+// moving on cache misses, and a DB fallback would belong at a higher layer.
+func (gs *LocalGovernanceStore) GetTeamModelPolicy(teamID, provider string) *configstoreTables.TableTeamModelPolicy {
+	if teamID == "" || provider == "" {
+		return nil
+	}
+	v, ok := gs.teamModelPolicies.Load(teamModelPolicyKey(teamID, provider))
+	if !ok || v == nil {
+		return nil
+	}
+	if policy, ok := v.(*configstoreTables.TableTeamModelPolicy); ok {
+		return policy
+	}
+	return nil
+}
+
+// UpsertTeamModelPolicy writes the row into the in-memory cache. The unique
+// index on (team_id, provider) makes the underlying DB Save race-free under
+// concurrent admin edits; this method is the in-memory twin of that write.
+func (gs *LocalGovernanceStore) UpsertTeamModelPolicy(policy *configstoreTables.TableTeamModelPolicy) {
+	if policy == nil || policy.TeamID == "" || policy.Provider == "" {
+		return
+	}
+	gs.teamModelPolicies.Store(teamModelPolicyKey(policy.TeamID, policy.Provider), policy)
+}
+
+// DeleteTeamModelPolicy removes the cached row, returning the team to
+// "inherit global" semantics for that provider. Missing keys are silent
+// no-ops so callers don't need a separate "exists?" check.
+func (gs *LocalGovernanceStore) DeleteTeamModelPolicy(teamID, provider string) {
+	if teamID == "" || provider == "" {
+		return
+	}
+	gs.teamModelPolicies.Delete(teamModelPolicyKey(teamID, provider))
+}
+
+// DeleteTeamModelPoliciesForTeam clears every ACL row that belonged to a
+// team. Called from DeleteTeamInMemory so a team teardown also drops its
+// ACL footprint.
+func (gs *LocalGovernanceStore) DeleteTeamModelPoliciesForTeam(teamID string) {
+	if teamID == "" {
+		return
+	}
+	gs.teamModelPolicies.Range(func(key, _ interface{}) bool {
+		k, ok := key.(string)
+		if !ok {
+			return true
+		}
+		// Keys are "teamID\x00provider"; prefix-match the teamID half so we
+		// don't have to enumerate every provider a team could have policies
+		// against. The NUL separator guarantees no false positive.
+		if len(k) > len(teamID) && k[:len(teamID)] == teamID && k[len(teamID)] == '\x00' {
+			gs.teamModelPolicies.Delete(k)
+		}
+		return true
+	})
 }
 
 // CreateCustomerInMemory adds a new customer to the in-memory store (lock-free)

@@ -830,6 +830,12 @@ func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 	if provider == "" && !h.applyListModelsVirtualKeyProviderFilter(ctx, bifrostCtx) {
 		return
 	}
+	// The explicit-provider path skips the fan-out filter above, so resolve the
+	// team ACL (Phase 6 / D6) separately — otherwise ?provider=X would list
+	// models the caller's team is not allowed to use.
+	if provider != "" && !h.applyListModelsTeamACLForExplicitProvider(ctx, bifrostCtx) {
+		return
+	}
 
 	var resp *schemas.BifrostListModelsResponse
 	var bifrostErr *schemas.BifrostError
@@ -894,6 +900,12 @@ func (h *CompletionHandler) listModels(ctx *fasthttp.RequestCtx) {
 		SendBifrostError(ctx, bifrostErr)
 		return
 	}
+
+	// Team ACL (Phase 6 / D6): narrow the list before enrichment and the
+	// routing-rule backfill, so a member never sees a model their team blocks
+	// and backfilled virtual models are not subject to a provider-scoped policy.
+	// No-op when the request carries no team policies.
+	applyListModelsTeamACLFilter(resp, bifrostCtx, schemas.ModelProvider(provider))
 
 	h.finishListModelsResponse(ctx, bifrostCtx, resp)
 }

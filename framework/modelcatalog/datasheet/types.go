@@ -41,6 +41,14 @@ type Entry struct {
 	Provider  string `json:"provider"`
 	Mode      string `json:"mode"`
 
+	// FXRate carries the per-source-currency rate used to convert this entry's
+	// costs into the engine's read currency (USD, see D11-A). The upstream
+	// datasheet ships USD-denominated rates, so today's payload sets this to 0
+	// (or leaves it absent) and ApplyFXUSD treats that as "already USD". A
+	// future non-USD provider only has to populate FXRate here — the rest of
+	// the engine reads already-USD rates and never needs to know the source.
+	FXRate float64 `json:"fx_rate,omitempty"`
+
 	ContextLength   *int                  `json:"context_length,omitempty"`
 	MaxInputTokens  *int                  `json:"max_input_tokens,omitempty"`
 	MaxOutputTokens *int                  `json:"max_output_tokens,omitempty"`
@@ -589,10 +597,24 @@ func withRetries[T any](ctx context.Context, maxRetries int, maxBackoff time.Dur
 }
 
 // convertEntryToTablePricing converts a parsed Entry from the upstream
-// datasheet into the row shape persisted in the config store.
+// datasheet into the row shape persisted in the config store. Every
+// per-token / per-call rate is funneled through ApplyFXUSD so the row that
+// hits the database is already in the engine's read currency (USD, see
+// temp/team/03-cost-allocation/data-model §1.1 D11-A). The source datasheet
+// already ships USD-denominated rates, so the layer is a no-op in practice
+// today; it exists so a future non-USD provider's fxRate only has to land
+// in one place.
 func convertEntryToTablePricing(modelKey string, entry Entry) configstoreTables.TableModelPricing {
 	provider := normalizeProvider(entry.Provider)
 	modelName := extractModelName(modelKey)
+	fx := entry.FXRate
+	apply := func(p *float64) *float64 {
+		if p == nil {
+			return nil
+		}
+		v := ApplyFXUSD(*p, fx)
+		return &v
+	}
 	return configstoreTables.TableModelPricing{
 		Model:           modelName,
 		BaseModel:       entry.BaseModel,
@@ -604,88 +626,88 @@ func convertEntryToTablePricing(modelKey string, entry Entry) configstoreTables.
 		Architecture:    entry.Architecture,
 		IsDeprecated:    entry.IsDeprecated,
 
-		InputCostPerToken:                         entry.InputCostPerToken,
-		OutputCostPerToken:                        entry.OutputCostPerToken,
-		InputCostPerTokenBatches:                  entry.InputCostPerTokenBatches,
-		OutputCostPerTokenBatches:                 entry.OutputCostPerTokenBatches,
-		InputCostPerTokenPriority:                 entry.InputCostPerTokenPriority,
-		OutputCostPerTokenPriority:                entry.OutputCostPerTokenPriority,
-		InputCostPerTokenFlex:                     entry.InputCostPerTokenFlex,
-		OutputCostPerTokenFlex:                    entry.OutputCostPerTokenFlex,
-		InputCostPerTokenFast:                     entry.InputCostPerTokenFast,
-		OutputCostPerTokenFast:                    entry.OutputCostPerTokenFast,
-		InputCostPerTokenAbove200kTokens:          entry.InputCostPerTokenAbove200kTokens,
-		InputCostPerTokenAbove200kTokensPriority:  entry.InputCostPerTokenAbove200kTokensPriority,
-		OutputCostPerTokenAbove200kTokens:         entry.OutputCostPerTokenAbove200kTokens,
-		OutputCostPerTokenAbove200kTokensPriority: entry.OutputCostPerTokenAbove200kTokensPriority,
-		InputCostPerTokenAbove272kTokens:          entry.InputCostPerTokenAbove272kTokens,
-		InputCostPerTokenAbove272kTokensPriority:  entry.InputCostPerTokenAbove272kTokensPriority,
-		InputCostPerTokenFlexAbove272kTokens:      entry.InputCostPerTokenFlexAbove272kTokens,
-		OutputCostPerTokenAbove272kTokens:         entry.OutputCostPerTokenAbove272kTokens,
-		OutputCostPerTokenAbove272kTokensPriority: entry.OutputCostPerTokenAbove272kTokensPriority,
-		OutputCostPerTokenFlexAbove272kTokens:     entry.OutputCostPerTokenFlexAbove272kTokens,
-		InputCostPerCharacter:                     entry.InputCostPerCharacter,
-		InputCostPerTokenAbove128kTokens:          entry.InputCostPerTokenAbove128kTokens,
-		InputCostPerImageAbove128kTokens:          entry.InputCostPerImageAbove128kTokens,
-		InputCostPerVideoPerSecondAbove128kTokens: entry.InputCostPerVideoPerSecondAbove128kTokens,
-		InputCostPerAudioPerSecondAbove128kTokens: entry.InputCostPerAudioPerSecondAbove128kTokens,
-		OutputCostPerTokenAbove128kTokens:         entry.OutputCostPerTokenAbove128kTokens,
+		InputCostPerToken:                         apply(entry.InputCostPerToken),
+		OutputCostPerToken:                        apply(entry.OutputCostPerToken),
+		InputCostPerTokenBatches:                  apply(entry.InputCostPerTokenBatches),
+		OutputCostPerTokenBatches:                 apply(entry.OutputCostPerTokenBatches),
+		InputCostPerTokenPriority:                 apply(entry.InputCostPerTokenPriority),
+		OutputCostPerTokenPriority:                apply(entry.OutputCostPerTokenPriority),
+		InputCostPerTokenFlex:                     apply(entry.InputCostPerTokenFlex),
+		OutputCostPerTokenFlex:                    apply(entry.OutputCostPerTokenFlex),
+		InputCostPerTokenFast:                     apply(entry.InputCostPerTokenFast),
+		OutputCostPerTokenFast:                    apply(entry.OutputCostPerTokenFast),
+		InputCostPerTokenAbove200kTokens:          apply(entry.InputCostPerTokenAbove200kTokens),
+		InputCostPerTokenAbove200kTokensPriority:  apply(entry.InputCostPerTokenAbove200kTokensPriority),
+		OutputCostPerTokenAbove200kTokens:         apply(entry.OutputCostPerTokenAbove200kTokens),
+		OutputCostPerTokenAbove200kTokensPriority: apply(entry.OutputCostPerTokenAbove200kTokensPriority),
+		InputCostPerTokenAbove272kTokens:          apply(entry.InputCostPerTokenAbove272kTokens),
+		InputCostPerTokenAbove272kTokensPriority:  apply(entry.InputCostPerTokenAbove272kTokensPriority),
+		InputCostPerTokenFlexAbove272kTokens:      apply(entry.InputCostPerTokenFlexAbove272kTokens),
+		OutputCostPerTokenAbove272kTokens:         apply(entry.OutputCostPerTokenAbove272kTokens),
+		OutputCostPerTokenAbove272kTokensPriority: apply(entry.OutputCostPerTokenAbove272kTokensPriority),
+		OutputCostPerTokenFlexAbove272kTokens:     apply(entry.OutputCostPerTokenFlexAbove272kTokens),
+		InputCostPerCharacter:                     apply(entry.InputCostPerCharacter),
+		InputCostPerTokenAbove128kTokens:          apply(entry.InputCostPerTokenAbove128kTokens),
+		InputCostPerImageAbove128kTokens:          apply(entry.InputCostPerImageAbove128kTokens),
+		InputCostPerVideoPerSecondAbove128kTokens: apply(entry.InputCostPerVideoPerSecondAbove128kTokens),
+		InputCostPerAudioPerSecondAbove128kTokens: apply(entry.InputCostPerAudioPerSecondAbove128kTokens),
+		OutputCostPerTokenAbove128kTokens:         apply(entry.OutputCostPerTokenAbove128kTokens),
 
-		CacheCreationInputTokenCost:                        entry.CacheCreationInputTokenCost,
-		CacheReadInputTokenCost:                            entry.CacheReadInputTokenCost,
-		CacheCreationInputTokenCostAbove200kTokens:         entry.CacheCreationInputTokenCostAbove200kTokens,
-		CacheReadInputTokenCostAbove200kTokens:             entry.CacheReadInputTokenCostAbove200kTokens,
-		CacheReadInputTokenCostAbove200kTokensPriority:     entry.CacheReadInputTokenCostAbove200kTokensPriority,
-		CacheCreationInputTokenCostAbove1hr:                entry.CacheCreationInputTokenCostAbove1hr,
-		CacheCreationInputTokenCostAbove1hrAbove200kTokens: entry.CacheCreationInputTokenCostAbove1hrAbove200kTokens,
-		CacheCreationInputAudioTokenCost:                   entry.CacheCreationInputAudioTokenCost,
-		CacheReadInputTokenCostPriority:                    entry.CacheReadInputTokenCostPriority,
-		CacheReadInputTokenCostFlex:                        entry.CacheReadInputTokenCostFlex,
-		CacheReadInputImageTokenCost:                       entry.CacheReadInputImageTokenCost,
-		CacheReadInputTokenCostAbove272kTokens:             entry.CacheReadInputTokenCostAbove272kTokens,
-		CacheReadInputTokenCostAbove272kTokensPriority:     entry.CacheReadInputTokenCostAbove272kTokensPriority,
-		CacheReadInputTokenCostFlexAbove272kTokens:         entry.CacheReadInputTokenCostFlexAbove272kTokens,
-		CacheCreationInputTokenCostAbove272kTokens:         entry.CacheCreationInputTokenCostAbove272kTokens,
-		CacheCreationInputTokenCostFlex:                    entry.CacheCreationInputTokenCostFlex,
-		CacheCreationInputTokenCostFlexAbove272kTokens:     entry.CacheCreationInputTokenCostFlexAbove272kTokens,
-		CacheCreationInputTokenCostPriority:                entry.CacheCreationInputTokenCostPriority,
-		CacheCreationInputTokenCostFast:                    entry.CacheCreationInputTokenCostFast,
-		CacheCreationInputTokenCostAbove1hrFast:            entry.CacheCreationInputTokenCostAbove1hrFast,
-		CacheReadInputTokenCostFast:                        entry.CacheReadInputTokenCostFast,
+		CacheCreationInputTokenCost:                        apply(entry.CacheCreationInputTokenCost),
+		CacheReadInputTokenCost:                            apply(entry.CacheReadInputTokenCost),
+		CacheCreationInputTokenCostAbove200kTokens:         apply(entry.CacheCreationInputTokenCostAbove200kTokens),
+		CacheReadInputTokenCostAbove200kTokens:             apply(entry.CacheReadInputTokenCostAbove200kTokens),
+		CacheReadInputTokenCostAbove200kTokensPriority:     apply(entry.CacheReadInputTokenCostAbove200kTokensPriority),
+		CacheCreationInputTokenCostAbove1hr:                apply(entry.CacheCreationInputTokenCostAbove1hr),
+		CacheCreationInputTokenCostAbove1hrAbove200kTokens: apply(entry.CacheCreationInputTokenCostAbove1hrAbove200kTokens),
+		CacheCreationInputAudioTokenCost:                   apply(entry.CacheCreationInputAudioTokenCost),
+		CacheReadInputTokenCostPriority:                    apply(entry.CacheReadInputTokenCostPriority),
+		CacheReadInputTokenCostFlex:                        apply(entry.CacheReadInputTokenCostFlex),
+		CacheReadInputImageTokenCost:                       apply(entry.CacheReadInputImageTokenCost),
+		CacheReadInputTokenCostAbove272kTokens:             apply(entry.CacheReadInputTokenCostAbove272kTokens),
+		CacheReadInputTokenCostAbove272kTokensPriority:     apply(entry.CacheReadInputTokenCostAbove272kTokensPriority),
+		CacheReadInputTokenCostFlexAbove272kTokens:         apply(entry.CacheReadInputTokenCostFlexAbove272kTokens),
+		CacheCreationInputTokenCostAbove272kTokens:         apply(entry.CacheCreationInputTokenCostAbove272kTokens),
+		CacheCreationInputTokenCostFlex:                    apply(entry.CacheCreationInputTokenCostFlex),
+		CacheCreationInputTokenCostFlexAbove272kTokens:     apply(entry.CacheCreationInputTokenCostFlexAbove272kTokens),
+		CacheCreationInputTokenCostPriority:                apply(entry.CacheCreationInputTokenCostPriority),
+		CacheCreationInputTokenCostFast:                    apply(entry.CacheCreationInputTokenCostFast),
+		CacheCreationInputTokenCostAbove1hrFast:            apply(entry.CacheCreationInputTokenCostAbove1hrFast),
+		CacheReadInputTokenCostFast:                        apply(entry.CacheReadInputTokenCostFast),
 
-		InputCostPerImage:                             entry.InputCostPerImage,
-		InputCostPerPixel:                             entry.InputCostPerPixel,
-		OutputCostPerImage:                            entry.OutputCostPerImage,
-		OutputCostPerPixel:                            entry.OutputCostPerPixel,
-		OutputCostPerImagePremiumImage:                entry.OutputCostPerImagePremiumImage,
-		OutputCostPerImageAbove512x512Pixels:          entry.OutputCostPerImageAbove512x512Pixels,
-		OutputCostPerImageAbove512x512PixelsPremium:   entry.OutputCostPerImageAbove512x512PixelsPremium,
-		OutputCostPerImageAbove1024x1024Pixels:        entry.OutputCostPerImageAbove1024x1024Pixels,
-		OutputCostPerImageAbove1024x1024PixelsPremium: entry.OutputCostPerImageAbove1024x1024PixelsPremium,
-		OutputCostPerImageAbove2048x2048Pixels:        entry.OutputCostPerImageAbove2048x2048Pixels,
-		OutputCostPerImageAbove4096x4096Pixels:        entry.OutputCostPerImageAbove4096x4096Pixels,
-		OutputCostPerImageLowQuality:                  entry.OutputCostPerImageLowQuality,
-		OutputCostPerImageMediumQuality:               entry.OutputCostPerImageMediumQuality,
-		OutputCostPerImageHighQuality:                 entry.OutputCostPerImageHighQuality,
-		OutputCostPerImageAutoQuality:                 entry.OutputCostPerImageAutoQuality,
-		InputCostPerImageToken:                        entry.InputCostPerImageToken,
-		OutputCostPerImageToken:                       entry.OutputCostPerImageToken,
+		InputCostPerImage:                             apply(entry.InputCostPerImage),
+		InputCostPerPixel:                             apply(entry.InputCostPerPixel),
+		OutputCostPerImage:                            apply(entry.OutputCostPerImage),
+		OutputCostPerPixel:                            apply(entry.OutputCostPerPixel),
+		OutputCostPerImagePremiumImage:                apply(entry.OutputCostPerImagePremiumImage),
+		OutputCostPerImageAbove512x512Pixels:          apply(entry.OutputCostPerImageAbove512x512Pixels),
+		OutputCostPerImageAbove512x512PixelsPremium:   apply(entry.OutputCostPerImageAbove512x512PixelsPremium),
+		OutputCostPerImageAbove1024x1024Pixels:        apply(entry.OutputCostPerImageAbove1024x1024Pixels),
+		OutputCostPerImageAbove1024x1024PixelsPremium: apply(entry.OutputCostPerImageAbove1024x1024PixelsPremium),
+		OutputCostPerImageAbove2048x2048Pixels:        apply(entry.OutputCostPerImageAbove2048x2048Pixels),
+		OutputCostPerImageAbove4096x4096Pixels:        apply(entry.OutputCostPerImageAbove4096x4096Pixels),
+		OutputCostPerImageLowQuality:                  apply(entry.OutputCostPerImageLowQuality),
+		OutputCostPerImageMediumQuality:               apply(entry.OutputCostPerImageMediumQuality),
+		OutputCostPerImageHighQuality:                 apply(entry.OutputCostPerImageHighQuality),
+		OutputCostPerImageAutoQuality:                 apply(entry.OutputCostPerImageAutoQuality),
+		InputCostPerImageToken:                        apply(entry.InputCostPerImageToken),
+		OutputCostPerImageToken:                       apply(entry.OutputCostPerImageToken),
 
-		InputCostPerAudioToken:      entry.InputCostPerAudioToken,
-		InputCostPerAudioPerSecond:  entry.InputCostPerAudioPerSecond,
-		InputCostPerSecond:          entry.InputCostPerSecond,
-		InputCostPerVideoPerSecond:  entry.InputCostPerVideoPerSecond,
-		OutputCostPerAudioToken:     entry.OutputCostPerAudioToken,
-		OutputCostPerVideoPerSecond: entry.OutputCostPerVideoPerSecond,
-		OutputCostPerSecond:         entry.OutputCostPerSecond,
+		InputCostPerAudioToken:      apply(entry.InputCostPerAudioToken),
+		InputCostPerAudioPerSecond:  apply(entry.InputCostPerAudioPerSecond),
+		InputCostPerSecond:          apply(entry.InputCostPerSecond),
+		InputCostPerVideoPerSecond:  apply(entry.InputCostPerVideoPerSecond),
+		OutputCostPerAudioToken:     apply(entry.OutputCostPerAudioToken),
+		OutputCostPerVideoPerSecond: apply(entry.OutputCostPerVideoPerSecond),
+		OutputCostPerSecond:         apply(entry.OutputCostPerSecond),
 
-		SearchContextCostPerQuery:     entry.SearchContextCostPerQuery,
-		CodeInterpreterCostPerSession: entry.CodeInterpreterCostPerSession,
+		SearchContextCostPerQuery:     apply(entry.SearchContextCostPerQuery),
+		CodeInterpreterCostPerSession: apply(entry.CodeInterpreterCostPerSession),
 		InferenceGeoUSMultiplier:      entry.InferenceGeoUSMultiplier,
-		CostPerRequest:                entry.CostPerRequest,
+		CostPerRequest:                apply(entry.CostPerRequest),
 
-		OCRCostPerPage:        entry.OCRCostPerPage,
-		AnnotationCostPerPage: entry.AnnotationCostPerPage,
+		OCRCostPerPage:        apply(entry.OCRCostPerPage),
+		AnnotationCostPerPage: apply(entry.AnnotationCostPerPage),
 	}
 }
 

@@ -87,8 +87,15 @@ fi
 # this via the environment.
 export BIFROST_SETUP_TOKEN="${BIFROST_SETUP_TOKEN:-dev-setup-token-pg-build}"
 
+# Phase 6 / D9: the local dev database stores provider keys in plaintext and no
+# encryption_key is configured, so the gateway must explicitly opt in to plaintext
+# storage — otherwise EnforceEncryptionStartupPolicy refuses to boot. Production
+# deployments must NOT set this; they provide BIFROST_ENCRYPTION_KEY instead and run
+# `celer-route-admin admin re-encrypt --confirm` to migrate any pre-existing rows.
+export BIFROST_ALLOW_PLAINTEXT_STORAGE="${BIFROST_ALLOW_PLAINTEXT_STORAGE:-true}"
+
 if ! pid=$(pg_start_bg "$LOG_DIR/celer-route-api.log" "$PID_DIR/celer-route-api.pid" \
-        "BIFROST_PORT=$PORT" "BIFROST_UI_DEV=true" "BIFROST_SETUP_TOKEN=$BIFROST_SETUP_TOKEN" "PATH=$PATH" -- \
+        "BIFROST_PORT=$PORT" "BIFROST_UI_DEV=true" "BIFROST_SETUP_TOKEN=$BIFROST_SETUP_TOKEN" "BIFROST_ALLOW_PLAINTEXT_STORAGE=$BIFROST_ALLOW_PLAINTEXT_STORAGE" "PATH=$PATH" -- \
         "$BIFROST_BIN" -app-dir "$DATA_DIR" -port "$PORT" -host "$HOST" -log-level info -log-style pretty); then
     pg_fail --category=service_start_failure --code=PG-E-0800 \
         --message="启动 celer-route-api 失败" \

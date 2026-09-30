@@ -216,6 +216,47 @@ type PricingOverridesQueryParams struct {
 	ProviderKeyID *string
 }
 
+// ReencryptMode selects which migration the re-encrypt command performs.
+type ReencryptMode string
+
+const (
+	// ReencryptModePlaintextToEncrypted walks every sensitive table and
+	// re-saves rows whose encryption_status is plain_text so their
+	// sensitive columns are encrypted under the current key. Idempotent.
+	ReencryptModePlaintextToEncrypted ReencryptMode = "plaintext-to-encrypted"
+	// ReencryptModeRotateKey is reserved for a future key-rotation flow
+	// (re-encrypt already-encrypted rows under a newly activated key).
+	// Today it is a no-op that returns ErrReencryptModeUnsupported.
+	ReencryptModeRotateKey ReencryptMode = "rotate-key"
+)
+
+// ReencryptOptions drives a single re-encrypt run. Defaults apply when a
+// field is zero: BatchSize falls back to 100 rows/transaction; Mode falls
+// back to ReencryptModePlaintextToEncrypted.
+type ReencryptOptions struct {
+	// Mode selects which migration to perform. Default: plaintext-to-encrypted.
+	Mode ReencryptMode
+	// BatchSize caps rows per transaction. Default: 100.
+	BatchSize int
+	// DryRun, when true, returns the counts without writing any change.
+	DryRun bool
+}
+
+// PlaintextRowCounts reports how many rows still carry encryption_status='plain_text'
+// per table. Zero values are elided from the rendered CLI output.
+type PlaintextRowCounts map[string]int64
+
+// ReencryptResult is the structured outcome of a re-encrypt run. The CLI
+// prints the per-table counts; the server uses Encrypted > 0 to assert the
+// migration actually happened.
+type ReencryptResult struct {
+	DryRun          bool
+	Mode            ReencryptMode
+	BatchSize       int
+	PlaintextBefore PlaintextRowCounts
+	Encrypted       PlaintextRowCounts
+}
+
 // ConfigStore is the interface for the config store.
 type ConfigStore interface {
 	// Health check
@@ -223,6 +264,17 @@ type ConfigStore interface {
 
 	// Encryption
 	EncryptPlaintextRows(ctx context.Context) error
+	// ReencryptPlaintextRows runs a one-shot plaintext→encrypted migration
+	// across every sensitive table with the given batch size. When
+	// DryRun is true the function returns the number of rows that WOULD be
+	// migrated without writing any change. When Mode is "rotate-key" the
+	// function re-encrypts already-encrypted rows under the current key
+	// (no-op when the key hasn't changed; used by future key rotation).
+	ReencryptPlaintextRows(ctx context.Context, opts ReencryptOptions) (ReencryptResult, error)
+	// CountPlaintextRows returns how many sensitive rows are still stored
+	// in plaintext. Used by the CLI re-encrypt --dry-run path and by the
+	// D9 startup policy to size the migration. Cheap: SELECT COUNT(*) per table.
+	CountPlaintextRows(ctx context.Context) (PlaintextRowCounts, error)
 
 	// Client config CRUD
 	UpdateClientConfig(ctx context.Context, config *ClientConfig) error
@@ -446,6 +498,90 @@ type ConfigStore interface {
 	DeleteSession(ctx context.Context, token string) error
 	FlushSessions(ctx context.Context) error
 
+	// User CRUD (Phase 1 /temp/team — member-only login path).
+	// Admin login continues to use AuthConfig.AdminUserName; this interface
+	// exists so the member-login flow can look up users by email, fetch their
+	// team memberships, and (in Phase 2) provision new users via invitations.
+	// GetUserByID returns (nil, nil) when no such user exists so callers can
+	// distinguish "missing" from "error" without an extra errors.Is check.
+	GetUserByID(ctx context.Context, id string) (*tables.TableUser, error)
+	// GetUserByEmail is the member-login lookup path; emails are stored
+	// lowercased so callers must normalize before calling.
+	GetUserByEmail(ctx context.Context, email string) (*tables.TableUser, error)
+	// ListUsers returns users matching the given status/role filter,
+	// paginated. Used by GET /api/governance/users (Phase 2).
+	ListUsers(ctx context.Context, status, role string, limit, offset int) ([]tables.TableUser, int64, error)
+	CreateUser(ctx context.Context, user *tables.TableUser) error
+	UpdateUser(ctx context.Context, user *tables.TableUser) error
+	// UpdateUserLastLoginAt is a targeted column update so the session
+	// middleware doesn't need to read-modify-write the entire user row.
+	UpdateUserLastLoginAt(ctx context.Context, id string, at time.Time) error
+	DeleteUser(ctx context.Context, id string) error
+
+	// Team-member CRUD (Phase 1).
+	// GetTeamMembership returns a single (team_id, user_id) row, used by the
+	// member portal to look up which team the user belongs to.
+	GetTeamMembership(ctx context.Context, teamID, userID string) (*tables.TableTeamMember, error)
+	// GetUserTeamMemberships returns every membership row for a user, used
+	// by GET /api/member/me to render the member's team list.
+	GetUserTeamMemberships(ctx context.Context, userID string) ([]tables.TableTeamMember, error)
+	// ListTeamMembers returns every membership row in a team, used by
+	// GET /api/governance/teams/:id/members (Phase 2).
+	ListTeamMembers(ctx context.Context, teamID string) ([]tables.TableTeamMember, error)
+	CreateTeamMember(ctx context.Context, member *tables.TableTeamMember) error
+	UpdateTeamMember(ctx context.Context, member *tables.TableTeamMember) error
+	DeleteTeamMember(ctx context.Context, teamID, userID string) error
+
+	// Invitation CRUD (Phase 2). The token is the random half of the link;
+	// admin generates it, invitee accepts it. ListInvitations is
+	// paginated by status so the admin UI can render "pending" separately
+	// from "accepted / expired / revoked".
+	CreateInvitation(ctx context.Context, inv *tables.TableInvitation) error
+	GetInvitationByToken(ctx context.Context, token string) (*tables.TableInvitation, error)
+	GetInvitationByID(ctx context.Context, id string) (*tables.TableInvitation, error)
+	ListInvitations(ctx context.Context, teamID, status string, limit, offset int) ([]tables.TableInvitation, int64, error)
+	UpdateInvitation(ctx context.Context, inv *tables.TableInvitation) error
+	// AcceptInvitationTx applies one invitation acceptance atomically:
+	// resolve-or-create the user, upsert the team_members row, and burn the
+	// token in a single transaction. Any failure rolls all three back, so a
+	// mid-flight error can never leave an orphan active user with no team or
+	// a still-pending invitation that a retry would double-apply.
+	//
+	// Returns ErrInvitationNotFound / ErrInvitationNotUsable (both map to 410
+	// Gone at the handler layer) when the token is unknown or already spent.
+	AcceptInvitationTx(ctx context.Context, in AcceptInvitationInput) (*AcceptInvitationOutput, error)
+
+	// KeyRequest CRUD (Phase 2). Approval happens at the handler layer
+	// where admin manually creates the VK; the row here is just the audit
+	// trail that names the resulting virtual_key_id.
+	CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error
+	GetKeyRequestByID(ctx context.Context, id string) (*tables.TableKeyRequest, error)
+	ListKeyRequests(ctx context.Context, status, userID, teamID string, limit, offset int) ([]tables.TableKeyRequest, int64, error)
+	UpdateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error
+
+	// DisableUserVKeys flips every active VK owned by the given user to
+	// is_active=false (used by the offboarding flow in flows.md §4). It
+	// does NOT touch provider keys — provider keys remain under admin
+	// centralized control, matching the boundary in §5.1.
+	DisableUserVKeys(ctx context.Context, userID string) ([]string, error)
+	// ListVirtualKeysByUserID returns the (lightweight) VK summary for a
+	// single user — used by GET /api/governance/users/:id so the admin
+	// UI can render "VKs this user owns" without exposing VK secrets or
+	// the provider key details they reference.
+	ListVirtualKeysByUserID(ctx context.Context, userID string, limit, offset int) ([]tables.TableVirtualKey, int64, error)
+
+	// TouchVirtualKeyLastUsedAt bulk-updates governance_virtual_keys.last_used_at
+	// = now for the given VK ids. Powers the US24 idle-VK report: the
+	// sidekiq job queries the log store for VKs touched since the last
+	// sweep, then calls this to refresh the column in one round-trip.
+	TouchVirtualKeyLastUsedAt(ctx context.Context, ids []string) (int64, error)
+
+	// ListIdleVirtualKeys returns VKs whose last_used_at is NULL or older
+	// than the threshold. NULL means "never used" — surfaced alongside
+	// timed-out rows so a brand-new key the admin never shared still
+	// shows up on the first scan. Ordered longest-idle first.
+	ListIdleVirtualKeys(ctx context.Context, threshold time.Time, limit, offset int) ([]tables.TableVirtualKey, int64, error)
+
 	// Temp token CRUD
 	CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error
 	GetTempTokenByHash(ctx context.Context, tokenHash string) (*tables.TempToken, error)
@@ -484,6 +620,52 @@ type ConfigStore interface {
 	CreatePricingOverride(ctx context.Context, override *tables.TablePricingOverride, tx ...*gorm.DB) error
 	UpdatePricingOverride(ctx context.Context, override *tables.TablePricingOverride, tx ...*gorm.DB) error
 	DeletePricingOverride(ctx context.Context, id string, tx ...*gorm.DB) error
+
+	// Standard-prices (Phase 4 cost-allocation D7) — the team ledger's
+	// versioned price book. Reports pick the active row per (provider,
+	// model, request time); admin edits append a new effective_from row.
+	ListStandardPrices(ctx context.Context, params StandardPriceQueryParams) ([]tables.TableStandardPrice, int64, error)
+	GetStandardPriceByID(ctx context.Context, id string) (*tables.TableStandardPrice, error)
+	GetActiveStandardPrice(ctx context.Context, provider, model string, at time.Time) (*tables.TableStandardPrice, error)
+	CreateStandardPrice(ctx context.Context, row *tables.TableStandardPrice) error
+	BulkCreateStandardPrices(ctx context.Context, rows []tables.TableStandardPrice) error
+	DeleteStandardPrice(ctx context.Context, id string) error
+
+	// Team-pricing-profiles — per-team overrides (mode=standard/actual,
+	// margin_multiplier). Defaults are implicit when the row is absent.
+	ListTeamPricingProfiles(ctx context.Context) ([]tables.TableTeamPricingProfile, error)
+	GetTeamPricingProfile(ctx context.Context, teamID string) (*tables.TableTeamPricingProfile, error)
+	UpsertTeamPricingProfile(ctx context.Context, row *tables.TableTeamPricingProfile) error
+	DeleteTeamPricingProfile(ctx context.Context, teamID string) error
+
+	// Billing-reconciliations (Phase 5 cost-allocation §6) — calibration
+	// batches pairing gateway Σactual against provider Σactual. The handler
+	// side never reads items directly except through the parent batch id,
+	// so Get/Update only need to surface the parent row. Items are written
+	// in one go from the calibration job.
+	ListReconciliations(ctx context.Context, params ReconciliationQueryParams) ([]tables.TableBillingReconciliation, int64, error)
+	GetReconciliationByID(ctx context.Context, id string) (*tables.TableBillingReconciliation, error)
+	ListReconciliationItems(ctx context.Context, reconciliationID string) ([]tables.TableBillingReconItem, error)
+	CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error
+	UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error
+	// ApplyReconciliationTx commits a calibration batch atomically: the
+	// corrected datasheet rows and the batch's `applied` status flip land in
+	// one transaction, so a mid-flight failure can never leave the price book
+	// half re-priced with the batch still readable as `matched` (which would
+	// let a retry compound the multiplicative correction).
+	//
+	// Returns ErrReconciliationAlreadyApplied when the batch was already
+	// applied — including when a concurrent apply won the row lock first.
+	ApplyReconciliationTx(ctx context.Context, row *tables.TableBillingReconciliation, correctedRows []tables.TableModelPricing) error
+
+	// Team-model-policies (Phase 6 / D6) — per-team allow/deny lists used as
+	// the upper bound on what any of the team's VKs can call. List returns
+	// every policy for the team so the admin UI can render the full table;
+	// GetByTeamProvider is the resolver's hot path lookup.
+	ListTeamModelPolicies(ctx context.Context, teamID string) ([]tables.TableTeamModelPolicy, error)
+	GetTeamModelPolicy(ctx context.Context, teamID, provider string) (*tables.TableTeamModelPolicy, error)
+	UpsertTeamModelPolicy(ctx context.Context, policy *tables.TableTeamModelPolicy) error
+	DeleteTeamModelPolicy(ctx context.Context, teamID, provider string) error
 
 	// Model parameters
 	GetModelParameters(ctx context.Context) ([]tables.TableModelParameters, error)
@@ -925,6 +1107,28 @@ type ConfigStore interface {
 	RescheduleWebhookJob(ctx context.Context, id, runnerID string, leaseUntil, nextAttemptAt time.Time) error
 	DeleteWebhookJob(ctx context.Context, id, runnerID string, leaseUntil time.Time) error
 
+	// Alert rules (Phase 3 / 02-alerting)
+	CreateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error
+	GetAlertRuleByID(ctx context.Context, id string) (*tables.TableAlertRule, error)
+	ListAlertRules(ctx context.Context, params AlertRulesQueryParams) ([]tables.TableAlertRule, int64, error)
+	ListAlertRulesForScope(ctx context.Context, scopeType, scopeID string) ([]tables.TableAlertRule, error)
+	UpdateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error
+	DeleteAlertRule(ctx context.Context, id string) error
+
+	// Alert events (Phase 3 / 02-alerting)
+	CreateAlertEvent(ctx context.Context, event *tables.TableAlertEvent) error
+	GetAlertEventByID(ctx context.Context, id string) (*tables.TableAlertEvent, error)
+	ListAlertEvents(ctx context.Context, params AlertEventsQueryParams) ([]tables.TableAlertEvent, int64, error)
+	LatestAlertEventForRule(ctx context.Context, ruleID, scopeType, scopeID string, since time.Time) (*tables.TableAlertEvent, error)
+	UpdateAlertEventDeliveryStatus(ctx context.Context, id, status string) error
+
+	// Budget snapshots (Phase 3 / 02-alerting projection source)
+	CreateBudgetSnapshot(ctx context.Context, snap *tables.TableBudgetSnapshot) error
+	ListBudgetSnapshotsForBudget(ctx context.Context, budgetID string, limit int) ([]tables.TableBudgetSnapshot, error)
+	LatestBudgetSnapshot(ctx context.Context, budgetID string) (*tables.TableBudgetSnapshot, error)
+	AllBudgetIDs(ctx context.Context) ([]string, error)
+	GetBudgetByID(ctx context.Context, id string) (*tables.TableBudget, error)
+
 	// DB returns the underlying database connection.
 	DB() *gorm.DB
 
@@ -1009,24 +1213,45 @@ type ConfigStore interface {
 	Close(ctx context.Context) error
 }
 
+// ConfigStoreOption tunes behaviour of NewConfigStore that is orthogonal to the
+// connection itself. Options are applied in order.
+type ConfigStoreOption func(*configStoreOptions)
+
+type configStoreOptions struct {
+	skipStartupEncryptionSync bool
+}
+
+// WithSkipStartupEncryptionSync disables the eager plaintext→encrypted pass the
+// store normally runs during construction. The admin `re-encrypt` command uses
+// it so `--dry-run` can count rows without mutating them and so the migration
+// only runs when the operator passes `--confirm`. Every other caller should let
+// the default (sync enabled) stand.
+func WithSkipStartupEncryptionSync() ConfigStoreOption {
+	return func(o *configStoreOptions) { o.skipStartupEncryptionSync = true }
+}
+
 // NewConfigStore creates a new config store based on the configuration
-func NewConfigStore(ctx context.Context, config *Config, logger schemas.Logger) (ConfigStore, error) {
+func NewConfigStore(ctx context.Context, config *Config, logger schemas.Logger, opts ...ConfigStoreOption) (ConfigStore, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 	if !config.Enabled {
 		return nil, nil
 	}
+	var settings configStoreOptions
+	for _, opt := range opts {
+		opt(&settings)
+	}
 	logger.Info("connecting to %s database", config.Type)
 	switch config.Type {
 	case ConfigStoreTypeSQLite:
 		if sqliteConfig, ok := config.Config.(*SQLiteConfig); ok {
-			return newSqliteConfigStore(ctx, sqliteConfig, logger)
+			return newSqliteConfigStore(ctx, sqliteConfig, logger, settings.skipStartupEncryptionSync)
 		}
 		return nil, fmt.Errorf("invalid sqlite config: %T", config.Config)
 	case ConfigStoreTypePostgres:
 		if postgresConfig, ok := config.Config.(*PostgresConfig); ok {
-			return newPostgresConfigStore(ctx, postgresConfig, logger)
+			return newPostgresConfigStore(ctx, postgresConfig, logger, settings.skipStartupEncryptionSync)
 		}
 		return nil, fmt.Errorf("invalid postgres config: %T", config.Config)
 	}

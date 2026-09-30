@@ -72,6 +72,11 @@ type GovernancePlugin struct {
 	tracker  *UsageTracker   // Business logic owner (updates, resets, persistence)
 	engine   *RoutingEngine  // Routing engine for dynamic routing
 
+	// AlertEvaluator (Phase 3 / 02-alerting) is optional and set by the
+	// transport layer once the configstore + dispatcher are wired. nil is
+	// a legitimate state for callers that have not opted in to alerting.
+	alertEvaluator *AlertEvaluator
+
 	// Dependencies
 	configStore  configstore.ConfigStore
 	modelCatalog *modelcatalog.ModelCatalog
@@ -921,6 +926,34 @@ func (p *GovernancePlugin) pruneMCPIncludeToolsFromContext(ctx *schemas.BifrostC
 //   - *EvaluationResult: The governance evaluation result
 //   - *schemas.BifrostError: The error to return if request is not allowed, nil if allowed
 func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext, evaluationRequest *EvaluationRequest, requestType schemas.RequestType) (*EvaluationResult, *schemas.BifrostError) {
+	// mergeBudgetInfo unions prior.BudgetInfo into next without duplication.
+	// Each evaluation step (Provider/Model → VK → Customer → Team → User)
+	// reassigns result wholesale, so a budget visible to an upstream step
+	// would otherwise vanish by the time the alert loop runs. The dedup is
+	// stable and order-preserving: the prior step's budgets are seen first
+	// so the alert consumer's view matches the order they were evaluated.
+	mergeBudgetInfo := func(prior, next *EvaluationResult) *EvaluationResult {
+		if prior == nil || len(prior.BudgetInfo) == 0 || next == prior {
+			return next
+		}
+		if next == nil {
+			next = prior
+		}
+		seen := make(map[string]bool, len(next.BudgetInfo))
+		for _, b := range next.BudgetInfo {
+			if b != nil {
+				seen[b.ID] = true
+			}
+		}
+		for _, b := range prior.BudgetInfo {
+			if b == nil || seen[b.ID] {
+				continue
+			}
+			seen[b.ID] = true
+			next.BudgetInfo = append(next.BudgetInfo, b)
+		}
+		return next
+	}
 	// Check if authentication is mandatory (either VK or user auth)
 	// Checking if the virtual key is valid or not
 	isVirtualKeyValid := false
@@ -962,7 +995,7 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		Reason:   "Provider-level and model-level checks skipped for read-only request",
 	}
 	if !skipBudgetsAndRateLimits {
-		result = p.resolver.EvaluateModelAndProviderRequest(ctx, evaluationRequest.Provider, evaluationRequest.Model)
+		result = mergeBudgetInfo(result, p.resolver.EvaluateModelAndProviderRequest(ctx, evaluationRequest.Provider, evaluationRequest.Model))
 	}
 
 	// The flow for governance checks is:
@@ -986,7 +1019,7 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 	// we touch Customer / Team / User.
 	if result.Decision == DecisionAllow && evaluationRequest.VirtualKey != "" {
 		skipVKBudgetLimit := evaluationRequest.UserID != "" || skipBudgetsAndRateLimits
-		result = p.resolver.EvaluateVirtualKeyRequest(ctx, evaluationRequest.VirtualKey, evaluationRequest.Provider, evaluationRequest.Model, requestType, skipVKBudgetLimit)
+		result = mergeBudgetInfo(result, p.resolver.EvaluateVirtualKeyRequest(ctx, evaluationRequest.VirtualKey, evaluationRequest.Provider, evaluationRequest.Model, requestType, skipVKBudgetLimit))
 	}
 
 	// Step 2: Customer-level budget (customer attached directly to VK, or via the VK's team).
@@ -1005,7 +1038,7 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 			customerID = hierarchyVK.Team.Customer.ID
 		}
 		if customerID != "" {
-			result = p.resolver.EvaluateCustomerRequest(ctx, customerID, evaluationRequest)
+			result = mergeBudgetInfo(result, p.resolver.EvaluateCustomerRequest(ctx, customerID, evaluationRequest))
 		}
 	}
 
@@ -1020,13 +1053,13 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 			teamID = hierarchyVK.Team.ID
 		}
 		if teamID != "" {
-			result = p.resolver.EvaluateTeamRequest(ctx, teamID, evaluationRequest)
+			result = mergeBudgetInfo(result, p.resolver.EvaluateTeamRequest(ctx, teamID, evaluationRequest))
 		}
 	}
 
 	// Step 4: User-level governance.
 	if !skipBudgetsAndRateLimits && result.Decision == DecisionAllow {
-		result = p.resolver.EvaluateUserRequest(ctx, evaluationRequest.UserID, evaluationRequest)
+		result = mergeBudgetInfo(result, p.resolver.EvaluateUserRequest(ctx, evaluationRequest.UserID, evaluationRequest))
 	}
 
 	// Check the actual MCP tools injected into the request against the VK MCPConfigs.
@@ -1065,6 +1098,14 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		}
 	}
 
+	// Alert loop: soft-threshold rules are evaluated inline (5-15ms cost
+	// budget; failure logs but never blocks the request). The hard-block
+	// case fires its own async budget.exceeded emission below. The
+	// evaluator is nil when alert wiring is disabled.
+	if p.alertEvaluator != nil {
+		p.alertEvaluator.EvaluateSoftThresholds(ctx, result)
+	}
+
 	// Handle decision
 	switch result.Decision {
 	case DecisionAllow:
@@ -1096,6 +1137,21 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		}
 
 	case DecisionBudgetExceeded:
+		// Hard block: emit budget.exceeded asynchronously so the 402
+		// response is not gated on alert I/O. The relevant budget is in
+		// result.BudgetInfo; we check CurrentUsage >= EffectiveMaxLimit so
+		// the same evaluator that caught the request also fires the alert.
+		// EnqueueBudgetExceeded is fire-and-forget so latency stays unaffected.
+		if p.alertEvaluator != nil {
+			for _, b := range result.BudgetInfo {
+				if b == nil {
+					continue
+				}
+				if b.CurrentUsage >= b.EffectiveMaxLimit() && b.EffectiveMaxLimit() > 0 {
+					p.alertEvaluator.EnqueueBudgetExceeded(ctx, b)
+				}
+			}
+		}
 		return result, &schemas.BifrostError{
 			Type:       new(string(result.Decision)),
 			StatusCode: new(402),
@@ -1709,6 +1765,14 @@ func (p *GovernancePlugin) postHookWorker(result *schemas.BifrostResponse, bifro
 // GetGovernanceStore returns the governance store
 func (p *GovernancePlugin) GetGovernanceStore() GovernanceStore {
 	return p.store
+}
+
+// SetAlertEvaluator wires the alert loop into the governance plugin. Pass
+// nil to disable alerting. The plugin never spawns goroutines here; the
+// evaluator only does inline work on the request path (soft thresholds) or
+// fires the dispatcher (hard block async emission).
+func (p *GovernancePlugin) SetAlertEvaluator(evaluator *AlertEvaluator) {
+	p.alertEvaluator = evaluator
 }
 
 // GenerateVirtualKey is a helper function

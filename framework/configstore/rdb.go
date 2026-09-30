@@ -4774,6 +4774,17 @@ func (s *RDBConfigStore) DeleteTeam(ctx context.Context, id string, tx ...*gorm.
 	if err := txDB.WithContext(ctx).Model(&tables.TableVirtualKey{}).Where("team_id = ?", id).Update("team_id", nil).Error; err != nil {
 		return err
 	}
+	// Team-scoped side tables that declare no FK on team_id and have no has-many
+	// relation on TableTeam, so neither the DB nor GORM cleans them up for us.
+	// Delete them explicitly or the rows orphan permanently — unreachable through
+	// the API, yet still surfaced by the report/policy list endpoints and
+	// re-synced into the governance cache on every boot.
+	if err := txDB.WithContext(ctx).Where("team_id = ?", id).Delete(&tables.TableTeamPricingProfile{}).Error; err != nil {
+		return err
+	}
+	if err := txDB.WithContext(ctx).Where("team_id = ?", id).Delete(&tables.TableTeamModelPolicy{}).Error; err != nil {
+		return err
+	}
 	rateLimitID := team.RateLimitID
 	// Delete the team - owned budgets cascade via FK on governance_budgets.team_id
 	if err := txDB.WithContext(ctx).Delete(&tables.TableTeam{}, "id = ?", id).Error; err != nil {
@@ -6417,6 +6428,496 @@ func (s *RDBConfigStore) DeleteSession(ctx context.Context, token string) error 
 // FlushSessions flushes all sessions from the database.
 func (s *RDBConfigStore) FlushSessions(ctx context.Context) error {
 	return s.DB().WithContext(ctx).Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&tables.SessionsTable{}).Error
+}
+
+// ============================================================================
+// User CRUD — Phase 1 of /temp/team (member login path).
+//
+// The admin login path (AuthConfig.AdminUserName / AdminPassword) is
+// untouched: those credentials back the dashboard admin session and the
+// IsLocalAdminContextKey RBAC bypass. The TableUser rows here back the
+// parallel member-only login, which is keyed by email + bcrypt hash and
+// gated by status='active'. See temp/team/01-identity for the full split.
+// ============================================================================
+
+// GetUserByID returns (nil, nil) when no such user exists so callers can
+// distinguish "missing" from a real DB error without an errors.Is check.
+func (s *RDBConfigStore) GetUserByID(ctx context.Context, id string) (*tables.TableUser, error) {
+	var user tables.TableUser
+	if err := s.DB().WithContext(ctx).First(&user, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// GetUserByEmail looks up a user by email. The BeforeSave hook normalizes
+// emails to lowercase at write time, so callers must also pass the email
+// in lowercased form here; the Login handler is the canonical example.
+func (s *RDBConfigStore) GetUserByEmail(ctx context.Context, email string) (*tables.TableUser, error) {
+	var user tables.TableUser
+	if err := s.DB().WithContext(ctx).First(&user, "email = ?", email).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// ListUsers returns paginated user rows filtered by optional status/role.
+// Either filter is empty ⇒ no constraint on that column. Total count is
+// returned alongside the page so the admin UI can render pagination.
+func (s *RDBConfigStore) ListUsers(ctx context.Context, status, role string, limit, offset int) ([]tables.TableUser, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableUser{})
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if role != "" {
+		q = q.Where("role = ?", role)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var users []tables.TableUser
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+	return users, total, nil
+}
+
+// CreateUser inserts a new user row. Caller must populate ID + Email +
+// Status before calling; the BeforeSave hook will normalize the email and
+// reject malformed rows.
+func (s *RDBConfigStore) CreateUser(ctx context.Context, user *tables.TableUser) error {
+	return s.DB().WithContext(ctx).Create(user).Error
+}
+
+// UpdateUser saves all fields of an existing user row. The standard GORM
+// Save() is intentional here (rather than a targeted column update) so the
+// admin user-management endpoint can flip status / role / display_name in a
+// single call without a per-column method.
+func (s *RDBConfigStore) UpdateUser(ctx context.Context, user *tables.TableUser) error {
+	return s.DB().WithContext(ctx).Save(user).Error
+}
+
+// UpdateUserLastLoginAt is a targeted column update for the member-login
+// path so we don't need to read-modify-write the entire user row on every
+// successful authentication.
+func (s *RDBConfigStore) UpdateUserLastLoginAt(ctx context.Context, id string, at time.Time) error {
+	return s.DB().WithContext(ctx).Model(&tables.TableUser{}).
+		Where("id = ?", id).
+		Update("last_login_at", at).Error
+}
+
+// DeleteUser hard-deletes a user row. Callers are responsible for cascading
+// dependent state (team_members rows, VK is_active flags) — the simpler
+// option is to set status='disabled' instead of deleting, which preserves
+// historical usage attribution.
+func (s *RDBConfigStore) DeleteUser(ctx context.Context, id string) error {
+	return s.DB().WithContext(ctx).Delete(&tables.TableUser{}, "id = ?", id).Error
+}
+
+// GetTeamMembership returns the single membership row for (team_id,
+// user_id) or (nil, nil) when no row exists. The unique index on
+// (team_id, user_id) guarantees at most one row per pair.
+func (s *RDBConfigStore) GetTeamMembership(ctx context.Context, teamID, userID string) (*tables.TableTeamMember, error) {
+	var m tables.TableTeamMember
+	err := s.DB().WithContext(ctx).First(&m, "team_id = ? AND user_id = ?", teamID, userID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &m, nil
+}
+
+// GetUserTeamMemberships returns every team membership row for a user.
+// Order is by joined_at desc so the most recently joined team surfaces
+// first in the member-portal rendering.
+func (s *RDBConfigStore) GetUserTeamMemberships(ctx context.Context, userID string) ([]tables.TableTeamMember, error) {
+	var rows []tables.TableTeamMember
+	if err := s.DB().WithContext(ctx).Where("user_id = ?", userID).Order("joined_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// ListTeamMembers returns every membership row for a team. Removed-status
+// rows are included so the admin UI can show former members and keep
+// historical cost attribution; callers filter as needed.
+func (s *RDBConfigStore) ListTeamMembers(ctx context.Context, teamID string) ([]tables.TableTeamMember, error) {
+	var rows []tables.TableTeamMember
+	if err := s.DB().WithContext(ctx).Where("team_id = ?", teamID).Order("joined_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// CreateTeamMember inserts a membership row. The unique index on
+// (team_id, user_id) raises a duplicate-key error if the same pair is
+// inserted twice; callers convert that into a 409.
+func (s *RDBConfigStore) CreateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return s.DB().WithContext(ctx).Create(member).Error
+}
+
+// UpdateTeamMember saves all fields of an existing team_member row.
+func (s *RDBConfigStore) UpdateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return s.DB().WithContext(ctx).Save(member).Error
+}
+
+// DeleteTeamMember hard-deletes the (team_id, user_id) row. Prefer
+// status='removed' for offboarding so usage history survives.
+func (s *RDBConfigStore) DeleteTeamMember(ctx context.Context, teamID, userID string) error {
+	return s.DB().WithContext(ctx).Where("team_id = ? AND user_id = ?", teamID, userID).Delete(&tables.TableTeamMember{}).Error
+}
+
+// CreateInvitation inserts a new invitations row. The BeforeSave hook
+// normalizes the email and enforces role/status enums, so callers just
+// populate the read/write fields and pass the struct in.
+func (s *RDBConfigStore) CreateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return s.DB().WithContext(ctx).Create(inv).Error
+}
+
+// GetInvitationByToken fetches the unique row matching the supplied
+// token. Returns (nil, nil) when not found so callers can convert that
+// to a 404 without a sentinel-error dance.
+func (s *RDBConfigStore) GetInvitationByToken(ctx context.Context, token string) (*tables.TableInvitation, error) {
+	var inv tables.TableInvitation
+	err := s.DB().WithContext(ctx).First(&inv, "token = ?", token).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &inv, nil
+}
+
+// GetInvitationByID is the admin-side lookup (the token lookup is the
+// public / accept path; admin views fetch rows by primary key for the
+// "show all invitations" panel).
+func (s *RDBConfigStore) GetInvitationByID(ctx context.Context, id string) (*tables.TableInvitation, error) {
+	var inv tables.TableInvitation
+	err := s.DB().WithContext(ctx).First(&inv, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &inv, nil
+}
+
+// ListInvitations paginates invitations for a team (or, when teamID is
+// empty, every invitation across teams — admin-only call). status can be
+// empty to mean "any"; the limit/offset are clamp-guarded at the handler
+// layer so this method is a thin passthrough.
+func (s *RDBConfigStore) ListInvitations(ctx context.Context, teamID, status string, limit, offset int) ([]tables.TableInvitation, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableInvitation{})
+	if teamID != "" {
+		q = q.Where("team_id = ?", teamID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []tables.TableInvitation
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// UpdateInvitation writes the row back; the BeforeSave hook re-validates
+// any field the caller changed (notably status transitions on accept /
+// revoke). The token is treated as immutable after creation — handlers
+// that want to "rotate" an invitation should create a fresh row.
+func (s *RDBConfigStore) UpdateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return s.DB().WithContext(ctx).Save(inv).Error
+}
+
+// AcceptInvitationInput carries the caller-validated inputs for one
+// invitation acceptance.
+//
+// PasswordHash is a pre-computed bcrypt digest rather than the plaintext so
+// the expensive KDF stays OUTSIDE the database transaction. Holding a write
+// lock across a ~100ms bcrypt call would serialize every other writer on
+// SQLite and waste a Postgres connection for no reason. Callers compute it
+// with encrypt.Hash after applying their own password policy.
+//
+// DisplayName is only consulted when the acceptance has to create a brand-new
+// user row; an existing user keeps their current display name.
+type AcceptInvitationInput struct {
+	Token        string
+	PasswordHash string
+	DisplayName  string
+	Now          time.Time
+}
+
+// AcceptInvitationOutput is the post-commit state the handler renders. All
+// three pointers are non-nil on success and are copies, so the caller cannot
+// mutate persisted rows through them.
+type AcceptInvitationOutput struct {
+	User       *tables.TableUser
+	TeamMember *tables.TableTeamMember
+	Invitation *tables.TableInvitation
+}
+
+// AcceptInvitationTx applies one invitation acceptance atomically: resolve or
+// create the user, upsert the team_members row, and burn the token — all in a
+// single transaction.
+//
+// Why this exists (C-3): the accept endpoint used to issue those three writes
+// as independent statements. A failure on the middle step left a live,
+// password-set user belonging to no team, with the invitation still marked
+// pending — so a retry created a SECOND membership row for the same
+// (team_id, user_id) and the orphan account could log in to an empty portal.
+// Wrapping the sequence means any failure rolls all three back.
+//
+// The invitation row is re-read and re-validated INSIDE the transaction, under
+// a FOR UPDATE lock on Postgres (a no-op on SQLite, whose writer serialization
+// already prevents the interleave). That closes the double-accept race the
+// handler-level pre-check alone cannot: two concurrent requests both pass the
+// handler's IsUsable check, but only the one that wins the row lock sees a
+// pending invitation — the other observes accepted_at already stamped and
+// returns ErrInvitationNotUsable.
+//
+// Sentinel errors the handler maps to HTTP status codes:
+//   - ErrInvitationNotFound  → 410 Gone
+//   - ErrInvitationNotUsable → 410 Gone
+func (s *RDBConfigStore) AcceptInvitationTx(ctx context.Context, in AcceptInvitationInput) (*AcceptInvitationOutput, error) {
+	if strings.TrimSpace(in.Token) == "" {
+		return nil, ErrInvitationNotFound
+	}
+	if in.PasswordHash == "" {
+		return nil, errors.New("accept invitation: password hash is required")
+	}
+	if in.Now.IsZero() {
+		in.Now = time.Now().UTC()
+	}
+
+	var out AcceptInvitationOutput
+	err := s.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 1. Lock + re-read the invitation. The lock makes the single-use
+		//    guarantee hold under concurrency rather than being a
+		//    check-then-act race against the handler's pre-check.
+		var inv tables.TableInvitation
+		err := dbForUpdate(tx).First(&inv, "token = ?", in.Token).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInvitationNotFound
+			}
+			return err
+		}
+		if !inv.IsUsable(in.Now) {
+			return ErrInvitationNotUsable
+		}
+
+		// 2. Resolve or create the user. Looking up by email first lets an
+		//    existing account re-accept (e.g. after a password reset)
+		//    without producing a duplicate row.
+		email := strings.ToLower(strings.TrimSpace(inv.Email))
+		var user tables.TableUser
+		userExists := true
+		err = tx.Where("email = ?", email).First(&user).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			userExists = false
+			displayName := strings.TrimSpace(in.DisplayName)
+			if displayName == "" {
+				displayName = email
+			}
+			user = tables.TableUser{
+				ID:          uuid.New().String(),
+				Email:       email,
+				DisplayName: displayName,
+				Status:      tables.UserStatusPending,
+				Role:        tables.UserRoleMember,
+				CreatedAt:   in.Now,
+				UpdatedAt:   in.Now,
+			}
+		}
+		hash := in.PasswordHash
+		user.PasswordHash = &hash
+		user.Status = tables.UserStatusActive
+		user.UpdatedAt = in.Now
+		if userExists {
+			if err := tx.Save(&user).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+		}
+
+		// 3. Upsert the membership. A previously-removed member is promoted
+		//    back to active rather than duplicated; the (team_id, user_id)
+		//    unique index is the backstop.
+		var member tables.TableTeamMember
+		memberExists := true
+		err = tx.Where("team_id = ? AND user_id = ?", inv.TeamID, user.ID).First(&member).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			memberExists = false
+			member = tables.TableTeamMember{
+				ID:        uuid.New().String(),
+				TeamID:    inv.TeamID,
+				UserID:    user.ID,
+				JoinedAt:  in.Now,
+				CreatedAt: in.Now,
+			}
+		}
+		member.RoleInTeam = inv.RoleInTeam
+		member.Status = tables.TeamMemberStatusActive
+		member.UpdatedAt = in.Now
+		if memberExists {
+			if err := tx.Save(&member).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Create(&member).Error; err != nil {
+				return err
+			}
+		}
+
+		// 4. Burn the token — single-use, per the design contract.
+		inv.MarkAccepted(in.Now)
+		inv.UpdatedAt = in.Now
+		if err := tx.Save(&inv).Error; err != nil {
+			return err
+		}
+
+		userOut := user
+		memberOut := member
+		invOut := inv
+		out.User = &userOut
+		out.TeamMember = &memberOut
+		out.Invitation = &invOut
+		return nil
+	})
+	if err != nil {
+		return nil, s.parseGormError(err)
+	}
+	return &out, nil
+}
+
+// CreateKeyRequest inserts a new key_requests row. Status defaults to
+// 'pending' on insert; the BeforeSave hook enforces the kind enum.
+func (s *RDBConfigStore) CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return s.DB().WithContext(ctx).Create(req).Error
+}
+
+// GetKeyRequestByID fetches a single row. (nil, nil) on missing.
+func (s *RDBConfigStore) GetKeyRequestByID(ctx context.Context, id string) (*tables.TableKeyRequest, error) {
+	var req tables.TableKeyRequest
+	err := s.DB().WithContext(ctx).First(&req, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &req, nil
+}
+
+// ListKeyRequests paginates key_requests. The empty-string convention is
+// the same as ListInvitations: filters with empty values are skipped, so
+// admin/team-owner UI can render "all pending" with status='pending' and
+// the rest of the filters empty.
+func (s *RDBConfigStore) ListKeyRequests(ctx context.Context, status, userID, teamID string, limit, offset int) ([]tables.TableKeyRequest, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableKeyRequest{})
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if userID != "" {
+		q = q.Where("user_id = ?", userID)
+	}
+	if teamID != "" {
+		q = q.Where("team_id = ?", teamID)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []tables.TableKeyRequest
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// UpdateKeyRequest persists the row back. Approval flips Status + writes
+// the approver + decision_note; the matching virtual_key_id back-fill is
+// optional and only relevant for add_vk / extend_quota.
+func (s *RDBConfigStore) UpdateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return s.DB().WithContext(ctx).Save(req).Error
+}
+
+// DisableUserVKeys flips every active VK owned by the given user to
+// is_active=false. Returns the list of affected VK ids so the handler
+// can echo it back to the admin UI ("these VKs were disabled"). Does
+// NOT touch provider keys — provider keys stay under admin centralized
+// control, per the boundary spelled out in
+// temp/team/01-identity/data-model.md §5.1.
+func (s *RDBConfigStore) DisableUserVKeys(ctx context.Context, userID string) ([]string, error) {
+	var ids []string
+	if err := s.DB().WithContext(ctx).
+		Model(&tables.TableVirtualKey{}).
+		Where("user_id = ?", userID).
+		Pluck("id", &ids).Error; err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return ids, nil
+	}
+	if err := s.DB().WithContext(ctx).
+		Model(&tables.TableVirtualKey{}).
+		Where("user_id = ?", userID).
+		Update("is_active", false).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// ListVirtualKeysByUserID returns lightweight VK summaries (no provider
+// config / no key associations) for a single user, paginated. Used by
+// GET /api/governance/users/:id to render "VKs this user owns" without
+// ever surfacing the provider key details — the boundary from
+// data-model.md §5.1 says even admin sees provider keys only through
+// /api/providers/{provider}/keys, not through the user-detail view.
+func (s *RDBConfigStore) ListVirtualKeysByUserID(ctx context.Context, userID string, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	q := s.DB().WithContext(ctx).Model(&tables.TableVirtualKey{}).Where("user_id = ?", userID)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []tables.TableVirtualKey
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }
 
 // CreateTempToken inserts a new temp_tokens row. The plaintext token must be
@@ -9340,4 +9841,72 @@ func (s *RDBConfigStore) DeleteWebhookJob(ctx context.Context, id, runnerID stri
 		return fmt.Errorf("webhook job not found or no longer owned by caller")
 	}
 	return nil
+}
+
+// TouchVirtualKeyLastUsedAt bulk-updates last_used_at = now for the given
+// VK ids. Used by the idle-VK sidekiq job (US24) — the job only ever calls
+// this with ids it saw in the trailing log sweep, so the bulk path is the
+// only realistic shape. Returns the number of rows actually updated so the
+// caller can record drift (e.g. ids present in logs but not in the VK
+// table — should never happen, but is useful telemetry).
+//
+// We do NOT update UpdatedAt — touching last_used_at on every successful
+// inference would invalidate any UI / cache that keys off UpdatedAt.
+func (s *RDBConfigStore) TouchVirtualKeyLastUsedAt(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	now := time.Now().UTC()
+	res := s.ScopedDB(ctx).Model(&tables.TableVirtualKey{}).
+		Where("id IN ?", ids).
+		Update("last_used_at", now)
+	if res.Error != nil {
+		return 0, fmt.Errorf("touch virtual key last_used_at: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+// ListIdleVirtualKeys returns VKs whose last_used_at is NULL or older than
+// the threshold. Powers the US24 idle-key report: admin clicks "scan" on
+// the workspace/keys page, sees a list of VKs nobody has used for N days.
+//
+// The order is "longest-idle first" so the UI can show the most-overdue
+// keys at the top. limit / offset match the rest of the page-style
+// ConfigStore methods so the UI can paginate without bespoke code.
+func (s *RDBConfigStore) ListIdleVirtualKeys(ctx context.Context, threshold time.Time, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	db := s.ScopedDB(ctx)
+	base := db.Model(&tables.TableVirtualKey{}).
+		Where("last_used_at IS NULL OR last_used_at < ?", threshold.UTC())
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count idle virtual keys: %w", err)
+	}
+	var rows []tables.TableVirtualKey
+	err := base.
+		Order(idleVKOrderClause(db.Dialector.Name())).
+		Limit(limit).
+		Offset(offset).
+		Find(&rows).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("list idle virtual keys: %w", err)
+	}
+	return rows, total, nil
+}
+
+// idleVKOrderClause returns a dialect-aware ORDER BY that puts NULL
+// last_used_at first ("never used") followed by the oldest non-null
+// timestamp. SQLite and MySQL don't accept the standard
+// `NULLS FIRST` clause, so we expand it to `IS NULL` + `ASC` for them.
+func idleVKOrderClause(dialect string) string {
+	if dialect == "postgres" {
+		return "last_used_at ASC NULLS FIRST, updated_at ASC"
+	}
+	// SQLite, MySQL, ClickHouse all accept the IS NULL ... ASC expansion.
+	return "last_used_at IS NULL DESC, last_used_at ASC, updated_at ASC"
 }

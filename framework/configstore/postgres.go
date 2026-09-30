@@ -18,7 +18,12 @@ type PostgresConfig = postgresconn.Config
 // immediately, then a fresh runtime pool is opened. The runtime pool's
 // connections never see pre-migration schema, so their cached prepared-plans
 // stay valid for the life of the process.
-func newPostgresConfigStore(ctx context.Context, config *PostgresConfig, logger schemas.Logger) (ConfigStore, error) {
+//
+// When skipStartupEncryptionSync is true the constructor does not run the eager
+// plaintext→encrypted pass; the caller is then responsible for driving the
+// migration explicitly (used by the admin re-encrypt command so --dry-run and
+// --confirm stay meaningful).
+func newPostgresConfigStore(ctx context.Context, config *PostgresConfig, logger schemas.Logger, skipStartupEncryptionSync bool) (ConfigStore, error) {
 	if err := postgresconn.Validate(config, false); err != nil {
 		return nil, err
 	}
@@ -118,11 +123,14 @@ func newPostgresConfigStore(ctx context.Context, config *PostgresConfig, logger 
 	// Encrypt any plaintext rows if encryption is enabled. Runs on the
 	// runtime pool — pure DML (SELECT + UPDATE), no DDL, so cached plans it
 	// installs remain valid until the next external migration batch.
-	logger.Info("configstore: encrypting plaintext rows if encryption is enabled")
-	if err := d.EncryptPlaintextRows(ctx); err != nil {
-		logger.Error("configstore: failed to encrypt plaintext rows: %v", err)
-		postgresconn.Close(db, logger)
-		return nil, fmt.Errorf("failed to encrypt plaintext rows: %w", err)
+	// Skipped when the caller drives the migration explicitly.
+	if !skipStartupEncryptionSync {
+		logger.Info("configstore: encrypting plaintext rows if encryption is enabled")
+		if err := d.EncryptPlaintextRows(ctx); err != nil {
+			logger.Error("configstore: failed to encrypt plaintext rows: %v", err)
+			postgresconn.Close(db, logger)
+			return nil, fmt.Errorf("failed to encrypt plaintext rows: %w", err)
+		}
 	}
 	logger.Info("configstore: postgres config store ready")
 	return d, nil

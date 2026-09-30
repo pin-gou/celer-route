@@ -29,8 +29,7 @@
 		"otherProvidersDesc": "你可以在提供商页面添加自定义提供商，或从 {{count}}+ 个支持的提供商中选择。",
 		"openProvidersPage": "前往提供商页面",
 		"addOpenCode": "添加 OpenCode Free",
-		"addedOpenCode": "已添加 OpenCode Free",
-		"addProvider": "添加提供商"
+		"addedOpenCode": "已添加 OpenCode Free"
 	},
 	"welcomeDesc": "celer-route 是一个高性能 AI 网关，统一 20+ LLM 提供商，对外暴露 OpenAI 兼容的单一 API。",
 	"feature": {

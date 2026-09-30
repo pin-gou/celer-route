@@ -353,6 +353,8 @@ EXPECTED BEHAVIORS SUMMARY
 
 import (
 	"context"
+	"crypto/aes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -510,9 +512,17 @@ func (m *MockConfigStore) RevokeOAuth2Session(ctx context.Context, id string) er
 }
 func (m *MockConfigStore) Ping(ctx context.Context) error                 { return nil }
 func (m *MockConfigStore) EncryptPlaintextRows(ctx context.Context) error { return nil }
-func (m *MockConfigStore) Close(ctx context.Context) error                { return nil }
-func (m *MockConfigStore) DB() *gorm.DB                                   { return nil }
-func (m *MockConfigStore) ScopedDB(ctx context.Context) *gorm.DB          { return nil }
+
+// Phase 6 D9: stub Count/Reencrypt for vet.
+func (m *MockConfigStore) CountPlaintextRows(ctx context.Context) (configstore.PlaintextRowCounts, error) {
+	return configstore.PlaintextRowCounts{}, nil
+}
+func (m *MockConfigStore) ReencryptPlaintextRows(ctx context.Context, opts configstore.ReencryptOptions) (configstore.ReencryptResult, error) {
+	return configstore.ReencryptResult{Mode: opts.Mode, BatchSize: opts.BatchSize, DryRun: opts.DryRun}, nil
+}
+func (m *MockConfigStore) Close(ctx context.Context) error       { return nil }
+func (m *MockConfigStore) DB() *gorm.DB                          { return nil }
+func (m *MockConfigStore) ScopedDB(ctx context.Context) *gorm.DB { return nil }
 func (m *MockConfigStore) ExecuteTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
 	return fn(nil)
 }
@@ -1241,6 +1251,126 @@ func (m *MockConfigStore) DeleteSession(ctx context.Context, token string) error
 	return nil
 }
 
+// Phase 1 /temp/team — user + team-member CRUD stubs. Real tests in
+// transports/celer-route-http/handlers/member_auth_test.go exercise these
+// via a focused fake; this mock just satisfies the interface so other
+// lib-level tests continue to compile.
+func (m *MockConfigStore) GetUserByID(ctx context.Context, id string) (*tables.TableUser, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetUserByEmail(ctx context.Context, email string) (*tables.TableUser, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListUsers(ctx context.Context, status, role string, limit, offset int) ([]tables.TableUser, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) CreateUser(ctx context.Context, user *tables.TableUser) error {
+	return nil
+}
+
+func (m *MockConfigStore) UpdateUser(ctx context.Context, user *tables.TableUser) error {
+	return nil
+}
+
+func (m *MockConfigStore) UpdateUserLastLoginAt(ctx context.Context, id string, at time.Time) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteUser(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *MockConfigStore) GetTeamMembership(ctx context.Context, teamID, userID string) (*tables.TableTeamMember, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetUserTeamMemberships(ctx context.Context, userID string) ([]tables.TableTeamMember, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListTeamMembers(ctx context.Context, teamID string) ([]tables.TableTeamMember, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) CreateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return nil
+}
+
+func (m *MockConfigStore) UpdateTeamMember(ctx context.Context, member *tables.TableTeamMember) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteTeamMember(ctx context.Context, teamID, userID string) error {
+	return nil
+}
+
+// Invitation / KeyRequest / Offboarding stubs (Phase 2). All return
+// benign defaults — the tests that exercise the real paths live in
+// framework/configstore/rdb_phase2_test.go.
+func (m *MockConfigStore) CreateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return nil
+}
+
+func (m *MockConfigStore) GetInvitationByToken(ctx context.Context, token string) (*tables.TableInvitation, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetInvitationByID(ctx context.Context, id string) (*tables.TableInvitation, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListInvitations(ctx context.Context, teamID, status string, limit, offset int) ([]tables.TableInvitation, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) UpdateInvitation(ctx context.Context, inv *tables.TableInvitation) error {
+	return nil
+}
+
+func (m *MockConfigStore) AcceptInvitationTx(ctx context.Context, in configstore.AcceptInvitationInput) (*configstore.AcceptInvitationOutput, error) {
+	return nil, configstore.ErrInvitationNotFound
+}
+
+func (m *MockConfigStore) ApplyReconciliationTx(ctx context.Context, row *tables.TableBillingReconciliation, correctedRows []tables.TableModelPricing) error {
+	return nil
+}
+
+func (m *MockConfigStore) CreateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return nil
+}
+
+func (m *MockConfigStore) GetKeyRequestByID(ctx context.Context, id string) (*tables.TableKeyRequest, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListKeyRequests(ctx context.Context, status, userID, teamID string, limit, offset int) ([]tables.TableKeyRequest, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) UpdateKeyRequest(ctx context.Context, req *tables.TableKeyRequest) error {
+	return nil
+}
+
+func (m *MockConfigStore) DisableUserVKeys(ctx context.Context, userID string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) ListVirtualKeysByUserID(ctx context.Context, userID string, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	return nil, 0, nil
+}
+
+// US24 idle-VK methods
+func (m *MockConfigStore) TouchVirtualKeyLastUsedAt(ctx context.Context, ids []string) (int64, error) {
+	return 0, nil
+}
+
+func (m *MockConfigStore) ListIdleVirtualKeys(ctx context.Context, threshold time.Time, limit, offset int) ([]tables.TableVirtualKey, int64, error) {
+	return nil, 0, nil
+}
+
 // Temp token
 func (m *MockConfigStore) CreateTempToken(ctx context.Context, token *tables.TempToken, tx ...*gorm.DB) error {
 	return nil
@@ -1308,6 +1438,50 @@ func (m *MockConfigStore) UpdatePricingOverride(ctx context.Context, override *t
 }
 
 func (m *MockConfigStore) DeletePricingOverride(ctx context.Context, id string, tx ...*gorm.DB) error {
+	return nil
+}
+
+// Standard prices (Phase 4 cost-allocation D7)
+
+func (m *MockConfigStore) ListStandardPrices(ctx context.Context, params configstore.StandardPriceQueryParams) ([]tables.TableStandardPrice, int64, error) {
+	return nil, 0, nil
+}
+
+func (m *MockConfigStore) GetStandardPriceByID(ctx context.Context, id string) (*tables.TableStandardPrice, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetActiveStandardPrice(ctx context.Context, provider, model string, at time.Time) (*tables.TableStandardPrice, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) CreateStandardPrice(ctx context.Context, row *tables.TableStandardPrice) error {
+	return nil
+}
+
+func (m *MockConfigStore) BulkCreateStandardPrices(ctx context.Context, rows []tables.TableStandardPrice) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteStandardPrice(ctx context.Context, id string) error {
+	return nil
+}
+
+// Team pricing profiles
+
+func (m *MockConfigStore) ListTeamPricingProfiles(ctx context.Context) ([]tables.TableTeamPricingProfile, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) GetTeamPricingProfile(ctx context.Context, teamID string) (*tables.TableTeamPricingProfile, error) {
+	return nil, nil
+}
+
+func (m *MockConfigStore) UpsertTeamPricingProfile(ctx context.Context, row *tables.TableTeamPricingProfile) error {
+	return nil
+}
+
+func (m *MockConfigStore) DeleteTeamPricingProfile(ctx context.Context, teamID string) error {
 	return nil
 }
 
@@ -2402,6 +2576,91 @@ func (m *MockConfigStore) RenamePromptSession(ctx context.Context, id uint, name
 	return nil
 }
 func (m *MockConfigStore) DeletePromptSession(ctx context.Context, id uint) error { return nil }
+
+// Phase 3 (02-alerting) stubs — the mock satisfies the ConfigStore
+// interface for tests that do not exercise alerting. Returning nil /
+// empty keeps the surface zero-cost while letting the interface compile.
+func (m *MockConfigStore) CreateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error {
+	return nil
+}
+func (m *MockConfigStore) GetAlertRuleByID(ctx context.Context, id string) (*tables.TableAlertRule, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) ListAlertRules(ctx context.Context, params configstore.AlertRulesQueryParams) ([]tables.TableAlertRule, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockConfigStore) ListAlertRulesForScope(ctx context.Context, scopeType, scopeID string) ([]tables.TableAlertRule, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) UpdateAlertRule(ctx context.Context, rule *tables.TableAlertRule) error {
+	return nil
+}
+func (m *MockConfigStore) DeleteAlertRule(ctx context.Context, id string) error { return nil }
+func (m *MockConfigStore) CreateAlertEvent(ctx context.Context, event *tables.TableAlertEvent) error {
+	return nil
+}
+func (m *MockConfigStore) GetAlertEventByID(ctx context.Context, id string) (*tables.TableAlertEvent, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) ListAlertEvents(ctx context.Context, params configstore.AlertEventsQueryParams) ([]tables.TableAlertEvent, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockConfigStore) LatestAlertEventForRule(ctx context.Context, ruleID, scopeType, scopeID string, since time.Time) (*tables.TableAlertEvent, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) UpdateAlertEventDeliveryStatus(ctx context.Context, id, status string) error {
+	return nil
+}
+func (m *MockConfigStore) CreateBudgetSnapshot(ctx context.Context, snap *tables.TableBudgetSnapshot) error {
+	return nil
+}
+func (m *MockConfigStore) ListBudgetSnapshotsForBudget(ctx context.Context, budgetID string, limit int) ([]tables.TableBudgetSnapshot, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) LatestBudgetSnapshot(ctx context.Context, budgetID string) (*tables.TableBudgetSnapshot, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) AllBudgetIDs(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) GetBudgetByID(ctx context.Context, id string) (*tables.TableBudget, error) {
+	return nil, nil
+}
+
+// Reconciliation stubs (Phase 5) — kept minimal so MockConfigStore still
+// satisfies the ConfigStore interface. Tests that exercise reconciliation
+// logic substitute the real RDBConfigStore.
+func (m *MockConfigStore) ListReconciliations(ctx context.Context, params configstore.ReconciliationQueryParams) ([]tables.TableBillingReconciliation, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockConfigStore) GetReconciliationByID(ctx context.Context, id string) (*tables.TableBillingReconciliation, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) ListReconciliationItems(ctx context.Context, reconciliationID string) ([]tables.TableBillingReconItem, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) CreateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation, items []tables.TableBillingReconItem) error {
+	return nil
+}
+func (m *MockConfigStore) UpdateReconciliation(ctx context.Context, row *tables.TableBillingReconciliation) error {
+	return nil
+}
+
+// Team model policies (Phase 6 / D6) — same minimal-stub rationale as the
+// reconciliation methods above; the real RDBConfigStore owns the actual
+// table and CRUD logic.
+func (m *MockConfigStore) ListTeamModelPolicies(ctx context.Context, teamID string) ([]tables.TableTeamModelPolicy, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) GetTeamModelPolicy(ctx context.Context, teamID, provider string) (*tables.TableTeamModelPolicy, error) {
+	return nil, nil
+}
+func (m *MockConfigStore) UpsertTeamModelPolicy(ctx context.Context, policy *tables.TableTeamModelPolicy) error {
+	return nil
+}
+func (m *MockConfigStore) DeleteTeamModelPolicy(ctx context.Context, teamID, provider string) error {
+	return nil
+}
 
 // Helper functions for tests
 
@@ -3946,8 +4205,8 @@ func TestGenerateProviderConfigHash(t *testing.T) {
 		SendBackRawResponse: true,
 		CooldownPolicy: &schemas.CooldownPolicy{
 			RateLimit: &schemas.CooldownPolicyRule{
-				Match:     []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
-				MatchMode: "any",
+				Match:      []schemas.CooldownPolicyMatch{{StatusCode: schemas.Ptr(429)}},
+				MatchMode:  "any",
 				TTLSeconds: 60,
 			},
 		},
@@ -17989,14 +18248,14 @@ var excludedGoFields = map[string]map[string]bool{
 		"virtual_keys": true, // GORM relation
 	},
 	"tables.TableVirtualKey": {
-		"config_hash":              true,
-		"created_at":               true,
-		"updated_at":               true,
-		"created_by_user_id":       true, // DB ownership metadata; set by API/session layer
-		"budgets":                  true, // GORM relation (budgets have virtual_key_id FK)
-		"rate_limit":               true, // GORM relation
-		"team":                     true, // GORM relation
-		"customer":                 true, // GORM relation
+		"config_hash":               true,
+		"created_at":                true,
+		"updated_at":                true,
+		"created_by_user_id":        true, // DB ownership metadata; set by API/session layer
+		"budgets":                   true, // GORM relation (budgets have virtual_key_id FK)
+		"rate_limit":                true, // GORM relation
+		"team":                      true, // GORM relation
+		"customer":                  true, // GORM relation
 		"is_access_profile_managed": true, // Enterprise feature; server-computed field, not in OSS schema
 	},
 	"tables.TableVirtualKeyProviderConfig": {
@@ -18051,7 +18310,7 @@ var excludedSchemaFields = map[string]map[string]bool{
 	"client": {
 		"allowed_headers": true, // Not in ClientConfig
 	},
-	
+
 	"auth_config": {
 		"disable_auth_on_inference": true, // Deprecated and ignored; kept in schema for backward-compatible config.json validation. Use enforce_auth_on_inference.
 	},
@@ -18061,7 +18320,7 @@ var excludedSchemaFields = map[string]map[string]bool{
 	"governance.teams": {
 		"budget_id": true, // Replaced by budgets[] relationship with team_id FK on TableBudget
 	},
-	
+
 	"governance.virtual_keys.provider_configs": {
 		"keys":    true, // Complex nested type, validated separately
 		"key_ids": true, // Config-file format; handled via custom UnmarshalJSON into allow_all_keys/keys
@@ -18069,7 +18328,7 @@ var excludedSchemaFields = map[string]map[string]bool{
 	"governance.virtual_keys.mcp_configs": {
 		"mcp_client_name": true, // Config-file format; captured via custom UnmarshalJSON and resolved to mcp_client_id at startup
 	},
-	
+
 	"mcp.client_configs": {
 		"websocket_config": true, // Schema documents all connection types
 		"http_config":      true, // Schema documents all connection types
@@ -21070,4 +21329,245 @@ func TestResolveSetupToken_TrimsSurroundingWhitespace(t *testing.T) {
 	t.Setenv("BIFROST_SETUP_TOKEN", "")
 	configData := &ConfigData{SetupToken: schemas.NewSecretVar("  my-token  ")}
 	assert.Equal(t, "my-token", resolveSetupToken(configData))
+}
+
+// countingMockStore embeds MockConfigStore but returns a canned plaintext-row
+// breakdown so the D9 count-enrichment path can be asserted.
+type countingMockStore struct {
+	*MockConfigStore
+	counts configstore.PlaintextRowCounts
+}
+
+func (c *countingMockStore) CountPlaintextRows(ctx context.Context) (configstore.PlaintextRowCounts, error) {
+	return c.counts, nil
+}
+
+// TestEnforceEncryptionStartupPolicy_DeniesWithoutKeyOrOptIn pins the D9 default:
+// no key + no explicit opt-in is fatal.
+func TestEnforceEncryptionStartupPolicy_DeniesWithoutKeyOrOptIn(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(false)
+	encrypt.Init("", logger)
+
+	err := (&Config{}).EnforceEncryptionStartupPolicy(context.Background())
+	require.Error(t, err)
+	var policyErr *configstore.EncryptionNotConfiguredError
+	require.ErrorAs(t, err, &policyErr)
+	assert.Contains(t, err.Error(), "encryption_key")
+	assert.Contains(t, err.Error(), "allow_plaintext_storage")
+}
+
+// TestEnforceEncryptionStartupPolicy_AllowsWithOptIn confirms the explicit
+// plaintext opt-in is honoured.
+func TestEnforceEncryptionStartupPolicy_AllowsWithOptIn(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(true)
+	encrypt.Init("", logger)
+
+	require.NoError(t, (&Config{}).EnforceEncryptionStartupPolicy(context.Background()))
+}
+
+// TestEnforceEncryptionStartupPolicy_AllowsWithKey confirms a configured key
+// satisfies the policy regardless of the opt-in flag.
+func TestEnforceEncryptionStartupPolicy_AllowsWithKey(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(false)
+	encrypt.Init("a-long-enough-test-passphrase-32b!", logger)
+
+	require.NoError(t, (&Config{}).EnforceEncryptionStartupPolicy(context.Background()))
+}
+
+// TestEnforceEncryptionStartupPolicy_EnrichesWithRowCounts verifies the refusal
+// names the tables that still hold plaintext, so the operator can size the
+// re-encrypt run.
+func TestEnforceEncryptionStartupPolicy_EnrichesWithRowCounts(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+	encrypt.SetAllowPlaintextStorage(false)
+	encrypt.Init("", logger)
+
+	cfg := &Config{ConfigStore: &countingMockStore{
+		MockConfigStore: NewMockConfigStore(),
+		counts:          configstore.PlaintextRowCounts{"config_keys": 7, "config_providers": 4},
+	}}
+	err := cfg.EnforceEncryptionStartupPolicy(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "11 plaintext sensitive rows")
+	assert.Contains(t, err.Error(), "config_keys=7")
+	assert.Contains(t, err.Error(), "config_providers=4")
+	assert.Contains(t, err.Error(), "celer-route-admin admin re-encrypt")
+}
+
+// TestInitEncryption_PlaintextPolicyPrecedence pins precedence: config.json
+// overrides the env var, which overrides the deny-by-default. Unknown env values
+// fail closed.
+func TestInitEncryption_PlaintextPolicyPrecedence(t *testing.T) {
+	initTestLogger()
+	t.Cleanup(func() { encrypt.SetAllowPlaintextStorage(false) })
+
+	// config true, env false → env wins (false)
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "false")
+	require.NoError(t, initEncryption(&ConfigData{AllowPlaintextStorage: true}))
+	assert.False(t, encrypt.AllowPlaintextStorage(), "explicit env false must override config true")
+
+	// config false, env true → env wins (true)
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "true")
+	require.NoError(t, initEncryption(&ConfigData{}))
+	assert.True(t, encrypt.AllowPlaintextStorage(), "env true must enable plaintext")
+
+	// unset env, config false → deny
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "")
+	require.NoError(t, initEncryption(&ConfigData{}))
+	assert.False(t, encrypt.AllowPlaintextStorage(), "default must be deny")
+
+	// unknown env value → fail closed (deny)
+	t.Setenv("BIFROST_ALLOW_PLAINTEXT_STORAGE", "maybe")
+	require.NoError(t, initEncryption(&ConfigData{AllowPlaintextStorage: true}))
+	assert.False(t, encrypt.AllowPlaintextStorage(), "unrecognised env value must fail closed")
+}
+
+// TestInitEncryption_SaltResolution pins the salt-resolution contract:
+//   - both config.json and env unset → no custom salt (Init derives only
+//     the legacy key, exactly like the historical behaviour).
+//   - valid base64 with ≥16 decoded bytes → derived as a second key, the
+//     legacy key still populated for read-back of pre-salt rows.
+//   - non-base64 string → fail loud (typo must not silently fall back to
+//     the historical DefaultSalt, which would defeat the per-deployment
+//     isolation the feature exists to provide).
+//   - decoded length < 16 → fail loud (Argon2id salt strength).
+func TestInitEncryption_SaltResolution(t *testing.T) {
+	initTestLogger()
+	const passphrase = "test-passphrase-long-enough-32!"
+
+	// Case 1: neither set → no custom salt, only the legacy key loaded.
+	t.Run("no salt sources", func(t *testing.T) {
+		t.Setenv("BIFROST_ENCRYPTION_SALT", "")
+		encrypt.InitWithSalt(passphrase, nil, &testLogger{})
+		state := encrypt.State()
+		require.NotNil(t, state)
+		assert.NotNil(t, state.LegacyKey, "legacy key must always be populated")
+		assert.Nil(t, state.CustomKey, "no custom salt means no custom key")
+	})
+
+	// Case 2: valid base64 in config.json → custom key loaded, legacy key
+	// also loaded for read-back compatibility.
+	t.Run("valid config.json salt", func(t *testing.T) {
+		t.Setenv("BIFROST_ENCRYPTION_SALT", "")
+		saltBytes := make([]byte, 32)
+		for i := range saltBytes {
+			saltBytes[i] = byte(i)
+		}
+		encrypt.InitWithSalt(passphrase, saltBytes, &testLogger{})
+		state := encrypt.State()
+		require.NotNil(t, state)
+		assert.NotNil(t, state.LegacyKey)
+		assert.NotNil(t, state.CustomKey, "valid config salt must populate the custom key")
+		assert.NotEqual(t, state.LegacyKey, state.CustomKey, "legacy and custom keys must differ for the same passphrase")
+	})
+
+	// Case 3: invalid base64 in config.json → initEncryption returns an
+	// error and the package-global state is untouched.
+	t.Run("invalid config.json salt errors", func(t *testing.T) {
+		t.Setenv("BIFROST_ENCRYPTION_SALT", "")
+		err := initEncryption(&ConfigData{
+			EncryptionKey: schemas.NewSecretVar(passphrase),
+			EncryptionSalt: "this is not base64 !!",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "encryption_salt")
+	})
+}
+
+// TestInitEncryption_EnvSaltPrecedence verifies the env var fallback
+// path: when config.json omits encryption_salt but BIFROST_ENCRYPTION_SALT
+// is set, the env value is picked. The decoded length check still applies
+// — too-short decoded env values fail boot the same as too-short config
+// values.
+func TestInitEncryption_EnvSaltPrecedence(t *testing.T) {
+	initTestLogger()
+	const passphrase = "test-passphrase-long-enough-32!"
+
+	// Valid env salt populates the custom key.
+	t.Run("valid env salt", func(t *testing.T) {
+		saltBytes := make([]byte, 32)
+		for i := range saltBytes {
+			saltBytes[i] = byte(0x80 | i)
+		}
+		t.Setenv("BIFROST_ENCRYPTION_SALT", base64.StdEncoding.EncodeToString(saltBytes))
+		require.NoError(t, initEncryption(&ConfigData{
+			EncryptionKey: schemas.NewSecretVar(passphrase),
+		}))
+		state := encrypt.State()
+		require.NotNil(t, state)
+		assert.NotNil(t, state.CustomKey, "env salt must populate the custom key")
+	})
+
+	// Too-short env salt fails boot.
+	t.Run("short env salt errors", func(t *testing.T) {
+		short := make([]byte, 8) // < 16 bytes minimum
+		t.Setenv("BIFROST_ENCRYPTION_SALT", base64.StdEncoding.EncodeToString(short))
+		err := initEncryption(&ConfigData{
+			EncryptionKey: schemas.NewSecretVar(passphrase),
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "minimum is 16 bytes")
+	})
+}
+
+// TestInitEncryption_LegacyRowRoundTrip verifies the backward-compat
+// promise: a row encrypted by the pre-salt build (no header byte) is
+// still decryptable by a build that has salt_version support, when the
+// operator has not set a custom salt (so the legacy key is unchanged).
+//
+// This is the contract operators depend on: the upgrade is opt-in —
+// not setting encryption_salt keeps existing rows decrypting bit-for-bit.
+func TestInitEncryption_LegacyRowRoundTrip(t *testing.T) {
+	initTestLogger()
+	const passphrase = "legacy-upgrade-passphrase-32-byte!!"
+
+	// Encrypt under the legacy code path (pre-salt Init).
+	encrypt.Init(passphrase, &testLogger{})
+	legacy, err := encrypt.Encrypt("api-key-AKIAIOSFODNN7EXAMPLE")
+	require.NoError(t, err)
+	require.NotEmpty(t, legacy)
+	decoded, err := base64.StdEncoding.DecodeString(legacy)
+	require.NoError(t, err)
+	// Legacy format: 12-byte nonce + ciphertext, no version header.
+	assert.GreaterOrEqual(t, len(decoded), 12+aes.BlockSize, "legacy ciphertext should be ≥ 12 + 16 bytes")
+
+	// Re-init with salt support and the same passphrase (no custom salt).
+	encrypt.InitWithSalt(passphrase, nil, &testLogger{})
+	got, err := encrypt.Decrypt(legacy)
+	require.NoError(t, err, "legacy ciphertext must still decrypt after the salt-aware Init")
+	assert.Equal(t, "api-key-AKIAIOSFODNN7EXAMPLE", got, "plaintext must match byte-for-byte")
+}
+
+// TestInitEncryption_VersionedRowRoundTrip verifies the new format end
+// to end: encrypt → decrypt under saltVersionCustom yields the original
+// plaintext. A mixed database (legacy + versioned rows) round-trips both
+// formats cleanly.
+func TestInitEncryption_VersionedRowRoundTrip(t *testing.T) {
+	initTestLogger()
+	const passphrase = "versioned-row-passphrase-32-byts"
+	salt := make([]byte, 32)
+	for i := range salt {
+		salt[i] = byte(0x40 + i%16)
+	}
+	encrypt.InitWithSalt(passphrase, salt, &testLogger{})
+
+	cipher, err := encrypt.Encrypt("plain-custom-salt-row")
+	require.NoError(t, err)
+	got, err := encrypt.Decrypt(cipher)
+	require.NoError(t, err)
+	assert.Equal(t, "plain-custom-salt-row", got)
+
+	// A row written by the legacy build (no header) coexists.
+	legacyRow, err := encrypt.Encrypt("plain-legacy-row")
+	require.NoError(t, err)
+	legacyPlain, err := encrypt.Decrypt(legacyRow)
+	require.NoError(t, err)
+	assert.Equal(t, "plain-legacy-row", legacyPlain)
 }

@@ -41,6 +41,14 @@ type LogStore interface {
 // attempt without a database read.
 type EndpointResolver interface {
 	WebhookEndpointByID(id string) (*tables.TableWebhookEndpoint, bool)
+	// WebhookEndpoints enumerates every known endpoint. It backs the
+	// event-fanout path (see Dispatcher.EndpointIDsForEvent), where the caller
+	// does not already hold an id and must discover which endpoints subscribe.
+	//
+	// Implementations serve this from the same in-memory map as
+	// WebhookEndpointByID, so it costs no database read on the request path.
+	// Returned pointers must be treated as read-only by callers.
+	WebhookEndpoints() []*tables.TableWebhookEndpoint
 }
 
 // Default delivery tuning, applied when an endpoint does not set its own
@@ -177,6 +185,97 @@ func (d *Dispatcher) EnqueueJobEvent(ctx context.Context, job *logstore.AsyncJob
 	d.Wake()
 }
 
+// EnqueueAlertEvent queues the webhook delivery for an alert rule firing.
+// The pre-rendered body is stored on the webhook job row so the dispatcher
+// has no extra store lookup to perform at delivery time. The endpoint id
+// must resolve via WebhookEndpointByID; missing / disabled / unsubscribed
+// endpoints are silently skipped (debug-logged), matching the async-job
+// path's behaviour. Returns the number of webhook deliveries queued (one
+// per matching endpoint channel on the rule).
+func (d *Dispatcher) EnqueueAlertEvent(ctx context.Context, rule *tables.TableAlertRule, event *tables.TableAlertEvent, endpointIDs []string) int {
+	if rule == nil || event == nil {
+		return 0
+	}
+	body, err := RenderAlertPayload(rule, event, time.Now().UTC())
+	if err != nil {
+		d.logger.Warn("webhooks: rendering alert payload for rule %s / event %s failed: %v", rule.ID, event.ID, err)
+		return 0
+	}
+	queued := 0
+	for _, endpointID := range endpointIDs {
+		endpoint, ok := d.resolver.WebhookEndpointByID(endpointID)
+		if !ok || endpoint.Disabled || !subscribesTo(endpoint, tables.WebhookEvent(event.Event)) {
+			d.logger.Debug("webhooks: skipping alert enqueue for event %s: endpoint %s missing/disabled/unsubscribed", event.ID, endpointID)
+			continue
+		}
+		job := &tables.TableWebhookJob{
+			ID:          uuid.NewString(),
+			EndpointID:  endpoint.ID,
+			AsyncJobID:  event.ID,
+			Event:       tables.WebhookEvent(event.Event),
+			PayloadJSON: string(body),
+		}
+		if err := d.insertWebhookJob(ctx, job); err != nil {
+			d.logger.Warn("webhooks: dropping alert notification for event %s to endpoint %s: %v", event.ID, endpointID, err)
+			continue
+		}
+		queued++
+	}
+	if queued > 0 {
+		d.Wake()
+	}
+	return queued
+}
+
+// EnqueueBudgetExceeded queues a budget.exceeded webhook delivery to every
+// endpoint subscribed to the event. Used by the asynchronous 402 path; the
+// 402 response itself does not wait on this enqueue (alert-evaluator flows
+// see 02-alerting/flows.md §2 for the synchronous/asynchronous split).
+func (d *Dispatcher) EnqueueBudgetExceeded(ctx context.Context, scopeType, scopeID string, usedAmount, maxAmount float64, endpointIDs []string) int {
+	body := RenderBudgetExceededPayload(scopeType, scopeID, usedAmount, maxAmount, time.Now().UTC())
+	queued := 0
+	for _, endpointID := range endpointIDs {
+		endpoint, ok := d.resolver.WebhookEndpointByID(endpointID)
+		if !ok || endpoint.Disabled || !subscribesTo(endpoint, tables.WebhookEventBudgetExceeded) {
+			d.logger.Debug("webhooks: skipping budget.exceeded enqueue: endpoint %s missing/disabled/unsubscribed", endpointID)
+			continue
+		}
+		job := &tables.TableWebhookJob{
+			ID:          uuid.NewString(),
+			EndpointID:  endpoint.ID,
+			AsyncJobID:  "budget.exceeded",
+			Event:       tables.WebhookEventBudgetExceeded,
+			PayloadJSON: string(body),
+		}
+		if err := d.insertWebhookJob(ctx, job); err != nil {
+			d.logger.Warn("webhooks: dropping budget.exceeded notification to endpoint %s: %v", endpointID, err)
+			continue
+		}
+		queued++
+	}
+	if queued > 0 {
+		d.Wake()
+	}
+	return queued
+}
+
+// insertWebhookJob retries a queue insert a few times to ride out transient
+// storage errors. Extracted so the two Enqueue* helpers above share the
+// same retry policy without duplicating the loop body.
+func (d *Dispatcher) insertWebhookJob(ctx context.Context, job *tables.TableWebhookJob) error {
+	var err error
+	for attempt := range enqueueAttempts {
+		if err = d.configStore.CreateWebhookJob(ctx, job); err == nil {
+			return nil
+		}
+		if errors.Is(err, configstore.ErrAlreadyExists) {
+			return nil
+		}
+		time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+	}
+	return err
+}
+
 // DeliverTest sends one signed sample of the given event through the exact
 // production delivery path — same rendering, signing, client, and
 // redirect/TLS policy — without touching the queue, history, or failure
@@ -217,6 +316,54 @@ func (d *Dispatcher) Wake() {
 	case d.signal <- struct{}{}:
 	default:
 	}
+}
+
+// WebhookEndpointByID returns the in-memory endpoint for the given id, or
+// (nil, false) when the endpoint is gone or disabled. Exposed so the admin
+// "test rule" handler (and any other out-of-band delivery caller) can
+// validate that the endpoint is currently subscribed before invoking
+// DeliverTest.
+func (d *Dispatcher) WebhookEndpointByID(id string) (*tables.TableWebhookEndpoint, bool) {
+	if d == nil || d.resolver == nil {
+		return nil, false
+	}
+	return d.resolver.WebhookEndpointByID(id)
+}
+
+// EndpointIDsForEvent returns the ids of every enabled endpoint subscribed to
+// the given event, sorted for deterministic fanout.
+//
+// This is the discovery half of the enqueue contract: EnqueueAlertEvent and
+// EnqueueBudgetExceeded both take an explicit id list and deliver to nothing
+// when it is empty, so a caller that cannot name the ids up front — the
+// budget.exceeded path, which is triggered by a budget row rather than by an
+// alert rule with configured channels — must resolve them here. Returning an
+// empty list previously meant "notify nobody", silently.
+//
+// Filtering reuses subscribesTo and the Disabled flag rather than
+// reimplementing them, so the enqueue-time and discovery-time notions of
+// "this endpoint wants this event" cannot drift apart. The resolver is
+// in-memory, so this costs no database read on the request path.
+func (d *Dispatcher) EndpointIDsForEvent(event tables.WebhookEvent) []string {
+	if d == nil || d.resolver == nil {
+		return nil
+	}
+	endpoints := d.resolver.WebhookEndpoints()
+	if len(endpoints) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if endpoint == nil || endpoint.ID == "" || endpoint.Disabled {
+			continue
+		}
+		if !subscribesTo(endpoint, event) {
+			continue
+		}
+		ids = append(ids, endpoint.ID)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 func (d *Dispatcher) run() {
@@ -394,21 +541,29 @@ func (d *Dispatcher) attempt(job tables.TableWebhookJob, endpoint *tables.TableW
 	var body []byte
 	var err error
 	var requestID string
-	asyncJob, findErr := d.logStore.FindAsyncJobByID(d.baseCtx, job.AsyncJobID)
-	switch {
-	case findErr == nil:
-		requestID = asyncJob.RequestID
-		body, err = renderPayload(asyncJob, job.Event, endpoint.IncludeResponse, tuning.maxResponsePayloadBytes, now)
-	case errors.Is(findErr, logstore.ErrNotFound):
-		// The job row must have existed for this delivery to be queued, so
-		// not-found can only mean its result TTL lapsed: deliver the
-		// degraded body that says so instead of dropping the notification.
-		body, err = renderExpiredPayload(&job, now)
-	default:
-		// Storage hiccup — not an attempt. Leave the row claimed; the lease
-		// expiry re-offers it to any node.
-		d.logger.Warn("webhooks: reading async job %s failed: %v", job.AsyncJobID, findErr)
-		return
+	if job.PayloadJSON != "" {
+		// Alert / budget-exceeded deliveries carry a pre-rendered body; no
+		// async_job lookup is required. We deliberately do not ask the
+		// endpoint for IncludeResponse here: alert payloads never carry a
+		// response body and the field is irrelevant to the data shape.
+		body = []byte(job.PayloadJSON)
+	} else {
+		asyncJob, findErr := d.logStore.FindAsyncJobByID(d.baseCtx, job.AsyncJobID)
+		switch {
+		case findErr == nil:
+			requestID = asyncJob.RequestID
+			body, err = renderPayload(asyncJob, job.Event, endpoint.IncludeResponse, tuning.maxResponsePayloadBytes, now)
+		case errors.Is(findErr, logstore.ErrNotFound):
+			// The job row must have existed for this delivery to be queued, so
+			// not-found can only mean its result TTL lapsed: deliver the
+			// degraded body that says so instead of dropping the notification.
+			body, err = renderExpiredPayload(&job, now)
+		default:
+			// Storage hiccup — not an attempt. Leave the row claimed; the lease
+			// expiry re-offers it to any node.
+			d.logger.Warn("webhooks: reading async job %s failed: %v", job.AsyncJobID, findErr)
+			return
+		}
 	}
 	if err != nil {
 		// Rendering is deterministic on stored state, so retrying cannot

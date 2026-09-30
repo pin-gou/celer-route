@@ -30,6 +30,7 @@ import (
 	"github.com/pin-gou/celer-route/framework/modelcatalog/live"
 	dynamicPlugins "github.com/pin-gou/celer-route/framework/plugins"
 	"github.com/pin-gou/celer-route/framework/sidekiq"
+	"github.com/pin-gou/celer-route/framework/sidekiq/jobs"
 	"github.com/pin-gou/celer-route/framework/temptoken"
 	"github.com/pin-gou/celer-route/framework/tracing"
 	"github.com/pin-gou/celer-route/framework/webhooks"
@@ -252,6 +253,7 @@ type BifrostHTTPServer struct {
 	IntegrationHandler *handlers.IntegrationHandler
 
 	AuthMiddleware       *handlers.AuthMiddleware
+	MemberAuthMiddleware *handlers.MemberAuthMiddleware
 	CORSMiddleware       *handlers.CorsMiddleware
 	TracingMiddleware    *handlers.TracingMiddleware
 	WSTicketStore        *handlers.WSTicketStore
@@ -2345,6 +2347,35 @@ func (a *rtkAccessor) Histogram(start, end, bucketSize int64) []rtk.RtkHistogram
 	return a.p.Histogram(start, end, bucketSize)
 }
 
+// cacheStatsProviderFunc adapts the semanticcache plugin's process-lifetime
+// snapshot to the handler-local shape. A func-typed adapter keeps the
+// handlers package free of a dependency on the plugin package while still
+// letting the resolver below hand back a live provider.
+type cacheStatsProviderFunc func() handlers.CacheStatsSnapshotShape
+
+func (f cacheStatsProviderFunc) Stats() handlers.CacheStatsSnapshotShape { return f() }
+
+// resolveCacheStats returns a live view over the semantic_cache plugin's
+// counters, or nil when the plugin isn't loaded. Resolved per call for the
+// same reload-safety reason as the cache-clear resolver: /api/plugins can
+// swap the plugin out without a restart.
+func (s *BifrostHTTPServer) resolveCacheStats() handlers.CacheStatsProvider {
+	p, err := lib.FindPluginAs[*semanticcache.Plugin](s.Config, semanticcache.PluginName)
+	if err != nil || p == nil {
+		return nil
+	}
+	return cacheStatsProviderFunc(func() handlers.CacheStatsSnapshotShape {
+		snap := p.Stats()
+		return handlers.CacheStatsSnapshotShape{
+			Hits:             snap.Hits,
+			Misses:           snap.Misses,
+			HitRate:          snap.HitRate,
+			SavedInputTokens: snap.SavedInputTokens,
+			SavedCost:        snap.SavedCost,
+		}
+	})
+}
+
 // ResolveRtkPlugin returns an RtkPluginAccessor over the live RTK plugin
 // when it is loaded, or (nil, false) when it is not. It is safe to call
 // from any goroutine — the underlying pointer is replaced atomically when
@@ -2606,6 +2637,33 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	if sessionHandler != nil {
 		sessionHandler.RegisterRoutes(s.Router, middlewares...)
 	}
+	if s.MemberAuthMiddleware != nil {
+		// Member routes share no middleware with the admin path. Login +
+		// auth-status are public; logout + me are guarded by the member
+		// middleware alone (admin AuthMiddleware is intentionally NOT
+		// chained so a valid admin cookie does not satisfy a member-only
+		// route and vice versa).
+		memberSessionHandler := handlers.NewMemberSessionHandler(s.Config.ConfigStore)
+		memberSessionHandler.RegisterRoutes(s.Router, s.MemberAuthMiddleware.APIMiddleware())
+
+		// Phase 2 — invitations (admin CRUD + public accept), key
+		// requests (member submit + admin decide), user management
+		// (admin CRUD + offboarding), member portal (member self-
+		// service). All four share the same config store but land on
+		// different middleware chains so a member cookie cannot satisfy
+		// an admin route.
+		invitationHandler := handlers.NewInvitationHandler(s.Config.ConfigStore)
+		invitationHandler.RegisterRoutes(s.Router, middlewares...)
+
+		keyRequestHandler := handlers.NewKeyRequestHandler(s.Config.ConfigStore)
+		keyRequestHandler.RegisterRoutes(s.Router, middlewares, s.MemberAuthMiddleware.APIMiddleware())
+
+		userManagementHandler := handlers.NewUserManagementHandler(s.Config.ConfigStore)
+		userManagementHandler.RegisterRoutes(s.Router, middlewares...)
+
+		memberPortalHandler := handlers.NewMemberPortalHandler(s.Config.ConfigStore, s.Config.LogsStore)
+		memberPortalHandler.RegisterRoutes(s.Router, s.MemberAuthMiddleware.APIMiddleware())
+	}
 	if promptsHandler != nil {
 		promptsHandler.RegisterRoutes(s.Router, middlewares...)
 	}
@@ -2615,6 +2673,73 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	}
 	webhookHandler := handlers.NewWebhookHandler(callbacks, s.Config, s.WebhookDispatcher)
 	webhookHandler.RegisterRoutes(s.Router, middlewares...)
+	// Phase 3 (02-alerting): alert-rule CRUD + alert-event queries +
+	// budget projection. The handler is safe to construct even when the
+	// sidekiq runner or dispatcher is nil — it just downgrades the
+	// "snapshot-now" and "test rule" endpoints to 503. The rule cache is
+	// wired below (G6/C-4) so writes to alert_rules invalidate the in-
+	// process cache the hot path reads.
+	alertingHandler := handlers.NewAlertingHandler(s.Config.ConfigStore, s.WebhookDispatcher, s.SidekiqRunner)
+	if gov, gpErr := s.getGovernancePlugin(); gpErr == nil && gov != nil {
+		if gp, ok := gov.(*governance.GovernancePlugin); ok {
+			// Share the evaluator's cache with the handler: both are
+			// constructed here, so the same instance can be flipped into
+			// both without any extra plumbing. Without this seam a freshly
+			// created rule wouldn't fire until the cache TTL elapsed.
+			evaluator := governance.NewAlertEvaluator(s.Config.ConfigStore, logger, s.WebhookDispatcher)
+			gp.SetAlertEvaluator(evaluator)
+			alertingHandler.SetRulesCache(evaluator.Rules())
+		}
+	}
+	alertingHandler.RegisterRoutes(s.Router, middlewares...)
+	// Phase 4 (03-cost-allocation): standard_prices + team_pricing_profiles
+	// admin surface, plus the cost-allocation reports (summary / trend /
+	// details / forecast / cost-by-member / cost-by-vk). Both handlers are
+	// safe to construct when the underlying stores are nil — read paths
+	// degrade to empty rows with a clear error rather than 500.
+	standardPriceHandler := handlers.NewStandardPriceHandler(s.Config.ConfigStore)
+	standardPriceHandler.RegisterRoutes(s.Router, middlewares...)
+	var reportsLogStore logstore.LogStore
+	if s.Config.LogsStore != nil {
+		reportsLogStore = s.Config.LogsStore
+	}
+	reportsCostHandler := handlers.NewReportsCostHandler(s.Config.ConfigStore, reportsLogStore)
+	reportsCostHandler.RegisterRoutes(s.Router, middlewares...)
+	// Phase 5 (03-cost-allocation §7 + 04-security cache-observability):
+	// the admin-only financial surface — gateway delta (Σactual − Σstandard,
+	// by provider and by provider+model) and billing reconciliation
+	// (usage-API calibration + invoice CSV fallback) — plus the cache
+	// observability pair (/api/cache/stats and /api/reports/cache/savings).
+	//
+	// All four are constructed unconditionally: every store dependency is
+	// optional and the handlers degrade to empty/annotated responses with a
+	// clear note rather than 500ing when one is missing.
+	gatewayDeltaHandler := handlers.NewReportsGatewayDeltaHandler(s.Config.ConfigStore, reportsLogStore)
+	gatewayDeltaHandler.RegisterRoutes(s.Router, middlewares...)
+
+	// The reconciliation handler's store dependencies are the config store
+	// split into two narrow interfaces; a store that doesn't implement them
+	// (a read-only / nil store) leaves the handler mounted but degrading.
+	reconciliationStore, _ := s.Config.ConfigStore.(handlers.ReconciliationStore)
+	reconciliationDatasheet, _ := s.Config.ConfigStore.(handlers.ReconciliationDatasheetStore)
+	reconciliationHandler := handlers.NewReportsReconciliationHandler(
+		reconciliationStore,
+		reportsLogStore,
+		reconciliationDatasheet,
+		nil, // usage API client: wired per provider once the credentials land (Phase 5 ships the data path)
+	)
+	reconciliationHandler.RegisterRoutes(s.Router, middlewares...)
+
+	cacheStatsHandler := handlers.NewCacheStatsHandler(s.resolveCacheStats)
+	cacheStatsHandler.RegisterRoutes(s.Router, middlewares...)
+	reportsCacheHandler := handlers.NewReportsCacheHandler(reportsLogStore, s.resolveCacheStats)
+	reportsCacheHandler.RegisterRoutes(s.Router, middlewares...)
+	// US24 idle-VK report. Admin-only endpoint that lists VKs whose
+	// last_used_at is NULL or older than the requested threshold; the
+	// underlying column is kept fresh by the sidekiq job registered
+	// alongside the budget snapshot job above.
+	idleKeysHandler := handlers.NewIdleKeysHandler(s.Config.ConfigStore)
+	idleKeysHandler.RegisterRoutes(s.Router, middlewares...)
 	skillsServingHandler := handlers.NewSkillsServingHandler(s.Config.ConfigStore, s.Config.ObjectStore)
 	if skillsServingHandler != nil {
 		skillsServingHandler.RegisterRoutes(s.Router, middlewares...)
@@ -2827,6 +2952,13 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	s.Config, err = lib.LoadConfig(ctx, configDir)
 	if err != nil {
 		return fmt.Errorf("failed to load config %v", err)
+	}
+	// D9 (Phase 6): refuse to serve traffic when no encryption key is configured
+	// and the operator has not explicitly opted in to plaintext storage. This is
+	// a deployment-level decision, kept out of LoadConfig so config-parsing tests
+	// and the admin CLI remain unaffected.
+	if err := s.Config.EnforceEncryptionStartupPolicy(ctx); err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 	// Propagate the app data directory to the config so built-in plugins that
 	// default their on-disk roots to <appDir>/<subdir> (e.g. RTK raw-output)
@@ -3090,6 +3222,15 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 		if ctx.Value(schemas.BifrostContextKeyIsEnterprise) == nil {
 			apiMiddlewares = append(apiMiddlewares, s.AuthMiddleware.APIMiddleware())
 		}
+		// Phase 1 /temp/team: the member-only login path runs alongside the
+		// admin AuthMiddleware. It uses a separate cookie (bf_member_session)
+		// so admin and member sessions can coexist on the same browser; it
+		// never sets IsLocalAdminContextKey so downstream RBAC retains its
+		// existing meaning.
+		s.MemberAuthMiddleware, err = handlers.InitMemberAuthMiddleware(s.Config.ConfigStore)
+		if err != nil {
+			return fmt.Errorf("failed to initialize member auth middleware: %v", err)
+		}
 	}
 	// Add semantic cache plugin embedding request executor if it exists
 	semanticCachePlugin, err := lib.FindPluginAs[*semanticcache.Plugin](s.Config, semanticcache.PluginName)
@@ -3100,6 +3241,66 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	// Initialize Sidekiq runner for background jobs
 	if s.Config != nil && s.Config.ConfigStore != nil {
 		s.SidekiqRunner = sidekiq.New(s.Config.ConfigStore, logger, 4, "")
+	}
+
+	// G6/C-4: AlertEvaluator is wired in RegisterAPIRoutes (along with the
+// rules-cache invalidation channel into the alerting handler). The HTTP
+// build is the only build that ever uses alert rules today — SDK-only
+// deployments have no admin surface to mutate rules and so neither
+// require the evaluator nor the cache invalidation. Re-introduce an
+// unconditional SetAlertEvaluator here when an SDK-only alert path lands.
+
+	// Register the alert-loop background jobs on the sidekiq runner. The
+	// budget snapshot job is the source of the projection endpoint's data;
+	// the alert notification job is the durable retry path for budget.exceeded
+	// emissions that lost their inline dispatcher connection.
+	if s.SidekiqRunner != nil && s.Config != nil && s.Config.ConfigStore != nil {
+		// budget_snapshot: register the handler so any enqueue is claimable.
+		snapJob := jobs.NewBudgetSnapshotJob(s.Config.ConfigStore)
+		s.SidekiqRunner.Register(snapJob.Kind(), snapJob.Handle)
+		// alert_notification: same, with dispatcher as a dependency.
+		notifJob := jobs.NewAlertNotificationJob(s.Config.ConfigStore, s.WebhookDispatcher)
+		s.SidekiqRunner.Register(notifJob.Kind(), notifJob.Handle)
+		// idle_vk_sweep (US24): bulk-refresh governance_virtual_keys.last_used_at
+		// by walking the log store. Wired when the log store is available;
+		// without a log store the job no-ops (it advances its cursor so the
+		// next tick after the log store comes back doesn't replay a huge
+		// window).
+		if s.Config.LogsStore != nil {
+			idleJob := jobs.NewIdleVKJob(s.Config.LogsStore, s.Config.ConfigStore, 30*time.Minute)
+			s.SidekiqRunner.Register(idleJob.Kind(), idleJob.Handle)
+			go func() {
+				ticker := time.NewTicker(30 * time.Minute)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-s.Ctx.Done():
+						return
+					case <-ticker.C:
+						if err := jobs.EnqueueIdleVKSweep(s.SidekiqRunner, idleJob); err != nil {
+							logger.Warn("failed to enqueue periodic idle-vk sweep: %v", err)
+						}
+					}
+				}
+			}()
+		}
+		// Periodic ticker: enqueue one budget_snapshot job every hour. We
+		// use a fresh job id per tick so retries don't dedupe against a
+		// healthy job that already ran.
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-s.Ctx.Done():
+					return
+				case <-ticker.C:
+					if err := jobs.EnqueueBudgetSnapshotNow(s.SidekiqRunner, s.Config.ConfigStore); err != nil {
+						logger.Warn("failed to enqueue periodic budget snapshot: %v", err)
+					}
+				}
+			}
+		}()
 	}
 
 	// Register routes
