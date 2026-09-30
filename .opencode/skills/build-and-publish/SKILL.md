@@ -25,6 +25,7 @@ metadata:
 | git 工作区干净 | `git status --porcelain` 为空 | 终止并提示提交或 stash |
 | 参数 `version` | 格式 `vX.Y.Z`（如 `v1.2.3`） | 终止并提示正确格式 |
 | 交叉编译工具链 | `bash .github/workflows/scripts/install-cross-compilers.sh` 可自动安装（需 sudo，或已手动装好）；产物校验见步骤 3.5 | 工具链不可用且无法安装时终止——二进制为硬依赖，不发二进制不建 release |
+| buildx builder 串行配置 | 本机 buildx builder（`celer-route-builder`）须由 `_docker-image-setup-builder` 以 `buildkitd.serial.toml`（max-parallelism=1）创建；**旧配置创建的 builder 需先执行一次 `docker buildx rm celer-route-builder` 迁移**（`inspect \|\| create` 不会重建已存在的 builder） | 未迁移则镜像双平台仍并行构建，宿主可能卡死——先迁移再继续 |
 
 ## 参数
 
@@ -103,6 +104,13 @@ git log --format="%s" "$log_range"
 用户确认后，`prev_tag` 与 `log_range` 沿用至步骤 4，不再重新推导。
 
 ### 步骤 3：构建 multi-arch Docker 镜像并推送
+
+> 多平台构建已**串行化**：builder 使用 `buildkitd.serial.toml`（max-parallelism=1），
+> linux/amd64 与 linux/arm64 两个平台在 BuildKit 内排队依次构建（同一时刻只有一个
+> 平台在跑 1×npm + 2×go build），避免并发导致宿主卡死。镜像内 `go build` 另以
+> `-p 2`（`GO_BUILD_PARALLELISM`）限制单次编译并行度。若本机 builder 是旧配置创建
+> 的，先执行 `docker buildx rm celer-route-builder` 使其按新配置重建（会丢一次
+> buildx 缓存卷，release 低频可接受）。
 
 ```bash
 make docker-image-multiarch VERSION="$version"
