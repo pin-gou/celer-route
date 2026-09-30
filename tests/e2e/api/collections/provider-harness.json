@@ -51770,7 +51770,7 @@
 },
     {
       "name": "57. Logs Storage & Manual Cleanup Endpoints (commit 47951747)",
-      "description": "Smoke coverage for the request-log storage settings endpoints and the manual cleanup workflow surfaced on the Logs Settings page. All endpoints are admin/settings routes (no provider routing), so the cases run against the gateway's own database store (SQLite by default) and never touch a paid provider. The cleanup paths intentionally target a far-past cutoff so the worker finishes in one batch with zero deletions — the case pins the wire shape (status code, response schema, status polling), not destructive behaviour, so the suite can run safely on shared environments.\n\nStorage case pins the schema: every bucket (logs_with_payload / logs_stripped / logs_offloaded / logs_hidden) and size split (size_with_payload_bytes / size_offloaded_bytes / size_without_payload_bytes) must be present so the UI's breakdown card has something to render even on an empty table.\n\nPreview case pins the older_than scope's request/response shape (matched_logs + estimated_size_bytes + cutoff echo) so the dialog's preview line has the data it needs.\n\nCleanup-status case pins the 202-with-job-status accept path and the polling status shape (status + processed + deleted + message) — the same status endpoint used by the settings dialog's progress bar.",
+      "description": "Smoke coverage for the request-log storage settings endpoints and the manual cleanup workflow surfaced on the Logs Settings page. All endpoints are admin/settings routes (no provider routing), so the cases run against the gateway's own database store (SQLite by default) and never touch a paid provider. The cleanup paths intentionally target a far-past cutoff so the worker finishes in one batch with zero deletions — the case pins the wire shape (status code, response schema, status polling), not destructive behaviour, so the suite can run safely on shared environments.\n\nStorage case pins the schema: every bucket (logs_with_payload / logs_stripped / logs_offloaded / logs_hidden) and size split (size_with_payload_bytes / size_offloaded_bytes / size_without_payload_bytes) must be present so the UI's breakdown card has something to render even on an empty table. The case also pins the bucket-sum invariant (sum === total_logs) and, when total_logs > 0, asserts at least one bucket is non-zero — both invariants guard against the v1.1.3 regression where estimatePayloadBreakdown raised `operator does not exist: boolean = integer` on Postgres and the handler swallowed the error so the settings page shipped 0/0/0/0.\n\nPreview case pins the older_than scope's request/response shape (matched_logs + estimated_size_bytes + cutoff echo) so the dialog's preview line has the data it needs.\n\nCleanup-status case pins the 202-with-job-status accept path and the polling status shape (status + processed + deleted + message) — the same status endpoint used by the settings dialog's progress bar.",
       "item": [
         {
           "name": "Storage stats GET schema includes payload breakdown (admin)",
@@ -51798,6 +51798,16 @@
                   "  // bucket counts must sum to total on every response shape (including empty table: 0=0+0+0+0)",
                   "  var sum = (j.logs_with_payload || 0) + (j.logs_stripped || 0) + (j.logs_offloaded || 0) + (j.logs_hidden || 0);",
                   "  pm.expect(sum, 'bucket sum ' + sum + ' must equal total_logs ' + j.total_logs).to.equal(j.total_logs);",
+                  "  // regression guard for the Postgres `boolean = integer` bug that",
+                  "  // shipped in v1.1.3: estimatePayloadBreakdown raised on Postgres",
+                  "  // (operator does not exist: boolean = integer) and StorageStats",
+                  "  // swallowed the error, returning all four buckets as 0. On a",
+                  "  // populated table (total_logs > 0) the buckets must reach > 0",
+                  "  // in aggregate — a value of zero across all four means the",
+                  "  // aggregate silently failed and the UI shows a false breakdown.",
+                  "  if (j.total_logs > 0) {",
+                  "    pm.expect(sum, 'on a populated table (total_logs=' + j.total_logs + ') at least one bucket must be non-zero — otherwise the aggregate silently failed').to.be.greaterThan(0);",
+                  "  }",
                   "});"
                 ]
               }

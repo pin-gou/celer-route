@@ -5708,6 +5708,14 @@ func (s *RDBLogStore) StorageStats(ctx context.Context) (*StorageStats, error) {
 		stats.SizeWithoutPayloadBytes = breakdown.SizeWithoutPayloadBytes
 		stats.SizeWithPayloadBytes = breakdown.SizeWithPayloadBytes
 		stats.SizeOffloadedBytes = breakdown.SizeOffloadedBytes
+	} else if brkErr != nil {
+		// The aggregate is non-critical (total_logs / size still reflect the
+		// table), but a silent zero across all four buckets misleads the
+		// operator — the settings page then shows "you have 0 stripped logs"
+		// on a 100k-row table, which is wrong. Log loudly enough that the
+		// failure surfaces in support traces; the UI keeps the zeros so
+		// the endpoint stays cheap and idempotent for the polling timer.
+		s.logger.Warn(fmt.Sprintf("logstore: failed to compute payload-state breakdown, breakdown will report 0/0/0/0 on the settings page: %s", brkErr))
 	}
 
 	return stats, nil
@@ -5751,12 +5759,16 @@ func (s *RDBLogStore) estimatePayloadBreakdown(ctx context.Context, total int64)
 	// was later stripped or offloaded.
 	//
 	// Field order matches SELECT column order: GORM's Raw Scan binds by
-	// position, so the struct must mirror the SQL column sequence.
+	// column name (the struct fields are normalised to snake_case), so the
+	// SQL aliases need to match the struct field names below.
 	//
-	// Note: parameters are int (1/0), not bool. SQLite's type coercion is
-	// permissive for integer/boolean comparisons, but bools in GORM can be
-	// rendered as 1/0 differently between backends (Postgres prefers true,
-	// SQLite prefers 1). Using ints directly removes that ambiguity.
+	// The three boolean columns (`content_hidden`, `payload_stripped`,
+	// `has_object`) MUST be compared with bool placeholders. SQLite is
+	// permissive — `content_hidden = 1` works because SQLite coerces
+	// boolean↔integer — but Postgres rejects `boolean = integer` with
+	// "operator does not exist: boolean = integer", which silently breaks
+	// the whole aggregate (the handler used to swallow the error and ship
+	// 0/0/0/0 to the UI). Use true/false, matching the rest of the package.
 	type bucketCounts struct {
 		Hidden      int64
 		Stripped    int64
@@ -5771,10 +5783,10 @@ func (s *RDBLogStore) estimatePayloadBreakdown(ctx context.Context, total int64)
 		  SUM(CASE WHEN has_object = ? AND payload_stripped = ? AND content_hidden = ? THEN 1 ELSE 0 END) AS offloaded,
 		  SUM(CASE WHEN content_hidden = ? AND payload_stripped = ? AND has_object = ? THEN 1 ELSE 0 END) AS with_payload
 		FROM logs
-	`, 1, // Hidden bucket (any content_hidden row)
-		1, 0, // Stripped bucket: payload_stripped AND NOT hidden
-		1, 0, 0, // Offloaded bucket: has_object AND NOT stripped AND NOT hidden
-		0, 0, 0, // WithPayload bucket: not hidden, not stripped, not offloaded
+	`, true, // Hidden bucket (any content_hidden row)
+		true, false, // Stripped bucket: payload_stripped AND NOT hidden
+		true, false, false, // Offloaded bucket: has_object AND NOT stripped AND NOT hidden
+		false, false, false, // WithPayload bucket: not hidden, not stripped, not offloaded
 	).Scan(&counts).Error; err != nil {
 		return nil, err
 	}
