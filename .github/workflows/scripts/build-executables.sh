@@ -17,6 +17,12 @@ fi
 VERSION="${1#v}"
 PLATFORM_FILTER="${2:-}"
 
+# Limit Go's per-build compile parallelism (-p) to keep memory/pCPU spikes low.
+# Builds are already sequential (one platform at a time); this caps the internal
+# parallelism of each individual build so a single go build can't OOM a small host.
+# Tune via GO_BUILD_PARALLELISM (e.g. GO_BUILD_PARALLELISM=4 for beefy machines).
+PARALLELISM="${GO_BUILD_PARALLELISM:-2}"
+
 echo "🔨 Building Go executables with version: $VERSION"
 
 # Get the script directory and project root
@@ -91,7 +97,7 @@ for platform in "${platforms[@]}"; do
     fi
 
     env GOWORK=off CGO_ENABLED=1 GOOS="$GOOS" GOARCH="$GOARCH" CC="$CC_COMPILER" CXX="$CXX_COMPILER" \
-      go build -trimpath -tags "netgo,osusergo,sqlite_static" \
+      go build -p "$PARALLELISM" -trimpath -tags "netgo,osusergo,sqlite_static" \
       -ldflags "-s -w -buildid= -extldflags '-static' -X main.Version=v${VERSION}" \
       -o "$PROJECT_ROOT/dist/$PLATFORM_DIR/$GOARCH/$output_name" .
 
@@ -102,7 +108,7 @@ for platform in "${platforms[@]}"; do
     fi
 
     env GOWORK=off CGO_ENABLED=1 GOOS="$GOOS" GOARCH="$GOARCH" CC="$CC_COMPILER" CXX="$CXX_COMPILER" \
-      go build -trimpath -ldflags "-s -w -buildid= -X main.Version=v${VERSION}" \
+      go build -p "$PARALLELISM" -trimpath -ldflags "-s -w -buildid= -X main.Version=v${VERSION}" \
       -o "$PROJECT_ROOT/dist/$PLATFORM_DIR/$GOARCH/$output_name" .
 
    else # Darwin (macOS)
@@ -115,7 +121,7 @@ for platform in "${platforms[@]}"; do
     fi
 
     env GOWORK=off CGO_ENABLED=1 GOOS="$GOOS" GOARCH="$GOARCH" CC="$CC_COMPILER" CXX="$CXX_COMPILER" \
-      go build -trimpath -ldflags "-s -w -buildid= -X main.Version=v${VERSION}" \
+      go build -p "$PARALLELISM" -trimpath -ldflags "-s -w -buildid= -X main.Version=v${VERSION}" \
       -o "$PROJECT_ROOT/dist/$PLATFORM_DIR/$GOARCH/$output_name" .
   fi
 
