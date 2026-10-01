@@ -13,7 +13,7 @@ import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import AppLogNotManagedCard from "@/app/workspace/config/views/AppLogNotManagedCard";
 import LogCleanupDialog from "@/app/workspace/config/views/LogCleanupDialog";
 import LogStorageCard from "@/app/workspace/config/views/LogStorageCard";
-import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -41,11 +41,27 @@ export default function LoggingView() {
 	const [needsRestart, setNeedsRestart] = useState<boolean>(false);
 	const [loggingHeadersText, setLoggingHeadersText] = useState<string>("");
 	const [activeTab, setActiveTab] = useQueryState("tab", parseAsStringLiteral(LOGGING_TABS).withDefault("requests"));
-	// Manual cleanup dialog state. The dialog owns its scope/inputs; this
-	// state only tracks open/close. Empty filters means the "by filter" scope
+	// Manual cleanup dialog state. The dialog owns its scope/inputs; this state
+	// only tracks open/close. Empty filters means the "by filter" scope
 	// option will be disabled in the dialog (cleanest behaviour for a brand-new
 	// session: ask for time/date by default).
-	const [cleanupOpen, setCleanupOpen] = useState(false);
+	// A running cleanup job id rides a URL param (?cleanupJob=<id>) so a page
+	// refresh reopens the progress panel instead of silently losing the job.
+	const [cleanupJobParam, setCleanupJobParam] = useQueryState("cleanupJob", parseAsString);
+	const [cleanupManualOpen, setCleanupManualOpen] = useState(false);
+	// Open when the user asked for the dialog OR a cleanup is tracked in the
+	// URL (refresh restores the running job's progress panel automatically).
+	const cleanupOpen = cleanupManualOpen || cleanupJobParam !== null;
+
+	const handleCleanupOpenChange = useCallback(
+		(open: boolean) => {
+			setCleanupManualOpen(open);
+			// Closing the dialog (explicitly, or because the job settled) drops
+			// the tracked job so a later refresh doesn't reopen a stale dialog.
+			if (!open) setCleanupJobParam(null);
+		},
+		[setCleanupJobParam],
+	);
 
 	useEffect(() => {
 		if (config) {
@@ -156,7 +172,7 @@ export default function LoggingView() {
 					{/* Storage stats + manual cleanup entry point. The card hosts the
 					    "open cleanup dialog" button; cleanup is destructive and never
 					    rides the Save Changes flow at the bottom of the page. */}
-					<LogStorageCard onOpenCleanup={() => setCleanupOpen(true)} />
+					<LogStorageCard onOpenCleanup={() => setCleanupManualOpen(true)} />
 
 					{/* Basic */}
 					<section className="space-y-4">
@@ -477,7 +493,14 @@ export default function LoggingView() {
 			{/* Manual cleanup dialog. Lives outside the Save Changes flow by
 			    design: cleanup is destructive + asynchronous and would be
 			    misleading to bundle under "save settings". */}
-			<LogCleanupDialog open={cleanupOpen} onOpenChange={setCleanupOpen} filters={null} />
+			<LogCleanupDialog
+				open={cleanupOpen}
+				onOpenChange={handleCleanupOpenChange}
+				filters={null}
+				persistentJobId={cleanupJobParam}
+				onJobStarted={(id) => setCleanupJobParam(id)}
+				onJobSettled={() => setCleanupJobParam(null)}
+			/>
 		</div>
 	);
 }

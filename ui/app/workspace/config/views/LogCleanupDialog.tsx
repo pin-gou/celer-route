@@ -26,6 +26,13 @@ interface Props {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	filters?: LogFilters | null;
+	/** In-flight cleanup job id tracked outside the dialog, so a page refresh
+	    can restore the progress panel instead of losing the running job. */
+	persistentJobId?: string | null;
+	/** Called when a cleanup job starts, so the caller can persist the id. */
+	onJobStarted?: (id: string) => void;
+	/** Called when the tracked job settles, so the caller can drop the id. */
+	onJobSettled?: () => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -44,7 +51,7 @@ function formatBytes(bytes: number): string {
 const SAFETY_ROW_THRESHOLD = 1_000_000;
 const SAFETY_SIZE_BYTES = 5 * 1024 * 1024 * 1024;
 
-export default function LogCleanupDialog({ open, onOpenChange, filters }: Props) {
+export default function LogCleanupDialog({ open, onOpenChange, filters, persistentJobId = null, onJobStarted, onJobSettled }: Props) {
 	const { t } = useTranslation("config");
 	const hasSettingsUpdate = useRbac(RbacResource.Settings, RbacOperation.Update);
 	const dispatch = useAppDispatch();
@@ -59,22 +66,40 @@ export default function LogCleanupDialog({ open, onOpenChange, filters }: Props)
 	const [preview, setPreview] = useState<CleanupPreview | null>(null);
 	const [previewError, setPreviewError] = useState<string | null>(null);
 	const [confirmPhrase, setConfirmPhrase] = useState("");
-	const [jobId, setJobId] = useState<string | null>(null);
+	const [jobId, setJobId] = useState<string | null>(() => persistentJobId ?? null);
 
 	const [triggerPreview, { isFetching: previewLoading }] = useLazyPreviewCleanupByFilterQuery();
 	const [startCleanup, { isLoading: starting }] = useStartCleanupMutation();
 	const [cancelCleanup, { isLoading: cancelling }] = useCancelCleanupMutation();
 
-	const { data: status } = useGetCleanupStatusQuery(jobId ? { id: jobId } : undefined, { skip: !jobId, pollingInterval: 1000 });
+	const {
+		data: status,
+		isError: statusError,
+		error: statusErrorObj,
+	} = useGetCleanupStatusQuery(jobId ? { id: jobId } : undefined, { skip: !jobId, pollingInterval: 1000 });
 
 	useEffect(() => {
 		if (open) {
 			setPreview(null);
 			setPreviewError(null);
 			setConfirmPhrase("");
-			setJobId(null);
+			// Restore a tracked job (e.g. after a page refresh) instead of always
+			// resetting to the "configure a new cleanup" state.
+			setJobId(persistentJobId ?? null);
 		}
-	}, [open]);
+	}, [open, persistentJobId]);
+
+	// A persisted job id that no longer resolves (404 — the sidekiq row was
+	// pruned or never existed) means there is nothing left to track: drop the
+	// persistence and fall back to the configure view instead of polling an
+	// error forever. Transient errors (network, 5xx) keep polling.
+	useEffect(() => {
+		if (!jobId || !statusError) return;
+		const code = (statusErrorObj as { status?: number } | undefined)?.status;
+		if (code !== 404) return;
+		setJobId(null);
+		onJobSettled?.();
+	}, [jobId, statusError, statusErrorObj, onJobSettled]);
 
 	useEffect(() => {
 		if (!jobId || !status) return;
@@ -82,16 +107,19 @@ export default function LogCleanupDialog({ open, onOpenChange, filters }: Props)
 			toast.success(t("logging.cleanupRunningDone") + (status.message ? " · " + status.message : ""));
 			dispatch(baseApi.util.invalidateTags(["LogsStorage"]));
 			setJobId(null);
+			onJobSettled?.();
 			onOpenChange(false);
 		} else if (status.status === "failed") {
 			toast.error(t("logging.cleanupRunningFailed") + (status.last_error ? " · " + status.last_error : ""));
 			setJobId(null);
+			onJobSettled?.();
 		} else if (status.status === "cancelled") {
 			toast.info(t("logging.cleanupRunningCancelled"));
 			dispatch(baseApi.util.invalidateTags(["LogsStorage"]));
 			setJobId(null);
+			onJobSettled?.();
 		}
-	}, [jobId, status, t, dispatch, onOpenChange]);
+	}, [jobId, status, t, dispatch, onOpenChange, onJobSettled]);
 
 	const buildRequest = useCallback((): CleanupRequest | null => {
 		if (scope === "all") return { scope: "all", strip_payloads_only: false };
@@ -141,9 +169,11 @@ export default function LogCleanupDialog({ open, onOpenChange, filters }: Props)
 		if (!req) return;
 		try {
 			const job = await startCleanup(req).unwrap();
-			setJobId(job.id ?? null);
+			const id = job.id ?? null;
+			setJobId(id);
 			setPreview(null);
 			setConfirmPhrase("");
+			if (id) onJobStarted?.(id);
 		} catch (err) {
 			const e = err as { status?: number; data?: { error?: string } };
 			if (e?.status === 409) {
