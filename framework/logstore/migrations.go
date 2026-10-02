@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pin-gou/celer-route/core/schemas"
@@ -302,6 +303,13 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"timeline_events_init"}, run: migrationCreateTimelineEventsTable},
 	{IDs: []string{"timeline_events_v2_provider_meta"}, run: migrationAddTimelineEventsProviderMeta},
 	{IDs: []string{"dashboard_bucket_metrics_add_unique_index"}, run: migrationAddDashboardBucketMetricsUniqueIndex},
+	// Payload split: large TEXT payload columns move off the logs heap onto the
+	// log_payloads side table so stripping can DELETE them (Postgres autovacuum
+	// reclaims the space) instead of UPDATE-clearing columns in place (which only
+	// ever leaves dead tuples behind). See LogPayload.
+	{IDs: []string{"logs_split_payload_create_log_payloads_table"}, run: migrationCreateLogPayloadsTable},
+	{IDs: []string{"logs_split_payload_backfill_log_payloads"}, run: migrationBackfillLogPayloads},
+	{IDs: []string{"logs_split_payload_drop_logs_columns"}, run: migrationDropLogsPayloadColumns},
 }
 
 // areThereAnyPendingMigrations returns true if there are any pending migrations to be applied.
@@ -4502,6 +4510,237 @@ func migrationAddBillingFidelityColumns(ctx context.Context, db *gorm.DB, logger
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while adding billing fidelity columns: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationCreateLogPayloadsTable creates the log_payloads side table that
+// holds the strip-able payload columns. Portable DDL (Postgres + SQLite); the
+// ClickHouse store never runs these steps (it has its own migration path).
+func migrationCreateLogPayloadsTable(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_split_payload_create_log_payloads_table"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+
+	cols := make([]string, 0, len(stripPayloadOmitColumns)+1)
+	cols = append(cols, "log_id TEXT PRIMARY KEY")
+	for _, col := range stripPayloadOmitColumns {
+		cols = append(cols, fmt.Sprintf("%s TEXT", col))
+	}
+	sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS log_payloads (%s)", strings.Join(cols, ", "))
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("%s: %w", migrationName, err)
+	}
+	return nil
+}
+
+// migrationBackfillLogPayloads copies the payload columns of existing logs rows
+// into log_payloads, in batches, before the columns are dropped from logs.
+// Idempotent: rows already copied (from a partially-completed earlier run) are
+// skipped via ON CONFLICT DO NOTHING / OR IGNORE, and the id cursor advances
+// past every touched row so the window never stalls.
+func migrationBackfillLogPayloads(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_split_payload_backfill_log_payloads"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+
+	cols := stripPayloadOmitColumns
+	// Build the "at least one payload column is non-empty" predicate.
+	predParts := make([]string, len(cols))
+	for i, col := range cols {
+		predParts[i] = col + " <> ''"
+	}
+	anyPayloadPred := "(" + strings.Join(predParts, " OR ") + ")"
+
+	selectCols := strings.Join(cols, ", ")
+
+	// INSERT OR IGNORE (SQLite) / ON CONFLICT DO NOTHING appended after the
+	// SELECT (Postgres requires the conflict clause at the end of the statement).
+	insertPrefix := "INSERT INTO log_payloads (log_id, " + selectCols + ")"
+	conflictSuffix := ""
+	if db.Dialector.Name() == "postgres" {
+		conflictSuffix = " ON CONFLICT (log_id) DO NOTHING"
+	} else {
+		insertPrefix = "INSERT OR IGNORE INTO log_payloads (log_id, " + selectCols + ")"
+	}
+
+	// Payload backfill batch: how many rows per INSERT ... SELECT window. Small
+	// enough to stay under SQLite's bind-variable limit (the WHERE id IN (?)
+	// list carries this many placeholders).
+	const backfillBatchSize = 500
+
+	// Window the table by primary key (index-only, ordered) and let the INSERT's
+	// WHERE re-apply the payload predicate on just that window — a predicate
+	// scan over the whole table per batch would be quadratic. Rows already copied
+	// (a crash mid-run) are skipped via the conflict clause.
+	cursor := ""
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		// Window by primary key (index-only, ordered); id > '' matches every id.
+		var ids []string
+		if err := db.WithContext(ctx).Model(&Log{}).
+			Select("id").Where("id > ?", cursor).
+			Order("id").Limit(backfillBatchSize).
+			Pluck("id", &ids).Error; err != nil {
+			return fmt.Errorf("%s: select window: %w", migrationName, err)
+		}
+		if len(ids) == 0 {
+			break
+		}
+
+		// Copy the window's payload columns over (INSERT ... SELECT with the
+		// window ids; conflict-tolerant so a rerun after a crash skips rows that
+		// were already copied). The payload predicate runs on this bounded window.
+		inPlaceholders := make([]string, len(ids))
+		inArgs := make([]any, len(ids))
+		for i, id := range ids {
+			inPlaceholders[i] = "?"
+			inArgs[i] = id
+		}
+		stmt := insertPrefix + " SELECT id, " + selectCols +
+			" FROM logs WHERE id IN (" + strings.Join(inPlaceholders, ", ") +
+			") AND NOT payload_stripped AND " + anyPayloadPred + conflictSuffix
+		if err := db.WithContext(ctx).Exec(stmt, inArgs...).Error; err != nil {
+			return fmt.Errorf("%s: backfill batch: %w", migrationName, err)
+		}
+
+		cursor = ids[len(ids)-1]
+	}
+	return nil
+}
+
+// migrationDropLogsPayloadColumns removes the payload columns from the logs
+// table once they live in log_payloads.
+//
+// Postgres: each DROP COLUMN is a metadata-only operation (no table rewrite),
+// cheap even on huge tables.
+//
+// SQLite: ALTER TABLE DROP COLUMN rewrites the whole table per column, so the
+// migration instead performs a single table rewrite — build a logs_new table
+// with only the surviving columns, copy the rows, drop the old table, rename,
+// and recreate the captured index definitions.
+func migrationDropLogsPayloadColumns(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_split_payload_drop_logs_columns"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+
+	if db.Dialector.Name() != "sqlite" {
+		// Postgres (and any other dialect): metadata-only per-column drops.
+		for _, col := range stripPayloadOmitColumns {
+			if err := db.WithContext(ctx).Exec(fmt.Sprintf("ALTER TABLE logs DROP COLUMN IF EXISTS %s", col)).Error; err != nil {
+				return fmt.Errorf("%s: drop column %s: %w", migrationName, col, err)
+			}
+		}
+		return nil
+	}
+
+	// SQLite: single rewrite. First capture the index DDL so it can be recreated
+	// after the rename.
+	var indexDDLs []string
+	rows, err := db.WithContext(ctx).Raw(
+		"SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL", "logs",
+	).Rows()
+	if err != nil {
+		return fmt.Errorf("%s: read index DDL: %w", migrationName, err)
+	}
+	for rows.Next() {
+		var sql string
+		if err := rows.Scan(&sql); err != nil {
+			rows.Close()
+			return fmt.Errorf("%s: scan index DDL: %w", migrationName, err)
+		}
+		indexDDLs = append(indexDDLs, sql)
+	}
+	rows.Close()
+
+	// Column defs for the new table, skipping the payload columns.
+	type colInfo struct {
+		name    string
+		typ     string
+		notNull bool
+		dflt    sql.NullString
+		pk      int
+	}
+	var cols []colInfo
+	infoRows, err := db.WithContext(ctx).Raw("SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info(?) ORDER BY cid", "logs").Rows()
+	if err != nil {
+		return fmt.Errorf("%s: read table info: %w", migrationName, err)
+	}
+	for infoRows.Next() {
+		var c colInfo
+		if err := infoRows.Scan(&c.name, &c.typ, &c.notNull, &c.dflt, &c.pk); err != nil {
+			infoRows.Close()
+			return fmt.Errorf("%s: scan table info: %w", migrationName, err)
+		}
+		if isStripPayloadColumn(c.name) {
+			continue
+		}
+		cols = append(cols, c)
+	}
+	infoRows.Close()
+
+	if len(cols) == 0 {
+		return fmt.Errorf("%s: no surviving columns — refusing to rewrite logs", migrationName)
+	}
+
+	var defParts []string
+	for _, c := range cols {
+		def := fmt.Sprintf("%q %s", c.name, c.typ)
+		if c.notNull {
+			def += " NOT NULL"
+		}
+		if c.dflt.Valid {
+			def += " DEFAULT " + c.dflt.String
+		}
+		defParts = append(defParts, def)
+	}
+	var pkCols []string
+	for _, c := range cols {
+		if c.pk > 0 {
+			pkCols = append(pkCols, c.name)
+		}
+	}
+	if len(pkCols) > 0 {
+		defParts = append(defParts, "PRIMARY KEY ("+strings.Join(pkCols, ", ")+")")
+	}
+
+	newTable := "logs_split_payload_new"
+	exec := func(sql string) error {
+		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+			return fmt.Errorf("%s: %w", migrationName, err)
+		}
+		return nil
+	}
+
+	if err := exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", newTable)); err != nil {
+		return err
+	}
+	createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", newTable, strings.Join(defParts, ", "))
+	if err := exec(createSQL); err != nil {
+		return err
+	}
+
+	var keepCols []string
+	for _, c := range cols {
+		keepCols = append(keepCols, c.name)
+	}
+	copySQL := fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM logs", newTable, strings.Join(keepCols, ", "), strings.Join(keepCols, ", "))
+	if err := exec(copySQL); err != nil {
+		return err
+	}
+	if err := exec("DROP TABLE logs"); err != nil {
+		return err
+	}
+	if err := exec(fmt.Sprintf("ALTER TABLE %s RENAME TO logs", newTable)); err != nil {
+		return err
+	}
+	for _, idx := range indexDDLs {
+		if err := exec(idx); err != nil {
+			return err
+		}
 	}
 	return nil
 }

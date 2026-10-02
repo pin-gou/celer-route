@@ -129,10 +129,10 @@ func TestSQLiteListInputHistoryPassThroughOnBadJSON(t *testing.T) {
 	require.NoError(t, entry.SerializeFields())
 	require.NoError(t, store.Create(ctx, entry))
 
-	// Clobber the column to a non-array JSON literal at the SQL layer so the
-	// projection's json_type(...)='array' guard triggers.
+	// Clobber the side-table column to a non-array JSON literal at the SQL layer
+	// so the projection's json_type(...)='array' guard triggers.
 	require.NoError(t, store.ScopedDB(ctx).Exec(
-		"UPDATE logs SET input_history = ? WHERE id = ?", `"just-a-string-not-array"`, "bad",
+		"UPDATE log_payloads SET input_history = ? WHERE log_id = ?", `"just-a-string-not-array"`, "bad",
 	).Error)
 
 	result, err := store.SearchLogs(ctx, SearchFilters{}, PaginationOptions{Limit: 10})

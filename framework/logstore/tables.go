@@ -400,6 +400,95 @@ func (Log) TableName() string {
 	return "logs"
 }
 
+// LogPayload holds the strip-able payload columns of a Log row in a separate
+// table (log_payloads). Keeping the large TEXT content off the logs heap lets
+// Postgres actually reclaim disk when a log is stripped — the strip path
+// DELETEs the log_payloads row instead of UPDATE-clearing columns in place,
+// which only ever leaves dead tuples behind for autovacuum.
+//
+// One row per log id; absent for content-hidden / fully-offloaded / stripped
+// rows that carry no DB-resident payload. Columns intentionally mirror the
+// strip-able payload set (StripPayloadFieldNames): token_usage, error_details
+// and cache_debug stay on logs (billing + cache-stats consumers read them off
+// the heap row).
+type LogPayload struct {
+	LogID string `gorm:"column:log_id;primaryKey" json:"-"`
+
+	InputHistory            string `gorm:"type:text" json:"-"`
+	ResponsesInputHistory   string `gorm:"type:text" json:"-"`
+	OutputMessage           string `gorm:"type:text" json:"-"`
+	ResponsesOutput         string `gorm:"type:text" json:"-"`
+	EmbeddingOutput         string `gorm:"type:text" json:"-"`
+	RerankOutput            string `gorm:"type:text" json:"-"`
+	OCRInput                string `gorm:"type:text" json:"-"`
+	OCROutput               string `gorm:"type:text" json:"-"`
+	Params                  string `gorm:"type:text" json:"-"`
+	Tools                   string `gorm:"type:text" json:"-"`
+	ToolCalls               string `gorm:"type:text" json:"-"`
+	SpeechInput             string `gorm:"type:text" json:"-"`
+	TranscriptionInput      string `gorm:"type:text" json:"-"`
+	ImageGenerationInput    string `gorm:"type:text" json:"-"`
+	ImageEditInput          string `gorm:"type:text" json:"-"`
+	ImageVariationInput     string `gorm:"type:text" json:"-"`
+	VideoGenerationInput    string `gorm:"type:text" json:"-"`
+	SpeechOutput            string `gorm:"type:text" json:"-"`
+	TranscriptionOutput     string `gorm:"type:text" json:"-"`
+	ImageGenerationOutput   string `gorm:"type:text" json:"-"`
+	ListModelsOutput        string `gorm:"type:text" json:"-"`
+	VideoGenerationOutput   string `gorm:"type:text" json:"-"`
+	VideoRetrieveOutput     string `gorm:"type:text" json:"-"`
+	VideoDownloadOutput     string `gorm:"type:text" json:"-"`
+	VideoListOutput         string `gorm:"type:text" json:"-"`
+	VideoDeleteOutput       string `gorm:"type:text" json:"-"`
+	GuardrailDebug          string `gorm:"type:text" json:"-"`
+	RawRequest              string `gorm:"type:text" json:"-"`
+	RawResponse             string `gorm:"type:text" json:"-"`
+	PassthroughRequestBody  string `gorm:"type:text" json:"-"`
+	PassthroughResponseBody string `gorm:"type:text" json:"-"`
+	RoutingEngineLogs       string `gorm:"type:text" json:"-"`
+}
+
+// TableName sets the table name for GORM.
+func (LogPayload) TableName() string {
+	return "log_payloads"
+}
+
+// hasAnyColumn reports whether the row carries any non-empty payload column.
+func (p *LogPayload) hasAnyColumn() bool {
+	return p.InputHistory != "" ||
+		p.ResponsesInputHistory != "" ||
+		p.OutputMessage != "" ||
+		p.ResponsesOutput != "" ||
+		p.EmbeddingOutput != "" ||
+		p.RerankOutput != "" ||
+		p.OCRInput != "" ||
+		p.OCROutput != "" ||
+		p.Params != "" ||
+		p.Tools != "" ||
+		p.ToolCalls != "" ||
+		p.SpeechInput != "" ||
+		p.TranscriptionInput != "" ||
+		p.ImageGenerationInput != "" ||
+		p.ImageEditInput != "" ||
+		p.ImageVariationInput != "" ||
+		p.VideoGenerationInput != "" ||
+		p.SpeechOutput != "" ||
+		p.TranscriptionOutput != "" ||
+		p.ImageGenerationOutput != "" ||
+		p.ListModelsOutput != "" ||
+		p.VideoGenerationOutput != "" ||
+		p.VideoRetrieveOutput != "" ||
+		p.VideoDownloadOutput != "" ||
+		p.VideoListOutput != "" ||
+		p.VideoDeleteOutput != "" ||
+		p.GuardrailDebug != "" ||
+		p.RawRequest != "" ||
+		p.RawResponse != "" ||
+		p.PassthroughRequestBody != "" ||
+		p.PassthroughResponseBody != "" ||
+		p.RoutingEngineLogs != ""
+}
+
 // BeforeCreate GORM hook to set created_at and serialize JSON fields
 func (l *Log) BeforeCreate(tx *gorm.DB) error {
 	if l.CreatedAt.IsZero() {

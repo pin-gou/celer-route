@@ -22,12 +22,12 @@ func newRankingLimitTestStore(t *testing.T, teams int) *RDBLogStore {
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Log{}))
+	autoMigrateLogStoreSchema(t, db)
 
 	now := time.Now()
 	for i := range teams {
 		teamID := fmt.Sprintf("team-%03d", i)
-		require.NoError(t, db.Create(&Log{
+		require.NoError(t, db.Omit(stripPayloadOmitColumns...).Create(&Log{
 			ID:          teamID,
 			Timestamp:   now,
 			Status:      "success",

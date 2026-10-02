@@ -31,7 +31,7 @@ func newRootsOnlyStore(t *testing.T) (*RDBLogStore, time.Time) {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	require.NoError(t, db.AutoMigrate(&Log{}))
+	autoMigrateLogStoreSchema(t, db)
 
 	now := time.Now()
 	strPtr := func(v string) *string { return &v }
@@ -57,7 +57,7 @@ func newRootsOnlyStore(t *testing.T) (*RDBLogStore, time.Time) {
 		{ID: "self-ref", Timestamp: now, Status: "success", Provider: "openai", FallbackIndex: 0, ParentRequestID: strPtr("self-ref")},
 	}
 	for i := range seed {
-		require.NoError(t, db.Create(&seed[i]).Error)
+		require.NoError(t, db.Omit(stripPayloadOmitColumns...).Create(&seed[i]).Error)
 	}
 
 	return &RDBLogStore{db: db, logger: bifrost.NewDefaultLogger(schemas.LogLevelInfo)}, now

@@ -50,10 +50,15 @@ func TestStripPayloadFieldNamesExcludesExemptColumns(t *testing.T) {
 		set[f] = struct{}{}
 	}
 	// token_usage and error_details are exempt (cost recompute / error diagnosis).
+	// cache_debug is exempt too: semantic-cache billing reads it off the heap
+	// row and the cache-hit matviews precompute from it, so stripping must not
+	// clear it (it stays on logs through the payload split).
 	_, hasTokenUsage := set["token_usage"]
 	_, hasErrorDetails := set["error_details"]
+	_, hasCacheDebug := set["cache_debug"]
 	assert.False(t, hasTokenUsage, "token_usage must not be stripped")
 	assert.False(t, hasErrorDetails, "error_details must not be stripped")
+	assert.False(t, hasCacheDebug, "cache_debug must not be stripped")
 	// Representative payload columns are present.
 	_, hasInput := set["input_history"]
 	_, hasOutput := set["output_message"]

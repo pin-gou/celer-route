@@ -1058,16 +1058,20 @@ func PayloadFieldNames() []string {
 // stripExemptPayloadFields are payload columns that the retention cleaner must NOT
 // strip when aging out a row. token_usage is needed for cost recomputation (the
 // denormalized integer token columns don't carry the full breakdown), and
-// error_details preserves error-diagnosis context.
+// error_details preserves error-diagnosis context. cache_debug is a denormalized
+// billing column (semantic-cache pricing reads hit_type/direct out of it) and is
+// precomputed into the cache-hit matviews, so it stays on the logs row and is
+// never cleared by stripping.
 var stripExemptPayloadFields = map[string]struct{}{
 	"token_usage":   {},
 	"error_details": {},
+	"cache_debug":   {},
 }
 
 // StripPayloadFieldNames returns the DB column names cleared by the retention
-// cleaner when a log is stripped: all payload fields except token_usage and
-// error_details. metadata and content_summary are not payload fields and are
-// always retained.
+// cleaner when a log is stripped: all payload fields except token_usage,
+// error_details and cache_debug. metadata and content_summary are not payload
+// fields and are always retained.
 func StripPayloadFieldNames() []string {
 	fields := make([]string, 0, len(payloadFields)-len(stripExemptPayloadFields))
 	for _, f := range payloadFields {
@@ -1079,6 +1083,29 @@ func StripPayloadFieldNames() []string {
 	return fields
 }
 
+// stripPayloadColumnSet is the set of strip-able payload column names. Since the
+// payload split, these columns live exclusively on the log_payloads side table;
+// every other column lives on the logs heap row.
+var stripPayloadColumnSet = func() map[string]struct{} {
+	s := make(map[string]struct{}, len(payloadFields))
+	for _, f := range StripPayloadFieldNames() {
+		s[f] = struct{}{}
+	}
+	return s
+}()
+
+// stripPayloadOmitColumns are the column names that must be Omitted from every
+// GORM write against the logs table: after the table split they only exist on
+// log_payloads, so an un-omitted INSERT/UPDATE would reference a missing column.
+var stripPayloadOmitColumns = StripPayloadFieldNames()
+
+// isStripPayloadColumn reports whether a column name belongs to the log_payloads
+// side table (the strip-able payload set).
+func isStripPayloadColumn(col string) bool {
+	_, ok := stripPayloadColumnSet[col]
+	return ok
+}
+
 // payloadFieldSet is a set for O(1) lookup of payload field names.
 var payloadFieldSet = func() map[string]struct{} {
 	s := make(map[string]struct{}, len(payloadFields))
@@ -1087,6 +1114,208 @@ var payloadFieldSet = func() map[string]struct{} {
 	}
 	return s
 }()
+
+// logPayloadFromLog copies the strip-able payload columns from a Log into a
+// LogPayload side-table row. Returns nil when the Log carries no DB-resident
+// payload (all strip-able columns empty) — content-hidden rows, fully-offloaded
+// hybrid rows, and already-stripped rows all produce nil and therefore no
+// log_payloads row.
+func logPayloadFromLog(l *Log) *LogPayload {
+	if l == nil {
+		return nil
+	}
+	p := &LogPayload{
+		LogID:                   l.ID,
+		InputHistory:            l.InputHistory,
+		ResponsesInputHistory:   l.ResponsesInputHistory,
+		OutputMessage:           l.OutputMessage,
+		ResponsesOutput:         l.ResponsesOutput,
+		EmbeddingOutput:         l.EmbeddingOutput,
+		RerankOutput:            l.RerankOutput,
+		OCRInput:                l.OCRInput,
+		OCROutput:               l.OCROutput,
+		Params:                  l.Params,
+		Tools:                   l.Tools,
+		ToolCalls:               l.ToolCalls,
+		SpeechInput:             l.SpeechInput,
+		TranscriptionInput:      l.TranscriptionInput,
+		ImageGenerationInput:    l.ImageGenerationInput,
+		ImageEditInput:          l.ImageEditInput,
+		ImageVariationInput:     l.ImageVariationInput,
+		VideoGenerationInput:    l.VideoGenerationInput,
+		SpeechOutput:            l.SpeechOutput,
+		TranscriptionOutput:     l.TranscriptionOutput,
+		ImageGenerationOutput:   l.ImageGenerationOutput,
+		ListModelsOutput:        l.ListModelsOutput,
+		VideoGenerationOutput:   l.VideoGenerationOutput,
+		VideoRetrieveOutput:     l.VideoRetrieveOutput,
+		VideoDownloadOutput:     l.VideoDownloadOutput,
+		VideoListOutput:         l.VideoListOutput,
+		VideoDeleteOutput:       l.VideoDeleteOutput,
+		GuardrailDebug:          l.GuardrailDebug,
+		RawRequest:              l.RawRequest,
+		RawResponse:             l.RawResponse,
+		PassthroughRequestBody:  l.PassthroughRequestBody,
+		PassthroughResponseBody: l.PassthroughResponseBody,
+		RoutingEngineLogs:       l.RoutingEngineLogs,
+	}
+	if !p.hasAnyColumn() {
+		return nil
+	}
+	return p
+}
+
+// mergeLogPayloadIntoLog copies a log_payloads row back onto a Log's serialized
+// columns so DeserializeFields can rebuild the parsed virtual fields. Used by
+// FindByID after fetching the heap row.
+func mergeLogPayloadIntoLog(l *Log, p *LogPayload) {
+	if l == nil || p == nil {
+		return
+	}
+	l.InputHistory = p.InputHistory
+	l.ResponsesInputHistory = p.ResponsesInputHistory
+	l.OutputMessage = p.OutputMessage
+	l.ResponsesOutput = p.ResponsesOutput
+	l.EmbeddingOutput = p.EmbeddingOutput
+	l.RerankOutput = p.RerankOutput
+	l.OCRInput = p.OCRInput
+	l.OCROutput = p.OCROutput
+	l.Params = p.Params
+	l.Tools = p.Tools
+	l.ToolCalls = p.ToolCalls
+	l.SpeechInput = p.SpeechInput
+	l.TranscriptionInput = p.TranscriptionInput
+	l.ImageGenerationInput = p.ImageGenerationInput
+	l.ImageEditInput = p.ImageEditInput
+	l.ImageVariationInput = p.ImageVariationInput
+	l.VideoGenerationInput = p.VideoGenerationInput
+	l.SpeechOutput = p.SpeechOutput
+	l.TranscriptionOutput = p.TranscriptionOutput
+	l.ImageGenerationOutput = p.ImageGenerationOutput
+	l.ListModelsOutput = p.ListModelsOutput
+	l.VideoGenerationOutput = p.VideoGenerationOutput
+	l.VideoRetrieveOutput = p.VideoRetrieveOutput
+	l.VideoDownloadOutput = p.VideoDownloadOutput
+	l.VideoListOutput = p.VideoListOutput
+	l.VideoDeleteOutput = p.VideoDeleteOutput
+	l.GuardrailDebug = p.GuardrailDebug
+	l.RawRequest = p.RawRequest
+	l.RawResponse = p.RawResponse
+	l.PassthroughRequestBody = p.PassthroughRequestBody
+	l.PassthroughResponseBody = p.PassthroughResponseBody
+	l.RoutingEngineLogs = p.RoutingEngineLogs
+}
+
+// logPayloadColumnMap returns the non-empty strip-able payload columns of a Log
+// as a column→value map (the shape GORM needs for a log_payloads upsert). Only
+// non-empty columns are included so a partial terminal update never wipes fields
+// the initial insert already wrote.
+func logPayloadColumnMap(l *Log) map[string]any {
+	if l == nil {
+		return nil
+	}
+	m := make(map[string]any, 32)
+	if l.InputHistory != "" {
+		m["input_history"] = l.InputHistory
+	}
+	if l.ResponsesInputHistory != "" {
+		m["responses_input_history"] = l.ResponsesInputHistory
+	}
+	if l.OutputMessage != "" {
+		m["output_message"] = l.OutputMessage
+	}
+	if l.ResponsesOutput != "" {
+		m["responses_output"] = l.ResponsesOutput
+	}
+	if l.EmbeddingOutput != "" {
+		m["embedding_output"] = l.EmbeddingOutput
+	}
+	if l.RerankOutput != "" {
+		m["rerank_output"] = l.RerankOutput
+	}
+	if l.OCRInput != "" {
+		m["ocr_input"] = l.OCRInput
+	}
+	if l.OCROutput != "" {
+		m["ocr_output"] = l.OCROutput
+	}
+	if l.Params != "" {
+		m["params"] = l.Params
+	}
+	if l.Tools != "" {
+		m["tools"] = l.Tools
+	}
+	if l.ToolCalls != "" {
+		m["tool_calls"] = l.ToolCalls
+	}
+	if l.SpeechInput != "" {
+		m["speech_input"] = l.SpeechInput
+	}
+	if l.TranscriptionInput != "" {
+		m["transcription_input"] = l.TranscriptionInput
+	}
+	if l.ImageGenerationInput != "" {
+		m["image_generation_input"] = l.ImageGenerationInput
+	}
+	if l.ImageEditInput != "" {
+		m["image_edit_input"] = l.ImageEditInput
+	}
+	if l.ImageVariationInput != "" {
+		m["image_variation_input"] = l.ImageVariationInput
+	}
+	if l.VideoGenerationInput != "" {
+		m["video_generation_input"] = l.VideoGenerationInput
+	}
+	if l.SpeechOutput != "" {
+		m["speech_output"] = l.SpeechOutput
+	}
+	if l.TranscriptionOutput != "" {
+		m["transcription_output"] = l.TranscriptionOutput
+	}
+	if l.ImageGenerationOutput != "" {
+		m["image_generation_output"] = l.ImageGenerationOutput
+	}
+	if l.ListModelsOutput != "" {
+		m["list_models_output"] = l.ListModelsOutput
+	}
+	if l.VideoGenerationOutput != "" {
+		m["video_generation_output"] = l.VideoGenerationOutput
+	}
+	if l.VideoRetrieveOutput != "" {
+		m["video_retrieve_output"] = l.VideoRetrieveOutput
+	}
+	if l.VideoDownloadOutput != "" {
+		m["video_download_output"] = l.VideoDownloadOutput
+	}
+	if l.VideoListOutput != "" {
+		m["video_list_output"] = l.VideoListOutput
+	}
+	if l.VideoDeleteOutput != "" {
+		m["video_delete_output"] = l.VideoDeleteOutput
+	}
+	if l.GuardrailDebug != "" {
+		m["guardrail_debug"] = l.GuardrailDebug
+	}
+	if l.RawRequest != "" {
+		m["raw_request"] = l.RawRequest
+	}
+	if l.RawResponse != "" {
+		m["raw_response"] = l.RawResponse
+	}
+	if l.PassthroughRequestBody != "" {
+		m["passthrough_request_body"] = l.PassthroughRequestBody
+	}
+	if l.PassthroughResponseBody != "" {
+		m["passthrough_response_body"] = l.PassthroughResponseBody
+	}
+	if l.RoutingEngineLogs != "" {
+		m["routing_engine_logs"] = l.RoutingEngineLogs
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
 
 // fieldsNeedHydration returns true if any of the requested fields are
 // payload fields that have been offloaded to object storage.

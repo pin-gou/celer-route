@@ -26,7 +26,7 @@ func newErrorPatternsStore(t *testing.T) *RDBLogStore {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	require.NoError(t, db.AutoMigrate(&Log{}))
+	autoMigrateLogStoreSchema(t, db)
 	return &RDBLogStore{db: db}
 }
 
@@ -35,7 +35,7 @@ func newErrorPatternsStore(t *testing.T) *RDBLogStore {
 // since the Log struct does not have a StatusCode column.
 func seedErrorLog(t *testing.T, store *RDBLogStore, id, provider, errJSON string, ts time.Time) {
 	t.Helper()
-	require.NoError(t, store.db.Create(&Log{
+	require.NoError(t, store.db.Omit(stripPayloadOmitColumns...).Create(&Log{
 		ID:           id,
 		Provider:     provider,
 		Status:       "error",
@@ -164,7 +164,7 @@ func TestErrorPatterns_LocalTimezoneDoesNotSkewWindow(t *testing.T) {
 	if db == nil {
 		t.Skip("Postgres not available, skipping timezone-skew regression test")
 	}
-	require.NoError(t, db.AutoMigrate(&Log{}))
+	autoMigrateLogStoreSchema(t, db)
 	store := &RDBLogStore{db: db}
 	ctx := context.Background()
 
