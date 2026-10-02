@@ -178,11 +178,19 @@ func insertMalformedLog(t *testing.T, db *gorm.DB, c malformedHistoryCase, ts ti
 		objType = "chat.completion"
 	}
 	err := db.Exec(`
-		INSERT INTO logs (id, timestamp, object_type, provider, model, status,
-			input_history, responses_input_history, created_at)
-		VALUES (?, ?, ?, 'openai', 'gpt-4', 'success', ?, ?, ?)
-	`, id, ts, objType, c.inputHistory, c.respHistory, ts).Error
+		INSERT INTO logs (id, timestamp, object_type, provider, model, status, created_at)
+		VALUES (?, ?, ?, 'openai', 'gpt-4', 'success', ?)
+	`, id, ts, objType, ts).Error
 	require.NoError(t, err, "failed to insert row for case %q", c.name)
+	// Since the payload split, malformed history values live on the log_payloads
+	// side table; the list query's jsonb/json handling is what the suite covers.
+	if c.inputHistory != "" || c.respHistory != "" {
+		err = db.Exec(`
+			INSERT INTO log_payloads (log_id, input_history, responses_input_history)
+			VALUES (?, ?, ?)
+		`, id, c.inputHistory, c.respHistory).Error
+		require.NoError(t, err, "failed to insert payload for case %q", c.name)
+	}
 	return id
 }
 

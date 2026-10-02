@@ -21,7 +21,7 @@ func TestGetStatsTokenSplit(t *testing.T) {
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Log{}))
+	autoMigrateLogStoreSchema(t, db)
 
 	s := &RDBLogStore{db: db, logger: bifrost.NewDefaultLogger(schemas.LogLevelInfo)}
 	ctx := context.Background()
@@ -38,7 +38,7 @@ func TestGetStatsTokenSplit(t *testing.T) {
 		{"d", 999, 99, 1098, "processing"}, // non-terminal, must NOT count
 	}
 	for _, sd := range seed {
-		require.NoError(t, db.Create(&Log{
+		require.NoError(t, db.Omit(stripPayloadOmitColumns...).Create(&Log{
 			ID:               sd.id,
 			Timestamp:        now,
 			Status:           sd.status,
@@ -68,7 +68,8 @@ func TestGetStatsBucketBackfill(t *testing.T) {
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Log{}, &DashboardBucketMetric{}))
+	require.NoError(t, db.AutoMigrate(&Log{}, &LogPayload{}, &DashboardBucketMetric{}))
+	autoMigrateLogStoreSchema(t, db)
 
 	s := &RDBLogStore{db: db, logger: bifrost.NewDefaultLogger(schemas.LogLevelInfo)}
 	ctx := context.Background()
@@ -92,13 +93,13 @@ func TestGetStatsBucketBackfill(t *testing.T) {
 	lat100 := 100.0
 	lat200 := 200.0
 	lat300 := 300.0
-	require.NoError(t, db.Create(&[]Log{
-		{ID: "root-a", Timestamp: nowRounded, Status: "error",   FallbackIndex: 0},
-		{ID: "child-a1", Timestamp: nowRounded.Add(time.Second), Status: "error",   FallbackIndex: 1, ParentRequestID: strPtr("root-a")},
+	require.NoError(t, db.Omit(stripPayloadOmitColumns...).Create(&[]Log{
+		{ID: "root-a", Timestamp: nowRounded, Status: "error", FallbackIndex: 0},
+		{ID: "child-a1", Timestamp: nowRounded.Add(time.Second), Status: "error", FallbackIndex: 1, ParentRequestID: strPtr("root-a")},
 		{ID: "child-a2", Timestamp: nowRounded.Add(2 * time.Second), Status: "success", FallbackIndex: 2, ParentRequestID: strPtr("root-a"), Latency: &lat100},
 		{ID: "root-b", Timestamp: nowRounded, Status: "success", FallbackIndex: 0, Latency: &lat200},
 		{ID: "root-c", Timestamp: nowRounded, Status: "success", FallbackIndex: 0, Latency: &lat300},
-		{ID: "root-d", Timestamp: nowRounded, Status: "error",   FallbackIndex: 0},
+		{ID: "root-d", Timestamp: nowRounded, Status: "error", FallbackIndex: 0},
 	}).Error)
 
 	// Seed the bucket table with totals that deliberately differ from the raw

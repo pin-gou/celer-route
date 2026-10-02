@@ -44,7 +44,7 @@ func TestStorageStatsPayloadBreakdown(t *testing.T) {
 		{ID: "with-payload-3", Timestamp: now.Add(8 * time.Second), Object: "chat_completion", Provider: "openai", Model: "gpt-4o-mini", Status: "success"},
 		{ID: "with-payload-4", Timestamp: now.Add(9 * time.Second), Object: "chat_completion", Provider: "openai", Model: "gpt-4o-mini", Status: "success"},
 	}
-	require.NoError(t, store.db.Create(seed).Error)
+	require.NoError(t, store.db.Omit(stripPayloadOmitColumns...).Create(seed).Error)
 
 	stats, err := store.StorageStats(ctx)
 	require.NoError(t, err, "StorageStats should not fail on a populated table")
@@ -86,7 +86,7 @@ func TestStorageStatsPayloadBreakdownHiddenTakesPrecedence(t *testing.T) {
 	// Two hidden-and-stripped rows. If Stripped were evaluated before
 	// Hidden, both would land in Stripped too, and the totals wouldn't
 	// reconcile.
-	require.NoError(t, store.db.Create(&[]*Log{
+	require.NoError(t, store.db.Omit(stripPayloadOmitColumns...).Create(&[]*Log{
 		{ID: "hidden-stripped-1", Timestamp: now, Object: "chat_completion", Provider: "openai", Model: "gpt-4o-mini", Status: "success", ContentHidden: true, PayloadStripped: true},
 		{ID: "hidden-stripped-2", Timestamp: now.Add(time.Second), Object: "chat_completion", Provider: "openai", Model: "gpt-4o-mini", Status: "success", ContentHidden: true, PayloadStripped: true},
 	}).Error)
@@ -160,7 +160,7 @@ func TestStorageStatsPayloadBreakdownPostgres(t *testing.T) {
 		{ID: "pg-offloaded", Timestamp: now.Add(2 * time.Second), Object: "chat_completion", Provider: "openai", Model: "gpt-4o-mini", Status: "success", HasObject: true},
 		{ID: "pg-with-payload", Timestamp: now.Add(3 * time.Second), Object: "chat_completion", Provider: "openai", Model: "gpt-4o-mini", Status: "success"},
 	}
-	require.NoError(t, db.Create(seed).Error)
+	require.NoError(t, db.Omit(stripPayloadOmitColumns...).Create(seed).Error)
 
 	stats, err := store.StorageStats(ctx)
 	require.NoError(t, err, "StorageStats must not fail on Postgres — the previous bug raised `operator does not exist: boolean = integer` here")

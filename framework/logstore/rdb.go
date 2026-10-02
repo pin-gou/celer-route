@@ -526,7 +526,16 @@ func (s *RDBLogStore) Create(ctx context.Context, entry *Log) error {
 	if s.db.Dialector.Name() == "postgres" {
 		db = db.Omit("inc_number")
 	}
-	return db.Create(entry).Error
+	if err := db.Omit(stripPayloadOmitColumns...).Create(entry).Error; err != nil {
+		return err
+	}
+	// Payload lives on the log_payloads side table (see LogPayload).
+	if p := logPayloadFromLog(entry); p != nil {
+		if err := s.createLogPayloadRows(ctx, []*LogPayload{p}, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CreateIfNotExists inserts a new log entry only if it doesn't already exist.
@@ -542,10 +551,21 @@ func (s *RDBLogStore) CreateIfNotExists(ctx context.Context, entry *Log) error {
 	if s.db.Dialector.Name() == "postgres" {
 		db = db.Omit("inc_number")
 	}
-	return db.Clauses(clause.OnConflict{
+	if err := db.Omit(stripPayloadOmitColumns...).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
 		DoNothing: true,
-	}).Create(entry).Error
+	}).Create(entry).Error; err != nil {
+		return err
+	}
+	// Payload row is inserted (conflict-tolerant) even when the logs row hit an
+	// existing id — a retried create on a row whose payload insert failed earlier
+	// still gets its payload.
+	if p := logPayloadFromLog(entry); p != nil {
+		if err := s.createLogPayloadRows(ctx, []*LogPayload{p}, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // BatchCreateIfNotExists inserts multiple log entries in a single transaction.
@@ -566,10 +586,18 @@ func (s *RDBLogStore) BatchCreateIfNotExists(ctx context.Context, entries []*Log
 			PrepareLastUserMessagePreview(entry, nil)
 		}
 	}
-	return db.Clauses(clause.OnConflict{
+	if err := db.Omit(stripPayloadOmitColumns...).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
 		DoNothing: true,
-	}).Create(&entries).Error
+	}).Create(&entries).Error; err != nil {
+		return err
+	}
+	if payloads := logPayloadsFromLogs(entries); len(payloads) > 0 {
+		if err := s.createLogPayloadRows(ctx, payloads, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // BatchUpsert inserts new log entries or overwrites existing ones by id.
@@ -585,10 +613,96 @@ func (s *RDBLogStore) BatchUpsert(ctx context.Context, entries []*Log) error {
 	if s.db.Dialector.Name() == "postgres" {
 		db = db.Omit("inc_number")
 	}
-	return db.Clauses(clause.OnConflict{
+	if err := db.Omit(stripPayloadOmitColumns...).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
 		UpdateAll: true,
-	}).Create(&entries).Error
+	}).Create(&entries).Error; err != nil {
+		return err
+	}
+	// Payload columns upsert (create or overwrite) on the side table.
+	if payloads := logPayloadsFromLogs(entries); len(payloads) > 0 {
+		if err := s.createLogPayloadRows(ctx, payloads, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// logPayloadsFromLogs collects the non-empty payload rows for a batch of logs.
+func logPayloadsFromLogs(entries []*Log) []*LogPayload {
+	payloads := make([]*LogPayload, 0, len(entries))
+	for _, entry := range entries {
+		if p := logPayloadFromLog(entry); p != nil {
+			payloads = append(payloads, p)
+		}
+	}
+	return payloads
+}
+
+// createLogPayloadRows inserts log_payloads rows in chunks small enough to stay
+// under SQLite's variable limit. When onConflictUpdate is true the upsert
+// overwrites existing rows (BatchUpsert semantics); otherwise it does nothing on
+// conflict (create-if-not-exists semantics).
+func (s *RDBLogStore) createLogPayloadRows(ctx context.Context, payloads []*LogPayload, onConflictUpdate bool) error {
+	if len(payloads) == 0 {
+		return nil
+	}
+	const payloadInsertChunkSize = 100
+	onConflict := clause.OnConflict{
+		Columns:   []clause.Column{{Name: "log_id"}},
+		DoNothing: true,
+	}
+	if onConflictUpdate {
+		onConflict.DoNothing = false
+		onConflict.UpdateAll = true
+	}
+	for i := 0; i < len(payloads); i += payloadInsertChunkSize {
+		end := min(i+payloadInsertChunkSize, len(payloads))
+		chunk := payloads[i:end]
+		db := s.db.WithContext(ctx).Clauses(onConflict)
+		if err := db.Create(&chunk).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// upsertLogPayloadColumns upserts the given payload columns for one log id on
+// the log_payloads side table (create if absent, overwrite the listed columns
+// if present). Only the listed columns are overwritten, so a partial terminal
+// update never wipes payload the initial insert already wrote.
+//
+// Uses the portable ON CONFLICT (log_id) DO UPDATE SET col = excluded.col form
+// (Postgres and SQLite ≥ 3.24 both support it); the GORM Create(map) path can't
+// drive an upsert without a model, so this is raw SQL with internal-only column
+// names.
+func (s *RDBLogStore) upsertLogPayloadColumns(ctx context.Context, id string, cols map[string]any) error {
+	if len(cols) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(cols))
+	for name := range cols {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var placeholders []string
+	var setClauses []string
+	// Statement is "(log_id, <cols...>) VALUES (?, <placeholders...>)" — the id
+	// binds first, then each payload column's value in sorted-name order.
+	args := make([]any, 0, len(cols)+1)
+	args = append(args, id)
+	for _, name := range names {
+		placeholders = append(placeholders, "?")
+		setClauses = append(setClauses, name+" = excluded."+name)
+		args = append(args, cols[name])
+	}
+
+	stmt := fmt.Sprintf(
+		"INSERT INTO log_payloads (log_id, %s) VALUES (?, %s) ON CONFLICT (log_id) DO UPDATE SET %s",
+		strings.Join(names, ", "), strings.Join(placeholders, ", "), strings.Join(setClauses, ", "),
+	)
+	return s.db.WithContext(ctx).Exec(stmt, args...).Error
 }
 
 // Ping checks if the database is reachable.
@@ -762,12 +876,60 @@ func (s *RDBLogStore) Update(ctx context.Context, id string, entry any) error {
 		return err
 	}
 
-	tx := s.db.WithContext(ctx).Model(&Log{}).Where("id = ?", id).Updates(serializedEntry)
-	if tx.Error != nil {
-		return tx.Error
+	// Split the update into logs-heap columns and log_payloads columns. Anything
+	// in the strip-able payload set lives on the side table; the rest (scalars,
+	// token_usage, error_details, cache_debug, content_summary, ...) updates the
+	// heap row.
+	var logUpdates any // nil when there is nothing to update on the logs row
+	var payloadCols map[string]any
+	switch v := serializedEntry.(type) {
+	case map[string]interface{}:
+		payloadCols = nil
+		scalar := make(map[string]interface{}, len(v))
+		for k, val := range v {
+			if isStripPayloadColumn(k) {
+				if payloadCols == nil {
+					payloadCols = make(map[string]any)
+				}
+				payloadCols[k] = val
+			} else {
+				scalar[k] = val
+			}
+		}
+		if len(scalar) > 0 {
+			logUpdates = scalar
+		}
+	case *Log:
+		payloadCols = logPayloadColumnMap(v)
+		logUpdates = v
+	case Log:
+		l := v
+		payloadCols = logPayloadColumnMap(&l)
+		logUpdates = &l
+	default:
+		logUpdates = serializedEntry
 	}
-	if tx.RowsAffected == 0 {
-		return ErrNotFound
+
+	tx := s.db.WithContext(ctx).Model(&Log{}).Where("id = ?", id)
+	if logUpdates != nil {
+		var result *gorm.DB
+		if _, isMap := logUpdates.(map[string]interface{}); isMap {
+			result = tx.Updates(logUpdates)
+		} else {
+			result = tx.Omit(stripPayloadOmitColumns...).Updates(logUpdates)
+		}
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrNotFound
+		}
+	}
+
+	if len(payloadCols) > 0 {
+		if err := s.upsertLogPayloadColumns(ctx, id, payloadCols); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1114,6 +1276,11 @@ func (s *RDBLogStore) searchLogs(ctx context.Context, filters SearchFilters, pag
 	g.Go(func() error {
 		dataQuery := s.ScopedDB(gCtx).Model(&Log{})
 		dataQuery = s.applyFilters(dataQuery, filters)
+		// Payload columns (message previews, modality outputs, raw bodies) live on
+		// the log_payloads side table since the payload split; the list and billing
+		// projections both reference them, so every data page joins it. Stripped /
+		// offloaded / content-hidden rows have no side row and scan as NULLs.
+		dataQuery = dataQuery.Joins("LEFT JOIN log_payloads ON log_payloads.log_id = logs.id")
 		dataQuery = dataQuery.Order(orderClause).Select(selectColumns).Limit(limit)
 		if pagination.Offset > 0 {
 			dataQuery = dataQuery.Offset(pagination.Offset)
@@ -1253,6 +1420,9 @@ func (s *RDBLogStore) GetSessionLogs(ctx context.Context, sessionID string, pagi
 		dataQuery := baseQuery.Session(&gorm.Session{}).
 			WithContext(gCtx).
 			Order(orderClause).
+			// listSelectColumns references payload columns, which since the payload
+			// split live on the log_payloads side table — join it like searchLogs.
+			Joins("LEFT JOIN log_payloads ON log_payloads.log_id = logs.id").
 			Select(s.listSelectColumns()).
 			Limit(limit)
 		if pagination.Offset > 0 {
@@ -4354,7 +4524,36 @@ func (s *RDBLogStore) FindByID(ctx context.Context, id string) (*Log, error) {
 		}
 		return nil, err
 	}
+	// Load the payload side-table row and re-deserialize so the parsed virtual
+	// fields (input_history, output_message, raw_request, ...) are populated for
+	// the detail endpoint. Absent row = stripped / offloaded / content-hidden log.
+	payload, err := s.getLogPayload(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if payload != nil {
+		mergeLogPayloadIntoLog(&log, payload)
+		if err := log.DeserializeFields(); err != nil {
+			// Parsing degrades to empty/zero per field; never fail a detail read
+			// because one payload column held malformed JSON.
+			return &log, nil
+		}
+	}
 	return &log, nil
+}
+
+// getLogPayload fetches the log_payloads row for one log id, or (nil, nil) when
+// the row does not exist.
+func (s *RDBLogStore) getLogPayload(ctx context.Context, id string) (*LogPayload, error) {
+	var payload LogPayload
+	err := s.db.WithContext(ctx).Where("log_id = ?", id).First(&payload).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &payload, nil
 }
 
 // IsLogEntryPresent checks if a log entry is present in the database.
@@ -4371,10 +4570,23 @@ func (s *RDBLogStore) IsLogEntryPresent(ctx context.Context, id string) (bool, e
 	return true, nil
 }
 
+// maybeJoinLogPayload adds the log_payloads LEFT JOIN when the projection
+// requests payload columns, which since the payload split live only on the side
+// table.
+func maybeJoinLogPayload(db *gorm.DB, fields []string) *gorm.DB {
+	for _, f := range fields {
+		if isStripPayloadColumn(f) {
+			return db.Joins("LEFT JOIN log_payloads ON log_payloads.log_id = logs.id")
+		}
+	}
+	return db
+}
+
 // FindFirst gets a log entry from the database.
 func (s *RDBLogStore) FindFirst(ctx context.Context, query any, fields ...string) (*Log, error) {
 	var log Log
-	if err := s.db.WithContext(ctx).Select(fields).Where(query).First(&log).Error; err != nil {
+	db := maybeJoinLogPayload(s.db.WithContext(ctx), fields)
+	if err := db.Select(fields).Where(query).First(&log).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -4385,6 +4597,13 @@ func (s *RDBLogStore) FindFirst(ctx context.Context, query any, fields ...string
 
 // Flush deletes old log entries from the database.
 func (s *RDBLogStore) Flush(ctx context.Context, since time.Time) error {
+	// The initial "processing" insert writes input_history/params/tools onto the
+	// log_payloads side table, so those rows are deleted together with the log.
+	if err := s.db.WithContext(ctx).
+		Exec("DELETE FROM log_payloads WHERE log_id IN (SELECT id FROM logs WHERE status = ? AND created_at < ?)", "processing", since).
+		Error; err != nil {
+		return fmt.Errorf("failed to cleanup old processing log payloads: %w", err)
+	}
 	result := s.db.WithContext(ctx).Where("status = ? AND created_at < ?", "processing", since).Delete(&Log{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to cleanup old processing logs: %w", result.Error)
@@ -4776,7 +4995,8 @@ func (s *RDBLogStore) GetDistinctMetadataKeys(ctx context.Context, limit int, qu
 // FindAll finds all log entries from the database.
 func (s *RDBLogStore) FindAll(ctx context.Context, query any, fields ...string) ([]*Log, error) {
 	var logs []*Log
-	if err := s.db.WithContext(ctx).Select(fields).Where(query).Limit(defaultMaxQueryLimit).Find(&logs).Error; err != nil {
+	db := maybeJoinLogPayload(s.db.WithContext(ctx), fields)
+	if err := db.Select(fields).Where(query).Limit(defaultMaxQueryLimit).Find(&logs).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return []*Log{}, nil
 		}
@@ -4842,17 +5062,23 @@ func (s *RDBLogStore) DeleteLogsBatch(ctx context.Context, cutoff time.Time, bat
 		return 0, nil
 	}
 
-	// Delete the selected IDs
+	// Delete the selected IDs (payload side-table rows cascade with them).
 	result := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&Log{})
 	if result.Error != nil {
 		return 0, result.Error
 	}
+	if err := s.deleteLogPayloadByIDs(ctx, ids); err != nil {
+		return 0, err
+	}
 	return result.RowsAffected, nil
 }
 
-// StripPayloadsBatch clears the payload content columns of logs older than
-// cutoff that have not been stripped yet, leaving the row (summary, metadata,
-// scalar columns, token_usage, error_details) intact. Returns the number of
+// StripPayloadsBatch strips the payload of logs older than cutoff that have
+// not been stripped yet, leaving the row (summary, metadata, scalar columns,
+// token_usage, error_details, cache_debug) intact. Stripping now DELETEs the
+// log_payloads side-table row instead of UPDATE-clearing columns in place:
+// Postgres dead tuples from a DELETE are reclaimed by autovacuum, so the disk
+// footprint of stripped payloads is actually released. Returns the number of
 // rows stripped.
 func (s *RDBLogStore) StripPayloadsBatch(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	// Select IDs of logs to strip, limited to the batch size.
@@ -4870,17 +5096,20 @@ func (s *RDBLogStore) StripPayloadsBatch(ctx context.Context, cutoff time.Time, 
 		return 0, nil
 	}
 
-	// Build the update map: clear every strip-eligible payload column and mark
-	// the row stripped. A map (rather than struct) is required so zero-value
-	// strings are written instead of skipped by GORM.
-	updates := map[string]interface{}{"payload_stripped": true}
-	for _, col := range StripPayloadFieldNames() {
-		updates[col] = ""
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 
-	result := s.db.WithContext(ctx).Model(&Log{}).Where("id IN ?", ids).Updates(updates)
+	// Mark the row stripped (single boolean flip; the payload columns no longer
+	// live on the heap row) and delete the side-table row that held them.
+	result := s.db.WithContext(ctx).Model(&Log{}).
+		Where("id IN ? AND payload_stripped = ?", ids, false).
+		Update("payload_stripped", true)
 	if result.Error != nil {
 		return 0, result.Error
+	}
+	if err := s.deleteLogPayloadByIDs(ctx, ids); err != nil {
+		return 0, err
 	}
 	return result.RowsAffected, nil
 }
@@ -4899,7 +5128,7 @@ func (s *RDBLogStore) DeleteLog(ctx context.Context, id string) error {
 	if err := s.db.WithContext(ctx).Where("id = ?", id).Delete(&Log{}).Error; err != nil {
 		return err
 	}
-	return nil
+	return s.deleteLogPayloadByIDs(ctx, []string{id})
 }
 
 // DeleteLogs deletes multiple log entries from the database by their IDs.
@@ -4910,7 +5139,7 @@ func (s *RDBLogStore) DeleteLogs(ctx context.Context, ids []string) error {
 	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&Log{}).Error; err != nil {
 		return err
 	}
-	return nil
+	return s.deleteLogPayloadByIDs(ctx, ids)
 }
 
 // ============================================================================
@@ -5909,9 +6138,16 @@ func (s *RDBLogStore) estimateLogsTableBytes(ctx context.Context) (int64, error)
 		var size int64
 		// pg_total_relation_size includes the heap, indexes, TOAST, and
 		// aux tables — the entire footprint, which is what users care about.
-		if err := s.db.WithContext(ctx).Raw(
-			"SELECT COALESCE(pg_total_relation_size('logs'), 0)",
-		).Scan(&size).Error; err != nil {
+		// Since the payload split, the payload bytes live on log_payloads, so
+		// both tables are counted (the side table is absent pre-migration).
+		if err := s.db.WithContext(ctx).Raw(`
+			SELECT pg_total_relation_size('logs')
+			     + COALESCE((
+			         SELECT pg_total_relation_size(c.oid)
+			         FROM pg_class c
+			         WHERE c.relname = 'log_payloads' AND c.relkind = 'r'
+			       ), 0)
+		`).Scan(&size).Error; err != nil {
 			return 0, err
 		}
 		return size, nil
@@ -6021,13 +6257,16 @@ func (s *RDBLogStore) DeleteByFilterBatch(ctx context.Context, filters SearchFil
 	if result.Error != nil {
 		return 0, result.Error
 	}
+	if err := s.deleteLogPayloadByIDs(ctx, ids); err != nil {
+		return 0, err
+	}
 	return result.RowsAffected, nil
 }
 
-// StripPayloadsByFilterBatch clears payload columns on up to batchSize
-// rows matching filters that haven't been stripped yet. The update map matches
-// StripPayloadsBatch (single-row path) so the two code paths clear the same
-// fields.
+// StripPayloadsByFilterBatch strips payloads on up to batchSize rows matching
+// filters that haven't been stripped yet. Like StripPayloadsBatch, stripping
+// DELETEs the log_payloads side-table row so Postgres autovacuum reclaims the
+// space; the heap row only flips payload_stripped.
 func (s *RDBLogStore) StripPayloadsByFilterBatch(ctx context.Context, filters SearchFilters, batchSize int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = cleanupBatchSize
@@ -6050,14 +6289,23 @@ func (s *RDBLogStore) StripPayloadsByFilterBatch(ctx context.Context, filters Se
 		return 0, err
 	}
 
-	updates := map[string]interface{}{"payload_stripped": true}
-	for _, col := range StripPayloadFieldNames() {
-		updates[col] = ""
-	}
-
-	result := s.db.WithContext(ctx).Model(&Log{}).Where("id IN ?", ids).Updates(updates)
+	result := s.db.WithContext(ctx).Model(&Log{}).
+		Where("id IN ? AND payload_stripped = ?", ids, false).
+		Update("payload_stripped", true)
 	if result.Error != nil {
 		return 0, result.Error
 	}
+	if err := s.deleteLogPayloadByIDs(ctx, ids); err != nil {
+		return 0, err
+	}
 	return result.RowsAffected, nil
+}
+
+// deleteLogPayloadByIDs removes the log_payloads side-table rows for the given
+// log ids.
+func (s *RDBLogStore) deleteLogPayloadByIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return s.db.WithContext(ctx).Where("log_id IN ?", ids).Delete(&LogPayload{}).Error
 }

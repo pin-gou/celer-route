@@ -14,7 +14,9 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 
 PROJECT_ROOT="$(cd "$HOOK_DIR/../.." && pwd)"
 BIFROST_BIN="${BIFROST_BIN:-$PROJECT_ROOT/tmp/celer-route-http}"
-DATA_DIR="$HOOK_DIR/local/data"
+# 数据目录按环境派生：local → .pg/hooks/local/data，local-pg → .pg/hooks/local-pg/data
+ENV_NAME="${PG_ENV:-local}"
+DATA_DIR="$HOOK_DIR/$ENV_NAME/data"
 PORT="${BIFROST_START_PORT:-${PG_INSTANCE_PORT:-9080}}"
 HOST="${PG_INSTANCE_HOST:-localhost}"
 
