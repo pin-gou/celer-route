@@ -281,3 +281,86 @@ func TestPayloadSplitFlushRemovesSideRow(t *testing.T) {
 	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM log_payloads").Scan(&sideCount).Error)
 	require.Equal(t, int64(0), sideCount)
 }
+
+// TestPayloadSplitMigrationDropsColumnsWithDependentMatViews is the Postgres
+// regression for the 2BP01 failure seen in production: the multi-value filter
+// matviews are built from teamOrBUFanoutFrom, whose subquery selects `l.*` over
+// the logs table, so Postgres records a dependency on every logs column —
+// including the payload columns — and a bare DROP COLUMN raises
+// "cannot drop column input_history ... because other objects depend on it".
+//
+// The drop migration must first drop the managed matviews, then the columns,
+// and the startup ensureMatViews path must be able to rebuild them against the
+// post-split schema.
+func TestPayloadSplitMigrationDropsColumnsWithDependentMatViews(t *testing.T) {
+	db := trySetupPostgresDB(t)
+	if db == nil {
+		t.Skip("Postgres not available, skipping matview-dependency migration test")
+	}
+
+	// Own a clean schema.
+	dropAllManagedMatViews(db)
+	require.NoError(t, db.Exec("DROP TABLE IF EXISTS logs CASCADE").Error)
+	require.NoError(t, db.Exec("DROP TABLE IF EXISTS log_payloads CASCADE").Error)
+	require.NoError(t, db.Exec("CREATE TABLE IF NOT EXISTS migrations (id VARCHAR(255) PRIMARY KEY)").Error)
+	require.NoError(t, db.Exec("DELETE FROM migrations").Error)
+
+	// Old-style schema: logs with payload columns (from the full struct).
+	require.NoError(t, db.AutoMigrate(&Log{}))
+
+	// Reproduce the production dependency: a matview whose body selects `l.*`
+	// from logs (the same shape multiValueFilterMatViewBody generates for the
+	// team / business_unit / customer filter dropdowns). This makes Postgres
+	// depend on every logs column, including input_history.
+	require.NoError(t, db.Exec(`
+		CREATE MATERIALIZED VIEW IF NOT EXISTS mv_dep_payload_test AS
+		SELECT DISTINCT dim_id AS id, dim_name AS name, COALESCE(user_id, '') AS user_id
+		FROM (
+			SELECT l.*, fan.dim_id AS dim_id, fan.dim_name AS dim_name
+			FROM logs l
+			CROSS JOIN (SELECT 't' AS dim_id, 'Team' AS dim_name) fan
+		) fanned
+	`).Error)
+
+	// The drop step must succeed: it drops the dependent matviews before the
+	// columns.
+	require.NoError(t, triggerMigrations(context.Background(), db, testLogger{}))
+
+	// Payload columns are gone from logs.
+	var logsCols []struct{ Name string }
+	require.NoError(t, db.Raw(`
+		SELECT a.attname AS name
+		FROM pg_attribute a
+		JOIN pg_class c ON c.oid = a.attrelid
+		WHERE c.relkind = 'r' AND c.relname = 'logs' AND a.attnum > 0 AND NOT a.attisdropped
+	`).Scan(&logsCols).Error)
+	colSet := map[string]bool{}
+	for _, c := range logsCols {
+		colSet[c.Name] = true
+	}
+	require.False(t, colSet["input_history"], "logs must not keep input_history after the split migration")
+
+	// The dependent matview was dropped as part of the migration.
+	var depExists bool
+	require.NoError(t, db.Raw(`
+		SELECT EXISTS (SELECT 1 FROM pg_class WHERE relkind = 'm' AND relname = 'mv_dep_payload_test')
+	`).Scan(&depExists).Error)
+	require.False(t, depExists, "dependent matview must be dropped by the migration")
+
+	// ensureMatViews (the startup path) must rebuild the managed matviews
+	// against the post-split schema without erroring on the dropped columns.
+	require.NoError(t, ensureMatViews(context.Background(), db))
+	for _, view := range []string{"mv_logs_hourly", "mv_filter_models", "mv_filter_teams"} {
+		var exists bool
+		require.NoError(t, db.Raw(`
+			SELECT EXISTS (SELECT 1 FROM pg_class WHERE relkind = 'm' AND relname = ?)
+		`, view).Scan(&exists).Error)
+		require.Truef(t, exists, "managed matview %s must be recreatable after the split", view)
+	}
+
+	t.Cleanup(func() {
+		dropAllManagedMatViews(db)
+		db.Exec("DROP TABLE IF EXISTS logs CASCADE")
+		db.Exec("DROP TABLE IF EXISTS log_payloads CASCADE")
+	})
+}

@@ -4528,7 +4528,22 @@ func migrationCreateLogPayloadsTable(ctx context.Context, db *gorm.DB, logger sc
 		cols = append(cols, fmt.Sprintf("%s TEXT", col))
 	}
 	sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS log_payloads (%s)", strings.Join(cols, ", "))
-	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = false
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			if err := tx.WithContext(ctx).Exec(sql).Error; err != nil {
+				return fmt.Errorf("%s: %w", migrationName, err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.WithContext(ctx).Migrator().DropTable("log_payloads")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("%s: %w", migrationName, err)
 	}
 	return nil
@@ -4544,6 +4559,31 @@ func migrationBackfillLogPayloads(ctx context.Context, db *gorm.DB, logger schem
 	logger.Info("[logstore] starting migration %s", migrationName)
 	defer logger.Info("[logstore] finished migration %s", migrationName)
 
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = false
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			return backfillLogPayloadsInto(ctx, tx, migrationName)
+		},
+		Rollback: func(tx *gorm.DB) error {
+			// Backfill cannot be rolled back without losing data already copied;
+			// the drop step is gated behind this one anyway.
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("%s: %w", migrationName, err)
+	}
+	return nil
+}
+
+// backfillLogPayloadsInto copies the payload columns of existing logs rows into
+// log_payloads, in batches, before the columns are dropped from logs. Idempotent:
+// rows already copied (from a partially-completed earlier run) are skipped via
+// ON CONFLICT DO NOTHING / OR IGNORE, and the id cursor advances past every
+// touched row so the window never stalls.
+func backfillLogPayloadsInto(ctx context.Context, db *gorm.DB, migrationName string) error {
 	cols := stripPayloadOmitColumns
 	// Build the "at least one payload column is non-empty" predicate.
 	predParts := make([]string, len(cols))
@@ -4627,15 +4667,58 @@ func migrationDropLogsPayloadColumns(ctx context.Context, db *gorm.DB, logger sc
 	logger.Info("[logstore] starting migration %s", migrationName)
 	defer logger.Info("[logstore] finished migration %s", migrationName)
 
-	if db.Dialector.Name() != "sqlite" {
-		// Postgres (and any other dialect): metadata-only per-column drops.
-		for _, col := range stripPayloadOmitColumns {
-			if err := db.WithContext(ctx).Exec(fmt.Sprintf("ALTER TABLE logs DROP COLUMN IF EXISTS %s", col)).Error; err != nil {
-				return fmt.Errorf("%s: drop column %s: %w", migrationName, col, err)
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = false
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+
+			if tx.Dialector.Name() != "sqlite" {
+				// Postgres (and any other dialect): metadata-only per-column drops.
+				//
+				// The multi-value filter matviews (mv_filter_teams /
+				// mv_filter_business_units / mv_filter_customers) are built from
+				// teamOrBUFanoutFrom, whose subquery selects `l.*` over the logs
+				// table. Postgres records a dependency on EVERY logs column for
+				// that, so DROP COLUMN would fail with 2BP01 ("cannot drop column
+				// ... because other objects depend on it"). Drop the managed
+				// matviews first; the post-migration startup path
+				// (ensureMatViews, a non-blocking goroutine) recreates them from
+				// the post-split column set.
+				for _, view := range allMatViewNames() {
+					if err := tx.Exec("DROP MATERIALIZED VIEW IF EXISTS " + view + " CASCADE").Error; err != nil {
+						return fmt.Errorf("%s: drop matview %s: %w", migrationName, view, err)
+					}
+				}
+				for _, col := range stripPayloadOmitColumns {
+					if err := tx.Exec(fmt.Sprintf("ALTER TABLE logs DROP COLUMN IF EXISTS %s", col)).Error; err != nil {
+						return fmt.Errorf("%s: drop column %s: %w", migrationName, col, err)
+					}
+				}
+				return nil
 			}
-		}
-		return nil
+
+			return migrationDropLogsPayloadColumnsSQLite(ctx, tx, migrationName)
+		},
+		Rollback: func(tx *gorm.DB) error {
+			// Columns cannot be re-added with their data; the migration is
+			// forward-only. Return nil so a rollback attempt does not wedge.
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("%s: %w", migrationName, err)
 	}
+	return nil
+}
+
+// migrationDropLogsPayloadColumnsSQLite performs the SQLite single table
+// rewrite: build a logs_new table with only the surviving columns, copy the
+// rows, drop the old table, rename, and recreate the captured index definitions.
+// (SQLite ALTER TABLE DROP COLUMN rewrites the whole table per column, so a
+// single rewrite is far cheaper than 32 of them.)
+func migrationDropLogsPayloadColumnsSQLite(ctx context.Context, db *gorm.DB, migrationName string) error {
 
 	// SQLite: single rewrite. First capture the index DDL so it can be recreated
 	// after the rename.
