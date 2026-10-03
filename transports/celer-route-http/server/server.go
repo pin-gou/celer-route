@@ -3244,11 +3244,11 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	}
 
 	// G6/C-4: AlertEvaluator is wired in RegisterAPIRoutes (along with the
-// rules-cache invalidation channel into the alerting handler). The HTTP
-// build is the only build that ever uses alert rules today — SDK-only
-// deployments have no admin surface to mutate rules and so neither
-// require the evaluator nor the cache invalidation. Re-introduce an
-// unconditional SetAlertEvaluator here when an SDK-only alert path lands.
+	// rules-cache invalidation channel into the alerting handler). The HTTP
+	// build is the only build that ever uses alert rules today — SDK-only
+	// deployments have no admin surface to mutate rules and so neither
+	// require the evaluator nor the cache invalidation. Re-introduce an
+	// unconditional SetAlertEvaluator here when an SDK-only alert path lands.
 
 	// Register the alert-loop background jobs on the sidekiq runner. The
 	// budget snapshot job is the source of the projection endpoint's data;
@@ -3424,9 +3424,14 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 
 	// Checking if config has server config and use it to set read buffer size
 	logger.Debug("server read buffer size: %d", s.Config.ServerConfig.ReadBufferSize)
-	// Create fasthttp server instance
+	// Create fasthttp server instance.
+	//
+	// RecoverMiddleware is the outermost wrapper: fasthttp does NOT recover
+	// panics itself (any unhandled panic in a request handler kills the whole
+	// server), so this is the net that turns a handler panic into a 500
+	// response and a server-side error log instead of a process crash.
 	s.Server = &fasthttp.Server{
-		Handler:            handlers.SecurityHeadersMiddleware()(s.CORSMiddleware.Middleware()(handlers.RequestDecompressionMiddleware(s.Config)(s.Router.Handler))),
+		Handler:            handlers.RecoverMiddleware()(handlers.SecurityHeadersMiddleware()(s.CORSMiddleware.Middleware()(handlers.RequestDecompressionMiddleware(s.Config)(s.Router.Handler)))),
 		MaxRequestBodySize: s.Config.ClientConfig.MaxRequestBodySizeMB * 1024 * 1024,
 		ReadBufferSize:     s.Config.ServerConfig.ReadBufferSize,
 	}

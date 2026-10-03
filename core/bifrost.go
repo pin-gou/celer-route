@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/azure"
 	"github.com/pin-gou/celer-route/core/providers/baichuan"
 	"github.com/pin-gou/celer-route/core/providers/baidu"
+	"github.com/pin-gou/celer-route/core/providers/baseten"
 	"github.com/pin-gou/celer-route/core/providers/bedrock"
 	"github.com/pin-gou/celer-route/core/providers/bedrockmantle"
 	"github.com/pin-gou/celer-route/core/providers/byteplus"
@@ -36,6 +38,7 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/cohere"
 	"github.com/pin-gou/celer-route/core/providers/coze"
 	"github.com/pin-gou/celer-route/core/providers/cozecn"
+	"github.com/pin-gou/celer-route/core/providers/databricks"
 	"github.com/pin-gou/celer-route/core/providers/deepinfra"
 	"github.com/pin-gou/celer-route/core/providers/deepseek"
 	"github.com/pin-gou/celer-route/core/providers/elevenlabs"
@@ -47,13 +50,16 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/hyperbolic"
 	"github.com/pin-gou/celer-route/core/providers/iflytek"
 	"github.com/pin-gou/celer-route/core/providers/internlm"
+	"github.com/pin-gou/celer-route/core/providers/longcat"
 	"github.com/pin-gou/celer-route/core/providers/minimax"
 	"github.com/pin-gou/celer-route/core/providers/minimaxcn"
 	"github.com/pin-gou/celer-route/core/providers/mistral"
+	"github.com/pin-gou/celer-route/core/providers/modal"
 	"github.com/pin-gou/celer-route/core/providers/modelscope"
 	"github.com/pin-gou/celer-route/core/providers/moonshot"
 	"github.com/pin-gou/celer-route/core/providers/nebius"
 	"github.com/pin-gou/celer-route/core/providers/nvidia"
+	"github.com/pin-gou/celer-route/core/providers/oci"
 	"github.com/pin-gou/celer-route/core/providers/ollama"
 	"github.com/pin-gou/celer-route/core/providers/openai"
 	"github.com/pin-gou/celer-route/core/providers/opencode"
@@ -66,10 +72,12 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/runware"
 	"github.com/pin-gou/celer-route/core/providers/runway"
 	"github.com/pin-gou/celer-route/core/providers/sambanova"
+	"github.com/pin-gou/celer-route/core/providers/sap"
 	"github.com/pin-gou/celer-route/core/providers/sarvam"
 	"github.com/pin-gou/celer-route/core/providers/sensenova"
 	"github.com/pin-gou/celer-route/core/providers/sgl"
 	"github.com/pin-gou/celer-route/core/providers/siliconflow"
+	"github.com/pin-gou/celer-route/core/providers/snowflake"
 	"github.com/pin-gou/celer-route/core/providers/stepfun"
 	"github.com/pin-gou/celer-route/core/providers/tencent"
 	"github.com/pin-gou/celer-route/core/providers/together"
@@ -77,13 +85,6 @@ import (
 	"github.com/pin-gou/celer-route/core/providers/vertex"
 	"github.com/pin-gou/celer-route/core/providers/vllm"
 	"github.com/pin-gou/celer-route/core/providers/volcengine"
-	"github.com/pin-gou/celer-route/core/providers/baseten"
-	"github.com/pin-gou/celer-route/core/providers/databricks"
-	"github.com/pin-gou/celer-route/core/providers/longcat"
-	"github.com/pin-gou/celer-route/core/providers/modal"
-	"github.com/pin-gou/celer-route/core/providers/oci"
-	"github.com/pin-gou/celer-route/core/providers/sap"
-	"github.com/pin-gou/celer-route/core/providers/snowflake"
 	"github.com/pin-gou/celer-route/core/providers/wafer"
 	"github.com/pin-gou/celer-route/core/providers/watsonx"
 	"github.com/pin-gou/celer-route/core/providers/xai"
@@ -7010,6 +7011,26 @@ func clearAnthropicPassthroughForNonNativeProvider(ctx *schemas.BifrostContext, 
 // It manages retries, error handling, and response processing.
 func (bifrost *Bifrost) requestWorker(provider schemas.Provider, config *schemas.ProviderConfig, pq *ProviderQueue, waitGroup *sync.WaitGroup) {
 	defer waitGroup.Done()
+	bifrost.requestWorkerServe(provider, config, pq)
+}
+
+// requestWorkerServe runs the worker's serve loop. requestWorker owns the
+// waitGroup.Done(); this helper only keeps the loop alive. A panic escaping
+// the loop (e.g. from a plugin post-hook or a provider converter) is recovered
+// here so it cannot crash the whole process, and the loop restarts so the
+// provider's queue stays serviced instead of being abandoned to a dead channel.
+func (bifrost *Bifrost) requestWorkerServe(provider schemas.Provider, config *schemas.ProviderConfig, pq *ProviderQueue) {
+	defer func() {
+		if r := recover(); r != nil {
+			bifrost.logger.Error("requestWorker for provider %s panicked: %v\n%s", provider.GetProviderKey(), r, debug.Stack())
+			if !pq.isClosing() {
+				// The provider is still live — keep serving its queue. The stack
+				// has already unwound before this defer runs, so this recursion
+				// restarts at a fresh frame rather than growing the stack.
+				bifrost.requestWorkerServe(provider, config, pq)
+			}
+		}
+	}()
 
 	for {
 		var req *ChannelMessage

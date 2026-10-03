@@ -12,6 +12,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -552,6 +553,34 @@ func HandleOpenAITextCompletionStreaming(
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -1146,6 +1175,34 @@ func HandleOpenAIChatCompletionStreaming(
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -1860,6 +1917,34 @@ func HandleOpenAIResponsesStreaming(
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -2503,6 +2588,34 @@ func HandleOpenAISpeechStreamRequest(
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -3013,6 +3126,34 @@ func HandleOpenAITranscriptionStreamRequest(
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -3464,6 +3605,34 @@ func HandleOpenAIImageGenerationStreaming(
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -4963,6 +5132,34 @@ func HandleOpenAIImageEditStreamRequest(
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -1981,6 +1982,17 @@ func (h *CompletionHandler) handleStreamingResponse(ctx *fasthttp.RequestCtx, bi
 
 	// Producer goroutine: processes the stream channel, formats SSE events, sends to reader
 	go func() {
+		// Registered first so it runs last, after the cleanup defer below has
+		// stopped the heartbeat and closed the reader. Go unwinds every registered
+		// defer when a goroutine panics, so the cleanup defer still runs and the
+		// client never hangs; this recover exists so the panic cannot also crash
+		// the whole process. cancel() is idempotent and safe to call again here.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("SSE producer goroutine panicked: %v\n%s", r, debug.Stack())
+				cancel()
+			}
+		}()
 		var transportLogs []schemas.PluginLogEntry
 		completerRan := false
 		// runCompleter invokes the transport post-hook completer at most once.
