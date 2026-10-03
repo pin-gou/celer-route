@@ -78,9 +78,12 @@ rm -f "$DATA_DIR"/config.db* "$DATA_DIR"/config.json
 
 # 写入启动配置：本地开发默认允许明文存储敏感字段，避免 D9 启动守卫拒绝启动。
 # 生产部署必须配置 encryption_key 并运行 re-encrypt 迁移。
+# auth_config.is_enabled=false 是"显式禁用认证"的声明：认证从未配置（auth_config
+# 缺失）时网关现在会 fail-closed，只有显式声明禁用才能保持管理面开放。
 cat > "$DATA_DIR/config.json" <<'EOF'
 {
-  "allow_plaintext_storage": true
+  "allow_plaintext_storage": true,
+  "auth_config": { "is_enabled": false }
 }
 EOF
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -18,6 +19,7 @@ import (
 	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
 	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
 	"github.com/pin-gou/celer-route/framework/encrypt"
 	"github.com/pin-gou/celer-route/framework/temptoken"
 	"github.com/pin-gou/celer-route/framework/tracing"
@@ -44,6 +46,26 @@ func SecurityHeadersMiddleware() schemas.BifrostHTTPMiddleware {
 			if string(ctx.Request.Header.Peek("X-Forwarded-Proto")) == "https" || ctx.IsTLS() {
 				ctx.Response.Header.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}
+			next(ctx)
+		}
+	}
+}
+
+// RecoverMiddleware catches panics that escape route handlers and converts them
+// into a 500 response instead of crashing the process. fasthttp does NOT recover
+// panics itself (any unhandled panic in a request handler kills the entire
+// server), so this wraps the outermost handler chain as defense-in-depth next to
+// the fasthttp.Server.PanicHandler field. The panic value and full stack are
+// logged server-side; the client only ever sees a generic message.
+func RecoverMiddleware() schemas.BifrostHTTPMiddleware {
+	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+		return func(ctx *fasthttp.RequestCtx) {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Error("request handler panicked: %v\n%s", r, debug.Stack())
+					SendError(ctx, fasthttp.StatusInternalServerError, "internal server error")
+				}
+			}()
 			next(ctx)
 		}
 	}
@@ -723,6 +745,14 @@ func validateSession(_ *fasthttp.RequestCtx, store configstore.ConfigStore, toke
 	if session.ExpiresAt.Before(time.Now()) {
 		return false
 	}
+	// A member-issued session token must never authenticate admin routes. Both
+	// kinds share the sessions table, and a member token's random half is stored
+	// here under the same shape — without this check a leaked member cookie
+	// ("<user_id>:<random>", random half persisted) would grant admin access by
+	// submitting the random half as a Bearer token.
+	if session.Kind == tables.SessionKindMember {
+		return false
+	}
 	return true
 }
 
@@ -994,10 +1024,10 @@ func (m *AuthMiddleware) APIMiddleware() schemas.BifrostHTTPMiddleware {
 		// it would whitelist /api/oauth/per-user/* (auth-via-temp-token) and
 		// /api/oauth/config/* (admin-only) and bypass the temp-token fallback
 		// in tryTempTokenOrUnauthorized.
-		// Trailing slash is required: the dev routes live under "/api/dev/pprof".
-		// A bare "/api/dev" prefix also matches "/api/devices" (and any other
-		// "/api/dev*" route), which would silently bypass auth on those routes.
-		"/api/dev/",
+		// Dev routes live under "/api/dev/pprof"; the prefix is pinned to the
+		// pprof subtree (NOT a bare "/api/dev") so that no future /api/dev*
+		// route (e.g. /api/devices, /api/dev/backup) silently bypasses auth.
+		"/api/dev/pprof",
 		// Skills serving endpoints are public — marketplace URLs cannot carry
 		// credentials securely. Management endpoints under /api/skills (without
 		// /serve/) remain authenticated.
@@ -1015,19 +1045,64 @@ func (m *AuthMiddleware) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			}) != -1 {
 			return true
 		}
-		// Check user-configured whitelisted routes
+		// Check user-configured whitelisted routes. Exact routes are honored;
+		// "*"-suffixed wildcards are refused when they would open a sensitive
+		// admin subtree (governance, providers, logs, sessions, config, dev,
+		// oauth, mcp, skills, users) — otherwise an operator who whitelists
+		// "/api/governance/*" (or even a short prefix covering it) would silently
+		// expose every management endpoint without credentials.
 		if configuredRoutes := m.whitelistedRoutes.Load(); configuredRoutes != nil {
-			if slices.Contains(*configuredRoutes, url) || slices.IndexFunc(*configuredRoutes, func(route string) bool {
-				if before, ok := strings.CutSuffix(route, "*"); ok {
-					return strings.HasPrefix(url, before)
-				}
-				return false
-			}) != -1 {
+			if slices.Contains(*configuredRoutes, url) {
 				return true
+			}
+			for _, route := range *configuredRoutes {
+				before, ok := strings.CutSuffix(route, "*")
+				if !ok {
+					continue
+				}
+				if wildcardOpensSensitiveRoute(before) {
+					continue
+				}
+				if strings.HasPrefix(url, before) {
+					return true
+				}
 			}
 		}
 		return false
 	}, false)
+}
+
+// sensitiveWhitelistedPrefixes are admin subtrees that must never be reachable
+// through the operator whitelist's "*" wildcard expansion. Exact-route
+// whitelisting of individual URLs is still honored; only wildcards that would
+// blanket-open these trees are refused.
+var sensitiveWhitelistedPrefixes = []string{
+	"/api/governance/",
+	"/api/providers/",
+	"/api/logs/",
+	"/api/session/",
+	"/api/config",
+	"/api/dev/",
+	"/api/oauth/",
+	"/api/mcp/",
+	"/api/skills/",
+	"/api/users",
+}
+
+// wildcardOpensSensitiveRoute reports whether a "*"-suffixed whitelist route
+// whose wildcard prefix is `before` would match any sensitive admin path: the
+// prefix is inside a sensitive subtree, or it is a prefix of one (so its match
+// set covers it). An empty prefix ("*") matches everything and is refused.
+func wildcardOpensSensitiveRoute(before string) bool {
+	if before == "" {
+		return true
+	}
+	for _, sp := range sensitiveWhitelistedPrefixes {
+		if strings.HasPrefix(before, sp) || strings.HasPrefix(sp, before) {
+			return true
+		}
+	}
+	return false
 }
 
 // middleware is the core authentication middleware that checks if the request should be authenticated or not.
@@ -1041,18 +1116,41 @@ func (m *AuthMiddleware) middleware(shouldSkip func(*configstore.AuthConfig, str
 				return
 			}
 			authConfig := m.authConfig.Load()
-			if authConfig == nil || !authConfig.IsEnabled {
-				// logger.Debug("auth middleware is disabled because auth config is not present or not enabled")
+			if authConfig == nil {
+				// No authentication has EVER been configured (fresh instance, or
+				// the operator has not created an admin account yet). Fail closed:
+				// only the explicitly public routes (login, health, OAuth
+				// discovery, UI assets — handled by shouldSkip) and the onboarding
+				// config surface (GET/PUT /api/config{,...}) are reachable.
+				// Everything else 401s, so a network-reachable, not-yet-configured
+				// instance does not expose its management API to anyone who can
+				// route to the port.
+				//
+				// Creating the first admin remains possible: PUT /api/config
+				// reaches the config handler, which itself requires the
+				// operator's setup token. InferenceMiddleware's shouldSkip always
+				// returns true, so inference via virtual keys keeps working on
+				// auth-less instances — this gate applies to the admin/API
+				// surface only.
+				url := string(ctx.Path())
+				if shouldSkip(nil, url) || url == "/api/config" || strings.HasPrefix(url, "/api/config/") {
+					next(ctx)
+					return
+				}
+				SendError(ctx, fasthttp.StatusUnauthorized, "Authentication not configured")
+				return
+			}
+			if !authConfig.IsEnabled {
+				// Operator explicitly disabled auth (is_enabled=false in
+				// config.json) — full open mode. AuthBypassed is set so
+				// high-risk capabilities (e.g. native plugin/subprocess loading)
+				// can still demand real authentication even while the rest of
+				// the API is intentionally open.
 				ctx.SetUserValue(schemas.BifrostContextKeySessionToken, "")
 				// Mark as local admin so downstream RBAC bypasses cleanly when
 				// auth is fully disabled; otherwise RBAC 401s and the UI enters
 				// a logout/login redirect loop.
 				ctx.SetUserValue(schemas.IsLocalAdminContextKey, true)
-				// Distinct from IsLocalAdminContextKey (which is also true for genuinely
-				// authenticated sessions): this specifically marks "no credential was
-				// checked at all" so handlers gating especially dangerous capabilities
-				// (e.g. native plugin/subprocess loading) can require real authentication
-				// even while the rest of the API is intentionally left open.
 				ctx.SetUserValue(schemas.BifrostContextKeyAuthBypassed, true)
 				next(ctx)
 				return

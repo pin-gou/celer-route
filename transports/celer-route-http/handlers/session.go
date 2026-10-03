@@ -142,6 +142,7 @@ func (h *SessionHandler) login(ctx *fasthttp.RequestCtx) {
 		ExpiresAt: time.Now().Add(time.Hour * 24 * 30), // 30 days
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		Kind:      tables.SessionKindAdmin,
 	}
 	err = h.configStore.CreateSession(ctx, session)
 	if err != nil {

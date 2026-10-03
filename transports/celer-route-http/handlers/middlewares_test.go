@@ -605,12 +605,18 @@ func TestChainMiddlewares_ShortCircuitMiddlePosition(t *testing.T) {
 }
 
 // TestAuthMiddleware_NilAuthConfig tests that auth middleware allows requests when auth config is nil
+// TestAuthMiddleware_NilAuthConfig tests that auth middleware FAILS CLOSED when
+// no auth config has ever been configured: only the public routes and the
+// onboarding config surface are reachable; every other route is rejected with
+// 401 so a network-reachable, not-yet-configured instance does not expose its
+// management API.
 func TestAuthMiddleware_NilAuthConfig(t *testing.T) {
 	SetLogger(&mockLogger{})
 
 	am := &AuthMiddleware{}
 	// authConfig is nil by default (simulates app start with no auth config)
 
+	// 1) Non-public management routes must be rejected.
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.SetRequestURI("/api/some-endpoint")
 
@@ -623,9 +629,32 @@ func TestAuthMiddleware_NilAuthConfig(t *testing.T) {
 	handler := middleware(next)
 	handler(ctx)
 
-	// When auth config is nil, requests should be allowed through
-	if !nextCalled {
-		t.Error("Next handler should be called when auth config is nil")
+	if nextCalled {
+		t.Error("Next handler should NOT be called when auth config is nil for a protected route")
+	}
+	if ctx.Response.StatusCode() != fasthttp.StatusUnauthorized {
+		t.Errorf("Expected status code %d, got %d", fasthttp.StatusUnauthorized, ctx.Response.StatusCode())
+	}
+
+	// 2) Onboarding surface must stay reachable: PUT /api/config creates the
+	// first admin (gated by the setup token inside the config handler).
+	ctx2 := &fasthttp.RequestCtx{}
+	ctx2.Request.SetRequestURI("/api/config")
+	nextCalled2 := false
+	handler2 := middleware(func(ctx *fasthttp.RequestCtx) { nextCalled2 = true })
+	handler2(ctx2)
+	if !nextCalled2 {
+		t.Error("onboarding /api/config should be reachable when auth config is nil")
+	}
+
+	// 3) Public routes (login / health) stay reachable.
+	ctx3 := &fasthttp.RequestCtx{}
+	ctx3.Request.SetRequestURI("/api/session/login")
+	nextCalled3 := false
+	handler3 := middleware(func(ctx *fasthttp.RequestCtx) { nextCalled3 = true })
+	handler3(ctx3)
+	if !nextCalled3 {
+		t.Error("login should be reachable when auth config is nil")
 	}
 }
 
@@ -933,7 +962,9 @@ func TestAuthMiddleware_APIMiddleware_VirtualKeyDoesNotBypass(t *testing.T) {
 	}
 }
 
-// TestAuthMiddleware_UpdateAuthConfig_NilToEnabled tests updating auth config from nil to enabled
+// TestAuthMiddleware_UpdateAuthConfig_NilToEnabled tests updating auth config from nil to enabled.
+// With a nil auth config the middleware fails closed (protected routes 401);
+// after enabling auth, unauth'd requests are rejected too.
 func TestAuthMiddleware_UpdateAuthConfig_NilToEnabled(t *testing.T) {
 	SetLogger(&mockLogger{})
 
@@ -943,7 +974,7 @@ func TestAuthMiddleware_UpdateAuthConfig_NilToEnabled(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.SetRequestURI("/api/some-endpoint")
 
-	// First request should pass (nil config)
+	// First request should be rejected (nil config fails closed)
 	nextCalled := false
 	next := func(ctx *fasthttp.RequestCtx) {
 		nextCalled = true
@@ -953,8 +984,11 @@ func TestAuthMiddleware_UpdateAuthConfig_NilToEnabled(t *testing.T) {
 	handler := middleware(next)
 	handler(ctx)
 
-	if !nextCalled {
-		t.Error("First request should pass when auth config is nil")
+	if nextCalled {
+		t.Error("First request should NOT pass when auth config is nil")
+	}
+	if ctx.Response.StatusCode() != fasthttp.StatusUnauthorized {
+		t.Errorf("Expected status code %d, got %d", fasthttp.StatusUnauthorized, ctx.Response.StatusCode())
 	}
 
 	// Now enable auth

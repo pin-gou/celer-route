@@ -8,6 +8,7 @@ import (
 
 	"github.com/pin-gou/celer-route/core/schemas"
 	"github.com/pin-gou/celer-route/framework/configstore"
+	"github.com/pin-gou/celer-route/framework/configstore/tables"
 	"github.com/valyala/fasthttp"
 )
 
@@ -28,9 +29,9 @@ const memberSessionLifetime = 30 * 24 * time.Hour
 // authentication paths can evolve independently:
 //
 //   - admin  : password-based AuthConfig.AdminUserName / AdminPassword;
-//              sets IsLocalAdminContextKey=true on success.
+//     sets IsLocalAdminContextKey=true on success.
 //   - member : cookie-backed SessionsTable row whose subject is a
-//              TableUser.ID; sets BifrostContextKeyMemberUserID.
+//     TableUser.ID; sets BifrostContextKeyMemberUserID.
 //
 // The two share the underlying sessions table (the same row shape: a
 // random token + expiry) but write to different cookie names, so admin
@@ -74,7 +75,7 @@ func (m *MemberAuthMiddleware) APIMiddleware() schemas.BifrostHTTPMiddleware {
 // issues the session; auth-status reports the cookie's validity without
 // demanding any caller-supplied body.
 var memberUnauthPaths = map[string]struct{}{
-	"/api/member/login":      {},
+	"/api/member/login":       {},
 	"/api/member/auth-status": {},
 }
 
@@ -143,6 +144,14 @@ func (m *MemberAuthMiddleware) lookupMemberUserID(ctx *fasthttp.RequestCtx, toke
 		return "", err
 	}
 	if session.ExpiresAt.Before(time.Now()) {
+		return "", nil
+	}
+	// Defense in depth: only member-kind rows authenticate member routes. An
+	// admin session row (or any row minted by another path) must not satisfy
+	// the member lookup even though it lives in the same table. The token's
+	// "<user_id>:" shape already rejects admin tokens, but the kind check
+	// keeps the two auth domains disjoint at the data level too.
+	if session.Kind != tables.SessionKindMember {
 		return "", nil
 	}
 	userID, _ := decodeMemberTokenToUserID(token)

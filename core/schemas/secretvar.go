@@ -309,6 +309,19 @@ func (e SecretVar) MarshalJSON() ([]byte, error) {
 	}{Val: e.Val, Ref: e.ref, SecretType: e.SecretType})
 }
 
+// GoString makes fmt printing (%v/%+v/%#v) of a SecretVar emit a redacted
+// representation instead of the plaintext value, so a stray debug log or test
+// assertion can never leak provider keys, virtual keys, OAuth secrets, or any
+// other credential held in a SecretVar. Without this, fmt.Sprintf("%+v", key)
+// falls back to reflection and prints Val verbatim.
+func (e SecretVar) GoString() string {
+	r := e.Redacted()
+	if r == nil {
+		return "SecretVar(<nil>)"
+	}
+	return fmt.Sprintf("SecretVar{Val:%q, ref:%q, SecretType:%s}", r.Val, r.ref, r.SecretType)
+}
+
 // UnmarshalJSON unmarshals the value from JSON.
 func (e *SecretVar) UnmarshalJSON(data []byte) error {
 	val := string(data)

@@ -107,6 +107,7 @@ func (h *MemberSessionHandler) login(ctx *fasthttp.RequestCtx) {
 		ExpiresAt: time.Now().Add(memberSessionLifetime),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		Kind:      tables.SessionKindMember,
 	}
 	if err := h.store.CreateSession(ctx, session); err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to create session: %v", err))
@@ -170,8 +171,8 @@ func (h *MemberSessionHandler) me(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	SendJSON(ctx, map[string]any{
-		"user":    memberUserView(user),
-		"teams":   memberships,
+		"user":     memberUserView(user),
+		"teams":    memberships,
 		"is_admin": user.Role == tables.UserRoleAdmin,
 	})
 }

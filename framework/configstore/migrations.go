@@ -286,6 +286,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"update_plugins_table_for_custom_plugins"}, run: migrationAddPluginPathColumn},
 	{IDs: []string{"add_provider_config_budget_rate_limit"}, run: migrationAddProviderConfigBudgetRateLimit},
 	{IDs: []string{"add_sessions_table"}, run: migrationAddSessionsTable},
+	{IDs: []string{"add_session_kind_column"}, run: migrationAddSessionKindColumn},
 	{IDs: []string{"add_headers_json_column_into_mcp_client"}, run: migrationAddHeadersJSONColumnIntoMCPClient},
 	{IDs: []string{"add_disable_content_logging_column"}, run: migrationAddDisableContentLoggingColumn},
 	{IDs: []string{"add_mcp_client_id_column"}, run: migrationAddMCPClientIDColumn},
@@ -1836,6 +1837,45 @@ func migrationAddSessionsTable(ctx context.Context, db *gorm.DB, logger schemas.
 	err := m.Migrate()
 	if err != nil {
 		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddSessionKindColumn adds the kind column to the sessions table so
+// member-issued session rows can be distinguished from admin rows. The admin
+// validation path refuses member-kind tokens (closing the cross-auth privilege
+// escalation where a leaked member session token's random half would otherwise
+// pass admin validateSession); existing rows predate member sessions and are
+// all admin sessions, so they are backfilled to 'admin'.
+func migrationAddSessionKindColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_session_kind_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.SessionsTable{}, "kind"); err != nil {
+				return err
+			}
+			// Rows written before this migration were all admin sessions
+			// (member sessions are a later feature); normalize any NULL/empty.
+			if err := tx.Exec("UPDATE sessions SET kind = ? WHERE kind IS NULL OR kind = ''", tables.SessionKindAdmin).Error; err != nil {
+				return fmt.Errorf("failed to backfill session kind: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &tables.SessionsTable{}, "kind"); err != nil {
+				return err
+			}
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while running add session kind column migration: %s", err.Error())
 	}
 	return nil
 }

@@ -448,6 +448,26 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
+	// Fail closed on configuration writes while authentication has never been
+	// configured (authConfig == nil): the ONLY write a fresh, not-yet-configured
+	// instance may accept is the one that bootstraps admin credentials (a
+	// payload carrying auth_config, gated by the operator's setup token below).
+	// Without this guard, an unauthenticated network caller racing the operator
+	// could plant provider keys, proxy config, or logging settings into the
+	// instance via PUT /api/config — the middleware intentionally lets this
+	// route through so onboarding can complete, so this guard must run after
+	// all field-level validations above (so a malformed payload still gets its
+	// precise 400) but before any live mutation or persistence below.
+	authConfig, err := h.store.ConfigStore.GetAuthConfig(ctx)
+	if err != nil && !errors.Is(err, configstore.ErrNotFound) {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("Failed to get auth config: %v", err))
+		return
+	}
+	if authConfig == nil && payload.AuthConfig == nil {
+		SendError(ctx, fasthttp.StatusForbidden, "Authentication must be configured before other configuration can be changed")
+		return
+	}
+
 	var restartReasons []string
 
 	if payload.ClientConfig.DropExcessRequests != currentConfig.DropExcessRequests {

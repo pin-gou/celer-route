@@ -8,6 +8,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// SessionKind distinguishes which auth path minted a sessions-table row. The
+// admin and member logins share the sessions table (the member cookie carries
+// "<user_id>:<random>" while the table stores only the random half, hashed for
+// lookup). Marking the kind lets the admin validation path refuse member-issued
+// tokens and the member path refuse admin tokens, closing the cross-auth
+// privilege escalation where a leaked member session token's random half would
+// otherwise pass the admin validateSession lookup unchanged.
+const (
+	SessionKindAdmin  = "admin"
+	SessionKindMember = "member"
+)
+
 // SessionsTable represents a session in the database
 type SessionsTable struct {
 	ID               int       `gorm:"primaryKey;autoIncrement" json:"id"`
@@ -17,6 +29,7 @@ type SessionsTable struct {
 	UpdatedAt        time.Time `gorm:"index;not null" json:"updated_at"`
 	EncryptionStatus string    `gorm:"type:varchar(20);default:'plain_text'" json:"-"`
 	TokenHash        string    `gorm:"type:varchar(64);index:idx_session_token_hash,unique" json:"-"`
+	Kind             string    `gorm:"type:varchar(20);default:'admin';index" json:"-"`
 }
 
 // TableName sets the table name for each model
