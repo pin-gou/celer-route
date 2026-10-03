@@ -18,6 +18,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/pin-gou/celer-route/core/mcp/utils"
+	"github.com/pin-gou/celer-route/core/network"
 	"github.com/pin-gou/celer-route/core/schemas"
 )
 
@@ -2394,11 +2395,32 @@ func (m *MCPManager) failConnectAttempt(entry *schemas.MCPClientState, config *s
 }
 
 // buildTLSHTTPClient constructs an *http.Client with a custom TLS configuration derived
-// from MCPTLSConfig. Returns nil when tlsCfg is nil so callers can use the library default.
+// from MCPTLSConfig, and — regardless of TLS config — an SSRF-safe DialContext so a
+// user-configured MCP server URL cannot reach loopback, private, or metadata endpoints
+// (169.254.169.254 etc.) from the gateway.
+//
+// Unlike the previous behavior (returning nil when tlsCfg is nil, letting the caller fall
+// back to the library default transport), this ALWAYS returns a client: the mcp-go
+// transport's default client has no SSRF gate, so a tlsCfg-less MCP client would dial any
+// user-supplied URL. Callers therefore always pass the returned client through
+// WithHTTPBasicClient / WithHTTPClient.
+//
 // InsecureSkipVerify takes priority over CACertPEM when both are set.
 func (m *MCPManager) buildTLSHTTPClient(tlsCfg *schemas.MCPTLSConfig) (*http.Client, error) {
+	transportImpl, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		transportImpl = &http.Transport{}
+	}
+	cloned := transportImpl.Clone()
+	// SSRF gate on every dial. This blocks loopback/private/CGNAT/link-local
+	// targets unconditionally (matching the webhook and provider dialers). The
+	// check re-runs per dial, so it also holds across redirects and re-dials
+	// (DNS-rebinding protection). Internal-only MCP servers must be reachable
+	// via an operator-approved path (proxy/allowlist), not by relaxing this.
+	cloned.DialContext = network.SSRFSafeDialContext(10 * time.Second)
+
 	if tlsCfg == nil {
-		return nil, nil
+		return &http.Client{Transport: cloned}, nil
 	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	if tlsCfg.InsecureSkipVerify {
@@ -2417,11 +2439,6 @@ func (m *MCPManager) buildTLSHTTPClient(tlsCfg *schemas.MCPTLSConfig) (*http.Cli
 			tlsConfig.RootCAs = rootCAs
 		}
 	}
-	transport, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		transport = &http.Transport{}
-	}
-	cloned := transport.Clone()
 	cloned.TLSClientConfig = tlsConfig
 	return &http.Client{Transport: cloned}, nil
 }

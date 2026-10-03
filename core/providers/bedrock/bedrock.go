@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
+	"github.com/pin-gou/celer-route/core/network"
 	"github.com/pin-gou/celer-route/core/providers/anthropic"
 	openai "github.com/pin-gou/celer-route/core/providers/openai"
 	providerUtils "github.com/pin-gou/celer-route/core/providers/utils"
@@ -89,6 +91,53 @@ func NewBedrockProvider(config *schemas.ProviderConfig, logger schemas.Logger) (
 		ResponseHeaderTimeout: requestTimeout,
 		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     config.NetworkConfig.EnforceHTTP2,
+	}
+
+	// SSRF-safe dialing: user-controlled BedrockEndpoints (runtime/control_plane/
+	// agent_runtime/s3) can point anywhere, so every dial resolves the host and
+	// rejects the connection if any resolved address is link-local (169.254.0.0/16 —
+	// the cloud metadata endpoint, e.g. 169.254.169.254) or unspecified. RFC 1918
+	// private addresses are only permitted when the operator explicitly opted in via
+	// allow_private_network (required for VPC-endpoint Bedrock deployments). The
+	// winning IP literal is dialed directly, closing the DNS-rebinding window.
+	// This mirrors providerUtils.ConfigureDialer's fasthttp semantics for the
+	// net/http transport; the streaming client inherits it via transport.Clone in
+	// BuildStreamingHTTPClient.
+	transport.DialContext = func(ctx context.Context, netw, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid dial address %q: %w", addr, err)
+		}
+		ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+		if err != nil {
+			return nil, fmt.Errorf("DNS lookup failed for %s: %w", host, err)
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("DNS lookup for %s returned no addresses", host)
+		}
+		dialer := &net.Dialer{Timeout: requestTimeout}
+		var lastErr error
+		for _, ip := range ips {
+			// Unspecified and link-local (169.254.x.x, fe80::) are always blocked —
+			// they include cloud instance metadata endpoints that must never be
+			// reachable, even in private-network deployments.
+			if ip.IsUnspecified() || network.IsLinkLocal(ip) {
+				return nil, fmt.Errorf("connection to unspecified/link-local IP %s is not allowed", ip)
+			}
+			// RFC 1918 blocked unless the operator opted in; loopback always allowed.
+			if !ip.IsLoopback() && !config.NetworkConfig.AllowPrivateNetwork && network.IsPrivateIP(ip) {
+				return nil, fmt.Errorf("connection to private IP %s is not allowed", ip)
+			}
+			conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip.String(), port))
+			if dialErr == nil {
+				return conn, nil
+			}
+			lastErr = dialErr
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, fmt.Errorf("no usable address resolved for %s", host)
 	}
 
 	// Disable HTTP/2 auto-negotiation when not explicitly enforced.
@@ -1101,6 +1150,34 @@ func (provider *BedrockProvider) TextCompletionStream(ctx *schemas.BifrostContex
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				provider.logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -1416,6 +1493,34 @@ func (provider *BedrockProvider) ChatCompletionStream(ctx *schemas.BifrostContex
 	providerUtils.SetStreamIdleTimeoutIfEmpty(ctx, provider.networkConfig.StreamIdleTimeoutInSeconds)
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				provider.logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
@@ -1804,6 +1909,34 @@ func (provider *BedrockProvider) ResponsesStream(ctx *schemas.BifrostContext, po
 
 	// Start streaming in a goroutine
 	go func() {
+		// Registered first (runs last). The other defers below still unwind on
+		// panic (Go runs every registered defer), so the stream channel is closed
+		// and the connection released; this recover exists so the panic cannot
+		// also crash the whole process. A terminal error chunk is emitted so a
+		// consumer blocked on the channel sees the failure instead of a silent
+		// close.
+		defer func() {
+			if r := recover(); r != nil {
+				provider.logger.Error("stream goroutine panicked: %v\n%s", r, debug.Stack())
+				// The defers registered below close the stream channel before this
+				// recover runs (LIFO), so a send or close here may hit a closed
+				// channel. Guard them so the recovery itself cannot panic and
+				// crash the process.
+				func() {
+					defer func() { _ = recover() }()
+					select {
+					case responseChan <- &schemas.BifrostStreamChunk{
+						BifrostError: &schemas.BifrostError{
+							IsBifrostError: false,
+							Error:          &schemas.ErrorField{Message: "stream failed internally"},
+						},
+					}:
+					default:
+					}
+					providerUtils.CloseStream(ctx, responseChan)
+				}()
+			}
+		}()
 		defer providerUtils.EnsureStreamFinalizerCalled(ctx, postHookSpanFinalizer)
 		defer func() {
 			if ctx.Err() == context.Canceled {
