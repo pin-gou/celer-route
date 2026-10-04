@@ -80,10 +80,17 @@ rm -f "$DATA_DIR"/config.db* "$DATA_DIR"/config.json
 # 生产部署必须配置 encryption_key 并运行 re-encrypt 迁移。
 # auth_config.is_enabled=false 是"显式禁用认证"的声明：认证从未配置（auth_config
 # 缺失）时网关现在会 fail-closed，只有显式声明禁用才能保持管理面开放。
+# 注意：lib/config.go 的 auth 配置加载器要求 admin_username/admin_password 同时
+# 存在才会持久化 auth_config（否则静默丢弃该配置，实例保持 fail-closed，管理面
+# 401）。因此本地开发配置带占位凭据；auth 仍为 is_enabled=false，凭据惰性不生效。
 cat > "$DATA_DIR/config.json" <<'EOF'
 {
   "allow_plaintext_storage": true,
-  "auth_config": { "is_enabled": false }
+  "auth_config": {
+    "is_enabled": false,
+    "admin_username": "admin",
+    "admin_password": "celer-route-local-dev"
+  }
 }
 EOF
 
