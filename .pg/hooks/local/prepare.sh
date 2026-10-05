@@ -78,18 +78,20 @@ rm -f "$DATA_DIR"/config.db* "$DATA_DIR"/config.json
 
 # 写入启动配置：本地开发默认允许明文存储敏感字段，避免 D9 启动守卫拒绝启动。
 # 生产部署必须配置 encryption_key 并运行 re-encrypt 迁移。
-# auth_config.is_enabled=false 是"显式禁用认证"的声明：认证从未配置（auth_config
-# 缺失）时网关现在会 fail-closed，只有显式声明禁用才能保持管理面开放。
-# 注意：lib/config.go 的 auth 配置加载器要求 admin_username/admin_password 同时
-# 存在才会持久化 auth_config（否则静默丢弃该配置，实例保持 fail-closed，管理面
-# 401）。因此本地开发配置带占位凭据；auth 仍为 is_enabled=false，凭据惰性不生效。
-cat > "$DATA_DIR/config.json" <<'EOF'
+# 仪表盘密码保护默认启用（auth_config.is_enabled=true）：管理面 API 与 UI 均需
+# 管理员登录后才能访问。默认管理员 admin / CelerRoute-2026，可用环境变量
+# BIFROST_ADMIN_USERNAME / BIFROST_ADMIN_PASSWORD 覆盖（seed.py 读取同一组变量）。
+# 明文密码由 lib/config.go 的 loadAuthConfig 在实例启动时 bcrypt 哈希后持久化到
+# config.db，config.json 只保留明文引用，不会以明文落库。
+ADMIN_USERNAME="${BIFROST_ADMIN_USERNAME:-admin}"
+ADMIN_PASSWORD="${BIFROST_ADMIN_PASSWORD:-CelerRoute-2026}"
+cat > "$DATA_DIR/config.json" <<EOF
 {
   "allow_plaintext_storage": true,
   "auth_config": {
-    "is_enabled": false,
-    "admin_username": "admin",
-    "admin_password": "celer-route-local-dev"
+    "is_enabled": true,
+    "admin_username": "$ADMIN_USERNAME",
+    "admin_password": "$ADMIN_PASSWORD"
   }
 }
 EOF
@@ -135,6 +137,7 @@ sleep 1
 echo "=== prepare_env 完成 ==="
 echo "  数据目录: $DATA_DIR 已就绪（config.db + logs.db）"
 echo "  fixture:  $FIXTURE_DIR 中的配置已写入"
+echo "  仪表盘:   http://localhost:$PORT （密码保护已启用，管理员 $ADMIN_USERNAME / $ADMIN_PASSWORD）"
 
 pg_exit --status=pass --duration=$(( $(date +%s) - $(date +%s) )) \
-        --metadata="data_dir=\"$DATA_DIR\" port=\"$PORT\""
+        --metadata="data_dir=\"$DATA_DIR\" port=\"$PORT\" admin_user=\"$ADMIN_USERNAME\""

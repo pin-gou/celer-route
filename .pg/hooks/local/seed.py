@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """
 从 fixature 目录读取 fixture JSON，通过 celer-route-api 的 HTTP API 写入数据。
+
+local 环境的 prepare_env 默认启用仪表盘密码保护（admin / CelerRoute-2026），
+种子化前先登录管理面建立会话；认证未启用（如 local-pg）时自动跳过登录，
+保持开放模式种子化不变。
+
 用法: seed.py <fixature_dir> <port> [host]
+环境变量: BIFROST_ADMIN_USERNAME / BIFROST_ADMIN_PASSWORD（默认 admin / CelerRoute-2026，
+         与 local prepare.sh 写入的 auth_config 保持一致）
 """
+import http.cookiejar
 import json
 import os
 import sys
@@ -16,6 +24,15 @@ HOST = sys.argv[3] if len(sys.argv) > 3 else "localhost"
 BASE = f"http://{HOST}:{PORT}"
 TIMEOUT = 15  # per-request timeout
 
+# 管理面凭据：与 local prepare.sh 写入 config.json 的 auth_config 保持一致。
+ADMIN_USERNAME = os.environ.get("BIFROST_ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("BIFROST_ADMIN_PASSWORD", "CelerRoute-2026")
+
+# 带 cookie jar 的 opener：登录成功后会话 cookie 自动附加到后续请求，
+# 使开启仪表盘密码保护的 prepare_env 也能正常种子化。
+_cookie_jar = http.cookiejar.CookieJar()
+_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_cookie_jar))
+
 
 def api(method, path, body=None, timeout=TIMEOUT):
     url = f"{BASE}{path}"
@@ -23,7 +40,7 @@ def api(method, path, body=None, timeout=TIMEOUT):
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _OPENER.open(req, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8", errors="replace")
@@ -208,6 +225,31 @@ def seed_plugins():
             print(f"  ✗ plugin {pname}: {status} {resp.get('error', resp)}")
 
 
+def login():
+    """登录管理面，建立管理员会话。
+
+    prepare_env 默认启用仪表盘密码保护，种子化写操作（/api/providers 等）需要
+    会话凭证。登录成功返回 True；认证未启用（HTTP 403，如 local-pg）返回 False，
+    继续以开放模式种子化。
+    认证已启用但登录失败（错误凭据）时直接退出——否则后续写操作将全部 401，
+    种子化结束只见一串 ✗，难以定位根因。
+    """
+    status, resp = api("POST", "/api/session/login", {
+        "username": ADMIN_USERNAME,
+        "password": ADMIN_PASSWORD,
+    })
+    if status == 200:
+        print(f"  ✓ 仪表盘密码保护已启用，已登录 {ADMIN_USERNAME}")
+        return True
+    if status == 403:
+        print("  - 认证未启用（HTTP 403），继续以开放模式种子化")
+        return False
+    print(f"  ✗ 管理面登录失败（HTTP {status}）：{resp.get('error', resp)}")
+    print(f"  ✗ 请确认 BIFROST_ADMIN_USERNAME / BIFROST_ADMIN_PASSWORD "
+          f"与 prepare.sh 写入 config.json 的 auth_config 一致")
+    sys.exit(1)
+
+
 def seed_proxy_config():
     data = load_fixture("fixature_proxy_config.json")
     if data:
@@ -231,6 +273,10 @@ def main():
         sys.exit(1)
 
     print("celer-route-api 已连接")
+
+    # 1. 管理面登录（仪表盘密码保护）
+    print("1. 管理面登录...")
+    login()
 
     # 2. Provider
     print("2. 创建 provider...")
