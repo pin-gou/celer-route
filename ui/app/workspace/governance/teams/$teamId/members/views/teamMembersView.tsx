@@ -31,7 +31,7 @@ import { toast } from "sonner";
 // share the team-detail surface with.
 export default function TeamMembersView() {
 	const { teamId } = useParams({ from: "/workspace/governance/teams/$teamId/members" });
-	const { t } = useTranslation("teams");
+	const { t } = useTranslation("governance-ui");
 	const { copy } = useCopyToClipboard();
 
 	const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
@@ -53,7 +53,7 @@ export default function TeamMembersView() {
 		try {
 			const res = await createTeamInvitation({ teamID: teamId, body: { email, role } }).unwrap();
 			setInviteLink({ token: res.token, link: res.link, email });
-			toast.success(t("inviteSuccess", { email }));
+			toast.success(t("teams.inviteSuccess", { email }));
 			setInviteSheetOpen(false);
 		} catch (e) {
 			toast.error(getErrorMessage(e));
@@ -63,7 +63,7 @@ export default function TeamMembersView() {
 	const onRevoke = async (invitationID: string) => {
 		try {
 			await revokeTeamInvitation({ teamID: teamId, invitationID }).unwrap();
-			toast.success(t("inviteRevoked"));
+			toast.success(t("teams.inviteRevoked"));
 			setPendingRevoke(null);
 		} catch (e) {
 			toast.error(getErrorMessage(e));
@@ -83,13 +83,13 @@ export default function TeamMembersView() {
 			<div className="p-8" data-testid="team-members-not-found">
 				<Card>
 					<CardHeader>
-						<CardTitle>{t("loadFailed")}</CardTitle>
-						<CardDescription>{teamError ? getErrorMessage(teamError) : t("teamNotFound")}</CardDescription>
+						<CardTitle>{t("teams.loadFailed")}</CardTitle>
+						<CardDescription>{teamError ? getErrorMessage(teamError) : t("teams.teamNotFound")}</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<Button asChild variant="outline">
 							<Link to="/workspace/governance/teams/$teamId" params={{ teamId }} data-testid="team-members-back-not-found">
-								{t("back")}
+								{t("teams.back")}
 							</Link>
 						</Button>
 					</CardContent>
@@ -108,13 +108,13 @@ export default function TeamMembersView() {
 						</Link>
 					</Button>
 					<div>
-						<h1 className="text-foreground text-2xl font-semibold">{t("membersTitle")}</h1>
+						<h1 className="text-foreground text-2xl font-semibold">{t("teams.membersTitle")}</h1>
 						<p className="text-muted-foreground mt-1 font-mono text-xs">{team.name}</p>
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
 					<Button onClick={() => setInviteSheetOpen(true)} data-testid="team-members-invite">
-						<UserPlus className="mr-1 h-4 w-4" /> {t("invite")}
+						<UserPlus className="mr-1 h-4 w-4" /> {t("teams.invite")}
 					</Button>
 				</div>
 			</header>
@@ -122,32 +122,32 @@ export default function TeamMembersView() {
 			<section>
 				<header className="mb-2 flex items-center gap-2">
 					<Users className="h-4 w-4" />
-					<h2 className="text-lg font-semibold">{t("membersTitle")}</h2>
+					<h2 className="text-lg font-semibold">{t("teams.membersTitle")}</h2>
 					<span className="text-muted-foreground text-sm">({members.length})</span>
 				</header>
 				<div className="border-border bg-card rounded-sm border">
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>{t("col_email")}</TableHead>
-								<TableHead>{t("col_display_name")}</TableHead>
-								<TableHead>{t("col_role")}</TableHead>
-								<TableHead>{t("col_status")}</TableHead>
-								<TableHead>{t("col_user_status")}</TableHead>
-								<TableHead>{t("col_joined")}</TableHead>
+								<TableHead>{t("teams.col_email")}</TableHead>
+								<TableHead>{t("teams.col_display_name")}</TableHead>
+								<TableHead>{t("teams.col_role")}</TableHead>
+								<TableHead>{t("teams.col_status")}</TableHead>
+								<TableHead>{t("teams.col_user_status")}</TableHead>
+								<TableHead>{t("teams.col_joined")}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{membersLoading ? (
 								<TableRow>
 									<TableCell colSpan={6} className="text-muted-foreground py-8 text-center text-sm">
-										<Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> {t("loading")}
+										<Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> {t("teams.loading")}
 									</TableCell>
 								</TableRow>
 							) : members.length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={6} className="text-muted-foreground py-8 text-center text-sm">
-										{t("noMembers")}
+										{t("teams.noMembers")}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -161,31 +161,31 @@ export default function TeamMembersView() {
 			<section>
 				<header className="mb-2 flex items-center gap-2">
 					<UserPlus className="h-4 w-4" />
-					<h2 className="text-lg font-semibold">{t("invitationsTitle")}</h2>
+					<h2 className="text-lg font-semibold">{t("teams.invitationsTitle")}</h2>
 					<span className="text-muted-foreground text-sm">({invitations.length})</span>
 				</header>
 				<div className="border-border bg-card rounded-sm border">
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>{t("col_email")}</TableHead>
-								<TableHead>{t("col_role")}</TableHead>
-								<TableHead>{t("col_status")}</TableHead>
-								<TableHead>{t("col_expires")}</TableHead>
-								<TableHead className="w-12 text-right">{t("col_actions")}</TableHead>
+								<TableHead>{t("teams.col_email")}</TableHead>
+								<TableHead>{t("teams.col_role")}</TableHead>
+								<TableHead>{t("teams.col_status")}</TableHead>
+								<TableHead>{t("teams.col_expires")}</TableHead>
+								<TableHead className="w-12 text-right">{t("teams.col_actions")}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{invitationsLoading ? (
 								<TableRow>
 									<TableCell colSpan={5} className="text-muted-foreground py-8 text-center text-sm">
-										<Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> {t("loading")}
+										<Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> {t("teams.loading")}
 									</TableCell>
 								</TableRow>
 							) : invitations.length === 0 ? (
 								<TableRow>
 									<TableCell colSpan={5} className="text-muted-foreground py-8 text-center text-sm">
-										{t("noInvitations")}
+										{t("teams.noInvitations")}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -195,7 +195,7 @@ export default function TeamMembersView() {
 										<TableCell>{inv.role_in_team}</TableCell>
 										<TableCell>
 											<Badge variant={inv.status === "pending" ? "default" : inv.status === "accepted" ? "secondary" : "outline"}>
-												{t(`inviteStatus_${inv.status}`)}
+												{t(`teams.inviteStatus_${inv.status}`)}
 											</Badge>
 										</TableCell>
 										<TableCell className="text-muted-foreground text-xs">{new Date(inv.expires_at).toLocaleString()}</TableCell>
@@ -222,15 +222,15 @@ export default function TeamMembersView() {
 			{pendingRevoke && (
 				<Card data-testid="team-members-revoke-confirm">
 					<CardHeader>
-						<CardTitle className="text-base">{t("revokeConfirmTitle")}</CardTitle>
-						<CardDescription>{t("revokeConfirmDesc")}</CardDescription>
+						<CardTitle className="text-base">{t("teams.revokeConfirmTitle")}</CardTitle>
+						<CardDescription>{t("teams.revokeConfirmDesc")}</CardDescription>
 					</CardHeader>
 					<CardContent className="flex gap-2">
 						<Button onClick={() => onRevoke(pendingRevoke)} data-testid="team-members-revoke-confirm-action">
-							{t("confirmRevoke")}
+							{t("teams.confirmRevoke")}
 						</Button>
 						<Button variant="outline" onClick={() => setPendingRevoke(null)}>
-							{t("cancel")}
+							{t("teams.cancel")}
 						</Button>
 					</CardContent>
 				</Card>
@@ -239,8 +239,8 @@ export default function TeamMembersView() {
 			{inviteLink && (
 				<Card data-testid="team-members-invite-link">
 					<CardHeader>
-						<CardTitle className="text-base">{t("inviteLinkTitle", { email: inviteLink.email })}</CardTitle>
-						<CardDescription>{t("inviteLinkDesc")}</CardDescription>
+						<CardTitle className="text-base">{t("teams.inviteLinkTitle", { email: inviteLink.email })}</CardTitle>
+						<CardDescription>{t("teams.inviteLinkDesc")}</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<div className="bg-muted flex items-center gap-2 rounded-sm p-3 font-mono text-xs">
@@ -251,7 +251,7 @@ export default function TeamMembersView() {
 								<CopyGlyph className="h-4 w-4" />
 							</Button>
 						</div>
-						<p className="text-muted-foreground mt-2 text-xs">{t("inviteLinkUrl", { link: inviteLink.link })}</p>
+						<p className="text-muted-foreground mt-2 text-xs">{t("teams.inviteLinkUrl", { link: inviteLink.link })}</p>
 					</CardContent>
 				</Card>
 			)}
@@ -263,7 +263,7 @@ export default function TeamMembersView() {
 }
 
 function MemberRow({ member }: { member: TeamMember }) {
-	const { t } = useTranslation("teams");
+	const { t } = useTranslation("governance-ui");
 	return (
 		<TableRow data-testid={`team-member-${member.id}`}>
 			<TableCell className="font-mono text-xs">{member.email ?? <span className="text-muted-foreground">—</span>}</TableCell>
@@ -272,9 +272,11 @@ function MemberRow({ member }: { member: TeamMember }) {
 				<Badge variant="outline">{member.role_in_team}</Badge>
 			</TableCell>
 			<TableCell>
-				<Badge variant={member.status === "active" ? "default" : "secondary"}>{t(`memberStatus_${member.status}`)}</Badge>
+				<Badge variant={member.status === "active" ? "default" : "secondary"}>{t(`teams.memberStatus_${member.status}`)}</Badge>
 			</TableCell>
-			<TableCell className="text-muted-foreground text-xs">{member.user_status ? t(`userStatus_${member.user_status}`) : "—"}</TableCell>
+			<TableCell className="text-muted-foreground text-xs">
+				{member.user_status ? t(`teams.userStatus_${member.user_status}`) : "—"}
+			</TableCell>
 			<TableCell className="text-muted-foreground text-xs">{new Date(member.joined_at).toLocaleDateString()}</TableCell>
 		</TableRow>
 	);
@@ -291,7 +293,7 @@ function InviteSheet({
 	onSubmit: (email: string, role: "admin" | "member") => Promise<void>;
 	isSubmitting: boolean;
 }) {
-	const { t } = useTranslation("teams");
+	const { t } = useTranslation("governance-ui");
 	const [email, setEmail] = useState("");
 	const [role, setRole] = useState<"admin" | "member">("member");
 
@@ -314,13 +316,13 @@ function InviteSheet({
 			<SheetContent className="w-full sm:max-w-md" data-testid="team-members-invite-sheet">
 				<SheetHeader>
 					<SheetTitle className="flex items-center gap-2">
-						<Plus className="h-4 w-4" /> {t("invite")}
+						<Plus className="h-4 w-4" /> {t("teams.invite")}
 					</SheetTitle>
-					<SheetDescription>{t("inviteSheetDesc")}</SheetDescription>
+					<SheetDescription>{t("teams.inviteSheetDesc")}</SheetDescription>
 				</SheetHeader>
 				<form onSubmit={handleSubmit} className="space-y-4 px-4 pb-4">
 					<div className="space-y-2">
-						<Label htmlFor="members-invite-email">{t("col_email")}</Label>
+						<Label htmlFor="members-invite-email">{t("teams.col_email")}</Label>
 						<Input
 							id="members-invite-email"
 							type="email"
@@ -331,23 +333,23 @@ function InviteSheet({
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label>{t("col_role")}</Label>
+						<Label>{t("teams.col_role")}</Label>
 						<Select value={role} onValueChange={(v) => setRole(v as "admin" | "member")}>
 							<SelectTrigger data-testid="team-members-invite-role">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="member">{t("role_member")}</SelectItem>
-								<SelectItem value="admin">{t("role_admin")}</SelectItem>
+								<SelectItem value="member">{t("teams.role_member")}</SelectItem>
+								<SelectItem value="admin">{t("teams.role_admin")}</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>
 					<SheetFooter className="px-0">
 						<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-							{t("cancel")}
+							{t("teams.cancel")}
 						</Button>
 						<Button type="submit" isLoading={isSubmitting} data-testid="team-members-invite-submit">
-							{t("invite")}
+							{t("teams.invite")}
 						</Button>
 					</SheetFooter>
 				</form>

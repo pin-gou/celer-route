@@ -14,7 +14,7 @@ import TeamModelPoliciesSection from "./teamModelPoliciesSection";
 // independently. A "Manage members" link keeps the deep-link obvious.
 export default function TeamDetailView() {
 	const { teamId } = useParams({ from: "/workspace/governance/teams/$teamId" });
-	const { t } = useTranslation("teams");
+	const { t } = useTranslation("governance-ui");
 
 	const { data: teamResp, isLoading: teamLoading, error: teamError } = useGetTeamQuery(teamId);
 	const team = teamResp?.team;
@@ -32,13 +32,13 @@ export default function TeamDetailView() {
 			<div className="p-8">
 				<Card>
 					<CardHeader>
-						<CardTitle>{t("loadFailed")}</CardTitle>
-						<CardDescription>{teamError ? getErrorMessage(teamError) : t("teamNotFound")}</CardDescription>
+						<CardTitle>{t("teams.loadFailed")}</CardTitle>
+						<CardDescription>{teamError ? getErrorMessage(teamError) : t("teams.teamNotFound")}</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<Button asChild variant="outline">
 							<Link to="/workspace/config/api-keys" data-testid="team-detail-back-redirect">
-								{t("back")}
+								{t("teams.back")}
 							</Link>
 						</Button>
 					</CardContent>
@@ -62,10 +62,10 @@ export default function TeamDetailView() {
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
-					{team.customer && <Badge variant="outline">{t("customer", { name: team.customer.name })}</Badge>}
+					{team.customer && <Badge variant="outline">{t("teams.customer", { name: team.customer.name })}</Badge>}
 					<Button asChild variant="outline" data-testid="team-detail-manage-members">
 						<Link to="/workspace/governance/teams/$teamId/members" params={{ teamId }}>
-							<Users className="mr-1 h-4 w-4" /> {t("manageMembers")}
+							<Users className="mr-1 h-4 w-4" /> {t("teams.manageMembers")}
 							<UserPlus className="ml-1 h-3 w-3 opacity-60" />
 						</Link>
 					</Button>

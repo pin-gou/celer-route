@@ -158,7 +158,7 @@ export default function TeamModelPoliciesSection({ teamID }: TeamModelPoliciesSe
 									<TableHead className="w-32">{t("teams.teamPolicies.colProvider")}</TableHead>
 									<TableHead>{t("teams.teamPolicies.colAllowed")}</TableHead>
 									<TableHead>{t("teams.teamPolicies.colBlacklisted")}</TableHead>
-									<TableHead className="w-32 text-right">{t("col_actions")}</TableHead>
+									<TableHead className="w-32 text-right">{t("teams.col_actions")}</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>

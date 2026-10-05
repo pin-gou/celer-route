@@ -5,6 +5,7 @@ import {
 	BookOpenText,
 	Boxes,
 	BoxIcon,
+	Building2,
 	ChartColumnBig,
 	ChevronsLeftRightEllipsis,
 	Flag,
@@ -717,6 +718,13 @@ export default function AppSidebar() {
 				url: "/workspace/governance/users",
 				icon: Users,
 				description: "Manage member accounts & invitations",
+				hasAccess: isDbConnected ? hasSettingsAccess : false,
+			},
+			{
+				title: t("nav.teams"),
+				url: "/workspace/governance/teams",
+				icon: Building2,
+				description: "Manage teams, members & team policies",
 				hasAccess: isDbConnected ? hasSettingsAccess : false,
 			},
 			{
