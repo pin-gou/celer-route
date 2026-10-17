@@ -275,25 +275,28 @@ func (p *opencodeProvider) opencodeAnthropicHeaders(key schemas.Key) map[string]
 	return headers
 }
 
-// applyFreeTierHeaders injects the headers required by opencode's free tier
-// when the bare `opencode` (keyless) provider is hit and the requested model
-// is one of opencodeFreeModels. The upstream Console handler enforces the
-// "free tier can only be used in OpenCode" gate by requiring ALL of:
+// applyFreeTierHeaders injects the identity headers required by opencode's
+// free tier when the bare `opencode` (keyless) provider is hit and the
+// requested model is a free-tier model. The upstream Console handler enforces
+// the "free tier can only be used in OpenCode" gate with a multi-layer check:
 //
-//  1. x-opencode-session — missing it returns 400 MissingSessionID.
+//  1. x-opencode-session (canonical `ses_` shape) — a non-empty id, missing it
+//     returns 400 MissingSessionID.
 //  2. Authorization: Bearer public — the anonymous-auth sentinel that routes
 //     through allowAnonymous instead of missingApiKey.
-//  3. User-Agent containing "opencode" — without it (e.g. the fasthttp
-//     default) the same request comes back 429 FreeUsageLimitError, the
-//     message the Console surfaces when the caller does not look like an
-//     OpenCode client. Curl-confirmed: UA "fasthttp" → 429, UA
-//     "opencode/1.0.0 (celer-route gateway)" → 200 on identical bodies.
+//  3. User-Agent containing an `opencode/` client with version >= 1.18.0 —
+//     a foreign UA comes back 403 FreeTierError, an outdated one 426
+//     UpgradeRequired.
+//  4. x-opencode-request (canonical `msg_` shape) + x-opencode-project —
+//     informational parts of the client identity contract.
 //
-// x-opencode-client is informational only (matches the real client's header
-// set) and is not part of the gate.
+// The request BODY is a separate part of the gate and is handled by
+// applyFreeTierBody (official tool set + stream:true); headers alone are not
+// sufficient since September 2026.
 //
 // Caller-supplied values win: if the caller has already set Authorization,
-// x-opencode-session, x-opencode-client, or User-Agent via key.Value,
+// x-opencode-session, x-opencode-client, x-opencode-request,
+// x-opencode-project, or User-Agent via key.Value,
 // NetworkConfig.ExtraHeaders, or BifrostContextKeyExtraHeaders, those values
 // are preserved. We inject only into the per-request header map so the
 // ctx-level ExtraHeaders merge in providerUtils.SetExtraHeaders still wins on
@@ -311,14 +314,20 @@ func (p *opencodeProvider) applyFreeTierHeaders(ctx *schemas.BifrostContext, hea
 	if _, ok := headers["x-opencode-session"]; !ok {
 		headers["x-opencode-session"] = newSessionID()
 	}
+	if _, ok := headers["x-opencode-request"]; !ok {
+		headers["x-opencode-request"] = newRequestID()
+	}
 	if _, ok := headers["x-opencode-client"]; !ok {
 		headers["x-opencode-client"] = "celer-route"
+	}
+	if _, ok := headers["x-opencode-project"]; !ok {
+		headers["x-opencode-project"] = "global"
 	}
 	// User-Agent is part of the free-tier gate (see function doc). Respect a
 	// caller-set value from the auth-header map, NetworkConfig.ExtraHeaders, or
 	// BifrostContextKeyExtraHeaders (matched case-insensitively); otherwise
 	// inject the OpenCode client UA so the request passes the gate instead of
-	// returning 429.
+	// returning 403/429.
 	if !headerKeyPresent(headers, "User-Agent") &&
 		!headerKeyPresent(p.networkConfig.ExtraHeaders, "User-Agent") &&
 		!ctxHeaderKeyPresent(ctx, "User-Agent") {
@@ -326,11 +335,8 @@ func (p *opencodeProvider) applyFreeTierHeaders(ctx *schemas.BifrostContext, hea
 	}
 }
 
-// opencodeFreeTierUserAgent spoofs the OpenCode desktop/CLI client identity
-// the free-tier gate checks for. Confirmed working against
-// https://opencode.ai/zen/v1/chat/completions with Bearer public + a fresh
-// x-opencode-session.
-const opencodeFreeTierUserAgent = "opencode/1.0.0 (celer-route gateway)"
+// opencodeFreeTierTools is defined in freetier.go together with the
+// free-tier body/stream assembly helpers.
 
 // headerKeyPresent reports whether name exists in the map under any casing.
 // NetworkConfig.ExtraHeaders and the per-request header maps both use
@@ -372,6 +378,12 @@ func ctxHeaderKeyPresent(ctx *schemas.BifrostContext, name string) bool {
 // are routed through the Anthropic-compatible /v1/messages endpoint because
 // they reject oa-compat payloads upstream. All other models use
 // /v1/chat/completions.
+//
+// Free-tier models on the bare `opencode` (keyless) provider cannot be served
+// as a plain unary call: the upstream gate requires stream:true + the OpenCode
+// tool set in the body. Those requests are executed through the streaming
+// surface internally and the chunks are assembled back into a unary response,
+// so the pipeline keeps unary semantics.
 func (p *opencodeProvider) ChatCompletion(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostChatRequest) (*schemas.BifrostChatResponse, *schemas.BifrostError) {
 	prepared := prepareOpencodeRequest(request)
 
@@ -393,6 +405,13 @@ func (p *opencodeProvider) ChatCompletion(ctx *schemas.BifrostContext, key schem
 		)
 	}
 
+	// Free-tier requests must reach the upstream as stream:true with the
+	// official tool set (see applyFreeTierBody); a bare unary call gets 403
+	// FreeTierError. Execute through the streaming surface and fold the chunks.
+	if p.providerKey == schemas.Opencode && isFreeOpencodeModel(prepared.Model) {
+		return p.chatCompletionFreeTierUnary(ctx, key, prepared)
+	}
+
 	headers := openai.BearerAuthHeader(key)
 	p.applyFreeTierHeaders(ctx, headers, prepared)
 	return openai.HandleOpenAIChatCompletionRequest(
@@ -410,6 +429,19 @@ func (p *opencodeProvider) ChatCompletion(ctx *schemas.BifrostContext, key schem
 		nil,
 		p.logger,
 	)
+}
+
+// chatCompletionFreeTierUnary serves a unary chat completion against the zen
+// free tier by running the request through the streaming surface (which the
+// gate requires) and assembling the chunks into a single response. A no-op
+// per-chunk post-hook is used because the pipeline-level post-hook chain runs
+// once, on the assembled response, at the caller's level.
+func (p *opencodeProvider) chatCompletionFreeTierUnary(ctx *schemas.BifrostContext, key schemas.Key, prepared *schemas.BifrostChatRequest) (*schemas.BifrostChatResponse, *schemas.BifrostError) {
+	stream, bifrostErr := p.ChatCompletionStream(ctx, noopPostHook, nil, key, prepared)
+	if bifrostErr != nil {
+		return nil, bifrostErr
+	}
+	return assembleFreeTierChatResponse(prepared.Model, stream)
 }
 
 // ChatCompletionStream performs a streaming chat completion request to the Opencode API.
@@ -451,6 +483,13 @@ func (p *opencodeProvider) ChatCompletionStream(ctx *schemas.BifrostContext, pos
 
 	headers := openai.BearerAuthHeader(key)
 	p.applyFreeTierHeaders(ctx, headers, prepared)
+	// Free-tier gate additionally validates the request body: add the OpenCode
+	// built-in tool set and pin tool_choice=none for tool-less callers so the
+	// request passes instead of 403 FreeTierError. (stream:true is enforced
+	// here by the streaming surface itself.)
+	if p.providerKey == schemas.Opencode && isFreeOpencodeModel(prepared.Model) {
+		prepared = applyFreeTierBody(prepared)
+	}
 	return openai.HandleOpenAIChatCompletionStreaming(
 		ctx,
 		p.streamingClient,
