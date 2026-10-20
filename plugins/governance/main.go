@@ -940,7 +940,12 @@ func (p *GovernancePlugin) EvaluateGovernanceRequest(ctx *schemas.BifrostContext
 		}
 	}
 	p.cfgMutex.RLock()
-	if !isVirtualKeyValid && !hasDirectKeyAuth(ctx) && evaluationRequest.UserID == "" && p.isVkMandatory != nil && *p.isVkMandatory {
+	// Admin-internal probes (e.g. the provider model test endpoints) mark the
+	// request keyless-and-intentional via BifrostContextKeySkipVKMandatoryCheck,
+	// so the mandatory-VK rejection does not fire for them. A provided-but-invalid
+	// VK is still rejected above, regardless of this flag.
+	skipVKMandatoryCheck := bifrost.GetBoolFromContext(ctx, schemas.BifrostContextKeySkipVKMandatoryCheck)
+	if !isVirtualKeyValid && !hasDirectKeyAuth(ctx) && evaluationRequest.UserID == "" && !skipVKMandatoryCheck && p.isVkMandatory != nil && *p.isVkMandatory {
 		p.cfgMutex.RUnlock()
 		return nil, &schemas.BifrostError{
 			Type:       new("virtual_key_required"),

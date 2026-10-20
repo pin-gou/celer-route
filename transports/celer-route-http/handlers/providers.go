@@ -1646,10 +1646,13 @@ func (h *ProviderHandler) testProviderModel(ctx *fasthttp.RequestCtx) {
 
 	// Build the BifrostContext. The plugin pipeline is left active so logging
 	// records the test call in the LLM logs page. Budget/rate-limit checks and
-	// VK usage tracking are disabled so the test never affects quotas or stats.
+	// VK usage tracking are disabled so the test never affects quotas or stats,
+	// and the mandatory-VK requirement is waived: this is an admin-internal
+	// probe with no caller VK to present.
 	bfCtx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
 	bfCtx.SetValue(schemas.BifrostContextKeySkipBudgetAndRateLimits, true)
 	bfCtx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
+	bfCtx.SetValue(schemas.BifrostContextKeySkipVKMandatoryCheck, true)
 
 	// If a key_id is specified, resolve it and force it on the context.
 	if payload.KeyID != "" {
@@ -1824,11 +1827,14 @@ func (h *ProviderHandler) testOneModel(ctx *fasthttp.RequestCtx, provider schema
 	// The fasthttp request context is safe to share across model workers (each
 	// probe gets its own cancellable BifrostContext child), and keeps request
 	// values — request ID, headers — visible to the plugin pipeline exactly as
-	// the single model test does.
+	// the single model test does. Skip budget/rate-limit checks and VK usage
+	// tracking so tests never affect quotas or stats, and waive the mandatory-VK
+	// requirement: these are admin-internal probes with no caller VK to present.
 	bfCtx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
 	defer bfCtx.Cancel()
 	bfCtx.SetValue(schemas.BifrostContextKeySkipBudgetAndRateLimits, true)
 	bfCtx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
+	bfCtx.SetValue(schemas.BifrostContextKeySkipVKMandatoryCheck, true)
 
 	hi := "hi"
 	content := &schemas.ChatMessageContent{ContentStr: &hi}
