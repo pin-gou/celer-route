@@ -51996,5 +51996,107 @@
         }
       ]
     }
+  ,
+{
+  "name": "58. Opencode Go Console Session Header (x-opencode-session required)",
+  "description": "Pins the wire-visible behaviour of the keyed Opencode tiers after the Console session-header fix. Since 2026-09-06 the OpenCode Go gateway answers every inference request that omits x-opencode-session with HTTP 400 MissingSessionID (body: 'Request is missing x-opencode-session and cannot be routed efficiently'). Before the fix, celer-route only injected the Console identity headers for the bare keyless `opencode` free tier (applyFreeTierHeaders), so every opencode-go call — chat completions, the Anthropic-compatible /v1/messages path used by claude-format models, and the streaming variants — failed at the Console gate, including the provider page's 'Test' button which runs the same pipeline. After the fix, applyConsoleIdentityHeaders injects x-opencode-session, x-opencode-request, x-opencode-client and a self-identifying User-Agent on the keyed Zen/Go tiers, deriving a session id that is stable for a conversation when the caller pins one via x-bf-session-id (the Console routes each conversation to one backend and reuses its prompt cache off that id). Cases here pin (1) a non-streaming chat completion on opencode-go that must not surface MissingSessionID, and (2) its streaming variant. They are [PREVIEW]-tagged because they need a real OpenCode Go subscription key, which the default sweep does not carry: run with INCLUDE_PREVIEW=1 and an opencode-go provider configured. Go-level tests in core/providers/opencode/consoleheaders_test.go cover the header injection, session-id stability and caller-override rules in isolation.",
+  "item": [
+    {
+      "name": "[PREVIEW] opencode-go chat completion carries the Console session header (opencode-go/glm-5.3-flash)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "// Red-before-green pin: before the fix this request returns 400 MissingSessionID.",
+              "pm.test('opencode-go chat - not MissingSessionID', function () {",
+              "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('MissingSessionID');",
+              "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('x-opencode-session');",
+              "});",
+              "pm.test('opencode-go chat - wire intact', function () {",
+              "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "  var j = pm.response.json();",
+              "  pm.expect(j.choices && j.choices[0] && j.choices[0].message, 'expected a chat completion response').to.be.ok;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"opencode-go/glm-5.3-flash\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Hello\" }\n  ],\n  \"max_tokens\": 16\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "[PREVIEW] opencode-go chat stream carries the Console session header (opencode-go/glm-5.3-flash)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([401, 402, 403, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+              "pm.test('opencode-go stream - not MissingSessionID', function () {",
+              "  pm.expect(pm.response.text(), 'failed: ' + pm.response.text()).to.not.include('MissingSessionID');",
+              "});",
+              "pm.test('opencode-go stream - SSE', function () {",
+              "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+              "  var ct = pm.response.headers.get('content-type') || '';",
+              "  pm.expect(ct.toLowerCase(), 'expected SSE, got ' + ct).to.include('event-stream');",
+              "  pm.expect(pm.response.text(), 'empty stream').to.be.ok;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"opencode-go/glm-5.3-flash\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Hello\" }\n  ],\n  \"max_tokens\": 16,\n  \"stream\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "chat",
+            "completions"
+          ]
+        }
+      }
+    }
+  ]
+}
   ]
 }

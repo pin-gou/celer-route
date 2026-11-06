@@ -338,6 +338,87 @@ func (p *opencodeProvider) applyFreeTierHeaders(ctx *schemas.BifrostContext, hea
 // opencodeFreeTierTools is defined in freetier.go together with the
 // free-tier body/stream assembly helpers.
 
+// opencodeConsoleUserAgent identifies celer-route to the OpenCode Console.
+//
+// The Console's client contract asks harnesses to "identify itself with its own
+// user agent, such as `my-coding-agent/1.0`, rather than a generic SDK or
+// HTTP-library name" (https://opencode.ai/v2/docs/console/go#where-can-i-use-it).
+// fasthttp's default UA is exactly such a library name, so the keyed tiers state
+// their own identity instead. The keyless free tier is different: its gate
+// requires an `opencode/` UA and uses opencodeFreeTierUserAgent.
+const opencodeConsoleUserAgent = "celer-route/1.0.0"
+
+// applyConsoleIdentityHeaders injects the OpenCode Console client-identity
+// headers on the keyed tiers (Zen pay-as-you-go and Go subscription).
+//
+// Since 2026-09-06 the Go gateway answers every request without
+// x-opencode-session with HTTP 400 MissingSessionID ("Request is missing
+// x-opencode-session and cannot be routed efficiently"), which made every
+// opencode-go call fail. The pay-as-you-go tier does not hard-require the
+// header, but the Console documents it for all Console traffic — it routes a
+// conversation to one backend and reuses its prompt cache off the id — so both
+// keyed tiers send it.
+//
+// The id must be stable for the lifetime of a conversation: when the request
+// carries a gateway session id (x-bf-session-id → BifrostContextKeySessionID)
+// the same canonical id is derived from it for every turn. Requests without one
+// get a fresh id, which still satisfies the gate but cannot reuse an upstream
+// prompt cache.
+//
+// The bare keyless provider is intentionally skipped: applyFreeTierHeaders owns
+// its identity headers end to end (it must send the opencode free-tier UA, so
+// injecting the gateway UA here would break that gate).
+//
+// Caller-supplied values win. The provider-supplied header map is applied after
+// the extra headers on both the OpenAI and Anthropic surfaces, so a value the
+// caller set through NetworkConfig.ExtraHeaders or the request extra headers is
+// left alone instead of being overwritten.
+func (p *opencodeProvider) applyConsoleIdentityHeaders(ctx *schemas.BifrostContext, headers map[string]string) {
+	if p.providerKey == schemas.Opencode {
+		return
+	}
+
+	identityHeaders := []string{
+		"x-opencode-session",
+		"x-opencode-request",
+		"x-opencode-client",
+		"x-opencode-project",
+		"User-Agent",
+	}
+	for _, name := range identityHeaders {
+		if _, ok := headers[name]; ok {
+			continue
+		}
+		if headerKeyPresent(p.networkConfig.ExtraHeaders, name) || ctxHeaderKeyPresent(ctx, name) {
+			continue
+		}
+
+		switch name {
+		case "x-opencode-session":
+			headers[name] = p.consoleSessionID(ctx)
+		case "x-opencode-request":
+			headers[name] = newRequestID()
+		case "x-opencode-client":
+			headers[name] = "celer-route"
+		case "x-opencode-project":
+			headers[name] = "global"
+		case "User-Agent":
+			headers[name] = opencodeConsoleUserAgent
+		}
+	}
+}
+
+// consoleSessionID returns the value of x-opencode-session for a request,
+// stable for a conversation when the caller pins one with x-bf-session-id.
+func (p *opencodeProvider) consoleSessionID(ctx *schemas.BifrostContext) string {
+	if ctx != nil {
+		if sessionID, ok := ctx.Value(schemas.BifrostContextKeySessionID).(string); ok && strings.TrimSpace(sessionID) != "" {
+			return newStableSessionID(sessionID)
+		}
+	}
+	return newSessionID()
+}
+
 // headerKeyPresent reports whether name exists in the map under any casing.
 // NetworkConfig.ExtraHeaders and the per-request header maps both use
 // arbitrary casing, so a plain map lookup on a canonical key misses "user-agent"
@@ -388,6 +469,8 @@ func (p *opencodeProvider) ChatCompletion(ctx *schemas.BifrostContext, key schem
 	prepared := prepareOpencodeRequest(request)
 
 	if isClaudeFormatModel(prepared.Model) {
+		headers := p.opencodeAnthropicHeaders(key)
+		p.applyConsoleIdentityHeaders(ctx, headers)
 		return anthropic.HandleAnthropicChatCompletionRequest(
 			ctx,
 			p.client,
@@ -398,7 +481,7 @@ func (p *opencodeProvider) ChatCompletion(ctx *schemas.BifrostContext, key schem
 				ShouldSendBackRawRequest:  providerUtils.ShouldSendBackRawRequest(ctx, p.sendBackRawRequest),
 				ShouldSendBackRawResponse: providerUtils.ShouldSendBackRawResponse(ctx, p.sendBackRawResponse),
 			},
-			p.opencodeAnthropicHeaders(key),
+			headers,
 			p.networkConfig.ExtraHeaders,
 			nil,
 			p.logger,
@@ -414,6 +497,7 @@ func (p *opencodeProvider) ChatCompletion(ctx *schemas.BifrostContext, key schem
 
 	headers := openai.BearerAuthHeader(key)
 	p.applyFreeTierHeaders(ctx, headers, prepared)
+	p.applyConsoleIdentityHeaders(ctx, headers)
 	return openai.HandleOpenAIChatCompletionRequest(
 		ctx,
 		p.client,
@@ -461,12 +545,14 @@ func (p *opencodeProvider) ChatCompletionStream(ctx *schemas.BifrostContext, pos
 		if bifrostErr != nil {
 			return nil, bifrostErr
 		}
+		headers := p.opencodeAnthropicHeaders(key)
+		p.applyConsoleIdentityHeaders(ctx, headers)
 		return anthropic.HandleAnthropicChatCompletionStreaming(
 			ctx,
 			p.streamingClient,
 			p.networkConfig.BaseURL+providerUtils.GetPathFromContext(ctx, "/v1/messages"),
 			jsonBody,
-			p.opencodeAnthropicHeaders(key),
+			headers,
 			p.networkConfig.ExtraHeaders,
 			p.networkConfig.StreamIdleTimeoutInSeconds,
 			nil,
@@ -483,6 +569,7 @@ func (p *opencodeProvider) ChatCompletionStream(ctx *schemas.BifrostContext, pos
 
 	headers := openai.BearerAuthHeader(key)
 	p.applyFreeTierHeaders(ctx, headers, prepared)
+	p.applyConsoleIdentityHeaders(ctx, headers)
 	// Free-tier gate additionally validates the request body: add the OpenCode
 	// built-in tool set and pin tool_choice=none for tool-less callers so the
 	// request passes instead of 403 FreeTierError. (stream:true is enforced

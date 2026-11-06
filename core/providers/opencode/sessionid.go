@@ -2,6 +2,7 @@ package opencode
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"hash/fnv"
 	"sync/atomic"
@@ -126,4 +127,29 @@ func newOpencodeID(prefix string, descending bool) string {
 	}
 
 	return prefix + timePart + string(suffix)
+}
+
+// newStableSessionID derives a session id deterministically from seed.
+//
+// The Console reuses a conversation's prompt cache and routes every turn to the
+// same backend off x-opencode-session, so the value must not change between
+// turns of one conversation. celer-route's per-conversation identity is
+// x-bf-session-id (schemas.BifrostContextKeySessionID); hashing it yields a
+// value that is stable for the conversation, distinct across conversations,
+// carries no caller data, and still matches the opencode `ses_` id shape the
+// Console expects.
+func newStableSessionID(seed string) string {
+	digest := sha256.Sum256([]byte(seed))
+
+	// 12 hex chars (6 bytes) take the timestamp-counter segment's place so the
+	// id keeps the canonical `ses_<12 hex><14 base62>` layout. Ordering within
+	// the id is meaningless here; only the shape and stability matter.
+	timePart := hex.EncodeToString(digest[:6])
+
+	suffix := make([]byte, sessionIDRandLen)
+	for i := range suffix {
+		suffix[i] = sessionIDAlphabet[digest[6+i]%62]
+	}
+
+	return sessionIDPrefix + timePart + string(suffix)
 }
