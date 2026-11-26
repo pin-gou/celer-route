@@ -142,6 +142,29 @@ func isKeySkippingAllowed(providerKey schemas.ModelProvider) bool {
 	return providerKey != schemas.Azure && providerKey != schemas.Bedrock && providerKey != schemas.BedrockMantle && providerKey != schemas.Vertex
 }
 
+// shouldSkipRetryBackoff reports whether a retry should run immediately instead
+// of sleeping first.
+//
+// Backoff exists to let a condition clear before the next attempt. It only has
+// something to wait out when the next attempt reuses the same credential, so:
+//
+//   - keyChanged && perKeyFailure: the previous failure was bound to the key
+//     (429/401/402/403) and key selection genuinely picked a different one. The
+//     new key has its own quota and its own credentials, so waiting adds latency
+//     without changing the outcome. Skip the sleep.
+//   - !keyChanged: no rotation actually happened (a 429 pool reset re-picked the
+//     same key, or the provider is keyless). The same key's limit must decay on
+//     its own, so keep the backoff.
+//   - perKeyFailure == false (5xx / network errors): the failure is upstream-
+//     side, not credential-side, and the retry reuses the same key. Keep the
+//     backoff as the classic transient-error mitigation.
+//
+// encryptedContentStrip is independent of key rotation: the retry payload
+// changed (rejected encrypted reasoning was dropped), so nothing to wait out.
+func shouldSkipRetryBackoff(keyChanged, perKeyFailure, encryptedContentStrip bool) bool {
+	return encryptedContentStrip || (keyChanged && perKeyFailure)
+}
+
 // calculateBackoff implements exponential backoff with jitter for retry attempts.
 func calculateBackoff(attempt int, config *schemas.ProviderConfig) time.Duration {
 	// Calculate an exponential backoff: initial * 2^attempt

@@ -6412,11 +6412,6 @@ func executeRequestWithRetries[T any](
 	var usedKeyIDs map[string]bool
 	var deadKeyIDs map[string]bool
 	lastWasPerKeyFailure := false
-	// True iff the previous attempt failed with a *permanent* per-key error (401/402/403).
-	// Used to suppress backoff on the next attempt only when we genuinely rotated to a
-	// different credential — a dead key gains nothing from waiting. 429 rotations stay
-	// subject to backoff because account-level rate limits share quota across keys.
-	lastWasPermanentKeyFailure := false
 	// ID of the key used on the previous attempt. Compared against the freshly selected
 	// key to confirm an actual credential swap happened before suppressing backoff —
 	// after a 429 pool reset, the selector can legitimately re-pick the same key.
@@ -6583,15 +6578,15 @@ func executeRequestWithRetries[T any](
 			// encrypted-reasoning fail-soft, so the counter never reads "1/0".
 			logger.Debug("retrying request (attempt %d/%d) for model %s: %s", attempts, config.NetworkConfig.MaxRetries+extraAttempts, model, retryMsg)
 
-			// Skip backoff only when (a) we genuinely rotated to a different credential AND
-			// (b) the previous failure was a *permanent* per-key error (401/402/403) where
-			// waiting offers nothing against a dead key.
+			// Skip backoff only when the next attempt has a genuinely different thing to
+			// try, i.e. we rotated to a different credential after a key-bound failure
+			// (429/401/402/403 — the new key has its own quota / valid credentials), or
+			// the payload changed because rejected encrypted reasoning was stripped.
 			//
 			// Backoff is preserved in every other case:
 			//   - 5xx / network retries (same key) — transient upstream issue, classic backoff.
-			//   - 429 rotations — account-level rate limits share quota across keys, so the
-			//     new key may not have fresh capacity; the backoff lets the quota window slide.
-			//   - 429 pool reset that re-picks the same key — no rotation actually happened.
+			//   - 429 pool reset that re-picks the same key — no rotation actually happened,
+			//     so that key's rate-limit window still has to slide before it can serve.
 			//   - keyless providers — currentKey.ID stays empty, so keyChanged is false.
 			keyChanged := keyProvider != nil && currentKey.ID != previousKeyID
 
@@ -6613,7 +6608,7 @@ func executeRequestWithRetries[T any](
 			}
 			ctx.AppendRoutingEngineLog(schemas.RoutingEngineCore, schemas.LogLevelInfo, fmt.Sprintf("Retry %d/%d for %s/%s (previous attempt failed: %s%s)", attempts, config.NetworkConfig.MaxRetries+extraAttempts, providerKey, model, routingErrorSummary(bifrostError), keyNote))
 
-			if !((lastWasPermanentKeyFailure && keyChanged) || lastWasEncryptedContentStrip) {
+			if !shouldSkipRetryBackoff(keyChanged, lastWasPerKeyFailure, lastWasEncryptedContentStrip) {
 				backoff := calculateBackoff(attempts-1, config)
 				logger.Debug("sleeping for %s before retry", backoff)
 				time.Sleep(backoff)
@@ -6937,7 +6932,6 @@ func executeRequestWithRetries[T any](
 			}
 		}
 		lastWasPerKeyFailure = isPerKeyFailure
-		lastWasPermanentKeyFailure = isPermanentKeyFailure
 		// Remember the key used on this attempt so the next iteration's backoff check
 		// can detect whether key selection genuinely picked a different credential.
 		previousKeyID = currentKey.ID
