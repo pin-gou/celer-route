@@ -622,6 +622,20 @@ type CooldownPolicyRule struct {
 	Match      []CooldownPolicyMatch `json:"match"`
 	MatchMode  string                `json:"match_mode,omitempty"` // "any" | "all"; defaults to "any" when empty
 	TTLSeconds int                   `json:"ttl_seconds"`
+	// RetryAfterMode controls whether a provider-supplied retry hint
+	// (Retry-After / x-ratelimit-reset-*, captured on the error path in
+	// BifrostError.ExtraFields.ProviderResponseHeaders) may override
+	// TTLSeconds. Values are case-insensitive:
+	//
+	//   - "off" (default, empty resolves here): always use TTLSeconds. This
+	//     keeps every pre-existing configuration byte-for-byte identical.
+	//   - "cap": effective = min(providerHint, TTLSeconds). A hint can shorten
+	//     the cooldown below TTLSeconds but never extend it; when the provider
+	//     sends no usable hint, TTLSeconds is used.
+	//   - "exact": effective = providerHint, falling back to TTLSeconds when
+	//     no usable hint is present. Note this can shorten a long quota TTL to
+	//     a short hint, so evaluate it per rule before enabling.
+	RetryAfterMode string `json:"retry_after_mode,omitempty"`
 }
 
 // ScopeOrDefault returns the rule's effective scope, defaulting to
@@ -631,6 +645,17 @@ func (r *CooldownPolicyRule) ScopeOrDefault() CooldownPolicyScope {
 		return CooldownScopeKey
 	}
 	return r.Scope.OrDefault()
+}
+
+// RetryAfterModeOrDefault returns the rule's effective retry-after mode,
+// normalizing empty ("not configured") and mixed-case values to the canonical
+// lower-case form. Empty resolves to "off" so configurations written before
+// this field existed keep their exact previous behaviour.
+func (r *CooldownPolicyRule) RetryAfterModeOrDefault() string {
+	if r == nil || r.RetryAfterMode == "" {
+		return "off"
+	}
+	return strings.ToLower(strings.TrimSpace(r.RetryAfterMode))
 }
 
 // CooldownPolicy attaches rate_limit and quota cooldown rules to a single
@@ -949,7 +974,12 @@ func ResolveCooldownPolicy(provider ModelProvider, configured *CooldownPolicy) *
 // (provider create/update) so a mistake is visible immediately instead of
 // showing up later as a wrong cooldown kind — or as no cooldown at all.
 //
-// The one check today: a quota rule that matches on a bare status code.
+// Two checks today:
+//
+//  1. retry_after_mode must be one of "" / "off" / "cap" / "exact"
+//     (case-insensitive). A typo would otherwise silently behave like "off".
+//  2. A quota rule that matches on a bare status code.
+//
 // Quota is evaluated BEFORE rate_limit (see CooldownPlugin.classify), so a
 // bare {status_code: 429} claims every 429 — including all the transient
 // rate-limit ones — which both mislabels them as "quota exhausted" and makes
@@ -961,7 +991,30 @@ func ResolveCooldownPolicy(provider ModelProvider, configured *CooldownPolicy) *
 // legitimate last-resort catch-all, and it cannot shadow anything because it
 // is the last rule consulted.
 func (p *CooldownPolicy) Validate() error {
-	if p == nil || p.Quota == nil {
+	if p == nil {
+		return nil
+	}
+	for _, rule := range []struct {
+		name string
+		rule *CooldownPolicyRule
+	}{
+		{"rate_limit", p.RateLimit},
+		{"quota", p.Quota},
+	} {
+		if rule.rule == nil {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(rule.rule.RetryAfterMode)) {
+		case "", "off", "cap", "exact":
+			// valid ("" normalizes to "off")
+		default:
+			return fmt.Errorf(
+				"cooldown_policy.%s.retry_after_mode %q is invalid; must be one of \"off\", \"cap\", \"exact\" (or empty for the default \"off\")",
+				rule.name, rule.rule.RetryAfterMode,
+			)
+		}
+	}
+	if p.Quota == nil {
 		return nil
 	}
 	for i, m := range p.Quota.Match {

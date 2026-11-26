@@ -346,7 +346,7 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 
 	return (
 		<>
-			<div className="grid grid-cols-3 gap-3">
+			<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
 				<FormField
 					control={control}
 					name={`${ruleKey}.match_mode`}
@@ -407,6 +407,32 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 									value={field.value ?? 0}
 									onChange={(e) => field.onChange(Number(e.target.value) || 0)}
 								/>
+							</FormControl>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={control}
+					name={`${ruleKey}.retry_after_mode`}
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel className="flex items-center gap-1.5">
+								{t("fragments.cooldownPolicy.retryAfterMode.label")}
+								<HelpHint>{t("fragments.cooldownPolicy.retryAfterMode.description")}</HelpHint>
+							</FormLabel>
+							<FormControl>
+								<Select value={(field.value ?? "off") as string} onValueChange={field.onChange}>
+									<SelectTrigger className="w-full" data-testid={`provider-cooldown-${ruleKey}-retry-after-mode-trigger`}>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="off">{t("fragments.cooldownPolicy.retryAfterMode.off")}</SelectItem>
+										<SelectItem value="cap">{t("fragments.cooldownPolicy.retryAfterMode.cap")}</SelectItem>
+										<SelectItem value="exact">{t("fragments.cooldownPolicy.retryAfterMode.exact")}</SelectItem>
+									</SelectContent>
+								</Select>
 							</FormControl>
 							<FormMessage />
 						</FormItem>

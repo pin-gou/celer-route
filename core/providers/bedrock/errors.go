@@ -23,6 +23,14 @@ func parseBedrockHTTPError(statusCode int, headers http.Header, body []byte) *sc
 
 	var errorResp BedrockError
 	bifrostErr := providerUtils.HandleProviderAPIError(fastResp, &errorResp)
+	// HandleProviderAPIError already extracts these from the fasthttp shim
+	// built above, but assign again from the original http.Header so a future
+	// refactor that stops routing Bedrock errors through the shared helper
+	// cannot silently drop the provider's retry hints (Retry-After,
+	// x-ratelimit-reset-*). Same filter, so the result is identical.
+	if bifrostErr != nil {
+		bifrostErr.ExtraFields.ProviderResponseHeaders = providerUtils.ExtractProviderResponseHeadersFromHTTP(&http.Response{Header: headers})
+	}
 	if errorResp.Message != "" {
 		if bifrostErr.Error == nil {
 			bifrostErr.Error = &schemas.ErrorField{}

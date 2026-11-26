@@ -4021,6 +4021,12 @@
           "type": "integer",
           "minimum": 1,
           "description": "Cooldown TTL in seconds applied to a key when the rule fires"
+        },
+        "retry_after_mode": {
+          "type": "string",
+          "enum": ["off", "cap", "exact"],
+          "default": "off",
+          "description": "Whether the cooldown duration may follow a retry delay reported by the provider (Retry-After, x-ratelimit-reset-*). \"off\" (default) always uses ttl_seconds. \"cap\" uses min(provider hint, ttl_seconds) so a hint can shorten but never extend the cooldown; falls back to ttl_seconds when the provider sends no usable hint. \"exact\" uses the provider hint outright and falls back to ttl_seconds when absent — note that this can shorten a deliberately long quota TTL to a short hint, so evaluate it per rule."
         }
       },
       "required": ["match", "ttl_seconds"],

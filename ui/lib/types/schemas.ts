@@ -696,6 +696,11 @@ export const cooldownPolicyRuleSchema = z.object({
 	ttl_seconds: z.number().int().min(1),
 	enabled: z.boolean().optional(),
 	scope: z.enum(["key", "model"]).optional(),
+	// How ttl_seconds combines with the provider's Retry-After hint. Must be
+	// declared here even if the UI never sets it: zod strips unknown keys, so
+	// omitting it would silently erase a value configured via config.json/API
+	// the next time anyone saves the policy from this form.
+	retry_after_mode: z.enum(["off", "cap", "exact"]).optional(),
 });
 
 export const cooldownPolicySchema = z.object({

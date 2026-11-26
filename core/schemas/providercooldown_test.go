@@ -75,6 +75,71 @@ func TestValidateCooldownPolicy_ScopedQuotaMatchesAreValid(t *testing.T) {
 	}
 }
 
+// TestValidateCooldownPolicy_RetryAfterMode pins the retry_after_mode enum:
+// empty and the three documented values (case-insensitive) validate, anything
+// else is rejected with the field path in the message.
+func TestValidateCooldownPolicy_RetryAfterMode(t *testing.T) {
+	valid := []string{"", "off", "cap", "exact", "OFF", "Cap", "Exact"}
+	for _, mode := range valid {
+		for _, field := range []string{"rate_limit", "quota"} {
+			rule := &CooldownPolicyRule{
+				TTLSeconds:     60,
+				RetryAfterMode: mode,
+				Match:          []CooldownPolicyMatch{{MessageContains: []string{"rate limit"}}},
+			}
+			p := &CooldownPolicy{}
+			if field == "quota" {
+				p.Quota = rule
+			} else {
+				p.RateLimit = rule
+			}
+			if err := p.Validate(); err != nil {
+				t.Fatalf("retry_after_mode %q on %s must validate, got %v", mode, field, err)
+			}
+		}
+	}
+
+	for _, mode := range []string{"max", "exactish", "ON"} {
+		rule := &CooldownPolicyRule{
+			TTLSeconds:     60,
+			RetryAfterMode: mode,
+			Match:          []CooldownPolicyMatch{{MessageContains: []string{"rate limit"}}},
+		}
+		p := &CooldownPolicy{RateLimit: rule}
+		err := p.Validate()
+		if err == nil {
+			t.Fatalf("retry_after_mode %q must be rejected", mode)
+		}
+		for _, want := range []string{"cooldown_policy.rate_limit.retry_after_mode", "off", "cap", "exact"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %q must mention %q", err.Error(), want)
+			}
+		}
+	}
+}
+
+func TestCooldownPolicyRule_RetryAfterModeOrDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		rule *CooldownPolicyRule
+		want string
+	}{
+		{"nil rule", nil, "off"},
+		{"empty", &CooldownPolicyRule{}, "off"},
+		{"off", &CooldownPolicyRule{RetryAfterMode: "off"}, "off"},
+		{"cap", &CooldownPolicyRule{RetryAfterMode: "cap"}, "cap"},
+		{"exact", &CooldownPolicyRule{RetryAfterMode: "exact"}, "exact"},
+		{"mixed case", &CooldownPolicyRule{RetryAfterMode: "ExAcT"}, "exact"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.rule.RetryAfterModeOrDefault(); got != tt.want {
+				t.Fatalf("RetryAfterModeOrDefault() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestDefaultCooldownPolicy_AllProvidersValidate guards the built-in defaults
 // against the exact mistake Validate() exists to catch. A default that fails
 // its own validation would either brick provider startup or train operators to

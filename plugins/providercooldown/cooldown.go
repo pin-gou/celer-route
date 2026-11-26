@@ -16,9 +16,11 @@ const (
 	PluginName = "provider-cooldown"
 
 	// DefaultCooldownTTL is the default per-(provider, key_id) cooldown duration
-	// applied when a quota-exhausted error is observed. The plugin does not have
-	// access to HTTP response headers (e.g. Retry-After) at the post-hook layer,
-	// so a single default is the simplest correct default.
+	// applied when a quota-exhausted error is observed. The per-provider
+	// CooldownPolicy supersedes it; this constant is only the legacy fallback
+	// for configs that still use quota_patterns. Provider retry hints
+	// (Retry-After / x-ratelimit-reset-*) are honoured only when a policy rule
+	// opts in via retry_after_mode (see effectiveCooldownTTL).
 	DefaultCooldownTTL = 5 * time.Minute
 
 	pluginName = PluginName
@@ -1266,12 +1268,41 @@ func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvid
 		policy = schemas.DefaultCooldownPolicy(provider)
 	}
 	if policy.Quota != nil && policy.Quota.MatchesRule(bifrostErr) {
-		return time.Duration(policy.Quota.TTLSeconds) * time.Second, keyID, keyName, CooldownKindQuota, policy.Quota.ScopeOrDefault(), true
+		return effectiveCooldownTTL(policy.Quota, bifrostErr), keyID, keyName, CooldownKindQuota, policy.Quota.ScopeOrDefault(), true
 	}
 	if policy.RateLimit != nil && policy.RateLimit.MatchesRule(bifrostErr) {
-		return time.Duration(policy.RateLimit.TTLSeconds) * time.Second, keyID, keyName, CooldownKindRateLimit, policy.RateLimit.ScopeOrDefault(), true
+		return effectiveCooldownTTL(policy.RateLimit, bifrostErr), keyID, keyName, CooldownKindRateLimit, policy.RateLimit.ScopeOrDefault(), true
 	}
 	return 0, keyID, keyName, "", schemas.CooldownScopeKey, false
+}
+
+// effectiveCooldownTTL resolves the cooldown duration a fired rule applies,
+// optionally honouring the provider's own retry hint captured on the error
+// path in bifrostErr.ExtraFields.ProviderResponseHeaders.
+//
+// RetryAfterModeOrDefault() == "off" (the default) returns TTLSeconds verbatim
+// without reading any header, so configurations that predate the mode keep
+// byte-for-byte the previous behaviour.
+func effectiveCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.BifrostError) time.Duration {
+	if rule == nil {
+		return 0
+	}
+	ttl := time.Duration(rule.TTLSeconds) * time.Second
+	mode := rule.RetryAfterModeOrDefault()
+	if mode != "cap" && mode != "exact" {
+		return ttl
+	}
+	if bifrostErr == nil {
+		return ttl
+	}
+	hint := providerRetryAfterHint(bifrostErr.ExtraFields.ProviderResponseHeaders)
+	if hint <= 0 {
+		return ttl
+	}
+	if mode == "cap" && hint > ttl {
+		return ttl
+	}
+	return hint
 }
 
 func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {

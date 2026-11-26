@@ -578,6 +578,13 @@
 			},
 			"ttlLabel": "Cooldown TTL (seconds)",
 			"ttlDescription": "How long the matched key stays out of rotation; cooldown expires automatically.",
+			"retryAfterMode": {
+				"label": "Duration source",
+				"description": "Fixed TTL uses only the seconds below. Capped by TTL uses the provider's retry hint when it is shorter. Provider hint uses the hint exactly, which can also lengthen the cooldown.",
+				"off": "Fixed TTL",
+				"cap": "Provider hint, capped by TTL",
+				"exact": "Provider hint exactly"
+			},
 			"matchesLabel": "Matches",
 			"addMatch": "Add match",
 			"noMatches": "At least one match is required.",

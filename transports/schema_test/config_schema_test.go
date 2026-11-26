@@ -1316,4 +1316,49 @@ func TestSchemaProviderCooldownPolicy(t *testing.T) {
 			t.Error("unknown match field must be rejected by additionalProperties:false")
 		}
 	})
+
+	t.Run("retry_after_mode accepts documented values", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"retry_after_mode": "cap"
+						},
+						"quota": {
+							"match": [{"code": ["insufficient_quota"]}],
+							"ttl_seconds": 600,
+							"retry_after_mode": "exact"
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected retry_after_mode cap/exact to validate, got: %v", err)
+		}
+	})
+
+	t.Run("unknown retry_after_mode is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"retry_after_mode": "sometimes"
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("invalid retry_after_mode must be rejected by the enum")
+		}
+	})
 }

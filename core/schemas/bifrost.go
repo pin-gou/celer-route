@@ -2159,11 +2159,19 @@ type BifrostErrorExtraFields struct {
 	// matched (i.e. RoutingInfo.ResolvedKeyAlias != nil), otherwise
 	// RoutingInfo.Model. Still populated for backward compatibility; new
 	// consumers should read from RoutingInfo.
-	ResolvedModelUsed         string                `json:"resolved_model_used,omitempty"`
-	RequestType               RequestType           `json:"request_type,omitempty"`
-	MCPRequestType            MCPRequestType        `json:"mcp_request_type,omitempty"`
-	RawRequest                interface{}           `json:"raw_request,omitempty"`
-	RawResponse               interface{}           `json:"raw_response,omitempty"`
+	ResolvedModelUsed string         `json:"resolved_model_used,omitempty"`
+	RequestType       RequestType    `json:"request_type,omitempty"`
+	MCPRequestType    MCPRequestType `json:"mcp_request_type,omitempty"`
+	RawRequest        interface{}    `json:"raw_request,omitempty"`
+	RawResponse       interface{}    `json:"raw_response,omitempty"`
+	// ProviderResponseHeaders carries the upstream provider's response headers
+	// on the error path, mirroring
+	// BifrostResponseExtraFields.ProviderResponseHeaders on the success path.
+	// Populated through the same filter, so sensitive headers (authorization,
+	// cookies, API keys) and transport-level headers are already excluded.
+	// Consumers use it for provider-supplied retry hints (Retry-After,
+	// x-ratelimit-reset-*).
+	ProviderResponseHeaders   map[string]string     `json:"provider_response_headers,omitempty"`
 	ConvertedRequestType      RequestType           `json:"converted_request_type,omitempty"`
 	DroppedCompatPluginParams []string              `json:"dropped_compat_plugin_params,omitempty"`
 	Latency                   int64                 `json:"latency,omitempty"` // in milliseconds
