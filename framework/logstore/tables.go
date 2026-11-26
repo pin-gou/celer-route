@@ -1813,6 +1813,38 @@ type ProviderTokenHistogramResult struct {
 	Providers         []string                       `json:"providers"`
 }
 
+// ProviderKeyModelUsageEntry is one (model, selected key) bucket of provider
+// usage over a time window. It is built from the denormalized log columns
+// (status / token counters / selected_key_id) rather than the token_usage or
+// error_details payloads, so it works identically on sqlite and postgres.
+type ProviderKeyModelUsageEntry struct {
+	Model            string `json:"model"`
+	KeyID            string `json:"key_id"`
+	KeyName          string `json:"key_name"`
+	Requests         int64  `json:"requests"`
+	Successes        int64  `json:"successes"`
+	Errors           int64  `json:"errors"`
+	Cancelled        int64  `json:"cancelled"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+	CachedReadTokens int64  `json:"cached_read_tokens"`
+	TotalTokens      int64  `json:"total_tokens"`
+	// Derived values, computed from the window instead of SQL so they stay
+	// backend-independent.
+	AvgTotalTokens    float64 `json:"avg_total_tokens"`
+	RequestsPerMinute float64 `json:"requests_per_minute"`
+	TokensPerMinute   float64 `json:"tokens_per_minute"`
+}
+
+// ProviderKeyModelUsageResult is the result of GetProviderKeyModelUsage.
+// Entries is always non-nil: an empty window yields an empty slice, never null.
+type ProviderKeyModelUsageResult struct {
+	Provider  string                       `json:"provider"`
+	StartTime time.Time                    `json:"start_time"`
+	EndTime   time.Time                    `json:"end_time"`
+	Entries   []ProviderKeyModelUsageEntry `json:"entries"`
+}
+
 // ProviderLatencyStats represents latency statistics for a single provider
 type ProviderLatencyStats struct {
 	AvgLatency    float64 `json:"avg_latency"`
