@@ -646,10 +646,13 @@ type CooldownPolicy struct {
 // Cooldown policy TTL defaults applied by DefaultCooldownPolicy. Tuned per
 // provider based on observed error semantics in production:
 //
-//   - Sensenova: workspace-level quota shared across keys, so a short
-//     rate-limit cooldown (30s) lets the whole pool probe before the
-//     window resets; quota cooldown is longer (600s) since quota exhaustion
-//     is rarely self-healing.
+//   - Sensenova: rate limits are enforced PER KEY (verified against 10 weeks
+//     of traffic: 99.7% of 429-seconds hit only one of the six keys, vs a
+//     68.6% multi-key baseline). The 30s rate-limit cooldown is validated by
+//     the same data: the next request's success rate returns to baseline
+//     within 25–60s, so a longer cooldown would only suppress healthy
+//     capacity. Quota cooldown stays long (600s) because genuine exhaustion
+//     ("token plan entitlement exhausted") recovers only in ~2.6h median.
 //   - Anthropic: no quota concept (billing uses 402) — rate_limit only.
 //   - Gemini/Vertex: quota exhaustion hits the same window as rate limit
 //     but is harder to recover from (per-day/per-project quotas).
@@ -676,13 +679,48 @@ const (
 func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 	switch provider {
 	case Sensenova:
+		// The rule set below is pinned by
+		// TestClassify_SensenovaObservedTaxonomy, whose cases are drawn verbatim
+		// from 10 weeks of production traffic (2026-09-15 → 2026-11-26, 24,740
+		// client-visible 429s). Two of SenseNova's shapes are unusual enough
+		// that a ruleset keyed off the error type alone fails:
+		//
+		//  1. The dominant self-healing errors are reported as
+		//     type=quota_exceeded_error + code=8, NOT rate_limit_error:
+		//     "tpm exhausted" is 27% of all 429s, "rps exhausted" 4%, and
+		//     "rpm exhausted" 1%. A type-keyed rule leaves them un-cooldowned.
+		//
+		//  2. code=insufficient_quota is overloaded: it tags both a genuine
+		//     balance exhaustion and a short rate window. On this provider the
+		//     rate-window shape dominates (p50 recovery ~91s, the same order as
+		//     TPM/RPM), while only "token plan entitlement exhausted" is truly
+		//     persistent (p50 ~2.6h). Attribution therefore has to come from
+		//     the message, not from the type/code pair.
+		//
+		// So quota is message-first, and rate_limit must not be type-only.
 		return &CooldownPolicy{
 			RateLimit: &CooldownPolicyRule{
 				MatchMode:  "any",
 				TTLSeconds: SensenovaRateLimitTTLSeconds,
 				Match: []CooldownPolicyMatch{
-					{MessageContains: []string{"http error 429", "rate_limit_error"}},
+					// Explicit rate-limit errors: Endpoint{TPM,RPM}Exceeded,
+					// ModelAccount{Tpm,Rpm}RateLimitExceeded, Throttling.BurstRate,
+					// RequestBurstTooFast, and the numeric 429001/429003 codes.
 					{Type: []string{"rate_limit_error"}},
+					// Self-healing exhaustion reported under the quota-exceeded
+					// type with numeric code 8, plus the gateway's own rendered
+					// "HTTP error 429" fallback text for responses with no body.
+					{MessageContains: []string{
+						"http error 429",
+						"tpm exhausted",
+						"rpm exhausted",
+						"rps exhausted",
+						"inference exceeds tpm/rpm limit",
+					}},
+					// code=insufficient_quota carrying a rate-limit message: a
+					// short window, not a depleted balance. The message-scoped
+					// quota rule above claims the genuine balance cases first.
+					{Code: []string{"insufficient_quota"}},
 				},
 			},
 			Quota: &CooldownPolicyRule{
@@ -691,10 +729,19 @@ func DefaultCooldownPolicy(provider ModelProvider) *CooldownPolicy {
 				// quota deliberately requires a quota-specific signal
 				// (message/code/type) — bare status_code 429 must NOT match,
 				// or every transient rate limit would silently take the
-				// 10-minute quota cooldown.
+				// 10-minute quota cooldown. Validate() enforces this.
 				Match: []CooldownPolicyMatch{
-					{MessageContains: []string{"workspace allocated quota", "insufficient_quota", "quota exceeded", "quota_exceeded"}},
-					{Code: []string{"insufficient_quota"}},
+					// Genuinely persistent: p50 recovery ~2.6h.
+					{MessageContains: []string{"token plan entitlement exhausted", "entitlement exhausted"}},
+					// Balance / allocated-quota exhaustion. Wording varies
+					// ("Workspace allocated quota exceeded", "Allocated quota
+					// exceeded, please increase your quota limit.").
+					{MessageContains: []string{
+						"allocated quota exceeded",
+						"quota exceeded",
+						"quota_exceeded",
+						"increase your quota limit",
+					}},
 				},
 			},
 		}
@@ -895,6 +942,48 @@ func ResolveCooldownPolicy(provider ModelProvider, configured *CooldownPolicy) *
 		return configured
 	}
 	return DefaultCooldownPolicy(provider)
+}
+
+// Validate reports CooldownPolicy shapes that silently defeat the operator's
+// intent. Callers should surface the returned error when the config is saved
+// (provider create/update) so a mistake is visible immediately instead of
+// showing up later as a wrong cooldown kind — or as no cooldown at all.
+//
+// The one check today: a quota rule that matches on a bare status code.
+// Quota is evaluated BEFORE rate_limit (see CooldownPlugin.classify), so a
+// bare {status_code: 429} claims every 429 — including all the transient
+// rate-limit ones — which both mislabels them as "quota exhausted" and makes
+// every rate_limit rule dead configuration. This is not hypothetical: it is
+// the exact shape found on the reference deployment, where it attributed
+// ~all rate-limit hits to quota.
+//
+// rate_limit is deliberately exempt: a bare status-code match there is a
+// legitimate last-resort catch-all, and it cannot shadow anything because it
+// is the last rule consulted.
+func (p *CooldownPolicy) Validate() error {
+	if p == nil || p.Quota == nil {
+		return nil
+	}
+	for i, m := range p.Quota.Match {
+		if !m.IsBareStatusMatch() {
+			continue
+		}
+		return fmt.Errorf(
+			"cooldown_policy.quota.match[%d] matches any %d response regardless of body; "+
+				"quota is evaluated before rate_limit, so this rule shadows every rate_limit rule "+
+				"and mislabels transient rate limits as quota exhaustion. "+
+				"Add message_contains, type, or code to target only genuine quota errors",
+			i, *m.StatusCode,
+		)
+	}
+	return nil
+}
+
+// IsBareStatusMatch reports whether the match constrains nothing but the HTTP
+// status code, i.e. it fires on every response carrying that status.
+func (m *CooldownPolicyMatch) IsBareStatusMatch() bool {
+	return m != nil && m.StatusCode != nil &&
+		len(m.MessageContains) == 0 && len(m.Type) == 0 && len(m.Code) == 0
 }
 
 func (config *ProviderConfig) CheckAndSetDefaults() {

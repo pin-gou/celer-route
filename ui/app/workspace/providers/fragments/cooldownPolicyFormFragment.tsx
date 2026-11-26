@@ -34,11 +34,27 @@ interface CooldownPolicyFormFragmentProps {
 const RULE_FIELDS = ["rate_limit", "quota"] as const;
 type RuleField = (typeof RULE_FIELDS)[number];
 
-const DEFAULT_RULE = (ttlSeconds: number): NonNullable<CooldownPolicyFormSchema["rate_limit"]> => ({
+const DEFAULT_RATE_LIMIT_RULE = (ttlSeconds: number): NonNullable<CooldownPolicyFormSchema["rate_limit"]> => ({
 	match: [{ status_code: 429 }],
 	match_mode: "any",
 	ttl_seconds: ttlSeconds,
 });
+
+// DEFAULT_QUOTA_RULE must NOT be a bare {status_code: 429}: quota is evaluated
+// before rate_limit, so a bare 429 there claims every transient rate-limit
+// error and makes the rate_limit rule dead configuration. The backend rejects
+// such a policy (see schemas.CooldownPolicy.Validate), so the UI seeds a
+// message-scoped quota signal instead. It deliberately does NOT match on
+// code=insufficient_quota: some providers (e.g. SenseNova) reuse that code for
+// a short, self-healing rate window. TTL matches the backend quota default
+// (600s) because genuine quota exhaustion is not self-healing.
+const DEFAULT_QUOTA_RULE = (ttlSeconds: number): NonNullable<CooldownPolicyFormSchema["quota"]> => ({
+	match: [{ status_code: 429, message_contains: ["insufficient_quota", "quota exceeded", "entitlement exhausted"] }],
+	match_mode: "any",
+	ttl_seconds: ttlSeconds,
+});
+
+const defaultRuleFor = (rule: RuleField) => (rule === "quota" ? DEFAULT_QUOTA_RULE(600) : DEFAULT_RATE_LIMIT_RULE(60));
 
 const STATUS_CODE_MIN = 100;
 const STATUS_CODE_MAX = 599;
@@ -61,7 +77,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 		// instead of re-injecting the default rate_limit rule.
 		const hasPolicy = policy != null;
 		return {
-			rate_limit: hasPolicy ? policy?.rate_limit : DEFAULT_RULE(60),
+			rate_limit: hasPolicy ? policy?.rate_limit : DEFAULT_RATE_LIMIT_RULE(60),
 			quota: policy?.quota ?? undefined,
 		} as CooldownPolicyFormSchema;
 	};
@@ -120,7 +136,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 			.unwrap()
 			.then(() => {
 				toast.success(t("fragments.cooldownPolicy.toast.cleared"));
-				const resetValues = { rate_limit: DEFAULT_RULE(60), quota: undefined } as CooldownPolicyFormSchema;
+				const resetValues = { rate_limit: DEFAULT_RATE_LIMIT_RULE(60), quota: undefined } as CooldownPolicyFormSchema;
 				initialValuesRef.current = JSON.parse(JSON.stringify(resetValues)) as CooldownPolicyFormSchema;
 				form.reset(resetValues);
 			})
@@ -223,7 +239,7 @@ function ErrorSampleBrowserBridge({ provider }: { provider: ModelProvider["name"
 
 		const current = getValues(targetRule);
 		if (!current) {
-			setValue(targetRule, DEFAULT_RULE(60), { shouldDirty: true, shouldValidate: true });
+			setValue(targetRule, defaultRuleFor(targetRule), { shouldDirty: true, shouldValidate: true });
 		}
 
 		const matchPath = `${targetRule}.match` as const;
@@ -294,7 +310,7 @@ function InnerFields({ provider }: { provider: string }) {
 										if (checked) {
 											const current = getValues(ruleKey);
 											const saved = savedRules.current[ruleKey];
-											const base = current ?? saved ?? DEFAULT_RULE(60);
+											const base = current ?? saved ?? defaultRuleFor(ruleKey);
 											setValue(ruleKey, { ...base, enabled: true } as never, {
 												shouldDirty: true,
 												shouldValidate: true,

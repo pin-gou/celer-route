@@ -302,6 +302,59 @@ func TestUpdateProvider_RejectsKeysInBody(t *testing.T) {
 	}
 }
 
+// TestUpdateProvider_RejectsBareQuotaMatchInCooldownPolicy locks in the one
+// config shape the reference deployment actually shipped and suffered from: a
+// quota rule matching a bare {status_code: 429}. Quota is evaluated before
+// rate_limit, so that rule claims every 429 — including all transient
+// rate-limit errors — and every rate_limit rule becomes dead configuration.
+// The handler must refuse the save instead of storing it.
+func TestUpdateProvider_RejectsBareQuotaMatchInCooldownPolicy(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.Sensenova: {},
+			},
+		},
+		modelsManager: &mockModelsManager{},
+	}
+
+	body := `{
+		"network_config": {},
+		"concurrency_and_buffer_size": {"concurrency": 1000, "buffer_size": 5000},
+		"cooldown_policy": {
+			"quota": {
+				"match": [{"status_code": 429}],
+				"match_mode": "any",
+				"ttl_seconds": 600
+			}
+		}
+	}`
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod(fasthttp.MethodPut)
+	ctx.Request.SetRequestURI("/api/providers/sensenova")
+	ctx.Request.SetBodyString(body)
+	ctx.SetUserValue("provider", string(schemas.Sensenova))
+
+	h.updateProvider(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	if !strings.Contains(string(ctx.Response.Body()), "cooldown policy") {
+		t.Fatalf("expected the error to name the cooldown policy, got %s", string(ctx.Response.Body()))
+	}
+}
+
+// TestUpdateProvider_AcceptsScopedQuotaMatchInCooldownPolicy is the positive
+// counterpart: a quota match that carries a quota-specific predicate must get
+// past validation. Driving the handler to 200 needs a real *bifrost.Bifrost,
+// so the positive path is covered by schemas.TestValidateCooldownPolicy_*;
+// the handler-level contract we can assert here is the negative one above.
+
 // TestUpdateProvider_PassesThroughForEmptyOrAbsentKeys locks in the explicit
 // promise that the keys-guard only rejects NON-empty `keys` arrays. A future
 // refactor that accidentally tightens the guard to `payload.Keys != nil` (or

@@ -401,6 +401,12 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 			}
 		}
 	}
+	// A quota rule matching a bare status code would shadow every rate_limit
+	// rule (quota is evaluated first). See CooldownPolicy.Validate.
+	if err := payload.CooldownPolicy.Validate(); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid cooldown policy: %v", err))
+		return
+	}
 	// Check if provider already exists
 	if _, err := h.inMemoryStore.GetProviderConfigRedacted(payload.Provider); err != nil {
 		if !errors.Is(err, lib.ErrNotFound) {
@@ -591,6 +597,15 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 			SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid base URL: %v", err))
 			return
 		}
+	}
+
+	// Reject cooldown policies that would silently shadow the rate_limit rule
+	// (a bare status_code match inside quota). Surfacing this at save time is
+	// the only cheap moment: once stored, the misclassification only shows up
+	// as the wrong "quota exhausted" badge on the cooldown state page.
+	if err := payload.CooldownPolicy.Validate(); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid cooldown policy: %v", err))
+		return
 	}
 
 	config.ConcurrencyAndBufferSize = &payload.ConcurrencyAndBufferSize
