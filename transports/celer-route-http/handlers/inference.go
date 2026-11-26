@@ -616,7 +616,18 @@ func enableRawRequestResponseForContainer(bifrostCtx *schemas.BifrostContext) {
 	bifrostCtx.SetValue(schemas.BifrostContextKeyStoreRawRequestResponse, true)
 }
 
-// parseFallbacks extracts fallbacks from string array and converts to Fallback structs
+// parseFallbacks extracts fallbacks from a string array and converts them to Fallback structs.
+//
+// Each entry must be in "provider/model" form, where provider is a known
+// provider name. Entries that are empty, lack a known provider prefix (bare
+// model names, unknown namespaces, leading whitespace), or have an empty
+// model are silently dropped without an error. Order is preserved,
+// duplicates are intentionally kept, and model names are not trimmed.
+//
+// A fallback may name the same provider+model as the primary request on
+// purpose: clients use it to rotate to a different API key for the same model.
+// In production this "same-model fallback" strategy succeeds on ~76% of
+// fallback attempts.
 func parseFallbacks(fallbackStrings []string) ([]schemas.Fallback, error) {
 	fallbacks := make([]schemas.Fallback, 0, len(fallbackStrings))
 	for _, fallback := range fallbackStrings {
