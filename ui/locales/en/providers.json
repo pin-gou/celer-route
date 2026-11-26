@@ -628,6 +628,44 @@
 				"failedToUpdate": "Failed to update cooldown policy"
 			}
 		},
+		"providerUsage": {
+			"title": "Capacity usage",
+			"description": "Recent consumption per model × API key. Request counts are upstream attempts, so fallback retries are included.",
+			"windowOptions": {
+				"1h": "Last 1 hour",
+				"24h": "Last 24 hours"
+			},
+			"loading": "Loading usage...",
+			"error": "Failed to load usage.",
+			"empty": "No requests in this window.",
+			"groupCount": "{{count}} model × key groups",
+			"noKey": "(no key)",
+			"summary": {
+				"requests": "Upstream requests",
+				"errors": "Errors",
+				"errorRate": "Error rate",
+				"totalTokens": "Total tokens",
+				"tokensPerMinute": "Tokens / min"
+			},
+			"table": {
+				"model": "Model",
+				"key": "Key",
+				"requests": "Upstream requests",
+				"errorRate": "Error rate",
+				"tokensPerMinute": "Tokens / min",
+				"avgTokens": "Avg tokens",
+				"cancelledNote": "{{count}} cancelled"
+			},
+			"baseline": {
+				"title": "Baseline: top errors",
+				"totalErrors": "{{count}} total errors",
+				"loading": "Loading error baseline...",
+				"error": "Failed to load error baseline.",
+				"empty": "No errors in this window.",
+				"unknown": "Unknown error",
+				"count": "{{count}}×"
+			}
+		},
 		"performance": {
 			"concurrency": "Concurrency",
 			"bufferSize": "Buffer Size",

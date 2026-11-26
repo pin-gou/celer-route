@@ -628,6 +628,44 @@
 				"failedToUpdate": "冷却策略更新失败"
 			}
 		},
+		"providerUsage": {
+			"title": "容量水位",
+			"description": "按模型 × API Key 统计的近期消耗。请求数为上游尝试次数，包含 fallback 重试。",
+			"windowOptions": {
+				"1h": "最近 1 小时",
+				"24h": "最近 24 小时"
+			},
+			"loading": "正在加载用量...",
+			"error": "加载用量失败。",
+			"empty": "此时间窗内暂无请求。",
+			"groupCount": "共 {{count}} 组模型 × Key",
+			"noKey": "（无 Key）",
+			"summary": {
+				"requests": "上游请求",
+				"errors": "错误",
+				"errorRate": "错误率",
+				"totalTokens": "总词元",
+				"tokensPerMinute": "词元/分钟"
+			},
+			"table": {
+				"model": "模型",
+				"key": "Key",
+				"requests": "上游请求",
+				"errorRate": "错误率",
+				"tokensPerMinute": "词元/分钟",
+				"avgTokens": "平均词元",
+				"cancelledNote": "取消 {{count}}"
+			},
+			"baseline": {
+				"title": "基线：错误 Top 3",
+				"totalErrors": "共 {{count}} 条错误",
+				"loading": "正在加载错误基线...",
+				"error": "加载错误基线失败。",
+				"empty": "此时间窗内暂无错误。",
+				"unknown": "未知错误",
+				"count": "{{count}}×"
+			}
+		},
 		"performance": {
 			"concurrency": "并发数",
 			"bufferSize": "缓冲区大小",
