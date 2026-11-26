@@ -31,6 +31,58 @@ type Config struct {
 	// Patterns are matched against the lower-cased error message via
 	// strings.Contains (same semantics as the built-in list).
 	QuotaPatterns []string `json:"quota_patterns"`
+
+	// Escalation optionally makes cooldown TTLs grow when the same key keeps
+	// failing (and when many keys fail at once). Nil or Enabled=false keeps
+	// the pre-escalation behaviour byte-for-byte.
+	//
+	// This intentionally lives in the *plugin* config rather than in
+	// schemas.CooldownPolicy: the provider cooldown policy form rebuilds the
+	// whole cooldown_policy object from the fields it knows about, silently
+	// dropping any sub-field it does not understand. The plugin config has no
+	// such form (the UI only toggles the plugin on/off), so fields here
+	// survive an unrelated save.
+	Escalation *EscalationConfig `json:"escalation,omitempty"`
+}
+
+// EscalationConfig controls the optional adaptive TTL upgrade.
+//
+// The behaviour is expressed purely as a longer TTL — no sleeps, no blocking,
+// and no change to the bytes sent upstream.
+type EscalationConfig struct {
+	// Enabled turns the feature on. Default false keeps current behaviour.
+	Enabled bool `json:"enabled"`
+
+	// MaxMultiplier caps how much a single key's TTL can grow (1x, 2x, 4x …).
+	// Values <= 0 fall back to defaultEscalationMaxMultiplier; values above
+	// maxAllowedEscalationMultiplier are clamped to it.
+	MaxMultiplier int `json:"max_multiplier"`
+}
+
+// Normalized returns a copy of the config with MaxMultiplier applied the same
+// way ParseConfig / AsState apply it, so callers that build the struct
+// directly still get deterministic behaviour.
+func (e *EscalationConfig) Normalized() *EscalationConfig {
+	if e == nil {
+		return nil
+	}
+	out := *e
+	out.MaxMultiplier = normalizeMaxMultiplier(out.MaxMultiplier)
+	return &out
+}
+
+// normalizeMaxMultiplier applies the documented default (4) and upper bound
+// (16). Negative / zero means "unset" and takes the default; everything above
+// the bound is clamped.
+func normalizeMaxMultiplier(n int) int {
+	switch {
+	case n <= 0:
+		return defaultEscalationMaxMultiplier
+	case n > maxAllowedEscalationMultiplier:
+		return maxAllowedEscalationMultiplier
+	default:
+		return n
+	}
 }
 
 // ParseConfig decodes the raw config map (as received from the plugin
@@ -78,6 +130,33 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 			}
 		}
 	}
+	if v, ok := raw["escalation"]; ok {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("escalation: expected object, got %T", v)
+		}
+		ec := &EscalationConfig{}
+		for k, vv := range m {
+			switch k {
+			case "enabled":
+				b, ok := vv.(bool)
+				if !ok {
+					return nil, fmt.Errorf("escalation.enabled: expected boolean, got %T", vv)
+				}
+				ec.Enabled = b
+			case "max_multiplier":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("escalation.max_multiplier: %w", err)
+				}
+				ec.MaxMultiplier = n
+			default:
+				return nil, fmt.Errorf("escalation: unknown key %q", k)
+			}
+		}
+		ec.MaxMultiplier = normalizeMaxMultiplier(ec.MaxMultiplier)
+		c.Escalation = ec
+	}
 	return c, nil
 }
 
@@ -107,6 +186,9 @@ func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 			)
 		}
 		s.SetTTLOverride(mp, time.Duration(secs)*time.Second)
+	}
+	if esc := c.Escalation.Normalized(); esc != nil && esc.Enabled {
+		s.enableEscalation(esc.MaxMultiplier)
 	}
 	return s
 }

@@ -153,6 +153,16 @@ type CooldownState struct {
 	// would cause avoidable fallback churn after the reset.
 	ttlOverrides map[schemas.ModelProvider]time.Duration
 
+	// escalation, when non-nil, enables adaptive TTL escalation (see
+	// escalation.go). Nil — the default — means the whole subsystem is inert:
+	// no extra state is read, no TTL is scaled, and the Mark path is unchanged.
+	escalation *escalationState
+
+	// now is the time source used by the state. Nil means time.Now. Tests
+	// inject a fake clock here; production never mutates it. It must not be
+	// swapped while the state is in concurrent use.
+	now func() time.Time
+
 	// Lifetime totals (atomic; cover all kinds including unclassified).
 	markCount       atomic.Uint64
 	suppressedCount atomic.Uint64
@@ -217,6 +227,16 @@ func (c *CooldownState) SetTTLOverride(provider schemas.ModelProvider, ttl time.
 	c.mu.Lock()
 	c.ttlOverrides[provider] = ttl
 	c.mu.Unlock()
+}
+
+// nowTime returns the state's current time, defaulting to time.Now. Reading
+// the now field is safe as long as it is never swapped while the state is in
+// concurrent use (tests install a fake clock before that point).
+func (c *CooldownState) nowTime() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
 }
 
 // key builds the storage key for a key-granularity cooldown: a trailing "::"
@@ -321,7 +341,7 @@ func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID str
 		return time.Time{}, "", false
 	}
 	k := c.markKey(provider, keyID, model, scope)
-	now := time.Now()
+	now := c.nowTime()
 	c.mu.RLock()
 	rec, ok := c.cooldowns[k]
 	c.mu.RUnlock()
@@ -331,7 +351,7 @@ func (c *CooldownState) lookupCooldown(provider schemas.ModelProvider, keyID str
 	if !now.Before(rec.expiresAt) {
 		// lazy prune
 		c.mu.Lock()
-		if cur, ok := c.cooldowns[k]; ok && !time.Now().Before(cur.expiresAt) {
+		if cur, ok := c.cooldowns[k]; ok && !c.nowTime().Before(cur.expiresAt) {
 			delete(c.cooldowns, k)
 		}
 		c.mu.Unlock()
@@ -370,7 +390,7 @@ func (c *CooldownState) lookupSuppressed(provider schemas.ModelProvider, keyID s
 // suppressed. Used to derive the Retry-After hint on the synthetic 429
 // "no_eligible_keys" response so clients know when to retry.
 func (c *CooldownState) ShortestRemainingCooldown(provider schemas.ModelProvider, model string, keys []schemas.Key) time.Duration {
-	now := time.Now()
+	now := c.nowTime()
 	var shortest time.Duration
 	found := false
 	for _, k := range keys {
@@ -454,8 +474,16 @@ func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string
 	if effective <= 0 {
 		effective = c.effectiveTTLLocked(provider)
 	}
+	now := c.nowTime()
+	// Escalation is applied after the base TTL (including any retry_after_mode
+	// resolution) has been computed, so the two features compose: the mode
+	// decides the base, then the multiplier stretches it, then the 1h ceiling
+	// bounds it. With escalation disabled this is a single nil check.
+	if c.escalation != nil {
+		effective = c.escalation.applyLocked(provider, keyID, model, scope, effective, now)
+	}
 	c.cooldowns[c.markKey(provider, keyID, model, scope)] = CooldownRecord{
-		expiresAt: time.Now().Add(effective),
+		expiresAt: now.Add(effective),
 		kind:      kind,
 	}
 	idx := kindIndex(kind)
@@ -573,7 +601,7 @@ type CooldownEntry struct {
 // pruned lazily as they are encountered; callers wanting an exact snapshot
 // may want to call this twice and trust the second result.
 func (c *CooldownState) Snapshot() []CooldownEntry {
-	now := time.Now()
+	now := c.nowTime()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	out := make([]CooldownEntry, 0, len(c.cooldowns))
@@ -622,6 +650,16 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string, m
 		return false
 	}
 	delete(c.cooldowns, k)
+	// A manual unfreeze means the operator considers the key healthy again, so
+	// its escalation counter (and storm-window membership) is reset too —
+	// otherwise the next single failure would immediately jump to 2x/4x.
+	if c.escalation != nil {
+		clearModel := ""
+		if model != "" {
+			clearModel = model
+		}
+		c.clearEscalationLocked(provider, keyID, clearModel)
+	}
 	return true
 }
 
@@ -716,7 +754,7 @@ func (c *CooldownState) runGCLocked(logger schemas.Logger, interval time.Duratio
 		case <-stop:
 			return
 		case <-ticker.C:
-			now := time.Now()
+			now := c.nowTime()
 			c.mu.Lock()
 			pruned := 0
 			remaining := 0
@@ -727,6 +765,9 @@ func (c *CooldownState) runGCLocked(logger schemas.Logger, interval time.Duratio
 				}
 			}
 			remaining = len(c.cooldowns)
+			if c.escalation != nil {
+				c.escalation.cleanupLocked(now)
+			}
 			c.mu.Unlock()
 			if pruned > 0 && logger != nil {
 				logger.Debug("[provider-cooldown] GC pruned %d expired entries, %d remaining", pruned, remaining)
@@ -967,8 +1008,9 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	p.quotaPatterns = cfg.QuotaPatterns
 	p.startGC()
 	if p.logger != nil {
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s))",
-			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns))
+		escalationEnabled := cfg.Escalation != nil && cfg.Escalation.Enabled
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t)",
+			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled)
 	}
 	return nil
 }
@@ -1306,7 +1348,15 @@ func effectiveCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.
 }
 
 func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
-	if p.State == nil || bifrostErr == nil {
+	if p.State == nil {
+		return resp, bifrostErr, nil
+	}
+	if bifrostErr == nil {
+		// Success: clear this key's escalation counter so a recovered key is
+		// not punished for earlier 429s. This deliberately records NO cooldown
+		// state — success must stay a no-op for the cooldown map itself. When
+		// escalation is disabled the helper returns before reading ctx.
+		p.State.clearEscalationOnSuccess(ctx)
 		return resp, bifrostErr, nil
 	}
 

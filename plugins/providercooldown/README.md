@@ -42,7 +42,8 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
       "name": "provider-cooldown",
       "config": {
         "default_ttl_seconds": 300,
-        "ttl_overrides": { "openai": 30, "anthropic": 1200 }
+        "ttl_overrides": { "openai": 30, "anthropic": 1200 },
+        "escalation": { "enabled": false, "max_multiplier": 4 }
       }
     }
   ]
@@ -55,6 +56,21 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `name` | string | — | must be `"provider-cooldown"` |
 | `config.default_ttl_seconds` | int | 300 | applied to every provider without an override; `<= 0` falls back to 300 |
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
+| `config.escalation.enabled` | bool | `false` | adaptive TTL escalation (see below); off = unchanged behaviour |
+| `config.escalation.max_multiplier` | int | `4` | per-key TTL growth ceiling, clamped to `1..16` |
+
+### Adaptive TTL escalation (optional, default off)
+
+When `escalation.enabled` is true, cooldown TTLs grow on repeat failures:
+
+- the same `(provider, key, model)` failing again within 300s doubles the TTL
+  (1x → 2x → 4x … up to `max_multiplier`); a successful call clears the count;
+- when 3+ distinct keys fail for the same provider/model within 60s, new marks
+  start at 2x until that window goes quiet;
+- escalated TTLs are capped at 1 hour and are never shorter than the base TTL.
+
+It is expressed only as a longer TTL — no sleeps, no blocking, and no change to
+the upstream request bytes.
 
 Provider names use Bifrost's `ModelProvider` enum (e.g. `"openai"`,
 `"anthropic"`, `"bedrock"`).
