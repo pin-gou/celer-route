@@ -505,11 +505,53 @@ var providerErrorCatalog = map[ModelProvider]ProviderErrorCatalog{
 			"rate_limit_error",       // observed
 			"authentication_error",   // docs
 			"permission_error",       // docs
+			// Appended from 10 weeks of production traffic
+			// (2026-09-15 → 2026-11-26): SenseNova reports self-healing
+			// rate/quota exhaustion under quota_exceeded_error rather than
+			// rate_limit_error, so a type-only rule keyed on rate_limit_error
+			// misses the dominant 429 shape.
+			"quota_exceeded_error",       // observed
+			"not_found_error",            // observed
+			"permission_denied_error",    // observed
+			"failed_precondition_error",  // observed
+			"inference_error",            // observed
+			"request_timed_out",          // observed
+			"provider_connection_failed", // observed
 		},
 		Codes: []string{
 			"insufficient_quota",      // observed
 			"invalid_api_key",         // docs
 			"model_not_found",         // docs
+			// Appended from the same 10-week window. The dotted entries are
+			// SenseNova's internal enum names, emitted verbatim as error.code.
+			"RateLimitExceeded.EndpointTPMExceeded",       // observed
+			"RateLimitExceeded.EndpointRPMExceeded",       // observed
+			"ModelAccountTpmRateLimitExceeded",            // observed
+			"ModelAccountRpmRateLimitExceeded",            // observed
+			"ModelAccountConcurrentRequestsLimitExceeded", // observed
+			"Throttling.BurstRate",                        // observed
+			"RequestBurstTooFast",                         // observed
+			"429001",                                      // observed
+			"429003",                                      // observed
+			"429",                                         // observed (bare HTTP status echoed as code)
+			// "8" is an overloaded numeric code: it tags self-healing window
+			// exhaustion (tpm/rps/rpm exhausted) AND persistent token-plan
+			// entitlement exhaustion. Only error.message distinguishes them,
+			// so cooldown rules must not key on the code alone.
+			"8",      // observed (overloaded; disambiguate via message)
+			"3",      // observed (invalid parameter, e.g. MaxTokens out of range)
+			"400",    // observed
+			"400001", // observed
+			"400006", // observed
+			"InvalidParameter", // observed
+			"BadRequest",       // observed
+			"18",               // observed (safety/security rejection)
+			"16",               // observed (401 with numeric code)
+			"14",               // observed (503 with numeric code)
+			"503",              // observed
+			"7",                // observed (model not in current token plan)
+			"5",                // observed (model route not found)
+			"9",                // observed (safety check failed)
 		},
 	},
 	Baichuan: {
