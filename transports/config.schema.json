@@ -5795,6 +5795,12 @@
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
         },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
+        },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
         },
@@ -5838,6 +5844,12 @@
         "store_raw_request_response": {
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
+        },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
@@ -5883,6 +5895,12 @@
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
         },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
+        },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
         },
@@ -5927,6 +5945,12 @@
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
         },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
+        },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
         }
@@ -5967,6 +5991,12 @@
         "store_raw_request_response": {
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
+        },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
@@ -6009,6 +6039,12 @@
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
         },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
+        },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
         }
@@ -6049,6 +6085,12 @@
         "store_raw_request_response": {
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
+        },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
@@ -6091,6 +6133,12 @@
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
         },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
+        },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
         }
@@ -6132,6 +6180,12 @@
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
         },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
+        },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
         }
@@ -6170,6 +6224,12 @@
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
         },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
+        },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
         }
@@ -6207,6 +6267,12 @@
         "store_raw_request_response": {
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
+        },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"
@@ -6248,6 +6314,12 @@
         "store_raw_request_response": {
           "type": "boolean",
           "description": "Capture raw request/response for internal logging only; strip from API responses returned to clients (default: false)"
+        },
+        "max_concurrent_requests_per_key": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of simultaneous in-flight requests per API key of this provider. 0 (default) disables the limit entirely, with no extra locking or counting. When enabled, an in-flight request whose selected key is at the limit makes the gateway prefer another key of the same provider that still has headroom; if every key is saturated the request is still allowed through rather than failed. This is a concurrency gate, not a cooldown: it does not mark keys unhealthy or skip them after an error."
         },
         "custom_provider_config": {
           "$ref": "#/$defs/custom_provider_config"

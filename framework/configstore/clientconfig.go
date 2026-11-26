@@ -500,9 +500,13 @@ type ProviderConfig struct {
 	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`               // OpenAI-specific configuration
 	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`             // Per-provider cooldown policy (rate_limit / quota rules)
 	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`          // Per-model default request parameters (model → param → value); provider-agnostic
-	ConfigHash               string                            `json:"config_hash,omitempty"`                 // Hash of config.json version, used for change detection
-	Status                   string                            `json:"status,omitempty"`                      // Model discovery status for keyless providers
-	Description              string                            `json:"description,omitempty"`                 // Model discovery error message for keyless providers
+	// MaxConcurrentRequestsPerKey caps simultaneous in-flight requests per API
+	// key; 0 disables the gate. Surfaced through config.json, the provider API,
+	// and ultimately schemas.ProviderConfig.
+	MaxConcurrentRequestsPerKey int    `json:"max_concurrent_requests_per_key,omitempty"`
+	ConfigHash                  string `json:"config_hash,omitempty"` // Hash of config.json version, used for change detection
+	Status                      string `json:"status,omitempty"`      // Model discovery status for keyless providers
+	Description                 string `json:"description,omitempty"` // Model discovery error message for keyless providers
 }
 
 // Redacted returns a redacted copy of the provider configuration.
@@ -513,18 +517,19 @@ func (p *ProviderConfig) Redacted() *ProviderConfig {
 		redactedNetworkConfig = p.NetworkConfig.Redacted()
 	}
 	redactedConfig := ProviderConfig{
-		NetworkConfig:            redactedNetworkConfig,
-		ConcurrencyAndBufferSize: p.ConcurrencyAndBufferSize,
-		SendBackRawRequest:       p.SendBackRawRequest,
-		SendBackRawResponse:      p.SendBackRawResponse,
-		StoreRawRequestResponse:  p.StoreRawRequestResponse,
-		CustomProviderConfig:     p.CustomProviderConfig,
-		OpenAIConfig:             p.OpenAIConfig,
-		CooldownPolicy:           p.CooldownPolicy,
-		DefaultParameters:        p.DefaultParameters,
-		ConfigHash:               p.ConfigHash,
-		Status:                   p.Status,
-		Description:              p.Description,
+		NetworkConfig:               redactedNetworkConfig,
+		ConcurrencyAndBufferSize:    p.ConcurrencyAndBufferSize,
+		SendBackRawRequest:          p.SendBackRawRequest,
+		SendBackRawResponse:         p.SendBackRawResponse,
+		StoreRawRequestResponse:     p.StoreRawRequestResponse,
+		CustomProviderConfig:        p.CustomProviderConfig,
+		OpenAIConfig:                p.OpenAIConfig,
+		CooldownPolicy:              p.CooldownPolicy,
+		DefaultParameters:           p.DefaultParameters,
+		MaxConcurrentRequestsPerKey: p.MaxConcurrentRequestsPerKey,
+		ConfigHash:                  p.ConfigHash,
+		Status:                      p.Status,
+		Description:                 p.Description,
 	}
 
 	if p.ProxyConfig != nil {
@@ -796,6 +801,18 @@ func (p *ProviderConfig) GenerateConfigHash(providerName string) (string, error)
 	// Hash StoreRawRequestResponse
 	if p.StoreRawRequestResponse {
 		hash.Write([]byte("storeRawRequestResponse"))
+	}
+
+	// Hash MaxConcurrentRequestsPerKey (per-key in-flight gate). Only when set,
+	// mirroring the boolean flags above: a disabled gate must not perturb the
+	// hash of existing rows, so upgrades don't look like a config change.
+	if p.MaxConcurrentRequestsPerKey > 0 {
+		hash.Write([]byte("maxConcurrentRequestsPerKey:"))
+		data, err := sonic.Marshal(p.MaxConcurrentRequestsPerKey)
+		if err != nil {
+			return "", err
+		}
+		hash.Write(data)
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil

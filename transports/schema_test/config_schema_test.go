@@ -575,6 +575,74 @@ func TestSchemaProviderRawRequest(t *testing.T) {
 	})
 }
 
+// TestSchemaProviderMaxConcurrentRequestsPerKey pins the config version of the
+// per-key in-flight gate: every provider variant must accept the field (they all
+// set additionalProperties:false, so a missing branch rejects the whole config),
+// zero must stay valid as the default, and negatives must be rejected.
+func TestSchemaProviderMaxConcurrentRequestsPerKey(t *testing.T) {
+	schema := loadSchema(t)
+
+	for _, def := range []string{
+		"provider",
+		"provider_with_bedrock_config",
+		"provider_with_bedrock_mantle_config",
+		"provider_with_vllm_config",
+		"provider_with_replicate_config",
+		"provider_with_azure_config",
+		"provider_with_azure_ai_config",
+		"provider_with_vertex_config",
+		"provider_with_ollama_config",
+		"provider_with_sgl_config",
+		"provider_with_deepseek_config",
+		"provider_with_fireworks_config",
+	} {
+		t.Run(def+" has max_concurrent_requests_per_key", func(t *testing.T) {
+			_, found := navigateJSON(schema, "$defs", def, "properties", "max_concurrent_requests_per_key")
+			if !found {
+				t.Errorf("$defs/%s is missing 'max_concurrent_requests_per_key' property — ProviderConfig Go struct defines this field", def)
+			}
+		})
+	}
+
+	compiled := compileSchema(t)
+
+	valid := `{
+		"providers": {
+			"openai": {
+				"keys": [{"name": "test", "value": "sk-test", "weight": 1, "models": ["gpt-4"]}],
+				"max_concurrent_requests_per_key": 4
+			}
+		}
+	}`
+	if err := validateConfig(t, compiled, valid); err != nil {
+		t.Errorf("provider with max_concurrent_requests_per_key should be valid, got: %v", err)
+	}
+
+	zero := `{
+		"providers": {
+			"openai": {
+				"keys": [{"name": "test", "value": "sk-test", "weight": 1, "models": ["gpt-4"]}],
+				"max_concurrent_requests_per_key": 0
+			}
+		}
+	}`
+	if err := validateConfig(t, compiled, zero); err != nil {
+		t.Errorf("max_concurrent_requests_per_key = 0 (disabled) should be valid, got: %v", err)
+	}
+
+	negative := `{
+		"providers": {
+			"openai": {
+				"keys": [{"name": "test", "value": "sk-test", "weight": 1, "models": ["gpt-4"]}],
+				"max_concurrent_requests_per_key": -1
+			}
+		}
+	}`
+	if err := validateConfig(t, compiled, negative); err == nil {
+		t.Error("negative max_concurrent_requests_per_key should be rejected by the schema")
+	}
+}
+
 func TestSchemaGovernanceProviders(t *testing.T) {
 	schema := loadSchema(t)
 

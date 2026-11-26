@@ -561,6 +561,14 @@ type ProviderConfig struct {
 	OpenAIConfig            *OpenAIConfig                     `json:"openai_config,omitempty"`
 	CooldownPolicy          *CooldownPolicy                   `json:"cooldown_policy,omitempty"`    // Per-provider cooldown rules; nil falls back to DefaultCooldownPolicy
 	DefaultParameters       map[string]map[string]interface{} `json:"default_parameters,omitempty"` // Per-model default request parameters (model → param → value); injected only when the request omits the param. Provider-agnostic: any provider/model may use it.
+	// MaxConcurrentRequestsPerKey caps how many requests may be in flight
+	// against a single API key of this provider. 0 (default) disables the cap
+	// entirely: the concurrency-gate code path is skipped, so there is no
+	// locking, no counting and no behaviour change. When > 0, an attempt whose
+	// selected key is already at the cap checks the rest of the candidate pool
+	// for a key with headroom; if every candidate is saturated the request is
+	// still allowed through (fail-open) rather than failed.
+	MaxConcurrentRequestsPerKey int `json:"max_concurrent_requests_per_key,omitempty"`
 }
 
 // OpenAIConfig holds OpenAI-specific provider configuration.
@@ -1070,6 +1078,14 @@ func (config *ProviderConfig) CheckAndSetDefaults() {
 
 	if config.NetworkConfig.KeepAliveTimeoutInSeconds <= 0 {
 		config.NetworkConfig.KeepAliveTimeoutInSeconds = DefaultKeepAliveTimeoutInSeconds
+	}
+
+	// A negative per-key in-flight cap is meaningless; normalize it to "disabled"
+	// rather than rejecting the whole provider config. The gate itself also
+	// treats any value <= 0 as disabled, so config paths that never run this
+	// method (e.g. an API update that only touches one field) behave identically.
+	if config.MaxConcurrentRequestsPerKey < 0 {
+		config.MaxConcurrentRequestsPerKey = 0
 	}
 
 	if config.NetworkConfig.MaxConnsPerHost <= 0 {
