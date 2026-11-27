@@ -36,7 +36,7 @@ func newTestState(ttl time.Duration, clk *fakeClock, escalationOn bool, maxMulti
 	s := NewCooldownState(ttl)
 	s.now = clk.Now
 	if escalationOn {
-		s.enableEscalation(maxMultiplier)
+		s.enableEscalation(&schemas.CooldownEscalationConfig{Enabled: true, MaxMultiplier: maxMultiplier})
 	}
 	return s
 }

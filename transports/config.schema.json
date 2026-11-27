@@ -3980,7 +3980,7 @@
     },
     "cooldown_escalation": {
       "type": "object",
-      "description": "Optional adaptive cooldown escalation. Disabled by default. When enabled, a key that keeps failing inside a 300s window gets a longer TTL (1x, 2x, 4x ... up to max_multiplier), and when 3+ distinct keys fail for the same provider/model inside 60s, new marks start at 2x. Success clears the key's counter. Escalated TTLs are capped at 1 hour. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
+      "description": "Optional adaptive cooldown escalation. Disabled by default. When enabled, a key that keeps failing inside a 300s window gets a longer TTL (1x, 2x, 4x ... up to max_multiplier), and when 3+ distinct keys fail for the same provider/model inside 60s, new marks start at 2x. Success clears the key's counter unless the optional chronic sub-section has that key in long-backoff mode, where recovery_successes consecutive successes are required. Escalated TTLs are capped at 1 hour (the chronic sub-section can exceed that up to its own configurable limit). Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -3993,6 +3993,57 @@
           "maximum": 16,
           "default": 4,
           "description": "Upper bound on how much a single key's TTL can grow (1..16, values above 16 are clamped; values <= 0 fall back to 4)"
+        },
+        "chronic": {
+          "$ref": "#/$defs/cooldown_chronic",
+          "description": "Optional long backoff for chronically unhealthy keys/models. Sub-section of escalation: it only takes effect when escalation.enabled is true, and (like every other section) a provider's own escalation section replaces the plugin-level one wholesale — a provider section that omits chronic does NOT inherit it. Default off."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_chronic": {
+      "type": "object",
+      "description": "Optional chronic long-backoff. Disabled by default. When enabled, a (provider, key, model) whose observed EWMA success rate is below success_rate_threshold with at least min_samples observations is treated as chronically unhealthy: its cooldown records chronic_max_ttl_seconds (with jitter) instead of the short escalated TTL, so the gateway stops burning one upstream request every couple of minutes just to re-learn the same 429. The chronic mark is only lifted after recovery_successes CONSECUTIVE successes, so a key with a ~15% success rate cannot reset on a lucky probe. Half-open probing needs no scheduler: when the long TTL lapses the key is selectable again (with health weighting it is de-prioritised but never unselectable) and the next natural rotation is the probe. Only effective when escalation.enabled is true; used both as the plugin-level default and, optionally, as a per-provider cooldown_policy.escalation.chronic sub-section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn chronic long-backoff on (default false = current behaviour). Requires escalation.enabled=true; the combination chronic.enabled=true with escalation.enabled=false is rejected."
+        },
+        "success_rate_threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "default": 0.3,
+          "description": "EWMA success rate below which a row with enough samples counts as chronically unhealthy (strictly between 0 and 1; values <= 0 fall back to 0.3, values outside the open interval are clamped inside it)."
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 10,
+          "description": "How many observations a (provider, key, model) row needs before the chronic predicate may fire (clamped to 1..1000; values <= 0 fall back to 10)."
+        },
+        "chronic_max_ttl_seconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 86400,
+          "default": 1800,
+          "description": "Long backoff recorded for a chronic row, before jitter (clamped to 30..86400; values <= 0 fall back to 1800). Chronic only ever lengthens a cooldown: if the base or escalated TTL is already longer, that value is kept."
+        },
+        "jitter_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0,
+          "description": "Fractional jitter applied to chronic_max_ttl_seconds (0.2 = ±20%, clamped to 0..1), which de-synchronises keys that started failing together. 0 (the shipped default) means no jitter; 0.2 is the recommended value for production."
+        },
+        "recovery_successes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 3,
+          "description": "How many CONSECUTIVE successes lift the chronic mark (clamped to 1..1000; values <= 0 fall back to 3). This is the hysteresis that stops a single lucky probe from resetting a chronically failing key; the key's escalation counters are kept until this threshold is reached."
         }
       },
       "additionalProperties": false

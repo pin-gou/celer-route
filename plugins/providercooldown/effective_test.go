@@ -42,7 +42,7 @@ func checkCapacity(p *CooldownPlugin, policy *schemas.CooldownPolicy, provider s
 func TestCapabilityResolutionMatrix(t *testing.T) {
 	s := NewCooldownState(time.Minute)
 	s.enableCapacity(&CapacityConfig{Enabled: true, TokenLimit: 1000, RequestLimit: 7, WindowSeconds: 120})
-	s.enableEscalation(2)
+	s.enableEscalation(&EscalationConfig{Enabled: true, MaxMultiplier: 2})
 	s.enableLearning(&LearningConfig{Enabled: true, WindowSeconds: 120, MaxSamples: 40, MinSamples: 3})
 
 	override := &schemas.CooldownPolicy{

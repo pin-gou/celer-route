@@ -34,12 +34,20 @@ import (
 // Everything here is guarded by CooldownState.mu — the same mutex that protects
 // the cooldowns map — so no additional lock is introduced and observations can
 // never interleave with a filter read.
+//
+// The same table also backs chronic long-backoff detection (chronic.go): the
+// EWMA is exactly the "is this credential actually healthy" signal that decides
+// whether a failure deserves a minutes-long cooldown. Observation is therefore
+// driven by "health weighting OR chronic backoff", while the two consumers stay
+// independent — an operator may run either without the other.
 
 // healthStateRetention is how long a (provider, key, model) health row
 // survives without any observation before the GC drops it. It matches the
-// per-key counter retention (24h), which is far longer than any cooldown TTL
-// (max 1h) and than the maximum EWMA half-life (1h), so a live key's health is
-// never pruned while it still matters.
+// per-key counter retention (24h), which is far longer than the maximum EWMA
+// half-life (1h) and than the longest chronic backoff, so a live key's health is
+// never pruned while it still matters. During a chronic backoff the row is
+// re-observed on every probe, which happens at most once per (long) TTL, so the
+// retention is refreshed long before it expires.
 const healthStateRetention = 24 * time.Hour
 
 // minSelectableKeyWeight is the smallest weight WeightedRandom can actually
@@ -68,6 +76,18 @@ type healthEntry struct {
 	// lastAt is when the most recent observation happened; it drives both the
 	// EWMA half-life decay and the GC retention check.
 	lastAt time.Time
+	// consecutiveSuccesses counts unbroken successes since the last failure.
+	// It is the hysteresis signal for chronic recovery: a single lucky probe
+	// must not lift a chronic backoff, so the chronic mark is only cleared
+	// after recovery_successes in a row. Any failure resets it to zero.
+	consecutiveSuccesses int
+	// chronic latches "this row is in chronic long-backoff mode". It is set
+	// when the EWMA/sample predicate first fires (samples >= min_samples and
+	// ewma < success_rate_threshold) and cleared only after
+	// recovery_successes consecutive successes, so a row whose EWMA briefly
+	// dips back above the threshold cannot oscillate between long and short
+	// backoff on every probe.
+	chronic bool
 }
 
 // healthState is the lazily allocated health table. Nil means "never
@@ -102,8 +122,9 @@ func (c *CooldownState) ensureHealthLocked() *healthState {
 }
 
 // observe folds one terminal outcome for (provider, keyID, model) into that
-// row's EWMA. It is a no-op when health weighting is off for the provider, so
-// the default deployment never takes the lock here.
+// row's EWMA. It is a no-op when BOTH health weighting and chronic long-backoff
+// are off for the provider, so the default deployment never takes the lock
+// here.
 //
 // Failures are recorded from the per-key failure marker only. PostLLMHook also
 // marks a terminal 429, but the marker already sees that same rejection, so
@@ -114,6 +135,11 @@ func (c *CooldownState) ensureHealthLocked() *healthState {
 // hard and then sat idle for several half-lives therefore snaps back to healthy
 // on its very next success — exactly the "recovered upstream" case — instead of
 // being penalised for stale history.
+//
+// The same update also maintains chronic state: a failure resets the
+// consecutive-success counter, a success advances it, and the chronic latch is
+// taken (predicate fires) or released (recovery_successes reached) here, so the
+// mark path only has to read the row.
 func (c *CooldownState) observe(policy *schemas.CooldownPolicy, provider schemas.ModelProvider, keyID string, model string, success bool) {
 	if c == nil {
 		return
@@ -124,7 +150,7 @@ func (c *CooldownState) observe(policy *schemas.CooldownPolicy, provider schemas
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return
 	}
-	spec, ok := healthSpecOf(c.defaults.resolveHealth(policy))
+	spec, ok := c.defaults.observationSpecOf(policy)
 	if !ok {
 		return
 	}
@@ -142,7 +168,12 @@ func (c *CooldownState) observe(policy *schemas.CooldownPolicy, provider schemas
 	if !found {
 		// The first observation seeds the EWMA at the target: there is no
 		// history to average against yet.
-		hs.entries[id] = &healthEntry{ewma: target, samples: 1, lastAt: now}
+		e = &healthEntry{ewma: target, samples: 1, lastAt: now}
+		if success {
+			e.consecutiveSuccesses = 1
+		}
+		hs.entries[id] = e
+		c.updateChronicLocked(e, spec)
 		return
 	}
 	alpha := 1.0
@@ -163,6 +194,34 @@ func (c *CooldownState) observe(policy *schemas.CooldownPolicy, provider schemas
 	e.ewma += alpha * (target - e.ewma)
 	e.samples++
 	e.lastAt = now
+	if success {
+		e.consecutiveSuccesses++
+	} else {
+		e.consecutiveSuccesses = 0
+	}
+	c.updateChronicLocked(e, spec)
+}
+
+// updateChronicLocked applies the chronic latch policy to one freshly updated
+// row. The caller MUST hold c.mu (write) and MUST call it after the row's EWMA,
+// sample count and consecutive-success counter have been updated.
+//
+// The two branches are mutually exclusive by construction: latching requires
+// enough samples and a low EWMA (a fresh failure), while releasing requires
+// recovery_successes consecutive successes (which already lifted the EWMA).
+func (c *CooldownState) updateChronicLocked(e *healthEntry, spec observationSpec) {
+	if c == nil || e == nil || !spec.chronicOn {
+		return
+	}
+	if !e.chronic {
+		if e.samples >= spec.chronic.minSamples && e.ewma < spec.chronic.successRateThreshold {
+			e.chronic = true
+		}
+		return
+	}
+	if e.consecutiveSuccesses >= spec.chronic.recoverySuccesses {
+		e.chronic = false
+	}
 }
 
 // observeSuccess is the PostLLMHook success-path entry point: it records a
@@ -177,10 +236,11 @@ func (c *CooldownState) observeSuccess(policy *schemas.CooldownPolicy, ctx *sche
 	if c == nil {
 		return
 	}
-	// Resolve the effective section BEFORE scanning the context/response: with
-	// health off for this provider (the default) the whole success path costs
-	// two pointer reads, exactly like the disabled capacity / learning paths.
-	if _, ok := healthSpecOf(c.defaults.resolveHealth(policy)); !ok {
+	// Resolve the observation decision BEFORE scanning the context/response:
+	// with both health weighting and chronic backoff off for this provider (the
+	// default) the whole success path costs a couple of pointer reads and
+	// branches, exactly like the disabled capacity / learning paths.
+	if !c.defaults.observationNeeded(policy) {
 		return
 	}
 	provider, keyID, ok := successProviderAndKey(ctx, resp)
@@ -262,9 +322,11 @@ func (c *CooldownState) cleanupHealthLocked(now time.Time) {
 
 // healthRow is the internal read-only view of one health row, used by tests.
 type healthRow struct {
-	ewma    float64
-	samples int
-	lastAt  time.Time
+	ewma                 float64
+	samples              int
+	lastAt               time.Time
+	consecutiveSuccesses int
+	chronic              bool
 }
 
 // healthRowFor returns a copy of the health row for (provider, keyID, model),
@@ -283,7 +345,13 @@ func (c *CooldownState) healthRowFor(provider schemas.ModelProvider, keyID strin
 	if !ok {
 		return healthRow{}, false
 	}
-	return healthRow{ewma: e.ewma, samples: e.samples, lastAt: e.lastAt}, true
+	return healthRow{
+		ewma:                 e.ewma,
+		samples:              e.samples,
+		lastAt:               e.lastAt,
+		consecutiveSuccesses: e.consecutiveSuccesses,
+		chronic:              e.chronic,
+	}, true
 }
 
 // healthSize returns the number of health rows (tests / diagnostics).

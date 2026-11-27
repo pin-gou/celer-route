@@ -592,6 +592,29 @@ describe("ConfigForm — fleet default policies", () => {
 		expect(config.capacity).toEqual(legacyCapacity);
 	});
 
+	it("preserves a stored escalation.chronic block when only max_multiplier is edited", async () => {
+		const chronic = {
+			enabled: true,
+			success_rate_threshold: 0.3,
+			min_samples: 10,
+			chronic_max_ttl_seconds: 1800,
+			jitter_ratio: 0.2,
+			recovery_successes: 3,
+		};
+		render(
+			<ConfigForm plugin={configFormFixture({ escalation: { enabled: true, max_multiplier: 4, chronic } })} />,
+		);
+
+		fireEvent.change(screen.getByTestId("providercooldown-escalation-max-multiplier"), { target: { value: "6" } });
+		fireEvent.click(screen.getByTestId("providercooldown-config-save"));
+
+		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
+
+		// The form has no chronic editor, but the section it submits must not
+		// silently drop the block: next save would otherwise erase it.
+		expect(submittedPluginUpdate().data.config.escalation).toEqual({ enabled: true, max_multiplier: 6, chronic });
+	});
+
 	it("sends { enabled: false } for a section that is switched off instead of omitting it", async () => {
 		render(<ConfigForm plugin={configFormFixture()} />);
 

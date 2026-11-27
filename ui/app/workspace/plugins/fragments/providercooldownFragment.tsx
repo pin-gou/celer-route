@@ -109,7 +109,8 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 // The provider-cooldown plugin carries three opt-in capabilities:
 //
 //   - escalation — adaptive TTL upgrade (a key's cooldown grows while it keeps
-//     failing)
+//     failing). Its optional `chronic` sub-section (long backoff for chronic
+//     keys) has no editor here but is preserved verbatim on save.
 //   - capacity   — retrospective capacity gate backed by real usage
 //   - learning   — read-only learner that estimates the provider's effective
 //     per-window limit from upstream rate-limit feedback
@@ -155,6 +156,14 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 			escalation: {
 				enabled: pluginConfig.escalation?.enabled ?? false,
 				max_multiplier: pluginConfig.escalation?.max_multiplier ?? DEFAULT_ESCALATION_MAX_MULTIPLIER,
+				// The optional `chronic` long-backoff sub-section has no editor
+				// on this page (it is configured via config.json / API), but it
+				// MUST survive a save: this form submits
+				// `escalation: { ...values.escalation }`, so a value absent from
+				// the form would be silently dropped. Carry it through verbatim
+				// (and only when it exists, so the payload for a config without
+				// it is unchanged).
+				...(pluginConfig.escalation?.chronic ? { chronic: pluginConfig.escalation.chronic } : {}),
 			},
 			learning: {
 				enabled: pluginConfig.learning?.enabled ?? false,

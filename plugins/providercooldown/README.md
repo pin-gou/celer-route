@@ -59,7 +59,7 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `config.default_ttl_seconds` | int | 300 | applied to every provider without an override; `<= 0` falls back to 300 |
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
 | `config.quota_patterns` | array | `[]` | extra lower-case substrings treated as quota exhaustion; required at the config level (falls back to the built-in list when empty) |
-| `config.escalation.*` | object | absent | **plugin-level default** adaptive TTL escalation (see below); a provider's own `cooldown_policy.escalation` overrides it |
+| `config.escalation.*` | object | absent | **plugin-level default** adaptive TTL escalation (see below); a provider's own `cooldown_policy.escalation` overrides it. Its `chronic` sub-object is the optional long-backoff for chronically bad keys |
 | `config.capacity.*` | object | absent | **deprecated legacy fleet default** retrospective capacity gate (see below); a provider's own `cooldown_policy.capacity` overrides it. Kept for backward compatibility — the UI no longer edits it and only shows a read-only warning plus the fleet water level |
 | `config.learning.*` | object | absent | **plugin-level default** read-only limit learner (see below); a provider's own `cooldown_policy.learning` overrides it |
 | `config.health.*` | object | absent | **plugin-level default** health-aware key weighting (see below); a provider's own `cooldown_policy.health` overrides it |
@@ -100,13 +100,63 @@ Read-only endpoints exposed by the plugin (wired in
 When `escalation.enabled` is true, cooldown TTLs grow on repeat failures:
 
 - the same `(provider, key, model)` failing again within 300s doubles the TTL
-  (1x → 2x → 4x … up to `max_multiplier`); a successful call clears the count;
+  (1x → 2x → 4x … up to `max_multiplier`); a successful call clears the count
+  (see `escalation.chronic` below for the hysteresis that replaces this rule for
+  chronically bad keys);
 - when 3+ distinct keys fail for the same provider/model within 60s, new marks
   start at 2x until that window goes quiet;
 - escalated TTLs are capped at 1 hour and are never shorter than the base TTL.
 
 It is expressed only as a longer TTL — no sleeps, no blocking, and no change to
 the upstream request bytes.
+
+#### `escalation.chronic` — long backoff for chronically bad keys (default off)
+
+Escalation alone is capped at `base_ttl × max_multiplier`: with the common
+`ttl_seconds=30` + `max_multiplier=4` that tops out at 120s, so a key whose
+quota is consumed outside this gateway is probed every two minutes — and each
+probe is itself an upstream request that consumes the account's RPM. The
+"success clears every counter" rule makes it worse: a key with a ~15% success
+rate keeps resetting on its lucky probe, so it is never left alone.
+
+`escalation.chronic` reuses the health EWMA (the same observations that feed
+health-aware weighting) to detect that case and switch it to a long, jittered
+backoff:
+
+| Field | Default | Notes |
+|---|---|---|
+| `enabled` | `false` | Requires `escalation.enabled=true`; the combination with escalation off is rejected |
+| `success_rate_threshold` | `0.3` | EWMA success rate below which a row with enough samples is chronic; strictly inside `(0, 1)` |
+| `min_samples` | `10` | Observations required before the predicate may fire (1–1000) |
+| `chronic_max_ttl_seconds` | `1800` | Long backoff, before jitter (30–86400). Never shortens a longer base/escalated TTL |
+| `jitter_ratio` | `0` | `0.2` = ±20% random jitter so keys that failed together do not retry in lockstep. `0` disables jitter; `0.2` is the recommended production value |
+| `recovery_successes` | `3` | Consecutive successes required to lift the chronic mark (1–1000) |
+
+Behaviour:
+
+- **Detection** — chronic is evaluated per `(provider, key, model)`, and once
+  latched it survives a single success. Key-scope marks (no model) aggregate all
+  model rows of that key, and any chronically bad model makes the key chronic at
+  key scope (a bad model cannot hide behind a healthy sibling).
+- **Long TTL** — while chronic, each failure records
+  `chronic_max_ttl_seconds × (1 ± jitter_ratio)`, floored at the normal
+  (escalated) TTL. The escalation/storm counters keep advancing as usual, so the
+  state stays self-consistent when the key recovers.
+- **Half-open probe, no scheduler** — when the long TTL lapses the key is
+  selectable again (with health weighting it is de-prioritised but never
+  unselectable), so the next natural rotation is the probe. A failed probe earns
+  another long backoff; a successful one just serves traffic.
+- **Hysteresis recovery** — one success does NOT clear the chronic mark or the
+  key's escalation counters. Only `recovery_successes` consecutive successes do,
+  after which the next failure starts from the original 1x TTL. A recovered
+  upstream is therefore picked up within at most ~2× `chronic_max_ttl_seconds`.
+- **Rollback** — `escalation.chronic.enabled=false` (or omitting the block)
+  restores the pre-chronic behaviour byte-for-byte, including "success clears
+  the counters".
+
+Because sections are replaced wholesale, a provider-level `escalation` section
+that omits `chronic` disables chronic for that provider even when the plugin
+default enables it.
 
 ### Retrospective capacity gate (optional, default off)
 

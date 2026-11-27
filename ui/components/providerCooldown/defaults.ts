@@ -1,4 +1,4 @@
-import type { CooldownCapacityConfig, CooldownEscalationConfig, CooldownLearningConfig } from "@/lib/types/config";
+import type { CooldownCapacityConfig, CooldownChronicConfig, CooldownEscalationConfig, CooldownLearningConfig } from "@/lib/types/config";
 import type { ProviderCooldownCapabilityDefaults } from "@/lib/types/plugins";
 
 // Frontend mirrors of the backend defaults in core/schemas/cooldownpolicy.go.
@@ -124,14 +124,26 @@ export function capacityGateStatus(
 	};
 }
 
+/** Effective escalation values, including the optional chronic sub-section
+ *  (carried through verbatim so pre-filling "custom" never drops it). */
+export interface EffectiveEscalationConfig {
+	enabled: boolean;
+	max_multiplier: number;
+	chronic?: CooldownChronicConfig;
+}
+
 export function resolveEffectiveEscalation(
 	providerSegment: CooldownEscalationConfig | undefined,
 	pluginSegment: CooldownEscalationConfig | undefined,
-): Required<CooldownEscalationConfig> {
+): EffectiveEscalationConfig {
 	const source = providerSegment ?? pluginSegment;
 	return {
 		enabled: source?.enabled ?? false,
 		max_multiplier: positiveOr(source?.max_multiplier, DEFAULT_ESCALATION_MAX_MULTIPLIER),
+		// The whole-section rule applies to chronic too: a provider section
+		// without it means "no chronic for this provider", so only carry the
+		// chronic block of the section that won the resolution.
+		chronic: source?.chronic,
 	};
 }
 
@@ -156,7 +168,7 @@ export function resolveEffectiveCapabilities(
 	pluginDefaults: ProviderCooldownCapabilityDefaults,
 ): {
 	capacity: Required<CooldownCapacityConfig>;
-	escalation: Required<CooldownEscalationConfig>;
+	escalation: EffectiveEscalationConfig;
 	learning: Required<CooldownLearningConfig>;
 } {
 	return {

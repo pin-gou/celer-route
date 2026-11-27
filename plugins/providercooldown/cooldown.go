@@ -2,6 +2,7 @@ package providercooldown
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -197,6 +198,14 @@ type CooldownState struct {
 	// inject a fake clock here; production never mutates it. It must not be
 	// swapped while the state is in concurrent use.
 	now func() time.Time
+
+	// randFloat supplies the [0, 1) draw used to jitter the chronic long
+	// backoff. Nil means "use the state-owned rng below". Tests inject a fixed
+	// value to pin exact TTLs. Both fields are only touched by the mark path,
+	// which holds c.mu (write), so they need no separate lock and are never
+	// read from a concurrent reader.
+	randFloat func() float64
+	rng       *rand.Rand
 
 	// Lifetime totals (atomic; cover all kinds including unclassified).
 	markCount       atomic.Uint64
@@ -532,6 +541,11 @@ func (c *CooldownState) markWithPolicy(policy *schemas.CooldownPolicy, provider 
 	// of pointer reads; when escalation is off for this provider the mark path
 	// stays byte-for-byte the pre-escalation behaviour.
 	maxMultiplier, escalate := c.defaults.escalationMaxMultiplier(policy)
+	// Chronic long-backoff is a SUB-section of escalation: chronicActive is
+	// false unless the effective escalation section is enabled AND its chronic
+	// block is enabled. Resolving it here keeps the disabled case at two
+	// pointer reads with no lock and no clock read.
+	chronic, chronicActive := c.defaults.chronicSpec(policy)
 
 	c.mu.Lock()
 	effective := ttl
@@ -547,6 +561,16 @@ func (c *CooldownState) markWithPolicy(policy *schemas.CooldownPolicy, provider 
 	if escalate {
 		es := c.ensureEscalationLocked()
 		effective = es.applyLocked(provider, keyID, model, scope, effective, maxMultiplier, now)
+	}
+	// Chronic backoff runs AFTER escalation on purpose: applyLocked's counter
+	// advance and storm-window recording are the side effects that keep the
+	// escalation state self-consistent, so a chronic key keeps counting its
+	// failures. When the chronic latch is released (after recovery_successes
+	// consecutive successes) the success path clears those counters, so the next
+	// failure starts a fresh, non-stale count. The TTL returned by applyLocked
+	// is only a floor here: the chronic value replaces it when it is longer.
+	if chronicActive {
+		effective = c.applyChronicTTLLocked(provider, keyID, model, chronic, effective, now)
 	}
 	c.cooldowns[c.markKey(provider, keyID, model, scope)] = CooldownRecord{
 		expiresAt: now.Add(effective),
@@ -763,10 +787,14 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string, m
 //     success counters plus the remaining time on the key's longest active
 //     cooldown, so an operator can tell "which key is paying for it"
 //     instead of only "which provider".
+//   - ChronicKeyCount is the number of distinct (provider, key_id) pairs with
+//     at least one health row currently latched in chronic long-backoff. It is
+//     zero unless escalation.chronic is enabled for some provider.
 type CooldownStats struct {
 	MarkCount             uint64                                         `json:"mark_count"`
 	SuppressedCount       uint64                                         `json:"suppressed_count"`
 	CurrentActiveCount    int                                            `json:"current_active_count"`
+	ChronicKeyCount       int                                            `json:"chronic_key_count"`
 	ByKind                ByKindCounters                                 `json:"by_kind"`
 	PerProvider           map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider"`
 	PerProviderModel      map[string]ProviderKindCounters                `json:"per_provider_model,omitempty"`
@@ -822,6 +850,7 @@ func (c *CooldownState) Stats() CooldownStats {
 		stats.PerProviderScopeModel[p] = *pc
 	}
 	stats.PerKey = c.perKeyStatsSnapshot(remaining)
+	stats.ChronicKeyCount = c.chronicKeyCountLocked()
 	c.mu.RUnlock()
 	return stats
 }
@@ -1152,11 +1181,12 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	p.startGC()
 	if p.logger != nil {
 		escalationEnabled := cfg.Escalation != nil && cfg.Escalation.Enabled
+		chronicEnabled := escalationEnabled && cfg.Escalation.Chronic != nil && cfg.Escalation.Chronic.Enabled
 		capacityEnabled := cfg.Capacity.Active()
 		learningEnabled := cfg.Learning.Active()
 		healthEnabled := cfg.Health.Active()
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t, health=%t; providers without their own cooldown_policy section inherit these defaults)",
-			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled, learningEnabled, healthEnabled)
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, chronic=%t, capacity=%t, learning=%t, health=%t; providers without their own cooldown_policy section inherit these defaults)",
+			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, chronicEnabled, capacityEnabled, learningEnabled, healthEnabled)
 		// The plugin-level capacity section is a deprecated fleet-wide default:
 		// one global limit inherited by every provider without an override. Warn
 		// once at startup (only when the section is actually present) so
@@ -1538,19 +1568,21 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 	// response at all.
 	p.recordCapacity(ctx, policy, resp, bifrostErr)
 	if bifrostErr == nil {
-		// Success: clear this key's escalation counter so a recovered key is
-		// not punished for earlier 429s. This deliberately records NO cooldown
-		// state — success must stay a no-op for the cooldown map itself. When
+		// Success: the health observation runs FIRST so the chronic latch and
+		// the consecutive-success counter are up to date when the escalation
+		// clear below decides whether this success was enough to end a chronic
+		// backoff (recovery_successes hysteresis). Both steps are independent of
+		// each other otherwise.
+		state.observeSuccess(policy, ctx, resp)
+		// Then clear this key's escalation counter so a recovered key is not
+		// punished for earlier 429s. This deliberately records NO cooldown state
+		// — success must stay a no-op for the cooldown map itself. When
 		// escalation is disabled the helper returns before reading ctx.
-		state.clearEscalationOnSuccess(ctx)
+		state.clearEscalationOnSuccess(policy, ctx)
 		// Per-key observation: a success is the third leg of the per-key
 		// picture (marks / suppressions / successes). It is counted for the
 		// key that served the request and changes no cooldown state.
 		state.recordPerKeySuccess(ctx, resp)
-		// Health signal (optional, off by default): a success raises the key's
-		// EWMA, which is what lets a recovered credential climb back to its
-		// configured weight.
-		state.observeSuccess(policy, ctx, resp)
 		return resp, bifrostErr, nil
 	}
 

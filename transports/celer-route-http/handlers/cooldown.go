@@ -149,6 +149,7 @@ type cooldownStatsResponse struct {
 	MarkCount             uint64                                                      `json:"mark_count"`
 	SuppressedCount       uint64                                                      `json:"suppressed_count"`
 	CurrentActiveCount    int                                                         `json:"current_active_count"`
+	ChronicKeyCount       int                                                         `json:"chronic_key_count"`
 	ByKind                providercooldown.ByKindCounters                             `json:"by_kind"`
 	PerProvider           map[string]providercooldown.ProviderKindCounters            `json:"per_provider"`
 	PerProviderModel      map[string]map[string]providercooldown.ProviderKindCounters `json:"per_provider_model,omitempty"`
@@ -210,6 +211,7 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 		MarkCount:             stats.MarkCount,
 		SuppressedCount:       stats.SuppressedCount,
 		CurrentActiveCount:    stats.CurrentActiveCount,
+		ChronicKeyCount:       stats.ChronicKeyCount,
 		ByKind:                stats.ByKind,
 		PerProvider:           perProvider,
 		PerProviderModel:      perProviderModel,

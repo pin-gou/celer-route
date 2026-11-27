@@ -206,6 +206,94 @@ func healthSpecOf(cfg *schemas.CooldownHealthConfig) (healthSpec, bool) {
 	}, true
 }
 
+// chronicSpec is the comparable, already-normalized field set of the
+// escalation.chronic sub-section. Like capacitySpec / learningSpec it exists so
+// the hot paths read the effective configuration without allocating a copy.
+type chronicSpec struct {
+	successRateThreshold float64
+	minSamples           int
+	maxTTLSeconds        int
+	jitterRatio          float64
+	recoverySuccesses    int
+}
+
+// chronicSpecOf normalizes the chronic block. The second return value is false
+// when chronic long-backoff is inert: no escalation section, escalation
+// disabled, no chronic block, or chronic disabled. Because chronic is a
+// sub-behaviour of escalation, escalation must be enabled for it to apply
+// (Validate rejects an enabled chronic block under a disabled escalation).
+func chronicSpecOf(cfg *schemas.CooldownEscalationConfig) (chronicSpec, bool) {
+	if cfg == nil || !cfg.Enabled || cfg.Chronic == nil || !cfg.Chronic.Enabled {
+		return chronicSpec{}, false
+	}
+	return chronicSpec{
+		successRateThreshold: schemas.NormalizeChronicSuccessRateThreshold(cfg.Chronic.SuccessRateThreshold),
+		minSamples:           schemas.NormalizeChronicMinSamples(cfg.Chronic.MinSamples),
+		maxTTLSeconds:        schemas.NormalizeChronicMaxTTLSeconds(cfg.Chronic.ChronicMaxTTLSeconds),
+		jitterRatio:          schemas.NormalizeChronicJitterRatio(cfg.Chronic.JitterRatio),
+		recoverySuccesses:    schemas.NormalizeChronicRecoverySuccesses(cfg.Chronic.RecoverySuccesses),
+	}, true
+}
+
+// chronicSpec resolves the chronic sub-section for a provider (own escalation
+// section first, then the plugin default).
+func (d *capabilityDefaults) chronicSpec(policy *schemas.CooldownPolicy) (chronicSpec, bool) {
+	return chronicSpecOf(d.resolveEscalation(policy))
+}
+
+// observationSpec is the resolved decision for "should this terminal outcome be
+// folded into the health table, and with what decay".
+//
+// Observation and weighting are deliberately decoupled: health weighting needs
+// the EWMA to scale Selection weights, while chronic detection needs the very
+// same EWMA to decide the long backoff. An operator may enable chronic while
+// keeping weighting off (or vice versa), so observation is required by either
+// capability, not by health alone.
+type observationSpec struct {
+	halfLifeSeconds float64
+	chronic         chronicSpec
+	chronicOn       bool
+}
+
+// observationNeeded reports whether ANY capability needs the EWMA table, using
+// only pointer reads and boolean branches so the default (everything off) path
+// can be answered without building an observationSpec. It is the hot-path gate;
+// observationSpecOf does the full resolution once observation is known to be
+// needed.
+func (d *capabilityDefaults) observationNeeded(policy *schemas.CooldownPolicy) bool {
+	if health := d.resolveHealth(policy); health != nil && health.Enabled {
+		return true
+	}
+	esc := d.resolveEscalation(policy)
+	return esc != nil && esc.Enabled && esc.Chronic != nil && esc.Chronic.Enabled
+}
+
+// observationSpecOf resolves the observation decision plus the chronic fields
+// the EWMA update needs. The second return value is false when BOTH health
+// weighting and chronic long-backoff are inert, which is the default
+// deployment: observe() then returns before taking a lock or reading a clock.
+//
+// halfLifeSeconds comes from the health section when it is active; with health
+// off it falls back to the documented default half-life so the EWMA still ages
+// between observations (chronic's threshold is time-sensitive only through that
+// decay).
+func (d *capabilityDefaults) observationSpecOf(policy *schemas.CooldownPolicy) (observationSpec, bool) {
+	health, healthOn := healthSpecOf(d.resolveHealth(policy))
+	chronic, chronicOn := chronicSpecOf(d.resolveEscalation(policy))
+	if !healthOn && !chronicOn {
+		return observationSpec{}, false
+	}
+	spec := observationSpec{
+		halfLifeSeconds: float64(schemas.DefaultHealthHalfLifeSeconds),
+		chronic:         chronic,
+		chronicOn:       chronicOn,
+	}
+	if healthOn {
+		spec.halfLifeSeconds = health.halfLifeSeconds
+	}
+	return spec, true
+}
+
 // dedupeLearnedLimits keeps one entry per (provider, model) pair, preferring
 // the LAST occurrence. Callers append the plugin-default learner first and the
 // per-provider learners after it, so a provider whose section was added while

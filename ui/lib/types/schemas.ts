@@ -725,6 +725,44 @@ export const cooldownPolicyRuleSchema = z.object({
 
 // Adaptive TTL upgrade — a key's cooldown TTL grows (1x, 2x, 4x …) while it
 // keeps failing. max_multiplier is clamped to 1..16 by the backend (<= 0 → 4).
+//
+// `chronic` is declared but not edited here: it is the optional long-backoff
+// sub-section configured via config.json / API. Declaring it is what keeps zod
+// from stripping a stored block when this form saves an unrelated edit (zod
+// drops unknown keys). Every field is optional so any partial stored object
+// round-trips unchanged.
+export const providerCooldownChronicConfigSchema = z.object({
+	enabled: z.boolean().optional(),
+	success_rate_threshold: z
+		.number({ error: t("validation.numberExpected") })
+		.gt(0, t("validation.minNumber", { n: "0" }))
+		.lt(1, t("validation.maxNumber", { n: "1" }))
+		.optional(),
+	min_samples: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(1, t("validation.minNumber", { n: "1" }))
+		.max(1000, t("validation.maxNumber", { n: "1000" }))
+		.optional(),
+	chronic_max_ttl_seconds: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(30, t("validation.minNumber", { n: "30" }))
+		.max(86400, t("validation.maxNumber", { n: "86400" }))
+		.optional(),
+	jitter_ratio: z
+		.number({ error: t("validation.numberExpected") })
+		.min(0, t("validation.minNumber", { n: "0" }))
+		.max(1, t("validation.maxNumber", { n: "1" }))
+		.optional(),
+	recovery_successes: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(1, t("validation.minNumber", { n: "1" }))
+		.max(1000, t("validation.maxNumber", { n: "1000" }))
+		.optional(),
+});
+
 export const providerCooldownEscalationConfigSchema = z.object({
 	enabled: z.boolean(),
 	max_multiplier: z
@@ -732,6 +770,7 @@ export const providerCooldownEscalationConfigSchema = z.object({
 		.int(t("validation.integerExpected"))
 		.min(1, t("validation.minNumber", { n: "1" }))
 		.max(16, t("validation.maxNumber", { n: "16" })),
+	chronic: providerCooldownChronicConfigSchema.optional(),
 });
 
 // Retrospective capacity gate — real usage is summed over a rolling window and

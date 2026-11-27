@@ -96,6 +96,7 @@ type Config struct {
 type (
 	CapacityConfig   = schemas.CooldownCapacityConfig
 	EscalationConfig = schemas.CooldownEscalationConfig
+	ChronicConfig    = schemas.CooldownChronicConfig
 	LearningConfig   = schemas.CooldownLearningConfig
 	HealthConfig     = schemas.CooldownHealthConfig
 )
@@ -165,9 +166,23 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 					return nil, fmt.Errorf("escalation.max_multiplier: %w", err)
 				}
 				ec.MaxMultiplier = n
+			case "chronic":
+				ch, err := parseChronicConfig(vv)
+				if err != nil {
+					return nil, err
+				}
+				ec.Chronic = ch
 			default:
 				return nil, fmt.Errorf("escalation: unknown key %q", k)
 			}
+		}
+		// Chronic is a sub-behaviour of escalation (it chooses the long TTL an
+		// escalated cooldown should use), so an enabled chronic block under a
+		// disabled escalation section can never do anything. Reject it at parse
+		// time instead of letting it silently no-op — this is a new field, so
+		// there is no backward compatibility to preserve here.
+		if ec.Chronic != nil && ec.Chronic.Enabled && !ec.Enabled {
+			return nil, fmt.Errorf("escalation.chronic.enabled requires escalation.enabled=true")
 		}
 		c.Escalation = ec.Normalized()
 	}
@@ -322,6 +337,60 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 	return c, nil
 }
 
+// parseChronicConfig decodes the escalation.chronic sub-object with the same
+// strict posture as the other sections: unknown keys are errors, and every
+// field is normalized by EscalationConfig.Normalized afterwards.
+func parseChronicConfig(v any) (*ChronicConfig, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("escalation.chronic: expected object, got %T", v)
+	}
+	ch := &ChronicConfig{}
+	for k, vv := range m {
+		switch k {
+		case "enabled":
+			b, ok := vv.(bool)
+			if !ok {
+				return nil, fmt.Errorf("escalation.chronic.enabled: expected boolean, got %T", vv)
+			}
+			ch.Enabled = b
+		case "success_rate_threshold":
+			f, err := toFloat64(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.success_rate_threshold: %w", err)
+			}
+			ch.SuccessRateThreshold = f
+		case "min_samples":
+			n, err := toInt(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.min_samples: %w", err)
+			}
+			ch.MinSamples = n
+		case "chronic_max_ttl_seconds":
+			n, err := toInt(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.chronic_max_ttl_seconds: %w", err)
+			}
+			ch.ChronicMaxTTLSeconds = n
+		case "jitter_ratio":
+			f, err := toFloat64(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.jitter_ratio: %w", err)
+			}
+			ch.JitterRatio = f
+		case "recovery_successes":
+			n, err := toInt(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.recovery_successes: %w", err)
+			}
+			ch.RecoverySuccesses = n
+		default:
+			return nil, fmt.Errorf("escalation.chronic: unknown key %q", k)
+		}
+	}
+	return ch, nil
+}
+
 // AsState builds a CooldownState with the parsed config applied. The state
 // is independent of the receiver and is safe to mutate further (e.g. via
 // SetTTLOverride) without affecting the source Config.
@@ -356,7 +425,7 @@ func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 		s.SetTTLOverride(mp, time.Duration(secs)*time.Second)
 	}
 	if esc := c.Escalation.Normalized(); esc != nil && esc.Enabled {
-		s.enableEscalation(esc.MaxMultiplier)
+		s.enableEscalation(esc)
 	}
 	if capCfg := c.Capacity.Normalized(); capCfg.Active() {
 		s.enableCapacity(capCfg)

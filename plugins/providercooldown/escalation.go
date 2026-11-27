@@ -118,17 +118,19 @@ func newEscalationState(maxMultiplier int) *escalationState {
 // enableEscalation registers the plugin-level escalation section as the
 // DEFAULT for providers without their own section and builds the state
 // eagerly (the historical behaviour, so `state.escalation` is non-nil right
-// after AsState when the plugin enables it). Build the state and call this
+// after AsState when the plugin enables it). The whole section is registered —
+// max_multiplier and the optional chronic sub-section — so a provider without
+// its own escalation section inherits both. Build the state and call this
 // before it is shared across goroutines (Config.AsState does exactly that);
 // the write is lock-protected, but writers racing with live readers would
 // still see a partial switch.
-func (c *CooldownState) enableEscalation(maxMultiplier int) {
-	if c == nil {
+func (c *CooldownState) enableEscalation(cfg *schemas.CooldownEscalationConfig) {
+	if c == nil || cfg == nil || !cfg.Enabled {
 		return
 	}
-	cfg := (&EscalationConfig{Enabled: true, MaxMultiplier: maxMultiplier}).Normalized()
-	c.defaults.escalation = cfg
-	es := newEscalationState(cfg.MaxMultiplier)
+	norm := cfg.Normalized()
+	c.defaults.escalation = norm
+	es := newEscalationState(norm.MaxMultiplier)
 	c.mu.Lock()
 	c.escalation = es
 	c.mu.Unlock()
@@ -309,9 +311,20 @@ func (c *CooldownState) clearEscalationLocked(provider schemas.ModelProvider, ke
 // clears every escalation counter for that key — across models and scopes — so
 // a recovered credential is not punished for earlier failures.
 //
+// Chronic hysteresis: when escalation.chronic is enabled for this provider AND
+// the key is still in chronic long-backoff mode, the counters are kept. A key
+// with a ~15% success rate would otherwise reset its escalation on every lucky
+// probe, which is precisely the "single success re-arms the short TTL" bug the
+// chronic section exists to remove. PostLLMHook calls observeSuccess first, so
+// by the time this runs the current success is already counted; once
+// recovery_successes consecutive successes have lifted the chronic latch, the
+// next success falls through to the normal clear. With chronic disabled the
+// function is byte-for-byte the previous behaviour (one latch check on a nil
+// spec).
+//
 // It returns immediately when escalation is disabled, before touching the
 // context — that is what keeps the default configuration zero-overhead.
-func (c *CooldownState) clearEscalationOnSuccess(ctx *schemas.BifrostContext) {
+func (c *CooldownState) clearEscalationOnSuccess(policy *schemas.CooldownPolicy, ctx *schemas.BifrostContext) {
 	if c == nil || c.escalation == nil || ctx == nil {
 		return
 	}
@@ -337,11 +350,19 @@ func (c *CooldownState) clearEscalationOnSuccess(ctx *schemas.BifrostContext) {
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return
 	}
+	chronic, chronicActive := c.defaults.chronicSpec(policy)
+	c.mu.Lock()
+	if chronicActive && c.isChronicLocked(provider, keyID, "", chronic, c.nowTime()) {
+		// Still chronic: keep the counters so the next probe is escalated the
+		// same way it was before. The latch (and therefore this branch) is
+		// released by the success observation once recovery_successes is hit.
+		c.mu.Unlock()
+		return
+	}
 	// Clear every model/scope counter for this key: a success proves the
 	// credential itself is healthy right now, so keeping a stale count from a
 	// different model (or from the legacy model-less Mark path) would only
 	// over-escalate the next failure.
-	c.mu.Lock()
 	c.clearEscalationLocked(provider, keyID, "")
 	c.mu.Unlock()
 }

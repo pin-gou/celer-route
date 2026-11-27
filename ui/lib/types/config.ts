@@ -432,9 +432,29 @@ export interface CooldownPolicyRule {
 // CooldownEscalationConfig mirrors schemas.CooldownEscalationConfig: a key's
 // cooldown TTL grows while it keeps failing. max_multiplier is clamped to
 // 1..16 by the backend; an unset value takes the backend default (4).
+//
+// `chronic` is the optional long-backoff sub-section. Neither form on this page
+// edits it (it is configured via config.json / API), but it is declared here and
+// in the zod schema so a stored block survives a save instead of being stripped.
 export interface CooldownEscalationConfig {
 	enabled?: boolean;
 	max_multiplier?: number;
+	chronic?: CooldownChronicConfig;
+}
+
+// CooldownChronicConfig mirrors schemas.CooldownChronicConfig: a (provider, key,
+// model) whose EWMA success rate stays below success_rate_threshold gets a
+// jittered chronic_max_ttl_seconds backoff, and the chronic mark is only lifted
+// after recovery_successes consecutive successes. Only effective when the parent
+// escalation section is enabled. Unset numeric fields take backend defaults
+// (threshold 0.3, min_samples 10, ttl 1800, jitter 0, recovery 3).
+export interface CooldownChronicConfig {
+	enabled?: boolean;
+	success_rate_threshold?: number;
+	min_samples?: number;
+	chronic_max_ttl_seconds?: number;
+	jitter_ratio?: number;
+	recovery_successes?: number;
 }
 
 // CooldownCapacityConfig mirrors schemas.CooldownCapacityConfig: real token and

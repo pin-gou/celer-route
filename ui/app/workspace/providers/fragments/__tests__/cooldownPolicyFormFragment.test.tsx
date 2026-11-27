@@ -216,6 +216,32 @@ describe("CooldownPolicyFormFragment — capability tri-state payload", () => {
 		expect(policy?.learning).toEqual({ enabled: false });
 	});
 
+	it("editing rate_limit keeps a nested escalation.chronic block (no editor, must not be dropped)", async () => {
+		const chronic = {
+			enabled: true,
+			success_rate_threshold: 0.3,
+			min_samples: 10,
+			chronic_max_ttl_seconds: 1800,
+			jitter_ratio: 0.2,
+			recovery_successes: 3,
+		};
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: RATE_LIMIT_RULE,
+					escalation: { enabled: true, max_multiplier: 4, chronic },
+				})}
+			/>,
+		);
+		changeTtl();
+
+		await save();
+
+		// zod strips unknown keys, so `chronic` must be part of the escalation
+		// schema for this to survive — that is exactly what this pins.
+		expect(submittedPolicy()?.escalation).toEqual({ enabled: true, max_multiplier: 4, chronic });
+	});
+
 	it("echoes an explicit { enabled: false } section back unchanged", async () => {
 		render(
 			<CooldownPolicyFormFragment

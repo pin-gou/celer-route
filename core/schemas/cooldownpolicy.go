@@ -85,6 +85,48 @@ const (
 	DefaultHealthMinWeightFactor = 0.05
 	MinHealthMinWeightFactor     = 0.01
 	MaxHealthMinWeightFactor     = 1.0
+
+	// DefaultChronicSuccessRateThreshold is the EWMA success rate below which
+	// a (provider, key, model) row is considered chronically unhealthy. It is
+	// deliberately low: a key with a 15% success rate is "chronic" (each probe
+	// mostly burns an upstream request), while a transiently degraded key that
+	// still succeeds half the time is not.
+	DefaultChronicSuccessRateThreshold = 0.3
+	// MinChronicSuccessRateThreshold / MaxChronicSuccessRateThreshold bound the
+	// threshold. They stay strictly inside (0, 1) so the predicate can never
+	// become "always chronic" or "never chronic".
+	MinChronicSuccessRateThreshold = 0.01
+	MaxChronicSuccessRateThreshold = 0.99
+
+	// DefaultChronicMinSamples is how many observations a row needs before the
+	// chronic predicate may fire.
+	DefaultChronicMinSamples = 10
+	MinChronicMinSamples     = 1
+	MaxChronicMinSamples     = 1000
+
+	// DefaultChronicMaxTTLSeconds is the long backoff applied to a chronically
+	// unhealthy key/model. 30 minutes is long enough to stop the probe tax but
+	// short enough that a recovered upstream is picked up again within a
+	// couple of backoff periods.
+	DefaultChronicMaxTTLSeconds = 1800
+	MinChronicMaxTTLSeconds     = 30
+	MaxChronicMaxTTLSeconds     = 86400
+
+	// DefaultChronicJitterRatio is the RECOMMENDED jitter fraction (±20%) for
+	// the long backoff. It is not applied to an unset field: jitter_ratio=0
+	// means "no jitter" (deterministic TTLs), which is what operators who
+	// prefer a fixed long backoff want, and what tests pin.
+	DefaultChronicJitterRatio = 0.2
+	MinChronicJitterRatio     = 0.0
+	MaxChronicJitterRatio     = 1.0
+
+	// DefaultChronicRecoverySuccesses is how many CONSECUTIVE successes a
+	// chronic key must produce before the chronic mark is lifted. It is the
+	// hysteresis that stops a 15%-success key from resetting on a single lucky
+	// probe.
+	DefaultChronicRecoverySuccesses = 3
+	MinChronicRecoverySuccesses     = 1
+	MaxChronicRecoverySuccesses     = 1000
 )
 
 // CooldownCapacityConfig configures the optional retrospective capacity gate.
@@ -260,17 +302,32 @@ type CooldownEscalationConfig struct {
 	// Values <= 0 fall back to DefaultEscalationMaxMultiplier; values above
 	// MaxEscalationMultiplier are clamped to it.
 	MaxMultiplier int `json:"max_multiplier"`
+
+	// Chronic optionally switches repeated failures into a LONG backoff for
+	// chronically unhealthy keys instead of a short, repeatedly-probed one.
+	// It is a SUB-SECTION of escalation: it only has any effect when Enabled
+	// is true (Chronic.Enabled with escalation disabled is a configuration
+	// error — see Validate). Because sections replacement is wholesale, a
+	// provider whose own escalation section omits chronic does NOT inherit the
+	// plugin-level chronic block.
+	Chronic *CooldownChronicConfig `json:"chronic,omitempty"`
 }
 
 // Normalized returns a copy of the config with MaxMultiplier applied the same
 // way the plugin's ParseConfig / AsState apply it, so callers that build the
 // struct directly still get deterministic behaviour.
+//
+// The nested Chronic block is deep-copied (and normalized) rather than
+// aliased, so normalizing never mutates the caller's object.
 func (e *CooldownEscalationConfig) Normalized() *CooldownEscalationConfig {
 	if e == nil {
 		return nil
 	}
 	out := *e
 	out.MaxMultiplier = NormalizeEscalationMaxMultiplier(out.MaxMultiplier)
+	if out.Chronic != nil {
+		out.Chronic = out.Chronic.Normalized()
+	}
 	return &out
 }
 
@@ -291,6 +348,17 @@ func (e *CooldownEscalationConfig) Validate() error {
 			MaxEscalationMultiplier, DefaultEscalationMaxMultiplier, e.MaxMultiplier,
 		)
 	}
+	if e.Chronic != nil {
+		if err := e.Chronic.Validate(); err != nil {
+			return err
+		}
+		// Chronic is a sub-behaviour of escalation: it changes how an
+		// escalated cooldown is chosen, so escalation itself must be on.
+		// Reject the combination instead of silently doing nothing.
+		if e.Chronic.Enabled && !e.Enabled {
+			return fmt.Errorf("escalation.chronic.enabled requires escalation.enabled=true")
+		}
+	}
 	return nil
 }
 
@@ -303,6 +371,201 @@ func NormalizeEscalationMaxMultiplier(n int) int {
 		return DefaultEscalationMaxMultiplier
 	case n > MaxEscalationMultiplier:
 		return MaxEscalationMultiplier
+	default:
+		return n
+	}
+}
+
+// CooldownChronicConfig turns the short, repeatedly-probed cooldown of a
+// chronically unhealthy (provider, key, model) into a long backoff with
+// hysteresis on recovery.
+//
+// It answers three problems the plain escalation cannot:
+//
+//  1. A 30s-per-mark rate-limit TTL with max_multiplier=4 tops out at 120s,
+//     which is far too short for an upstream account whose quota is exhausted
+//     by traffic outside this gateway: every 120s the pool burns one more
+//     request just to re-learn the same 429.
+//  2. Clearing every counter on a single success means a key with ~15% success
+//     never stays escalated: the lucky probe keeps resetting the clock, so the
+//     key is probed forever (the probe itself consumes the account's RPM).
+//  3. The pertinence of the check itself is only as good as the EWMA, which
+//     the health section already maintains.
+//
+// The effect is still purely a longer TTL: nothing is refused, no request bytes
+// change. It is a sub-section of CooldownEscalationConfig and only has any
+// effect when escalation.enabled is also true. A nil pointer means "not
+// configured"; Enabled=false is the default and keeps escalation byte-for-byte
+// identical to the pre-chronic behaviour.
+type CooldownChronicConfig struct {
+	// Enabled turns chronic long-backoff on. Requires escalation.enabled.
+	Enabled bool `json:"enabled"`
+
+	// SuccessRateThreshold is the EWMA success rate below which a row with
+	// enough samples counts as chronically unhealthy. <= 0 falls back to 0.3;
+	// values are clamped into 0.01..0.99.
+	SuccessRateThreshold float64 `json:"success_rate_threshold,omitempty"`
+
+	// MinSamples is how many observations a (provider, key, model) row needs
+	// before the chronic predicate may fire. <= 0 falls back to 10; values are
+	// clamped into 1..1000.
+	MinSamples int `json:"min_samples,omitempty"`
+
+	// ChronicMaxTTLSeconds is the long backoff (before jitter) applied to a
+	// chronic row. <= 0 falls back to 1800; values are clamped into
+	// 30..86400. The mark path never lets it shorten an existing (base or
+	// escalated) TTL: chronic only ever lengthens.
+	ChronicMaxTTLSeconds int `json:"chronic_max_ttl_seconds,omitempty"`
+
+	// JitterRatio is the fractional jitter applied to ChronicMaxTTLSeconds
+	// (0.2 = ±20%), which de-synchronises keys that started failing together.
+	// 0 means "no jitter" (deterministic TTL); values are clamped into 0..1.
+	JitterRatio float64 `json:"jitter_ratio,omitempty"`
+
+	// RecoverySuccesses is how many consecutive successes lift the chronic
+	// mark (hysteresis). A single lucky probe must not reset a key with a 15%
+	// success rate. <= 0 falls back to 3; values are clamped into 1..1000.
+	RecoverySuccesses int `json:"recovery_successes,omitempty"`
+}
+
+// Normalized returns a copy of the config with defaults applied and values
+// clamped the same way the plugin's ParseConfig does, so callers that build
+// the struct directly still get deterministic behaviour.
+func (c *CooldownChronicConfig) Normalized() *CooldownChronicConfig {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	out.SuccessRateThreshold = NormalizeChronicSuccessRateThreshold(out.SuccessRateThreshold)
+	out.MinSamples = NormalizeChronicMinSamples(out.MinSamples)
+	out.ChronicMaxTTLSeconds = NormalizeChronicMaxTTLSeconds(out.ChronicMaxTTLSeconds)
+	out.JitterRatio = NormalizeChronicJitterRatio(out.JitterRatio)
+	out.RecoverySuccesses = NormalizeChronicRecoverySuccesses(out.RecoverySuccesses)
+	return &out
+}
+
+// Active reports whether chronic long-backoff should do any work at all. It
+// deliberately does not consult the parent escalation section; callers resolve
+// the whole section and check escalation.enabled first.
+func (c *CooldownChronicConfig) Active() bool {
+	return c != nil && c.Enabled
+}
+
+// Validate performs strict validation for write paths. Zero means "unset" for
+// every bounded field and is accepted; Normalized applies the default.
+func (c *CooldownChronicConfig) Validate() error {
+	if c == nil {
+		return nil
+	}
+	if c.SuccessRateThreshold != 0 &&
+		(c.SuccessRateThreshold <= 0 || c.SuccessRateThreshold >= 1) {
+		return fmt.Errorf(
+			"escalation.chronic.success_rate_threshold must be strictly between 0 and 1 (or 0 for the default %v), got %v",
+			DefaultChronicSuccessRateThreshold, c.SuccessRateThreshold,
+		)
+	}
+	if c.MinSamples != 0 && (c.MinSamples < MinChronicMinSamples || c.MinSamples > MaxChronicMinSamples) {
+		return fmt.Errorf(
+			"escalation.chronic.min_samples must be between %d and %d (or 0 for the default %d), got %d",
+			MinChronicMinSamples, MaxChronicMinSamples, DefaultChronicMinSamples, c.MinSamples,
+		)
+	}
+	if c.ChronicMaxTTLSeconds != 0 &&
+		(c.ChronicMaxTTLSeconds < MinChronicMaxTTLSeconds || c.ChronicMaxTTLSeconds > MaxChronicMaxTTLSeconds) {
+		return fmt.Errorf(
+			"escalation.chronic.chronic_max_ttl_seconds must be between %d and %d (or 0 for the default %d), got %d",
+			MinChronicMaxTTLSeconds, MaxChronicMaxTTLSeconds, DefaultChronicMaxTTLSeconds, c.ChronicMaxTTLSeconds,
+		)
+	}
+	if c.JitterRatio < MinChronicJitterRatio || c.JitterRatio > MaxChronicJitterRatio {
+		return fmt.Errorf(
+			"escalation.chronic.jitter_ratio must be between %v and %v, got %v",
+			MinChronicJitterRatio, MaxChronicJitterRatio, c.JitterRatio,
+		)
+	}
+	if c.RecoverySuccesses != 0 &&
+		(c.RecoverySuccesses < MinChronicRecoverySuccesses || c.RecoverySuccesses > MaxChronicRecoverySuccesses) {
+		return fmt.Errorf(
+			"escalation.chronic.recovery_successes must be between %d and %d (or 0 for the default %d), got %d",
+			MinChronicRecoverySuccesses, MaxChronicRecoverySuccesses, DefaultChronicRecoverySuccesses, c.RecoverySuccesses,
+		)
+	}
+	return nil
+}
+
+// NormalizeChronicSuccessRateThreshold applies the documented default (0.3)
+// and (0, 1) bounds. Zero / negative means "unset" and takes the default;
+// positive values are clamped into 0.01..0.99.
+func NormalizeChronicSuccessRateThreshold(f float64) float64 {
+	switch {
+	case f <= 0:
+		return DefaultChronicSuccessRateThreshold
+	case f < MinChronicSuccessRateThreshold:
+		return MinChronicSuccessRateThreshold
+	case f > MaxChronicSuccessRateThreshold:
+		return MaxChronicSuccessRateThreshold
+	default:
+		return f
+	}
+}
+
+// NormalizeChronicMinSamples applies the documented default (10) and bounds
+// (1..1000). Zero / negative means "unset" and takes the default; positive
+// values outside the bounds are clamped.
+func NormalizeChronicMinSamples(n int) int {
+	switch {
+	case n <= 0:
+		return DefaultChronicMinSamples
+	case n < MinChronicMinSamples:
+		return MinChronicMinSamples
+	case n > MaxChronicMinSamples:
+		return MaxChronicMinSamples
+	default:
+		return n
+	}
+}
+
+// NormalizeChronicMaxTTLSeconds applies the documented default (1800) and
+// bounds (30..86400). Zero / negative means "unset" and takes the default;
+// positive values outside the bounds are clamped.
+func NormalizeChronicMaxTTLSeconds(n int) int {
+	switch {
+	case n <= 0:
+		return DefaultChronicMaxTTLSeconds
+	case n < MinChronicMaxTTLSeconds:
+		return MinChronicMaxTTLSeconds
+	case n > MaxChronicMaxTTLSeconds:
+		return MaxChronicMaxTTLSeconds
+	default:
+		return n
+	}
+}
+
+// NormalizeChronicJitterRatio clamps the jitter fraction into 0..1. Zero is
+// meaningful and preserved ("no jitter"); negative means "unset" and takes the
+// recommended default.
+func NormalizeChronicJitterRatio(f float64) float64 {
+	switch {
+	case f < 0:
+		return DefaultChronicJitterRatio
+	case f > MaxChronicJitterRatio:
+		return MaxChronicJitterRatio
+	default:
+		return f
+	}
+}
+
+// NormalizeChronicRecoverySuccesses applies the documented default (3) and
+// bounds (1..1000). Zero / negative means "unset" and takes the default;
+// positive values outside the bounds are clamped.
+func NormalizeChronicRecoverySuccesses(n int) int {
+	switch {
+	case n <= 0:
+		return DefaultChronicRecoverySuccesses
+	case n < MinChronicRecoverySuccesses:
+		return MinChronicRecoverySuccesses
+	case n > MaxChronicRecoverySuccesses:
+		return MaxChronicRecoverySuccesses
 	default:
 		return n
 	}

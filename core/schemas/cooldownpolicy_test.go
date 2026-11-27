@@ -225,6 +225,135 @@ func TestCooldownEscalationConfigValidate(t *testing.T) {
 	if err := (*CooldownEscalationConfig)(nil).Validate(); err != nil {
 		t.Fatalf("nil config must validate, got %v", err)
 	}
+
+	// A chronic block is validated in place, and an enabled chronic block under
+	// a disabled escalation section is rejected (it could never take effect).
+	if err := (&CooldownEscalationConfig{
+		Enabled: true,
+		Chronic: &CooldownChronicConfig{Enabled: true},
+	}).Validate(); err != nil {
+		t.Fatalf("enabled chronic under enabled escalation rejected: %v", err)
+	}
+	if err := (&CooldownEscalationConfig{
+		Enabled: false,
+		Chronic: &CooldownChronicConfig{Enabled: true},
+	}).Validate(); err == nil {
+		t.Fatal("escalation.chronic.enabled with escalation.enabled=false must be rejected")
+	}
+	if err := (&CooldownEscalationConfig{
+		Enabled: true,
+		Chronic: &CooldownChronicConfig{Enabled: true, SuccessRateThreshold: 1.5},
+	}).Validate(); err == nil {
+		t.Fatal("an out-of-range chronic threshold must be rejected")
+	}
+}
+
+func TestCooldownChronicConfigNormalized(t *testing.T) {
+	if (*CooldownChronicConfig)(nil).Normalized() != nil {
+		t.Fatal("nil chronic config Normalized() must be nil")
+	}
+	got := (&CooldownChronicConfig{Enabled: true}).Normalized()
+	if got.SuccessRateThreshold != DefaultChronicSuccessRateThreshold ||
+		got.MinSamples != DefaultChronicMinSamples ||
+		got.ChronicMaxTTLSeconds != DefaultChronicMaxTTLSeconds ||
+		got.RecoverySuccesses != DefaultChronicRecoverySuccesses {
+		t.Fatalf("defaults = %+v, want %v/%d/%d/%d", got,
+			DefaultChronicSuccessRateThreshold, DefaultChronicMinSamples,
+			DefaultChronicMaxTTLSeconds, DefaultChronicRecoverySuccesses)
+	}
+	// jitter 0 means "no jitter" and must survive normalization; a negative
+	// value takes the recommended default.
+	if (&CooldownChronicConfig{}).Normalized().JitterRatio != 0 {
+		t.Fatal("jitter_ratio=0 must be preserved as \"no jitter\"")
+	}
+	if got := (&CooldownChronicConfig{JitterRatio: -1}).Normalized().JitterRatio; got != DefaultChronicJitterRatio {
+		t.Fatalf("negative jitter_ratio normalized to %v, want %v", got, DefaultChronicJitterRatio)
+	}
+
+	clamps := []struct {
+		in   CooldownChronicConfig
+		want CooldownChronicConfig
+	}{
+		{
+			in:   CooldownChronicConfig{SuccessRateThreshold: 2, MinSamples: -5, ChronicMaxTTLSeconds: 1 << 20, JitterRatio: 9, RecoverySuccesses: -2},
+			want: CooldownChronicConfig{SuccessRateThreshold: MaxChronicSuccessRateThreshold, MinSamples: DefaultChronicMinSamples, ChronicMaxTTLSeconds: MaxChronicMaxTTLSeconds, JitterRatio: MaxChronicJitterRatio, RecoverySuccesses: DefaultChronicRecoverySuccesses},
+		},
+		{
+			in:   CooldownChronicConfig{SuccessRateThreshold: 0.001, ChronicMaxTTLSeconds: 1},
+			want: CooldownChronicConfig{SuccessRateThreshold: MinChronicSuccessRateThreshold, MinSamples: DefaultChronicMinSamples, ChronicMaxTTLSeconds: MinChronicMaxTTLSeconds, RecoverySuccesses: DefaultChronicRecoverySuccesses},
+		},
+	}
+	for _, tt := range clamps {
+		got := tt.in.Normalized()
+		if got.SuccessRateThreshold != tt.want.SuccessRateThreshold ||
+			got.MinSamples != tt.want.MinSamples ||
+			got.ChronicMaxTTLSeconds != tt.want.ChronicMaxTTLSeconds ||
+			got.JitterRatio != tt.want.JitterRatio ||
+			got.RecoverySuccesses != tt.want.RecoverySuccesses {
+			t.Fatalf("Normalized(%+v) = %+v, want %+v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestCooldownChronicConfigActiveAndValidate(t *testing.T) {
+	if (*CooldownChronicConfig)(nil).Active() {
+		t.Fatal("nil chronic config must not be active")
+	}
+	if (&CooldownChronicConfig{}).Active() {
+		t.Fatal("disabled chronic config must not be active")
+	}
+	if !(&CooldownChronicConfig{Enabled: true}).Active() {
+		t.Fatal("enabled chronic config must be active")
+	}
+
+	for _, cfg := range []CooldownChronicConfig{
+		{},
+		{SuccessRateThreshold: 0.5, MinSamples: 10, ChronicMaxTTLSeconds: 1800, JitterRatio: 0.2, RecoverySuccesses: 3},
+		{JitterRatio: 0},
+		{JitterRatio: 1},
+	} {
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("valid chronic config %+v rejected: %v", cfg, err)
+		}
+	}
+	invalid := []struct {
+		name string
+		cfg  CooldownChronicConfig
+		want string
+	}{
+		{"threshold must stay inside (0,1)", CooldownChronicConfig{SuccessRateThreshold: 1}, "escalation.chronic.success_rate_threshold"},
+		{"negative threshold", CooldownChronicConfig{SuccessRateThreshold: -0.2}, "escalation.chronic.success_rate_threshold"},
+		{"min_samples too small", CooldownChronicConfig{MinSamples: -1}, "escalation.chronic.min_samples"},
+		{"ttl too large", CooldownChronicConfig{ChronicMaxTTLSeconds: MaxChronicMaxTTLSeconds + 1}, "escalation.chronic.chronic_max_ttl_seconds"},
+		{"jitter above one", CooldownChronicConfig{JitterRatio: 1.5}, "escalation.chronic.jitter_ratio"},
+		{"recovery too large", CooldownChronicConfig{RecoverySuccesses: MaxChronicRecoverySuccesses + 1}, "escalation.chronic.recovery_successes"},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if err == nil {
+				t.Fatalf("config %+v must be rejected", tt.cfg)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error %q does not mention %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCooldownEscalationNormalizedDeepCopiesChronic(t *testing.T) {
+	chronic := &CooldownChronicConfig{Enabled: true, MinSamples: 7}
+	cfg := &CooldownEscalationConfig{Enabled: true, MaxMultiplier: 4, Chronic: chronic}
+	got := cfg.Normalized()
+	if got.Chronic == chronic {
+		t.Fatal("Normalized aliased the caller's chronic block; it must be deep-copied")
+	}
+	if chronic.MinSamples != 7 {
+		t.Fatalf("the caller's chronic block was mutated: %+v", chronic)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("enabled chronic under enabled escalation rejected: %v", err)
+	}
 }
 
 func TestCooldownLearningConfigNormalized(t *testing.T) {
