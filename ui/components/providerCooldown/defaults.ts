@@ -65,6 +65,29 @@ export function resolveEffectiveCapacity(
 	};
 }
 
+/**
+ * Fleet-level summary of the capacity gate for one provider: which tri-state
+ * it is in, whether the gate actually blocks anything today (enabled with at
+ * least one positive limit), and the values that apply after inheritance.
+ */
+export interface CapacityGateStatus {
+	mode: CooldownCapabilityMode;
+	active: boolean;
+	effective: Required<CooldownCapacityConfig>;
+}
+
+export function capacityGateStatus(
+	providerSegment: CooldownCapacityConfig | undefined,
+	pluginSegment: CooldownCapacityConfig | undefined,
+): CapacityGateStatus {
+	const effective = resolveEffectiveCapacity(providerSegment, pluginSegment);
+	return {
+		mode: cooldownCapabilityMode(providerSegment),
+		active: effective.enabled && (effective.token_limit > 0 || effective.request_limit > 0),
+		effective,
+	};
+}
+
 export function resolveEffectiveEscalation(
 	providerSegment: CooldownEscalationConfig | undefined,
 	pluginSegment: CooldownEscalationConfig | undefined,

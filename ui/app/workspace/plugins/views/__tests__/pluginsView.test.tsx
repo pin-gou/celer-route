@@ -183,6 +183,10 @@ describe("PluginsView — dispatch logic (task 11.2)", () => {
 
 		// The provider-cooldown fragment renders the enabled switch at minimum
 		expect(screen.getByTestId("providercooldown-enabled-switch")).toBeTruthy();
+		// The capability sections are the plugin-wide defaults shared with the
+		// provider detail page.
+		expect(screen.getByText("providerCooldown.capabilityDefaultsTitle")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-capacity-enabled")).toBeTruthy();
 	});
 
 	it("renders RtkFragment when selectedPlugin.name is 'rtk'", () => {

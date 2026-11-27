@@ -131,7 +131,7 @@ describe("PerProviderPolicyOverview — renders customised policies and edit jum
 		mocks.providersData = [];
 	});
 
-	it("renders customised policies and navigates to provider page on edit", () => {
+	it("renders customised policies and navigates to the provider cooldown tab", () => {
 		mocks.navigate.mockReset();
 
 		mocks.providersData = [
@@ -158,31 +158,112 @@ describe("PerProviderPolicyOverview — renders customised policies and edit jum
 		expect(screen.getByText(/per-provider cooldown policies/i)).toBeTruthy();
 		// Sensational custom policy visible
 		expect(screen.getByTestId("providercooldown-policy-row-sensenova")).toBeTruthy();
-		// Edit button on the customised row navigates to the provider page deep-linking
-		// into the cooldown policy section.
-		const editBtn = screen.getByTestId("providercooldown-policy-edit-sensenova");
-		fireEvent.click(editBtn);
+		// Every fleet row deep-links straight into the provider's cooldown tab.
+		const configureBtn = screen.getByTestId("providercooldown-configure-sensenova");
+		fireEvent.click(configureBtn);
 		expect(mocks.navigate).toHaveBeenCalledWith({
 			to: "/workspace/providers/$id",
 			params: { id: "sensenova" },
-			search: { tab: "overview", editing: "cooldown-policy" },
+			search: { tab: "cooldown" },
 		});
-		// Default-policy providers get their own row with a "Configure" jump link
-		expect(screen.getByTestId("providercooldown-policy-goto-openai")).toBeTruthy();
+		// Default-policy providers get their own row with the same jump button
+		expect(screen.getByTestId("providercooldown-configure-openai")).toBeTruthy();
 		// openai appears in the default-policy list; just verify the list rendered
 		// at least one provider name from ProviderLabels.
 		const providerLabels = screen.getAllByText("OpenAI");
 		expect(providerLabels.length).toBeGreaterThan(0);
 
-		// The default-policy row's link navigates to the provider page too
 		mocks.navigate.mockReset();
-		const gotoBtn = screen.getByTestId("providercooldown-policy-goto-openai");
+		const gotoBtn = screen.getByTestId("providercooldown-configure-openai");
 		fireEvent.click(gotoBtn);
 		expect(mocks.navigate).toHaveBeenCalledWith({
 			to: "/workspace/providers/$id",
 			params: { id: "openai" },
-			search: { tab: "overview", editing: "cooldown-policy" },
+			search: { tab: "cooldown" },
 		});
+	});
+
+	it("shows the three capacity gate states on the fleet rows", () => {
+		mocks.navigate.mockReset();
+		mocks.providersData = [
+			{
+				name: "openai",
+				network_config: {},
+				concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 },
+			} as never,
+			{
+				name: "anthropic",
+				network_config: {},
+				concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 },
+				cooldown_policy: { capacity: { enabled: false } },
+			} as never,
+			{
+				name: "gemini",
+				network_config: {},
+				concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 },
+				cooldown_policy: { capacity: { enabled: true, token_limit: 500, window_seconds: 30 } },
+			} as never,
+		];
+		render(
+			<ProvidercooldownFragment
+				plugin={{
+					...mockPlugin,
+					config: { ...mockPlugin.config, capacity: { enabled: true, token_limit: 1000, window_seconds: 60 } },
+				}}
+			/>,
+		);
+
+		// No capacity override → inherits the plugin default and shows its limit.
+		const inherited = screen.getByTestId("providercooldown-capacity-status-openai");
+		expect(inherited.textContent).toContain("Using default");
+		expect(inherited.textContent).toContain("1,000");
+
+		// Explicitly off.
+		const disabled = screen.getByTestId("providercooldown-capacity-status-anthropic");
+		expect(disabled.textContent).toContain("Off");
+		expect(disabled.textContent).not.toContain("1,000");
+
+		// Own capacity section → customised with its own effective limit.
+		const customised = screen.getByTestId("providercooldown-capacity-status-gemini");
+		expect(customised.textContent).toContain("Customised");
+		expect(customised.textContent).toContain("500");
+	});
+
+	it("labels an inherited capacity gate as off when the plugin default is disabled", () => {
+		mocks.providersData = [
+			{ name: "openai", network_config: {}, concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 } } as never,
+		];
+		render(<ProvidercooldownFragment plugin={{ ...mockPlugin, config: {} }} />);
+
+		const inherited = screen.getByTestId("providercooldown-capacity-status-openai");
+		expect(inherited.textContent).toContain("Using default");
+		expect(inherited.textContent).toContain("default is off");
+		// No default cap is in force, so the "confirm per provider" warning is hidden.
+		expect(screen.queryByTestId("providercooldown-capacity-default-hint")).toBeNull();
+	});
+
+	it("warns about providers inheriting an enabled default capacity cap", () => {
+		mocks.providersData = [
+			{ name: "openai", network_config: {}, concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 } } as never,
+			{
+				name: "gemini",
+				network_config: {},
+				concurrency_and_buffer_size: { concurrency: 1, buffer_size: 1 },
+				cooldown_policy: { capacity: { enabled: true, token_limit: 500 } },
+			} as never,
+		];
+		render(
+			<ProvidercooldownFragment
+				plugin={{
+					...mockPlugin,
+					config: { ...mockPlugin.config, capacity: { enabled: true, token_limit: 1000, window_seconds: 60 } },
+				}}
+			/>,
+		);
+
+		// Only openai inherits the default; gemini carries its own section.
+		const hint = screen.getByTestId("providercooldown-capacity-default-hint");
+		expect(hint.textContent).toContain("1 provider");
 	});
 
 	it("shows scope label on every rule (default key scope is not hidden)", () => {
@@ -386,6 +467,14 @@ describe("ConfigForm — capability sections", () => {
 		mocks.updatePlugin.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) }));
 	});
 
+	it("presents the three sections as plugin-wide defaults", () => {
+		mocks.providersData = [];
+		render(<ProvidercooldownFragment plugin={configFormFixture()} />);
+
+		expect(screen.getByText("Default capability settings")).toBeTruthy();
+		expect(screen.getByText(/every other provider inherits what is configured below/i)).toBeTruthy();
+	});
+
 	it("renders all three section switches and their fields", () => {
 		render(<ConfigForm plugin={configFormFixture()} />);
 
@@ -507,9 +596,9 @@ describe("ConfigForm — capability sections", () => {
 		expect(saveButton.disabled).toBe(false);
 		fireEvent.click(saveButton);
 
-		// zod rejects > 16, so the resolver marks the field invalid and RHF never
-		// invokes onSubmit.
-		await waitFor(() => expect(screen.getByTestId("providercooldown-escalation-max-multiplier").getAttribute("aria-invalid")).toBe("true"));
+		// zod rejects > 16, so the resolver marks the section invalid and RHF
+		// never invokes onSubmit.
+		await waitFor(() => expect(screen.getByTestId("providercooldown-config-errors")).toBeTruthy());
 		expect(mocks.updatePlugin).not.toHaveBeenCalled();
 	});
 
@@ -523,7 +612,7 @@ describe("ConfigForm — capability sections", () => {
 		expect(saveButton.disabled).toBe(false);
 		fireEvent.click(saveButton);
 
-		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-headroom").getAttribute("aria-invalid")).toBe("true"));
+		await waitFor(() => expect(screen.getByTestId("providercooldown-config-errors")).toBeTruthy());
 		expect(mocks.updatePlugin).not.toHaveBeenCalled();
 	});
 });
