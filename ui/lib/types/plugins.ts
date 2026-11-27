@@ -370,6 +370,26 @@ export interface ByKindCounters {
 	quota: KindCounters;
 }
 
+// Per-(provider, key) observability rollup surfaced under
+// CooldownStats.perKey. Rows are keyed by "<provider>::<keyID>"; a keyless
+// provider (whose sentinel key has no ID) collapses to "<provider>::".
+//
+// markCount / suppressedCount / successCount are lifetime monotonic
+// counters. Unlike the byKind / perProvider breakdowns, suppressedCount here
+// also covers unclassified (legacy quota_patterns) suppressions, so it sums
+// to the aggregate suppressedCount. lastMarkAt / lastSuccessAt are absent
+// until the event happens. cooldownRemaining is the remaining time (ns) on
+// the key's longest still-active cooldown, derived from the same snapshot
+// the GET /state endpoint serves; absent when the key is not cooling down.
+export interface PerKeyStats {
+	markCount: number;
+	suppressedCount: number;
+	successCount: number;
+	lastMarkAt?: string;
+	lastSuccessAt?: string;
+	cooldownRemaining?: number;
+}
+
 // Lifetime counters + point-in-time active count surfaced by GET
 // /api/plugins/provider-cooldown/stats.
 //
@@ -383,6 +403,9 @@ export interface ByKindCounters {
 // to explain "为什么总 304 但按模型细分只有 300" — the missing 4 sits in
 // perProviderScopeKey. For every provider the two sub-buckets sum to
 // perProvider (modulo unclassified legacy marks).
+//
+// perKey breaks the same observation down per (provider, key) so an
+// operator can tell which credential is absorbing the cooldowns.
 export interface CooldownStats {
 	markCount: number;
 	suppressedCount: number;
@@ -392,6 +415,7 @@ export interface CooldownStats {
 	perProviderModel?: Record<string, Record<string, ProviderKindCounters>>;
 	perProviderScopeKey?: Record<string, ProviderKindCounters>;
 	perProviderScopeModel?: Record<string, ProviderKindCounters>;
+	perKey?: Record<string, PerKeyStats>;
 }
 
 export interface CooldownStateResponse {

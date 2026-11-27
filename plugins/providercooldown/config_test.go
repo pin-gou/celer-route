@@ -120,8 +120,8 @@ func TestConfigAsStateIgnoresNonPositiveOverrides(t *testing.T) {
 	c := &Config{
 		DefaultTTLSeconds: 60,
 		TTLOverrides: map[string]int{
-			"openai":    -5,  // ignored
-			"anthropic": 0,   // ignored
+			"openai":    -5, // ignored
+			"anthropic": 0,  // ignored
 		},
 	}
 	s := c.AsState(nil)
@@ -138,9 +138,9 @@ func TestConfigAsStateWarnsOnUnknownProvider(t *testing.T) {
 	c := &Config{
 		DefaultTTLSeconds: 60,
 		TTLOverrides: map[string]int{
-			"openai":    30,  // known — no warning expected
-			"open-ai":   45,  // typo — warning expected
-			"anthropic": 90,  // known — no warning expected
+			"openai":           30,  // known — no warning expected
+			"open-ai":          45,  // typo — warning expected
+			"anthropic":        90,  // known — no warning expected
 			"made-up-provider": 120, // unknown — warning expected
 		},
 	}

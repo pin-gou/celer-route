@@ -266,6 +266,31 @@ export const pluginsApi = baseApi.injectEndpoints({
 							}
 						}
 					}
+					// per_key stays keyed by "<provider>::<keyID>" (the
+					// lookup key the plugin uses) and only its row fields
+					// are camelCased.
+					let perKey: CooldownStats["perKey"];
+					if (response.per_key && typeof response.per_key === "object") {
+						perKey = {};
+						for (const [key, row] of Object.entries(response.per_key)) {
+							const r = row as {
+								mark_count?: number;
+								suppressed_count?: number;
+								success_count?: number;
+								last_mark_at?: string;
+								last_success_at?: string;
+								cooldown_remaining?: number;
+							};
+							perKey[key] = {
+								markCount: r.mark_count ?? 0,
+								suppressedCount: r.suppressed_count ?? 0,
+								successCount: r.success_count ?? 0,
+								lastMarkAt: r.last_mark_at,
+								lastSuccessAt: r.last_success_at,
+								cooldownRemaining: r.cooldown_remaining,
+							};
+						}
+					}
 					return {
 						stats: {
 							markCount: response.mark_count,
@@ -274,6 +299,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 							byKind,
 							perProvider,
 							perProviderModel,
+							perKey,
 						},
 					};
 				}

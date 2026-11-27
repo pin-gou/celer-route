@@ -227,6 +227,14 @@ type CooldownState struct {
 	// every provider (modulo unclassified legacy marks, which contribute
 	// to neither sub-bucket). Guarded by c.mu (RWMutex).
 	perProviderScopeModel map[schemas.ModelProvider]*ProviderKindCounters
+
+	// perKey holds the per-(provider, key_id) observability counters (mark /
+	// suppressed / success plus their last-seen timestamps). It is a pure
+	// observation layer: nothing reads it to make a routing decision, it only
+	// reports what the existing mark / suppress / success paths already did.
+	// Guarded by c.mu (RWMutex); pruned by the same GC tick that prunes
+	// the escalation tables (see cleanupPerKeyStatsLocked).
+	perKey map[perKeyID]*perKeyEntry
 }
 
 // NewCooldownState returns a CooldownState with the given default TTL.
@@ -243,6 +251,7 @@ func NewCooldownState(ttl time.Duration) *CooldownState {
 		perProviderModel:      make(map[string]*ProviderKindCounters),
 		perProviderScopeKey:   make(map[schemas.ModelProvider]*ProviderKindCounters),
 		perProviderScopeModel: make(map[schemas.ModelProvider]*ProviderKindCounters),
+		perKey:                make(map[perKeyID]*perKeyEntry),
 	}
 }
 
@@ -536,6 +545,10 @@ func (c *CooldownState) markWithPolicy(policy *schemas.CooldownPolicy, provider 
 		expiresAt: now.Add(effective),
 		kind:      kind,
 	}
+	// Per-key observation: record the mark against the key it belongs to so
+	// the stats endpoint can attribute cooldowns per credential instead of
+	// only per provider. Purely additive — it changes no decision here.
+	c.recordPerKeyMarkLocked(provider, keyID, now)
 	idx := kindIndex(kind)
 	c.markByKind[idx].Add(1)
 	if kind == CooldownKindRateLimit {
@@ -738,6 +751,11 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string, m
 //     全来自 key-scope 命中"). For every provider the two sub-buckets sum
 //     to PerProvider (modulo unclassified legacy marks, which contribute to
 //     neither sub-bucket because they have no kind).
+//   - PerKey is the same observation broken down per (provider, key_id),
+//     keyed by "<provider>::<keyID>". It carries the mark / suppressed /
+//     success counters plus the remaining time on the key's longest active
+//     cooldown, so an operator can tell "which key is paying for it"
+//     instead of only "which provider".
 type CooldownStats struct {
 	MarkCount             uint64                                         `json:"mark_count"`
 	SuppressedCount       uint64                                         `json:"suppressed_count"`
@@ -747,6 +765,7 @@ type CooldownStats struct {
 	PerProviderModel      map[string]ProviderKindCounters                `json:"per_provider_model,omitempty"`
 	PerProviderScopeKey   map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider_scope_key,omitempty"`
 	PerProviderScopeModel map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider_scope_model,omitempty"`
+	PerKey                map[string]PerKeyStats                         `json:"per_key,omitempty"`
 }
 
 // Stats returns the lifetime counters and the current number of active
@@ -771,6 +790,12 @@ func (c *CooldownState) Stats() CooldownStats {
 			},
 		},
 	}
+	// The per-key rows carry the remaining time of the key's longest active
+	// cooldown. That value is taken from Snapshot() — the same source the
+	// GET /state endpoint serves — so the two views can never disagree.
+	// Snapshot() takes its own read lock, so it has to run BEFORE this
+	// method takes c.mu: sync.RWMutex is not reentrant.
+	remaining := perKeyRemainingByKey(c.Snapshot())
 	c.mu.RLock()
 	stats.CurrentActiveCount = len(c.cooldowns)
 	stats.PerProvider = make(map[schemas.ModelProvider]ProviderKindCounters, len(c.perProvider))
@@ -789,6 +814,7 @@ func (c *CooldownState) Stats() CooldownStats {
 	for p, pc := range c.perProviderScopeModel {
 		stats.PerProviderScopeModel[p] = *pc
 	}
+	stats.PerKey = c.perKeyStatsSnapshot(remaining)
 	c.mu.RUnlock()
 	return stats
 }
@@ -818,6 +844,10 @@ func (c *CooldownState) runGCLocked(logger schemas.Logger, interval time.Duratio
 			if c.escalation != nil {
 				c.escalation.cleanupLocked(now)
 			}
+			// The per-key observability rows are pruned on the same tick as
+			// the escalation tables, so every in-memory table of this state
+			// shares one bounded cadence.
+			c.cleanupPerKeyStatsLocked(now)
 			c.mu.Unlock()
 			if pruned > 0 && logger != nil {
 				logger.Debug("[provider-cooldown] GC pruned %d expired entries, %d remaining", pruned, remaining)
@@ -856,13 +886,20 @@ func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
 // (incrementing the suppressed counters per key) is a quick
 // perProvider[provider][kind].Suppressed++ under a short write lock; in
 // practice this is uncontended because filter calls are not concurrent
-// with each other for the same provider.
+// with each other for the same provider. The per-key observation counter is
+// bumped in the same critical section, so a suppression still costs exactly
+// one short write lock.
 func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 	return func(ctx *schemas.BifrostContext, provider schemas.ModelProvider, model string, keys []schemas.Key) ([]schemas.Key, error) {
 		if len(keys) == 0 {
 			return keys, nil
 		}
 		out := make([]schemas.Key, 0, len(keys))
+		// now is resolved lazily: the happy path (nothing suppressed) must not
+		// pay for a clock read, and one read covers every vetoed key in this
+		// call.
+		var now time.Time
+		nowResolved := false
 		for _, k := range keys {
 			_, kind, matchedScope, suppressed := c.lookupSuppressed(provider, k.ID, model)
 			if !suppressed {
@@ -877,7 +914,9 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 			// per-kind breakdown faithful to CooldownPolicy-driven marks.
 			if kind != "" {
 				c.suppressedByKind[idx].Add(1)
-				c.mu.Lock()
+			}
+			c.mu.Lock()
+			if kind != "" {
 				switch kind {
 				case CooldownKindRateLimit:
 					c.perProviderMarkLocked(provider).RateLimit.SuppressedCount++
@@ -907,8 +946,17 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 						c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeKey).Quota.SuppressedCount++
 					}
 				}
-				c.mu.Unlock()
 			}
+			// Per-key observation: the vetoed key itself gets the credit, so
+			// the stats endpoint can show which credential the filter keeps
+			// taking out of the rotation. Like the legacy suppressedCount
+			// above, this flat counter also covers unclassified marks.
+			if !nowResolved {
+				now = c.nowTime()
+				nowResolved = true
+			}
+			c.recordPerKeySuppressedLocked(provider, k.ID, now)
+			c.mu.Unlock()
 			if logger != nil {
 				logger.Info("[provider-cooldown] suppressed key %s/%s (name=%s, model=%s, kind=%s)", provider, k.ID, k.Name, model, kind)
 			}
@@ -1461,6 +1509,10 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 		// state — success must stay a no-op for the cooldown map itself. When
 		// escalation is disabled the helper returns before reading ctx.
 		state.clearEscalationOnSuccess(ctx)
+		// Per-key observation: a success is the third leg of the per-key
+		// picture (marks / suppressions / successes). It is counted for the
+		// key that served the request and changes no cooldown state.
+		state.recordPerKeySuccess(ctx, resp)
 		return resp, bifrostErr, nil
 	}
 

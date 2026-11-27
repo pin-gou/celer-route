@@ -135,6 +135,15 @@ func (h *CooldownHandler) getState(ctx *fasthttp.RequestCtx) {
 // down the same counters by CooldownKind (rate_limit / quota) and by
 // (provider, kind). The legacy fields are preserved verbatim so older
 // clients keep working without changes.
+//
+// PerKey is the per-(provider, key_id) observation layer introduced for the
+// cooldown optimisation baseline: it carries the same mark / suppressed
+// counters one level down, plus success count, the timestamps of the last
+// mark / success, and the remaining time on the key's longest active
+// cooldown. Keys are "<provider>::<keyID>" (the keyless-provider sentinel is
+// "<provider>::"), mirroring the keys the plugin uses internally. It is
+// always emitted (an empty object, never null) so clients can iterate it
+// unconditionally.
 type cooldownStatsResponse struct {
 	Plugin                string                                                      `json:"plugin"`
 	MarkCount             uint64                                                      `json:"mark_count"`
@@ -145,6 +154,7 @@ type cooldownStatsResponse struct {
 	PerProviderModel      map[string]map[string]providercooldown.ProviderKindCounters `json:"per_provider_model,omitempty"`
 	PerProviderScopeKey   map[string]providercooldown.ProviderKindCounters            `json:"per_provider_scope_key,omitempty"`
 	PerProviderScopeModel map[string]providercooldown.ProviderKindCounters            `json:"per_provider_scope_model,omitempty"`
+	PerKey                map[string]providercooldown.PerKeyStats                     `json:"per_key"`
 }
 
 func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
@@ -189,6 +199,12 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 	for provider, counters := range stats.PerProviderScopeModel {
 		perProviderScopeModel[string(provider)] = counters
 	}
+	// per_key is keyed by "<provider>::<keyID>" already, so it needs no key
+	// rewriting — only a non-nil map so the field is always an object.
+	perKey := make(map[string]providercooldown.PerKeyStats, len(stats.PerKey))
+	for k, row := range stats.PerKey {
+		perKey[k] = row
+	}
 	SendJSON(ctx, cooldownStatsResponse{
 		Plugin:                providercooldown.PluginName,
 		MarkCount:             stats.MarkCount,
@@ -199,6 +215,7 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 		PerProviderModel:      perProviderModel,
 		PerProviderScopeKey:   perProviderScopeKey,
 		PerProviderScopeModel: perProviderScopeModel,
+		PerKey:                perKey,
 	})
 }
 
