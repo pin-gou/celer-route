@@ -611,11 +611,11 @@
 			"cancel": "Cancel",
 			"save": "Save cooldown policy",
 			"errorSample": {
-				"title": "Error samples",
+				"title": "Turn errors into rules",
 				"loading": "Loading error samples...",
 				"error": "Failed to load error samples",
 				"noErrors": "No errors in this window.",
-				"tryChangingWindow": "Try the 24h window if you expect recent errors.",
+				"tryChangingWindow": "Switch to the 24-hour window to look further back.",
 				"totalErrors": "{{count}} total errors",
 				"apply": "Apply",
 				"windowOptions": {
@@ -627,7 +627,9 @@
 				"toast": {
 					"applied": "Added error sample as a new match",
 					"skippedInvalidStatusCode": "Skipped invalid HTTP status code from error sample (only 100–599 are accepted); the match was added by error type / code / message instead."
-				}
+				},
+				"description": "Lists the provider's current error shapes. Click “Apply” to turn one of them into a cooldown match.",
+				"updatedAt": "Updated at {{time}}"
 			},
 			"typeSelect": {
 				"selectPlaceholder": "Select a known value…",
@@ -642,7 +644,7 @@
 			}
 		},
 		"providerUsage": {
-			"title": "Capacity usage",
+			"title": "Usage by model × key",
 			"description": "Recent consumption per model × API key. Request counts are upstream attempts, so fallback retries are included.",
 			"windowOptions": {
 				"1h": "Last 1 hour",
@@ -669,15 +671,8 @@
 				"avgTokens": "Avg tokens",
 				"cancelledNote": "{{count}} cancelled"
 			},
-			"baseline": {
-				"title": "Baseline: top errors",
-				"totalErrors": "{{count}} total errors",
-				"loading": "Loading error baseline...",
-				"error": "Failed to load error baseline.",
-				"empty": "No errors in this window.",
-				"unknown": "Unknown error",
-				"count": "{{count}}×"
-			}
+			"updatedAt": "Updated at {{time}}",
+			"emptyTabNotice": "No requests in this statistics window, so the observation data is empty. Cooldown rules can still be configured."
 		},
 		"performance": {
 			"concurrency": "Concurrency",

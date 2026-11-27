@@ -308,7 +308,7 @@
 			}
 		},
 		"capacityUsage": {
-			"title": "容量水位",
+			"title": "闸门实时水位",
 			"description": "容量闸门滚动窗口内的真实用量（当前实例视角）。",
 			"loading": "正在加载容量用量…",
 			"error": "加载容量用量失败",
@@ -321,7 +321,13 @@
 			"sourceDefault": "默认值",
 			"sourceProvider": "本提供商",
 			"retryAfter": "约 {{seconds}} 秒后放行",
-			"key": "密钥"
+			"key": "密钥",
+			"updatedAt": "更新于 {{time}}"
+		},
+		"window": {
+			"label": "统计窗口",
+			"1h": "最近 1 小时",
+			"24h": "最近 24 小时"
 		}
 	},
 	"validation": {

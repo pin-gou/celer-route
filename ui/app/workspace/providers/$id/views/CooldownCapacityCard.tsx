@@ -1,4 +1,5 @@
 import { COOLDOWN_OBSERVABILITY_POLLING_INTERVAL_MS } from "@/components/providerCooldown/defaults";
+import { formatUpdatedAt } from "@/components/providerCooldown/cooldownWindow";
 import { getQueryErrorStatus } from "@/components/providerCooldown/queryError";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -92,7 +93,7 @@ function CapacityRow({ entry }: { entry: CapacityUsageEntry }) {
  */
 export function CooldownCapacityCard({ provider }: CooldownCapacityCardProps) {
 	const { t } = useTranslation("common");
-	const { data, error, isLoading } = useGetCapacityUsageQuery(undefined, {
+	const { data, error, isLoading, fulfilledTimeStamp } = useGetCapacityUsageQuery(undefined, {
 		pollingInterval: COOLDOWN_OBSERVABILITY_POLLING_INTERVAL_MS,
 	});
 
@@ -102,12 +103,20 @@ export function CooldownCapacityCard({ provider }: CooldownCapacityCardProps) {
 	// An explicit `{ enabled: false }` on the provider means the gate will never
 	// engage, no matter what the plugin default is.
 	const gateExplicitlyDisabled = provider.cooldown_policy?.capacity?.enabled === false;
+	const updatedAt = formatUpdatedAt(fulfilledTimeStamp);
 
 	return (
 		<div data-testid="providers2-capacity-usage-card" className="rounded-lg border p-4">
-			<div className="mb-3">
-				<h3 className="text-sm font-medium">{t("cooldownCapability.capacityUsage.title")}</h3>
-				<p className="text-muted-foreground mt-1 text-xs">{t("cooldownCapability.capacityUsage.description")}</p>
+			<div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+				<div className="min-w-0">
+					<h3 className="text-sm font-medium">{t("cooldownCapability.capacityUsage.title")}</h3>
+					<p className="text-muted-foreground mt-1 text-xs">{t("cooldownCapability.capacityUsage.description")}</p>
+				</div>
+				{updatedAt && (
+					<span data-testid="providers2-capacity-updated-at" className="text-muted-foreground shrink-0 text-xs">
+						{t("cooldownCapability.capacityUsage.updatedAt", { time: updatedAt })}
+					</span>
+				)}
 			</div>
 
 			{isLoading && (

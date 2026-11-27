@@ -308,7 +308,7 @@
 			}
 		},
 		"capacityUsage": {
-			"title": "Capacity water level",
+			"title": "Capacity gate water level",
 			"description": "Real usage inside the capacity gate's rolling window, as the plugin sees it right now.",
 			"loading": "Loading capacity usage…",
 			"error": "Failed to load capacity usage",
@@ -321,7 +321,13 @@
 			"sourceDefault": "Default",
 			"sourceProvider": "This provider",
 			"retryAfter": "Releases in about {{seconds}}s",
-			"key": "Key"
+			"key": "Key",
+			"updatedAt": "Updated at {{time}}"
+		},
+		"window": {
+			"label": "Statistics window",
+			"1h": "Last 1 hour",
+			"24h": "Last 24 hours"
 		}
 	},
 	"validation": {

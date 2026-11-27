@@ -34,6 +34,7 @@ import {
 	type CooldownCapabilityKey,
 	type CooldownCapabilityMode,
 } from "@/components/providerCooldown/defaults";
+import type { CooldownWindowKey } from "@/components/providerCooldown/cooldownWindow";
 import { useCooldownCapabilityDefaults } from "@/components/providerCooldown/useCooldownCapabilityDefaults";
 import { CapabilityOverrideCard } from "@/components/providerCooldown/capabilityOverrideCard";
 import { EscalationFields } from "@/components/providerCooldown/escalationFields";
@@ -43,6 +44,14 @@ import { LearningFields } from "@/components/providerCooldown/learningFields";
 interface CooldownPolicyFormFragmentProps {
 	provider: ModelProvider;
 	onCancel?: () => void;
+	/**
+	 * Observation window owned by the embedding tab. When present, the error
+	 * browser renders it instead of keeping a private selector, so the page
+	 * never shows two error lists computed over different windows.
+	 */
+	window?: CooldownWindowKey;
+	/** Hides the error browser's own "no errors" message (the tab shows one). */
+	suppressEmptyState?: boolean;
 }
 
 const RULE_FIELDS = ["rate_limit", "quota"] as const;
@@ -101,7 +110,7 @@ function formatInt(value: number): string {
 	return value.toLocaleString("en-US");
 }
 
-export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolicyFormFragmentProps) {
+export function CooldownPolicyFormFragment({ provider, onCancel, window, suppressEmptyState }: CooldownPolicyFormFragmentProps) {
 	const { t } = useTranslation("providers");
 	const { t: tc } = useTranslation("common");
 	const dispatch = useAppDispatch();
@@ -306,18 +315,19 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 
 	return (
 		<Form {...form}>
-			<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 px-6" data-testid="provider-config-cooldown-content">
-				<div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-					{/* Left: error sample browser */}
-					<div className="bg-muted/40 rounded-md border p-3" data-testid="error-sample-browser">
-						<h5 className="mb-2 text-sm font-medium">{t("fragments.cooldownPolicy.errorSample.title")}</h5>
-						<ErrorSampleBrowserBridge provider={provider.name} />
-					</div>
+			<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 px-6 py-5" data-testid="provider-config-cooldown-content">
+				{/* The error shapes are the INPUT of the rule editor below, so they
+				    sit directly above it instead of in a separate column: the
+				    operator reads an error and writes the matching rule without
+				    scrolling away from either. */}
+				<div className="bg-muted/40 rounded-md border p-3" data-testid="error-sample-browser">
+					<h5 className="mb-1 text-sm font-medium">{t("fragments.cooldownPolicy.errorSample.title")}</h5>
+					<p className="text-muted-foreground mb-2 text-xs">{t("fragments.cooldownPolicy.errorSample.description")}</p>
+					<ErrorSampleBrowserBridge provider={provider.name} window={window} suppressEmptyState={suppressEmptyState} />
+				</div>
 
-					{/* Right: rule editor */}
-					<div className="space-y-4">
-						<InnerFields provider={String(provider.name)} />
-					</div>
+				<div className="space-y-4">
+					<InnerFields provider={String(provider.name)} />
 				</div>
 
 				{/* Three per-provider capability overrides — inherit / custom / off. */}
@@ -447,11 +457,19 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 }
 
 // ---------------------------------------------------------------------------
-// Left column: error sample browser — clicking "apply" opens a popup to
-// pick the target rule (rate_limit or quota).
+// Error sample browser — clicking "apply" opens a popup to pick the target
+// rule (rate_limit or quota).
 // ---------------------------------------------------------------------------
 
-function ErrorSampleBrowserBridge({ provider }: { provider: ModelProvider["name"] }) {
+function ErrorSampleBrowserBridge({
+	provider,
+	window,
+	suppressEmptyState,
+}: {
+	provider: ModelProvider["name"];
+	window?: CooldownWindowKey;
+	suppressEmptyState?: boolean;
+}) {
 	const { t } = useTranslation("providers");
 	const { control, getValues, setValue } = useFormContext<CooldownPolicyFormSchema>();
 
@@ -504,7 +522,7 @@ function ErrorSampleBrowserBridge({ provider }: { provider: ModelProvider["name"
 
 	return (
 		<div className="flex flex-col gap-3">
-			<ErrorSampleBrowser provider={String(provider)} onApply={handleApply} />
+			<ErrorSampleBrowser provider={String(provider)} onApply={handleApply} window={window} suppressEmptyState={suppressEmptyState} />
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent data-testid="error-sample-apply-dialog">

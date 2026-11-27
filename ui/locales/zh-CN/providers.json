@@ -611,11 +611,11 @@
 			"cancel": "取消",
 			"save": "保存冷却策略",
 			"errorSample": {
-				"title": "错误样本",
+				"title": "从错误生成规则",
 				"loading": "正在加载错误样本...",
 				"error": "加载错误样本失败",
 				"noErrors": "此时间窗内暂无错误记录。",
-				"tryChangingWindow": "可尝试切换到 24 小时窗口查看。",
+				"tryChangingWindow": "可切换到 24 小时窗口查看。",
 				"totalErrors": "共 {{count}} 条错误",
 				"apply": "应用",
 				"windowOptions": {
@@ -627,7 +627,9 @@
 				"toast": {
 					"applied": "已将错误样本作为新匹配项添加",
 					"skippedInvalidStatusCode": "已忽略错误样本中无效的 HTTP 状态码（仅接受 100–599），本次匹配项已通过错误类型 / 代码 / 消息添加。"
-				}
+				},
+				"description": "列出该提供商当前的错误形态。点击「应用」可把一条错误直接写成冷却规则的匹配项。",
+				"updatedAt": "更新于 {{time}}"
 			},
 			"typeSelect": {
 				"selectPlaceholder": "选择已知值…",
@@ -642,7 +644,7 @@
 			}
 		},
 		"providerUsage": {
-			"title": "容量水位",
+			"title": "用量分布",
 			"description": "按模型 × API Key 统计的近期消耗。请求数为上游尝试次数，包含 fallback 重试。",
 			"windowOptions": {
 				"1h": "最近 1 小时",
@@ -669,15 +671,8 @@
 				"avgTokens": "平均词元",
 				"cancelledNote": "取消 {{count}}"
 			},
-			"baseline": {
-				"title": "基线：错误 Top 3",
-				"totalErrors": "共 {{count}} 条错误",
-				"loading": "正在加载错误基线...",
-				"error": "加载错误基线失败。",
-				"empty": "此时间窗内暂无错误。",
-				"unknown": "未知错误",
-				"count": "{{count}}×"
-			}
+			"updatedAt": "更新于 {{time}}",
+			"emptyTabNotice": "该统计窗口内没有请求，观测数据为空。冷却规则仍可正常配置。"
 		},
 		"performance": {
 			"concurrency": "并发数",
