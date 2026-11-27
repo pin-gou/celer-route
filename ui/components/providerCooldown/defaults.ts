@@ -45,23 +45,31 @@ function definedOr(value: number | undefined, fallback: number): number {
 }
 
 /**
- * Resolves the capacity config that actually applies right now: the provider
- * override wins per field, then the plugin-level default, then the frontend
- * constant. This is both what the tri-state card summarises and what the
- * "custom" mode pre-fills.
+ * Resolves the config that actually applies right now, mirroring the backend's
+ * whole-section rule (`capabilityDefaults.resolve*` in the plugin):
+ *
+ *   - provider section present → used as-is; fields it omits fall back to the
+ *     built-in defaults (never to the plugin default — there is no field-level
+ *     merge), then to the frontend constant which mirrors the same defaults;
+ *   - provider section absent  → the plugin-level default, which is itself
+ *     allowed to be partial and falls back to the built-in defaults.
+ *
+ * This is both what the tri-state card summarises and what the "custom" mode
+ * pre-fills.
  */
 export function resolveEffectiveCapacity(
 	providerSegment: CooldownCapacityConfig | undefined,
 	pluginSegment: CooldownCapacityConfig | undefined,
 ): Required<CooldownCapacityConfig> {
+	const source = providerSegment ?? pluginSegment;
 	return {
-		enabled: providerSegment?.enabled ?? pluginSegment?.enabled ?? false,
-		token_limit: definedOr(providerSegment?.token_limit, definedOr(pluginSegment?.token_limit, 0)),
-		request_limit: definedOr(providerSegment?.request_limit, definedOr(pluginSegment?.request_limit, 0)),
-		window_seconds: positiveOr(providerSegment?.window_seconds, positiveOr(pluginSegment?.window_seconds, DEFAULT_CAPACITY_WINDOW_SECONDS)),
-		headroom: positiveOr(providerSegment?.headroom, positiveOr(pluginSegment?.headroom, DEFAULT_CAPACITY_HEADROOM)),
-		scope: providerSegment?.scope || pluginSegment?.scope || DEFAULT_CAPACITY_SCOPE,
-		action: providerSegment?.action || pluginSegment?.action || DEFAULT_CAPACITY_ACTION,
+		enabled: source?.enabled ?? false,
+		token_limit: definedOr(source?.token_limit, 0),
+		request_limit: definedOr(source?.request_limit, 0),
+		window_seconds: positiveOr(source?.window_seconds, DEFAULT_CAPACITY_WINDOW_SECONDS),
+		headroom: positiveOr(source?.headroom, DEFAULT_CAPACITY_HEADROOM),
+		scope: source?.scope || DEFAULT_CAPACITY_SCOPE,
+		action: source?.action || DEFAULT_CAPACITY_ACTION,
 	};
 }
 
@@ -92,12 +100,10 @@ export function resolveEffectiveEscalation(
 	providerSegment: CooldownEscalationConfig | undefined,
 	pluginSegment: CooldownEscalationConfig | undefined,
 ): Required<CooldownEscalationConfig> {
+	const source = providerSegment ?? pluginSegment;
 	return {
-		enabled: providerSegment?.enabled ?? pluginSegment?.enabled ?? false,
-		max_multiplier: positiveOr(
-			providerSegment?.max_multiplier,
-			positiveOr(pluginSegment?.max_multiplier, DEFAULT_ESCALATION_MAX_MULTIPLIER),
-		),
+		enabled: source?.enabled ?? false,
+		max_multiplier: positiveOr(source?.max_multiplier, DEFAULT_ESCALATION_MAX_MULTIPLIER),
 	};
 }
 
@@ -105,11 +111,12 @@ export function resolveEffectiveLearning(
 	providerSegment: CooldownLearningConfig | undefined,
 	pluginSegment: CooldownLearningConfig | undefined,
 ): Required<CooldownLearningConfig> {
+	const source = providerSegment ?? pluginSegment;
 	return {
-		enabled: providerSegment?.enabled ?? pluginSegment?.enabled ?? false,
-		window_seconds: positiveOr(providerSegment?.window_seconds, positiveOr(pluginSegment?.window_seconds, DEFAULT_LEARNING_WINDOW_SECONDS)),
-		max_samples: positiveOr(providerSegment?.max_samples, positiveOr(pluginSegment?.max_samples, DEFAULT_LEARNING_MAX_SAMPLES)),
-		min_samples: positiveOr(providerSegment?.min_samples, positiveOr(pluginSegment?.min_samples, DEFAULT_LEARNING_MIN_SAMPLES)),
+		enabled: source?.enabled ?? false,
+		window_seconds: positiveOr(source?.window_seconds, DEFAULT_LEARNING_WINDOW_SECONDS),
+		max_samples: positiveOr(source?.max_samples, DEFAULT_LEARNING_MAX_SAMPLES),
+		min_samples: positiveOr(source?.min_samples, DEFAULT_LEARNING_MIN_SAMPLES),
 	};
 }
 
