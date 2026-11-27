@@ -1,10 +1,14 @@
 import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useUpdatePluginMutation } from "@/lib/store/apis/pluginsApi";
 import { RbacOperation, RbacResource, useRbac } from "@/lib/rbac";
 import { useGetProvidersQuery } from "@/lib/store/apis/providersApi";
 import { ProviderLabels } from "@/lib/constants/logs";
 import { PROVIDER_COOLDOWN_PLUGIN, type Plugin } from "@/lib/types/plugins";
+import { providerCooldownPluginConfigFormSchema, type ProviderCooldownPluginConfigFormSchema } from "@/lib/types/schemas";
 import { formatLocalDateTime, formatRelativeDistanceToNow, getDateLocale } from "@/lib/utils/date";
 import type { CooldownPolicy, CooldownPolicyRule } from "@/lib/types/config";
 import type { CooldownStats, CooldownStateEntry, ProviderKindCounters } from "@/lib/types/plugins";
@@ -15,6 +19,8 @@ import type { TFunction } from "i18next";
 import { toast } from "sonner";
 import { useGetCooldownStateQuery, useGetCooldownStatsQuery, useUnfreezeCooldownMutation } from "@/lib/store/apis/pluginsApi";
 import { useNavigate } from "@tanstack/react-router";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, type Resolver } from "react-hook-form";
 
 // ---------------------------------------------------------------------------
 // EnabledSwitch — top-level enabled toggle with RBAC gating
@@ -72,6 +78,568 @@ export function EnabledSwitch({ plugin }: { plugin: Plugin }) {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// ConfigForm — the plugin's optional capability sections
+// ---------------------------------------------------------------------------
+//
+// The provider-cooldown plugin grew three opt-in capabilities that used to be
+// reachable only through config.json / the raw plugin API:
+//
+//   - escalation — adaptive TTL upgrade (a key's cooldown grows while it keeps
+//     failing)
+//   - capacity   — retrospective capacity gate backed by real usage
+//   - learning   — read-only learner that estimates the provider's effective
+//     per-window limit from upstream rate-limit feedback
+//
+// All three are disabled by default. They live in the *plugin* config (not in
+// the provider-level cooldown_policy) because the provider policy form
+// rebuilds the whole cooldown_policy object and would drop them.
+//
+// A disabled section is still submitted as `{ enabled: false, … }` — omitting
+// the key would leave the previously stored value in place on the backend.
+
+/** Backend default for `escalation.max_multiplier` (<= 0 → 4). */
+const DEFAULT_ESCALATION_MAX_MULTIPLIER = 4;
+/** Backend default for `capacity.window_seconds` (<= 0 → 60). */
+const DEFAULT_CAPACITY_WINDOW_SECONDS = 60;
+/** Backend default for `capacity.headroom` (<= 0 → 0.9). */
+const DEFAULT_CAPACITY_HEADROOM = 0.9;
+/** Backend default for `capacity.scope`. */
+const DEFAULT_CAPACITY_SCOPE = "provider";
+/** Backend default for `capacity.action`. */
+const DEFAULT_CAPACITY_ACTION = "fallback";
+/** Backend default for `learning.window_seconds` (<= 0 → 60). */
+const DEFAULT_LEARNING_WINDOW_SECONDS = 60;
+/** Backend default for `learning.max_samples` (<= 0 → 50). */
+const DEFAULT_LEARNING_MAX_SAMPLES = 50;
+/** Backend default for `learning.min_samples` (<= 0 → 5). */
+const DEFAULT_LEARNING_MIN_SAMPLES = 5;
+
+export function ConfigForm({ plugin }: { plugin: Plugin }) {
+	const { t } = useTranslation("plugins");
+	const hasUpdateAccess = useRbac(RbacResource.Plugins, RbacOperation.Update);
+	const [updatePlugin, { isLoading }] = useUpdatePluginMutation();
+
+	const pluginConfig = (plugin.config || {}) as Record<string, any>;
+
+	const form = useForm<ProviderCooldownPluginConfigFormSchema, any, ProviderCooldownPluginConfigFormSchema>({
+		resolver: zodResolver(providerCooldownPluginConfigFormSchema) as Resolver<
+			ProviderCooldownPluginConfigFormSchema,
+			any,
+			ProviderCooldownPluginConfigFormSchema
+		>,
+		mode: "onChange",
+		reValidateMode: "onChange",
+		defaultValues: {
+			escalation: {
+				enabled: pluginConfig.escalation?.enabled ?? false,
+				max_multiplier: pluginConfig.escalation?.max_multiplier ?? DEFAULT_ESCALATION_MAX_MULTIPLIER,
+			},
+			capacity: {
+				enabled: pluginConfig.capacity?.enabled ?? false,
+				token_limit: pluginConfig.capacity?.token_limit ?? 0,
+				request_limit: pluginConfig.capacity?.request_limit ?? 0,
+				window_seconds: pluginConfig.capacity?.window_seconds ?? DEFAULT_CAPACITY_WINDOW_SECONDS,
+				headroom: pluginConfig.capacity?.headroom ?? DEFAULT_CAPACITY_HEADROOM,
+				scope: pluginConfig.capacity?.scope ?? DEFAULT_CAPACITY_SCOPE,
+				action: pluginConfig.capacity?.action ?? DEFAULT_CAPACITY_ACTION,
+			},
+			learning: {
+				enabled: pluginConfig.learning?.enabled ?? false,
+				window_seconds: pluginConfig.learning?.window_seconds ?? DEFAULT_LEARNING_WINDOW_SECONDS,
+				max_samples: pluginConfig.learning?.max_samples ?? DEFAULT_LEARNING_MAX_SAMPLES,
+				min_samples: pluginConfig.learning?.min_samples ?? DEFAULT_LEARNING_MIN_SAMPLES,
+			},
+		},
+	});
+
+	const escalationEnabled = form.watch("escalation.enabled");
+	const capacityEnabled = form.watch("capacity.enabled");
+	const learningEnabled = form.watch("learning.enabled");
+
+	const onSubmit = async (values: ProviderCooldownPluginConfigFormSchema) => {
+		if (!hasUpdateAccess) return;
+		// Every other top-level key of the stored config (default_ttl_seconds,
+		// ttl_overrides, quota_patterns, …) is carried over untouched — only
+		// the three capability sections are rewritten here.
+		const currentConfig = (plugin.config || {}) as Record<string, unknown>;
+		try {
+			await updatePlugin({
+				name: PROVIDER_COOLDOWN_PLUGIN,
+				data: {
+					// `enabled` has to be sent explicitly, otherwise the update
+					// would switch the plugin off.
+					enabled: plugin.enabled,
+					config: {
+						...currentConfig,
+						escalation: { ...values.escalation },
+						capacity: { ...values.capacity },
+						learning: { ...values.learning },
+					},
+				},
+			}).unwrap();
+			toast.success(t("providerCooldown.configSavedToast"));
+			form.reset(values);
+		} catch {
+			toast.error(t("providerCooldown.configSaveFailedToast"));
+		}
+	};
+
+	return (
+		<Form {...form}>
+			<form data-testid="providercooldown-config-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+				{/* ---------------------------------------------------------------- */}
+				{/* Section 1: escalation — adaptive TTL upgrade                    */}
+				{/* ---------------------------------------------------------------- */}
+				<div className="rounded-lg border p-4">
+					<FormField
+						control={form.control}
+						name="escalation.enabled"
+						render={({ field }) => (
+							<FormItem className="flex flex-row items-center justify-between">
+								<div className="space-y-0.5">
+									<FormLabel>{t("providerCooldown.escalation.title")}</FormLabel>
+									<FormDescription>{t("providerCooldown.escalation.description")}</FormDescription>
+								</div>
+								<FormControl>
+									<Switch
+										data-testid="providercooldown-escalation-enabled"
+										checked={Boolean(field.value)}
+										onCheckedChange={field.onChange}
+										disabled={isLoading || !hasUpdateAccess}
+									/>
+								</FormControl>
+							</FormItem>
+						)}
+					/>
+
+					<div className="bg-muted/50 mt-4 space-y-3 rounded-md border p-4">
+						<FormField
+							control={form.control}
+							name="escalation.max_multiplier"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>{t("providerCooldown.escalation.maxMultiplierLabel")}</FormLabel>
+									<FormDescription>{t("providerCooldown.escalation.maxMultiplierDescription")}</FormDescription>
+									<FormControl>
+										<Input
+											type="number"
+											min={1}
+											max={16}
+											step={1}
+											data-testid="providercooldown-escalation-max-multiplier"
+											placeholder={t("providerCooldown.escalation.maxMultiplierPlaceholder")}
+											{...field}
+											value={field.value ?? ""}
+											disabled={!escalationEnabled || !hasUpdateAccess}
+											onChange={(e) => {
+												const value = e.target.value;
+												if (value === "") {
+													field.onChange(undefined);
+													return;
+												}
+												const parsed = Number.parseInt(value);
+												if (!Number.isNaN(parsed)) {
+													field.onChange(parsed);
+												}
+											}}
+										/>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+					</div>
+				</div>
+
+				{/* ---------------------------------------------------------------- */}
+				{/* Section 2: capacity — retrospective capacity gate              */}
+				{/* ---------------------------------------------------------------- */}
+				<div className="rounded-lg border p-4">
+					<FormField
+						control={form.control}
+						name="capacity.enabled"
+						render={({ field }) => (
+							<FormItem className="flex flex-row items-center justify-between">
+								<div className="space-y-0.5">
+									<FormLabel>{t("providerCooldown.capacity.title")}</FormLabel>
+									<FormDescription>{t("providerCooldown.capacity.description")}</FormDescription>
+								</div>
+								<FormControl>
+									<Switch
+										data-testid="providercooldown-capacity-enabled"
+										checked={Boolean(field.value)}
+										onCheckedChange={field.onChange}
+										disabled={isLoading || !hasUpdateAccess}
+									/>
+								</FormControl>
+							</FormItem>
+						)}
+					/>
+
+					<div className="bg-muted/50 mt-4 space-y-3 rounded-md border p-4">
+						<div className="flex flex-row gap-4">
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="capacity.token_limit"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.capacity.tokenLimitLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.capacity.tokenLimitDescription")}</FormDescription>
+											<FormControl>
+												<Input
+													type="number"
+													min={0}
+													step={1}
+													data-testid="providercooldown-capacity-token-limit"
+													placeholder={t("providerCooldown.capacity.tokenLimitPlaceholder")}
+													{...field}
+													value={field.value ?? ""}
+													disabled={!capacityEnabled || !hasUpdateAccess}
+													onChange={(e) => {
+														const value = e.target.value;
+														if (value === "") {
+															field.onChange(undefined);
+															return;
+														}
+														const parsed = Number.parseInt(value);
+														if (!Number.isNaN(parsed)) {
+															field.onChange(parsed);
+														}
+													}}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="capacity.request_limit"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.capacity.requestLimitLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.capacity.requestLimitDescription")}</FormDescription>
+											<FormControl>
+												<Input
+													type="number"
+													min={0}
+													step={1}
+													data-testid="providercooldown-capacity-request-limit"
+													placeholder={t("providerCooldown.capacity.requestLimitPlaceholder")}
+													{...field}
+													value={field.value ?? ""}
+													disabled={!capacityEnabled || !hasUpdateAccess}
+													onChange={(e) => {
+														const value = e.target.value;
+														if (value === "") {
+															field.onChange(undefined);
+															return;
+														}
+														const parsed = Number.parseInt(value);
+														if (!Number.isNaN(parsed)) {
+															field.onChange(parsed);
+														}
+													}}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+						</div>
+
+						<div className="flex flex-row gap-4">
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="capacity.window_seconds"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.capacity.windowSecondsLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.capacity.windowSecondsDescription")}</FormDescription>
+											<FormControl>
+												<Input
+													type="number"
+													min={10}
+													max={3600}
+													step={1}
+													data-testid="providercooldown-capacity-window-seconds"
+													placeholder={t("providerCooldown.capacity.windowSecondsPlaceholder")}
+													{...field}
+													value={field.value ?? ""}
+													disabled={!capacityEnabled || !hasUpdateAccess}
+													onChange={(e) => {
+														const value = e.target.value;
+														if (value === "") {
+															field.onChange(undefined);
+															return;
+														}
+														const parsed = Number.parseInt(value);
+														if (!Number.isNaN(parsed)) {
+															field.onChange(parsed);
+														}
+													}}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="capacity.headroom"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.capacity.headroomLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.capacity.headroomDescription")}</FormDescription>
+											<FormControl>
+												<Input
+													type="number"
+													min={0.1}
+													max={1}
+													step={0.1}
+													data-testid="providercooldown-capacity-headroom"
+													placeholder={t("providerCooldown.capacity.headroomPlaceholder")}
+													{...field}
+													value={field.value ?? ""}
+													disabled={!capacityEnabled || !hasUpdateAccess}
+													onChange={(e) => {
+														const value = e.target.value;
+														if (value === "") {
+															field.onChange(undefined);
+															return;
+														}
+														const parsed = Number.parseFloat(value);
+														if (!Number.isNaN(parsed)) {
+															field.onChange(parsed);
+														}
+													}}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+						</div>
+
+						<div className="flex flex-row gap-4">
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="capacity.scope"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.capacity.scopeLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.capacity.scopeDescription")}</FormDescription>
+											<FormControl>
+												<Select value={field.value} onValueChange={field.onChange} disabled={!capacityEnabled || !hasUpdateAccess}>
+													<SelectTrigger data-testid="providercooldown-capacity-scope-trigger" className="w-full">
+														<SelectValue placeholder={t("providerCooldown.capacity.scopePlaceholder")} />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="provider">{t("providerCooldown.capacity.scopeProvider")}</SelectItem>
+														<SelectItem value="provider_model">{t("providerCooldown.capacity.scopeProviderModel")}</SelectItem>
+													</SelectContent>
+												</Select>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="capacity.action"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.capacity.actionLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.capacity.actionDescription")}</FormDescription>
+											<FormControl>
+												<Select value={field.value} onValueChange={field.onChange} disabled={!capacityEnabled || !hasUpdateAccess}>
+													<SelectTrigger data-testid="providercooldown-capacity-action-trigger" className="w-full">
+														<SelectValue placeholder={t("providerCooldown.capacity.actionPlaceholder")} />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="fallback">{t("providerCooldown.capacity.actionFallback")}</SelectItem>
+														<SelectItem value="reject">{t("providerCooldown.capacity.actionReject")}</SelectItem>
+													</SelectContent>
+												</Select>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				{/* ---------------------------------------------------------------- */}
+				{/* Section 3: learning — read-only limit learner                    */}
+				{/* ---------------------------------------------------------------- */}
+				<div className="rounded-lg border p-4">
+					<FormField
+						control={form.control}
+						name="learning.enabled"
+						render={({ field }) => (
+							<FormItem className="flex flex-row items-center justify-between">
+								<div className="space-y-0.5">
+									<FormLabel>{t("providerCooldown.learning.title")}</FormLabel>
+									<FormDescription>{t("providerCooldown.learning.description")}</FormDescription>
+								</div>
+								<FormControl>
+									<Switch
+										data-testid="providercooldown-learning-enabled"
+										checked={Boolean(field.value)}
+										onCheckedChange={field.onChange}
+										disabled={isLoading || !hasUpdateAccess}
+									/>
+								</FormControl>
+							</FormItem>
+						)}
+					/>
+
+					<div className="bg-muted/50 mt-4 space-y-3 rounded-md border p-4">
+						<div className="flex flex-row gap-4">
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="learning.window_seconds"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.learning.windowSecondsLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.learning.windowSecondsDescription")}</FormDescription>
+											<FormControl>
+												<Input
+													type="number"
+													min={10}
+													max={3600}
+													step={1}
+													data-testid="providercooldown-learning-window-seconds"
+													placeholder={t("providerCooldown.learning.windowSecondsPlaceholder")}
+													{...field}
+													value={field.value ?? ""}
+													disabled={!learningEnabled || !hasUpdateAccess}
+													onChange={(e) => {
+														const value = e.target.value;
+														if (value === "") {
+															field.onChange(undefined);
+															return;
+														}
+														const parsed = Number.parseInt(value);
+														if (!Number.isNaN(parsed)) {
+															field.onChange(parsed);
+														}
+													}}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="learning.max_samples"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.learning.maxSamplesLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.learning.maxSamplesDescription")}</FormDescription>
+											<FormControl>
+												<Input
+													type="number"
+													min={5}
+													max={500}
+													step={1}
+													data-testid="providercooldown-learning-max-samples"
+													placeholder={t("providerCooldown.learning.maxSamplesPlaceholder")}
+													{...field}
+													value={field.value ?? ""}
+													disabled={!learningEnabled || !hasUpdateAccess}
+													onChange={(e) => {
+														const value = e.target.value;
+														if (value === "") {
+															field.onChange(undefined);
+															return;
+														}
+														const parsed = Number.parseInt(value);
+														if (!Number.isNaN(parsed)) {
+															field.onChange(parsed);
+														}
+													}}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+							<div className="flex-1">
+								<FormField
+									control={form.control}
+									name="learning.min_samples"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel>{t("providerCooldown.learning.minSamplesLabel")}</FormLabel>
+											<FormDescription>{t("providerCooldown.learning.minSamplesDescription")}</FormDescription>
+											<FormControl>
+												<Input
+													type="number"
+													min={1}
+													max={100}
+													step={1}
+													data-testid="providercooldown-learning-min-samples"
+													placeholder={t("providerCooldown.learning.minSamplesPlaceholder")}
+													{...field}
+													value={field.value ?? ""}
+													disabled={!learningEnabled || !hasUpdateAccess}
+													onChange={(e) => {
+														const value = e.target.value;
+														if (value === "") {
+															field.onChange(undefined);
+															return;
+														}
+														const parsed = Number.parseInt(value);
+														if (!Number.isNaN(parsed)) {
+															field.onChange(parsed);
+														}
+													}}
+												/>
+											</FormControl>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div className="flex justify-end">
+					<Button
+						type="submit"
+						data-testid="providercooldown-config-save"
+						disabled={!form.formState.isDirty || !hasUpdateAccess || isLoading}
+						isLoading={isLoading}
+					>
+						{t("providerCooldown.configSave")}
+					</Button>
+				</div>
+			</form>
+		</Form>
 	);
 }
 
@@ -286,6 +854,13 @@ export function ProvidercooldownFragment({ plugin }: { plugin: Plugin }) {
 
 			{/* Section 3: enabled switch */}
 			<EnabledSwitch plugin={plugin} />
+
+			{/* Section 4: optional capability sections (escalation / capacity / learning) */}
+			<div className="rounded-lg border p-4">
+				<h4 className="mb-1 text-sm font-medium">{t("providerCooldown.configTitle")}</h4>
+				<p className="text-muted-foreground mb-4 text-sm">{t("providerCooldown.configDescription")}</p>
+				<ConfigForm plugin={plugin} />
+			</div>
 		</div>
 	);
 }

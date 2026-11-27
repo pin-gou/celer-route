@@ -676,6 +676,8 @@
 		"performance": {
 			"concurrency": "并发数",
 			"bufferSize": "缓冲区大小",
+			"maxConcurrentRequestsPerKey": "每 Key 在途并发上限",
+			"maxConcurrentRequestsPerKeyDescription": "单个 API Key 同时允许的在途请求数上限。0 = 不限制。",
 			"cancel": "取消",
 			"save": "保存性能配置",
 			"saveSuccess": "提供商配置更新成功",

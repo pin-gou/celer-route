@@ -19,14 +19,14 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Red phase: these imports reference code that does not exist yet.
 // Vitest will error with "Failed to resolve import" — this is the expected
 // TDD red-phase result. The dev phase implements these modules.
 // ---------------------------------------------------------------------------
-import { ProvidercooldownFragment, EnabledSwitch } from "../providercooldownFragment";
+import { ProvidercooldownFragment, EnabledSwitch, ConfigForm } from "../providercooldownFragment";
 import { type Plugin } from "@/lib/types/plugins";
 
 // ---------------------------------------------------------------------------
@@ -349,5 +349,181 @@ describe("PerProviderPolicyOverview — renders customised policies and edit jum
 		render(<ProvidercooldownFragment plugin={mockPlugin} />);
 
 		expect(screen.queryByTestId("providercooldown-policy-model-stats-openai-key-scope-remainder")).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// ConfigForm — optional capability sections (escalation / capacity / learning)
+//
+// Contract: ConfigForm submit → useUpdatePluginMutation({
+//   name: "provider-cooldown",
+//   data: { enabled: <plugin.enabled>, config: { ...currentConfig, escalation, capacity, learning } },
+// })
+// ---------------------------------------------------------------------------
+
+/** Build a plugin fixture whose `config` carries the pre-existing top-level keys. */
+const configFormFixture = (configOverrides: Record<string, unknown> = {}): Plugin => ({
+	...mockPlugin,
+	config: {
+		default_ttl_seconds: 600,
+		ttl_overrides: { openai: 300 },
+		quota_patterns: ["insufficient_quota"],
+		...configOverrides,
+	},
+});
+
+/** The single updatePlugin argument captured by the mocked mutation. */
+const submittedPluginUpdate = () =>
+	mocks.updatePlugin.mock.calls[0][0] as {
+		name: string;
+		data: { enabled: boolean; config: Record<string, any> };
+	};
+
+describe("ConfigForm — capability sections", () => {
+	beforeEach(() => {
+		mocks.updatePlugin.mockReset();
+		// Full success path: the fragment calls `.unwrap()` on the mutation promise.
+		mocks.updatePlugin.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) }));
+	});
+
+	it("renders all three section switches and their fields", () => {
+		render(<ConfigForm plugin={configFormFixture()} />);
+
+		expect(screen.getByTestId("providercooldown-config-form")).toBeTruthy();
+
+		// Escalation
+		expect(screen.getByTestId("providercooldown-escalation-enabled")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-escalation-max-multiplier")).toBeTruthy();
+
+		// Capacity
+		expect(screen.getByTestId("providercooldown-capacity-enabled")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-capacity-token-limit")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-capacity-request-limit")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-capacity-window-seconds")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-capacity-headroom")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-capacity-scope-trigger")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-capacity-action-trigger")).toBeTruthy();
+
+		// Learning
+		expect(screen.getByTestId("providercooldown-learning-enabled")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-learning-window-seconds")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-learning-max-samples")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-learning-min-samples")).toBeTruthy();
+
+		// Section off by default → its params are greyed out but still mounted.
+		expect((screen.getByTestId("providercooldown-escalation-max-multiplier") as HTMLInputElement).disabled).toBe(true);
+		expect((screen.getByTestId("providercooldown-capacity-token-limit") as HTMLInputElement).disabled).toBe(true);
+		expect((screen.getByTestId("providercooldown-learning-max-samples") as HTMLInputElement).disabled).toBe(true);
+	});
+
+	it("submits escalation { enabled: true, max_multiplier: 8 } and keeps the plugin enabled", async () => {
+		render(<ConfigForm plugin={configFormFixture({ default_ttl_seconds: 120 })} />);
+
+		fireEvent.click(screen.getByTestId("providercooldown-escalation-enabled"));
+		fireEvent.change(screen.getByTestId("providercooldown-escalation-max-multiplier"), { target: { value: "8" } });
+		fireEvent.click(screen.getByTestId("providercooldown-config-save"));
+
+		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
+
+		const { name, data } = submittedPluginUpdate();
+		expect(name).toBe("provider-cooldown");
+		// The plugin must not be switched off by a config save.
+		expect(data.enabled).toBe(true);
+		expect(data.config.escalation).toEqual({ enabled: true, max_multiplier: 8 });
+	});
+
+	it("preserves the other top-level keys of the stored plugin config", async () => {
+		render(<ConfigForm plugin={configFormFixture({ default_ttl_seconds: 120 })} />);
+
+		fireEvent.click(screen.getByTestId("providercooldown-escalation-enabled"));
+		fireEvent.click(screen.getByTestId("providercooldown-config-save"));
+
+		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
+
+		const config = submittedPluginUpdate().data.config;
+		expect(config.default_ttl_seconds).toBe(120);
+		expect(config.ttl_overrides).toEqual({ openai: 300 });
+		expect(config.quota_patterns).toEqual(["insufficient_quota"]);
+	});
+
+	it("sends { enabled: false } for sections that are switched off instead of omitting them", async () => {
+		render(<ConfigForm plugin={configFormFixture()} />);
+
+		// Turn escalation on, leave capacity / learning off.
+		fireEvent.click(screen.getByTestId("providercooldown-escalation-enabled"));
+		fireEvent.click(screen.getByTestId("providercooldown-config-save"));
+
+		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
+
+		const config = submittedPluginUpdate().data.config;
+		expect(config.escalation.enabled).toBe(true);
+
+		// Both disabled sections are explicitly present with `enabled: false`.
+		expect("capacity" in config).toBe(true);
+		expect(config.capacity).toEqual({
+			enabled: false,
+			token_limit: 0,
+			request_limit: 0,
+			window_seconds: 60,
+			headroom: 0.9,
+			scope: "provider",
+			action: "fallback",
+		});
+		expect("learning" in config).toBe(true);
+		expect(config.learning).toEqual({
+			enabled: false,
+			window_seconds: 60,
+			max_samples: 50,
+			min_samples: 5,
+		});
+	});
+
+	it("keeps the edited values of a section that is switched back off", async () => {
+		render(<ConfigForm plugin={configFormFixture()} />);
+
+		const capacitySwitch = screen.getByTestId("providercooldown-capacity-enabled");
+		fireEvent.click(capacitySwitch); // on
+		fireEvent.change(screen.getByTestId("providercooldown-capacity-token-limit"), { target: { value: "100000" } });
+		fireEvent.click(capacitySwitch); // off again
+
+		fireEvent.click(screen.getByTestId("providercooldown-config-save"));
+
+		await waitFor(() => expect(mocks.updatePlugin).toHaveBeenCalledTimes(1));
+
+		const capacity = submittedPluginUpdate().data.config.capacity;
+		expect(capacity.enabled).toBe(false);
+		expect(capacity.token_limit).toBe(100000);
+	});
+
+	it("does not submit when max_multiplier is out of range", async () => {
+		render(<ConfigForm plugin={configFormFixture()} />);
+
+		fireEvent.click(screen.getByTestId("providercooldown-escalation-enabled"));
+		fireEvent.change(screen.getByTestId("providercooldown-escalation-max-multiplier"), { target: { value: "99" } });
+
+		// The save button is enabled (the form is dirty) — the block must come
+		// from zod, not from a disabled button.
+		const saveButton = screen.getByTestId("providercooldown-config-save") as HTMLButtonElement;
+		expect(saveButton.disabled).toBe(false);
+		fireEvent.click(saveButton);
+
+		// zod rejects > 16, so the resolver marks the field invalid and RHF never
+		// invokes onSubmit.
+		await waitFor(() => expect(screen.getByTestId("providercooldown-escalation-max-multiplier").getAttribute("aria-invalid")).toBe("true"));
+		expect(mocks.updatePlugin).not.toHaveBeenCalled();
+	});
+
+	it("does not submit when headroom is out of range", async () => {
+		render(<ConfigForm plugin={configFormFixture()} />);
+
+		fireEvent.click(screen.getByTestId("providercooldown-capacity-enabled"));
+		fireEvent.change(screen.getByTestId("providercooldown-capacity-headroom"), { target: { value: "5" } });
+
+		const saveButton = screen.getByTestId("providercooldown-config-save") as HTMLButtonElement;
+		expect(saveButton.disabled).toBe(false);
+		fireEvent.click(saveButton);
+
+		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-headroom").getAttribute("aria-invalid")).toBe("true"));
+		expect(mocks.updatePlugin).not.toHaveBeenCalled();
 	});
 });

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { DefaultPerformanceConfig } from "@/lib/constants/config";
 import { getErrorMessage, setProviderFormDirtyState, useAppDispatch } from "@/lib/store";
@@ -33,6 +33,7 @@ export function PerformanceFormFragment({ provider, onCancel }: PerformanceFormF
 				concurrency: provider.concurrency_and_buffer_size?.concurrency ?? DefaultPerformanceConfig.concurrency,
 				buffer_size: provider.concurrency_and_buffer_size?.buffer_size ?? DefaultPerformanceConfig.buffer_size,
 			},
+			max_concurrent_requests_per_key: provider.max_concurrent_requests_per_key ?? 0,
 		},
 	});
 
@@ -47,8 +48,9 @@ export function PerformanceFormFragment({ provider, onCancel }: PerformanceFormF
 				concurrency: provider.concurrency_and_buffer_size?.concurrency ?? DefaultPerformanceConfig.concurrency,
 				buffer_size: provider.concurrency_and_buffer_size?.buffer_size ?? DefaultPerformanceConfig.buffer_size,
 			},
+			max_concurrent_requests_per_key: provider.max_concurrent_requests_per_key ?? 0,
 		});
-	}, [form, provider.name, provider.concurrency_and_buffer_size]);
+	}, [form, provider.name, provider.concurrency_and_buffer_size, provider.max_concurrent_requests_per_key]);
 
 	const onSubmit = (data: PerformanceFormSchema) => {
 		// Create updated provider configuration (raw request/response are in Debugging tab)
@@ -57,6 +59,7 @@ export function PerformanceFormFragment({ provider, onCancel }: PerformanceFormF
 				concurrency: data.concurrency_and_buffer_size.concurrency,
 				buffer_size: data.concurrency_and_buffer_size.buffer_size,
 			},
+			max_concurrent_requests_per_key: data.max_concurrent_requests_per_key,
 		});
 		updateProvider(updatedProvider)
 			.unwrap()
@@ -144,6 +147,44 @@ export function PerformanceFormFragment({ provider, onCancel }: PerformanceFormF
 							/>
 						</div>
 					</div>
+				</div>
+
+				{/* Per-API-key in-flight concurrency cap */}
+				<div className="space-y-4">
+					<FormField
+						control={form.control}
+						name="max_concurrent_requests_per_key"
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel>{t("fragments.performance.maxConcurrentRequestsPerKey")}</FormLabel>
+								<FormDescription>{t("fragments.performance.maxConcurrentRequestsPerKeyDescription")}</FormDescription>
+								<FormControl>
+									<Input
+										type="number"
+										min={0}
+										placeholder="0"
+										data-testid="providers2-performance-max-concurrent-requests-per-key"
+										{...field}
+										value={field.value === undefined || Number.isNaN(field.value) ? "" : field.value}
+										disabled={!hasUpdateProviderAccess}
+										onChange={(e) => {
+											const value = e.target.value;
+											if (value === "") {
+												field.onChange(undefined);
+												return;
+											}
+											const parsed = Number.parseInt(value);
+											if (!Number.isNaN(parsed)) {
+												field.onChange(parsed);
+											}
+											form.trigger("max_concurrent_requests_per_key");
+										}}
+									/>
+								</FormControl>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
 				</div>
 
 				{/* Form Actions */}

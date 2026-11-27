@@ -449,6 +449,8 @@ export interface ModelProviderConfig {
 	openai_config?: OpenAIConfig;
 	cooldown_policy?: CooldownPolicy;
 	default_parameters?: Record<string, Record<string, string | number | boolean>>;
+	// Per-API-key in-flight concurrency cap. 0 = disabled (no limit).
+	max_concurrent_requests_per_key?: number;
 	status?: "unknown" | "success" | "list_models_failed";
 	description?: string;
 }
@@ -529,6 +531,10 @@ export interface UpdateProviderRequest {
 	// Per-provider cooldown policy. Sent explicitly so the user can clear an
 	// override (by submitting null) — undefined means "leave as-is".
 	cooldown_policy?: CooldownPolicy | null;
+	// Per-API-key in-flight concurrency cap. 0 = disabled. The backend field
+	// is a *int — omitting it keeps the stored value, so sending the number
+	// explicitly is always safe.
+	max_concurrent_requests_per_key?: number;
 }
 
 export interface CreateProviderKeyRequest extends ModelProviderKey {}

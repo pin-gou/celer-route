@@ -676,6 +676,8 @@
 		"performance": {
 			"concurrency": "Concurrency",
 			"bufferSize": "Buffer Size",
+			"maxConcurrentRequestsPerKey": "Max Concurrent Requests per Key",
+			"maxConcurrentRequestsPerKeyDescription": "Maximum number of in-flight requests a single API key may have at once. 0 = no limit.",
 			"cancel": "Cancel",
 			"save": "Save Performance Configuration",
 			"saveSuccess": "Provider configuration updated successfully",

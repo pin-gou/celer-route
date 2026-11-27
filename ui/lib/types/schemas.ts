@@ -712,6 +712,105 @@ export type CooldownPolicyFormSchema = z.infer<typeof cooldownPolicySchema>;
 export type CooldownPolicyRuleFormSchema = z.infer<typeof cooldownPolicyRuleSchema>;
 export type CooldownPolicyMatchFormSchema = z.infer<typeof cooldownPolicyMatchSchema>;
 
+// ---------------------------------------------------------------------------
+// Provider cooldown plugin — optional capability sections
+// ---------------------------------------------------------------------------
+// These mirror plugins/providercooldown/config.go's EscalationConfig /
+// CapacityConfig / LearningConfig. They live in the *plugin* config (not in
+// schemas.CooldownPolicy) because the provider-level cooldown policy form
+// rebuilds the whole cooldown_policy object from the fields it knows about
+// and would silently drop unknown sub-fields.
+//
+// Every section is optional: a plugin config that never mentions one of them
+// means "not configured" and the backend keeps the feature inert.
+
+// Adaptive TTL upgrade — a key's cooldown TTL grows (1x, 2x, 4x …) while it
+// keeps failing. max_multiplier is clamped to 1..16 by the backend (<= 0 → 4).
+export const providerCooldownEscalationConfigSchema = z.object({
+	enabled: z.boolean(),
+	max_multiplier: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(1, t("validation.minNumber", { n: "1" }))
+		.max(16, t("validation.maxNumber", { n: "16" })),
+});
+
+// Retrospective capacity gate — real usage is summed over a rolling window and
+// subsequent requests are gated once limit*headroom is crossed.
+// window_seconds is clamped to 10..3600 (<= 0 → 60), headroom to 0.1..1.0
+// (<= 0 → 0.9). token_limit / request_limit of 0 mean "no limit".
+export const providerCooldownCapacityConfigSchema = z.object({
+	enabled: z.boolean(),
+	token_limit: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(0, t("validation.minNumber", { n: "0" })),
+	request_limit: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(0, t("validation.minNumber", { n: "0" })),
+	window_seconds: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(10, t("validation.minNumber", { n: "10" }))
+		.max(3600, t("validation.maxNumber", { n: "3600" })),
+	headroom: z
+		.number({ error: t("validation.numberExpected") })
+		.min(0.1, t("validation.minNumber", { n: "0.1" }))
+		.max(1, t("validation.maxNumber", { n: "1" })),
+	scope: z.enum(["provider", "provider_model"], {
+		error: t("validation.fieldRequired", { field: "Scope" }),
+	}),
+	action: z.enum(["fallback", "reject"], {
+		error: t("validation.fieldRequired", { field: "Action" }),
+	}),
+});
+
+// Read-only limit learner — watches upstream rate-limit rejections and
+// derives an estimate of the provider's effective per-window limit.
+// window_seconds is clamped to 10..3600 (<= 0 → 60), max_samples to 5..500
+// (<= 0 → 50), min_samples to 1..100 (<= 0 → 5).
+export const providerCooldownLearningConfigSchema = z.object({
+	enabled: z.boolean(),
+	window_seconds: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(10, t("validation.minNumber", { n: "10" }))
+		.max(3600, t("validation.maxNumber", { n: "3600" })),
+	max_samples: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(5, t("validation.minNumber", { n: "5" }))
+		.max(500, t("validation.maxNumber", { n: "500" })),
+	min_samples: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(1, t("validation.minNumber", { n: "1" }))
+		.max(100, t("validation.maxNumber", { n: "100" })),
+});
+
+// The plugin's capability sections as a whole. Each section may be absent
+// (undefined) — the backend then treats that capability as not configured.
+export const providerCooldownPluginConfigSchema = z.object({
+	escalation: providerCooldownEscalationConfigSchema.optional(),
+	capacity: providerCooldownCapacityConfigSchema.optional(),
+	learning: providerCooldownLearningConfigSchema.optional(),
+});
+
+// Form variant: every section is always present in the form so that turning
+// a section off keeps its last values and still submits them with
+// `enabled: false` (omitting the key would leave the old value in place).
+export const providerCooldownPluginConfigFormSchema = z.object({
+	escalation: providerCooldownEscalationConfigSchema,
+	capacity: providerCooldownCapacityConfigSchema,
+	learning: providerCooldownLearningConfigSchema,
+});
+
+export type ProviderCooldownEscalationConfigFormSchema = z.infer<typeof providerCooldownEscalationConfigSchema>;
+export type ProviderCooldownCapacityConfigFormSchema = z.infer<typeof providerCooldownCapacityConfigSchema>;
+export type ProviderCooldownLearningConfigFormSchema = z.infer<typeof providerCooldownLearningConfigSchema>;
+export type ProviderCooldownPluginConfigFormSchema = z.infer<typeof providerCooldownPluginConfigFormSchema>;
+
 // Allowed requests schema
 export const allowedRequestsSchema = z.object({
 	text_completion: z.boolean(),
@@ -950,6 +1049,12 @@ export const performanceFormSchema = z.object({
 			message: t("validation.rangeOutOfBounds", { field: "Concurrency", min: "", max: "buffer size" }),
 			path: ["concurrency"],
 		}),
+	// Per-API-key in-flight concurrency cap. 0 means "no limit".
+	max_concurrent_requests_per_key: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(0, t("validation.minNumber", { n: "0" }))
+		.default(0),
 });
 
 // Debugging tab (raw request/response toggles)

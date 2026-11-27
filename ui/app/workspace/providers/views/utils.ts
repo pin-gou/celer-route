@@ -17,5 +17,8 @@ export const buildProviderUpdatePayload = (provider: ModelProvider, updates: Par
 		default_parameters: updates.default_parameters ?? provider.default_parameters,
 		// cooldown_policy 需要显式处理 null（清除），不能用 ?? 短路
 		cooldown_policy: "cooldown_policy" in updates ? updates.cooldown_policy : provider.cooldown_policy,
+		// Per-API-key in-flight cap. The backend field is a *int (missing =
+		// keep stored value), so sending the number explicitly is always safe.
+		max_concurrent_requests_per_key: updates.max_concurrent_requests_per_key ?? provider.max_concurrent_requests_per_key ?? 0,
 	};
 };
