@@ -802,7 +802,7 @@ export const providerCooldownCapacityConfigSchema = z.object({
 		.number({ error: t("validation.numberExpected") })
 		.min(0.1, t("validation.minNumber", { n: "0.1" }))
 		.max(1, t("validation.maxNumber", { n: "1" })),
-	scope: z.enum(["provider", "provider_model"], {
+	scope: z.enum(["provider", "provider_model", "key"], {
 		error: t("validation.fieldRequired", { field: "Scope" }),
 	}),
 	action: z.enum(["fallback", "reject"], {

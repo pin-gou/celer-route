@@ -194,25 +194,32 @@ func TestCapacityUsageDropsExpiredWindow(t *testing.T) {
 	}
 }
 
-// TestSplitCapacityWindowKey pins the key parsing used to attribute a
-// provider_model entry back to (provider, model), including a model name that
-// itself contains the separator.
+// TestSplitCapacityWindowKey pins the key parsing used to attribute a live
+// entry back to (provider, key, model), including a model name that itself
+// contains the separator.
 func TestSplitCapacityWindowKey(t *testing.T) {
 	cases := []struct {
 		key   string
 		scope string
 		wantP schemas.ModelProvider
+		wantK string
 		wantM string
 	}{
-		{"openai|gpt-4o", CapacityScopeProviderModel, schemas.OpenAI, "gpt-4o"},
-		{"openai|vendor|model", CapacityScopeProviderModel, schemas.OpenAI, "vendor|model"},
-		{"openai", CapacityScopeProviderModel, schemas.OpenAI, ""},
-		{"openai", CapacityScopeProvider, schemas.OpenAI, ""},
+		{"openai|gpt-4o", CapacityScopeProviderModel, schemas.OpenAI, "", "gpt-4o"},
+		{"openai|vendor|model", CapacityScopeProviderModel, schemas.OpenAI, "", "vendor|model"},
+		{"openai", CapacityScopeProviderModel, schemas.OpenAI, "", ""},
+		{"openai", CapacityScopeProvider, schemas.OpenAI, "", ""},
+		// scope=key: "provider|keyID|model", with the model allowed to carry "|".
+		{"openai|key-1|gpt-4o", CapacityScopeKey, schemas.OpenAI, "key-1", "gpt-4o"},
+		{"openai|key-1|vendor|model", CapacityScopeKey, schemas.OpenAI, "key-1", "vendor|model"},
+		// The unattributable fallback bucket has no credential component.
+		{"openai|gpt-4o", CapacityScopeKey, schemas.OpenAI, "", "gpt-4o"},
+		{"openai", CapacityScopeKey, schemas.OpenAI, "", ""},
 	}
 	for _, tc := range cases {
-		p, m := splitCapacityWindowKey(tc.key, tc.scope)
-		if p != tc.wantP || m != tc.wantM {
-			t.Errorf("splitCapacityWindowKey(%q, %q) = (%q, %q), want (%q, %q)", tc.key, tc.scope, p, m, tc.wantP, tc.wantM)
+		p, k, m := splitCapacityWindowKey(tc.key, tc.scope)
+		if p != tc.wantP || k != tc.wantK || m != tc.wantM {
+			t.Errorf("splitCapacityWindowKey(%q, %q) = (%q, %q, %q), want (%q, %q, %q)", tc.key, tc.scope, p, k, m, tc.wantP, tc.wantK, tc.wantM)
 		}
 	}
 }

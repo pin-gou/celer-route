@@ -36,13 +36,22 @@ function CapacityMeter({ label, used, threshold, testId }: { label: string; used
 
 function CapacityRow({ entry }: { entry: CapacityUsageEntry }) {
 	const { t } = useTranslation("common");
-	const modelKey = entry.model || "all";
+	// `scope: "key"` reports one row per credential for the same model, so the
+	// model alone is not a unique identity (and would collide as a React key).
+	const rowId = entry.keyId ? `${entry.model || "all"}|${entry.keyId}` : entry.model || "all";
 	return (
-		<div data-testid={`providers2-capacity-row-${modelKey}`} className="space-y-2 rounded-md border p-2.5">
+		<div data-testid={`providers2-capacity-row-${rowId}`} className="space-y-2 rounded-md border p-2.5">
 			<div className="flex flex-wrap items-center justify-between gap-2">
-				<span className="font-mono text-xs">{entry.model || t("cooldownCapability.capacityUsage.allModels")}</span>
+				<span className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+					<span>{entry.model || t("cooldownCapability.capacityUsage.allModels")}</span>
+					{entry.keyId && (
+						<span data-testid={`providers2-capacity-key-${rowId}`} className="text-muted-foreground break-all">
+							{t("cooldownCapability.capacityUsage.key")} {entry.keyId}
+						</span>
+					)}
+				</span>
 				<div className="flex items-center gap-1.5">
-					<Badge variant="outline" data-testid={`providers2-capacity-source-${modelKey}`}>
+					<Badge variant="outline" data-testid={`providers2-capacity-source-${rowId}`}>
 						{entry.source === "provider"
 							? t("cooldownCapability.capacityUsage.sourceProvider")
 							: t("cooldownCapability.capacityUsage.sourceDefault")}
@@ -56,16 +65,16 @@ function CapacityRow({ entry }: { entry: CapacityUsageEntry }) {
 				label={t("cooldownCapability.capacityUsage.tokens")}
 				used={entry.usedTokens}
 				threshold={entry.thresholdTokens}
-				testId={`providers2-capacity-tokens-${modelKey}`}
+				testId={`providers2-capacity-tokens-${rowId}`}
 			/>
 			<CapacityMeter
 				label={t("cooldownCapability.capacityUsage.requests")}
 				used={entry.usedRequests}
 				threshold={entry.thresholdRequests}
-				testId={`providers2-capacity-requests-${modelKey}`}
+				testId={`providers2-capacity-requests-${rowId}`}
 			/>
 			{entry.retryAfterSeconds > 0 && (
-				<p data-testid={`providers2-capacity-retry-${modelKey}`} className="text-xs text-amber-600 dark:text-amber-500">
+				<p data-testid={`providers2-capacity-retry-${rowId}`} className="text-xs text-amber-600 dark:text-amber-500">
 					{t("cooldownCapability.capacityUsage.retryAfter", { seconds: entry.retryAfterSeconds })}
 				</p>
 			)}
@@ -122,7 +131,7 @@ export function CooldownCapacityCard({ provider }: CooldownCapacityCardProps) {
 			{!isLoading && !error && !gateExplicitlyDisabled && entries.length > 0 && (
 				<div className="space-y-2">
 					{entries.map((entry) => (
-						<CapacityRow key={`${entry.scope}|${entry.model}`} entry={entry} />
+						<CapacityRow key={`${entry.scope}|${entry.keyId ?? ""}|${entry.model}`} entry={entry} />
 					))}
 				</div>
 			)}

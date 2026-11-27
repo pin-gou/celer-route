@@ -601,9 +601,7 @@ describe("ConfigForm — fleet default policies", () => {
 			jitter_ratio: 0.2,
 			recovery_successes: 3,
 		};
-		render(
-			<ConfigForm plugin={configFormFixture({ escalation: { enabled: true, max_multiplier: 4, chronic } })} />,
-		);
+		render(<ConfigForm plugin={configFormFixture({ escalation: { enabled: true, max_multiplier: 4, chronic } })} />);
 
 		fireEvent.change(screen.getByTestId("providercooldown-escalation-max-multiplier"), { target: { value: "6" } });
 		fireEvent.click(screen.getByTestId("providercooldown-config-save"));

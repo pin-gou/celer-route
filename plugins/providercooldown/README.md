@@ -334,8 +334,61 @@ fleet water level:
 | `capacity.request_limit` | `0` | requests per window; `0` = unlimited |
 | `capacity.window_seconds` | `60` | clamped to `10..3600` |
 | `capacity.headroom` | `0.9` | gate engages at `limit * headroom`; clamped to `0.1..1.0` |
-| `capacity.scope` | `"provider"` | `"provider"` shares one budget per provider; `"provider_model"` per provider/model |
+| `capacity.scope` | `"provider"` | `"provider"` shares one budget per provider; `"provider_model"` per provider/model; `"key"` per provider/key/model (see below) |
 | `capacity.action` | `"fallback"` | `"fallback"` lets the fallback chain take over; `"reject"` returns the 429 immediately |
+
+#### Per-key budgets (`capacity.scope: "key"`)
+
+`"provider"` and `"provider_model"` share one budget across every credential of
+a provider, so a single exhausted account can block the whole provider even when
+the other keys are fine. `"key"` keeps an independent window per
+`(provider, key, model)`:
+
+- **accounting** — `PostLLMHook` adds each terminal request's real usage to the
+  window of the credential that served it (resolved from the attempt trail, the
+  same source the cooldown marker uses);
+- **enforcement while selecting** — the key pool filter removes only the keys
+  whose own window is over `limit * headroom`, so the request rotates to a key
+  that still has budget. This is what makes "one key over its budget blocked,
+  every other key unaffected" true: the filter is the only place that knows
+  which keys the worker may pick from;
+- **enforcement before selecting** — `PreProviderHook` runs before key
+  selection, so it can only ask "does the pool still have any budget?". It
+  short-circuits with the usual capacity 429 **only when no key has budget
+  left**, honouring `action` (`reject` still skips the fallback chain, `fallback`
+  still hands the request over);
+- **unattributable usage** — a keyless provider, or an attempt whose key cannot
+  be resolved, is accounted in the `provider_model` bucket instead of being
+  dropped. `record` and `check` share the same key derivation, so they never
+  disagree about where an attempt lands. A keyless provider's only (sentinel)
+  key has no id and is therefore gated through that same bucket;
+- **observability** — `GET /api/plugins/provider-cooldown/capacity-usage`
+  returns one row per credential, each carrying `key_id` (no new endpoint).
+
+```json
+{
+  "providers": {
+    "sensenova": {
+      "keys": [{ "name": "sensenova-key-1", "value": "env.SENSENOVA_API_KEY_1", "models": ["*"], "weight": 1 }],
+      "cooldown_policy": {
+        "capacity": {
+          "enabled": true,
+          "token_limit": 200000,
+          "request_limit": 500,
+          "window_seconds": 60,
+          "headroom": 0.9,
+          "scope": "key",
+          "action": "fallback"
+        }
+      }
+    }
+  }
+}
+```
+
+Notes: the budget is per model as well, so one key serving two models keeps two
+independent windows; and the per-key gate never creates a cooldown — a key that
+is over budget is merely skipped for selection until its window slides.
 
 Notes:
 

@@ -626,7 +626,7 @@ func (c *CooldownState) observeRateLimit(ctx *schemas.BifrostContext, policy *sc
 	if l == nil {
 		return
 	}
-	usedTokens, _ := l.observer.usage(provider, model)
+	usedTokens, _ := l.observer.usage(provider, "", model)
 	requestTokens := usageTotal(bifrostErr.ExtraFields.BilledUsage)
 	l.observe(provider, model, keyID, usedTokens, requestTokens, limiterDimensionOf(bifrostErr), l.now())
 	markLearnedSampled(ctx)
@@ -669,7 +669,7 @@ func (c *CooldownState) observeLearnedRateLimit(ctx *schemas.BifrostContext, pol
 	if l == nil || model == "" {
 		return
 	}
-	usedTokens, _ := l.observer.usage(provider, model)
+	usedTokens, _ := l.observer.usage(provider, "", model)
 	requestTokens := usageTotal(bifrostErr.ExtraFields.BilledUsage)
 	l.observe(provider, model, keyID, usedTokens, requestTokens, limiterDimensionOf(bifrostErr), l.now())
 	markLearnedSampled(ctx)

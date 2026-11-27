@@ -251,10 +251,11 @@
 			"headroomDescription": "预算使用到该比例后闸门才介入，例如 0.9 表示用掉 90% 时开始拦截（0.1–1.0）。",
 			"headroomPlaceholder": "0.9",
 			"scopeLabel": "统计粒度",
-			"scopeDescription": "同一提供商的全部模型共享一个预算，或按模型各自独立统计预算。",
+			"scopeDescription": "同一提供商的全部模型共享一个预算；或按模型各自独立统计；或按密钥与模型各自独立统计（某把密钥超出自身预算时会被轮换掉，其余密钥照常服务）。",
 			"scopePlaceholder": "选择统计粒度",
 			"scopeProvider": "跨模型共享",
 			"scopeProviderModel": "按模型独立",
+			"scopeKey": "按密钥独立",
 			"actionLabel": "预算耗尽时",
 			"actionDescription": "把请求交给 fallback 链处理，或直接拒绝该请求。",
 			"actionPlaceholder": "选择处理方式",
@@ -264,7 +265,8 @@
 			"noLimit": "不限制",
 			"scope": {
 				"provider": "跨模型共享",
-				"provider_model": "按模型独立"
+				"provider_model": "按模型独立",
+				"key": "按密钥独立"
 			},
 			"action": {
 				"fallback": "交给 fallback 链",
@@ -318,7 +320,8 @@
 			"window": "窗口 {{seconds}} 秒",
 			"sourceDefault": "默认值",
 			"sourceProvider": "本提供商",
-			"retryAfter": "约 {{seconds}} 秒后放行"
+			"retryAfter": "约 {{seconds}} 秒后放行",
+			"key": "密钥"
 		}
 	},
 	"validation": {

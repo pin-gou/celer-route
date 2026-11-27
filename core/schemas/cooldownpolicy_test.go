@@ -115,11 +115,21 @@ func TestCooldownCapacityConfigValidate(t *testing.T) {
 		{WindowSeconds: MinCapacityWindowSeconds, Headroom: MinCapacityHeadroom},
 		{WindowSeconds: MaxCapacityWindowSeconds, Headroom: MaxCapacityHeadroom},
 		{Scope: "PROVIDER_MODEL", Action: "Reject"},
+		{Scope: CapacityScopeKey},
+		{Scope: "KEY"},
 	}
 	for i := range valid {
 		if err := valid[i].Validate(); err != nil {
 			t.Fatalf("valid config %+v rejected: %v", valid[i], err)
 		}
+	}
+	// Every scope normalization accepts "key"; an unknown value keeps falling
+	// back to "provider".
+	if got := NormalizeCapacityScope(" Key "); got != CapacityScopeKey {
+		t.Fatalf("NormalizeCapacityScope(%q) = %q, want %q", " Key ", got, CapacityScopeKey)
+	}
+	if got := NormalizeCapacityScope("tenant"); got != CapacityScopeProvider {
+		t.Fatalf("NormalizeCapacityScope(%q) = %q, want the provider fallback", "tenant", got)
 	}
 
 	invalid := []struct {

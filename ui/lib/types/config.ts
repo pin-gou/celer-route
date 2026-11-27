@@ -466,14 +466,16 @@ export interface CooldownChronicConfig {
 // request usage is summed over a rolling window and further requests are gated
 // once limit*headroom is crossed. An unset (0) numeric field takes the backend
 // default (window 60, headroom 0.9); token_limit / request_limit of 0 mean
-// "no limit".
+// "no limit". `scope: "key"` keeps an independent budget per
+// (provider, key, model) triple, so one exhausted credential is rotated past
+// instead of blocking the whole provider.
 export interface CooldownCapacityConfig {
 	enabled?: boolean;
 	token_limit?: number;
 	request_limit?: number;
 	window_seconds?: number;
 	headroom?: number;
-	scope?: "provider" | "provider_model";
+	scope?: "provider" | "provider_model" | "key";
 	action?: "fallback" | "reject";
 }
 

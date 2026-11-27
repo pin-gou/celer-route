@@ -251,10 +251,11 @@
 			"headroomDescription": "Fraction of the limit that may be used before the gate engages — 0.9 blocks once 90% is spent (0.1–1.0).",
 			"headroomPlaceholder": "0.9",
 			"scopeLabel": "Accounting scope",
-			"scopeDescription": "Share one budget across every model of a provider, or keep an independent budget per model.",
+			"scopeDescription": "Share one budget across every model of a provider, keep an independent budget per model, or keep an independent budget per credential and model (a key over its own budget is rotated past, the others keep serving).",
 			"scopePlaceholder": "Select scope",
 			"scopeProvider": "Shared across models",
 			"scopeProviderModel": "Independent per model",
+			"scopeKey": "Independent per key",
 			"actionLabel": "When the budget is spent",
 			"actionDescription": "Hand the request to the configured fallback chain, or reject it outright.",
 			"actionPlaceholder": "Select action",
@@ -264,7 +265,8 @@
 			"noLimit": "no limit",
 			"scope": {
 				"provider": "shared across models",
-				"provider_model": "independent per model"
+				"provider_model": "independent per model",
+				"key": "independent per credential"
 			},
 			"action": {
 				"fallback": "hand off to the fallback chain",
@@ -318,7 +320,8 @@
 			"window": "Window {{seconds}}s",
 			"sourceDefault": "Default",
 			"sourceProvider": "This provider",
-			"retryAfter": "Releases in about {{seconds}}s"
+			"retryAfter": "Releases in about {{seconds}}s",
+			"key": "Key"
 		}
 	},
 	"validation": {

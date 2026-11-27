@@ -207,7 +207,7 @@ func TestCapacityGateRuntimeReconfigurePerProvider(t *testing.T) {
 	if got := p.State.gateFor(schemas.Anthropic, polB); got != gateB {
 		t.Fatal("A's reconfiguration must not rebuild B's gate")
 	}
-	if tokens, _ := gateB.usage(schemas.Anthropic, "claude-sonnet-4"); tokens != 300 {
+	if tokens, _ := gateB.usage(schemas.Anthropic, "", "claude-sonnet-4"); tokens != 300 {
 		t.Fatalf("B usage = %d, want 300 (must survive A's reconfiguration)", tokens)
 	}
 }

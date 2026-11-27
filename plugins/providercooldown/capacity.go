@@ -26,9 +26,11 @@ const (
 
 	// CapacityScopeProvider shares one budget across every model of a
 	// provider; CapacityScopeProviderModel keeps an independent budget per
-	// (provider, model) pair.
+	// (provider, model) pair; CapacityScopeKey keeps an independent budget
+	// per (provider, key, model) triple.
 	CapacityScopeProvider      = schemas.CapacityScopeProvider
 	CapacityScopeProviderModel = schemas.CapacityScopeProviderModel
+	CapacityScopeKey           = schemas.CapacityScopeKey
 
 	// CapacityActionFallback allows the configured fallback chain to take
 	// over once the gate engages; CapacityActionReject refuses the request.
@@ -170,13 +172,33 @@ func capacityThreshold(limit int64, headroom float64) int64 {
 	return t
 }
 
-// windowKey returns the accounting key for (provider, model) under the
+// windowKey returns the accounting key for (provider, key, model) under the
 // configured scope.
-func (g *capacityGate) windowKey(provider schemas.ModelProvider, model string) string {
-	if g.scope == CapacityScopeProviderModel {
+//
+// The SAME function builds the key for both record() and check(), which is
+// what guarantees the two never disagree ("recorded in bucket A, looked up in
+// bucket B" would let a key bypass its own budget).
+//
+//   - "provider"       → "provider" (one budget for the whole provider)
+//   - "provider_model" → "provider|model"
+//   - "key"            → "provider|keyID|model"
+//
+// A "key" scope without a keyID (a keyless provider, or an attempt that
+// cannot be attributed to a credential) falls back to the provider_model key:
+// the usage is still accounted, and it is accounted where it can also be
+// checked.
+func (g *capacityGate) windowKey(provider schemas.ModelProvider, keyID string, model string) string {
+	switch g.scope {
+	case CapacityScopeKey:
+		if keyID == "" {
+			return string(provider) + "|" + model
+		}
+		return string(provider) + "|" + keyID + "|" + model
+	case CapacityScopeProviderModel:
 		return string(provider) + "|" + model
+	default:
+		return string(provider)
 	}
-	return string(provider)
 }
 
 // nowSecond returns the current Unix second from the shared clock.
@@ -191,15 +213,18 @@ func (g *capacityGate) nowSecond() int64 {
 // A nil return means "allow". Reads lazily expire stale buckets and drop the
 // key entry entirely once nothing is live, so a window that has fully slid
 // away costs no memory.
-func (g *capacityGate) check(provider schemas.ModelProvider, model string) *capacityVerdict {
+//
+// keyID selects the per-key budget under the "key" scope; it is ignored by
+// the other scopes (their key does not contain a credential).
+func (g *capacityGate) check(provider schemas.ModelProvider, keyID string, model string) *capacityVerdict {
 	if g == nil {
 		return nil
 	}
-	if g.scope == CapacityScopeProviderModel && model == "" {
+	if g.scope != CapacityScopeProvider && model == "" {
 		// Nothing to attribute; never gate on an unattributable pair.
 		return nil
 	}
-	key := g.windowKey(provider, model)
+	key := g.windowKey(provider, keyID, model)
 	now := g.nowSecond()
 
 	g.mu.Lock()
@@ -229,14 +254,17 @@ func (g *capacityGate) check(provider schemas.ModelProvider, model string) *capa
 // record adds one terminal request's real usage to the window. tokens may be
 // 0 (usage unavailable or a failure that was not billed) — the request count
 // always advances, since it measures traffic we actually sent upstream.
-func (g *capacityGate) record(provider schemas.ModelProvider, model string, tokens int64) {
+//
+// keyID is the credential that served the attempt; it selects the per-key
+// budget under the "key" scope and is ignored by the other scopes.
+func (g *capacityGate) record(provider schemas.ModelProvider, keyID string, model string, tokens int64) {
 	if g == nil || provider == "" || model == "" {
 		return
 	}
 	if tokens < 0 {
 		tokens = 0
 	}
-	key := g.windowKey(provider, model)
+	key := g.windowKey(provider, keyID, model)
 	now := g.nowSecond()
 
 	g.mu.Lock()
@@ -381,15 +409,15 @@ func (g *capacityGate) trackedKeys() int {
 	return len(g.keys)
 }
 
-// liveBuckets reports how many buckets for (provider, model) still carry a
-// live epoch. Used by tests to assert stale buckets were zeroed.
-func (g *capacityGate) liveBuckets(provider schemas.ModelProvider, model string) int {
+// liveBuckets reports how many buckets for (provider, key, model) still carry
+// a live epoch. Used by tests to assert stale buckets were zeroed.
+func (g *capacityGate) liveBuckets(provider schemas.ModelProvider, keyID string, model string) int {
 	if g == nil {
 		return 0
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	w := g.keys[g.windowKey(provider, model)]
+	w := g.keys[g.windowKey(provider, keyID, model)]
 	if w == nil {
 		return 0
 	}
@@ -402,15 +430,15 @@ func (g *capacityGate) liveBuckets(provider schemas.ModelProvider, model string)
 	return n
 }
 
-// usage returns the live window totals for (provider, model) without
+// usage returns the live window totals for (provider, key, model) without
 // gating. Used by tests.
-func (g *capacityGate) usage(provider schemas.ModelProvider, model string) (tokens, requests int64) {
+func (g *capacityGate) usage(provider schemas.ModelProvider, keyID string, model string) (tokens, requests int64) {
 	if g == nil {
 		return 0, 0
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	w := g.keys[g.windowKey(provider, model)]
+	w := g.keys[g.windowKey(provider, keyID, model)]
 	if w == nil {
 		return 0, 0
 	}
@@ -508,20 +536,97 @@ func (c *CooldownState) gateFor(provider schemas.ModelProvider, policy *schemas.
 	return g
 }
 
-// capacityShortCircuit evaluates the gate for (provider, model) and, when the
+// capacityGateForFilter resolves the gate the key pool filter must consult,
+// or nil when there is nothing for it to do.
+//
+// It deliberately returns nil for every scope except "key": provider and
+// provider_model marks are decided in PreProviderHook, before key selection,
+// and their budget does not depend on which credential serves the request. By
+// short-circuiting on the spec (which is a handful of comparisons, no
+// allocation) the filter keeps the default — capacity disabled entirely —
+// path at a couple of pointer reads.
+func (c *CooldownState) capacityGateForFilter(provider schemas.ModelProvider, policy *schemas.CooldownPolicy) *capacityGate {
+	if c == nil {
+		return nil
+	}
+	spec, ok := capacitySpecOf(c.defaults.resolveCapacity(policy))
+	if !ok || spec.scope != CapacityScopeKey {
+		return nil
+	}
+	g := c.gateFor(provider, policy)
+	if g == nil || g.scope != CapacityScopeKey {
+		return nil
+	}
+	return g
+}
+
+// capacityShortCircuit evaluates the provider/model gate and, when the
 // window's budget is spent, builds the synthetic 429 that short-circuits the
 // attempt. Returns nil when the request may proceed.
+//
+// This is the provider / provider_model path: the accounting key does not
+// contain a credential, so the decision can be made before key selection. The
+// per-key scope is handled by capacityShortCircuitPerKey and the key pool
+// filter (see AsFilter), which together keep "one over-budget key" from
+// blocking the others.
 func (p *CooldownPlugin) capacityShortCircuit(ctx *schemas.BifrostContext, gate *capacityGate, provider schemas.ModelProvider, model string) *schemas.LLMPluginShortCircuit {
-	verdict := gate.check(provider, model)
+	return p.capacityShortCircuitFor(ctx, gate, provider, "", model, gate.check(provider, "", model))
+}
+
+// capacityShortCircuitPerKey evaluates a "key"-scoped gate against the whole
+// key pool and short-circuits only when NO key still has budget.
+//
+// Why the pool and not a single key: PreProviderHook runs before key
+// selection, so it cannot know which credential the worker will pick. Asking
+// "does the pool still have room?" is the only question with an answer at this
+// point. Per-key precision is provided by AsFilter, which removes the
+// exhausted keys from the candidate set so the worker rotates to one that
+// still has budget — that is what makes "one key over its budget blocked,
+// every other key unaffected" true.
+//
+// When at least one key still has budget this returns nil and the request
+// proceeds; the filter then keeps the exhausted keys out of the selection.
+func (p *CooldownPlugin) capacityShortCircuitPerKey(ctx *schemas.BifrostContext, gate *capacityGate, provider schemas.ModelProvider, model string, keys []schemas.Key) *schemas.LLMPluginShortCircuit {
+	if gate == nil || len(keys) == 0 {
+		return nil
+	}
+	// Pick the worst verdict (the longest retry-after) so the client is told
+	// when the pool as a whole becomes usable again rather than when the
+	// least-loaded key does.
+	var worst *capacityVerdict
+	worstKeyID := ""
+	for _, k := range keys {
+		v := gate.check(provider, k.ID, model)
+		if v == nil {
+			// This key still has budget: the request can be served.
+			return nil
+		}
+		if worst == nil || v.retryAfterSeconds > worst.retryAfterSeconds {
+			worst = v
+			worstKeyID = k.ID
+		}
+	}
+	return p.capacityShortCircuitFor(ctx, gate, provider, worstKeyID, model, worst)
+}
+
+// capacityShortCircuitFor builds the synthetic 429 for one verdict. keyID is
+// empty (and omitted from the message) for the provider / provider_model
+// scopes; it names the credential for the "key" scope so the operator can tell
+// which budget exhausted the pool.
+func (p *CooldownPlugin) capacityShortCircuitFor(ctx *schemas.BifrostContext, gate *capacityGate, provider schemas.ModelProvider, keyID string, model string, verdict *capacityVerdict) *schemas.LLMPluginShortCircuit {
 	if verdict == nil {
 		return nil
 	}
 	retryAfter := verdict.retryAfterSeconds
 	statusCode := 429
 	errType := capacityGateErrorType
+	target := string(provider) + "/" + model
+	if keyID != "" {
+		target += " (key " + keyID + ")"
+	}
 	message := fmt.Sprintf(
-		"%s%s/%s exceeded its %ds budget; retry in %ds",
-		capacityGateMessagePrefix, provider, model, gate.windowSeconds, retryAfter,
+		"%s%s exceeded its %ds budget; retry in %ds",
+		capacityGateMessagePrefix, target, gate.windowSeconds, retryAfter,
 	)
 	// "fallback" lets the configured fallback chain pick the request up;
 	// "reject" returns this error immediately. nil==true by default, so both
@@ -532,8 +637,8 @@ func (p *CooldownPlugin) capacityShortCircuit(ctx *schemas.BifrostContext, gate 
 	}
 	if p.logger != nil {
 		p.logger.Info(
-			"[provider-cooldown] capacity gate short-circuit on %s/%s — used %d token(s) / %d request(s) in %ds window (token_limit=%d, request_limit=%d, headroom=%.2f, scope=%s, action=%s, retry-after %ds)",
-			provider, model, verdict.usedTokens, verdict.usedRequests, gate.windowSeconds,
+			"[provider-cooldown] capacity gate short-circuit on %s/%s (key=%q) — used %d token(s) / %d request(s) in %ds window (token_limit=%d, request_limit=%d, headroom=%.2f, scope=%s, action=%s, retry-after %ds)",
+			provider, model, keyID, verdict.usedTokens, verdict.usedRequests, gate.windowSeconds,
 			gate.tokenLimit, gate.requestLimit, gate.headroom, gate.scope, gate.action, retryAfter,
 		)
 	}
@@ -586,33 +691,41 @@ func (p *CooldownPlugin) recordCapacity(ctx *schemas.BifrostContext, policy *sch
 	if !state.capacityOrLearningActive(policy) {
 		return
 	}
-	provider, model, tokens, ok := terminalUsage(ctx, resp, bifrostErr)
+	provider, model, keyID, tokens, ok := terminalUsage(ctx, resp, bifrostErr)
 	if !ok {
 		return
 	}
 	if gate := state.gateFor(provider, policy); gate != nil {
-		gate.record(provider, model, tokens)
+		gate.record(provider, keyID, model, tokens)
 	}
 	// The learner's observer window accounts the same real usage, but
-	// read-only: it never gates anything.
+	// read-only: it never gates anything. It stays provider/model granular
+	// because the estimate it produces is a provider/model limit.
 	if l := state.learnerFor(provider, policy); l != nil {
-		l.observer.record(provider, model, tokens)
+		l.observer.record(provider, "", model, tokens)
 	}
 }
 
-// terminalUsage extracts the (provider, model, tokens) of a terminal request
-// from either the response or the error. ok=false means the outcome must not be
-// accounted at all (non-terminal stream chunk, silent/short-circuited attempt,
-// plugin-produced response, or unattributable routing info).
-func terminalUsage(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (provider schemas.ModelProvider, model string, tokens int64, ok bool) {
+// terminalUsage extracts the (provider, model, keyID, tokens) of a terminal
+// request from either the response or the error. ok=false means the outcome
+// must not be accounted at all (non-terminal stream chunk, silent/short-
+// circuited attempt, plugin-produced response, or unattributable routing
+// info).
+//
+// keyID is the credential the attempt ran on, resolved from the attempt trail
+// with the same rule the rest of the plugin uses (the last record with a
+// usable key; the empty sentinel is legal only for keyless providers). It is
+// what the "key"-scoped capacity gate accounts against; an empty value is the
+// documented safe fallback that routes the usage to the provider/model bucket.
+func terminalUsage(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (provider schemas.ModelProvider, model string, keyID string, tokens int64, ok bool) {
 	if ctx == nil {
-		return "", "", 0, false
+		return "", "", "", 0, false
 	}
 	// The framework sets this flag for attempts that were rejected before
 	// reaching a provider. Counting them would let rejections extend the
 	// very window that rejected them.
 	if silent, _ := ctx.Value(schemas.BifrostContextKeySilentLog).(bool); silent {
-		return "", "", 0, false
+		return "", "", "", 0, false
 	}
 
 	var requestType schemas.RequestType
@@ -625,7 +738,7 @@ func terminalUsage(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, b
 	} else if resp != nil {
 		extra := resp.GetExtraFields()
 		if extra == nil {
-			return "", "", 0, false
+			return "", "", "", 0, false
 		}
 		requestType = extra.RequestType
 		routing := extra.RoutingInfo
@@ -633,14 +746,15 @@ func terminalUsage(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, b
 		model = routing.Model
 		tokens = responseTokenUsage(resp)
 	} else {
-		return "", "", 0, false
+		return "", "", "", 0, false
 	}
 
 	// A response/error without routing info did not come from a provider
 	// attempt (e.g. a semantic-cache hit produced by a plugin).
 	if provider == "" || model == "" {
-		return "", "", 0, false
+		return "", "", "", 0, false
 	}
+	keyID = attemptKeyID(ctx, provider)
 
 	// Streaming calls PostLLMHook once per chunk; account only the terminal
 	// one. Providers set BifrostContextKeyStreamEndIndicator on every
@@ -651,9 +765,33 @@ func terminalUsage(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, b
 	// accounted (tokens 0, request 0): under-counting is preferred to
 	// double-counting a stream's tokens.
 	if isStreamingRequest(requestType) && !isFinalChunk(ctx) {
-		return "", "", 0, false
+		return "", "", "", 0, false
 	}
-	return provider, model, tokens, true
+	return provider, model, keyID, tokens, true
+}
+
+// attemptKeyID returns the keyID of the attempt that produced the terminal
+// outcome, resolved from the append-only attempt trail. It mirrors the trail
+// scan in lastAttemptProviderAndKey / successProviderAndKey (empty keyID is
+// legal only for keyless providers), but returns "" rather than failing when
+// no usable key is recorded — the capacity gate treats that as the documented
+// provider_model fallback.
+func attemptKeyID(ctx *schemas.BifrostContext, provider schemas.ModelProvider) string {
+	if ctx == nil {
+		return ""
+	}
+	trail, ok := ctx.Value(schemas.BifrostContextKeyAttemptTrail).([]schemas.KeyAttemptRecord)
+	if !ok {
+		return ""
+	}
+	for i := len(trail) - 1; i >= 0; i-- {
+		rec := trail[i]
+		if rec.KeyID == "" && !schemas.IsKeylessProvider(provider) {
+			continue
+		}
+		return rec.KeyID
+	}
+	return ""
 }
 
 // isCapacityGateError recognises the synthetic error built by

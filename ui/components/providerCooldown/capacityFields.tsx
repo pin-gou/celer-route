@@ -23,6 +23,7 @@ export function CapacityFields({ value, onChange, disabled }: CapacityFieldsProp
 	const scopeOptions: ReadonlyArray<{ value: CapacityScope; label: string }> = [
 		{ value: "provider", label: t("cooldownCapability.capacity.scopeProvider") },
 		{ value: "provider_model", label: t("cooldownCapability.capacity.scopeProviderModel") },
+		{ value: "key", label: t("cooldownCapability.capacity.scopeKey") },
 	];
 	const actionOptions: ReadonlyArray<{ value: CapacityAction; label: string }> = [
 		{ value: "fallback", label: t("cooldownCapability.capacity.actionFallback") },

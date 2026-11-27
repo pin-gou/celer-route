@@ -28,9 +28,11 @@ const (
 
 	// CapacityScopeProvider shares one budget across every model of a
 	// provider; CapacityScopeProviderModel keeps an independent budget per
-	// (provider, model) pair.
+	// (provider, model) pair; CapacityScopeKey keeps an independent budget
+	// per (provider, key, model) triple.
 	CapacityScopeProvider      = "provider"
 	CapacityScopeProviderModel = "provider_model"
+	CapacityScopeKey           = "key"
 
 	// CapacityActionFallback allows the configured fallback chain to take
 	// over once the gate engages; CapacityActionReject refuses the request.
@@ -162,8 +164,9 @@ type CooldownCapacityConfig struct {
 	Headroom float64 `json:"headroom"`
 
 	// Scope selects the accounting granularity: "provider" (default) shares
-	// one budget across every model of a provider, while "provider_model"
-	// keeps an independent budget per (provider, model) pair.
+	// one budget across every model of a provider, "provider_model" keeps an
+	// independent budget per (provider, model) pair, and "key" keeps an
+	// independent budget per (provider, key, model) triple.
 	Scope string `json:"scope"`
 
 	// Action decides what happens once the gate engages: "fallback" (default)
@@ -221,11 +224,11 @@ func (c *CooldownCapacityConfig) Validate() error {
 		return fmt.Errorf("capacity.request_limit must not be negative, got %d", c.RequestLimit)
 	}
 	switch strings.TrimSpace(strings.ToLower(c.Scope)) {
-	case "", CapacityScopeProvider, CapacityScopeProviderModel:
+	case "", CapacityScopeProvider, CapacityScopeProviderModel, CapacityScopeKey:
 	default:
 		return fmt.Errorf(
-			"capacity.scope %q is invalid; must be %q or %q (or empty for the default)",
-			c.Scope, CapacityScopeProvider, CapacityScopeProviderModel,
+			"capacity.scope %q is invalid; must be %q, %q or %q (or empty for the default)",
+			c.Scope, CapacityScopeProvider, CapacityScopeProviderModel, CapacityScopeKey,
 		)
 	}
 	switch strings.TrimSpace(strings.ToLower(c.Action)) {
@@ -272,10 +275,13 @@ func NormalizeCapacityHeadroom(h float64) float64 {
 }
 
 // NormalizeCapacityScope resolves an unrecognized or empty scope to the
-// default "provider".
+// default "provider". "provider_model" and "key" are returned as-is.
 func NormalizeCapacityScope(s string) string {
-	if strings.TrimSpace(strings.ToLower(s)) == CapacityScopeProviderModel {
+	switch strings.TrimSpace(strings.ToLower(s)) {
+	case CapacityScopeProviderModel:
 		return CapacityScopeProviderModel
+	case CapacityScopeKey:
+		return CapacityScopeKey
 	}
 	return CapacityScopeProvider
 }

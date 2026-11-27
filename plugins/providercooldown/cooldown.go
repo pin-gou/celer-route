@@ -945,11 +945,21 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 			return keys, nil
 		}
 		out := make([]schemas.Key, 0, len(keys))
+		// The per-provider policy is resolved once per filter call; both the
+		// health section and the capacity gate read it.
+		policy := policyFromContext(ctx)
 		// Health-aware weighting is resolved once per filter call. An inert
 		// configuration (nil or disabled for this provider) leaves healthActive
 		// false and the whole subsystem is skipped, keeping the disabled path
 		// at the cost of two pointer reads.
-		healthSpec, healthActive := healthSpecOf(c.defaults.resolveHealth(policyFromContext(ctx)))
+		healthSpec, healthActive := healthSpecOf(c.defaults.resolveHealth(policy))
+		// Per-key capacity gate (scope=key only). For every other scope — and
+		// for the default, fully disabled deployment — this resolves to nil, so
+		// the filter behaves exactly as before. Per-key suppression happens
+		// HERE rather than in PreProviderHook because only the filter knows
+		// which keys the worker is about to choose from: removing one key's
+		// exhausted budget leaves every other key selectable.
+		capacityGate := c.capacityGateForFilter(provider, policy)
 		// now is resolved lazily: the happy path (nothing suppressed) must not
 		// pay for a clock read, and one read covers every vetoed key in this
 		// call.
@@ -958,6 +968,17 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 		for _, k := range keys {
 			_, kind, matchedScope, suppressed := c.lookupSuppressed(provider, k.ID, model)
 			if !suppressed {
+				if capacityGate != nil && capacityGate.check(provider, k.ID, model) != nil {
+					// This credential's own window is over budget. Rotate past
+					// it instead of refusing the request: the only request that
+					// has to be refused is the one no key can serve (handled in
+					// PreProviderHook). No cooldown counter is touched — this is
+					// a budget decision, not a cooldown suppression.
+					if logger != nil {
+						logger.Info("[provider-cooldown] capacity gate excluded key %s/%s (name=%s, model=%s, scope=key)", provider, k.ID, k.Name, model)
+					}
+					continue
+				}
 				out = append(out, k)
 				continue
 			}
@@ -1345,8 +1366,14 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 	// request body. The gate is resolved per provider: a provider's own
 	// CooldownPolicy capacity section wins over the plugin default, and the
 	// default-off case costs one pointer walk and one nil check.
+	//
+	// The provider / provider_model scopes decide on (provider[, model])
+	// alone, so they are evaluated here, before the key pool is consulted. The
+	// per-key scope needs the pool and is evaluated further down, once the
+	// keys are known.
 	policy := policyFromContext(ctx)
-	if gate := p.State.gateFor(provider, policy); gate != nil {
+	gate := p.State.gateFor(provider, policy)
+	if gate != nil && gate.scope != CapacityScopeKey {
 		if sc := p.capacityShortCircuit(ctx, gate, provider, model); sc != nil {
 			return req, sc, nil
 		}
@@ -1378,6 +1405,17 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 			keys = []schemas.Key{{}}
 		} else {
 			return req, nil, nil
+		}
+	}
+
+	// Per-key capacity gate (scope=key only). The provider/model scopes were
+	// already decided above; this one needs the credential list. It refuses
+	// the request only when NO key still has budget — when at least one does,
+	// AsFilter below keeps the exhausted keys out of the selection, so a
+	// single over-budget credential never blocks the others.
+	if gate != nil && gate.scope == CapacityScopeKey {
+		if sc := p.capacityShortCircuitPerKey(ctx, gate, provider, model, keys); sc != nil {
+			return req, sc, nil
 		}
 	}
 

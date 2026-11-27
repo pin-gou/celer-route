@@ -236,10 +236,10 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 					return nil, fmt.Errorf("capacity.scope: expected string, got %T", vv)
 				}
 				switch strings.TrimSpace(strings.ToLower(s)) {
-				case CapacityScopeProvider, CapacityScopeProviderModel:
+				case CapacityScopeProvider, CapacityScopeProviderModel, CapacityScopeKey:
 					cc.Scope = strings.TrimSpace(strings.ToLower(s))
 				default:
-					return nil, fmt.Errorf("capacity.scope: unknown value %q (expected %q or %q)", s, CapacityScopeProvider, CapacityScopeProviderModel)
+					return nil, fmt.Errorf("capacity.scope: unknown value %q (expected %q, %q or %q)", s, CapacityScopeProvider, CapacityScopeProviderModel, CapacityScopeKey)
 				}
 			case "action":
 				s, ok := vv.(string)

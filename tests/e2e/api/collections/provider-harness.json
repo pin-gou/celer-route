@@ -50187,6 +50187,16 @@
                   "  pm.expect(typeof j.by_kind.quota.mark_count, 'by_kind.quota.mark_count should be numeric').to.eql('number');",
                   "  pm.expect(typeof j.by_kind.quota.suppressed_count, 'by_kind.quota.suppressed_count should be numeric').to.eql('number');",
                   "  pm.expect(j.per_provider, 'per_provider should be present').to.be.an('object');",
+                  "  pm.expect(j.per_key, 'per_key should be present (object, may be empty)').to.be.an('object');",
+                  "});",
+                  "pm.test('per_key rows carry the documented per-key counters', function () {",
+                  "  var j = pm.response.json();",
+                  "  Object.keys(j.per_key || {}).forEach(function (id) {",
+                  "    var row = j.per_key[id];",
+                  "    pm.expect(typeof row.mark_count, 'per_key[' + id + '].mark_count should be numeric').to.eql('number');",
+                  "    pm.expect(typeof row.suppressed_count, 'per_key[' + id + '].suppressed_count should be numeric').to.eql('number');",
+                  "    pm.expect(typeof row.success_count, 'per_key[' + id + '].success_count should be numeric').to.eql('number');",
+                  "  });",
                   "});"
                 ]
               }

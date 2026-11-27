@@ -280,7 +280,7 @@ func TestCapacityBilledUsageIsAccounted(t *testing.T) {
 	}
 
 	gate := p.State.capacityGate()
-	tokens, requests := gate.usage(provider, "gpt-4o")
+	tokens, requests := gate.usage(provider, "", "gpt-4o")
 	if tokens != 1000 {
 		t.Fatalf("billed usage must be accounted, got %d tokens", tokens)
 	}
@@ -313,7 +313,7 @@ func TestCapacityWithoutUsageStillCountsRequest(t *testing.T) {
 	}
 
 	gate := p.State.capacityGate()
-	tokens, requests := gate.usage(provider, "gpt-4o")
+	tokens, requests := gate.usage(provider, "", "gpt-4o")
 	if tokens != 0 {
 		t.Fatalf("unknown usage must be recorded as 0 tokens, got %d", tokens)
 	}
@@ -419,7 +419,7 @@ func TestCapacityWindowSlidesAndClearsOldBuckets(t *testing.T) {
 	recordUsage(t, p, provider, model, 1000)
 
 	gate := p.State.capacityGate()
-	if tokens, _ := gate.usage(provider, model); tokens != 1000 {
+	if tokens, _ := gate.usage(provider, "", model); tokens != 1000 {
 		t.Fatalf("expected 1000 accounted tokens, got %d", tokens)
 	}
 
@@ -454,12 +454,12 @@ func TestCapacityWindowSlidesAndClearsOldBuckets(t *testing.T) {
 	if sc3 != nil {
 		t.Fatalf("expected the gate to re-open after the window slid, got %+v", sc3)
 	}
-	tokens, requests := gate.usage(provider, model)
+	tokens, requests := gate.usage(provider, "", model)
 	if tokens != 0 || requests != 0 {
 		t.Fatalf("expected the window to be empty after sliding, got %d tokens / %d requests", tokens, requests)
 	}
-	if gate.liveBuckets(provider, model) != 0 {
-		t.Fatalf("expected stale buckets to be cleared, got %d", gate.liveBuckets(provider, model))
+	if gate.liveBuckets(provider, "", model) != 0 {
+		t.Fatalf("expected stale buckets to be cleared, got %d", gate.liveBuckets(provider, "", model))
 	}
 }
 
@@ -569,7 +569,7 @@ func TestCapacityGateDoesNotCountRejectedRequests(t *testing.T) {
 	recordUsage(t, p, provider, model, 1000)
 
 	gate := p.State.capacityGate()
-	before, _ := gate.usage(provider, model)
+	before, _ := gate.usage(provider, "", model)
 
 	// A rejected request never reaches the provider, so the framework marks
 	// the attempt silent. It must not extend the window that rejected it.
@@ -586,7 +586,7 @@ func TestCapacityGateDoesNotCountRejectedRequests(t *testing.T) {
 		t.Fatalf("PostLLMHook returned an error: %v", err)
 	}
 
-	after, _ := gate.usage(provider, model)
+	after, _ := gate.usage(provider, "", model)
 	if after != before {
 		t.Fatalf("a rejected request must not be accounted: %d -> %d tokens", before, after)
 	}
@@ -627,7 +627,7 @@ func TestCapacityStreamingAccountsOnlyFinalChunk(t *testing.T) {
 		}
 	}
 	gate := p.State.capacityGate()
-	if _, requests := gate.usage(provider, model); requests != 0 {
+	if _, requests := gate.usage(provider, "", model); requests != 0 {
 		t.Fatalf("non-final chunks must not be accounted, got %d requests", requests)
 	}
 
@@ -637,7 +637,7 @@ func TestCapacityStreamingAccountsOnlyFinalChunk(t *testing.T) {
 	if _, _, err := p.PostLLMHook(ctx, streamResp(250), nil); err != nil {
 		t.Fatalf("PostLLMHook returned an error: %v", err)
 	}
-	tokens, requests := gate.usage(provider, model)
+	tokens, requests := gate.usage(provider, "", model)
 	if requests != 1 {
 		t.Fatalf("expected exactly one accounted streaming request, got %d", requests)
 	}
@@ -666,7 +666,7 @@ func TestCapacityStreamingErrorCountsOnce(t *testing.T) {
 		t.Fatalf("PostLLMHook returned an error: %v", err)
 	}
 	gate := p.State.capacityGate()
-	if _, requests := gate.usage(provider, model); requests != 0 {
+	if _, requests := gate.usage(provider, "", model); requests != 0 {
 		t.Fatalf("a non-terminal stream error must not be accounted, got %d requests", requests)
 	}
 
@@ -675,7 +675,7 @@ func TestCapacityStreamingErrorCountsOnce(t *testing.T) {
 	if _, _, err := p.PostLLMHook(ctx, nil, berr); err != nil {
 		t.Fatalf("PostLLMHook returned an error: %v", err)
 	}
-	tokens, requests := gate.usage(provider, model)
+	tokens, requests := gate.usage(provider, "", model)
 	if requests != 1 {
 		t.Fatalf("expected exactly one accounted streaming failure, got %d", requests)
 	}
@@ -778,7 +778,7 @@ func TestCapacityConcurrentRecordAndCheck(t *testing.T) {
 	wg.Wait()
 
 	gate := p.State.capacityGate()
-	tokens, requests := gate.usage(provider, model)
+	tokens, requests := gate.usage(provider, "", model)
 	if requests != n {
 		t.Fatalf("expected %d accounted requests, got %d", n, requests)
 	}

@@ -454,8 +454,56 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
 | `request_limit` | `0` | 每窗口请求数上限；`0` 表示不限 |
 | `window_seconds` | `60` | 滑动窗口长度，合法范围 `10`–`3600` |
 | `headroom` | `0.9` | 用量达到 `上限 × headroom` 即触发闸门，合法范围 `0.1`–`1.0` |
-| `scope` | `"provider"` | `"provider"`：同一提供商的全部模型共享一份预算；`"provider_model"`：每个「提供商 + 模型」各有一份 |
+| `scope` | `"provider"` | `"provider"`：同一提供商的全部模型共享一份预算；`"provider_model"`：每个「提供商 + 模型」各有一份；`"key"`：每个「提供商 + 密钥 + 模型」各有一份（见下文） |
 | `action` | `"fallback"` | `"fallback"`：交给 fallback 链继续尝试；`"reject"`：直接拒绝，不再回退 |
+
+#### 按密钥独立预算（`scope: "key"`）
+
+`"provider"` 和 `"provider_model"` 都是**一把密钥超支就影响整个提供商**——即使其它
+密钥还有额度。`"key"` 为每个 `(提供商, 密钥, 模型)` 维护独立窗口：
+
+- **记账**：每个终态请求的真实用量记到**实际服务该请求的密钥**上（密钥来自
+  attempt trail，与冷却标记用的是同一个来源）。
+- **选密钥时拦截**：密钥池过滤器只剔除**自己窗口已超阈值**的那些密钥，请求会轮换到
+  还有预算的密钥上。这是「单把密钥超支被拦、其余密钥不受影响」能成立的关键——只有
+  过滤器知道 worker 可能从哪些密钥里挑。
+- **选密钥前拦截**：`PreProviderHook` 在选密钥之前执行，只能回答「池子里还有没有
+  预算」。因此只有当**没有任何密钥还有预算**时才用容量闸门的 429 短路，并且照旧尊重
+  `action`（`reject` 依然不进入 fallback 链，`fallback` 依然把请求交给 fallback 链）。
+- **无法归因的用量**：keyless 提供商，或拿不到密钥的 attempt，记账时回落到
+  `provider_model` 桶而不是丢弃；`record` 与 `check` 共用同一套桶键推导，所以不会出现
+  「记到 A 桶、查 B 桶」的不一致。keyless 提供商唯一的（哨兵）密钥没有 id，因此正是
+  通过这个桶被拦截。
+- **可观测量**：`GET /api/plugins/provider-cooldown/capacity-usage` 直接复用，每个
+  密钥一行，带 `key_id`（不新增接口）。
+
+限制：预算同时按模型切分，所以同一把密钥服务两个模型会有两份独立窗口；按密钥的闸门
+**不会产生冷却**，超支的密钥只是暂时不参与选择，窗口滑走即恢复。
+
+配置示例（容量一律配在 `provider.cooldown_policy.capacity`）：
+
+```json
+{
+  "providers": {
+    "sensenova": {
+      "keys": [
+        { "name": "sensenova-key-1", "value": "env.SENSENOVA_API_KEY_1", "models": ["*"], "weight": 1 }
+      ],
+      "cooldown_policy": {
+        "capacity": {
+          "enabled": true,
+          "token_limit": 200000,
+          "request_limit": 500,
+          "window_seconds": 60,
+          "headroom": 0.9,
+          "scope": "key",
+          "action": "fallback"
+        }
+      }
+    }
+  }
+}
+```
 
 ### 当前窗口用量怎么看
 
@@ -467,7 +515,7 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
   这张表**只读**，不能在这里修改任何上限。
 - **提供商详情页 → 冷却策略 → 容量水位**：只看当前提供商（在用量卡下方）。每一行是
   一个统计口径——`scope = provider` 时只有一行「全部模型」，`provider_model` 时每个
-  模型一行。
+  模型一行，`key` 时每个「模型 + 密钥」一行（行内标出密钥 ID）。
 
 提供商卡片行内显示：
 
@@ -508,10 +556,38 @@ GET /api/plugins/provider-cooldown/capacity-usage
 }
 ```
 
+`scope = key` 时每个密钥一行，多出 `key_id`：
+
+```json
+{
+  "plugin": "provider-cooldown",
+  "count": 2,
+  "entries": [
+    {
+      "provider": "sensenova",
+      "key_id": "sensenova-key-1",
+      "model": "deepseek-flash",
+      "scope": "key",
+      "window_seconds": 60,
+      "used_tokens": 195000,
+      "used_requests": 470,
+      "token_limit": 200000,
+      "request_limit": 500,
+      "headroom": 0.9,
+      "threshold_tokens": 180000,
+      "threshold_requests": 450,
+      "retry_after_seconds": 37,
+      "source": "provider"
+    }
+  ]
+}
+```
+
 | 字段 | 含义 |
 |------|------|
 | `provider` / `model` | 统计对象；`scope = provider` 时没有 `model`，表示该提供商的全部模型共用一份预算 |
-| `scope` | `provider`（跨模型共享）或 `provider_model`（按模型独立） |
+| `key_id` | 仅 `scope = key` 时出现，表示这一行属于哪把密钥；无法归因的用量会以「无 key_id」的行出现在 `provider_model` 桶里 |
+| `scope` | `provider`（跨模型共享）、`provider_model`（按模型独立）或 `key`（按密钥 + 模型独立） |
 | `window_seconds` | 该行的滚动窗口长度 |
 | `used_tokens` / `used_requests` | 当前窗口内已记账的真实用量 |
 | `token_limit` / `request_limit` | 配置的上限，`0` 表示不限 |

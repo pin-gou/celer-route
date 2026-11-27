@@ -4085,9 +4085,9 @@
         },
         "scope": {
           "type": "string",
-          "enum": ["provider", "provider_model"],
+          "enum": ["provider", "provider_model", "key"],
           "default": "provider",
-          "description": "Accounting granularity: provider (one budget shared by every model of the provider) or provider_model (an independent budget per provider/model pair)."
+          "description": "Accounting granularity: provider (one budget shared by every model of the provider), provider_model (an independent budget per provider/model pair), or key (an independent budget per provider/key/model triple). With key, each credential's window is accounted and enforced separately: a key over its own budget is removed from the candidate pool and the request rotates to a key that still has budget, so one exhausted credential never blocks the others. Only when no key has any budget left is the request short-circuited (honouring action). Usage that cannot be attributed to a credential (a keyless provider, or an attempt whose key is unknown) is accounted in the provider_model bucket instead of being dropped; a keyless provider is gated through that same bucket. Under key the budget is per model as well, so one key serving two models keeps two independent windows."
         },
         "action": {
           "type": "string",

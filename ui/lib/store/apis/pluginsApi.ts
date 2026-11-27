@@ -24,6 +24,7 @@ import { baseApi } from "./baseApi";
 interface CapacityUsageWireEntry {
 	provider: string;
 	model?: string;
+	key_id?: string;
 	scope?: string;
 	window_seconds?: number;
 	used_tokens?: number;
@@ -357,7 +358,8 @@ export const pluginsApi = baseApi.injectEndpoints({
 				entries: (response.entries ?? []).map((entry) => ({
 					provider: entry.provider,
 					model: entry.model ?? "",
-					scope: entry.scope === "provider_model" ? "provider_model" : "provider",
+					keyId: entry.key_id,
+					scope: entry.scope === "provider_model" ? "provider_model" : entry.scope === "key" ? "key" : "provider",
 					windowSeconds: entry.window_seconds ?? 0,
 					usedTokens: entry.used_tokens ?? 0,
 					usedRequests: entry.used_requests ?? 0,

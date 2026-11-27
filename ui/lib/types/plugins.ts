@@ -437,15 +437,18 @@ export interface UnfreezeCooldownResponse {
 // provider's own cooldown_policy.capacity override.
 export type CapacityUsageSource = "default" | "provider";
 
-// One (provider, model) accounting row surfaced by GET
+// One live accounting row surfaced by GET
 // /api/plugins/provider-cooldown/capacity-usage. `threshold_*` is the
 // effective gate threshold (limit * headroom), so used/threshold is what the
 // UI should render as the consumed fraction. retry_after_seconds > 0 means the
-// gate is currently engaged for this row.
+// gate is currently engaged for this row. `keyId` is set only under the
+// `scope: "key"` granularity, where every credential keeps its own window;
+// apart from `provider` every scope also keeps the model.
 export interface CapacityUsageEntry {
 	provider: string;
 	model: string;
-	scope: "provider" | "provider_model";
+	keyId?: string;
+	scope: "provider" | "provider_model" | "key";
 	windowSeconds: number;
 	usedTokens: number;
 	usedRequests: number;
