@@ -10,11 +10,13 @@ routes straight to the next available key or fallback.
 
 ## Behaviour
 
-1. `PostLLMHook` inspects each terminal `BifrostError`. When the error
-   looks like a quota / billing exhaustion (HTTP 402, or HTTP 429 with a
-   matching message — see `IsQuotaExhausted` in `cooldown.go`), the
-   `(provider, key_id)` of the last failed attempt is recorded in an
-   in-memory map with an expiry timestamp.
+1. `PostLLMHook` inspects each terminal `BifrostError` and classifies it
+   against the provider's `CooldownPolicy`: quota matches are checked first,
+   then rate-limit matches. A provider with no policy of its own uses the
+   built-in default for that provider (`schemas.DefaultCooldownPolicy`). When
+   a rule fires, the `(provider, key_id)` — or `(provider, key_id, model)`
+   when the rule's scope is `model` — of the last failed attempt is recorded
+   in an in-memory map with an expiry timestamp.
 2. The bifrost core `KeyPoolFilter` hook consumes that map and removes
    cooled keys from the weighted-random candidate pool. Subsequent
    requests skip the cooled key entirely — LB picks another key in the
@@ -23,10 +25,9 @@ routes straight to the next available key or fallback.
 3. The `RunGC` ticker prunes expired entries every minute. `IsCoolingDown`
    also prunes lazily on read.
 
-Transient 429s ("too many requests, retry later") are intentionally NOT
-treated as quota exhaustion and do not trigger a cooldown — they
-self-heal on retry and over-cooling them would cause unnecessary
-fallback churn.
+A 429 that matches the rate-limit rule is cooled for that rule's TTL; an
+error that only *looks* transient but matches no rule is left alone, so it
+self-heals on retry without causing fallback churn.
 
 The cooldown state is in-memory per process. Container / process restarts
 wipe it. For multi-instance deployments, replace `CooldownState` with a
@@ -43,6 +44,7 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
       "config": {
         "default_ttl_seconds": 300,
         "ttl_overrides": { "openai": 30, "anthropic": 1200 },
+        "quota_patterns": ["insufficient_quota"],
         "escalation": { "enabled": false, "max_multiplier": 4 }
       }
     }
@@ -56,10 +58,39 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `name` | string | — | must be `"provider-cooldown"` |
 | `config.default_ttl_seconds` | int | 300 | applied to every provider without an override; `<= 0` falls back to 300 |
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
-| `config.escalation.enabled` | bool | `false` | adaptive TTL escalation (see below); off = unchanged behaviour |
-| `config.escalation.max_multiplier` | int | `4` | per-key TTL growth ceiling, clamped to `1..16` |
-| `config.capacity` | object | absent | optional retrospective capacity gate (see below); absent or `enabled=false` = unchanged behaviour |
-| `config.learning` | object | absent | optional read-only limit learner (see below); absent or `enabled=false` = unchanged behaviour |
+| `config.quota_patterns` | array | `[]` | extra lower-case substrings treated as quota exhaustion; required at the config level (falls back to the built-in list when empty) |
+| `config.escalation.*` | object | absent | **plugin-level default** adaptive TTL escalation (see below); a provider's own `cooldown_policy.escalation` overrides it |
+| `config.capacity.*` | object | absent | **plugin-level default** retrospective capacity gate (see below); a provider's own `cooldown_policy.capacity` overrides it |
+| `config.learning.*` | object | absent | **plugin-level default** read-only limit learner (see below); a provider's own `cooldown_policy.learning` overrides it |
+
+### Plugin-level defaults vs per-provider overrides
+
+The three capability sections in the plugin config are **defaults**, not the
+only place they can live. A provider carries its own section in
+`schemas.CooldownPolicy` (set from the provider detail page in the UI):
+
+- **section absent** → the provider inherits the plugin-level section; if that
+  is absent too, the capability is off;
+- **`{ "enabled": false }`** → explicitly off for this provider, even when the
+  plugin default is on;
+- **section present with values** → replaces the plugin-level section
+  **wholesale** — there is no field-level merge.
+
+Resolution lives in `effective.go` (`capabilityDefaults.resolveCapacity` /
+`resolveEscalation` / `resolveLearning`); core stamps the provider policy on
+the request context before every attempt (`BifrostContextKeyCooldownPolicy`).
+The config types and their bounds/defaults are shared with the write API and
+live in `core/schemas/cooldownpolicy.go`.
+
+Read-only endpoints exposed by the plugin (wired in
+`transports/celer-route-http/handlers/cooldown.go`):
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/plugins/provider-cooldown/state` | active cooldown entries |
+| `GET /api/plugins/provider-cooldown/stats` | mark / suppressed counters, per provider and per provider+model |
+| `GET /api/plugins/provider-cooldown/learned-limits` | learned per-window limits; each entry carries its own `window_seconds` (the top-level one is the plugin default, kept for compatibility) |
+| `GET /api/plugins/provider-cooldown/capacity-usage` | live capacity-gate accounting per provider (or provider+model) with `source` = `default` \| `provider` |
 
 ### Adaptive TTL escalation (optional, default off)
 
@@ -96,6 +127,9 @@ the request body:
 3. The request that crosses the line still goes out — the same trade-off the
    passive cooldown makes — in exchange for zero estimation error and a
    threshold that is easy to reason about.
+
+Set as the plugin-level **default** (a provider's own
+`cooldown_policy.capacity` replaces it wholesale):
 
 ```json
 {
@@ -194,6 +228,9 @@ Confidence bands are derived from the sample count relative to
 `min_samples`: `< min_samples` → `insufficient`, `< 3 × min_samples` → `low`,
 `< 6 × min_samples` → `medium`, otherwise `high`.
 
+Each provider can learn over its own window; the plugin-level section below is
+the default for providers that do not override it:
+
 ```json
 {
   "config": {
@@ -235,6 +272,7 @@ GET /api/plugins/provider-cooldown/learned-limits
       "sample_count": 12,
       "key_count": 2,
       "estimated_token_limit": 82000,
+      "window_seconds": 60,
       "lower_bound": 71000,
       "upper_bound": 91000,
       "confidence": "medium",
@@ -249,6 +287,9 @@ Notes:
 
 - **The learner only reads.** It never writes a cooldown policy, a capacity
   limit, or anything else — the estimate is a *suggestion* for the operator.
+- Each entry carries its own `window_seconds` because providers may learn over
+  different windows; the top-level `window_seconds` in the response is the
+  plugin-level default window, kept for backward compatibility.
 - The learned number is the aggregate limit our own traffic hit for one
   `(provider, model)` pair. With several keys in use, the provider's per-key
   limits add up, so the learned value is the sum of the limits we exercised;
@@ -358,11 +399,15 @@ config parsing.
 
 ## Limitations
 
-- The plugin cannot read the upstream provider's `Retry-After` /
-  `retry-after-ms` response header — those aren't surfaced through the
-  `LLMPlugin` interface. The TTL is therefore a fixed configured value
-  rather than provider-driven. Use `ttl_overrides` to tune per provider
-  if the default 10 minutes doesn't match a known reset cadence.
+- Provider retry hints (`Retry-After`, `x-ratelimit-reset-*`) are only used
+  when the matched rule sets `retry_after_mode` to `cap` or `exact`; the
+  default `off` keeps the fixed `ttl_seconds`. The hint is read from
+  `BifrostError.ExtraFields.ProviderResponseHeaders`, so it is available
+  through the plugin interface without any transport-specific code.
+- `escalation`, `capacity` and `learning` are plugin-level defaults; a
+  provider that sets its own section in `cooldown_policy` replaces the whole
+  section, so changing the plugin default does not retroactively change a
+  provider that already overrides it.
 - The cooldown state lives in-process. For multi-instance deployments
   replace `CooldownState` with a `KVStore`-backed implementation that
   satisfies the same `Mark` / `IsCoolingDown` semantics.

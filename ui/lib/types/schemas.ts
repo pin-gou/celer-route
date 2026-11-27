@@ -716,8 +716,9 @@ export const cooldownPolicyRuleSchema = z.object({
 // A provider-level section is tri-state: absent → inherit the plugin default,
 // `{ enabled: false }` → explicitly off, otherwise → custom. Because of that,
 // the per-provider variants are declared `.partial()` below: a provider only
-// has to send the fields it wants to override, and the backend fills the rest
-// with the plugin default (0 / "" meaning "use the default").
+// has to send the fields it cares about. Resolution is whole-section — a
+// present section does NOT merge with the plugin default; fields it omits fall
+// back to the built-in defaults (0 / "" meaning "use the backend default").
 //
 // Sections are declared before cooldownPolicySchema so it can reuse them
 // instead of duplicating field definitions.
@@ -791,8 +792,9 @@ export const providerCooldownLearningConfigSchema = z.object({
 // rate_limit / quota are the cooldown rule sets; capacity / escalation /
 // learning are optional per-provider overrides of the plugin-level
 // capabilities. They are `.partial()` because a provider-level override may
-// carry only the fields it changes (or just `{ enabled: false }`), and the
-// backend fills the rest from the plugin defaults.
+// carry only the fields it changes (or just `{ enabled: false }`). A present
+// section replaces the plugin default wholesale — omitted fields fall back to
+// the built-in defaults, not to the plugin default.
 export const cooldownPolicySchema = z.object({
 	rate_limit: cooldownPolicyRuleSchema.optional(),
 	quota: cooldownPolicyRuleSchema.optional(),
