@@ -3967,6 +3967,39 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "learning": {
+                    "type": "object",
+                    "description": "Optional read-only limit learner. Disabled by default. When enabled, the plugin watches provider RATE-LIMIT rejections (HTTP 429 classified as rate_limit by the provider's cooldown policy — quota/entitlement failures are ignored) and derives an estimate of the provider's effective per-window token limit from the REAL token usage that preceded each rejection. The estimate, its bounds, the sample count and a confidence band are published read-only through GET /api/plugins/provider-cooldown/learned-limits. Nothing is ever written back to the configuration.",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Turn the limit learner on (default false = current behaviour, no state allocated)"
+                      },
+                      "window_seconds": {
+                        "type": "integer",
+                        "minimum": 10,
+                        "maximum": 3600,
+                        "default": 60,
+                        "description": "Rolling window length in seconds used to measure the real token consumption that preceded a rejection (clamped to 10..3600; values <= 0 fall back to 60). Every published limit is expressed as 'tokens per window'."
+                      },
+                      "max_samples": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 500,
+                        "default": 50,
+                        "description": "How many rejection samples are kept per provider/model pair; the oldest is dropped first (clamped to 5..500; values <= 0 fall back to 50)."
+                      },
+                      "min_samples": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 5,
+                        "description": "How many samples are required before an estimate is published. Below it the pair is reported with confidence 'insufficient' and no estimate (clamped to 1..100; values <= 0 fall back to 5)."
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "required": [

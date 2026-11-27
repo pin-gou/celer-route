@@ -58,6 +58,16 @@ type Config struct {
 	// dropping unknown sub-fields. The plugin config has no such form, so
 	// these fields survive an unrelated save.
 	Capacity *CapacityConfig `json:"capacity,omitempty"`
+
+	// Learning optionally enables the read-only limit learner: the plugin
+	// watches provider rate-limit rejections and derives an estimate of the
+	// provider's effective per-window token limit, which is exposed through a
+	// read-only endpoint.
+	//
+	// Nil or Enabled=false (the default) keeps the feature completely inert:
+	// no state is allocated, no sample is collected, and nothing is ever
+	// written back to the configuration. The learner only produces a report.
+	Learning *LearningConfig `json:"learning,omitempty"`
 }
 
 // CapacityConfig configures the optional retrospective capacity gate.
@@ -346,6 +356,44 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 		}
 		c.Capacity = cc.Normalized()
 	}
+	if v, ok := raw["learning"]; ok {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("learning: expected object, got %T", v)
+		}
+		lc := &LearningConfig{}
+		for k, vv := range m {
+			switch k {
+			case "enabled":
+				b, ok := vv.(bool)
+				if !ok {
+					return nil, fmt.Errorf("learning.enabled: expected boolean, got %T", vv)
+				}
+				lc.Enabled = b
+			case "window_seconds":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("learning.window_seconds: %w", err)
+				}
+				lc.WindowSeconds = n
+			case "max_samples":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("learning.max_samples: %w", err)
+				}
+				lc.MaxSamples = n
+			case "min_samples":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("learning.min_samples: %w", err)
+				}
+				lc.MinSamples = n
+			default:
+				return nil, fmt.Errorf("learning: unknown key %q", k)
+			}
+		}
+		c.Learning = lc.Normalized()
+	}
 	return c, nil
 }
 
@@ -381,6 +429,9 @@ func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 	}
 	if capCfg := c.Capacity.Normalized(); capCfg.Active() {
 		s.enableCapacity(capCfg)
+	}
+	if learnCfg := c.Learning.Normalized(); learnCfg.Active() {
+		s.enableLearning(learnCfg)
 	}
 	return s
 }

@@ -73,6 +73,14 @@ type capacityWindow struct {
 // RWMutex into a write-lock bottleneck under load. The gate is nil unless
 // capacity.enabled=true and at least one limit is set, so a disabled config
 // pays exactly one nil-pointer check per request.
+//
+// Observer mode: a gate built without any threshold (tokenThresh == 0 and
+// requestThresh == 0) can never gate anything — check() only fires when a
+// threshold is configured and reached — so the same window accounting can be
+// reused purely to MEASURE real usage. The limit learner (see learn.go)
+// builds such an observer to learn "how many tokens did we already spend in
+// the window when the provider refused", without requiring the capacity gate
+// to be enabled.
 type capacityGate struct {
 	// Immutable after construction.
 	tokenLimit    int64

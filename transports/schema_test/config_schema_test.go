@@ -1172,10 +1172,28 @@ func TestSchemaProviderCooldownConfig(t *testing.T) {
 			"headroom": 0.9,
 			"scope": "provider_model",
 			"action": "fallback"
+		},
+		"learning": {
+			"enabled": true,
+			"window_seconds": 60,
+			"max_samples": 50,
+			"min_samples": 5
 		}
 	}`)
 	if err := validateConfig(t, compiled, validConfig); err != nil {
 		t.Fatalf("valid provider-cooldown config should validate, got: %v", err)
+	}
+
+	// A disabled learning block must also validate: it is inert at runtime
+	// and is the documented default state.
+	disabledLearning := providerCooldownPluginConfig(`{
+		"default_ttl_seconds": 600,
+		"ttl_overrides": {"openai": 300},
+		"quota_patterns": ["insufficient_quota"],
+		"learning": {"enabled": false, "window_seconds": 60, "max_samples": 50, "min_samples": 5}
+	}`)
+	if err := validateConfig(t, compiled, disabledLearning); err != nil {
+		t.Fatalf("a disabled provider-cooldown learning block should validate, got: %v", err)
 	}
 
 	// A disabled / limit-less capacity block must also validate: it is inert
@@ -1246,6 +1264,60 @@ func TestSchemaProviderCooldownConfig(t *testing.T) {
 				"ttl_overrides": {"openai": 300},
 				"quota_patterns": ["insufficient_quota"],
 				"capacity": {"enabled": true, "token_budget": 1000}
+			}`),
+		},
+		{
+			name: "unknown learning key is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "suggest": true}
+			}`),
+		},
+		{
+			name: "learning window below the minimum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "window_seconds": 5}
+			}`),
+		},
+		{
+			name: "learning window above the maximum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "window_seconds": 100000}
+			}`),
+		},
+		{
+			name: "learning max_samples below the minimum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "max_samples": 1}
+			}`),
+		},
+		{
+			name: "learning min_samples above the maximum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "min_samples": 1000}
+			}`),
+		},
+		{
+			name: "non-boolean learning enabled is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": "yes"}
 			}`),
 		},
 		{

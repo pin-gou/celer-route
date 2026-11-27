@@ -165,6 +165,12 @@ type CooldownState struct {
 	// requests are in flight without a lock on the read path.
 	capacity atomic.Pointer[capacityGate]
 
+	// learning, when non-nil, enables the read-only limit learner (see
+	// learn.go). Nil — the default — means the whole subsystem is inert:
+	// no samples are collected, no observer window is allocated, and no
+	// configuration is ever touched. The learner only produces a report.
+	learning atomic.Pointer[limitLearner]
+
 	// now is the time source used by the state. Nil means time.Now. Tests
 	// inject a fake clock here; production never mutates it. It must not be
 	// swapped while the state is in concurrent use.
@@ -934,6 +940,14 @@ func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMar
 			return
 		}
 		c.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
+		// Optional read-only learning (off by default): a rate-limit
+		// rejection brackets the provider's effective per-window token
+		// limit. Quota-classified rejections are deliberately NOT sampled —
+		// they are billing/entitlement failures, not a window limit, so
+		// they say nothing about the provider's TPM.
+		if kind == CooldownKindRateLimit {
+			c.observeRateLimit(ctx, provider, model, keyID, bifrostErr)
+		}
 		if logger != nil {
 			logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s) from per-key-failure marker", provider, keyID, keyName, model, ttl, kind, scope)
 		}
@@ -1017,8 +1031,9 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	if p.logger != nil {
 		escalationEnabled := cfg.Escalation != nil && cfg.Escalation.Enabled
 		capacityEnabled := cfg.Capacity.Active()
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t)",
-			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled)
+		learningEnabled := cfg.Learning.Active()
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t)",
+			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled, learningEnabled)
 	}
 	return nil
 }
@@ -1368,18 +1383,33 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 	if p.State == nil {
 		return resp, bifrostErr, nil
 	}
+	// Snapshot the state once: Init replaces it on a config reload, and this
+	// hook touches the state several times.
+	state := p.State
+	// Optional read-only learning (off by default). The sample is taken
+	// BEFORE the terminal attempt's own usage is accounted, so the measured
+	// window consumption is the one that preceded the rejection. A nil
+	// learner (the default) costs one pointer check.
+	if bifrostErr != nil {
+		state.observeLearnedRateLimit(ctx, bifrostErr)
+	}
 	// Capacity accounting runs for every terminal outcome — success included —
 	// before the cooldown-only early return below, which deliberately records
 	// no cooldown state on success. A nil gate (the default) is a no-op.
-	if gate := p.State.capacityGate(); gate != nil {
+	if gate := state.capacityGate(); gate != nil {
 		p.recordCapacity(ctx, gate, resp, bifrostErr)
+	}
+	// The learner's observer window accounts the same real usage the capacity
+	// gate does, but read-only: it never gates anything.
+	if l := state.learner(); l != nil {
+		p.recordCapacity(ctx, l.observer, resp, bifrostErr)
 	}
 	if bifrostErr == nil {
 		// Success: clear this key's escalation counter so a recovered key is
 		// not punished for earlier 429s. This deliberately records NO cooldown
 		// state — success must stay a no-op for the cooldown map itself. When
 		// escalation is disabled the helper returns before reading ctx.
-		p.State.clearEscalationOnSuccess(ctx)
+		state.clearEscalationOnSuccess(ctx)
 		return resp, bifrostErr, nil
 	}
 
@@ -1408,16 +1438,16 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 			if fallbackKeyID == "" && !schemas.IsKeylessProvider(provider) {
 				return resp, bifrostErr, nil
 			}
-			p.State.Mark(provider, fallbackKeyID)
+			state.Mark(provider, fallbackKeyID)
 			if p.logger != nil {
-				p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, legacy quota_patterns match)", provider, fallbackKeyID, fallbackKeyName, p.State.EffectiveTTL(provider))
+				p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, legacy quota_patterns match)", provider, fallbackKeyID, fallbackKeyName, state.EffectiveTTL(provider))
 			}
 		}
 		return resp, bifrostErr, nil
 	}
 
 	provider, _, _, _ := lastAttemptProviderAndKey(ctx, bifrostErr)
-	p.State.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
+	state.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
 	if p.logger != nil {
 		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s)", provider, keyID, keyName, model, ttl, kind, scope)
 	}

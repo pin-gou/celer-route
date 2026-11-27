@@ -50159,6 +50159,52 @@
           }
         },
         {
+          "name": "provider-cooldown learned-limits endpoint - read-only report of the learned per-window token limits",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('provider-cooldown learned-limits endpoint returns a read-only report', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.be.below(400);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.ok;",
+                  "  pm.expect(j.plugin, 'expected plugin name').to.eql('provider-cooldown');",
+                  "  pm.expect(typeof j.count, 'count should be numeric').to.eql('number');",
+                  "  pm.expect(typeof j.window_seconds, 'window_seconds should be numeric').to.eql('number');",
+                  "  pm.expect(j.limits, 'limits should be an array').to.be.an('array');",
+                  "  pm.expect(j.limits.length, 'limits length should match count').to.eql(j.count);",
+                  "});",
+                  "pm.test('learned-limits report exposes no key material', function () {",
+                  "  var raw = pm.response.text();",
+                  "  pm.expect(raw.indexOf('key_id'), 'report must not expose key ids').to.eql(-1);",
+                  "  pm.expect(raw.indexOf('api_key'), 'report must not expose api keys').to.eql(-1);",
+                  "  pm.expect(raw.indexOf('sk-'), 'report must not expose key secrets').to.eql(-1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plugins/provider-cooldown/learned-limits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plugins",
+                "provider-cooldown",
+                "learned-limits"
+              ]
+            }
+          }
+        },
+        {
           "name": "provider-cooldown single-key after plugin reload - filter still wired on canRotate=false path",
           "event": [
             {

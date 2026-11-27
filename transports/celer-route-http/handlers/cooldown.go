@@ -30,6 +30,7 @@ type KeyNameResolver func(provider schemas.ModelProvider, keyID string) string
 //
 //	GET    /api/plugins/provider-cooldown/state                    — dump active entries
 //	GET    /api/plugins/provider-cooldown/stats                    — lifetime counters + active count
+//	GET    /api/plugins/provider-cooldown/learned-limits           — learned per-window token limits
 //	DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} — manually un-cool a key
 //
 // The handler is safe to wire unconditionally — when the plugin is not
@@ -57,6 +58,7 @@ func NewCooldownHandler(resolve CooldownStateResolver, keyNameResolvers ...KeyNa
 func (h *CooldownHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
 	r.GET("/api/plugins/provider-cooldown/state", lib.ChainMiddlewares(h.getState, middlewares...))
 	r.GET("/api/plugins/provider-cooldown/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
+	r.GET("/api/plugins/provider-cooldown/learned-limits", lib.ChainMiddlewares(h.getLearnedLimits, middlewares...))
 	r.DELETE("/api/plugins/provider-cooldown/state/{provider}/{keyId}", lib.ChainMiddlewares(h.clearKey, middlewares...))
 }
 
@@ -132,15 +134,15 @@ func (h *CooldownHandler) getState(ctx *fasthttp.RequestCtx) {
 // (provider, kind). The legacy fields are preserved verbatim so older
 // clients keep working without changes.
 type cooldownStatsResponse struct {
-	Plugin               string                              `json:"plugin"`
-	MarkCount            uint64                              `json:"mark_count"`
-	SuppressedCount      uint64                              `json:"suppressed_count"`
-	CurrentActiveCount   int                                 `json:"current_active_count"`
-	ByKind             providercooldown.ByKindCounters      `json:"by_kind"`
-	PerProvider        map[string]providercooldown.ProviderKindCounters `json:"per_provider"`
-	PerProviderModel   map[string]map[string]providercooldown.ProviderKindCounters `json:"per_provider_model,omitempty"`
-	PerProviderScopeKey   map[string]providercooldown.ProviderKindCounters `json:"per_provider_scope_key,omitempty"`
-	PerProviderScopeModel map[string]providercooldown.ProviderKindCounters `json:"per_provider_scope_model,omitempty"`
+	Plugin                string                                                      `json:"plugin"`
+	MarkCount             uint64                                                      `json:"mark_count"`
+	SuppressedCount       uint64                                                      `json:"suppressed_count"`
+	CurrentActiveCount    int                                                         `json:"current_active_count"`
+	ByKind                providercooldown.ByKindCounters                             `json:"by_kind"`
+	PerProvider           map[string]providercooldown.ProviderKindCounters            `json:"per_provider"`
+	PerProviderModel      map[string]map[string]providercooldown.ProviderKindCounters `json:"per_provider_model,omitempty"`
+	PerProviderScopeKey   map[string]providercooldown.ProviderKindCounters            `json:"per_provider_scope_key,omitempty"`
+	PerProviderScopeModel map[string]providercooldown.ProviderKindCounters            `json:"per_provider_scope_model,omitempty"`
 }
 
 func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
@@ -186,15 +188,57 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 		perProviderScopeModel[string(provider)] = counters
 	}
 	SendJSON(ctx, cooldownStatsResponse{
-		Plugin:               providercooldown.PluginName,
-		MarkCount:            stats.MarkCount,
-		SuppressedCount:      stats.SuppressedCount,
-		CurrentActiveCount:   stats.CurrentActiveCount,
-		ByKind:               stats.ByKind,
-		PerProvider:          perProvider,
-		PerProviderModel:     perProviderModel,
+		Plugin:                providercooldown.PluginName,
+		MarkCount:             stats.MarkCount,
+		SuppressedCount:       stats.SuppressedCount,
+		CurrentActiveCount:    stats.CurrentActiveCount,
+		ByKind:                stats.ByKind,
+		PerProvider:           perProvider,
+		PerProviderModel:      perProviderModel,
 		PerProviderScopeKey:   perProviderScopeKey,
 		PerProviderScopeModel: perProviderScopeModel,
+	})
+}
+
+// cooldownLearnedLimitsResponse is the JSON shape returned by GET
+// learned-limits.
+//
+// The report is strictly read-only: it contains aggregate counters and the
+// provider/model names, never key material. WindowSeconds is part of the
+// response because every limit in it is expressed as "tokens per window" —
+// without the window length the number is meaningless.
+//
+// A pair whose sample count is below the configured minimum is still listed,
+// with confidence "insufficient" and no estimate fields: the operator can see
+// that the system is watching but has not learned anything trustworthy yet.
+type cooldownLearnedLimitsResponse struct {
+	Plugin        string                          `json:"plugin"`
+	Count         int                             `json:"count"`
+	WindowSeconds int                             `json:"window_seconds"`
+	Limits        []providercooldown.LearnedLimit `json:"limits"`
+}
+
+// getLearnedLimits serves the learned per-window token limits.
+//
+// The endpoint is read-only and never changes any configuration. When the
+// plugin is not loaded the request fails with the same HTTP 400 the other
+// cooldown endpoints use, so the contract stays consistent across the
+// handler.
+func (h *CooldownHandler) getLearnedLimits(ctx *fasthttp.RequestCtx) {
+	plugin := h.resolve()
+	if plugin == nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "provider-cooldown plugin is not loaded")
+		return
+	}
+	limits := plugin.LearnedLimits()
+	if limits == nil {
+		limits = []providercooldown.LearnedLimit{}
+	}
+	SendJSON(ctx, cooldownLearnedLimitsResponse{
+		Plugin:        providercooldown.PluginName,
+		Count:         len(limits),
+		WindowSeconds: plugin.LearningWindowSeconds(),
+		Limits:        limits,
 	})
 }
 
