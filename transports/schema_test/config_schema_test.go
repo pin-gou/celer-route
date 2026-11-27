@@ -740,7 +740,6 @@ func TestSchemaMCPClientConfigFields(t *testing.T) {
 		"is_code_mode_client",
 		"connection_string",
 		"auth_type",
-		"oauth_config_id",
 		"headers",
 		"tools_to_execute",
 		"tools_to_auto_execute",
@@ -754,6 +753,18 @@ func TestSchemaMCPClientConfigFields(t *testing.T) {
 			}
 		})
 	}
+
+	// oauth_config_id is server-managed state, not a declarative input: the
+	// config.json loader explicitly warns and nulls it (see
+	// transports/celer-route-http/lib/config.go, "ignoring oauth_config_id …
+	// cannot be set via config.json"). Documenting it in the config schema
+	// would advertise a knob that is silently ignored, so the schema must NOT
+	// carry it. This assertion guards the contract in both directions.
+	t.Run("mcp_client_config omits the server-managed oauth_config_id", func(t *testing.T) {
+		if _, found := navigateJSON(schema, "$defs", "mcp_client_config", "properties", "oauth_config_id"); found {
+			t.Error("$defs/mcp_client_config must not expose 'oauth_config_id': it is server-managed and cannot be set via config.json")
+		}
+	})
 
 	t.Run("mcp_client_config with new fields validates (stdio)", func(t *testing.T) {
 		compiled := compileSchema(t)

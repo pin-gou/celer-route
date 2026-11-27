@@ -326,6 +326,7 @@ func TestCatalogBundlesSupportedAnnotation(t *testing.T) {
 			{"id":"coding","title":"Coding","description":"d","providers":[
 				{"provider":"openai","models":["gpt-4o-mini"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"openai","base_url":"https://ignored.example.com/v1"},
 				{"provider":"together","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"openai","base_url":"https://api.together.xyz/v1"},
+				{"provider":"acme-with-fallback","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"openai","base_url":"https://1.1.1.1/v1"},
 				{"provider":"acme","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":""},
 				{"provider":"badbase","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"fireworks","base_url":"https://api.bad.example.com/v1"},
 				{"provider":"badurl","models":["m1"],"apply_url":"","apply_steps":[],"is_keyless":false,"notes":"","base_provider":"openai","base_url":"ftp://api.bad.example.com"}]}
@@ -343,8 +344,8 @@ func TestCatalogBundlesSupportedAnnotation(t *testing.T) {
 		t.Fatalf("decode bundles response: %v (body=%s)", err, ctx.Response.Body())
 	}
 	provs := resp.Bundles[0].Providers
-	if len(provs) != 5 {
-		t.Fatalf("providers len = %d, want 5", len(provs))
+	if len(provs) != 6 {
+		t.Fatalf("providers len = %d, want 6", len(provs))
 	}
 
 	// Built-in: supported, and any upstream fallback fields are cleared —
@@ -352,21 +353,32 @@ func TestCatalogBundlesSupportedAnnotation(t *testing.T) {
 	if !provs[0].Supported || provs[0].BaseProvider != "" || provs[0].BaseURL != "" {
 		t.Fatalf("built-in openai = %+v, want supported=true with cleared fallback fields", provs[0])
 	}
+	// A catalog entry for a provider that has since become built-in takes the
+	// built-in path too: supported, fallback cleared. This case used to double
+	// as the "unknown + fallback" fixture; when "together" was promoted to a
+	// standard provider it silently started exercising the built-in branch, so
+	// it now asserts that behaviour explicitly and the unknown case moved to
+	// acme-with-fallback below.
+	if !provs[1].Supported || provs[1].BaseProvider != "" || provs[1].BaseURL != "" {
+		t.Fatalf("together (now built-in) = %+v, want supported=true with cleared fallback fields", provs[1])
+	}
 	// Unknown + valid fallback: supported via custom-provider route, fields kept.
-	if !provs[1].Supported || provs[1].BaseProvider != "openai" || provs[1].BaseURL != "https://api.together.xyz/v1" {
-		t.Fatalf("together = %+v, want supported=true with fallback preserved", provs[1])
+	// The base URL is a public IP literal so ValidateExternalURL does not need
+	// DNS (an IP never goes through LookupIPAddr), keeping this test hermetic.
+	if !provs[2].Supported || provs[2].BaseProvider != "openai" || provs[2].BaseURL != "https://1.1.1.1/v1" {
+		t.Fatalf("acme-with-fallback = %+v, want supported=true with fallback preserved", provs[2])
 	}
 	// Unknown, no fallback: unsupported, fields stay empty.
-	if provs[2].Supported {
-		t.Fatalf("acme = %+v, want supported=false (no fallback)", provs[2])
+	if provs[3].Supported {
+		t.Fatalf("acme = %+v, want supported=false (no fallback)", provs[3])
 	}
 	// Unknown + unsupported base protocol (fireworks is not a supported base
 	// provider in core): unsupported, fallback cleared.
-	if provs[3].Supported || provs[3].BaseProvider != "" || provs[3].BaseURL != "" {
-		t.Fatalf("badbase = %+v, want supported=false with cleared fallback fields", provs[3])
+	if provs[4].Supported || provs[4].BaseProvider != "" || provs[4].BaseURL != "" {
+		t.Fatalf("badbase = %+v, want supported=false with cleared fallback fields", provs[4])
 	}
 	// Unknown + invalid base URL scheme: unsupported, fallback cleared.
-	if provs[4].Supported || provs[4].BaseURL != "" {
-		t.Fatalf("badurl = %+v, want supported=false with cleared fallback fields", provs[4])
+	if provs[5].Supported || provs[5].BaseURL != "" {
+		t.Fatalf("badurl = %+v, want supported=false with cleared fallback fields", provs[5])
 	}
 }
