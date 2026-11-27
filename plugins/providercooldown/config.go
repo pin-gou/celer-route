@@ -36,14 +36,12 @@ type Config struct {
 	// failing (and when many keys fail at once). Nil or Enabled=false keeps
 	// the pre-escalation behaviour byte-for-byte.
 	//
-	// This deliberately stays in the *plugin* config rather than being read
-	// from schemas.CooldownPolicy: the provider cooldown policy form rebuilds
-	// the whole cooldown_policy object from the fields it knows about,
-	// silently dropping any sub-field it does not understand. The plugin
-	// config has no such form (the UI only toggles the plugin on/off), so
-	// fields here survive an unrelated save. The type itself now lives in
-	// core/schemas so the per-provider policy can adopt it without
-	// duplicating the shape.
+	// This is the plugin-level DEFAULT: a provider whose own
+	// schemas.CooldownPolicy carries an escalation section uses that instead
+	// (whole-section replacement, no field-level merge). Keeping the default
+	// in the plugin config means the provider cooldown policy form — which
+	// rebuilds the whole cooldown_policy object from the fields it knows about
+	// — cannot silently drop it on an unrelated save.
 	Escalation *EscalationConfig `json:"escalation,omitempty"`
 
 	// Capacity optionally enables a retrospective budget gate: real token /
@@ -52,10 +50,10 @@ type Config struct {
 	// short-circuited until enough of the window slides away.
 	//
 	// Nil or Enabled=false (the default) keeps the feature completely inert:
-	// no state is allocated, no lock is taken, and no request is gated.
-	//
-	// Like Escalation, this lives in the *plugin* config rather than being
-	// read from schemas.CooldownPolicy, for the same form-round-trip reason.
+	// no state is allocated, no lock is taken, and no request is gated. This
+	// is the plugin-level default; a provider that configures its own capacity
+	// section in schemas.CooldownPolicy uses that gate instead (and can switch
+	// it off with enabled=false).
 	Capacity *CapacityConfig `json:"capacity,omitempty"`
 
 	// Learning optionally enables the read-only limit learner: the plugin
@@ -66,6 +64,8 @@ type Config struct {
 	// Nil or Enabled=false (the default) keeps the feature completely inert:
 	// no state is allocated, no sample is collected, and nothing is ever
 	// written back to the configuration. The learner only produces a report.
+	// This is the plugin-level default; providers can override the window
+	// length in their own schemas.CooldownPolicy learning section.
 	Learning *LearningConfig `json:"learning,omitempty"`
 }
 
@@ -266,6 +266,12 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 // AsState builds a CooldownState with the parsed config applied. The state
 // is independent of the receiver and is safe to mutate further (e.g. via
 // SetTTLOverride) without affecting the source Config.
+//
+// The three capability sections are registered as the state's DEFAULTS: each
+// provider that configures its own capacity / escalation / learning section in
+// schemas.CooldownPolicy overrides them at request time, and providers without
+// one keep inheriting these. No per-provider state is created here — the
+// plugin does not know the provider list.
 //
 // If a logger is provided, AsState logs a warning for each ttl_overrides
 // key whose name does not match any known Bifrost provider. A typo

@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pin-gou/celer-route/core/schemas"
@@ -124,6 +125,11 @@ type LearnedLimit struct {
 	// EstimatedTokenLimit is the suggested per-window token limit, in tokens
 	// per learning window. 0 when no estimate is available.
 	EstimatedTokenLimit int64 `json:"estimated_token_limit,omitempty"`
+	// WindowSeconds is the window length this estimate is expressed in.
+	// Different providers can learn over different windows (each provider's
+	// learning section may set its own window_seconds), so the unit of every
+	// estimate travels with the estimate itself.
+	WindowSeconds int `json:"window_seconds"`
 	// LowerBound is the smallest observed rejection point (tokens already
 	// consumed in the window when the provider refused).
 	LowerBound int64 `json:"lower_bound,omitempty"`
@@ -270,13 +276,14 @@ func (l *limitLearner) limits() []LearnedLimit {
 	out := make([]LearnedLimit, 0, len(l.pairs))
 	for _, pair := range l.pairs {
 		limit := LearnedLimit{
-			Provider:    string(pair.provider),
-			Model:       pair.model,
-			SampleCount: len(pair.samples),
-			KeyCount:    distinctKeyCount(pair.samples),
-			Confidence:  LearningConfidenceInsufficient,
-			FirstSeen:   pair.firstSeen,
-			LastSeen:    pair.lastSeen,
+			Provider:      string(pair.provider),
+			Model:         pair.model,
+			SampleCount:   len(pair.samples),
+			KeyCount:      distinctKeyCount(pair.samples),
+			WindowSeconds: int(l.windowSeconds),
+			Confidence:    LearningConfidenceInsufficient,
+			FirstSeen:     pair.firstSeen,
+			LastSeen:      pair.lastSeen,
 		}
 		if len(pair.samples) >= l.minSamples {
 			estimate, lower, upper := estimateLearnedLimit(pair.samples)
@@ -416,24 +423,104 @@ func learnedAlreadySampled(ctx *schemas.BifrostContext) bool {
 
 // --- CooldownState / plugin wiring ---
 
-// enableLearning installs the learner on the state. Like enableCapacity and
+// learnerHolder owns one provider's learner. The atomic pointer keeps the
+// steady-state read lock-free; the mutex serializes a rebuild when the
+// provider's effective learning config changes at runtime.
+type learnerHolder struct {
+	mu      sync.Mutex
+	learner atomic.Pointer[limitLearner]
+}
+
+// enableLearning registers the plugin-level learning section as the DEFAULT
+// for every provider that does not configure its own. Like enableCapacity and
 // enableEscalation this is normally called while the state is being built
-// (Config.AsState), but the atomic store makes a mid-flight reconfiguration
-// race-free too.
+// (Config.AsState); the atomic store also makes a mid-flight reconfiguration
+// race-free.
 func (c *CooldownState) enableLearning(cfg *LearningConfig) {
 	if c == nil || cfg == nil || !cfg.Active() {
 		return
 	}
-	c.learning.Store(newLearner(cfg, c.nowTime))
+	spec, ok := learningSpecOf(cfg)
+	if !ok {
+		return
+	}
+	n := cfg.Normalized()
+	c.defaultLearningSpec = spec
+	c.defaultLearningActive = true
+	c.defaults.learning = n
+	c.learning.Store(newLearner(n, c.nowTime))
 }
 
-// learner returns the learner installed on the state, or nil when the feature
-// is off.
+// learner returns the plugin-DEFAULT learner installed by enableLearning, or
+// nil when learning is off by default. Per-provider learners (which also cover
+// providers that enabled learning through their own CooldownPolicy) are
+// obtained through learnerFor.
 func (c *CooldownState) learner() *limitLearner {
 	if c == nil {
 		return nil
 	}
 	return c.learning.Load()
+}
+
+// learnerFor returns the effective learner for one provider under the given
+// per-provider policy, or nil when learning is off for it (nil config, or
+// enabled=false). Disabled providers allocate nothing and collect no samples.
+//
+// A provider with no learning section shares the plugin-default learner: the
+// pair key already includes the provider, and the window is identical, so a
+// separate observer would only duplicate memory. A provider whose section
+// differs gets its own learner (and therefore its own observer window), since
+// window lengths genuinely differ and cannot share one ring.
+func (c *CooldownState) learnerFor(provider schemas.ModelProvider, policy *schemas.CooldownPolicy) *limitLearner {
+	if c == nil {
+		return nil
+	}
+	spec, ok := learningSpecOf(c.defaults.resolveLearning(policy))
+	if !ok {
+		return nil
+	}
+	if c.defaultLearningActive && spec == c.defaultLearningSpec {
+		if l := c.learning.Load(); l != nil {
+			return l
+		}
+	}
+
+	holderAny, _ := c.learningRegistry.Load(provider)
+	holder, _ := holderAny.(*learnerHolder)
+	if holder == nil {
+		fresh := &learnerHolder{}
+		holderAny, _ = c.learningRegistry.LoadOrStore(provider, fresh)
+		holder, _ = holderAny.(*learnerHolder)
+	}
+	if l := holder.learner.Load(); l != nil && l.matchesLearningSpec(spec) {
+		return l
+	}
+
+	holder.mu.Lock()
+	defer holder.mu.Unlock()
+	if l := holder.learner.Load(); l != nil && l.matchesLearningSpec(spec) {
+		return l
+	}
+	l := newLearner(&LearningConfig{
+		Enabled:       true,
+		WindowSeconds: int(spec.windowSeconds),
+		MaxSamples:    spec.maxSamples,
+		MinSamples:    spec.minSamples,
+	}, c.nowTime)
+	holder.learner.Store(l)
+	return l
+}
+
+// matchesLearningSpec reports whether the learner was built from the given
+// normalized spec. Field-by-field scalar comparison: no reflect, no
+// allocation.
+func (l *limitLearner) matchesLearningSpec(spec learningSpec) bool {
+	if l == nil {
+		return false
+	}
+	return l.windowSeconds == spec.windowSeconds &&
+		l.maxSamples == spec.maxSamples &&
+		l.minSamples == spec.minSamples
 }
 
 // observeRateLimit records one learning sample for a rate-limit rejection
@@ -442,12 +529,12 @@ func (c *CooldownState) learner() *limitLearner {
 // The marker is the primary sampling point: it fires per failed attempt, at
 // the moment the provider refused, so it also catches the rejections a later
 // retry succeeded around (which PostLLMHook never sees).
-func (c *CooldownState) observeRateLimit(ctx *schemas.BifrostContext, provider schemas.ModelProvider, model string, keyID string, bifrostErr *schemas.BifrostError) {
-	l := c.learner()
-	if l == nil {
+func (c *CooldownState) observeRateLimit(ctx *schemas.BifrostContext, policy *schemas.CooldownPolicy, provider schemas.ModelProvider, model string, keyID string, bifrostErr *schemas.BifrostError) {
+	if bifrostErr == nil || model == "" {
 		return
 	}
-	if model == "" {
+	l := c.learnerFor(provider, policy)
+	if l == nil {
 		return
 	}
 	usedTokens, _ := l.observer.usage(provider, model)
@@ -466,12 +553,8 @@ func (c *CooldownState) observeRateLimit(ctx *schemas.BifrostContext, provider s
 //
 // The sample is taken BEFORE the terminal attempt's own usage is accounted,
 // so usedTokens reflects the consumption that preceded the rejection.
-func (c *CooldownState) observeLearnedRateLimit(ctx *schemas.BifrostContext, bifrostErr *schemas.BifrostError) {
+func (c *CooldownState) observeLearnedRateLimit(ctx *schemas.BifrostContext, policy *schemas.CooldownPolicy, bifrostErr *schemas.BifrostError) {
 	if c == nil || bifrostErr == nil {
-		return
-	}
-	l := c.learner()
-	if l == nil {
 		return
 	}
 	if learnedAlreadySampled(ctx) {
@@ -493,7 +576,8 @@ func (c *CooldownState) observeLearnedRateLimit(ctx *schemas.BifrostContext, bif
 	if !ok || kind != CooldownKindRateLimit {
 		return
 	}
-	if model == "" {
+	l := c.learnerFor(provider, policy)
+	if l == nil || model == "" {
 		return
 	}
 	usedTokens, _ := l.observer.usage(provider, model)
@@ -502,22 +586,43 @@ func (c *CooldownState) observeLearnedRateLimit(ctx *schemas.BifrostContext, bif
 	markLearnedSampled(ctx)
 }
 
+// allLearnedLimits aggregates the estimates of the plugin-default learner and
+// every per-provider learner into one slice sorted by provider then model. A
+// (provider, model) pair that exists in more than one learner (e.g. the
+// provider's section was added while the plugin was running) is reported once,
+// with the per-provider learner's window.
+func (c *CooldownState) allLearnedLimits() []LearnedLimit {
+	if c == nil {
+		return nil
+	}
+	out := c.learning.Load().limits()
+	c.learningRegistry.Range(func(_, v any) bool {
+		if holder, ok := v.(*learnerHolder); ok {
+			out = append(out, holder.learner.Load().limits()...)
+		}
+		return true
+	})
+	return dedupeLearnedLimits(out)
+}
+
 // LearnedLimits returns the read-only limit estimates for every observed
-// (provider, model) pair. Returns nil when the plugin has no state or the
-// learner is disabled.
+// (provider, model) pair across every provider, with the plugin defaults and
+// per-provider overrides both represented. Returns nil when the plugin has no
+// state or no learner is enabled anywhere.
 //
-// The returned slice is a snapshot: mutating it does not affect the learner.
+// The returned slice is a snapshot: mutating it does not affect the learners.
 func (p *CooldownPlugin) LearnedLimits() []LearnedLimit {
 	if p == nil || p.State == nil {
 		return nil
 	}
-	return p.State.learner().limits()
+	return p.State.allLearnedLimits()
 }
 
-// LearningWindowSeconds returns the effective rolling window (in seconds)
-// the learner measures consumption over, or 0 when the learner is disabled.
-// The unit of every reported limit is "tokens per window", so the window
-// length is part of the meaning of the number.
+// LearningWindowSeconds returns the plugin-default learner's rolling window
+// (in seconds), or 0 when learning is disabled at the plugin level. The unit
+// of every reported limit is "tokens per window"; providers that configure
+// their own learning section can use a different window, which is reported per
+// entry as LearnedLimit.WindowSeconds.
 func (p *CooldownPlugin) LearningWindowSeconds() int {
 	if p == nil || p.State == nil {
 		return 0

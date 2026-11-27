@@ -115,25 +115,50 @@ func newEscalationState(maxMultiplier int) *escalationState {
 	}
 }
 
-// enableEscalation turns on adaptive escalation for the state. Build the state
-// and call this before it is shared across goroutines (Config.AsState does
-// exactly that); the write is lock-protected, but writers racing with live
-// readers would still see a partial switch.
+// enableEscalation registers the plugin-level escalation section as the
+// DEFAULT for providers without their own section and builds the state
+// eagerly (the historical behaviour, so `state.escalation` is non-nil right
+// after AsState when the plugin enables it). Build the state and call this
+// before it is shared across goroutines (Config.AsState does exactly that);
+// the write is lock-protected, but writers racing with live readers would
+// still see a partial switch.
 func (c *CooldownState) enableEscalation(maxMultiplier int) {
 	if c == nil {
 		return
 	}
-	es := newEscalationState(maxMultiplier)
+	cfg := (&EscalationConfig{Enabled: true, MaxMultiplier: maxMultiplier}).Normalized()
+	c.defaults.escalation = cfg
+	es := newEscalationState(cfg.MaxMultiplier)
 	c.mu.Lock()
 	c.escalation = es
 	c.mu.Unlock()
 }
 
+// ensureEscalationLocked returns the escalation state, creating it on first
+// use. It is only reached for marks whose provider resolved an enabled
+// escalation config, so a deployment where no provider enables escalation
+// never allocates the entries/storm tables.
+//
+// The caller MUST hold c.mu (write).
+func (c *CooldownState) ensureEscalationLocked() *escalationState {
+	if c.escalation != nil {
+		return c.escalation
+	}
+	maxMultiplier := 0
+	if c.defaults.escalation != nil {
+		maxMultiplier = c.defaults.escalation.MaxMultiplier
+	}
+	c.escalation = newEscalationState(maxMultiplier)
+	return c.escalation
+}
+
 // applyLocked returns the TTL to record for this mark, after multiplying the
 // already-resolved TTL (retry_after_mode included) by the escalation factor
-// and applying the 1h ceiling. The caller MUST hold c.mu (write).
-func (e *escalationState) applyLocked(provider schemas.ModelProvider, keyID string, model string, scope schemas.CooldownPolicyScope, ttl time.Duration, now time.Time) time.Duration {
-	mult := e.multiplierLocked(provider, keyID, model, scope, now)
+// and applying the 1h ceiling. maxMultiplier is the effective per-provider cap
+// (the provider's own escalation section, or the plugin default). The caller
+// MUST hold c.mu (write).
+func (e *escalationState) applyLocked(provider schemas.ModelProvider, keyID string, model string, scope schemas.CooldownPolicyScope, ttl time.Duration, maxMultiplier int, now time.Time) time.Duration {
+	mult := e.multiplierLocked(provider, keyID, model, scope, maxMultiplier, now)
 	if mult <= 1 {
 		return ttl
 	}
@@ -155,7 +180,13 @@ func (e *escalationState) applyLocked(provider schemas.ModelProvider, keyID stri
 // apply to this mark. The storm signal is evaluated *before* the current mark
 // is recorded, so the key that reaches the threshold is not escalated by its
 // own hit — only marks that arrive after the threshold are.
-func (e *escalationState) multiplierLocked(provider schemas.ModelProvider, keyID string, model string, scope schemas.CooldownPolicyScope, now time.Time) int {
+//
+// maxMultiplier is the per-provider cap; the storm multiplier is clamped by it
+// too, so a provider that configures 1x never escalates even during a storm.
+func (e *escalationState) multiplierLocked(provider schemas.ModelProvider, keyID string, model string, scope schemas.CooldownPolicyScope, maxMultiplier int, now time.Time) int {
+	if maxMultiplier < 1 {
+		maxMultiplier = 1
+	}
 	k := escalationKey{provider: provider, keyID: keyID, model: model, scope: scope}
 	entry := e.entries[k]
 	if entry == nil || now.Sub(entry.lastAt) > escalationWindow {
@@ -173,13 +204,13 @@ func (e *escalationState) multiplierLocked(provider schemas.ModelProvider, keyID
 		mult = escalationStormMultiplier
 	}
 	for i := 1; i < entry.count; i++ {
-		if mult >= e.maxMultiplier {
+		if mult >= maxMultiplier {
 			break
 		}
 		mult *= 2
 	}
-	if mult > e.maxMultiplier {
-		mult = e.maxMultiplier
+	if mult > maxMultiplier {
+		mult = maxMultiplier
 	}
 	return mult
 }

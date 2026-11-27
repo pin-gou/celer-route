@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pin-gou/celer-route/core/schemas"
@@ -116,15 +117,17 @@ type capacityVerdict struct {
 	retryAfterSeconds int64
 }
 
-// newCapacityGate builds a gate from an already-normalized, Active() config.
-func newCapacityGate(cfg *CapacityConfig) *capacityGate {
+// newCapacityGateFromSpec builds a gate from an already-normalized spec. The
+// only constructor: callers go through capacitySpecOf so the same
+// normalization is applied everywhere.
+func newCapacityGateFromSpec(spec capacitySpec) *capacityGate {
 	g := &capacityGate{
-		tokenLimit:    cfg.TokenLimit,
-		requestLimit:  cfg.RequestLimit,
-		windowSeconds: int64(schemas.NormalizeCapacityWindowSeconds(cfg.WindowSeconds)),
-		scope:         schemas.NormalizeCapacityScope(cfg.Scope),
-		action:        schemas.NormalizeCapacityAction(cfg.Action),
-		headroom:      schemas.NormalizeCapacityHeadroom(cfg.Headroom),
+		tokenLimit:    spec.tokenLimit,
+		requestLimit:  spec.requestLimit,
+		windowSeconds: spec.windowSeconds,
+		scope:         spec.scope,
+		action:        spec.action,
+		headroom:      spec.headroom,
 		keys:          make(map[string]*capacityWindow),
 	}
 	if g.tokenLimit > 0 {
@@ -134,6 +137,21 @@ func newCapacityGate(cfg *CapacityConfig) *capacityGate {
 		g.requestThresh = capacityThreshold(g.requestLimit, g.headroom)
 	}
 	return g
+}
+
+// matchesCapacitySpec reports whether the gate was built from the given
+// normalized spec. Field-by-field scalar comparison: no reflect, no
+// allocation.
+func (g *capacityGate) matchesCapacitySpec(spec capacitySpec) bool {
+	if g == nil {
+		return false
+	}
+	return g.tokenLimit == spec.tokenLimit &&
+		g.requestLimit == spec.requestLimit &&
+		g.windowSeconds == spec.windowSeconds &&
+		g.headroom == spec.headroom &&
+		g.scope == spec.scope &&
+		g.action == spec.action
 }
 
 // capacityThreshold converts limit*headroom into the integer usage count at
@@ -401,25 +419,93 @@ func (g *capacityGate) usage(provider schemas.ModelProvider, model string) (toke
 
 // --- CooldownState / plugin wiring ---
 
-// enableCapacity installs an active gate on the state. Like enableEscalation,
+// capacityHolder owns one provider's gate. The atomic pointer makes the
+// steady-state read lock-free; the mutex only serializes a rebuild when that
+// provider's effective capacity config changes at runtime.
+type capacityHolder struct {
+	mu   sync.Mutex
+	gate atomic.Pointer[capacityGate]
+}
+
+// enableCapacity registers the plugin-level capacity section as the DEFAULT
+// for every provider that does not configure its own. Like enableEscalation,
 // this is normally called while the state is being built (AsState), but the
 // atomic store makes a mid-flight reconfiguration race-free too.
 func (c *CooldownState) enableCapacity(cfg *CapacityConfig) {
 	if c == nil || cfg == nil || !cfg.Active() {
 		return
 	}
-	g := newCapacityGate(cfg)
+	spec, ok := capacitySpecOf(cfg)
+	if !ok {
+		return
+	}
+	g := newCapacityGateFromSpec(spec)
 	g.now = c.nowTime
+	c.defaultCapacitySpec = spec
+	c.defaultCapacityActive = true
+	c.defaults.capacity = cfg.Normalized()
 	c.capacity.Store(g)
 }
 
-// capacityGate returns the gate installed on the state, or nil when the
-// feature is off.
+// capacityGate returns the plugin-DEFAULT gate installed by enableCapacity, or
+// nil when the feature is off by default. Per-provider gates (which also cover
+// providers that enabled the feature through their own CooldownPolicy) are
+// obtained through gateFor.
 func (c *CooldownState) capacityGate() *capacityGate {
 	if c == nil {
 		return nil
 	}
 	return c.capacity.Load()
+}
+
+// gateFor returns the effective capacity gate for one provider under the given
+// per-provider policy.
+//
+// Resolution is done first (provider section when present, plugin default
+// otherwise), so PreProviderHook and PostLLMHook always agree on the config.
+// The steady-state path is a spec comparison plus a sync.Map read plus an
+// atomic load; a gate is only built when the provider's effective spec differs
+// from the plugin default and from the gate already registered for it. A
+// rebuild intentionally starts from a fresh window accounting state.
+func (c *CooldownState) gateFor(provider schemas.ModelProvider, policy *schemas.CooldownPolicy) *capacityGate {
+	if c == nil {
+		return nil
+	}
+	spec, ok := capacitySpecOf(c.defaults.resolveCapacity(policy))
+	if !ok {
+		return nil
+	}
+	// Same effective spec as the plugin default → share its gate. This is the
+	// common case (a provider with no capacity section) and costs one struct
+	// comparison, no allocation. The gate's accounting keys already include
+	// the provider, so sharing is safe across providers.
+	if c.defaultCapacityActive && spec == c.defaultCapacitySpec {
+		if g := c.capacity.Load(); g != nil {
+			return g
+		}
+	}
+
+	holderAny, _ := c.capacityRegistry.Load(provider)
+	holder, _ := holderAny.(*capacityHolder)
+	if holder == nil {
+		fresh := &capacityHolder{}
+		holderAny, _ = c.capacityRegistry.LoadOrStore(provider, fresh)
+		holder, _ = holderAny.(*capacityHolder)
+	}
+	if g := holder.gate.Load(); g != nil && g.matchesCapacitySpec(spec) {
+		return g
+	}
+
+	holder.mu.Lock()
+	defer holder.mu.Unlock()
+	// Re-check under the lock: a concurrent request may have rebuilt it.
+	if g := holder.gate.Load(); g != nil && g.matchesCapacitySpec(spec) {
+		return g
+	}
+	g := newCapacityGateFromSpec(spec)
+	g.now = c.nowTime
+	holder.gate.Store(g)
+	return g
 }
 
 // capacityShortCircuit evaluates the gate for (provider, model) and, when the
@@ -469,7 +555,8 @@ func (p *CooldownPlugin) capacityShortCircuit(ctx *schemas.BifrostContext, gate 
 	}
 }
 
-// recordCapacity accounts one terminal request's real usage into the gate.
+// recordCapacity applies one terminal request's real usage to the provider's
+// effective capacity gate and to the provider's learner observer window.
 //
 // It runs for both success and failure because it measures traffic, not
 // outcomes: the request count advances on every terminal outcome, and tokens
@@ -488,21 +575,47 @@ func (p *CooldownPlugin) capacityShortCircuit(ctx *schemas.BifrostContext, gate 
 //     hit) carry no RoutingInfo.Provider.
 //   - Streaming calls PostLLMHook once per chunk, so only the terminal chunk
 //     is accounted.
-func (p *CooldownPlugin) recordCapacity(ctx *schemas.BifrostContext, gate *capacityGate, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) {
-	if gate == nil || ctx == nil {
+func (p *CooldownPlugin) recordCapacity(ctx *schemas.BifrostContext, policy *schemas.CooldownPolicy, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) {
+	if p == nil || p.State == nil {
 		return
+	}
+	state := p.State
+	// Cheap early-out before touching the response: when neither capability is
+	// on for this provider (the default), a terminal request pays only the
+	// config resolution.
+	if !state.capacityOrLearningActive(policy) {
+		return
+	}
+	provider, model, tokens, ok := terminalUsage(ctx, resp, bifrostErr)
+	if !ok {
+		return
+	}
+	if gate := state.gateFor(provider, policy); gate != nil {
+		gate.record(provider, model, tokens)
+	}
+	// The learner's observer window accounts the same real usage, but
+	// read-only: it never gates anything.
+	if l := state.learnerFor(provider, policy); l != nil {
+		l.observer.record(provider, model, tokens)
+	}
+}
+
+// terminalUsage extracts the (provider, model, tokens) of a terminal request
+// from either the response or the error. ok=false means the outcome must not be
+// accounted at all (non-terminal stream chunk, silent/short-circuited attempt,
+// plugin-produced response, or unattributable routing info).
+func terminalUsage(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (provider schemas.ModelProvider, model string, tokens int64, ok bool) {
+	if ctx == nil {
+		return "", "", 0, false
 	}
 	// The framework sets this flag for attempts that were rejected before
 	// reaching a provider. Counting them would let rejections extend the
 	// very window that rejected them.
 	if silent, _ := ctx.Value(schemas.BifrostContextKeySilentLog).(bool); silent {
-		return
+		return "", "", 0, false
 	}
 
 	var requestType schemas.RequestType
-	var provider schemas.ModelProvider
-	var model string
-	var tokens int64
 	if bifrostErr != nil {
 		requestType = bifrostErr.ExtraFields.RequestType
 		routing := bifrostErr.ExtraFields.RoutingInfo
@@ -512,7 +625,7 @@ func (p *CooldownPlugin) recordCapacity(ctx *schemas.BifrostContext, gate *capac
 	} else if resp != nil {
 		extra := resp.GetExtraFields()
 		if extra == nil {
-			return
+			return "", "", 0, false
 		}
 		requestType = extra.RequestType
 		routing := extra.RoutingInfo
@@ -520,13 +633,13 @@ func (p *CooldownPlugin) recordCapacity(ctx *schemas.BifrostContext, gate *capac
 		model = routing.Model
 		tokens = responseTokenUsage(resp)
 	} else {
-		return
+		return "", "", 0, false
 	}
 
 	// A response/error without routing info did not come from a provider
 	// attempt (e.g. a semantic-cache hit produced by a plugin).
 	if provider == "" || model == "" {
-		return
+		return "", "", 0, false
 	}
 
 	// Streaming calls PostLLMHook once per chunk; account only the terminal
@@ -538,10 +651,9 @@ func (p *CooldownPlugin) recordCapacity(ctx *schemas.BifrostContext, gate *capac
 	// accounted (tokens 0, request 0): under-counting is preferred to
 	// double-counting a stream's tokens.
 	if isStreamingRequest(requestType) && !isFinalChunk(ctx) {
-		return
+		return "", "", 0, false
 	}
-
-	gate.record(provider, model, tokens)
+	return provider, model, tokens, true
 }
 
 // isCapacityGateError recognises the synthetic error built by

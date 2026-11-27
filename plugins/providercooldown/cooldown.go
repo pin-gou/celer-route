@@ -154,22 +154,37 @@ type CooldownState struct {
 	ttlOverrides map[schemas.ModelProvider]time.Duration
 
 	// escalation, when non-nil, enables adaptive TTL escalation (see
-	// escalation.go). Nil — the default — means the whole subsystem is inert:
-	// no extra state is read, no TTL is scaled, and the Mark path is unchanged.
+	// escalation.go). It is created eagerly only when the plugin-level
+	// default enables it; a state where only some providers enable escalation
+	// through their own CooldownPolicy creates it lazily on the first mark
+	// that needs it. Nil plus an inert defaults.escalation means the whole
+	// subsystem stays inert: no extra state is read, no TTL is scaled, and the
+	// Mark path is unchanged.
 	escalation *escalationState
 
-	// capacity, when non-nil, enables the retrospective budget gate (see
-	// capacity.go). Nil — the default — means the whole subsystem is inert:
-	// no windows are allocated, no lock is taken, and no request is gated.
-	// Stored in an atomic pointer so Init can swap a state's gate while
-	// requests are in flight without a lock on the read path.
-	capacity atomic.Pointer[capacityGate]
+	// defaults holds the plugin-level (default) capacity / escalation /
+	// learning sections. A provider's own CooldownPolicy section replaces the
+	// matching default wholesale; nil or a section that is not configured
+	// falls back to these defaults.
+	defaults capabilityDefaults
 
-	// learning, when non-nil, enables the read-only limit learner (see
-	// learn.go). Nil — the default — means the whole subsystem is inert:
-	// no samples are collected, no observer window is allocated, and no
-	// configuration is ever touched. The learner only produces a report.
-	learning atomic.Pointer[limitLearner]
+	// capacity, when non-nil, is the DEFAULT capacity gate built from
+	// defaults.capacity (see capacity.go). Providers whose effective capacity
+	// spec differs get their own gate from capacityRegistry. Stored in an
+	// atomic pointer so a reconfiguration can swap it without a lock on the
+	// read path.
+	capacity              atomic.Pointer[capacityGate]
+	defaultCapacitySpec   capacitySpec
+	defaultCapacityActive bool
+	capacityRegistry      sync.Map // schemas.ModelProvider -> *capacityHolder
+
+	// learning, when non-nil, is the DEFAULT limit learner built from
+	// defaults.learning (see learn.go). Providers whose effective learning
+	// spec differs get their own learner from learningRegistry.
+	learning              atomic.Pointer[limitLearner]
+	defaultLearningSpec   learningSpec
+	defaultLearningActive bool
+	learningRegistry      sync.Map // schemas.ModelProvider -> *learnerHolder
 
 	// now is the time source used by the state. Nil means time.Now. Tests
 	// inject a fake clock here; production never mutates it. It must not be
@@ -462,6 +477,11 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 // effective TTL (the configured default or per-provider override), preserving
 // the behaviour of Mark.
 //
+// This is the policy-less entry point: escalation uses the plugin default. The
+// plugin's own paths (the per-key marker and PostLLMHook) call markWithPolicy
+// with the provider's stamped CooldownPolicy instead, so a provider can carry
+// its own escalation section.
+//
 // For keyless providers (schemas.IsKeylessProvider, e.g. bare `opencode`),
 // an empty keyID is the legal sentinel key returned by bifrost's
 // GetKeysForProvider; the mark is then recorded against the whole provider
@@ -476,12 +496,27 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 // (the filter only consults the model granularity when the runtime model is
 // non-empty), so the mark is skipped rather than recorded as a dead entry.
 func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string, model string, ttl time.Duration, kind CooldownKind, scope schemas.CooldownPolicyScope) {
+	c.markWithPolicy(nil, provider, keyID, model, ttl, kind, scope)
+}
+
+// markWithPolicy is MarkWithTTL with an explicit per-provider policy. A nil
+// policy means "use the plugin defaults".
+func (c *CooldownState) markWithPolicy(policy *schemas.CooldownPolicy, provider schemas.ModelProvider, keyID string, model string, ttl time.Duration, kind CooldownKind, scope schemas.CooldownPolicyScope) {
+	if c == nil {
+		return
+	}
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return
 	}
 	if scope.OrDefault() == schemas.CooldownScopeModel && model == "" {
 		return
 	}
+	// Resolve the effective escalation section before taking the lock. The
+	// registry/defaults are immutable after construction, so this is a couple
+	// of pointer reads; when escalation is off for this provider the mark path
+	// stays byte-for-byte the pre-escalation behaviour.
+	maxMultiplier, escalate := c.defaults.escalationMaxMultiplier(policy)
+
 	c.mu.Lock()
 	effective := ttl
 	if effective <= 0 {
@@ -491,9 +526,11 @@ func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string
 	// Escalation is applied after the base TTL (including any retry_after_mode
 	// resolution) has been computed, so the two features compose: the mode
 	// decides the base, then the multiplier stretches it, then the 1h ceiling
-	// bounds it. With escalation disabled this is a single nil check.
-	if c.escalation != nil {
-		effective = c.escalation.applyLocked(provider, keyID, model, scope, effective, now)
+	// bounds it. With escalation disabled for this provider this branch is
+	// skipped entirely.
+	if escalate {
+		es := c.ensureEscalationLocked()
+		effective = es.applyLocked(provider, keyID, model, scope, effective, maxMultiplier, now)
 	}
 	c.cooldowns[c.markKey(provider, keyID, model, scope)] = CooldownRecord{
 		expiresAt: now.Add(effective),
@@ -939,14 +976,18 @@ func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMar
 		if !ok {
 			return
 		}
-		c.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
+		// Resolve the policy once and use it for both the mark (so the
+		// provider's own escalation section applies) and the learning sample
+		// (so the provider's own learning window applies).
+		policy := policyFromContext(ctx)
+		c.markWithPolicy(policy, provider, keyID, model, ttl, kind, scope)
 		// Optional read-only learning (off by default): a rate-limit
 		// rejection brackets the provider's effective per-window token
 		// limit. Quota-classified rejections are deliberately NOT sampled —
 		// they are billing/entitlement failures, not a window limit, so
 		// they say nothing about the provider's TPM.
 		if kind == CooldownKindRateLimit {
-			c.observeRateLimit(ctx, provider, model, keyID, bifrostErr)
+			c.observeRateLimit(ctx, policy, provider, model, keyID, bifrostErr)
 		}
 		if logger != nil {
 			logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s) from per-key-failure marker", provider, keyID, keyName, model, ttl, kind, scope)
@@ -1032,7 +1073,7 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 		escalationEnabled := cfg.Escalation != nil && cfg.Escalation.Enabled
 		capacityEnabled := cfg.Capacity.Active()
 		learningEnabled := cfg.Learning.Active()
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t)",
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t; providers without their own cooldown_policy section inherit these defaults)",
 			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled, learningEnabled)
 	}
 	return nil
@@ -1175,8 +1216,11 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 
 	// Retrospective capacity gate (optional, off by default). Accounting uses
 	// real usage only, so this check never estimates tokens or reads the
-	// request body. A nil gate (the default) costs exactly one pointer check.
-	if gate := p.State.capacityGate(); gate != nil {
+	// request body. The gate is resolved per provider: a provider's own
+	// CooldownPolicy capacity section wins over the plugin default, and the
+	// default-off case costs one pointer walk and one nil check.
+	policy := policyFromContext(ctx)
+	if gate := p.State.gateFor(provider, policy); gate != nil {
 		if sc := p.capacityShortCircuit(ctx, gate, provider, model); sc != nil {
 			return req, sc, nil
 		}
@@ -1386,24 +1430,24 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 	// Snapshot the state once: Init replaces it on a config reload, and this
 	// hook touches the state several times.
 	state := p.State
+	// The per-provider policy is stamped on the context by core before every
+	// attempt. Both capabilities below resolve their effective section from it
+	// (own section, else plugin default), so two providers can run different
+	// windows / thresholds inside the same state.
+	policy := policyFromContext(ctx)
 	// Optional read-only learning (off by default). The sample is taken
 	// BEFORE the terminal attempt's own usage is accounted, so the measured
-	// window consumption is the one that preceded the rejection. A nil
-	// learner (the default) costs one pointer check.
+	// window consumption is the one that preceded the rejection. Learning
+	// disabled for this provider costs a couple of pointer reads.
 	if bifrostErr != nil {
-		state.observeLearnedRateLimit(ctx, bifrostErr)
+		state.observeLearnedRateLimit(ctx, policy, bifrostErr)
 	}
-	// Capacity accounting runs for every terminal outcome — success included —
-	// before the cooldown-only early return below, which deliberately records
-	// no cooldown state on success. A nil gate (the default) is a no-op.
-	if gate := state.capacityGate(); gate != nil {
-		p.recordCapacity(ctx, gate, resp, bifrostErr)
-	}
-	// The learner's observer window accounts the same real usage the capacity
-	// gate does, but read-only: it never gates anything.
-	if l := state.learner(); l != nil {
-		p.recordCapacity(ctx, l.observer, resp, bifrostErr)
-	}
+	// Capacity + observer accounting runs for every terminal outcome — success
+	// included — before the cooldown-only early return below, which
+	// deliberately records no cooldown state on success. When neither
+	// capability is on for this provider this returns before inspecting the
+	// response at all.
+	p.recordCapacity(ctx, policy, resp, bifrostErr)
 	if bifrostErr == nil {
 		// Success: clear this key's escalation counter so a recovered key is
 		// not punished for earlier 429s. This deliberately records NO cooldown
@@ -1438,7 +1482,7 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 			if fallbackKeyID == "" && !schemas.IsKeylessProvider(provider) {
 				return resp, bifrostErr, nil
 			}
-			state.Mark(provider, fallbackKeyID)
+			state.markWithPolicy(policy, provider, fallbackKeyID, "", 0, "", schemas.CooldownScopeKey)
 			if p.logger != nil {
 				p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, legacy quota_patterns match)", provider, fallbackKeyID, fallbackKeyName, state.EffectiveTTL(provider))
 			}
@@ -1447,7 +1491,7 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 	}
 
 	provider, _, _, _ := lastAttemptProviderAndKey(ctx, bifrostErr)
-	state.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
+	state.markWithPolicy(policy, provider, keyID, model, ttl, kind, scope)
 	if p.logger != nil {
 		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s)", provider, keyID, keyName, model, ttl, kind, scope)
 	}
