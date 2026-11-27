@@ -75,11 +75,24 @@ export function LearnedLimitsPanel({ provider, capacityWindowSeconds, onAdopt, d
 										<Badge variant="outline" data-testid={`providercooldown-learning-confidence-${CONFIDENCE_TEST_IDS[limit.confidence]}`}>
 											{t(`cooldownCapability.learning.confidence.${limit.confidence}`)}
 										</Badge>
+										{limit.limiterDimension && (
+											<Badge variant="outline" data-testid={`providercooldown-learning-dimension-${limit.limiterDimension}`}>
+												{t(`cooldownCapability.learning.dimension.${limit.limiterDimension}`)}
+											</Badge>
+										)}
 										<span className="text-muted-foreground">
 											{t("cooldownCapability.learning.sampleCount", { count: limit.sampleCount })}
 										</span>
 									</span>
 								</div>
+								{limit.limiterDimension === "rpm" && (
+									<p
+										data-testid={`providercooldown-learning-rpm-only-hint-${limit.model || "all"}`}
+										className="text-muted-foreground text-xs italic"
+									>
+										{t("cooldownCapability.learning.rpmOnlyHint")}
+									</p>
+								)}
 								<div className="text-muted-foreground">
 									{t("cooldownCapability.learning.estimate", {
 										tokens: formatLimit(limit.estimatedTokenLimit),

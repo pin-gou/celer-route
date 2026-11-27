@@ -479,6 +479,10 @@ export interface LearnedLimitEntry {
 	lowerBound: number | null;
 	upperBound: number | null;
 	confidence: LearnedLimitConfidence;
+	/** Dominant limiter dimension among the samples behind the estimate. */
+	limiterDimension?: "rpm" | "tpm" | "unknown" | null;
+	/** Retained sample count per limiter dimension (`rpm` / `tpm` / `unknown`). */
+	dimensionSampleCounts?: Record<string, number> | null;
 	firstSeen: string;
 	lastSeen: string;
 }

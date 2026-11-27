@@ -694,6 +694,12 @@ export const cooldownPolicyRuleSchema = z.object({
 	match: z.array(cooldownPolicyMatchSchema).min(1),
 	match_mode: z.enum(["any", "all"]).default("any"),
 	ttl_seconds: z.number().int().min(1),
+	// Rate-limit-only dimension split. Optional and 0/absent means "fall back
+	// to ttl_seconds"; declared so a configured value is not stripped by zod
+	// on the next save even when the form leaves the inputs blank. The bounds
+	// mirror the backend (>= 0, no upper bound — same as ttl_seconds).
+	rpm_ttl_seconds: z.number().int().min(0).optional(),
+	tpm_ttl_seconds: z.number().int().min(0).optional(),
 	enabled: z.boolean().optional(),
 	scope: z.enum(["key", "model"]).optional(),
 	// How ttl_seconds combines with the provider's Retry-After hint. Must be

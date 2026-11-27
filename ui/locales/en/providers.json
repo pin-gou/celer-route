@@ -578,6 +578,10 @@
 			},
 			"ttlLabel": "Cooldown TTL (seconds)",
 			"ttlDescription": "How long the matched key stays out of rotation; cooldown expires automatically.",
+			"rpmTtlLabel": "Request-rate TTL (seconds, optional)",
+			"rpmTtlDescription": "Cooldown for request-rate (RPM/RPS) rejections. Leave blank to use the cooldown TTL above. Set this longer when the RPM budget is consumed outside this gateway.",
+			"tpmTtlLabel": "Token-rate TTL (seconds, optional)",
+			"tpmTtlDescription": "Cooldown for token-rate (TPM) rejections. Leave blank to use the cooldown TTL above.",
 			"retryAfterMode": {
 				"label": "Duration source",
 				"description": "Fixed TTL uses only the seconds below. Capped by TTL uses the provider's retry hint when it is shorter. Provider hint uses the hint exactly, which can also lengthen the cooldown.",

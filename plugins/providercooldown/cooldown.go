@@ -1505,7 +1505,7 @@ func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvid
 		policy = schemas.DefaultCooldownPolicy(provider)
 	}
 	if policy.Quota != nil && policy.Quota.MatchesRule(bifrostErr) {
-		return effectiveCooldownTTL(policy.Quota, bifrostErr), keyID, keyName, CooldownKindQuota, policy.Quota.ScopeOrDefault(), true
+		return effectiveQuotaCooldownTTL(policy.Quota, bifrostErr), keyID, keyName, CooldownKindQuota, policy.Quota.ScopeOrDefault(), true
 	}
 	if policy.RateLimit != nil && policy.RateLimit.MatchesRule(bifrostErr) {
 		return effectiveCooldownTTL(policy.RateLimit, bifrostErr), keyID, keyName, CooldownKindRateLimit, policy.RateLimit.ScopeOrDefault(), true
@@ -1517,18 +1517,86 @@ func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvid
 // optionally honouring the provider's own retry hint captured on the error
 // path in bifrostErr.ExtraFields.ProviderResponseHeaders.
 //
-// RetryAfterModeOrDefault() == "off" (the default) returns TTLSeconds verbatim
-// without reading any header, so configurations that predate the mode keep
-// byte-for-byte the previous behaviour.
+// Two modes of operation, selected by whether the rule configures a
+// dimension-specific TTL:
+//
+// With RPMTTLSeconds and TPMTTLSeconds both unset (0), this is the pre-B3
+// implementation byte-for-byte: RetryAfterModeOrDefault() == "off" (the
+// default) returns TTLSeconds verbatim without reading any header, "cap" is
+// min(TTLSeconds, hint) and "exact" is the hint (falling back to TTLSeconds).
+//
+// With either dimension TTL set, the rate-limit dimension derived from the
+// error body picks the base: rpm -> RPMTTLSeconds, tpm -> TPMTTLSeconds,
+// unknown (or an unset dimension value) -> TTLSeconds. The retry_after_mode is
+// then applied relative to that base:
+//
+//   - "off": a usable provider hint is a LOWER BOUND, effective = max(base,
+//     hint). This is a deliberate change from the legacy "ignore hints" rule,
+//     because the dimension TTL is a floor derived from how the budget
+//     recovers; a provider asking us to wait longer must still be honoured.
+//   - "cap": effective = min(base, hint); no usable hint -> base.
+//   - "exact": effective = hint; no usable hint -> base.
+//
+// The hint is always bounded by maxProviderRetryAfterHint inside
+// providerRetryAfterHint, so neither branch can park a key for days.
 func effectiveCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.BifrostError) time.Duration {
+	return effectiveCooldownTTLInternal(rule, bifrostErr, true)
+}
+
+// effectiveQuotaCooldownTTL is the quota-rule variant. rpm_ttl_seconds /
+// tpm_ttl_seconds are rate_limit-only (Validate rejects them on a quota rule),
+// so the quota path ignores them even if a policy reached the runtime without
+// validation. The legacy mode semantics apply unchanged.
+func effectiveQuotaCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.BifrostError) time.Duration {
+	return effectiveCooldownTTLInternal(rule, bifrostErr, false)
+}
+
+func effectiveCooldownTTLInternal(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.BifrostError, dimensionAware bool) time.Duration {
 	if rule == nil {
 		return 0
 	}
 	ttl := time.Duration(rule.TTLSeconds) * time.Second
-	mode := rule.RetryAfterModeOrDefault()
-	if mode != "cap" && mode != "exact" {
-		return ttl
+	rpmTTL := 0
+	tpmTTL := 0
+	if dimensionAware {
+		rpmTTL = rule.RPMTTLSeconds
+		tpmTTL = rule.TPMTTLSeconds
 	}
+	if rpmTTL <= 0 && tpmTTL <= 0 {
+		// No dimension override: preserve the historical behaviour exactly,
+		// including not reading headers at all in "off" mode.
+		mode := rule.RetryAfterModeOrDefault()
+		if mode != "cap" && mode != "exact" {
+			return ttl
+		}
+		if bifrostErr == nil {
+			return ttl
+		}
+		hint := providerRetryAfterHint(bifrostErr.ExtraFields.ProviderResponseHeaders)
+		if hint <= 0 {
+			return ttl
+		}
+		if mode == "cap" && hint > ttl {
+			return ttl
+		}
+		return hint
+	}
+
+	// Dimension-aware base selection. An unset dimension value falls back to
+	// ttl_seconds; a dimension whose own TTL is 0 also falls back (per-field
+	// opt-in).
+	switch limiterDimensionOf(bifrostErr) {
+	case dimensionRPM:
+		if rpmTTL > 0 {
+			ttl = time.Duration(rpmTTL) * time.Second
+		}
+	case dimensionTPM:
+		if tpmTTL > 0 {
+			ttl = time.Duration(tpmTTL) * time.Second
+		}
+	}
+
+	mode := rule.RetryAfterModeOrDefault()
 	if bifrostErr == nil {
 		return ttl
 	}
@@ -1536,10 +1604,21 @@ func effectiveCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.
 	if hint <= 0 {
 		return ttl
 	}
-	if mode == "cap" && hint > ttl {
+	switch mode {
+	case "cap":
+		if hint < ttl {
+			return hint
+		}
+		return ttl
+	case "exact":
+		return hint
+	default:
+		// "off" with a dimension TTL configured: the hint is a lower bound.
+		if hint > ttl {
+			return hint
+		}
 		return ttl
 	}
-	return hint
 }
 
 func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {

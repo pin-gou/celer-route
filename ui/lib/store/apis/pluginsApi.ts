@@ -6,6 +6,7 @@ import {
 	CooldownStatsResponse,
 	CreatePluginRequest,
 	LearnedLimitConfidence,
+	LearnedLimitEntry,
 	LearnedLimitsResponse,
 	Plugin,
 	PluginsResponse,
@@ -52,6 +53,8 @@ interface LearnedLimitWireEntry {
 	lower_bound?: number | null;
 	upper_bound?: number | null;
 	confidence?: string;
+	limiter_dimension?: string;
+	dimension_sample_counts?: Record<string, number>;
 	first_seen?: string;
 	last_seen?: string;
 }
@@ -71,6 +74,17 @@ function normalizeLearnedConfidence(value: string | undefined): LearnedLimitConf
 			return value;
 		default:
 			return "insufficient";
+	}
+}
+
+function normalizeLearnedDimension(value: string | undefined): LearnedLimitEntry["limiterDimension"] {
+	switch (value) {
+		case "rpm":
+		case "tpm":
+		case "unknown":
+			return value;
+		default:
+			return null;
 	}
 }
 
@@ -378,6 +392,8 @@ export const pluginsApi = baseApi.injectEndpoints({
 					lowerBound: limit.lower_bound ?? null,
 					upperBound: limit.upper_bound ?? null,
 					confidence: normalizeLearnedConfidence(limit.confidence),
+					limiterDimension: normalizeLearnedDimension(limit.limiter_dimension),
+					dimensionSampleCounts: limit.dimension_sample_counts ?? null,
 					firstSeen: limit.first_seen ?? "",
 					lastSeen: limit.last_seen ?? "",
 				})),

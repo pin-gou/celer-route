@@ -630,6 +630,18 @@ type CooldownPolicyRule struct {
 	Match      []CooldownPolicyMatch `json:"match"`
 	MatchMode  string                `json:"match_mode,omitempty"` // "any" | "all"; defaults to "any" when empty
 	TTLSeconds int                   `json:"ttl_seconds"`
+	// RPMTTLSeconds overrides TTLSeconds for rate-limit rejections that the
+	// plugin classifies as request-rate (RPM/RPS). Only meaningful on a
+	// rate_limit rule; 0 (the default) falls back to TTLSeconds and keeps the
+	// pre-existing behaviour byte-for-byte. A request-rate limit that is
+	// consumed outside this gateway recovers on a longer timescale than a
+	// token-rate limit, so a longer TTL avoids burning a probe every few
+	// seconds. See the plugin's limiterDimensionOf for the classification
+	// table.
+	RPMTTLSeconds int `json:"rpm_ttl_seconds,omitempty"`
+	// TPMTTLSeconds is the token-rate counterpart of RPMTTLSeconds. Only
+	// meaningful on a rate_limit rule; 0 falls back to TTLSeconds.
+	TPMTTLSeconds int `json:"tpm_ttl_seconds,omitempty"`
 	// RetryAfterMode controls whether a provider-supplied retry hint
 	// (Retry-After / x-ratelimit-reset-*, captured on the error path in
 	// BifrostError.ExtraFields.ProviderResponseHeaders) may override
@@ -643,6 +655,13 @@ type CooldownPolicyRule struct {
 	//   - "exact": effective = providerHint, falling back to TTLSeconds when
 	//     no usable hint is present. Note this can shorten a long quota TTL to
 	//     a short hint, so evaluate it per rule before enabling.
+	//
+	// When RPMTTLSeconds / TPMTTLSeconds are configured they replace TTLSeconds
+	// as the base for the matching dimension, and "off" gains one extra meaning:
+	// a usable provider hint becomes a LOWER BOUND on that mark
+	// (effective = max(base, hint)). "cap" and "exact" keep their usual meaning
+	// relative to that base. With both fields unset the mode semantics above are
+	// unchanged.
 	RetryAfterMode string `json:"retry_after_mode,omitempty"`
 }
 
@@ -1000,11 +1019,14 @@ func ResolveCooldownPolicy(provider ModelProvider, configured *CooldownPolicy) *
 // (provider create/update) so a mistake is visible immediately instead of
 // showing up later as a wrong cooldown kind — or as no cooldown at all.
 //
-// Two checks today:
+// Two structural checks plus the dimension-TTL bounds:
 //
 //  1. retry_after_mode must be one of "" / "off" / "cap" / "exact"
 //     (case-insensitive). A typo would otherwise silently behave like "off".
 //  2. A quota rule that matches on a bare status code.
+//  3. rpm_ttl_seconds / tpm_ttl_seconds must be non-negative and may only be
+//     set on the rate_limit rule (they select a TTL for a rate-limit
+//     dimension, which quota marks do not have).
 //
 // Quota is evaluated BEFORE rate_limit (see CooldownPlugin.classify), so a
 // bare {status_code: 429} claims every 429 — including all the transient
@@ -1037,6 +1059,24 @@ func (p *CooldownPolicy) Validate() error {
 			return fmt.Errorf(
 				"cooldown_policy.%s.retry_after_mode %q is invalid; must be one of \"off\", \"cap\", \"exact\" (or empty for the default \"off\")",
 				rule.name, rule.rule.RetryAfterMode,
+			)
+		}
+		if rule.rule.RPMTTLSeconds < 0 {
+			return fmt.Errorf(
+				"cooldown_policy.%s.rpm_ttl_seconds %d is invalid; must be >= 0 (0 falls back to ttl_seconds)",
+				rule.name, rule.rule.RPMTTLSeconds,
+			)
+		}
+		if rule.rule.TPMTTLSeconds < 0 {
+			return fmt.Errorf(
+				"cooldown_policy.%s.tpm_ttl_seconds %d is invalid; must be >= 0 (0 falls back to ttl_seconds)",
+				rule.name, rule.rule.TPMTTLSeconds,
+			)
+		}
+		if rule.name == "quota" && (rule.rule.RPMTTLSeconds != 0 || rule.rule.TPMTTLSeconds != 0) {
+			return fmt.Errorf(
+				"cooldown_policy.quota.rpm_ttl_seconds / tpm_ttl_seconds are only valid on the rate_limit rule; " +
+					"a quota exhaustion is not a request- or token-rate window, so the dimension split does not apply",
 			)
 		}
 	}

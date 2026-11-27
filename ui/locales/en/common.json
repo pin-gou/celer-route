@@ -289,6 +289,12 @@
 			"suggestionsEmpty": "Not enough rate-limit samples yet — no estimate for this provider.",
 			"allModels": "all models",
 			"sampleCount": "{{count}} samples",
+			"rpmOnlyHint": "Only request-rate (RPM) rejections were observed for this pair, so no token estimate is available.",
+			"dimension": {
+				"rpm": "request rate",
+				"tpm": "token rate",
+				"unknown": "unclassified"
+			},
 			"estimate": "Estimated limit ≈ {{tokens}} tokens per {{window}}s",
 			"windowMismatch": "This estimate uses a {{learned}}s window while the capacity gate uses {{capacity}}s, so the numbers are not directly interchangeable.",
 			"adopt": "Use as limit",

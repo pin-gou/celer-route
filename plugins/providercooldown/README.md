@@ -158,6 +158,103 @@ Because sections are replaced wholesale, a provider-level `escalation` section
 that omits `chronic` disables chronic for that provider even when the plugin
 default enables it.
 
+### RPM/TPM dimension split (optional, default off)
+
+A rate-limit 429 can come from two different budgets, and they recover on very
+different timescales:
+
+- **RPM/RPS** (request rate) — the account's request budget is full. When it is
+  consumed by traffic outside this gateway (the production SenseNova case) it
+  does not clear until that external consumer stops, so the default token-rate
+  TTL merely probes the key again seconds later, and each probe consumes
+  another request from the same exhausted budget.
+- **TPM** (token rate) — our own token throughput hit the window limit. The
+  usual short TTL matches how fast the window drains.
+
+The plugin derives the dimension from the error body (`dimension.go`,
+`limiterDimensionOf`), case-insensitively, from the error type, code and
+rendered message:
+
+| Dimension | Recognised signals (production samples included) |
+|---|---|
+| `rpm` | `EndpointRPMExceeded`, `ModelAccountRpmRateLimitExceeded`, `rpm exhausted`, `rps exhausted`, `RequestBurstTooFast`, `Throttling.BurstRate`, and a generic `rate limit exceeded` that mentions no token/TPM wording. `rps` folds into this bucket: requests-per-second is still a request-rate limit |
+| `tpm` | `EndpointTPMExceeded`, `ModelAccountTpmRateLimitExceeded`, `tpm exhausted`, `token rate limit`, `tokens per minute` |
+| `unknown` | anything else. Falls back to `ttl_seconds` |
+
+Token patterns are evaluated before request patterns, so a body carrying both
+a generic "rate limit exceeded" phrase and a token budget signal resolves to
+`tpm`; `EndpointTPMExceeded` can therefore never be misfiled as `rpm`.
+
+Set the per-dimension TTLs on the **rate_limit** rule (they are rejected on a
+quota rule — a quota exhaustion is not a rate window):
+
+| Field | Default | Notes |
+|---|---|---|
+| `rpm_ttl_seconds` | `0` | TTL for `rpm` marks. `0` falls back to `ttl_seconds`. Ergonomics: 60–120s for an externally consumed RPM budget |
+| `tpm_ttl_seconds` | `0` | TTL for `tpm` marks. `0` falls back to `ttl_seconds`. Leaving both at `0` restores the pre-B3 behaviour byte-for-byte |
+
+Recommended SenseNova configuration (the provider page's cooldown editor can
+set the same two fields):
+
+```json
+{
+  "providers": {
+    "sensenova": {
+      "cooldown_policy": {
+        "rate_limit": {
+          "match": [{ "status_code": 429 }],
+          "ttl_seconds": 30,
+          "rpm_ttl_seconds": 90
+        }
+      }
+    }
+  }
+}
+```
+
+#### Interaction with `retry_after_mode`
+
+With either dimension TTL set, the dimension-specific value becomes the base
+and the retry hint is combined with it as follows:
+
+| `retry_after_mode` | no usable provider hint | usable provider hint |
+|---|---|---|
+| `off` (default) | base | `max(base, hint)` — the hint is a **lower bound** |
+| `cap` | base | `min(base, hint)` |
+| `exact` | base | `hint` |
+
+`base` = `rpm_ttl_seconds` for an rpm mark, `tpm_ttl_seconds` for a tpm mark,
+otherwise `ttl_seconds`. **This is a deliberate change to `off`**: previously
+`off` ignored provider hints entirely, but a dimension TTL is a floor derived
+from how the budget recovers, and a provider asking us to wait longer must
+still be honoured. When both dimension fields are `0`, `off` keeps its exact
+legacy meaning (fixed TTL, no header read). Hints remain bounded by
+`maxProviderRetryAfterHint` (24h) in every branch.
+
+The production SenseNova 429 carries only `X-Request-Id` and **no**
+`retry-after`, so the dimension TTL — not the hint — is what makes this work;
+the hint can only extend it further.
+
+#### Learning decontamination
+
+The same dimension is recorded on every learning sample. The learner still
+records **all** dimensions (for diagnostics and the report's
+`dimension_sample_counts`), but it estimates the token limit from **non-RPM
+samples only**:
+
+- an RPM rejection at `usedTokens≈0` says nothing about the token budget;
+  including it dragged the median and the lower bound to ~0, which is the
+  misleading `learned-limits` report the deployment produced;
+- `sample_count` / `key_count` / `lower_bound` / `upper_bound` /
+  `confidence` therefore describe the participating (tpm + unknown) samples;
+- `limiter_dimension` is the dominant dimension among those participants; when
+  every retained sample is an RPM rejection it reports `"rpm"`, and the entry
+  stays `insufficient` with no estimate — the operator can tell the token
+  estimate is unavailable instead of trusting a ~0;
+- `dimension_sample_counts` (e.g. `{"rpm":12,"tpm":8,"unknown":2}`) is
+  aggregated on each report from the bounded sample buffer; summing it
+  reconstructs the total retained sample count.
+
 ### Retrospective capacity gate (optional, default off)
 
 The passive cooldown reacts to failures that already happened. `capacity` adds
@@ -252,7 +349,9 @@ How it works:
 1. Every provider rejection classified as **rate limit** by the provider's
    `CooldownPolicy` produces one sample. Quota / entitlement failures
    (`insufficient_quota`, …) are deliberately ignored — they say nothing
-   about a window limit.
+   about a window limit. Each sample also records its limiter dimension
+   (rpm / tpm / unknown, see the RPM/TPM section above); RPM samples are kept
+   for diagnostics but excluded from the token-limit estimate.
 2. `used` comes from the same **real-usage** accounting the capacity gate
    uses (the token usage the provider reported, or `billed_usage` on a
    failed-but-billed attempt) — never an estimate. The learner keeps its own
@@ -333,6 +432,8 @@ GET /api/plugins/provider-cooldown/learned-limits
       "lower_bound": 71000,
       "upper_bound": 91000,
       "confidence": "medium",
+      "limiter_dimension": "tpm",
+      "dimension_sample_counts": { "rpm": 4, "tpm": 10, "unknown": 2 },
       "first_seen": "2026-11-20T10:15:02Z",
       "last_seen": "2026-11-20T11:02:41Z"
     }
@@ -344,6 +445,13 @@ Notes:
 
 - **The learner only reads.** It never writes a cooldown policy, a capacity
   limit, or anything else — the estimate is a *suggestion* for the operator.
+- `sample_count` counts the samples that participate in the estimate
+  (non-RPM); `dimension_sample_counts` covers every retained sample, so
+  `sample_count + dimension_sample_counts["rpm"]` is the retained total.
+- **An RPM rejection is not token evidence.** See the RPM/TPM section: only a
+  tpm/unknown sample is used for the estimate, which is why a pair that only
+  ever hits RPM reports `limiter_dimension: "rpm"` and `confidence:
+  "insufficient"` instead of a ~0 limit.
 - Each entry carries its own `window_seconds` because providers may learn over
   different windows; the top-level `window_seconds` in the response is the
   plugin-level default window, kept for backward compatibility.
@@ -511,9 +619,11 @@ config parsing.
 
 - Provider retry hints (`Retry-After`, `x-ratelimit-reset-*`) are only used
   when the matched rule sets `retry_after_mode` to `cap` or `exact`; the
-  default `off` keeps the fixed `ttl_seconds`. The hint is read from
-  `BifrostError.ExtraFields.ProviderResponseHeaders`, so it is available
-  through the plugin interface without any transport-specific code.
+  default `off` keeps the fixed `ttl_seconds`. The one exception is a
+  rate_limit rule with `rpm_ttl_seconds` / `tpm_ttl_seconds` configured: `off`
+  then treats a usable hint as a lower bound (`max(base, hint)`). The hint is
+  read from `BifrostError.ExtraFields.ProviderResponseHeaders`, so it is
+  available through the plugin interface without any transport-specific code.
 - `escalation`, `learning` and `health` are plugin-level defaults; `capacity` is
   a **deprecated legacy fleet default** (still honoured for providers without
   their own section, but no longer editable from the plugin page). A provider

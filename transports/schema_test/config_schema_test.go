@@ -1469,6 +1469,47 @@ func TestSchemaProviderCooldownPolicy(t *testing.T) {
 		}
 	})
 
+	t.Run("dimension TTLs on rate_limit are accepted", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"rpm_ttl_seconds": 90,
+							"tpm_ttl_seconds": 40
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected dimension TTLs to validate, got: %v", err)
+		}
+	})
+
+	t.Run("negative dimension TTL is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"rpm_ttl_seconds": -1
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("negative rpm_ttl_seconds must be rejected")
+		}
+	})
+
 	t.Run("match array is required", func(t *testing.T) {
 		cfg := `{
 			"providers": {

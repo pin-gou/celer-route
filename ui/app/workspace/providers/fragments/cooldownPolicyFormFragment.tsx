@@ -179,6 +179,18 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 		for (const key of COOLDOWN_POLICY_KEYS) {
 			if (policy[key] === undefined) delete policy[key];
 		}
+		// The dimension TTLs (rpm_ttl_seconds / tpm_ttl_seconds) select a
+		// cooldown for a RATE-LIMIT dimension, so the backend rejects them on a
+		// quota rule. The form only offers them on the rate_limit rule, but a
+		// value stored on the quota rule through config.json would otherwise be
+		// resubmitted verbatim and make every save fail. Strip them there.
+		const quota = policy.quota as Record<string, unknown> | undefined;
+		if (quota && typeof quota === "object") {
+			const cleaned = { ...quota };
+			delete cleaned.rpm_ttl_seconds;
+			delete cleaned.tpm_ttl_seconds;
+			policy.quota = cleaned;
+		}
 		return policy as unknown as CooldownPolicy;
 	};
 
@@ -582,6 +594,10 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 	const { trigger } = useFormContext<CooldownPolicyFormSchema>();
 	const matchName = `${ruleKey}.match` as const;
 	const { fields, append, remove } = useFieldArray({ control, name: matchName });
+	// The dimension inputs fall back to the plain TTL, so the placeholder shows
+	// the value that will actually be used when the field stays blank.
+	const ttlSeconds = useWatch({ control, name: `${ruleKey}.ttl_seconds` });
+	const ttlPlaceholder = String(ttlSeconds ?? "");
 
 	return (
 		<>
@@ -678,6 +694,59 @@ function RuleFields({ ruleKey, control, provider }: { ruleKey: RuleField; contro
 					)}
 				/>
 			</div>
+
+			{ruleKey === "rate_limit" && (
+				<div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="provider-cooldown-rate-limit-dimension-fields">
+					<FormField
+						control={control}
+						name={`${ruleKey}.rpm_ttl_seconds`}
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel className="flex items-center gap-1.5">
+									{t("fragments.cooldownPolicy.rpmTtlLabel")}
+									<HelpHint>{t("fragments.cooldownPolicy.rpmTtlDescription")}</HelpHint>
+								</FormLabel>
+								<FormControl>
+									<Input
+										data-testid={`provider-cooldown-${ruleKey}-rpm-ttl-input`}
+										type="number"
+										min={0}
+										max={86400}
+										value={field.value ?? ""}
+										placeholder={ttlPlaceholder}
+										onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value) || 0)}
+									/>
+								</FormControl>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={control}
+						name={`${ruleKey}.tpm_ttl_seconds`}
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel className="flex items-center gap-1.5">
+									{t("fragments.cooldownPolicy.tpmTtlLabel")}
+									<HelpHint>{t("fragments.cooldownPolicy.tpmTtlDescription")}</HelpHint>
+								</FormLabel>
+								<FormControl>
+									<Input
+										data-testid={`provider-cooldown-${ruleKey}-tpm-ttl-input`}
+										type="number"
+										min={0}
+										max={86400}
+										value={field.value ?? ""}
+										placeholder={ttlPlaceholder}
+										onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value) || 0)}
+									/>
+								</FormControl>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+				</div>
+			)}
 
 			<div className="space-y-2">
 				<div className="flex items-center justify-between">

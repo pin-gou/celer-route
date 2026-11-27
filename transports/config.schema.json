@@ -4224,6 +4224,16 @@
           "minimum": 1,
           "description": "Cooldown TTL in seconds applied to a key when the rule fires"
         },
+        "rpm_ttl_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rate-limit only. TTL in seconds used when the rejection is classified as a request-rate limit (RPM/RPS: EndpointRPMExceeded, 'rpm exhausted', 'rps exhausted', RequestBurstTooFast, Throttling.BurstRate, or a generic 'rate limit exceeded' with no token wording). 0 or omitted falls back to ttl_seconds. A request-rate budget consumed outside this gateway recovers slowly, so a longer value (e.g. 90) avoids probing the key every few seconds. Only meaningful on the rate_limit rule: the provider API rejects it on a quota rule, and a config.json value there is ignored at runtime. With either dimension TTL set, retry_after_mode 'off' treats the provider hint as a lower bound (max(base, hint)); 'cap'/'exact' keep their usual meaning relative to this base."
+        },
+        "tpm_ttl_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rate-limit only. TTL in seconds used when the rejection is classified as a token-rate limit (TPM: EndpointTPMExceeded, ModelAccountTpmRateLimitExceeded, 'tpm exhausted', 'token rate limit', 'tokens per minute'). 0 or omitted falls back to ttl_seconds. Only meaningful on the rate_limit rule: the provider API rejects it on a quota rule, and a config.json value there is ignored at runtime. Interacts with retry_after_mode exactly like rpm_ttl_seconds."
+        },
         "retry_after_mode": {
           "type": "string",
           "enum": ["off", "cap", "exact"],

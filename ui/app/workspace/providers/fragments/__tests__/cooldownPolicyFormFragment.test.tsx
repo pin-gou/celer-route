@@ -258,6 +258,46 @@ describe("CooldownPolicyFormFragment — capability tri-state payload", () => {
 		expect(submittedPolicy()?.capacity).toEqual({ enabled: false });
 	});
 
+	it("editing rate_limit keeps rpm/tpm dimension TTLs (zod must not strip them)", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: { ...RATE_LIMIT_RULE, rpm_ttl_seconds: 90, tpm_ttl_seconds: 40 },
+				})}
+			/>,
+		);
+		changeTtl();
+
+		await save();
+
+		const rateLimit = submittedPolicy()?.rate_limit as Record<string, unknown>;
+		expect(rateLimit.rpm_ttl_seconds).toBe(90);
+		expect(rateLimit.tpm_ttl_seconds).toBe(40);
+	});
+
+	it("strips dimension TTLs from the quota rule (the backend rejects them there)", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: RATE_LIMIT_RULE,
+					quota: {
+						match: [{ status_code: 429, message_contains: ["insufficient_quota"] }],
+						ttl_seconds: 600,
+						rpm_ttl_seconds: 90,
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		changeTtl();
+
+		await save();
+
+		const quota = submittedPolicy()?.quota as Record<string, unknown>;
+		expect(quota).not.toHaveProperty("rpm_ttl_seconds");
+		expect(quota).not.toHaveProperty("tpm_ttl_seconds");
+		expect(quota.ttl_seconds).toBe(600);
+	});
+
 	it("adopting a learned limit prefills the capacity token limit and switches to custom", async () => {
 		render(<CooldownPolicyFormFragment provider={baseProvider()} />);
 		openSection("learning");

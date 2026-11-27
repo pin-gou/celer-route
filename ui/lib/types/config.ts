@@ -427,6 +427,11 @@ export interface CooldownPolicyRule {
 	ttl_seconds: number;
 	enabled?: boolean;
 	scope?: "key" | "model";
+	// Rate-limit-only dimension split. 0/absent falls back to ttl_seconds.
+	// Declared here (and in the zod schema) so a value configured through
+	// config.json/API survives a save from this form instead of being stripped.
+	rpm_ttl_seconds?: number;
+	tpm_ttl_seconds?: number;
 }
 
 // CooldownEscalationConfig mirrors schemas.CooldownEscalationConfig: a key's

@@ -60,6 +60,19 @@ import (
 // the operator can see that the system is observing but has not yet learned
 // anything trustworthy.
 //
+// Dimension split (B3)
+//
+// A rate-limit 429 does not always mean the token budget was hit: the request
+// rate can be exhausted while the token window is nearly empty. The plugin
+// derives each rejection's limiter dimension (rpm / tpm / unknown, see
+// dimension.go). RPM samples are still recorded — they are useful for
+// diagnostics and are exposed as DimensionSampleCounts — but they are EXCLUDED
+// from the token-limit estimate. Without that split, a key rejected on RPM at
+// usedTokens≈0 dragged the median and the lower bound to ~0, which is exactly
+// the misleading report the production SenseNova deployment produced.
+// SampleCount / KeyCount / the estimate / the confidence all describe the
+// non-RPM samples only.
+//
 // A note on what "the limit" means here: the learned number is the aggregate
 // limit our own traffic hit for one (provider, model) pair. When several keys
 // of the same provider are in use, the provider's per-key limits add up, so
@@ -115,12 +128,17 @@ type LearnedLimit struct {
 	// Model is the model the rejected requests targeted.
 	Model string `json:"model"`
 	// SampleCount is how many rate-limit rejections were observed for the
-	// pair inside the retained sample buffer.
+	// pair inside the retained sample buffer AND participate in the token-limit
+	// estimate. RPM rejections are excluded (they say nothing about a token
+	// budget), so SampleCount + DimensionSampleCounts["rpm"] equals the total
+	// number of retained samples. Reconstruction: sum the values of
+	// DimensionSampleCounts.
 	SampleCount int `json:"sample_count"`
 	// KeyCount is how many distinct provider keys the retained samples were
 	// attributed to. When it is greater than 1 the estimate is the AGGREGATE
 	// limit our traffic hit (the provider's per-key limits add up), not a
-	// single key's limit.
+	// single key's limit. Like SampleCount it only counts samples that
+	// participate in the estimate (non-RPM).
 	KeyCount int `json:"key_count,omitempty"`
 	// EstimatedTokenLimit is the suggested per-window token limit, in tokens
 	// per learning window. 0 when no estimate is available.
@@ -138,6 +156,19 @@ type LearnedLimit struct {
 	UpperBound int64 `json:"upper_bound,omitempty"`
 	// Confidence is one of "insufficient", "low", "medium", "high".
 	Confidence string `json:"confidence"`
+	// LimiterDimension is the dominant limiter dimension among the samples
+	// that participate in the estimate (tpm or unknown). When no sample
+	// participates (every retained sample is an RPM rejection) it falls back to
+	// the dominant dimension among ALL retained samples, which lets an operator
+	// see "rpm" and understand why the token estimate is unavailable instead of
+	// reading a misleading ~0.
+	LimiterDimension string `json:"limiter_dimension,omitempty"`
+	// DimensionSampleCounts is how many retained samples carried each limiter
+	// dimension (e.g. {"rpm":12,"tpm":8,"unknown":2}). Summing the values
+	// reconstructs the total retained sample count, including the RPM samples
+	// excluded from SampleCount. Aggregated on each report from the bounded
+	// sample buffer, so it adds no long-lived state.
+	DimensionSampleCounts map[string]int `json:"dimension_sample_counts,omitempty"`
 	// FirstSeen / LastSeen bound the observation period.
 	FirstSeen time.Time `json:"first_seen"`
 	LastSeen  time.Time `json:"last_seen"`
@@ -148,7 +179,10 @@ type learnSample struct {
 	keyID         string
 	usedTokens    int64
 	requestTokens int64
-	at            time.Time
+	// dimension records which budget the rejection hit. Every sample is kept
+	// for diagnostics, but only non-RPM samples feed the token-limit estimate.
+	dimension limiterDimension
+	at        time.Time
 }
 
 // learnPair holds the samples of one (provider, model) pair.
@@ -224,8 +258,10 @@ func (l *limitLearner) window() int64 {
 //
 // usedTokens is the real token consumption measured over the window BEFORE the
 // rejection; requestTokens is the token count of the rejected request itself
-// (0 when the provider did not report it).
-func (l *limitLearner) observe(provider schemas.ModelProvider, model string, keyID string, usedTokens int64, requestTokens int64, at time.Time) {
+// (0 when the provider did not report it). dimension says which budget the
+// rejection hit; it is recorded for every sample but only non-RPM samples are
+// used by limits() to estimate the token limit.
+func (l *limitLearner) observe(provider schemas.ModelProvider, model string, keyID string, usedTokens int64, requestTokens int64, dimension limiterDimension, at time.Time) {
 	if l == nil || provider == "" || model == "" {
 		return
 	}
@@ -234,6 +270,9 @@ func (l *limitLearner) observe(provider schemas.ModelProvider, model string, key
 	}
 	if requestTokens < 0 {
 		requestTokens = 0
+	}
+	if dimension == "" {
+		dimension = dimensionUnknown
 	}
 
 	l.mu.Lock()
@@ -249,6 +288,7 @@ func (l *limitLearner) observe(provider schemas.ModelProvider, model string, key
 		keyID:         keyID,
 		usedTokens:    usedTokens,
 		requestTokens: requestTokens,
+		dimension:     dimension,
 		at:            at,
 	})
 	// Bounded buffer: the oldest sample is dropped once the cap is hit.
@@ -275,18 +315,31 @@ func (l *limitLearner) limits() []LearnedLimit {
 
 	out := make([]LearnedLimit, 0, len(l.pairs))
 	for _, pair := range l.pairs {
-		limit := LearnedLimit{
-			Provider:      string(pair.provider),
-			Model:         pair.model,
-			SampleCount:   len(pair.samples),
-			KeyCount:      distinctKeyCount(pair.samples),
-			WindowSeconds: int(l.windowSeconds),
-			Confidence:    LearningConfidenceInsufficient,
-			FirstSeen:     pair.firstSeen,
-			LastSeen:      pair.lastSeen,
+		// Partition once: every sample is counted per dimension for the
+		// diagnostic map, but only non-RPM samples feed the estimate. The
+		// partition slice is transient (report path only).
+		counts := make(map[string]int, 3)
+		participants := make([]learnSample, 0, len(pair.samples))
+		for _, s := range pair.samples {
+			counts[string(s.dimension)]++
+			if isTokenBudgetDimension(s.dimension) {
+				participants = append(participants, s)
+			}
 		}
-		if len(pair.samples) >= l.minSamples {
-			estimate, lower, upper := estimateLearnedLimit(pair.samples)
+		limit := LearnedLimit{
+			Provider:              string(pair.provider),
+			Model:                 pair.model,
+			SampleCount:           len(participants),
+			KeyCount:              distinctKeyCount(participants),
+			WindowSeconds:         int(l.windowSeconds),
+			Confidence:            LearningConfidenceInsufficient,
+			LimiterDimension:      string(dominantDimension(pair.samples, participants)),
+			DimensionSampleCounts: counts,
+			FirstSeen:             pair.firstSeen,
+			LastSeen:              pair.lastSeen,
+		}
+		if len(participants) >= l.minSamples {
+			estimate, lower, upper := estimateLearnedLimit(participants)
 			// A zero upper bound means the observer never measured any real
 			// usage for this pair (every sampled rejection saw an idle
 			// window — e.g. usage accounting is not wired, or the window is
@@ -297,7 +350,7 @@ func (l *limitLearner) limits() []LearnedLimit {
 				limit.EstimatedTokenLimit = estimate
 				limit.LowerBound = lower
 				limit.UpperBound = upper
-				limit.Confidence = learningConfidence(len(pair.samples), l.minSamples)
+				limit.Confidence = learningConfidence(len(participants), l.minSamples)
 			}
 		}
 		out = append(out, limit)
@@ -323,6 +376,42 @@ func distinctKeyCount(samples []learnSample) int {
 		seen[s.keyID] = struct{}{}
 	}
 	return len(seen)
+}
+
+// dominantDimension returns the most common limiter dimension among the
+// samples that participate in the estimate. When none participate (every
+// retained sample is an RPM rejection) it falls back to all retained samples,
+// so the report says "rpm" instead of omitting the field — that is the
+// operator's signal that this pair only ever hit the request-rate budget and
+// has no usable token estimate. Ties resolve rpm > tpm > unknown for a stable
+// output.
+func dominantDimension(all []learnSample, participants []learnSample) limiterDimension {
+	if len(all) == 0 {
+		return dimensionUnknown
+	}
+	src := participants
+	if len(src) == 0 {
+		src = all
+	}
+	var rpm, tpm, unknown int
+	for _, s := range src {
+		switch s.dimension {
+		case dimensionRPM:
+			rpm++
+		case dimensionTPM:
+			tpm++
+		default:
+			unknown++
+		}
+	}
+	best, bestN := dimensionRPM, rpm
+	if tpm > bestN {
+		best, bestN = dimensionTPM, tpm
+	}
+	if unknown > bestN {
+		best = dimensionUnknown
+	}
+	return best
 }
 
 // estimateLearnedLimit derives the point estimate and the confidence interval
@@ -539,7 +628,7 @@ func (c *CooldownState) observeRateLimit(ctx *schemas.BifrostContext, policy *sc
 	}
 	usedTokens, _ := l.observer.usage(provider, model)
 	requestTokens := usageTotal(bifrostErr.ExtraFields.BilledUsage)
-	l.observe(provider, model, keyID, usedTokens, requestTokens, l.now())
+	l.observe(provider, model, keyID, usedTokens, requestTokens, limiterDimensionOf(bifrostErr), l.now())
 	markLearnedSampled(ctx)
 }
 
@@ -582,7 +671,7 @@ func (c *CooldownState) observeLearnedRateLimit(ctx *schemas.BifrostContext, pol
 	}
 	usedTokens, _ := l.observer.usage(provider, model)
 	requestTokens := usageTotal(bifrostErr.ExtraFields.BilledUsage)
-	l.observe(provider, model, keyID, usedTokens, requestTokens, l.now())
+	l.observe(provider, model, keyID, usedTokens, requestTokens, limiterDimensionOf(bifrostErr), l.now())
 	markLearnedSampled(ctx)
 }
 

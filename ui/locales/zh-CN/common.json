@@ -289,6 +289,12 @@
 			"suggestionsEmpty": "限流样本还不足，暂无该提供商的估算。",
 			"allModels": "全部模型",
 			"sampleCount": "{{count}} 个样本",
+			"rpmOnlyHint": "该组合只观察到请求速率（RPM）拒绝，没有可用的词元上限估算。",
+			"dimension": {
+				"rpm": "请求速率",
+				"tpm": "词元速率",
+				"unknown": "未分类"
+			},
 			"estimate": "估算上限约每 {{window}} 秒 {{tokens}} 词元",
 			"windowMismatch": "该估算基于 {{learned}} 秒窗口，而容量闸门使用 {{capacity}} 秒窗口，数值不能直接通用。",
 			"adopt": "采用为上限",
