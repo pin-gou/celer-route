@@ -91,9 +91,35 @@ Read-only endpoints exposed by the plugin (wired in
 | Endpoint | Returns |
 |---|---|
 | `GET /api/plugins/provider-cooldown/state` | active cooldown entries |
-| `GET /api/plugins/provider-cooldown/stats` | mark / suppressed counters, per provider and per provider+model |
+| `GET /api/plugins/provider-cooldown/stats` | mark / suppressed counters, per provider, per provider+model **and per key** (`per_key`) |
 | `GET /api/plugins/provider-cooldown/learned-limits` | learned per-window limits; each entry carries its own `window_seconds` (the top-level one is the plugin default, kept for compatibility) |
-| `GET /api/plugins/provider-cooldown/capacity-usage` | live capacity-gate accounting per provider (or provider+model) with `source` = `default` \| `provider` |
+| `GET /api/plugins/provider-cooldown/capacity-usage` | live capacity-gate accounting per provider, provider+model or provider+key+model (per `scope`), with `source` = `default` \| `provider` |
+
+#### Per-key metrics surface
+
+`GET /api/plugins/provider-cooldown/stats` is the metric surface for key-level
+health. Its `per_key` block is keyed by `"<provider>::<keyID>"` and carries the
+three counters the optimisation batches are measured with:
+
+| Field | Meaning |
+|---|---|
+| `mark_count` | cooldowns recorded for this key |
+| `suppressed_count` | times the key pool filter vetoed this key |
+| `success_count` | requests that completed successfully on this key |
+
+plus `last_mark_at`, `last_success_at` and `cooldown_remaining`, and the
+top-level `chronic_key_count` (distinct keys currently in chronic long-backoff).
+The per-key rows sum to the aggregate `mark_count` / `suppressed_count`, so the
+breakdown cannot drift from the totals.
+
+These counters are **not** exported as Prometheus metrics. `core/schemas/plugin.go`
+has no "plugin contributes a collector" seam, the telemetry plugin owns a private
+`prometheus.Registry` that is created and replaced on reload, and registering into
+it from another plugin would need unregister-on-reload bookkeeping — a duplicate
+registration panics, which would take the whole `/metrics` endpoint down. The
+`/stats` endpoint answers the same question ("which key is paying for the
+cooldowns?") with no extra wiring, and it keeps the high-cardinality key id out of
+Prometheus label space entirely.
 
 ### Adaptive TTL escalation (optional, default off)
 

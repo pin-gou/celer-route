@@ -49,6 +49,34 @@ sidebar_position: 4
 - 每个条目右侧有 **解除冻结** 按钮，点击后该密钥立即回到密钥池，无需等 TTL 到期
   （keyless 提供商不显示该按钮）
 
+### 按密钥的指标表面（`/stats` 的 `per_key`）
+
+需要「哪把密钥在承担冷却」这个粒度时，用只读接口：
+
+```
+GET /api/plugins/provider-cooldown/stats
+```
+
+返回里的 `per_key` 以 `"<提供商>::<密钥ID>"` 为键，每行有三个计数：
+
+| 字段 | 含义 |
+|------|------|
+| `mark_count` | 该密钥累计被标记冷却的次数 |
+| `suppressed_count` | 该密钥累计被选钥过滤器拦截的次数 |
+| `success_count` | 该密钥累计成功完成请求的次数 |
+
+另外还有 `last_mark_at`、`last_success_at`、`cooldown_remaining`，以及顶层的
+`chronic_key_count`（当前处于慢性长退避的密钥数）。各密钥的计数之和等于顶层的
+`mark_count` / `suppressed_count`，所以这个细分视图不会与总量漂移。
+
+:::note 为什么不接 Prometheus
+这些计数**没有**导出为 Prometheus 指标。插件系统没有「插件贡献自定义 collector」的
+接口，telemetry 插件拥有自己的 `prometheus.Registry`，且会在重载时替换；从别的插件
+往里注册需要配套的注销逻辑，而重复注册会 panic，可能把整个 `/metrics` 端点拖垮。
+`/stats` 的 `per_key` 已经能回答同一个问题，而且把高基数的密钥 ID 完全挡在
+Prometheus 标签空间之外。
+:::
+
 ## 配置冷却策略
 
 冷却规则是**按提供商独立配置**的。每个提供商要么使用**内置默认策略**（开箱即用，
