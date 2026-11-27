@@ -10,7 +10,9 @@
  *   - the error shapes are rendered ONCE. The old "baseline: top 3" block was
  *     a second rendering of the very same endpoint, which cost a duplicate
  *     request and a misleading "baseline" name for a single-period list;
- *   - one empty state for the whole observation layer, not one per block;
+ *   - one empty state for "no requests" (the tab notice), while each block
+ *     still states its own result ("no errors", "no traffic in the gate") —
+ *     those are different facts and must not be swallowed;
  *   - the configuration zone (errors → rules) comes before the supporting
  *     observation detail.
  */
@@ -192,15 +194,26 @@ describe("CooldownTab", () => {
 		expect(policyCard.compareDocumentPosition(usageCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
-	it("renders ONE empty state for the whole observation layer when the window has no traffic", () => {
+	it("replaces the per-block 'no requests' message with ONE tab-level notice", () => {
 		mocks.usageEntries = [];
 		render(<CooldownTab provider={provider} />);
 
 		expect(screen.getByTestId("providers2-cooldown-empty-notice")).toBeTruthy();
-		// The per-block "no requests" message is replaced by the tab-level one.
+		// The usage table is dropped instead of repeating the same fact.
 		expect(screen.queryByTestId("providers2-usage-card")).toBeNull();
-		// …and the error browser does not repeat the same fact.
-		expect(screen.queryByTestId("error-sample-empty")).toBeNull();
+	});
+
+	it("keeps the error shapes' own 'no errors' message in BOTH windows", () => {
+		// "no errors" is a different fact from "no requests": a window can hold
+		// traffic and still have nothing to turn into a rule. The error block
+		// must therefore explain itself whatever the window, otherwise it looks
+		// blank on one window and populated on the other.
+		mocks.usageEntries = [];
+		render(<CooldownTab provider={provider} />);
+		expect(screen.getByText("fragments.cooldownPolicy.errorSample.noErrors")).toBeTruthy();
+
+		fireEvent.click(screen.getByTestId("providers2-cooldown-window-24h"));
+		expect(screen.getByText("fragments.cooldownPolicy.errorSample.noErrors")).toBeTruthy();
 	});
 
 	it("keeps the summary numbers in the tab strip and the breakdown in the table", () => {

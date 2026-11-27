@@ -80,15 +80,15 @@ describe("ErrorSampleBrowser", () => {
 		expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ error_code: "EndpointRPMExceeded" }));
 	});
 
-	it("hides the empty state when the tab already explains it", () => {
-		render(<ErrorSampleBrowser provider="openai" onApply={() => {}} window="1h" suppressEmptyState />);
-
-		expect(screen.queryByText("fragments.cooldownPolicy.errorSample.noErrors")).toBeNull();
-	});
-
 	it("does not suggest a wider window while the widest one is already selected", () => {
 		render(<ErrorSampleBrowser provider="openai" onApply={() => {}} window="24h" />);
 
 		expect(screen.queryByText("fragments.cooldownPolicy.errorSample.tryChangingWindow")).toBeNull();
+	});
+
+	it("offers the wider window as a next step while there is still one", () => {
+		render(<ErrorSampleBrowser provider="openai" onApply={() => {}} window="1h" />);
+
+		expect(screen.getByText("fragments.cooldownPolicy.errorSample.tryChangingWindow")).toBeTruthy();
 	});
 });

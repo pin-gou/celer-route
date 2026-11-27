@@ -21,15 +21,13 @@ interface ErrorSampleBrowserProps {
 	 * different windows, which reads as contradictory data.
 	 */
 	window?: CooldownWindowKey;
-	/** Hides the "no errors in this window" message (the tab shows one instead). */
-	suppressEmptyState?: boolean;
 }
 
 /**
  * The provider's current error shapes, each one click away from becoming a
  * cooldown match.
  */
-export function ErrorSampleBrowser({ provider, onApply, window, suppressEmptyState }: ErrorSampleBrowserProps) {
+export function ErrorSampleBrowser({ provider, onApply, window }: ErrorSampleBrowserProps) {
 	const { t } = useTranslation("providers");
 	const { t: tc } = useTranslation("common");
 	// Uncontrolled fallback for the contexts that embed this browser without
@@ -75,7 +73,7 @@ export function ErrorSampleBrowser({ provider, onApply, window, suppressEmptySta
 
 			{error && <p className="text-destructive py-4 text-center text-xs">{t("fragments.cooldownPolicy.errorSample.error")}</p>}
 
-			{!isLoading && !error && patterns.length === 0 && !suppressEmptyState && (
+			{!isLoading && !error && patterns.length === 0 && (
 				<div className="py-4 text-center">
 					<p className="text-muted-foreground text-xs">{t("fragments.cooldownPolicy.errorSample.noErrors")}</p>
 					{/* The hint only makes sense while a wider window is still

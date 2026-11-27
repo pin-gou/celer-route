@@ -132,7 +132,7 @@ export function CooldownTab({ provider }: CooldownTabProps) {
 			{/* Primary zone: the policy editor, with the error shapes that feed
 			    it directly above the rules. */}
 			<div data-testid="providers2-cooldown-policy-card" className="rounded-lg border">
-				<CooldownPolicyFormFragment provider={provider} window={window} suppressEmptyState={showEmptyNotice} />
+				<CooldownPolicyFormFragment provider={provider} window={window} />
 			</div>
 
 			{/* Supporting detail: the per-key breakdown and the gate's live
