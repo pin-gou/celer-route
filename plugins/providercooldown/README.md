@@ -62,14 +62,15 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `config.escalation.*` | object | absent | **plugin-level default** adaptive TTL escalation (see below); a provider's own `cooldown_policy.escalation` overrides it |
 | `config.capacity.*` | object | absent | **deprecated legacy fleet default** retrospective capacity gate (see below); a provider's own `cooldown_policy.capacity` overrides it. Kept for backward compatibility — the UI no longer edits it and only shows a read-only warning plus the fleet water level |
 | `config.learning.*` | object | absent | **plugin-level default** read-only limit learner (see below); a provider's own `cooldown_policy.learning` overrides it |
+| `config.health.*` | object | absent | **plugin-level default** health-aware key weighting (see below); a provider's own `cooldown_policy.health` overrides it |
 
 ### Plugin-level defaults vs per-provider overrides
 
-The three capability sections in the plugin config are **defaults**, not the
-only place they can live. A provider carries its own section in
+The capability sections in the plugin config are **defaults**, not the only
+place they can live. A provider carries its own section in
 `schemas.CooldownPolicy` (set from the provider detail page in the UI). The
 plugin-level `capacity` section is deprecated and no longer editable, so only
-`escalation` and `learning` are still presented as fleet defaults:
+`escalation`, `learning` and `health` are still presented as fleet defaults:
 
 - **section absent** → the provider inherits the plugin-level section; if that
   is absent too, the capability is off;
@@ -79,10 +80,10 @@ plugin-level `capacity` section is deprecated and no longer editable, so only
   **wholesale** — there is no field-level merge.
 
 Resolution lives in `effective.go` (`capabilityDefaults.resolveCapacity` /
-`resolveEscalation` / `resolveLearning`); core stamps the provider policy on
-the request context before every attempt (`BifrostContextKeyCooldownPolicy`).
-The config types and their bounds/defaults are shared with the write API and
-live in `core/schemas/cooldownpolicy.go`.
+`resolveEscalation` / `resolveLearning` / `resolveHealth`); core stamps the
+provider policy on the request context before every attempt
+(`BifrostContextKeyCooldownPolicy`). The config types and their bounds/defaults
+are shared with the write API and live in `core/schemas/cooldownpolicy.go`.
 
 Read-only endpoints exposed by the plugin (wired in
 `transports/celer-route-http/handlers/cooldown.go`):
@@ -305,6 +306,59 @@ Notes:
 - State is in-memory and per-process, and is dropped when the process restarts
   (or when the plugin is re-initialized).
 
+### Health-aware key weighting (optional, default off)
+
+Passive cooldown removes a failing key for the length of its TTL, but between
+cooldowns weighted-random still gives that key its full configured weight, so
+every rotation spends a request on a credential that is known to be failing.
+`health` closes that gap: it folds each `(provider, key, model)` triple's
+observed success/failure stream into an exponentially weighted moving average
+(EWMA) success rate and scales that key's `Weight` by it **before** weighted
+selection.
+
+```json
+{
+  "config": {
+    "default_ttl_seconds": 300,
+    "ttl_overrides": {},
+    "quota_patterns": ["insufficient_quota"],
+    "health": {
+      "enabled": true,
+      "half_life_seconds": 120,
+      "min_samples": 5,
+      "min_weight_factor": 0.05
+    }
+  }
+}
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `health.enabled` | `false` | `false` = feature fully inert (no state, no lock, weights unchanged) |
+| `health.half_life_seconds` | `120` | EWMA half-life; an observation one half-life old counts half. Clamped to `10..3600` |
+| `health.min_samples` | `5` | observations needed before the weight may be scaled; below it the weight is untouched. Clamped to `1..1000` |
+| `health.min_weight_factor` | `0.05` | floor of the scaling factor; clamped to `0.01..1.0` and never zero |
+
+Notes:
+
+- **Selection only.** A success in `PostLLMHook` raises the key's EWMA; a
+  policy-matched rate-limit / quota rejection observed by the per-key failure
+  marker lowers it. Nothing here marks a cooldown, refuses a request or changes
+  the upstream bytes.
+- **Never zero.** `min_weight_factor` keeps a de-prioritised key in the rotation
+  at a small, non-zero share. That share is its recovery probe: without it the
+  key could never report success again and the pool would slowly starve. A
+  scaled weight is also floored at the selector's minimum selectable unit
+  (`0.01`) so the guarantee survives `WeightedRandom`'s integer quantization.
+- **Fast recovery.** The EWMA is time-aware: a key that sat idle for several
+  half-lives snaps back to healthy on its first success afterwards instead of
+  being punished for stale history.
+- **No-op on the disabled path.** With the feature off (the default) every key
+  keeps its configured weight byte-for-byte and no state is allocated.
+- The plugin page does not edit `health` yet. Saving an unrelated plugin or
+  provider setting preserves a stored `health` section untouched (both forms
+  spread the stored object before overwriting the fields they own).
+
 ## Build the deployment image
 
 The `Dockerfile` in this directory builds a single arm64 alpine image
@@ -410,8 +464,8 @@ config parsing.
   default `off` keeps the fixed `ttl_seconds`. The hint is read from
   `BifrostError.ExtraFields.ProviderResponseHeaders`, so it is available
   through the plugin interface without any transport-specific code.
-- `escalation` and `learning` are plugin-level defaults; `capacity` is a
-  **deprecated legacy fleet default** (still honoured for providers without
+- `escalation`, `learning` and `health` are plugin-level defaults; `capacity` is
+  a **deprecated legacy fleet default** (still honoured for providers without
   their own section, but no longer editable from the plugin page). A provider
   that sets its own section in `cooldown_policy` replaces the whole section, so
   changing a plugin default does not retroactively change a provider that

@@ -74,6 +74,19 @@ type Config struct {
 	// This is the plugin-level default; providers can override the window
 	// length in their own schemas.CooldownPolicy learning section.
 	Learning *LearningConfig `json:"learning,omitempty"`
+
+	// Health optionally enables health-aware key weighting: each key's
+	// observed success rate is folded into an EWMA and the key-pool filter
+	// scales that key's Weight by it, so chronically failing credentials
+	// receive a smaller (never zero) share of the traffic.
+	//
+	// Nil or Enabled=false (the default) keeps the feature completely inert:
+	// no state is allocated, no lock is taken, and every key keeps its
+	// configured weight. This is the plugin-level DEFAULT: a provider whose
+	// own schemas.CooldownPolicy carries a health section uses that instead
+	// (whole-section replacement, no field-level merge), and a section with
+	// only enabled=false explicitly turns the feature off for that provider.
+	Health *HealthConfig `json:"health,omitempty"`
 }
 
 // The capability config types are owned by core/schemas so the plugin config
@@ -84,6 +97,7 @@ type (
 	CapacityConfig   = schemas.CooldownCapacityConfig
 	EscalationConfig = schemas.CooldownEscalationConfig
 	LearningConfig   = schemas.CooldownLearningConfig
+	HealthConfig     = schemas.CooldownHealthConfig
 )
 
 // ParseConfig decodes the raw config map (as received from the plugin
@@ -267,6 +281,44 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 		}
 		c.Learning = lc.Normalized()
 	}
+	if v, ok := raw["health"]; ok {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("health: expected object, got %T", v)
+		}
+		hc := &HealthConfig{}
+		for k, vv := range m {
+			switch k {
+			case "enabled":
+				b, ok := vv.(bool)
+				if !ok {
+					return nil, fmt.Errorf("health.enabled: expected boolean, got %T", vv)
+				}
+				hc.Enabled = b
+			case "half_life_seconds":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("health.half_life_seconds: %w", err)
+				}
+				hc.HalfLifeSeconds = n
+			case "min_samples":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("health.min_samples: %w", err)
+				}
+				hc.MinSamples = n
+			case "min_weight_factor":
+				f, err := toFloat64(vv)
+				if err != nil {
+					return nil, fmt.Errorf("health.min_weight_factor: %w", err)
+				}
+				hc.MinWeightFactor = f
+			default:
+				return nil, fmt.Errorf("health: unknown key %q", k)
+			}
+		}
+		c.Health = hc.Normalized()
+	}
 	return c, nil
 }
 
@@ -274,11 +326,11 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 // is independent of the receiver and is safe to mutate further (e.g. via
 // SetTTLOverride) without affecting the source Config.
 //
-// The three capability sections are registered as the state's DEFAULTS: each
-// provider that configures its own capacity / escalation / learning section in
-// schemas.CooldownPolicy overrides them at request time, and providers without
-// one keep inheriting these. No per-provider state is created here — the
-// plugin does not know the provider list.
+// The capability sections are registered as the state's DEFAULTS: each
+// provider that configures its own capacity / escalation / learning / health
+// section in schemas.CooldownPolicy overrides them at request time, and
+// providers without one keep inheriting these. No per-provider state is
+// created here — the plugin does not know the provider list.
 //
 // If a logger is provided, AsState logs a warning for each ttl_overrides
 // key whose name does not match any known Bifrost provider. A typo
@@ -311,6 +363,9 @@ func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 	}
 	if learnCfg := c.Learning.Normalized(); learnCfg.Active() {
 		s.enableLearning(learnCfg)
+	}
+	if healthCfg := c.Health.Normalized(); healthCfg.Active() {
+		s.enableHealth(healthCfg)
 	}
 	return s
 }

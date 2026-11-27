@@ -162,10 +162,17 @@ type CooldownState struct {
 	// Mark path is unchanged.
 	escalation *escalationState
 
+	// health, when non-nil, holds the per-(provider, key, model) EWMA success
+	// rates used by health-aware key weighting (see health.go). It is created
+	// lazily by the first observation of a provider whose effective health
+	// section is enabled, so a deployment with the feature off keeps it nil
+	// and every entry point short-circuits. Guarded by c.mu.
+	health *healthState
+
 	// defaults holds the plugin-level (default) capacity / escalation /
-	// learning sections. A provider's own CooldownPolicy section replaces the
-	// matching default wholesale; nil or a section that is not configured
-	// falls back to these defaults.
+	// learning / health sections. A provider's own CooldownPolicy section
+	// replaces the matching default wholesale; nil or a section that is not
+	// configured falls back to these defaults.
 	defaults capabilityDefaults
 
 	// capacity, when non-nil, is the DEFAULT capacity gate built from
@@ -848,6 +855,7 @@ func (c *CooldownState) runGCLocked(logger schemas.Logger, interval time.Duratio
 			// the escalation tables, so every in-memory table of this state
 			// shares one bounded cadence.
 			c.cleanupPerKeyStatsLocked(now)
+			c.cleanupHealthLocked(now)
 			c.mu.Unlock()
 			if pruned > 0 && logger != nil {
 				logger.Debug("[provider-cooldown] GC pruned %d expired entries, %d remaining", pruned, remaining)
@@ -889,12 +897,23 @@ func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
 // with each other for the same provider. The per-key observation counter is
 // bumped in the same critical section, so a suppression still costs exactly
 // one short write lock.
+//
+// Optional health-aware weighting (see health.go): when the effective health
+// section for the provider is enabled, each surviving key's Weight is scaled by
+// its EWMA success rate (floored at min_weight_factor) on the returned copy.
+// When disabled — the default — the returned keys carry their configured
+// Weight unchanged.
 func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 	return func(ctx *schemas.BifrostContext, provider schemas.ModelProvider, model string, keys []schemas.Key) ([]schemas.Key, error) {
 		if len(keys) == 0 {
 			return keys, nil
 		}
 		out := make([]schemas.Key, 0, len(keys))
+		// Health-aware weighting is resolved once per filter call. An inert
+		// configuration (nil or disabled for this provider) leaves healthActive
+		// false and the whole subsystem is skipped, keeping the disabled path
+		// at the cost of two pointer reads.
+		healthSpec, healthActive := healthSpecOf(c.defaults.resolveHealth(policyFromContext(ctx)))
 		// now is resolved lazily: the happy path (nothing suppressed) must not
 		// pay for a clock read, and one read covers every vetoed key in this
 		// call.
@@ -971,6 +990,14 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 				ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, retryAfterSecondsHint(rem))
 			}
 		}
+		// Health-aware weighting: scale every live key's Weight by its EWMA
+		// success rate so a chronically failing credential receives a smaller
+		// (never zero) share of the traffic. Suppressed keys are already out of
+		// `out`, so they are not weighted. This only edits the copies `out`
+		// already holds — the caller's slice is never mutated.
+		if healthActive {
+			c.applyHealthWeights(provider, model, out, healthSpec)
+		}
 		return out, nil
 	}
 }
@@ -1029,6 +1056,12 @@ func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMar
 		// (so the provider's own learning window applies).
 		policy := policyFromContext(ctx)
 		c.markWithPolicy(policy, provider, keyID, model, ttl, kind, scope)
+		// Health signal (optional, off by default): a policy-matched rejection
+		// is evidence that this credential is unhealthy at selection time.
+		// Only rate_limit / quota matches (the ok==true branch above) are
+		// recorded — an unrelated error would say nothing about a provider's
+		// throughput budget and must not depress the key's weight.
+		c.observe(policy, provider, keyID, model, false)
 		// Optional read-only learning (off by default): a rate-limit
 		// rejection brackets the provider's effective per-window token
 		// limit. Quota-classified rejections are deliberately NOT sampled —
@@ -1121,8 +1154,9 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 		escalationEnabled := cfg.Escalation != nil && cfg.Escalation.Enabled
 		capacityEnabled := cfg.Capacity.Active()
 		learningEnabled := cfg.Learning.Active()
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t; providers without their own cooldown_policy section inherit these defaults)",
-			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled, learningEnabled)
+		healthEnabled := cfg.Health.Active()
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t, health=%t; providers without their own cooldown_policy section inherit these defaults)",
+			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled, learningEnabled, healthEnabled)
 		// The plugin-level capacity section is a deprecated fleet-wide default:
 		// one global limit inherited by every provider without an override. Warn
 		// once at startup (only when the section is actually present) so
@@ -1513,6 +1547,10 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 		// picture (marks / suppressions / successes). It is counted for the
 		// key that served the request and changes no cooldown state.
 		state.recordPerKeySuccess(ctx, resp)
+		// Health signal (optional, off by default): a success raises the key's
+		// EWMA, which is what lets a recovered credential climb back to its
+		// configured weight.
+		state.observeSuccess(policy, ctx, resp)
 		return resp, bifrostErr, nil
 	}
 

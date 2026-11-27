@@ -687,6 +687,11 @@ type CooldownPolicy struct {
 	// Learning optionally enables the read-only limit learner for this
 	// policy. Nil means "not configured".
 	Learning *CooldownLearningConfig `json:"learning,omitempty"`
+
+	// Health optionally enables health-aware key weighting for this policy:
+	// the key-pool filter scales each key's Weight by its EWMA success rate.
+	// Nil means "not configured" (inherit the plugin-level default).
+	Health *CooldownHealthConfig `json:"health,omitempty"`
 }
 
 // Cooldown policy TTL defaults applied by DefaultCooldownPolicy. Tuned per
@@ -1061,6 +1066,11 @@ func (p *CooldownPolicy) Validate() error {
 	}
 	if p.Learning != nil {
 		if err := p.Learning.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
+	}
+	if p.Health != nil {
+		if err := p.Health.Validate(); err != nil {
 			return fmt.Errorf("cooldown_policy.%w", err)
 		}
 	}

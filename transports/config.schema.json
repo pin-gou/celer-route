@@ -3910,6 +3910,10 @@
                   "learning": {
                     "$ref": "#/$defs/cooldown_learning",
                     "description": "Plugin-level DEFAULT limit learner for every provider without its own cooldown_policy.learning section."
+                  },
+                  "health": {
+                    "$ref": "#/$defs/cooldown_health",
+                    "description": "Plugin-level DEFAULT health-aware key weighting for every provider without its own cooldown_policy.health section."
                   }
                 },
                 "required": [
@@ -4076,6 +4080,39 @@
       },
       "additionalProperties": false
     },
+    "cooldown_health": {
+      "type": "object",
+      "description": "Optional health-aware key weighting. Disabled by default. When enabled, the plugin folds each (provider, key, model) triple's observed success/failure stream into an exponentially weighted moving average success rate (half-life configurable), and the key-pool filter scales that key's configured Weight by it before weighted-random selection. The effect is purely a selection probability: no request is ever refused and no cooldown entry is created or extended. MinWeightFactor keeps a floor above zero so a de-prioritised key still receives a small share of traffic and can demonstrate recovery. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section (whole-section replacement, no field-level merge).",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn health-aware weighting on (default false = current behaviour, no state allocated, weights unchanged). A provider section with enabled=false explicitly turns the feature off for that provider, even when the plugin-level default is on."
+        },
+        "half_life_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600,
+          "default": 120,
+          "description": "EWMA half-life in seconds: an observation one half-life old carries half the weight of a fresh one (clamped to 10..3600; values <= 0 fall back to 120). A key that recovers therefore climbs back to its configured weight quickly once observed again."
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 5,
+          "description": "How many observations a (provider, key, model) triple needs before its health may scale the key's Weight. Below it the key keeps its configured weight exactly (clamped to 1..1000; values <= 0 fall back to 5)."
+        },
+        "min_weight_factor": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1,
+          "default": 0.05,
+          "description": "Lower bound of the health scaling factor (clamped to 0.01..1.0; values <= 0 fall back to 0.05). It is never zero: a key that is never selected can never demonstrate recovery, so zero would starve the pool instead of merely de-prioritising it."
+        }
+      },
+      "additionalProperties": false
+    },
     "cooldown_policy_match": {
       "type": "object",
       "description": "Single predicate contributing to a cooldown rule. All non-zero fields must hold against the BifrostError for the match to fire; matching across multiple MessageContains values is OR. A match with no fields set is a no-op.",
@@ -4148,7 +4185,7 @@
     },
     "cooldown_policy": {
       "type": "object",
-      "description": "Per-provider cooldown policy: rules for rate-limit and quota errors plus optional capability overrides. Quota is checked before rate_limit. A nil/unset CooldownPolicy falls back to bifrost's built-in default for that provider; a nil/unset capacity / escalation / learning section inherits the plugin-level default from plugins[].config (provider-cooldown), while a section with enabled=false explicitly turns that capability off for this provider. Sections are replaced wholesale (no field-level merge with the plugin default).",
+      "description": "Per-provider cooldown policy: rules for rate-limit and quota errors plus optional capability overrides. Quota is checked before rate_limit. A nil/unset CooldownPolicy falls back to bifrost's built-in default for that provider; a nil/unset capacity / escalation / learning / health section inherits the plugin-level default from plugins[].config (provider-cooldown), while a section with enabled=false explicitly turns that capability off for this provider. Sections are replaced wholesale (no field-level merge with the plugin default).",
       "properties": {
         "rate_limit": {
           "$ref": "#/$defs/cooldown_policy_rule"
@@ -4167,6 +4204,10 @@
         "learning": {
           "$ref": "#/$defs/cooldown_learning",
           "description": "Provider-specific limit-learner override (window length, sample caps). Omit to inherit the plugin-level default; set enabled=false to disable learning for this provider."
+        },
+        "health": {
+          "$ref": "#/$defs/cooldown_health",
+          "description": "Provider-specific health-aware key weighting override. Omit to inherit the plugin-level default; set enabled=false to disable health weighting for this provider."
         }
       },
       "additionalProperties": false

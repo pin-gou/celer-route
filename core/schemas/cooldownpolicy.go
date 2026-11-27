@@ -62,6 +62,29 @@ const (
 	DefaultLearningMinSamples = 5
 	MinLearningMinSamples     = 1
 	MaxLearningMinSamples     = 100
+
+	// DefaultHealthHalfLifeSeconds is the EWMA half-life used by the optional
+	// health-aware key weighting. 120s is the order of magnitude of a
+	// provider's rate-limit recovery window, so a key that recovers is
+	// re-weighted quickly.
+	DefaultHealthHalfLifeSeconds = 120
+	MinHealthHalfLifeSeconds     = 10
+	MaxHealthHalfLifeSeconds     = 3600
+
+	// DefaultHealthMinSamples is how many observations a (provider, key,
+	// model) triple needs before its health may scale the key's weight. Below
+	// it the key keeps its configured weight exactly.
+	DefaultHealthMinSamples = 5
+	MinHealthMinSamples     = 1
+	MaxHealthMinSamples     = 1000
+
+	// DefaultHealthMinWeightFactor is the floor applied to the health factor.
+	// It MUST stay above zero: a key that is never selected can never
+	// demonstrate recovery, so zero weight would starve the pool instead of
+	// merely de-prioritising a key.
+	DefaultHealthMinWeightFactor = 0.05
+	MinHealthMinWeightFactor     = 0.01
+	MaxHealthMinWeightFactor     = 1.0
 )
 
 // CooldownCapacityConfig configures the optional retrospective capacity gate.
@@ -425,5 +448,133 @@ func NormalizeLearningMinSamples(n int) int {
 		return MaxLearningMinSamples
 	default:
 		return n
+	}
+}
+
+// CooldownHealthConfig configures the optional health-aware key weighting.
+//
+// When enabled, every key's observed success/failure stream is folded into an
+// EWMA success rate, and the key-pool filter scales that key's configured
+// Weight by it before weighted-random selection. The effect is purely a
+// selection probability: no request is ever refused, and no cooldown entry is
+// created or shortened. A nil pointer means "not configured".
+//
+// Disabled is the default and keeps the selection weights byte-for-byte
+// identical to the pre-health behaviour.
+type CooldownHealthConfig struct {
+	// Enabled turns health-aware weighting on. Default false keeps current
+	// behaviour.
+	Enabled bool `json:"enabled"`
+
+	// HalfLifeSeconds is the EWMA half-life: an observation one half-life old
+	// carries half the weight of a fresh one. <= 0 falls back to 120; values
+	// are clamped into 10..3600.
+	HalfLifeSeconds int `json:"half_life_seconds,omitempty"`
+
+	// MinSamples is how many observations a (provider, key, model) triple
+	// needs before its health may scale the weight. <= 0 falls back to 5;
+	// values are clamped into 1..1000.
+	MinSamples int `json:"min_samples,omitempty"`
+
+	// MinWeightFactor is the lower bound of the scaling factor, so a
+	// chronically unhealthy key keeps a small, non-zero share of the traffic
+	// and can demonstrate recovery. <= 0 falls back to 0.05; values are
+	// clamped into 0.01..1.0. It is never allowed to reach zero.
+	MinWeightFactor float64 `json:"min_weight_factor,omitempty"`
+}
+
+// Normalized returns a copy of the config with defaults applied and values
+// clamped the same way the plugin's ParseConfig does, so callers that build
+// the struct directly still get deterministic behaviour.
+func (c *CooldownHealthConfig) Normalized() *CooldownHealthConfig {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	out.HalfLifeSeconds = NormalizeHealthHalfLifeSeconds(out.HalfLifeSeconds)
+	out.MinSamples = NormalizeHealthMinSamples(out.MinSamples)
+	out.MinWeightFactor = NormalizeHealthMinWeightFactor(out.MinWeightFactor)
+	return &out
+}
+
+// Active reports whether health-aware weighting should do any work at all.
+func (c *CooldownHealthConfig) Active() bool {
+	return c != nil && c.Enabled
+}
+
+// Validate performs strict validation for write paths. Zero means "unset" for
+// every bounded field and is accepted; Normalized applies the default.
+func (c *CooldownHealthConfig) Validate() error {
+	if c == nil {
+		return nil
+	}
+	if c.HalfLifeSeconds != 0 && (c.HalfLifeSeconds < MinHealthHalfLifeSeconds || c.HalfLifeSeconds > MaxHealthHalfLifeSeconds) {
+		return fmt.Errorf(
+			"health.half_life_seconds must be between %d and %d (or 0 for the default %d), got %d",
+			MinHealthHalfLifeSeconds, MaxHealthHalfLifeSeconds, DefaultHealthHalfLifeSeconds, c.HalfLifeSeconds,
+		)
+	}
+	if c.MinSamples != 0 && (c.MinSamples < MinHealthMinSamples || c.MinSamples > MaxHealthMinSamples) {
+		return fmt.Errorf(
+			"health.min_samples must be between %d and %d (or 0 for the default %d), got %d",
+			MinHealthMinSamples, MaxHealthMinSamples, DefaultHealthMinSamples, c.MinSamples,
+		)
+	}
+	if c.MinWeightFactor != 0 && (c.MinWeightFactor < MinHealthMinWeightFactor || c.MinWeightFactor > MaxHealthMinWeightFactor) {
+		return fmt.Errorf(
+			"health.min_weight_factor must be between %v and %v (or 0 for the default %v), got %v; "+
+				"a factor of zero would starve the key pool, so it is rejected",
+			MinHealthMinWeightFactor, MaxHealthMinWeightFactor, DefaultHealthMinWeightFactor, c.MinWeightFactor,
+		)
+	}
+	return nil
+}
+
+// NormalizeHealthHalfLifeSeconds applies the documented default (120) and
+// bounds (10..3600). Zero / negative means "unset" and takes the default;
+// positive values outside the bounds are clamped.
+func NormalizeHealthHalfLifeSeconds(n int) int {
+	switch {
+	case n <= 0:
+		return DefaultHealthHalfLifeSeconds
+	case n < MinHealthHalfLifeSeconds:
+		return MinHealthHalfLifeSeconds
+	case n > MaxHealthHalfLifeSeconds:
+		return MaxHealthHalfLifeSeconds
+	default:
+		return n
+	}
+}
+
+// NormalizeHealthMinSamples applies the documented default (5) and bounds
+// (1..1000). Zero / negative means "unset" and takes the default; positive
+// values outside the bounds are clamped.
+func NormalizeHealthMinSamples(n int) int {
+	switch {
+	case n <= 0:
+		return DefaultHealthMinSamples
+	case n < MinHealthMinSamples:
+		return MinHealthMinSamples
+	case n > MaxHealthMinSamples:
+		return MaxHealthMinSamples
+	default:
+		return n
+	}
+}
+
+// NormalizeHealthMinWeightFactor applies the documented default (0.05) and
+// bounds (0.01..1.0). Zero / negative means "unset" and takes the default;
+// positive values below the floor are raised to it so the factor can never
+// reach zero and starve the key pool.
+func NormalizeHealthMinWeightFactor(f float64) float64 {
+	switch {
+	case f <= 0:
+		return DefaultHealthMinWeightFactor
+	case f < MinHealthMinWeightFactor:
+		return MinHealthMinWeightFactor
+	case f > MaxHealthMinWeightFactor:
+		return MaxHealthMinWeightFactor
+	default:
+		return f
 	}
 }

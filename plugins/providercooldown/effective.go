@@ -31,6 +31,7 @@ type capabilityDefaults struct {
 	capacity   *schemas.CooldownCapacityConfig
 	escalation *schemas.CooldownEscalationConfig
 	learning   *schemas.CooldownLearningConfig
+	health     *schemas.CooldownHealthConfig
 }
 
 // policyFromContext returns the per-provider CooldownPolicy core stamped on the
@@ -80,6 +81,20 @@ func (d *capabilityDefaults) resolveLearning(policy *schemas.CooldownPolicy) *sc
 		return nil
 	}
 	return d.learning
+}
+
+// resolveHealth returns the effective health section for a provider.
+// Same whole-section replacement rule as resolveCapacity: a provider section
+// present with only enabled=false disables health weighting for that provider
+// even when the plugin default enables it.
+func (d *capabilityDefaults) resolveHealth(policy *schemas.CooldownPolicy) *schemas.CooldownHealthConfig {
+	if policy != nil && policy.Health != nil {
+		return policy.Health
+	}
+	if d == nil {
+		return nil
+	}
+	return d.health
 }
 
 // escalationMaxMultiplier resolves the effective escalation section and
@@ -165,6 +180,30 @@ func (c *CooldownState) capacityOrLearningActive(policy *schemas.CooldownPolicy)
 	}
 	_, ok := learningSpecOf(c.defaults.resolveLearning(policy))
 	return ok
+}
+
+// healthSpec is the comparable, already-normalized field set of a health
+// section. Like capacitySpec / learningSpec it exists so the hot paths can
+// compare/apply the effective configuration without calling Normalized (which
+// would allocate one config copy per request).
+type healthSpec struct {
+	halfLifeSeconds float64
+	minSamples      int
+	minWeightFactor float64
+}
+
+// healthSpecOf normalizes cfg into a healthSpec. The second return value is
+// false when health weighting is inert (nil or disabled), the same predicate
+// as CooldownHealthConfig.Active.
+func healthSpecOf(cfg *schemas.CooldownHealthConfig) (healthSpec, bool) {
+	if cfg == nil || !cfg.Enabled {
+		return healthSpec{}, false
+	}
+	return healthSpec{
+		halfLifeSeconds: float64(schemas.NormalizeHealthHalfLifeSeconds(cfg.HalfLifeSeconds)),
+		minSamples:      schemas.NormalizeHealthMinSamples(cfg.MinSamples),
+		minWeightFactor: schemas.NormalizeHealthMinWeightFactor(cfg.MinWeightFactor),
+	}, true
 }
 
 // dedupeLearnedLimits keeps one entry per (provider, model) pair, preferring

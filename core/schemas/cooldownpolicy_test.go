@@ -362,6 +362,133 @@ func TestCooldownLearningConfigValidate(t *testing.T) {
 	}
 }
 
+func TestCooldownHealthConfigNormalized(t *testing.T) {
+	if got := (*CooldownHealthConfig)(nil).Normalized(); got != nil {
+		t.Fatalf("nil config Normalized() = %+v, want nil", got)
+	}
+
+	got := (&CooldownHealthConfig{}).Normalized()
+	if got.HalfLifeSeconds != DefaultHealthHalfLifeSeconds ||
+		got.MinSamples != DefaultHealthMinSamples ||
+		got.MinWeightFactor != DefaultHealthMinWeightFactor {
+		t.Fatalf("zero config normalized to %+v, want defaults", got)
+	}
+
+	tests := []struct {
+		name string
+		in   CooldownHealthConfig
+		want CooldownHealthConfig
+	}{
+		{
+			name: "negative half life takes default",
+			in:   CooldownHealthConfig{HalfLifeSeconds: -1},
+			want: CooldownHealthConfig{HalfLifeSeconds: DefaultHealthHalfLifeSeconds, MinSamples: DefaultHealthMinSamples, MinWeightFactor: DefaultHealthMinWeightFactor},
+		},
+		{
+			name: "half life below minimum is clamped",
+			in:   CooldownHealthConfig{HalfLifeSeconds: MinHealthHalfLifeSeconds - 1},
+			want: CooldownHealthConfig{HalfLifeSeconds: MinHealthHalfLifeSeconds, MinSamples: DefaultHealthMinSamples, MinWeightFactor: DefaultHealthMinWeightFactor},
+		},
+		{
+			name: "half life above maximum is clamped",
+			in:   CooldownHealthConfig{HalfLifeSeconds: MaxHealthHalfLifeSeconds + 1},
+			want: CooldownHealthConfig{HalfLifeSeconds: MaxHealthHalfLifeSeconds, MinSamples: DefaultHealthMinSamples, MinWeightFactor: DefaultHealthMinWeightFactor},
+		},
+		{
+			name: "min samples below minimum is clamped",
+			in:   CooldownHealthConfig{MinSamples: -1},
+			want: CooldownHealthConfig{HalfLifeSeconds: DefaultHealthHalfLifeSeconds, MinSamples: DefaultHealthMinSamples, MinWeightFactor: DefaultHealthMinWeightFactor},
+		},
+		{
+			name: "min samples above maximum is clamped",
+			in:   CooldownHealthConfig{MinSamples: MaxHealthMinSamples + 1},
+			want: CooldownHealthConfig{HalfLifeSeconds: DefaultHealthHalfLifeSeconds, MinSamples: MaxHealthMinSamples, MinWeightFactor: DefaultHealthMinWeightFactor},
+		},
+		{
+			name: "zero weight factor takes default",
+			in:   CooldownHealthConfig{MinWeightFactor: 0},
+			want: CooldownHealthConfig{HalfLifeSeconds: DefaultHealthHalfLifeSeconds, MinSamples: DefaultHealthMinSamples, MinWeightFactor: DefaultHealthMinWeightFactor},
+		},
+		{
+			name: "weight factor below floor is raised",
+			in:   CooldownHealthConfig{MinWeightFactor: MinHealthMinWeightFactor / 2},
+			want: CooldownHealthConfig{HalfLifeSeconds: DefaultHealthHalfLifeSeconds, MinSamples: DefaultHealthMinSamples, MinWeightFactor: MinHealthMinWeightFactor},
+		},
+		{
+			name: "weight factor above one is clamped",
+			in:   CooldownHealthConfig{MinWeightFactor: 2},
+			want: CooldownHealthConfig{HalfLifeSeconds: DefaultHealthHalfLifeSeconds, MinSamples: DefaultHealthMinSamples, MinWeightFactor: MaxHealthMinWeightFactor},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := tt.in
+			got := in.Normalized()
+			if got == nil {
+				t.Fatal("Normalized() = nil")
+			}
+			if *got != tt.want {
+				t.Fatalf("Normalized() = %+v, want %+v", *got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCooldownHealthConfigActive(t *testing.T) {
+	if (*CooldownHealthConfig)(nil).Active() {
+		t.Fatal("nil health config must not be active")
+	}
+	if (&CooldownHealthConfig{}).Active() {
+		t.Fatal("disabled health config must not be active")
+	}
+	if !(&CooldownHealthConfig{Enabled: true}).Active() {
+		t.Fatal("enabled health config must be active")
+	}
+}
+
+func TestCooldownHealthConfigValidate(t *testing.T) {
+	for _, cfg := range []CooldownHealthConfig{
+		{},
+		{Enabled: true},
+		{HalfLifeSeconds: MinHealthHalfLifeSeconds, MinSamples: MinHealthMinSamples, MinWeightFactor: MinHealthMinWeightFactor},
+		{HalfLifeSeconds: MaxHealthHalfLifeSeconds, MinSamples: MaxHealthMinSamples, MinWeightFactor: MaxHealthMinWeightFactor},
+	} {
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("valid config %+v rejected: %v", cfg, err)
+		}
+	}
+
+	invalid := []struct {
+		name string
+		cfg  CooldownHealthConfig
+		want string
+	}{
+		{"half life below minimum", CooldownHealthConfig{HalfLifeSeconds: MinHealthHalfLifeSeconds - 1}, "health.half_life_seconds"},
+		{"half life above maximum", CooldownHealthConfig{HalfLifeSeconds: MaxHealthHalfLifeSeconds + 1}, "health.half_life_seconds"},
+		{"negative half life", CooldownHealthConfig{HalfLifeSeconds: -1}, "health.half_life_seconds"},
+		{"min samples below minimum", CooldownHealthConfig{MinSamples: -1}, "health.min_samples"},
+		{"min samples above maximum", CooldownHealthConfig{MinSamples: MaxHealthMinSamples + 1}, "health.min_samples"},
+		{"weight factor below floor", CooldownHealthConfig{MinWeightFactor: MinHealthMinWeightFactor / 2}, "health.min_weight_factor"},
+		{"weight factor above one", CooldownHealthConfig{MinWeightFactor: 2}, "health.min_weight_factor"},
+		{"negative weight factor", CooldownHealthConfig{MinWeightFactor: -1}, "health.min_weight_factor"},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if err == nil {
+				t.Fatalf("config %+v must be rejected", tt.cfg)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error %q does not mention %q", err, tt.want)
+			}
+		})
+	}
+
+	if err := (*CooldownHealthConfig)(nil).Validate(); err != nil {
+		t.Fatalf("nil config must validate, got %v", err)
+	}
+}
+
 func TestCooldownPolicyValidateCapabilitySections(t *testing.T) {
 	// Nil capability sections are always valid.
 	if err := (&CooldownPolicy{}).Validate(); err != nil {
@@ -375,6 +502,7 @@ func TestCooldownPolicyValidateCapabilitySections(t *testing.T) {
 		Capacity:   &CooldownCapacityConfig{Enabled: true, TokenLimit: 1000, Scope: CapacityScopeProvider},
 		Escalation: &CooldownEscalationConfig{Enabled: true, MaxMultiplier: 4},
 		Learning:   &CooldownLearningConfig{Enabled: true, WindowSeconds: 60, MaxSamples: 50, MinSamples: 5},
+		Health:     &CooldownHealthConfig{Enabled: true, HalfLifeSeconds: 120, MinSamples: 5, MinWeightFactor: 0.05},
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid capability sections rejected: %v", err)
@@ -399,6 +527,11 @@ func TestCooldownPolicyValidateCapabilitySections(t *testing.T) {
 			name:   "invalid learning",
 			policy: CooldownPolicy{Learning: &CooldownLearningConfig{MaxSamples: 1}},
 			want:   "cooldown_policy.learning.max_samples",
+		},
+		{
+			name:   "invalid health",
+			policy: CooldownPolicy{Health: &CooldownHealthConfig{MinWeightFactor: 2}},
+			want:   "cooldown_policy.health.min_weight_factor",
 		},
 	}
 	for _, tt := range invalid {

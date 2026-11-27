@@ -54,6 +54,10 @@ type RuleField = (typeof RULE_FIELDS)[number];
 // rather than sent — `JSON.stringify` would drop it anyway, but the spread of
 // the stored policy keeps the old value, which is exactly how the previous
 // implementation wiped sections it didn't know about.
+//
+// `health` is deliberately NOT in this list: the form has no editor for it, so
+// leaving it out of both the overwrite set and the delete loop is what makes a
+// stored health section survive an unrelated save.
 const COOLDOWN_POLICY_KEYS = ["rate_limit", "quota", "capacity", "escalation", "learning"] as const;
 
 type CapabilityModes = Record<CooldownCapabilityKey, CooldownCapabilityMode>;

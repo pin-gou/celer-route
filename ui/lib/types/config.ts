@@ -463,19 +463,32 @@ export interface CooldownLearningConfig {
 	min_samples?: number;
 }
 
+// CooldownHealthConfig mirrors schemas.CooldownHealthConfig: each key's
+// observed success rate folds into an EWMA and the key pool scales that key's
+// Weight by it. Unset numeric fields take backend defaults (half_life 120,
+// min_samples 5, min_weight_factor 0.05). min_weight_factor can never be zero.
+export interface CooldownHealthConfig {
+	enabled?: boolean;
+	half_life_seconds?: number;
+	min_samples?: number;
+	min_weight_factor?: number;
+}
+
 // CooldownPolicy attaches rate_limit / quota rules to a single provider. quota
 // is checked before rate_limit. nil falls back to the built-in default for
 // that provider (see docs).
 //
-// capacity / escalation / learning are optional per-provider overrides of the
-// plugin-level capability defaults: absent means "inherit the plugin default",
-// `{ enabled: false }` means "explicitly off for this provider".
+// capacity / escalation / learning / health are optional per-provider
+// overrides of the plugin-level capability defaults: absent means "inherit the
+// plugin default", `{ enabled: false }` means "explicitly off for this
+// provider".
 export interface CooldownPolicy {
 	rate_limit?: CooldownPolicyRule;
 	quota?: CooldownPolicyRule;
 	capacity?: CooldownCapacityConfig;
 	escalation?: CooldownEscalationConfig;
 	learning?: CooldownLearningConfig;
+	health?: CooldownHealthConfig;
 }
 
 // ProviderConfig matching Go's lib.ProviderConfig

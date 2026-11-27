@@ -171,9 +171,9 @@ export function ConfigForm({ plugin }: { plugin: Plugin }) {
 	const onSubmit = async (values: ProviderCooldownPluginConfigFormSchema) => {
 		if (!hasUpdateAccess) return;
 		// Every other top-level key of the stored config (default_ttl_seconds,
-		// ttl_overrides, quota_patterns, and — importantly — the legacy
-		// `capacity` block) is carried over untouched: only escalation and
-		// learning are rewritten here.
+		// ttl_overrides, quota_patterns, the optional `health` section, and —
+		// importantly — the legacy `capacity` block) is carried over untouched:
+		// only escalation and learning are rewritten here.
 		//
 		// `capacity` is intentionally NOT in the payload. Spreading the current
 		// config keeps whatever is stored, so saving the default policies can

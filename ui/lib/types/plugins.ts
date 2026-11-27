@@ -1,6 +1,6 @@
 // Plugins types that match the Go backend structures
 
-import type { CooldownCapacityConfig, CooldownEscalationConfig, CooldownLearningConfig } from "@/lib/types/config";
+import type { CooldownCapacityConfig, CooldownEscalationConfig, CooldownHealthConfig, CooldownLearningConfig } from "@/lib/types/config";
 import { z } from "zod";
 
 export const SEMANTIC_CACHE_PLUGIN = "semantic_cache";
@@ -501,6 +501,7 @@ export interface ProviderCooldownCapabilityDefaults {
 	escalation?: CooldownEscalationConfig;
 	capacity?: CooldownCapacityConfig;
 	learning?: CooldownLearningConfig;
+	health?: CooldownHealthConfig;
 }
 
 // Process-lifetime compression counters surfaced by GET
