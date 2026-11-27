@@ -671,8 +671,7 @@
 				"avgTokens": "Avg tokens",
 				"cancelledNote": "{{count}} cancelled"
 			},
-			"updatedAt": "Updated at {{time}}",
-			"emptyTabNotice": "No requests in this statistics window, so the observation data is empty. Cooldown rules can still be configured."
+			"updatedAt": "Updated at {{time}}"
 		},
 		"performance": {
 			"concurrency": "Concurrency",

@@ -50,7 +50,6 @@ export function CooldownTab({ provider }: CooldownTabProps) {
 	// nothing about.
 	const logsUnavailable = getQueryErrorStatus(usage.error) === 503;
 	const rows = usage.data?.entries ?? [];
-	const hasTraffic = rows.length > 0;
 
 	const summary = useMemo(() => {
 		const totals = rows.reduce(
@@ -65,16 +64,14 @@ export function CooldownTab({ provider }: CooldownTabProps) {
 		const windowMinutesUsed = usage.data?.window_minutes ?? windowMinutes;
 		return {
 			...totals,
-			errorRate: totals.requests > 0 ? `${((totals.errors / totals.requests) * 100).toFixed(1)}%` : "-",
+			// 0/0 is not "0%": with no traffic an error rate is undefined, and
+			// printing 0.0% would suggest the window was actually measured.
+			errorRate: totals.requests > 0 ? `${((totals.errors / totals.requests) * 100).toFixed(1)}%` : "—",
 			tokensPerMinute: windowMinutesUsed > 0 ? Math.round(totals.tokens / windowMinutesUsed) : 0,
 		};
 	}, [rows, usage.data?.window_minutes, windowMinutes]);
 
 	const updatedAt = formatUpdatedAt(usage.fulfilledTimeStamp);
-	// One empty state for the whole tab: when the window holds no traffic
-	// there is nothing to observe, and the per-block "no data" messages used
-	// to repeat the same fact three times.
-	const showEmptyNotice = !logsUnavailable && !usage.isLoading && !usage.error && !hasTraffic;
 
 	return (
 		<div className="space-y-4">
@@ -102,30 +99,25 @@ export function CooldownTab({ provider }: CooldownTabProps) {
 						</div>
 					</div>
 
-					{hasTraffic && (
-						<div data-testid="providers2-cooldown-summary" className="flex flex-wrap items-center gap-x-4 gap-y-1">
-							<SummaryMetric label={tp("fragments.providerUsage.summary.requests")} value={formatInt(summary.requests)} />
-							<SummaryMetric label={tp("fragments.providerUsage.summary.errors")} value={formatInt(summary.errors)} />
-							<SummaryMetric label={tp("fragments.providerUsage.summary.errorRate")} value={summary.errorRate} />
-							<SummaryMetric label={tp("fragments.providerUsage.summary.totalTokens")} value={formatInt(summary.tokens)} />
-							<SummaryMetric label={tp("fragments.providerUsage.summary.tokensPerMinute")} value={formatInt(summary.tokensPerMinute)} />
-						</div>
-					)}
+					{/* Always rendered: the window is a FILTER, not a layout
+					    switch. Swapping windows changes these numbers, never
+					    whether the strip is on the page. An empty window reads 0
+					    (and — for the undefined 0/0 error rate), which says what
+					    the old separate empty notice said without removing a
+					    whole block from the page. */}
+					<div data-testid="providers2-cooldown-summary" className="flex flex-wrap items-center gap-x-4 gap-y-1">
+						<SummaryMetric label={tp("fragments.providerUsage.summary.requests")} value={formatInt(summary.requests)} />
+						<SummaryMetric label={tp("fragments.providerUsage.summary.errors")} value={formatInt(summary.errors)} />
+						<SummaryMetric label={tp("fragments.providerUsage.summary.errorRate")} value={summary.errorRate} />
+						<SummaryMetric label={tp("fragments.providerUsage.summary.totalTokens")} value={formatInt(summary.tokens)} />
+						<SummaryMetric label={tp("fragments.providerUsage.summary.tokensPerMinute")} value={formatInt(summary.tokensPerMinute)} />
+					</div>
 
 					{updatedAt && (
 						<span data-testid="providers2-cooldown-updated-at" className="text-muted-foreground ml-auto text-xs">
 							{tp("fragments.providerUsage.updatedAt", { time: updatedAt })}
 						</span>
 					)}
-				</div>
-			)}
-
-			{showEmptyNotice && (
-				<div
-					data-testid="providers2-cooldown-empty-notice"
-					className="text-muted-foreground rounded-lg border border-dashed px-4 py-3 text-xs"
-				>
-					{tp("fragments.providerUsage.emptyTabNotice")}
 				</div>
 			)}
 
@@ -136,8 +128,9 @@ export function CooldownTab({ provider }: CooldownTabProps) {
 			</div>
 
 			{/* Supporting detail: the per-key breakdown and the gate's live
-			    water level. */}
-			{!showEmptyNotice && (
+			    water level. Both render in every window; an empty window shows
+			    the card with its own empty state rather than no card at all. */}
+			{!logsUnavailable && (
 				<ProviderUsageCard
 					usage={{
 						entries: rows,

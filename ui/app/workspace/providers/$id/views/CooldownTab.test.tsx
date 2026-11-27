@@ -194,13 +194,37 @@ describe("CooldownTab", () => {
 		expect(policyCard.compareDocumentPosition(usageCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
-	it("replaces the per-block 'no requests' message with ONE tab-level notice", () => {
+	it("keeps the SAME page structure in both windows", () => {
+		// The window is a FILTER, not a layout switch. The summary strip and the
+		// usage card must exist in every window; an empty window changes their
+		// numbers, not whether they are on the page. This is the regression the
+		// "1h shows no numbers at all" report was about.
+		const structure = () =>
+			({
+				summary: !!screen.queryByTestId("providers2-cooldown-summary"),
+				usageCard: !!screen.queryByTestId("providers2-usage-card"),
+			}) as Record<string, boolean>;
+
+		mocks.usageEntries = [];
+		render(<CooldownTab provider={provider} />);
+		const emptyWindow = structure();
+		expect(emptyWindow.summary).toBe(true);
+		expect(emptyWindow.usageCard).toBe(true);
+
+		fireEvent.click(screen.getByTestId("providers2-cooldown-window-24h"));
+		expect(structure()).toEqual(emptyWindow);
+	});
+
+	it("shows zeros (and an undefined error rate) for an empty window", () => {
 		mocks.usageEntries = [];
 		render(<CooldownTab provider={provider} />);
 
-		expect(screen.getByTestId("providers2-cooldown-empty-notice")).toBeTruthy();
-		// The usage table is dropped instead of repeating the same fact.
-		expect(screen.queryByTestId("providers2-usage-card")).toBeNull();
+		const strip = screen.getByTestId("providers2-cooldown-summary");
+		expect(strip.textContent).toContain("0");
+		expect(strip.textContent).toContain("—");
+		// The usage card explains the empty window inside itself rather than
+		// disappearing.
+		expect(screen.getByTestId("providers2-usage-empty")).toBeTruthy();
 	});
 
 	it("keeps the error shapes' own 'no errors' message in BOTH windows", () => {
