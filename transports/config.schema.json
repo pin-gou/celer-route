@@ -3917,6 +3917,56 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "capacity": {
+                    "type": "object",
+                    "description": "Optional retrospective capacity gate. Disabled by default, and inert unless at least one of token_limit / request_limit is greater than 0. It accounts REAL usage only (the token usage the provider reports, or billed_usage on a failed-but-billed attempt) over a rolling per-second window, and once the window's usage reaches limit*headroom, subsequent requests are short-circuited with a 429. The request that crosses the line still goes out (the same trade-off the passive cooldown makes); nothing is estimated and the request body is never read. This is the gateway's OWN budget gate, not a provider-declared quota.",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Turn the capacity gate on (default false = current behaviour, no state allocated)"
+                      },
+                      "token_limit": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0,
+                        "description": "Per-window token budget. 0 means unlimited. The gate engages once the window's real token usage reaches token_limit * headroom."
+                      },
+                      "request_limit": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0,
+                        "description": "Per-window request budget. 0 means unlimited. The gate engages once the window's request count reaches request_limit * headroom. At least one of token_limit / request_limit must be positive for the gate to do anything."
+                      },
+                      "window_seconds": {
+                        "type": "integer",
+                        "minimum": 10,
+                        "maximum": 3600,
+                        "default": 60,
+                        "description": "Rolling window length in seconds (clamped to 10..3600; values <= 0 fall back to 60). One bucket per second is kept per accounting key and expired buckets are cleared lazily."
+                      },
+                      "headroom": {
+                        "type": "number",
+                        "minimum": 0.1,
+                        "maximum": 1.0,
+                        "default": 0.9,
+                        "description": "Fraction of the limit that may be spent before the gate engages (0.9 = block once 90% of the budget is used). Clamped to 0.1..1.0; values <= 0 fall back to 0.9."
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": ["provider", "provider_model"],
+                        "default": "provider",
+                        "description": "Accounting granularity: provider (one budget shared by every model of the provider) or provider_model (an independent budget per provider/model pair)."
+                      },
+                      "action": {
+                        "type": "string",
+                        "enum": ["fallback", "reject"],
+                        "default": "fallback",
+                        "description": "What happens once the gate engages: fallback lets the configured fallback chain pick the request up, reject returns the 429 immediately."
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "required": [

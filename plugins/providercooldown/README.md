@@ -58,6 +58,7 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
 | `config.escalation.enabled` | bool | `false` | adaptive TTL escalation (see below); off = unchanged behaviour |
 | `config.escalation.max_multiplier` | int | `4` | per-key TTL growth ceiling, clamped to `1..16` |
+| `config.capacity` | object | absent | optional retrospective capacity gate (see below); absent or `enabled=false` = unchanged behaviour |
 
 ### Adaptive TTL escalation (optional, default off)
 
@@ -71,6 +72,72 @@ When `escalation.enabled` is true, cooldown TTLs grow on repeat failures:
 
 It is expressed only as a longer TTL — no sleeps, no blocking, and no change to
 the upstream request bytes.
+
+### Retrospective capacity gate (optional, default off)
+
+The passive cooldown reacts to failures that already happened. `capacity` adds
+an optional **budget gate**: once our own traffic to a provider has spent a
+configured amount in a rolling window, the *next* requests are short-circuited
+before they go out.
+
+This is deliberately retrospective — it never estimates tokens and never reads
+the request body:
+
+1. `PostLLMHook` adds each terminal request's **real** usage to a per-second
+   bucket ring: the token count from the response usage, or
+   `ExtraFields.BilledUsage` when a failed attempt was still billed. The request
+   count advances on every terminal outcome (success or failure); tokens are 0
+   when the provider reported none.
+2. `PreProviderHook` sums the live buckets. Once the window's usage reaches
+   `token_limit * headroom` (or `request_limit * headroom`), the attempt is
+   short-circuited with a 429 `rate_limit_exceeded` whose message names the
+   provider/model, the window and the seconds to wait.
+3. The request that crosses the line still goes out — the same trade-off the
+   passive cooldown makes — in exchange for zero estimation error and a
+   threshold that is easy to reason about.
+
+```json
+{
+  "config": {
+    "default_ttl_seconds": 300,
+    "ttl_overrides": {},
+    "quota_patterns": ["insufficient_quota"],
+    "capacity": {
+      "enabled": true,
+      "token_limit": 200000,
+      "request_limit": 500,
+      "window_seconds": 60,
+      "headroom": 0.9,
+      "scope": "provider",
+      "action": "fallback"
+    }
+  }
+}
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `capacity.enabled` | `false` | `false` = feature fully inert (no state, no lock) |
+| `capacity.token_limit` | `0` | tokens per window; `0` = unlimited |
+| `capacity.request_limit` | `0` | requests per window; `0` = unlimited |
+| `capacity.window_seconds` | `60` | clamped to `10..3600` |
+| `capacity.headroom` | `0.9` | gate engages at `limit * headroom`; clamped to `0.1..1.0` |
+| `capacity.scope` | `"provider"` | `"provider"` shares one budget per provider; `"provider_model"` per provider/model |
+| `capacity.action` | `"fallback"` | `"fallback"` lets the fallback chain take over; `"reject"` returns the 429 immediately |
+
+Notes:
+
+- The gate is inert unless **at least one** of `token_limit` / `request_limit`
+  is positive.
+- Rejected requests are not accounted, so a gate cannot extend its own window.
+- Attempts that never reached a provider (this plugin's own short-circuit, the
+  all-keys-in-cooldown short-circuit, cache hits) are not accounted.
+- Streaming responses are accounted once, on the terminal chunk. A stream that
+  dies without ever emitting a terminal marker is not accounted (it consumed
+  an unknown amount of usage; under-counting is preferred over guessing).
+- State is in-memory and per-process, and is dropped when the process restarts.
+  Buckets are second-granular and expire lazily; the key map is swept at most
+  once per window.
 
 Provider names use Bifrost's `ModelProvider` enum (e.g. `"openai"`,
 `"anthropic"`, `"bedrock"`).

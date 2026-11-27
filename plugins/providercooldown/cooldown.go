@@ -158,6 +158,13 @@ type CooldownState struct {
 	// no extra state is read, no TTL is scaled, and the Mark path is unchanged.
 	escalation *escalationState
 
+	// capacity, when non-nil, enables the retrospective budget gate (see
+	// capacity.go). Nil — the default — means the whole subsystem is inert:
+	// no windows are allocated, no lock is taken, and no request is gated.
+	// Stored in an atomic pointer so Init can swap a state's gate while
+	// requests are in flight without a lock on the read path.
+	capacity atomic.Pointer[capacityGate]
+
 	// now is the time source used by the state. Nil means time.Now. Tests
 	// inject a fake clock here; production never mutates it. It must not be
 	// swapped while the state is in concurrent use.
@@ -1009,8 +1016,9 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	p.startGC()
 	if p.logger != nil {
 		escalationEnabled := cfg.Escalation != nil && cfg.Escalation.Enabled
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t)",
-			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled)
+		capacityEnabled := cfg.Capacity.Active()
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t)",
+			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled)
 	}
 	return nil
 }
@@ -1148,6 +1156,15 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 	provider, model, _ := req.GetRequestFields()
 	if provider == "" || model == "" {
 		return req, nil, nil
+	}
+
+	// Retrospective capacity gate (optional, off by default). Accounting uses
+	// real usage only, so this check never estimates tokens or reads the
+	// request body. A nil gate (the default) costs exactly one pointer check.
+	if gate := p.State.capacityGate(); gate != nil {
+		if sc := p.capacityShortCircuit(ctx, gate, provider, model); sc != nil {
+			return req, sc, nil
+		}
 	}
 
 	providerKeysAny := ctx.Value(schemas.BifrostContextKeyProviderKeys)
@@ -1351,12 +1368,26 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 	if p.State == nil {
 		return resp, bifrostErr, nil
 	}
+	// Capacity accounting runs for every terminal outcome — success included —
+	// before the cooldown-only early return below, which deliberately records
+	// no cooldown state on success. A nil gate (the default) is a no-op.
+	if gate := p.State.capacityGate(); gate != nil {
+		p.recordCapacity(ctx, gate, resp, bifrostErr)
+	}
 	if bifrostErr == nil {
 		// Success: clear this key's escalation counter so a recovered key is
 		// not punished for earlier 429s. This deliberately records NO cooldown
 		// state — success must stay a no-op for the cooldown map itself. When
 		// escalation is disabled the helper returns before reading ctx.
 		p.State.clearEscalationOnSuccess(ctx)
+		return resp, bifrostErr, nil
+	}
+
+	// A capacity-gate rejection never reached a provider, so it must never
+	// mark a cooldown either — an operator's custom quota pattern could
+	// otherwise match the synthetic message and cool a key for a request we
+	// refused ourselves.
+	if isCapacityGateError(bifrostErr) {
 		return resp, bifrostErr, nil
 	}
 

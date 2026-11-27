@@ -1163,16 +1163,91 @@ func TestSchemaProviderCooldownConfig(t *testing.T) {
 	validConfig := providerCooldownPluginConfig(`{
 		"default_ttl_seconds": 600,
 		"ttl_overrides": {"openai": 300},
-		"quota_patterns": ["insufficient_quota"]
+		"quota_patterns": ["insufficient_quota"],
+		"capacity": {
+			"enabled": true,
+			"token_limit": 200000,
+			"request_limit": 500,
+			"window_seconds": 60,
+			"headroom": 0.9,
+			"scope": "provider_model",
+			"action": "fallback"
+		}
 	}`)
 	if err := validateConfig(t, compiled, validConfig); err != nil {
 		t.Fatalf("valid provider-cooldown config should validate, got: %v", err)
+	}
+
+	// A disabled / limit-less capacity block must also validate: it is inert
+	// at runtime and is the documented default state.
+	disabledCapacity := providerCooldownPluginConfig(`{
+		"default_ttl_seconds": 600,
+		"ttl_overrides": {"openai": 300},
+		"quota_patterns": ["insufficient_quota"],
+		"capacity": {"enabled": false, "token_limit": 0, "request_limit": 0}
+	}`)
+	if err := validateConfig(t, compiled, disabledCapacity); err != nil {
+		t.Fatalf("a disabled provider-cooldown capacity block should validate, got: %v", err)
 	}
 
 	tests := []struct {
 		name   string
 		config string
 	}{
+		{
+			name: "unknown capacity scope is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "scope": "cluster"}
+			}`),
+		},
+		{
+			name: "unknown capacity action is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "action": "explode"}
+			}`),
+		},
+		{
+			name: "capacity window below the minimum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "window_seconds": 5}
+			}`),
+		},
+		{
+			name: "capacity headroom above the maximum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "headroom": 1.5}
+			}`),
+		},
+		{
+			name: "negative capacity token_limit is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": -1}
+			}`),
+		},
+		{
+			name: "unknown capacity key is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_budget": 1000}
+			}`),
+		},
 		{
 			name: "negative default_ttl_seconds is rejected",
 			config: providerCooldownPluginConfig(`{
