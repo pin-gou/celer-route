@@ -995,6 +995,12 @@ func (h *HybridLogStore) GetProviderLatencyHistogram(ctx context.Context, filter
 	return h.inner.GetProviderLatencyHistogram(ctx, filters, bucketSizeSeconds)
 }
 
+// GetProviderKeyModelUsage delegates to the inner store and returns
+// per-(model, selected key) usage aggregates over [startTime, endTime].
+func (h *HybridLogStore) GetProviderKeyModelUsage(ctx context.Context, provider string, startTime, endTime time.Time) (*ProviderKeyModelUsageResult, error) {
+	return h.inner.GetProviderKeyModelUsage(ctx, provider, startTime, endTime)
+}
+
 // GetThroughputHistogram delegates to the inner store and returns a
 // token-generation throughput (tokens/sec) histogram bucketed by bucketSizeSeconds.
 func (h *HybridLogStore) GetThroughputHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ThroughputHistogramResult, error) {

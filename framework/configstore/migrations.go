@@ -487,6 +487,7 @@ var configstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"add_billing_reconciliations_tables"}, run: migrationAddBillingReconciliationsTables},
 	{IDs: []string{"add_team_model_policies_table"}, run: migrationAddTeamModelPoliciesTable},
 	{IDs: []string{"add_virtual_key_last_used_at_column"}, run: migrationAddVirtualKeyLastUsedAtColumn},
+	{IDs: []string{"add_provider_max_concurrent_requests_per_key_column"}, run: migrationAddProviderMaxConcurrentRequestsPerKeyColumn},
 }
 
 // quoteSQLiteIdentifier quotes a SQLite identifier, escaping any double quotes.
@@ -8833,6 +8834,39 @@ func migrationAddProviderDefaultParametersJSONColumn(ctx context.Context, db *go
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error running add_provider_default_parameters_json_column migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddProviderMaxConcurrentRequestsPerKeyColumn adds the per-key
+// in-flight concurrency cap to config_providers. The column defaults to 0,
+// which means "disabled": existing rows keep today's unlimited behaviour and no
+// backfill is required. Adding a column with a constant default is a
+// metadata-only change on supported Postgres versions, so this does not lock or
+// rewrite the table at boot.
+func migrationAddProviderMaxConcurrentRequestsPerKeyColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "add_provider_max_concurrent_requests_per_key_column"
+	logger.Info("[configstore] starting migration %s", migrationName)
+	defer logger.Info("[configstore] finished migration %s", migrationName)
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := addColumnIfNotExists(tx, logger, &tables.TableProvider{}, "max_concurrent_requests_per_key"); err != nil {
+				return fmt.Errorf("failed to add column max_concurrent_requests_per_key: %w", err)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			if err := dropColumnIfExists(tx, logger, &tables.TableProvider{}, "max_concurrent_requests_per_key"); err != nil {
+				return fmt.Errorf("failed to drop column max_concurrent_requests_per_key: %w", err)
+			}
+			return nil
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error running add_provider_max_concurrent_requests_per_key_column migration: %s", err.Error())
 	}
 	return nil
 }

@@ -1631,6 +1631,11 @@ func SetExtraHeadersHTTP(ctx context.Context, req *http.Request, extraHeaders ma
 // the target struct for unmarshaling.
 func HandleProviderAPIError(resp *fasthttp.Response, errorResp any) *schemas.BifrostError {
 	statusCode := resp.StatusCode()
+	// Capture the provider's response headers once so every return branch below
+	// carries them. Downstream consumers (provider-cooldown) read provider
+	// retry hints from ProviderResponseHeaders. Sensitive and transport-level
+	// headers are already excluded by ExtractProviderResponseHeaders.
+	providerHeaders := ExtractProviderResponseHeaders(resp)
 
 	// Decode body
 	decodedBody, err := CheckAndDecodeBody(resp)
@@ -1652,7 +1657,8 @@ func HandleProviderAPIError(resp *fasthttp.Response, errorResp any) *schemas.Bif
 				Message: err.Error(),
 			},
 			ExtraFields: schemas.BifrostErrorExtraFields{
-				RawResponse: rawErrorResponse,
+				RawResponse:             rawErrorResponse,
+				ProviderResponseHeaders: providerHeaders,
 			},
 		}
 	}
@@ -1691,7 +1697,8 @@ func HandleProviderAPIError(resp *fasthttp.Response, errorResp any) *schemas.Bif
 				Message: errorMessage,
 			},
 			ExtraFields: schemas.BifrostErrorExtraFields{
-				RawResponse: rawErrorResponse,
+				RawResponse:             rawErrorResponse,
+				ProviderResponseHeaders: providerHeaders,
 			},
 		}
 	}
@@ -1704,7 +1711,8 @@ func HandleProviderAPIError(resp *fasthttp.Response, errorResp any) *schemas.Bif
 			StatusCode:     &statusCode,
 			Error:          &schemas.ErrorField{},
 			ExtraFields: schemas.BifrostErrorExtraFields{
-				RawResponse: rawErrorResponse,
+				RawResponse:             rawErrorResponse,
+				ProviderResponseHeaders: providerHeaders,
 			},
 		}
 	}
@@ -1719,7 +1727,8 @@ func HandleProviderAPIError(resp *fasthttp.Response, errorResp any) *schemas.Bif
 				Error:   errors.New(string(decodedBody)),
 			},
 			ExtraFields: schemas.BifrostErrorExtraFields{
-				RawResponse: rawErrorResponse,
+				RawResponse:             rawErrorResponse,
+				ProviderResponseHeaders: providerHeaders,
 			},
 		}
 	}
@@ -1733,7 +1742,8 @@ func HandleProviderAPIError(resp *fasthttp.Response, errorResp any) *schemas.Bif
 			Message: message,
 		},
 		ExtraFields: schemas.BifrostErrorExtraFields{
-			RawResponse: rawErrorResponse,
+			RawResponse:             rawErrorResponse,
+			ProviderResponseHeaders: providerHeaders,
 		},
 	}
 }

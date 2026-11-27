@@ -575,6 +575,74 @@ func TestSchemaProviderRawRequest(t *testing.T) {
 	})
 }
 
+// TestSchemaProviderMaxConcurrentRequestsPerKey pins the config version of the
+// per-key in-flight gate: every provider variant must accept the field (they all
+// set additionalProperties:false, so a missing branch rejects the whole config),
+// zero must stay valid as the default, and negatives must be rejected.
+func TestSchemaProviderMaxConcurrentRequestsPerKey(t *testing.T) {
+	schema := loadSchema(t)
+
+	for _, def := range []string{
+		"provider",
+		"provider_with_bedrock_config",
+		"provider_with_bedrock_mantle_config",
+		"provider_with_vllm_config",
+		"provider_with_replicate_config",
+		"provider_with_azure_config",
+		"provider_with_azure_ai_config",
+		"provider_with_vertex_config",
+		"provider_with_ollama_config",
+		"provider_with_sgl_config",
+		"provider_with_deepseek_config",
+		"provider_with_fireworks_config",
+	} {
+		t.Run(def+" has max_concurrent_requests_per_key", func(t *testing.T) {
+			_, found := navigateJSON(schema, "$defs", def, "properties", "max_concurrent_requests_per_key")
+			if !found {
+				t.Errorf("$defs/%s is missing 'max_concurrent_requests_per_key' property — ProviderConfig Go struct defines this field", def)
+			}
+		})
+	}
+
+	compiled := compileSchema(t)
+
+	valid := `{
+		"providers": {
+			"openai": {
+				"keys": [{"name": "test", "value": "sk-test", "weight": 1, "models": ["gpt-4"]}],
+				"max_concurrent_requests_per_key": 4
+			}
+		}
+	}`
+	if err := validateConfig(t, compiled, valid); err != nil {
+		t.Errorf("provider with max_concurrent_requests_per_key should be valid, got: %v", err)
+	}
+
+	zero := `{
+		"providers": {
+			"openai": {
+				"keys": [{"name": "test", "value": "sk-test", "weight": 1, "models": ["gpt-4"]}],
+				"max_concurrent_requests_per_key": 0
+			}
+		}
+	}`
+	if err := validateConfig(t, compiled, zero); err != nil {
+		t.Errorf("max_concurrent_requests_per_key = 0 (disabled) should be valid, got: %v", err)
+	}
+
+	negative := `{
+		"providers": {
+			"openai": {
+				"keys": [{"name": "test", "value": "sk-test", "weight": 1, "models": ["gpt-4"]}],
+				"max_concurrent_requests_per_key": -1
+			}
+		}
+	}`
+	if err := validateConfig(t, compiled, negative); err == nil {
+		t.Error("negative max_concurrent_requests_per_key should be rejected by the schema")
+	}
+}
+
 func TestSchemaGovernanceProviders(t *testing.T) {
 	schema := loadSchema(t)
 
@@ -1095,16 +1163,163 @@ func TestSchemaProviderCooldownConfig(t *testing.T) {
 	validConfig := providerCooldownPluginConfig(`{
 		"default_ttl_seconds": 600,
 		"ttl_overrides": {"openai": 300},
-		"quota_patterns": ["insufficient_quota"]
+		"quota_patterns": ["insufficient_quota"],
+		"capacity": {
+			"enabled": true,
+			"token_limit": 200000,
+			"request_limit": 500,
+			"window_seconds": 60,
+			"headroom": 0.9,
+			"scope": "provider_model",
+			"action": "fallback"
+		},
+		"learning": {
+			"enabled": true,
+			"window_seconds": 60,
+			"max_samples": 50,
+			"min_samples": 5
+		}
 	}`)
 	if err := validateConfig(t, compiled, validConfig); err != nil {
 		t.Fatalf("valid provider-cooldown config should validate, got: %v", err)
+	}
+
+	// A disabled learning block must also validate: it is inert at runtime
+	// and is the documented default state.
+	disabledLearning := providerCooldownPluginConfig(`{
+		"default_ttl_seconds": 600,
+		"ttl_overrides": {"openai": 300},
+		"quota_patterns": ["insufficient_quota"],
+		"learning": {"enabled": false, "window_seconds": 60, "max_samples": 50, "min_samples": 5}
+	}`)
+	if err := validateConfig(t, compiled, disabledLearning); err != nil {
+		t.Fatalf("a disabled provider-cooldown learning block should validate, got: %v", err)
+	}
+
+	// A disabled / limit-less capacity block must also validate: it is inert
+	// at runtime and is the documented default state.
+	disabledCapacity := providerCooldownPluginConfig(`{
+		"default_ttl_seconds": 600,
+		"ttl_overrides": {"openai": 300},
+		"quota_patterns": ["insufficient_quota"],
+		"capacity": {"enabled": false, "token_limit": 0, "request_limit": 0}
+	}`)
+	if err := validateConfig(t, compiled, disabledCapacity); err != nil {
+		t.Fatalf("a disabled provider-cooldown capacity block should validate, got: %v", err)
 	}
 
 	tests := []struct {
 		name   string
 		config string
 	}{
+		{
+			name: "unknown capacity scope is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "scope": "cluster"}
+			}`),
+		},
+		{
+			name: "unknown capacity action is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "action": "explode"}
+			}`),
+		},
+		{
+			name: "capacity window below the minimum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "window_seconds": 5}
+			}`),
+		},
+		{
+			name: "capacity headroom above the maximum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": 1000, "headroom": 1.5}
+			}`),
+		},
+		{
+			name: "negative capacity token_limit is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_limit": -1}
+			}`),
+		},
+		{
+			name: "unknown capacity key is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"capacity": {"enabled": true, "token_budget": 1000}
+			}`),
+		},
+		{
+			name: "unknown learning key is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "suggest": true}
+			}`),
+		},
+		{
+			name: "learning window below the minimum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "window_seconds": 5}
+			}`),
+		},
+		{
+			name: "learning window above the maximum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "window_seconds": 100000}
+			}`),
+		},
+		{
+			name: "learning max_samples below the minimum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "max_samples": 1}
+			}`),
+		},
+		{
+			name: "learning min_samples above the maximum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": true, "min_samples": 1000}
+			}`),
+		},
+		{
+			name: "non-boolean learning enabled is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"learning": {"enabled": "yes"}
+			}`),
+		},
 		{
 			name: "negative default_ttl_seconds is rejected",
 			config: providerCooldownPluginConfig(`{
@@ -1314,6 +1529,51 @@ func TestSchemaProviderCooldownPolicy(t *testing.T) {
 		}`
 		if err := validateConfig(t, compiled, cfg); err == nil {
 			t.Error("unknown match field must be rejected by additionalProperties:false")
+		}
+	})
+
+	t.Run("retry_after_mode accepts documented values", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"retry_after_mode": "cap"
+						},
+						"quota": {
+							"match": [{"code": ["insufficient_quota"]}],
+							"ttl_seconds": 600,
+							"retry_after_mode": "exact"
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected retry_after_mode cap/exact to validate, got: %v", err)
+		}
+	})
+
+	t.Run("unknown retry_after_mode is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"retry_after_mode": "sometimes"
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("invalid retry_after_mode must be rejected by the enum")
 		}
 	})
 }

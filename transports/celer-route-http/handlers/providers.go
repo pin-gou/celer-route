@@ -104,21 +104,22 @@ const (
 
 // ProviderResponse represents the response for provider operations
 type ProviderResponse struct {
-	Name                     schemas.ModelProvider             `json:"name"`
-	NetworkConfig            schemas.NetworkConfig             `json:"network_config"`                   // Network-related settings
-	ConcurrencyAndBufferSize schemas.ConcurrencyAndBufferSize  `json:"concurrency_and_buffer_size"`      // Concurrency settings
-	ProxyConfig              *schemas.ProxyConfig              `json:"proxy_config"`                     // Proxy configuration
-	SendBackRawRequest       bool                              `json:"send_back_raw_request"`            // Include raw request in BifrostResponse
-	SendBackRawResponse      bool                              `json:"send_back_raw_response"`           // Include raw response in BifrostResponse
-	StoreRawRequestResponse  bool                              `json:"store_raw_request_response"`       // Capture raw request/response for internal logging only
-	CustomProviderConfig     *schemas.CustomProviderConfig     `json:"custom_provider_config,omitempty"` // Custom provider configuration
-	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`          // OpenAI-specific configuration
-	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`        // Per-provider cooldown policy
-	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`     // Per-model default request parameters (model → param → value)
-	ProviderStatus           ProviderStatus                    `json:"provider_status"`                  // Health/initialization status of the provider
-	Status                   string                            `json:"status,omitempty"`                 // Operational status (e.g., list_models_failed)
-	Description              string                            `json:"description,omitempty"`            // Error/status description
-	ConfigHash               string                            `json:"config_hash,omitempty"`            // Hash of config.json version, used for change detection
+	Name                        schemas.ModelProvider             `json:"name"`
+	NetworkConfig               schemas.NetworkConfig             `json:"network_config"`                   // Network-related settings
+	ConcurrencyAndBufferSize    schemas.ConcurrencyAndBufferSize  `json:"concurrency_and_buffer_size"`      // Concurrency settings
+	ProxyConfig                 *schemas.ProxyConfig              `json:"proxy_config"`                     // Proxy configuration
+	SendBackRawRequest          bool                              `json:"send_back_raw_request"`            // Include raw request in BifrostResponse
+	SendBackRawResponse         bool                              `json:"send_back_raw_response"`           // Include raw response in BifrostResponse
+	StoreRawRequestResponse     bool                              `json:"store_raw_request_response"`       // Capture raw request/response for internal logging only
+	CustomProviderConfig        *schemas.CustomProviderConfig     `json:"custom_provider_config,omitempty"` // Custom provider configuration
+	OpenAIConfig                *schemas.OpenAIConfig             `json:"openai_config,omitempty"`          // OpenAI-specific configuration
+	CooldownPolicy              *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"`        // Per-provider cooldown policy
+	DefaultParameters           map[string]map[string]interface{} `json:"default_parameters,omitempty"`     // Per-model default request parameters (model → param → value)
+	MaxConcurrentRequestsPerKey int                               `json:"max_concurrent_requests_per_key"`  // Per-API-key in-flight concurrency cap; 0 = disabled
+	ProviderStatus              ProviderStatus                    `json:"provider_status"`                  // Health/initialization status of the provider
+	Status                      string                            `json:"status,omitempty"`                 // Operational status (e.g., list_models_failed)
+	Description                 string                            `json:"description,omitempty"`            // Error/status description
+	ConfigHash                  string                            `json:"config_hash,omitempty"`            // Hash of config.json version, used for change detection
 	// IsKeyLess is true when the provider is inherently keyless (no API key
 	// needed). Set by the server for built-in keyless providers (opencode)
 	// and custom providers with CustomProviderConfig.IsKeyLess=true.
@@ -187,6 +188,8 @@ type providerCreatePayload struct {
 	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`   // OpenAI-specific configuration
 	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"` // Per-provider cooldown policy (rate_limit / quota)
 	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`
+	// MaxConcurrentRequestsPerKey caps in-flight requests per API key; 0 = disabled.
+	MaxConcurrentRequestsPerKey int `json:"max_concurrent_requests_per_key,omitempty"`
 }
 
 type providerUpdatePayload struct {
@@ -200,6 +203,11 @@ type providerUpdatePayload struct {
 	OpenAIConfig             *schemas.OpenAIConfig             `json:"openai_config,omitempty"`   // OpenAI-specific configuration
 	CooldownPolicy           *schemas.CooldownPolicy           `json:"cooldown_policy,omitempty"` // Per-provider cooldown policy; nil clears the override and falls back to the built-in default
 	DefaultParameters        map[string]map[string]interface{} `json:"default_parameters,omitempty"`
+	// MaxConcurrentRequestsPerKey caps in-flight requests per API key; 0 = disabled.
+	// Optional here (unlike create) so callers that don't know about the field —
+	// including the current Web UI, which rebuilds this payload from its own type
+	// whitelist — leave the stored value untouched instead of silently clearing it.
+	MaxConcurrentRequestsPerKey *int `json:"max_concurrent_requests_per_key,omitempty"`
 }
 
 // RegisterRoutes registers all provider management routes
@@ -209,6 +217,8 @@ func (h *ProviderHandler) RegisterRoutes(r *router.Router, middlewares ...schema
 	r.GET("/api/providers/{provider}", lib.ChainMiddlewares(h.getProvider, middlewares...))
 	r.GET("/api/providers/{provider}/keys", lib.ChainMiddlewares(h.listProviderKeys, middlewares...))
 	r.GET("/api/providers/{provider}/keys/{key_id}", lib.ChainMiddlewares(h.getProviderKey, middlewares...))
+	// Read-only operational view: request/token usage per (model, selected key).
+	r.GET("/api/providers/{provider}/usage", lib.ChainMiddlewares(h.getProviderUsage, middlewares...))
 	r.POST("/api/providers", lib.ChainMiddlewares(h.addProvider, middlewares...))
 	r.POST("/api/providers/{provider}/keys", lib.ChainMiddlewares(h.createProviderKey, middlewares...))
 	r.POST("/api/providers/{provider}/keys/batch", lib.ChainMiddlewares(h.batchUpdateProviderKeys, middlewares...))
@@ -401,6 +411,12 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 			}
 		}
 	}
+	// A quota rule matching a bare status code would shadow every rate_limit
+	// rule (quota is evaluated first). See CooldownPolicy.Validate.
+	if err := payload.CooldownPolicy.Validate(); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid cooldown policy: %v", err))
+		return
+	}
 	// Check if provider already exists
 	if _, err := h.inMemoryStore.GetProviderConfigRedacted(payload.Provider); err != nil {
 		if !errors.Is(err, lib.ErrNotFound) {
@@ -412,18 +428,24 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if payload.MaxConcurrentRequestsPerKey < 0 {
+		SendError(ctx, fasthttp.StatusBadRequest, "max_concurrent_requests_per_key must be >= 0 (0 disables the limit)")
+		return
+	}
+
 	// Construct ProviderConfig from individual fields
 	config := configstore.ProviderConfig{
-		NetworkConfig:            payload.NetworkConfig,
-		ProxyConfig:              payload.ProxyConfig,
-		ConcurrencyAndBufferSize: payload.ConcurrencyAndBufferSize,
-		SendBackRawRequest:       payload.SendBackRawRequest != nil && *payload.SendBackRawRequest,
-		SendBackRawResponse:      payload.SendBackRawResponse != nil && *payload.SendBackRawResponse,
-		StoreRawRequestResponse:  payload.StoreRawRequestResponse != nil && *payload.StoreRawRequestResponse,
-		CustomProviderConfig:     payload.CustomProviderConfig,
-		OpenAIConfig:             payload.OpenAIConfig,
-		CooldownPolicy:           payload.CooldownPolicy,
-		DefaultParameters:        payload.DefaultParameters,
+		NetworkConfig:               payload.NetworkConfig,
+		ProxyConfig:                 payload.ProxyConfig,
+		ConcurrencyAndBufferSize:    payload.ConcurrencyAndBufferSize,
+		SendBackRawRequest:          payload.SendBackRawRequest != nil && *payload.SendBackRawRequest,
+		SendBackRawResponse:         payload.SendBackRawResponse != nil && *payload.SendBackRawResponse,
+		StoreRawRequestResponse:     payload.StoreRawRequestResponse != nil && *payload.StoreRawRequestResponse,
+		CustomProviderConfig:        payload.CustomProviderConfig,
+		OpenAIConfig:                payload.OpenAIConfig,
+		CooldownPolicy:              payload.CooldownPolicy,
+		DefaultParameters:           payload.DefaultParameters,
+		MaxConcurrentRequestsPerKey: payload.MaxConcurrentRequestsPerKey,
 	}
 	// Validate custom provider configuration before persisting
 	if err := lib.ValidateCustomProvider(config, payload.Provider); err != nil {
@@ -459,16 +481,17 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 		logger.Warn("Failed to get redacted config for provider %s: %v", payload.Provider, err)
 		// Fall back to the raw config (no keys)
 		response := h.getProviderResponseFromConfig(payload.Provider, configstore.ProviderConfig{
-			NetworkConfig:            config.NetworkConfig,
-			ConcurrencyAndBufferSize: config.ConcurrencyAndBufferSize,
-			ProxyConfig:              config.ProxyConfig,
-			SendBackRawRequest:       config.SendBackRawRequest,
-			SendBackRawResponse:      config.SendBackRawResponse,
-			StoreRawRequestResponse:  config.StoreRawRequestResponse,
-			CustomProviderConfig:     config.CustomProviderConfig,
-			CooldownPolicy:           config.CooldownPolicy,
-			Status:                   config.Status,
-			Description:              config.Description,
+			NetworkConfig:               config.NetworkConfig,
+			ConcurrencyAndBufferSize:    config.ConcurrencyAndBufferSize,
+			ProxyConfig:                 config.ProxyConfig,
+			SendBackRawRequest:          config.SendBackRawRequest,
+			SendBackRawResponse:         config.SendBackRawResponse,
+			StoreRawRequestResponse:     config.StoreRawRequestResponse,
+			CustomProviderConfig:        config.CustomProviderConfig,
+			CooldownPolicy:              config.CooldownPolicy,
+			MaxConcurrentRequestsPerKey: config.MaxConcurrentRequestsPerKey,
+			Status:                      config.Status,
+			Description:                 config.Description,
 		}, ProviderStatusActive)
 		SendJSON(ctx, response)
 		return
@@ -546,15 +569,16 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 
 	// Construct ProviderConfig from individual fields (keys are managed separately via /keys endpoints)
 	config := configstore.ProviderConfig{
-		Keys:                     oldConfigRaw.Keys,
-		NetworkConfig:            oldConfigRaw.NetworkConfig,
-		ConcurrencyAndBufferSize: oldConfigRaw.ConcurrencyAndBufferSize,
-		ProxyConfig:              oldConfigRaw.ProxyConfig,
-		CustomProviderConfig:     oldConfigRaw.CustomProviderConfig,
-		OpenAIConfig:             oldConfigRaw.OpenAIConfig,
-		StoreRawRequestResponse:  oldConfigRaw.StoreRawRequestResponse,
-		Status:                   oldConfigRaw.Status,
-		Description:              oldConfigRaw.Description,
+		Keys:                        oldConfigRaw.Keys,
+		NetworkConfig:               oldConfigRaw.NetworkConfig,
+		ConcurrencyAndBufferSize:    oldConfigRaw.ConcurrencyAndBufferSize,
+		ProxyConfig:                 oldConfigRaw.ProxyConfig,
+		CustomProviderConfig:        oldConfigRaw.CustomProviderConfig,
+		OpenAIConfig:                oldConfigRaw.OpenAIConfig,
+		StoreRawRequestResponse:     oldConfigRaw.StoreRawRequestResponse,
+		MaxConcurrentRequestsPerKey: oldConfigRaw.MaxConcurrentRequestsPerKey,
+		Status:                      oldConfigRaw.Status,
+		Description:                 oldConfigRaw.Description,
 	}
 
 	if payload.ConcurrencyAndBufferSize.Concurrency == 0 {
@@ -593,6 +617,15 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
+	// Reject cooldown policies that would silently shadow the rate_limit rule
+	// (a bare status_code match inside quota). Surfacing this at save time is
+	// the only cheap moment: once stored, the misclassification only shows up
+	// as the wrong "quota exhausted" badge on the cooldown state page.
+	if err := payload.CooldownPolicy.Validate(); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid cooldown policy: %v", err))
+		return
+	}
+
 	config.ConcurrencyAndBufferSize = &payload.ConcurrencyAndBufferSize
 	// Merge network config - restore ca_cert_pem if the redacted placeholder was sent back
 	if oldConfigRaw.NetworkConfig != nil && oldRedactedConfig.NetworkConfig != nil && nc.CACertPEM != nil {
@@ -627,6 +660,16 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 	// default_parameters is a full-replace map like OpenAIConfig: the payload
 	// carries the complete map (empty object clears it).
 	config.DefaultParameters = payload.DefaultParameters
+	// Optional field: absent means "keep the stored value" (config was seeded from
+	// oldConfigRaw above). Explicit negative values are rejected rather than
+	// silently normalized, so an API caller can't think it enabled the gate.
+	if payload.MaxConcurrentRequestsPerKey != nil {
+		if *payload.MaxConcurrentRequestsPerKey < 0 {
+			SendError(ctx, fasthttp.StatusBadRequest, "max_concurrent_requests_per_key must be >= 0 (0 disables the limit)")
+			return
+		}
+		config.MaxConcurrentRequestsPerKey = *payload.MaxConcurrentRequestsPerKey
+	}
 	if payload.SendBackRawRequest != nil {
 		config.SendBackRawRequest = *payload.SendBackRawRequest
 	}
@@ -685,15 +728,16 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 		logger.Warn("Failed to get redacted config for provider %s: %v", provider, err)
 		// Fall back to sanitized config (no keys)
 		response := h.getProviderResponseFromConfig(provider, configstore.ProviderConfig{
-			NetworkConfig:            config.NetworkConfig,
-			ConcurrencyAndBufferSize: config.ConcurrencyAndBufferSize,
-			ProxyConfig:              config.ProxyConfig,
-			SendBackRawRequest:       config.SendBackRawRequest,
-			SendBackRawResponse:      config.SendBackRawResponse,
-			StoreRawRequestResponse:  config.StoreRawRequestResponse,
-			CustomProviderConfig:     config.CustomProviderConfig,
-			Status:                   config.Status,
-			Description:              config.Description,
+			NetworkConfig:               config.NetworkConfig,
+			ConcurrencyAndBufferSize:    config.ConcurrencyAndBufferSize,
+			ProxyConfig:                 config.ProxyConfig,
+			SendBackRawRequest:          config.SendBackRawRequest,
+			SendBackRawResponse:         config.SendBackRawResponse,
+			StoreRawRequestResponse:     config.StoreRawRequestResponse,
+			CustomProviderConfig:        config.CustomProviderConfig,
+			MaxConcurrentRequestsPerKey: config.MaxConcurrentRequestsPerKey,
+			Status:                      config.Status,
+			Description:                 config.Description,
 		}, ProviderStatusActive)
 		SendJSON(ctx, response)
 		return
@@ -756,23 +800,23 @@ type ListModelsResponse struct {
 
 // ModelDetailsResponse represents a model with capability metadata.
 type ModelDetailsResponse struct {
-	Name                 string                `json:"name"`
-	Provider             string                `json:"provider"`
-	ContextLength        *int                  `json:"context_length,omitempty"`
-	MaxInputTokens       *int                  `json:"max_input_tokens,omitempty"`
-	MaxOutputTokens      *int                  `json:"max_output_tokens,omitempty"`
-	InputCostPerToken    *float64              `json:"input_cost_per_token,omitempty"`
-	OutputCostPerToken   *float64              `json:"output_cost_per_token,omitempty"`
-	CacheWriteCost       *float64              `json:"cache_creation_input_token_cost,omitempty"`
-	CacheReadCost        *float64              `json:"cache_read_input_token_cost,omitempty"`
-	Architecture         *schemas.Architecture `json:"architecture,omitempty"`
-	IsDeprecated         bool                  `json:"is_deprecated,omitempty"`
+	Name               string                `json:"name"`
+	Provider           string                `json:"provider"`
+	ContextLength      *int                  `json:"context_length,omitempty"`
+	MaxInputTokens     *int                  `json:"max_input_tokens,omitempty"`
+	MaxOutputTokens    *int                  `json:"max_output_tokens,omitempty"`
+	InputCostPerToken  *float64              `json:"input_cost_per_token,omitempty"`
+	OutputCostPerToken *float64              `json:"output_cost_per_token,omitempty"`
+	CacheWriteCost     *float64              `json:"cache_creation_input_token_cost,omitempty"`
+	CacheReadCost      *float64              `json:"cache_read_input_token_cost,omitempty"`
+	Architecture       *schemas.Architecture `json:"architecture,omitempty"`
+	IsDeprecated       bool                  `json:"is_deprecated,omitempty"`
 	// IsCustom reports whether the pricing row backing this model was seeded
 	// through the management API (Add Custom Model) rather than datasheet sync
 	// or key discovery. Only custom models may be renamed/deleted.
-	IsCustom             bool                  `json:"is_custom,omitempty"`
-	AdditionalAttributes map[string]string     `json:"additional_attributes,omitempty"`
-	AccessibleByKeys     []string              `json:"accessible_by_keys,omitempty"`
+	IsCustom             bool              `json:"is_custom,omitempty"`
+	AdditionalAttributes map[string]string `json:"additional_attributes,omitempty"`
+	AccessibleByKeys     []string          `json:"accessible_by_keys,omitempty"`
 }
 
 // ListModelDetailsResponse represents the response for listing detailed models.
@@ -1400,6 +1444,7 @@ func (h *ProviderHandler) getProviderResponseFromConfig(provider schemas.ModelPr
 		OpenAIConfig:                 config.OpenAIConfig,
 		CooldownPolicy:               config.CooldownPolicy,
 		DefaultParameters:            config.DefaultParameters,
+		MaxConcurrentRequestsPerKey:  config.MaxConcurrentRequestsPerKey,
 		IsKeyLess:                    keyless,
 		ProviderStatus:               status,
 		Status:                       config.Status,
@@ -1682,10 +1727,13 @@ func (h *ProviderHandler) testProviderModel(ctx *fasthttp.RequestCtx) {
 
 	// Build the BifrostContext. The plugin pipeline is left active so logging
 	// records the test call in the LLM logs page. Budget/rate-limit checks and
-	// VK usage tracking are disabled so the test never affects quotas or stats.
+	// VK usage tracking are disabled so the test never affects quotas or stats,
+	// and the mandatory-VK requirement is waived: this is an admin-internal
+	// probe with no caller VK to present.
 	bfCtx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
 	bfCtx.SetValue(schemas.BifrostContextKeySkipBudgetAndRateLimits, true)
 	bfCtx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
+	bfCtx.SetValue(schemas.BifrostContextKeySkipVKMandatoryCheck, true)
 
 	// If a key_id is specified, resolve it and force it on the context.
 	if payload.KeyID != "" {
@@ -1860,11 +1908,14 @@ func (h *ProviderHandler) testOneModel(ctx *fasthttp.RequestCtx, provider schema
 	// The fasthttp request context is safe to share across model workers (each
 	// probe gets its own cancellable BifrostContext child), and keeps request
 	// values — request ID, headers — visible to the plugin pipeline exactly as
-	// the single model test does.
+	// the single model test does. Skip budget/rate-limit checks and VK usage
+	// tracking so tests never affect quotas or stats, and waive the mandatory-VK
+	// requirement: these are admin-internal probes with no caller VK to present.
 	bfCtx := schemas.NewBifrostContext(ctx, time.Now().Add(30*time.Second))
 	defer bfCtx.Cancel()
 	bfCtx.SetValue(schemas.BifrostContextKeySkipBudgetAndRateLimits, true)
 	bfCtx.SetValue(schemas.BifrostContextKeySkipVirtualKeyUsageTracking, true)
+	bfCtx.SetValue(schemas.BifrostContextKeySkipVKMandatoryCheck, true)
 
 	hi := "hi"
 	content := &schemas.ChatMessageContent{ContentStr: &hi}

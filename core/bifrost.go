@@ -18,6 +18,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 
+	"github.com/pin-gou/celer-route/core/keyinflight"
 	"github.com/pin-gou/celer-route/core/keyselectors"
 	"github.com/pin-gou/celer-route/core/mcp"
 	"github.com/pin-gou/celer-route/core/mcp/codemode/starlark"
@@ -137,6 +138,7 @@ type Bifrost struct {
 	keySelector         schemas.KeySelector                         // Custom key selector function
 	keyPoolFilter       atomic.Pointer[schemas.KeyPoolFilter]       // optional hook to veto keys before selection (nil pointer = all eligible); hot-swappable via SetKeyPoolFilter
 	perKeyFailureMarker atomic.Pointer[schemas.PerKeyFailureMarker] // optional hook called per failed attempt in executeRequestWithRetries (nil pointer = no-op); hot-swappable via SetPerKeyFailureMarker — lets cross-request key-state see the 429 a later retry succeeded around, which PostLLMHook never observes
+	keyInflight         *keyinflight.Limiter                        // per-(provider, key) in-flight counters backing MaxConcurrentRequestsPerKey; always non-nil after Init, untouched when the cap is 0
 	kvStore             schemas.KVStore                             // optional KV store for session stickiness (nil = disabled)
 }
 
@@ -285,6 +287,7 @@ func Init(ctx context.Context, config schemas.BifrostConfig) (*Bifrost, error) {
 		requestQueues: sync.Map{},
 		waitGroups:    sync.Map{},
 		keySelector:   config.KeySelector,
+		keyInflight:   keyinflight.New(),
 		mcpCredStore:  credstore.NewCredStore(config.OAuth2Provider, config.MCPHeadersProvider, config.Logger),
 		logger:        config.Logger,
 		kvStore:       config.KVStore,
@@ -6368,6 +6371,75 @@ func isSyntheticNoEligibleKeysError(err *schemas.BifrostError) bool {
 	return true
 }
 
+// preferKeyWithInflightHeadroom softens the per-key concurrency gate at the key
+// selection stage. It is called only when MaxConcurrentRequestsPerKey > 0, so a
+// disabled gate never reaches this function (the caller keeps using the plain
+// keySelector result).
+//
+// selected is the key the configured keySelector already picked. If that key
+// still has headroom, it is returned unchanged. Otherwise the same selector is
+// re-run over just the candidates that are below the cap, preserving the
+// provider's weighting among the still-available keys.
+//
+// When every candidate is saturated the original selection is returned: a full
+// key pool is a capacity signal, not a reason to fail the request. Blocking
+// would tie up a worker goroutine, and erroring would turn "this provider is
+// busy" into a user-visible failure — both are worse than briefly exceeding the
+// cap. The authoritative admission decision stays in Acquire, which is
+// fail-open in exactly the same way.
+func (bifrost *Bifrost) preferKeyWithInflightHeadroom(
+	ctx *schemas.BifrostContext,
+	selected schemas.Key,
+	available []schemas.Key,
+	providerKey schemas.ModelProvider,
+	model string,
+	limit int,
+) schemas.Key {
+	if limit <= 0 || bifrost.keyInflight == nil || len(available) <= 1 {
+		return selected
+	}
+	provName := string(providerKey)
+	if bifrost.keyInflight.InFlight(provName, selected.ID) < limit {
+		return selected
+	}
+
+	withHeadroom := make([]schemas.Key, 0, len(available))
+	for _, k := range available {
+		if bifrost.keyInflight.InFlight(provName, k.ID) < limit {
+			withHeadroom = append(withHeadroom, k)
+		}
+	}
+	if len(withHeadroom) == 0 {
+		bifrost.logger.Debug("all candidate keys for provider %s are at max_concurrent_requests_per_key=%d; allowing key %s through the gate", providerKey, limit, selected.ID)
+		return selected
+	}
+
+	alt, err := bifrost.keySelector(ctx, withHeadroom, providerKey, model)
+	if err != nil {
+		// The custom selector failed on the narrower pool. Keep the original pick
+		// instead of surfacing a selection error the plain path would not have hit.
+		return selected
+	}
+	bifrost.logger.Debug("key %s for provider %s is at max_concurrent_requests_per_key=%d; preferring key %s with headroom", selected.ID, providerKey, limit, alt.ID)
+	return alt
+}
+
+// acquireKeyInflight takes one in-flight slot for (providerKey, keyID) when the
+// per-key cap is enabled. limit <= 0 (the default) is a no-op that reports
+// success without touching the limiter, so the disabled path stays lock-free.
+// A rejected acquire is *not* an error: the attempt proceeds uncounted, which
+// is the deliberate fail-open behaviour described on preferKeyWithInflightHeadroom.
+func (bifrost *Bifrost) acquireKeyInflight(providerKey schemas.ModelProvider, keyID string, limit int) bool {
+	if limit <= 0 || bifrost.keyInflight == nil {
+		return false
+	}
+	acquired := bifrost.keyInflight.Acquire(string(providerKey), keyID, limit)
+	if !acquired {
+		bifrost.logger.Debug("key %s for provider %s already has %d request(s) in flight (max_concurrent_requests_per_key); allowing this attempt uncounted", keyID, providerKey, limit)
+	}
+	return acquired
+}
+
 // executeRequestWithRetries is a generic function that handles common request processing logic.
 // It consolidates retry logic, backoff calculation, error handling, and key rotation.
 // It is not a bifrost method because interface methods in go cannot be generic.
@@ -6422,11 +6494,6 @@ func executeRequestWithRetries[T any](
 	var usedKeyIDs map[string]bool
 	var deadKeyIDs map[string]bool
 	lastWasPerKeyFailure := false
-	// True iff the previous attempt failed with a *permanent* per-key error (401/402/403).
-	// Used to suppress backoff on the next attempt only when we genuinely rotated to a
-	// different credential — a dead key gains nothing from waiting. 429 rotations stay
-	// subject to backoff because account-level rate limits share quota across keys.
-	lastWasPermanentKeyFailure := false
 	// ID of the key used on the previous attempt. Compared against the freshly selected
 	// key to confirm an actual credential swap happened before suppressing backoff —
 	// after a 429 pool reset, the selector can legitimately re-pick the same key.
@@ -6593,15 +6660,15 @@ func executeRequestWithRetries[T any](
 			// encrypted-reasoning fail-soft, so the counter never reads "1/0".
 			logger.Debug("retrying request (attempt %d/%d) for model %s: %s", attempts, config.NetworkConfig.MaxRetries+extraAttempts, model, retryMsg)
 
-			// Skip backoff only when (a) we genuinely rotated to a different credential AND
-			// (b) the previous failure was a *permanent* per-key error (401/402/403) where
-			// waiting offers nothing against a dead key.
+			// Skip backoff only when the next attempt has a genuinely different thing to
+			// try, i.e. we rotated to a different credential after a key-bound failure
+			// (429/401/402/403 — the new key has its own quota / valid credentials), or
+			// the payload changed because rejected encrypted reasoning was stripped.
 			//
 			// Backoff is preserved in every other case:
 			//   - 5xx / network retries (same key) — transient upstream issue, classic backoff.
-			//   - 429 rotations — account-level rate limits share quota across keys, so the
-			//     new key may not have fresh capacity; the backoff lets the quota window slide.
-			//   - 429 pool reset that re-picks the same key — no rotation actually happened.
+			//   - 429 pool reset that re-picks the same key — no rotation actually happened,
+			//     so that key's rate-limit window still has to slide before it can serve.
 			//   - keyless providers — currentKey.ID stays empty, so keyChanged is false.
 			keyChanged := keyProvider != nil && currentKey.ID != previousKeyID
 
@@ -6623,7 +6690,7 @@ func executeRequestWithRetries[T any](
 			}
 			ctx.AppendRoutingEngineLog(schemas.RoutingEngineCore, schemas.LogLevelInfo, fmt.Sprintf("Retry %d/%d for %s/%s (previous attempt failed: %s%s)", attempts, config.NetworkConfig.MaxRetries+extraAttempts, providerKey, model, routingErrorSummary(bifrostError), keyNote))
 
-			if !((lastWasPermanentKeyFailure && keyChanged) || lastWasEncryptedContentStrip) {
+			if !shouldSkipRetryBackoff(keyChanged, lastWasPerKeyFailure, lastWasEncryptedContentStrip) {
 				backoff := calculateBackoff(attempts-1, config)
 				logger.Debug("sleeping for %s before retry", backoff)
 				time.Sleep(backoff)
@@ -6947,7 +7014,6 @@ func executeRequestWithRetries[T any](
 			}
 		}
 		lastWasPerKeyFailure = isPerKeyFailure
-		lastWasPermanentKeyFailure = isPermanentKeyFailure
 		// Remember the key used on this attempt so the next iteration's backoff check
 		// can detect whether key selection genuinely picked a different credential.
 		previousKeyID = currentKey.ID
@@ -7313,7 +7379,18 @@ func (bifrost *Bifrost) requestWorkerServe(provider schemas.Provider, config *sc
 									delete(usedKeyIDs, id)
 								}
 							}
-							return bifrost.keySelector(req.Context, available, provKey, mdl)
+							selected, selErr := bifrost.keySelector(req.Context, available, provKey, mdl)
+							if selErr != nil {
+								return selected, selErr
+							}
+							// Optional per-key concurrency gate: when the cap is enabled,
+							// steer selection toward a key that still has headroom. Guarded
+							// at the call site so a disabled cap adds no call and no
+							// limiter access at all.
+							if config.MaxConcurrentRequestsPerKey > 0 {
+								selected = bifrost.preferKeyWithInflightHeadroom(req.Context, selected, available, provKey, mdl, config.MaxConcurrentRequestsPerKey)
+							}
+							return selected, nil
 						}
 					}
 				}
@@ -7412,6 +7489,22 @@ func (bifrost *Bifrost) requestWorkerServe(provider schemas.Provider, config *sc
 				// a concurrent request can then reuse it and overwrite RequestType.
 				// Reading req.RequestType inside the closure would observe the new request's type.
 				attemptRequestType := req.RequestType
+				// Optional per-key in-flight gate. The slot is acquired before the
+				// provider call and released when THIS attempt's stream actually ends
+				// — wired into postHookSpanFinalizer below, not on channel return. A
+				// streaming body can outlive this closure by minutes, so releasing when
+				// the channel comes back would make the cap measure nothing.
+				inflightAcquired := config.MaxConcurrentRequestsPerKey > 0 &&
+					bifrost.acquireKeyInflight(provider.GetProviderKey(), k.ID, config.MaxConcurrentRequestsPerKey)
+				var inflightOnce sync.Once
+				releaseInflight := func() {
+					if !inflightAcquired {
+						return
+					}
+					inflightOnce.Do(func() {
+						bifrost.keyInflight.Release(string(provider.GetProviderKey()), k.ID)
+					})
+				}
 				pipeline := bifrost.getPluginPipeline()
 				postHookRunner := func(ctx *schemas.BifrostContext, result *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
 					// Populate extra fields before RunPostLLMHooks so plugins (e.g. logging)
@@ -7444,9 +7537,34 @@ func (bifrost *Bifrost) requestWorkerServe(provider schemas.Provider, config *sc
 				// Wrapped in sync.Once so the normal end-of-stream invocation and a deferred
 				// safety-net invocation (e.g. from a provider goroutine's panic path) cannot
 				// double-release the pipeline.
+				//
+				// This is also the streaming release point for the per-key in-flight slot.
+				// It is the hook that runs exactly once when the attempt's stream truly
+				// ends, on every provider path (finalizerOnce dedupes; inflightOnce adds
+				// a second guard in case a future caller reaches Release by another route):
+				//   - normal end of stream: the final chunk makes completeDeferredSpan
+				//     invoke it (providers/utils.ProcessAndSendResponse / ...BifrostError).
+				//     That call is skipped when no deferred span is parked (e.g. no
+				//     trace ID), so it is not by itself the guarantee;
+				//   - every provider streaming goroutine defers
+				//     providerUtils.EnsureStreamFinalizerCalled, which runs on ALL exits
+				//     (normal end, panic unwinding, early return) and invokes this
+				//     finalizer unconditionally — this is the load-bearing guarantee.
+				//     Every provider directory that closes a stream channel carries it;
+				//   - client disconnect / timeout: HandleStreamCancellation /
+				//     HandleStreamTimeout invoke it before closing the channel;
+				//   - stream setup failure after the goroutine started: the worker calls
+				//     lastAttemptFinalizer (see below), which is the same closure.
+				// Each attempt builds its own finalizerOnce + inflightOnce pair, so retries
+				// and fallbacks never share a slot.
 				var finalizerOnce sync.Once
 				postHookSpanFinalizer := func(ctx context.Context) {
 					finalizerOnce.Do(func() {
+						// Free the concurrency slot first: it measures provider
+						// occupancy, and a panic in span finalization must not strand it.
+						if inflightAcquired {
+							releaseInflight()
+						}
 						pipeline.FinalizeStreamingPostHookSpans(ctx)
 						bifrost.releasePluginPipeline(pipeline)
 					})
@@ -7455,11 +7573,19 @@ func (bifrost *Bifrost) requestWorkerServe(provider schemas.Provider, config *sc
 				streamCh, streamErr := bifrost.handleProviderStreamRequest(provider, config, req, k, postHookRunner, postHookSpanFinalizer)
 				// If stream setup failed before any provider goroutine started,
 				// no deferred finalizer will run — release the pipeline directly
-				// so a retry doesn't inherit a leaked pool entry.
-				if streamErr != nil && streamCh == nil {
-					finalizerOnce.Do(func() {
-						bifrost.releasePluginPipeline(pipeline)
-					})
+				// so a retry doesn't inherit a leaked pool entry. The in-flight
+				// slot has the same problem and is released on any nil-channel
+				// return: without a stream there is no consumer whose completion
+				// could trigger the finalizer.
+				if streamCh == nil {
+					if streamErr != nil {
+						finalizerOnce.Do(func() {
+							bifrost.releasePluginPipeline(pipeline)
+						})
+					}
+					if inflightAcquired {
+						releaseInflight()
+					}
 				}
 				return streamCh, streamErr
 			}, keyProvider, perKeyFailureMarker, req.RequestType, provider.GetProviderKey(), model, &req.BifrostRequest, bifrost.logger)
@@ -7474,6 +7600,14 @@ func (bifrost *Bifrost) requestWorkerServe(provider schemas.Provider, config *sc
 				}
 				req.SetModel(resolvedModel)
 				attemptRoutingInfo = schemas.BuildRoutingInfo(req.Context, provider.GetProviderKey(), originalModelRequested, k)
+				// Optional per-key in-flight gate: one slot per attempt, released when
+				// this attempt returns. Deferred inside the closure so a retry on a
+				// different key acquires its own slot instead of reusing this one.
+				if config.MaxConcurrentRequestsPerKey > 0 {
+					if inflightAcquired := bifrost.acquireKeyInflight(provider.GetProviderKey(), k.ID, config.MaxConcurrentRequestsPerKey); inflightAcquired {
+						defer bifrost.keyInflight.Release(string(provider.GetProviderKey()), k.ID)
+					}
+				}
 				// Record the upstream span for this attempt. handleProviderRequest
 				// is the single chokepoint that funnels every unary provider.X
 				// call (chat, embeddings, speech, transcription, image, video,

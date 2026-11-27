@@ -407,6 +407,7 @@ const (
 	BifrostContextKeyApp                                 BifrostContextKey = "app"                                              // string (canonical app key such as claude-code; set by plugins)
 	BifrostContextKeySkipBudgetAndRateLimits             BifrostContextKey = "bifrost-skip-budget-and-rate-limits"              // bool (set by bifrost for read-only requests like list models that don't consume quota)
 	BifrostContextKeySkipVirtualKeyUsageTracking         BifrostContextKey = "bifrost-skip-virtual-key-usage-tracking"          // bool (set by governance callers to skip VK usage while preserving VK auth/attribution)
+	BifrostContextKeySkipVKMandatoryCheck                BifrostContextKey = "bifrost-skip-vk-mandatory-check"                  // bool (set by admin/internal callers, e.g. model test endpoints, to exempt a keyless request from the mandatory-VK rejection)
 	BifrostContextKeyTraceID                             BifrostContextKey = "bifrost-trace-id"                                 // string (per-request trace store handle - set by tracing middleware or stream pre-hooks; use BifrostContextKeyExportTraceID for the W3C trace ID)
 	BifrostContextKeyExportTraceID                       BifrostContextKey = "bifrost-export-trace-id"                          // string (W3C trace ID advertised to the caller via the x-bifrost-trace-id response header; equals the store handle when no traceparent was inherited - set by tracing middleware)
 	BifrostContextKeySpanID                              BifrostContextKey = "bifrost-span-id"                                  // string (current span ID for child span creation - set by tracer)
@@ -2159,11 +2160,19 @@ type BifrostErrorExtraFields struct {
 	// matched (i.e. RoutingInfo.ResolvedKeyAlias != nil), otherwise
 	// RoutingInfo.Model. Still populated for backward compatibility; new
 	// consumers should read from RoutingInfo.
-	ResolvedModelUsed         string                `json:"resolved_model_used,omitempty"`
-	RequestType               RequestType           `json:"request_type,omitempty"`
-	MCPRequestType            MCPRequestType        `json:"mcp_request_type,omitempty"`
-	RawRequest                interface{}           `json:"raw_request,omitempty"`
-	RawResponse               interface{}           `json:"raw_response,omitempty"`
+	ResolvedModelUsed string         `json:"resolved_model_used,omitempty"`
+	RequestType       RequestType    `json:"request_type,omitempty"`
+	MCPRequestType    MCPRequestType `json:"mcp_request_type,omitempty"`
+	RawRequest        interface{}    `json:"raw_request,omitempty"`
+	RawResponse       interface{}    `json:"raw_response,omitempty"`
+	// ProviderResponseHeaders carries the upstream provider's response headers
+	// on the error path, mirroring
+	// BifrostResponseExtraFields.ProviderResponseHeaders on the success path.
+	// Populated through the same filter, so sensitive headers (authorization,
+	// cookies, API keys) and transport-level headers are already excluded.
+	// Consumers use it for provider-supplied retry hints (Retry-After,
+	// x-ratelimit-reset-*).
+	ProviderResponseHeaders   map[string]string     `json:"provider_response_headers,omitempty"`
 	ConvertedRequestType      RequestType           `json:"converted_request_type,omitempty"`
 	DroppedCompatPluginParams []string              `json:"dropped_compat_plugin_params,omitempty"`
 	Latency                   int64                 `json:"latency,omitempty"` // in milliseconds

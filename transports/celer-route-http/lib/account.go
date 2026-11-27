@@ -107,5 +107,6 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelPr
 	if len(config.DefaultParameters) > 0 {
 		providerConfig.DefaultParameters = config.DefaultParameters
 	}
+	providerConfig.MaxConcurrentRequestsPerKey = config.MaxConcurrentRequestsPerKey
 	return providerConfig, nil
 }

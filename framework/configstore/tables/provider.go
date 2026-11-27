@@ -15,20 +15,23 @@ import (
 // NOTE: Any changes to the provider configuration should be reflected in the GenerateConfigHash function
 // That helps us detect changes between config file and database config
 type TableProvider struct {
-	ID                       uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name                     string    `gorm:"type:varchar(50);uniqueIndex;not null" json:"name"` // ModelProvider as string
-	NetworkConfigJSON        string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.NetworkConfig
-	ConcurrencyBufferJSON    string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ConcurrencyAndBufferSize
-	ProxyConfigJSON          string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ProxyConfig
-	CustomProviderConfigJSON string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CustomProviderConfig
-	OpenAIConfigJSON         string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.OpenAIConfig
-	CooldownPolicyJSON       string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CooldownPolicy (rate_limit / quota rules)
-	DefaultParametersJSON    string    `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ProviderConfig.DefaultParameters (model → param → value)
-	SendBackRawRequest       bool      `json:"send_back_raw_request"`
-	SendBackRawResponse      bool      `json:"send_back_raw_response"`
-	StoreRawRequestResponse  bool      `json:"store_raw_request_response"`
-	CreatedAt                time.Time `gorm:"index;not null" json:"created_at"`
-	UpdatedAt                time.Time `gorm:"index;not null" json:"updated_at"`
+	ID                       uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name                     string `gorm:"type:varchar(50);uniqueIndex;not null" json:"name"` // ModelProvider as string
+	NetworkConfigJSON        string `gorm:"type:text" json:"-"`                                // JSON serialized schemas.NetworkConfig
+	ConcurrencyBufferJSON    string `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ConcurrencyAndBufferSize
+	ProxyConfigJSON          string `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ProxyConfig
+	CustomProviderConfigJSON string `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CustomProviderConfig
+	OpenAIConfigJSON         string `gorm:"type:text" json:"-"`                                // JSON serialized schemas.OpenAIConfig
+	CooldownPolicyJSON       string `gorm:"type:text" json:"-"`                                // JSON serialized schemas.CooldownPolicy (rate_limit / quota rules)
+	DefaultParametersJSON    string `gorm:"type:text" json:"-"`                                // JSON serialized schemas.ProviderConfig.DefaultParameters (model → param → value)
+	SendBackRawRequest       bool   `json:"send_back_raw_request"`
+	SendBackRawResponse      bool   `json:"send_back_raw_response"`
+	StoreRawRequestResponse  bool   `json:"store_raw_request_response"`
+	// MaxConcurrentRequestsPerKey caps simultaneous in-flight requests per API
+	// key of this provider; 0 (column default) disables the gate.
+	MaxConcurrentRequestsPerKey int       `gorm:"default:0" json:"max_concurrent_requests_per_key"`
+	CreatedAt                   time.Time `gorm:"index;not null" json:"created_at"`
+	UpdatedAt                   time.Time `gorm:"index;not null" json:"updated_at"`
 
 	// Relationships
 	Keys []TableKey `gorm:"foreignKey:ProviderID;constraint:OnDelete:CASCADE" json:"keys"`

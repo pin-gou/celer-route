@@ -203,6 +203,62 @@ func TestGovernancePlugin_EvaluateGovernanceRequest_HeaderWithoutContextDoesNotS
 	assert.Equal(t, "virtual key is required. Provide a virtual key via the x-bf-vk header.", bifrostErr.Error.Message)
 }
 
+// TestGovernancePlugin_EvaluateGovernanceRequest_SkipVKMandatoryWaivesMandatoryAuth verifies
+// admin-internal probes (e.g. the provider model test endpoints) that set
+// BifrostContextKeySkipVKMandatoryCheck can run keyless even when x-bf-vk is mandatory.
+func TestGovernancePlugin_EvaluateGovernanceRequest_SkipVKMandatoryWaivesMandatoryAuth(t *testing.T) {
+	logger := NewMockLogger()
+	store, err := NewLocalGovernanceStore(context.Background(), logger, nil, &configstore.GovernanceConfig{}, nil)
+	require.NoError(t, err)
+
+	mandatory := true
+	plugin := &GovernancePlugin{
+		store:         store,
+		resolver:      NewBudgetResolver(store, nil, logger, nil),
+		isVkMandatory: &mandatory,
+	}
+
+	ctx := &schemas.BifrostContext{}
+	ctx.SetValue(schemas.BifrostContextKeySkipVKMandatoryCheck, true)
+
+	result, bifrostErr := plugin.EvaluateGovernanceRequest(ctx, &EvaluationRequest{
+		Provider: schemas.OpenAI,
+		Model:    "gpt-4o",
+	}, schemas.PassthroughRequest)
+
+	require.Nil(t, bifrostErr)
+	assertDecision(t, DecisionAllow, result)
+}
+
+// TestGovernancePlugin_EvaluateGovernanceRequest_SkipVKMandatoryInvalidVKStillRejected verifies
+// the waiver never masks a provided-but-invalid virtual key.
+func TestGovernancePlugin_EvaluateGovernanceRequest_SkipVKMandatoryInvalidVKStillRejected(t *testing.T) {
+	logger := NewMockLogger()
+	store, err := NewLocalGovernanceStore(context.Background(), logger, nil, &configstore.GovernanceConfig{}, nil)
+	require.NoError(t, err)
+
+	mandatory := true
+	plugin := &GovernancePlugin{
+		store:         store,
+		resolver:      NewBudgetResolver(store, nil, logger, nil),
+		isVkMandatory: &mandatory,
+	}
+
+	ctx := &schemas.BifrostContext{}
+	ctx.SetValue(schemas.BifrostContextKeySkipVKMandatoryCheck, true)
+
+	_, bifrostErr := plugin.EvaluateGovernanceRequest(ctx, &EvaluationRequest{
+		VirtualKey: "sk-bf-nonexistent",
+		Provider:   schemas.OpenAI,
+		Model:      "gpt-4o",
+	}, schemas.PassthroughRequest)
+
+	require.NotNil(t, bifrostErr)
+	require.NotNil(t, bifrostErr.StatusCode)
+	assert.Equal(t, 401, *bifrostErr.StatusCode)
+	assert.Contains(t, bifrostErr.Error.Message, "not found")
+}
+
 // TestHasDirectKeyAuth reads only the transport-owned direct-key context value.
 func TestHasDirectKeyAuth(t *testing.T) {
 	ctx := &schemas.BifrostContext{}

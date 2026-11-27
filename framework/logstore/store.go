@@ -82,6 +82,12 @@ type LogStore interface {
 	GetProviderCostHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderCostHistogramResult, error)
 	GetProviderTokenHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderTokenHistogramResult, error)
 	GetProviderLatencyHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ProviderLatencyHistogramResult, error)
+	// GetProviderKeyModelUsage returns per-(model, selected key) request and
+	// token aggregates for one provider over [startTime, endTime]. It is a
+	// read-only operational view: the existing histograms break down by
+	// provider/team/customer/user/business_unit/app/user_agent, never by the
+	// model x key pair that actually carries the quota.
+	GetProviderKeyModelUsage(ctx context.Context, provider string, startTime, endTime time.Time) (*ProviderKeyModelUsageResult, error)
 	// GetThroughputHistogram returns time-bucketed token-generation throughput (tokens/sec).
 	GetThroughputHistogram(ctx context.Context, filters SearchFilters, bucketSizeSeconds int64) (*ThroughputHistogramResult, error)
 	// GetProviderThroughputHistogram returns time-bucketed tokens/sec with provider breakdown.

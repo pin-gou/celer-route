@@ -2,6 +2,7 @@ package opencode
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"hash/fnv"
 	"sync/atomic"
@@ -52,6 +53,28 @@ var sessionCounter atomic.Int64
 // Random bytes come from crypto/rand (matches `crypto.getRandomValues` in
 // the browser bundle and Node's `crypto.randomBytes` in the server bundle).
 func newSessionID() string {
+	return newOpencodeID(sessionIDPrefix, true)
+}
+
+// newRequestID emits the canonical `msg_` identity the zen free-tier gate
+// expects on `x-opencode-request`:
+//
+//	msg_ + 12 hex chars (ascending timestamp + counter) + 14 base62 chars
+//
+// The request id is the ascending counterpart of the session id (the client
+// mint both with the same scheme). The gate only validates the shape of both
+// ids, but keeping the same timestamp+counter generation keeps them coherent
+// the way the real client produces them.
+func newRequestID() string {
+	return newOpencodeID("msg_", false)
+}
+
+// newOpencodeID emits a canonical OpenCode client identifier of the shape
+// `<prefix>_ + 12 hex chars + 14 base62 chars` (26 chars total, matching the
+// client's identifier spec). `descending` selects the bitwise-NOT timestamp
+// encoding used for session ids (so they sort newest-first) vs. the plain
+// ascending encoding used for request ids.
+func newOpencodeID(prefix string, descending bool) string {
 	nowMs := time.Now().UnixMilli()
 	counter := sessionCounter.Add(1)
 
@@ -59,16 +82,19 @@ func newSessionID() string {
 	//   const current = BigInt(timestamp) * 0x1000n + BigInt(counter)
 	current := uint64(nowMs)<<12 | uint64(counter)
 	// NOT for descending ordering.
-	notCurrent := ^current
+	value := current
+	if descending {
+		value = ^current
+	}
 
-	// Emit the lower 6 bytes of notCurrent as 12 hex chars (time[0..6] in JS).
-	// JS does `value >> BigInt(40 - 8 * index) & 0xffn` then `.toString(16).padStart(2, "0")`
-	// for index in [0..6), which is little-endian byte extraction. We pack the
-	// bytes into a 6-byte big-endian integer and let hex.EncodeToString produce
-	// the same string order.
+	// Emit the upper 6 bytes of value as 12 hex chars, big-endian. JS does
+	// `value >> BigInt(40 - 8 * index) & 0xffn` then
+	// `.toString(16).padStart(2, "0")` for index in [0..6) — the most
+	// significant of the 48 tracked bits first. Packing the six bytes
+	// MSB-first makes hex.EncodeToString produce the same string order.
 	timeBytes := make([]byte, 6)
 	for i := 0; i < 6; i++ {
-		timeBytes[i] = byte(notCurrent >> (8 * i))
+		timeBytes[i] = byte(value >> (40 - 8*i))
 	}
 	timePart := hex.EncodeToString(timeBytes)
 
@@ -100,10 +126,30 @@ func newSessionID() string {
 		suffix[i] = sessionIDAlphabet[b%62]
 	}
 
-	var buf []byte
-	buf = make([]byte, 0, len(sessionIDPrefix)+sessionIDLength)
-	buf = append(buf, sessionIDPrefix...)
-	buf = append(buf, timePart...)
-	buf = append(buf, suffix...)
-	return string(buf)
+	return prefix + timePart + string(suffix)
+}
+
+// newStableSessionID derives a session id deterministically from seed.
+//
+// The Console reuses a conversation's prompt cache and routes every turn to the
+// same backend off x-opencode-session, so the value must not change between
+// turns of one conversation. celer-route's per-conversation identity is
+// x-bf-session-id (schemas.BifrostContextKeySessionID); hashing it yields a
+// value that is stable for the conversation, distinct across conversations,
+// carries no caller data, and still matches the opencode `ses_` id shape the
+// Console expects.
+func newStableSessionID(seed string) string {
+	digest := sha256.Sum256([]byte(seed))
+
+	// 12 hex chars (6 bytes) take the timestamp-counter segment's place so the
+	// id keeps the canonical `ses_<12 hex><14 base62>` layout. Ordering within
+	// the id is meaningless here; only the shape and stability matter.
+	timePart := hex.EncodeToString(digest[:6])
+
+	suffix := make([]byte, sessionIDRandLen)
+	for i := range suffix {
+		suffix[i] = sessionIDAlphabet[digest[6+i]%62]
+	}
+
+	return sessionIDPrefix + timePart + string(suffix)
 }

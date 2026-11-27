@@ -353,6 +353,119 @@ func TestGetStats_PluginNotLoaded(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
+// getLearnedLimits (GET /api/plugins/provider-cooldown/learned-limits)
+// -----------------------------------------------------------------------------
+
+func TestGetCooldownLearnedLimits_PluginNotLoaded(t *testing.T) {
+	h := NewCooldownHandler(func() *providercooldown.CooldownPlugin { return nil })
+	ctx := newCooldownCtx(nil)
+	h.getLearnedLimits(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400 when plugin not loaded, got %d", got)
+	}
+	if !strings.Contains(string(ctx.Response.Body()), "provider-cooldown plugin is not loaded") {
+		t.Fatalf("expected plugin-not-loaded message, got %s", ctx.Response.Body())
+	}
+}
+
+func TestGetCooldownLearnedLimits_Empty(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	h := newCooldownHandlerWithPlugin(plugin)
+
+	ctx := newCooldownCtx(nil)
+	h.getLearnedLimits(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	if !strings.Contains(body, `"count":0`) {
+		t.Fatalf("expected count:0 in body, got %s", body)
+	}
+	if !strings.Contains(body, `"limits":[]`) {
+		t.Fatalf("expected empty limits array in body, got %s", body)
+	}
+}
+
+// TestGetCooldownLearnedLimits_WithSamples pins the read-only report: the
+// learned estimate, its bounds, the sample count and the confidence band are
+// all published, and no key material leaks into the response.
+func TestGetCooldownLearnedLimits_WithSamples(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	if err := plugin.Init(map[string]any{
+		"learning": map[string]any{
+			"enabled":        true,
+			"window_seconds": 60,
+			"min_samples":    1,
+			"max_samples":    50,
+		},
+	}); err != nil {
+		t.Fatalf("Init returned an error: %v", err)
+	}
+
+	// A successful request burns 1200 real tokens in the learner's window.
+	usageCtx := schemas.NewBifrostContext(nil, time.Time{})
+	resp := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			Usage: &schemas.BifrostLLMUsage{TotalTokens: 1200},
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType: schemas.ChatCompletionRequest,
+				RoutingInfo: schemas.RoutingInfo{Provider: schemas.OpenAI, Model: "gpt-4o"},
+			},
+		},
+	}
+	if _, _, err := plugin.PostLLMHook(usageCtx, resp, nil); err != nil {
+		t.Fatalf("PostLLMHook returned an error: %v", err)
+	}
+
+	// Then the provider refuses the next attempt.
+	status := 429
+	rateLimitType := "rate_limit_error"
+	rateErr := &schemas.BifrostError{
+		StatusCode: &status,
+		Error: &schemas.ErrorField{
+			Message: "Rate limit reached for requests",
+			Type:    &rateLimitType,
+		},
+	}
+	markerCtx := schemas.NewBifrostContext(nil, time.Time{})
+	plugin.State.AsMarker(nil)(markerCtx, schemas.OpenAI, "secret-key-id", "secret-key-name", "gpt-4o", rateErr)
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(nil)
+	h.getLearnedLimits(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	for _, want := range []string{
+		`"count":1`,
+		`"window_seconds":60`,
+		`"provider":"openai"`,
+		`"model":"gpt-4o"`,
+		`"sample_count":1`,
+		`"estimated_token_limit":1200`,
+		`"lower_bound":1200`,
+		`"upper_bound":1200`,
+		`"confidence":"low"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in body, got %s", want, body)
+		}
+	}
+	// No key material may leak through the report.
+	for _, forbidden := range []string{"secret-key-id", "secret-key-name", "key_id"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("report must not contain %q, got %s", forbidden, body)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
 // Model field in state + ?model= query param for clearKey
 // -----------------------------------------------------------------------------
 

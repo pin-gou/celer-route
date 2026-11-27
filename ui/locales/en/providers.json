@@ -578,6 +578,13 @@
 			},
 			"ttlLabel": "Cooldown TTL (seconds)",
 			"ttlDescription": "How long the matched key stays out of rotation; cooldown expires automatically.",
+			"retryAfterMode": {
+				"label": "Duration source",
+				"description": "Fixed TTL uses only the seconds below. Capped by TTL uses the provider's retry hint when it is shorter. Provider hint uses the hint exactly, which can also lengthen the cooldown.",
+				"off": "Fixed TTL",
+				"cap": "Provider hint, capped by TTL",
+				"exact": "Provider hint exactly"
+			},
 			"matchesLabel": "Matches",
 			"addMatch": "Add match",
 			"noMatches": "At least one match is required.",
@@ -628,9 +635,49 @@
 				"failedToUpdate": "Failed to update cooldown policy"
 			}
 		},
+		"providerUsage": {
+			"title": "Capacity usage",
+			"description": "Recent consumption per model × API key. Request counts are upstream attempts, so fallback retries are included.",
+			"windowOptions": {
+				"1h": "Last 1 hour",
+				"24h": "Last 24 hours"
+			},
+			"loading": "Loading usage...",
+			"error": "Failed to load usage.",
+			"empty": "No requests in this window.",
+			"groupCount": "{{count}} model × key groups",
+			"noKey": "(no key)",
+			"summary": {
+				"requests": "Upstream requests",
+				"errors": "Errors",
+				"errorRate": "Error rate",
+				"totalTokens": "Total tokens",
+				"tokensPerMinute": "Tokens / min"
+			},
+			"table": {
+				"model": "Model",
+				"key": "Key",
+				"requests": "Upstream requests",
+				"errorRate": "Error rate",
+				"tokensPerMinute": "Tokens / min",
+				"avgTokens": "Avg tokens",
+				"cancelledNote": "{{count}} cancelled"
+			},
+			"baseline": {
+				"title": "Baseline: top errors",
+				"totalErrors": "{{count}} total errors",
+				"loading": "Loading error baseline...",
+				"error": "Failed to load error baseline.",
+				"empty": "No errors in this window.",
+				"unknown": "Unknown error",
+				"count": "{{count}}×"
+			}
+		},
 		"performance": {
 			"concurrency": "Concurrency",
 			"bufferSize": "Buffer Size",
+			"maxConcurrentRequestsPerKey": "Max Concurrent Requests per Key",
+			"maxConcurrentRequestsPerKeyDescription": "Maximum number of in-flight requests a single API key may have at once. 0 = no limit.",
 			"cancel": "Cancel",
 			"save": "Save Performance Configuration",
 			"saveSuccess": "Provider configuration updated successfully",

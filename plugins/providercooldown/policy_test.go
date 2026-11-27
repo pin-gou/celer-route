@@ -100,6 +100,143 @@ func TestClassify_RateLimitRule_FiresOnBare429(t *testing.T) {
 	}
 }
 
+// TestClassify_SensenovaObservedTaxonomy pins the mapping between SenseNova's
+// real 429 vocabulary and the cooldown kind it must be attributed to.
+//
+// Every (type, code, message) triple below is taken verbatim from 10 weeks of
+// production logs on the reference deployment (2026-09-15 → 2026-11-26,
+// 24,740 client-visible 429s). Two properties are load-bearing and neither is
+// obvious from the provider's error-type name alone:
+//
+//  1. The most common self-healing errors arrive as
+//     type=quota_exceeded_error + code=8, NOT as rate_limit_error:
+//     "tpm exhausted" (27% of all 429s), "rps exhausted" (4%), "rpm exhausted".
+//     A rule set keyed off the type alone leaves those requests un-cooldowned
+//     and mislabels the rest as quota exhaustion.
+//
+//  2. code=insufficient_quota is overloaded. It tags both a genuine
+//     balance/entitlement exhaustion and a short rate window, and on this
+//     provider the rate-window shape is the common one (p50 recovery ~91s,
+//     same order as TPM/RPM). Only "token plan entitlement exhausted" is
+//     genuinely persistent (p50 ~2.6h). Attribution therefore has to come
+//     from the message, not the type/code.
+func TestClassify_SensenovaObservedTaxonomy(t *testing.T) {
+	plugin := NewPlugin(nil)
+	ctx := withTrail(t, schemas.DefaultCooldownPolicy(schemas.Sensenova))
+
+	rateLimitTTL := time.Duration(schemas.SensenovaRateLimitTTLSeconds) * time.Second
+	quotaTTL := time.Duration(schemas.SensenovaQuotaTTLSeconds) * time.Second
+
+	tests := []struct {
+		name     string
+		typ      string
+		code     string
+		message  string
+		wantTTL  time.Duration
+		wantKind CooldownKind
+	}{
+		{
+			name:     "tpm exhausted reported as quota_exceeded_error/8",
+			typ:      "quota_exceeded_error",
+			code:     "8",
+			message:  "tpm exhausted",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "rps exhausted reported as quota_exceeded_error/8",
+			typ:      "quota_exceeded_error",
+			code:     "8",
+			message:  "rps exhausted",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "rpm exhausted reported as quota_exceeded_error/8",
+			typ:      "quota_exceeded_error",
+			code:     "8",
+			message:  "rpm exhausted",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "endpoint TPM exceeded",
+			typ:      "rate_limit_error",
+			code:     "RateLimitExceeded.EndpointTPMExceeded",
+			message:  "inference exceeds tpm/rpm limit",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "endpoint RPM exceeded",
+			typ:      "rate_limit_error",
+			code:     "RateLimitExceeded.EndpointRPMExceeded",
+			message:  "inference exceeds tpm/rpm limit",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "insufficient_quota with rate wording is a window, not a balance",
+			typ:      "rate_limit_error",
+			code:     "insufficient_quota",
+			message:  "inference exceeds tpm/rpm limit",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "burst throttle",
+			typ:      "rate_limit_error",
+			code:     "Throttling.BurstRate",
+			message:  "inference exceeds tpm/rpm limit",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "unrecognized numeric code 429003",
+			typ:      "rate_limit_error",
+			code:     "429003",
+			message:  "inference exceeds tpm/rpm limit",
+			wantTTL:  rateLimitTTL,
+			wantKind: CooldownKindRateLimit,
+		},
+		{
+			name:     "token plan entitlement exhausted is genuinely persistent",
+			typ:      "quota_exceeded_error",
+			code:     "8",
+			message:  "token plan entitlement exhausted",
+			wantTTL:  quotaTTL,
+			wantKind: CooldownKindQuota,
+		},
+		{
+			name:     "allocated quota exceeded is a balance error",
+			typ:      "invalid_request_error",
+			code:     "insufficient_quota",
+			message:  "Allocated quota exceeded, please increase your quota limit.",
+			wantTTL:  quotaTTL,
+			wantKind: CooldownKindQuota,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newErrOn(429, tc.typ, tc.code, tc.message, string(schemas.Sensenova))
+			ttl, keyID, _, _, kind, _, ok := plugin.classify(ctx, err)
+			if !ok {
+				t.Fatalf("expected classify to fire for %s/%s/%q, got ok=false", tc.typ, tc.code, tc.message)
+			}
+			if keyID == "" {
+				t.Fatal("expected non-empty keyID when AttemptTrail has a key")
+			}
+			if kind != tc.wantKind {
+				t.Fatalf("kind=%q, want %q", kind, tc.wantKind)
+			}
+			if ttl != tc.wantTTL {
+				t.Fatalf("TTL=%v, want %v", ttl, tc.wantTTL)
+			}
+		})
+	}
+}
+
 func TestClassify_EnabledFalseDoesNotFire(t *testing.T) {
 	plugin := NewPlugin(nil)
 	disabled := false

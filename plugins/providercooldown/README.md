@@ -42,7 +42,8 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
       "name": "provider-cooldown",
       "config": {
         "default_ttl_seconds": 300,
-        "ttl_overrides": { "openai": 30, "anthropic": 1200 }
+        "ttl_overrides": { "openai": 30, "anthropic": 1200 },
+        "escalation": { "enabled": false, "max_multiplier": 4 }
       }
     }
   ]
@@ -55,9 +56,207 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `name` | string | — | must be `"provider-cooldown"` |
 | `config.default_ttl_seconds` | int | 300 | applied to every provider without an override; `<= 0` falls back to 300 |
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
+| `config.escalation.enabled` | bool | `false` | adaptive TTL escalation (see below); off = unchanged behaviour |
+| `config.escalation.max_multiplier` | int | `4` | per-key TTL growth ceiling, clamped to `1..16` |
+| `config.capacity` | object | absent | optional retrospective capacity gate (see below); absent or `enabled=false` = unchanged behaviour |
+| `config.learning` | object | absent | optional read-only limit learner (see below); absent or `enabled=false` = unchanged behaviour |
+
+### Adaptive TTL escalation (optional, default off)
+
+When `escalation.enabled` is true, cooldown TTLs grow on repeat failures:
+
+- the same `(provider, key, model)` failing again within 300s doubles the TTL
+  (1x → 2x → 4x … up to `max_multiplier`); a successful call clears the count;
+- when 3+ distinct keys fail for the same provider/model within 60s, new marks
+  start at 2x until that window goes quiet;
+- escalated TTLs are capped at 1 hour and are never shorter than the base TTL.
+
+It is expressed only as a longer TTL — no sleeps, no blocking, and no change to
+the upstream request bytes.
+
+### Retrospective capacity gate (optional, default off)
+
+The passive cooldown reacts to failures that already happened. `capacity` adds
+an optional **budget gate**: once our own traffic to a provider has spent a
+configured amount in a rolling window, the *next* requests are short-circuited
+before they go out.
+
+This is deliberately retrospective — it never estimates tokens and never reads
+the request body:
+
+1. `PostLLMHook` adds each terminal request's **real** usage to a per-second
+   bucket ring: the token count from the response usage, or
+   `ExtraFields.BilledUsage` when a failed attempt was still billed. The request
+   count advances on every terminal outcome (success or failure); tokens are 0
+   when the provider reported none.
+2. `PreProviderHook` sums the live buckets. Once the window's usage reaches
+   `token_limit * headroom` (or `request_limit * headroom`), the attempt is
+   short-circuited with a 429 `rate_limit_exceeded` whose message names the
+   provider/model, the window and the seconds to wait.
+3. The request that crosses the line still goes out — the same trade-off the
+   passive cooldown makes — in exchange for zero estimation error and a
+   threshold that is easy to reason about.
+
+```json
+{
+  "config": {
+    "default_ttl_seconds": 300,
+    "ttl_overrides": {},
+    "quota_patterns": ["insufficient_quota"],
+    "capacity": {
+      "enabled": true,
+      "token_limit": 200000,
+      "request_limit": 500,
+      "window_seconds": 60,
+      "headroom": 0.9,
+      "scope": "provider",
+      "action": "fallback"
+    }
+  }
+}
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `capacity.enabled` | `false` | `false` = feature fully inert (no state, no lock) |
+| `capacity.token_limit` | `0` | tokens per window; `0` = unlimited |
+| `capacity.request_limit` | `0` | requests per window; `0` = unlimited |
+| `capacity.window_seconds` | `60` | clamped to `10..3600` |
+| `capacity.headroom` | `0.9` | gate engages at `limit * headroom`; clamped to `0.1..1.0` |
+| `capacity.scope` | `"provider"` | `"provider"` shares one budget per provider; `"provider_model"` per provider/model |
+| `capacity.action` | `"fallback"` | `"fallback"` lets the fallback chain take over; `"reject"` returns the 429 immediately |
+
+Notes:
+
+- The gate is inert unless **at least one** of `token_limit` / `request_limit`
+  is positive.
+- Rejected requests are not accounted, so a gate cannot extend its own window.
+- Attempts that never reached a provider (this plugin's own short-circuit, the
+  all-keys-in-cooldown short-circuit, cache hits) are not accounted.
+- Streaming responses are accounted once, on the terminal chunk. A stream that
+  dies without ever emitting a terminal marker is not accounted (it consumed
+  an unknown amount of usage; under-counting is preferred over guessing).
+- State is in-memory and per-process, and is dropped when the process restarts.
+  Buckets are second-granular and expire lazily; the key map is swept at most
+  once per window.
 
 Provider names use Bifrost's `ModelProvider` enum (e.g. `"openai"`,
 `"anthropic"`, `"bedrock"`).
+
+### Read-only limit learning (optional, default off)
+
+`learning` adds a **read-only observer** that learns a provider's effective
+per-window token limit from its own rate-limit rejections. It never changes
+any configuration — the only output is a report.
+
+Why: our own request/token rate cannot be fitted to a provider's limit (there
+is no cliff to fit — the very first request in a minute can already be
+rejected). But every 429 *does* carry a bracket: at the moment the provider
+refused, the window had already consumed `used` real tokens, and the refused
+request itself would have added `request` more. The effective limit therefore
+lies in `[used, used + request]`.
+
+How it works:
+
+1. Every provider rejection classified as **rate limit** by the provider's
+   `CooldownPolicy` produces one sample. Quota / entitlement failures
+   (`insufficient_quota`, …) are deliberately ignored — they say nothing
+   about a window limit.
+2. `used` comes from the same **real-usage** accounting the capacity gate
+   uses (the token usage the provider reported, or `billed_usage` on a
+   failed-but-billed attempt) — never an estimate. The learner keeps its own
+   read-only window, so it works whether or not the capacity gate is enabled.
+3. Each `(provider, model)` pair keeps the last `max_samples` samples.
+
+Estimation formula, for the `n` samples of one `(provider, model)` pair:
+
+```
+lower_i    = used_i                  # tokens already consumed when the 429 arrived
+upper_i    = used_i + request_i      # tokens the refused request would have added
+LowerBound = min_i lower_i
+UpperBound = max_i upper_i
+Estimated  = median_i lower_i
+```
+
+The median is used instead of the mean because the samples are a noisy
+process (concurrent requests, a provider window that does not line up with
+ours) and the tails should not drag the estimate. The bounds are the
+*envelope* of the per-sample brackets, not their intersection: with
+`request_i == 0` (the common case — a 429 is usually not billed) the
+intersection is empty and cannot carry an estimate.
+
+Below `min_samples` observations no estimate is published at all: the pair is
+still listed with its sample count and the confidence band `insufficient`, so
+the operator can see the system is observing but has not learned anything
+trustworthy yet.
+
+Confidence bands are derived from the sample count relative to
+`min_samples`: `< min_samples` → `insufficient`, `< 3 × min_samples` → `low`,
+`< 6 × min_samples` → `medium`, otherwise `high`.
+
+```json
+{
+  "config": {
+    "default_ttl_seconds": 300,
+    "ttl_overrides": {},
+    "quota_patterns": ["insufficient_quota"],
+    "learning": {
+      "enabled": true,
+      "window_seconds": 60,
+      "max_samples": 50,
+      "min_samples": 5
+    }
+  }
+}
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `learning.enabled` | `false` | `false` = feature fully inert (no state, no lock, no samples) |
+| `learning.window_seconds` | `60` | window used to measure the consumption that preceded a rejection; clamped to `10..3600` |
+| `learning.max_samples` | `50` | samples kept per provider/model; clamped to `5..500` |
+| `learning.min_samples` | `5` | samples required before an estimate is published; clamped to `1..100` |
+
+Read the result through the read-only endpoint:
+
+```
+GET /api/plugins/provider-cooldown/learned-limits
+```
+
+```json
+{
+  "plugin": "provider-cooldown",
+  "count": 1,
+  "window_seconds": 60,
+  "limits": [
+    {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "sample_count": 12,
+      "key_count": 2,
+      "estimated_token_limit": 82000,
+      "lower_bound": 71000,
+      "upper_bound": 91000,
+      "confidence": "medium",
+      "first_seen": "2026-11-20T10:15:02Z",
+      "last_seen": "2026-11-20T11:02:41Z"
+    }
+  ]
+}
+```
+
+Notes:
+
+- **The learner only reads.** It never writes a cooldown policy, a capacity
+  limit, or anything else — the estimate is a *suggestion* for the operator.
+- The learned number is the aggregate limit our own traffic hit for one
+  `(provider, model)` pair. With several keys in use, the provider's per-key
+  limits add up, so the learned value is the sum of the limits we exercised;
+  `key_count` says how many keys contributed.
+- The window must be the same order of magnitude as the provider's own limit
+  window; a 60s window matches a TPM limit, not a daily quota.
+- State is in-memory and per-process, and is dropped when the process restarts
+  (or when the plugin is re-initialized).
 
 ## Build the deployment image
 
