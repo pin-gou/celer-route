@@ -218,6 +218,103 @@
 		"warning": "Please be careful",
 		"copied": "Copied to clipboard"
 	},
+	"cooldownCapability": {
+		"mode": {
+			"inherit": "Inherit global default",
+			"custom": "Custom",
+			"disabled": "Off"
+		},
+		"summaryInheritedPrefix": "Currently applied (inherited from the global default): {{summary}}",
+		"summaryGlobalPrefix": "Global default: {{summary}}",
+		"summaryDisabled": "Explicitly turned off for this provider.",
+		"escalation": {
+			"title": "Adaptive cooldown escalation",
+			"description": "Grow a key's cooldown TTL while it keeps failing, instead of re-enabling it at the same TTL every time.",
+			"maxMultiplierLabel": "Max multiplier",
+			"maxMultiplierDescription": "How many times the base TTL may grow at most (1–16).",
+			"maxMultiplierPlaceholder": "4",
+			"effectiveSummary": "escalation up to {{multiplier}}× the base TTL"
+		},
+		"capacity": {
+			"title": "Retrospective capacity gate",
+			"description": "Account real token and request usage over a rolling window, and stop sending requests to a provider once its budget is (nearly) spent.",
+			"tokenLimitLabel": "Token limit per window",
+			"tokenLimitDescription": "Tokens allowed per window. 0 = no token limit.",
+			"tokenLimitPlaceholder": "0",
+			"requestLimitLabel": "Request limit per window",
+			"requestLimitDescription": "Requests allowed per window. 0 = no request limit.",
+			"requestLimitPlaceholder": "0",
+			"windowSecondsLabel": "Window (seconds)",
+			"windowSecondsDescription": "Length of the rolling accounting window (10–3600).",
+			"windowSecondsPlaceholder": "60",
+			"headroomLabel": "Headroom",
+			"headroomDescription": "Fraction of the limit that may be used before the gate engages — 0.9 blocks once 90% is spent (0.1–1.0).",
+			"headroomPlaceholder": "0.9",
+			"scopeLabel": "Accounting scope",
+			"scopeDescription": "Share one budget across every model of a provider, or keep an independent budget per model.",
+			"scopePlaceholder": "Select scope",
+			"scopeProvider": "Shared across models",
+			"scopeProviderModel": "Independent per model",
+			"actionLabel": "When the budget is spent",
+			"actionDescription": "Hand the request to the configured fallback chain, or reject it outright.",
+			"actionPlaceholder": "Select action",
+			"actionFallback": "Hand off to the fallback chain",
+			"actionReject": "Reject the request outright",
+			"effectiveSummary": "tokens {{tokens}}, requests {{requests}} per {{window}}s, headroom {{headroom}}, {{scope}}, {{action}}",
+			"noLimit": "no limit",
+			"scope": {
+				"provider": "shared across models",
+				"provider_model": "independent per model"
+			},
+			"action": {
+				"fallback": "hand off to the fallback chain",
+				"reject": "reject the request"
+			}
+		},
+		"learning": {
+			"title": "Limit learning (read-only)",
+			"description": "Watch upstream rate-limit rejections and estimate the provider's effective per-window limit. Recommendations only — the configuration is never changed automatically.",
+			"windowSecondsLabel": "Window (seconds)",
+			"windowSecondsDescription": "Length of the rolling window used for the estimate (10–3600).",
+			"windowSecondsPlaceholder": "60",
+			"maxSamplesLabel": "Max samples",
+			"maxSamplesDescription": "How many rate-limit samples to keep per provider (5–500).",
+			"maxSamplesPlaceholder": "50",
+			"minSamplesLabel": "Min samples",
+			"minSamplesDescription": "How many samples are needed before an estimate is reported (1–100).",
+			"minSamplesPlaceholder": "5",
+			"effectiveSummary": "window {{window}}s, keeping {{min}}–{{max}} samples",
+			"suggestionsTitle": "Learned limit suggestions",
+			"suggestionsCount": "{{count}} estimate(s)",
+			"suggestionsEmpty": "Not enough rate-limit samples yet — no estimate for this provider.",
+			"allModels": "all models",
+			"sampleCount": "{{count}} samples",
+			"estimate": "Estimated limit ≈ {{tokens}} tokens per {{window}}s",
+			"windowMismatch": "This estimate uses a {{learned}}s window while the capacity gate uses {{capacity}}s, so the numbers are not directly interchangeable.",
+			"adopt": "Use as limit",
+			"confidence": {
+				"insufficient": "insufficient samples",
+				"low": "low confidence",
+				"medium": "medium confidence",
+				"high": "high confidence"
+			}
+		},
+		"capacityUsage": {
+			"title": "Capacity water level",
+			"description": "Real usage inside the capacity gate's rolling window, as the plugin sees it right now.",
+			"loading": "Loading capacity usage…",
+			"error": "Failed to load capacity usage",
+			"empty": "No traffic in the current window (the gate may not be enabled yet).",
+			"emptyDisabled": "The capacity gate is turned off for this provider.",
+			"allModels": "all models",
+			"tokens": "Tokens",
+			"requests": "Requests",
+			"window": "Window {{seconds}}s",
+			"sourceDefault": "Default",
+			"sourceProvider": "This provider",
+			"retryAfter": "Releases in about {{seconds}}s"
+		}
+	},
 	"validation": {
 		"required": "This field is required",
 		"fieldRequired": "{{field}} is required",

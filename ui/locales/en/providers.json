@@ -602,6 +602,8 @@
 				"code": "Error code (exact, optional)"
 			},
 			"clear": "Clear custom policy",
+			"restoreDefault": "Restore global default",
+			"restoreDefaultHint": "Clears this provider's cooldown policy, including the escalation, capacity and learning overrides.",
 			"cancel": "Cancel",
 			"save": "Save cooldown policy",
 			"errorSample": {

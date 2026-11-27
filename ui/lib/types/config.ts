@@ -429,12 +429,53 @@ export interface CooldownPolicyRule {
 	scope?: "key" | "model";
 }
 
+// CooldownEscalationConfig mirrors schemas.CooldownEscalationConfig: a key's
+// cooldown TTL grows while it keeps failing. max_multiplier is clamped to
+// 1..16 by the backend; an unset value takes the backend default (4).
+export interface CooldownEscalationConfig {
+	enabled?: boolean;
+	max_multiplier?: number;
+}
+
+// CooldownCapacityConfig mirrors schemas.CooldownCapacityConfig: real token and
+// request usage is summed over a rolling window and further requests are gated
+// once limit*headroom is crossed. An unset (0) numeric field takes the backend
+// default (window 60, headroom 0.9); token_limit / request_limit of 0 mean
+// "no limit".
+export interface CooldownCapacityConfig {
+	enabled?: boolean;
+	token_limit?: number;
+	request_limit?: number;
+	window_seconds?: number;
+	headroom?: number;
+	scope?: "provider" | "provider_model";
+	action?: "fallback" | "reject";
+}
+
+// CooldownLearningConfig mirrors schemas.CooldownLearningConfig: the read-only
+// learner that estimates the provider's effective per-window limit from
+// upstream rate-limit feedback. Unset numeric fields take backend defaults
+// (window 60, max_samples 50, min_samples 5).
+export interface CooldownLearningConfig {
+	enabled?: boolean;
+	window_seconds?: number;
+	max_samples?: number;
+	min_samples?: number;
+}
+
 // CooldownPolicy attaches rate_limit / quota rules to a single provider. quota
 // is checked before rate_limit. nil falls back to the built-in default for
 // that provider (see docs).
+//
+// capacity / escalation / learning are optional per-provider overrides of the
+// plugin-level capability defaults: absent means "inherit the plugin default",
+// `{ enabled: false }` means "explicitly off for this provider".
 export interface CooldownPolicy {
 	rate_limit?: CooldownPolicyRule;
 	quota?: CooldownPolicyRule;
+	capacity?: CooldownCapacityConfig;
+	escalation?: CooldownEscalationConfig;
+	learning?: CooldownLearningConfig;
 }
 
 // ProviderConfig matching Go's lib.ProviderConfig

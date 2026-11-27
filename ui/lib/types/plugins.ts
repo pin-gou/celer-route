@@ -1,5 +1,6 @@
 // Plugins types that match the Go backend structures
 
+import type { CooldownCapacityConfig, CooldownEscalationConfig, CooldownLearningConfig } from "@/lib/types/config";
 import { z } from "zod";
 
 export const SEMANTIC_CACHE_PLUGIN = "semantic_cache";
@@ -406,6 +407,72 @@ export interface UnfreezeCooldownResponse {
 	provider: string;
 	keyId: string;
 	model?: string;
+}
+
+// Where a capacity entry's limits come from: the plugin-level default or the
+// provider's own cooldown_policy.capacity override.
+export type CapacityUsageSource = "default" | "provider";
+
+// One (provider, model) accounting row surfaced by GET
+// /api/plugins/provider-cooldown/capacity-usage. `threshold_*` is the
+// effective gate threshold (limit * headroom), so used/threshold is what the
+// UI should render as the consumed fraction. retry_after_seconds > 0 means the
+// gate is currently engaged for this row.
+export interface CapacityUsageEntry {
+	provider: string;
+	model: string;
+	scope: "provider" | "provider_model";
+	windowSeconds: number;
+	usedTokens: number;
+	usedRequests: number;
+	tokenLimit: number;
+	requestLimit: number;
+	headroom: number;
+	thresholdTokens: number;
+	thresholdRequests: number;
+	retryAfterSeconds: number;
+	source: CapacityUsageSource;
+}
+
+export interface CapacityUsageResponse {
+	plugin: string;
+	count: number;
+	entries: CapacityUsageEntry[];
+}
+
+export type LearnedLimitConfidence = "insufficient" | "low" | "medium" | "high";
+
+// One estimate surfaced by GET /api/plugins/provider-cooldown/learned-limits.
+// `estimated_token_limit` is null when the sample count has not reached
+// min_samples yet (confidence "insufficient").
+export interface LearnedLimitEntry {
+	provider: string;
+	model: string;
+	sampleCount: number;
+	keyCount: number;
+	estimatedTokenLimit: number | null;
+	windowSeconds: number;
+	lowerBound: number | null;
+	upperBound: number | null;
+	confidence: LearnedLimitConfidence;
+	firstSeen: string;
+	lastSeen: string;
+}
+
+export interface LearnedLimitsResponse {
+	plugin: string;
+	count: number;
+	windowSeconds: number;
+	limits: LearnedLimitEntry[];
+}
+
+// The provider-cooldown plugin config's optional capability sections, as read
+// back from Plugin.config. Absent sections mean "not configured at plugin
+// level", so the frontend constants apply.
+export interface ProviderCooldownCapabilityDefaults {
+	escalation?: CooldownEscalationConfig;
+	capacity?: CooldownCapacityConfig;
+	learning?: CooldownLearningConfig;
 }
 
 // Process-lifetime compression counters surfaced by GET

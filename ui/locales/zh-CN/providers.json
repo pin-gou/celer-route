@@ -602,6 +602,8 @@
 				"code": "错误代码（精确匹配，可选)"
 			},
 			"clear": "清除自定义策略",
+			"restoreDefault": "恢复全局默认",
+			"restoreDefaultHint": "将清除该提供商的全部冷却策略覆盖，包括三项高级能力。",
 			"cancel": "取消",
 			"save": "保存冷却策略",
 			"errorSample": {

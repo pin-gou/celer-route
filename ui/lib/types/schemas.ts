@@ -703,26 +703,24 @@ export const cooldownPolicyRuleSchema = z.object({
 	retry_after_mode: z.enum(["off", "cap", "exact"]).optional(),
 });
 
-export const cooldownPolicySchema = z.object({
-	rate_limit: cooldownPolicyRuleSchema.optional(),
-	quota: cooldownPolicyRuleSchema.optional(),
-});
-
-export type CooldownPolicyFormSchema = z.infer<typeof cooldownPolicySchema>;
-export type CooldownPolicyRuleFormSchema = z.infer<typeof cooldownPolicyRuleSchema>;
-export type CooldownPolicyMatchFormSchema = z.infer<typeof cooldownPolicyMatchSchema>;
-
 // ---------------------------------------------------------------------------
-// Provider cooldown plugin — optional capability sections
+// Provider cooldown — optional capability sections (escalation / capacity /
+// learning)
 // ---------------------------------------------------------------------------
-// These mirror plugins/providercooldown/config.go's EscalationConfig /
-// CapacityConfig / LearningConfig. They live in the *plugin* config (not in
-// schemas.CooldownPolicy) because the provider-level cooldown policy form
-// rebuilds the whole cooldown_policy object from the fields it knows about
-// and would silently drop unknown sub-fields.
+// These mirror schemas.CooldownEscalationConfig / CooldownCapacityConfig /
+// CooldownLearningConfig. The same three sections exist in two places:
 //
-// Every section is optional: a plugin config that never mentions one of them
-// means "not configured" and the backend keeps the feature inert.
+//   - the provider-cooldown *plugin* config (plugin-wide defaults), and
+//   - a provider's own cooldown_policy (per-provider override).
+//
+// A provider-level section is tri-state: absent → inherit the plugin default,
+// `{ enabled: false }` → explicitly off, otherwise → custom. Because of that,
+// the per-provider variants are declared `.partial()` below: a provider only
+// has to send the fields it wants to override, and the backend fills the rest
+// with the plugin default (0 / "" meaning "use the default").
+//
+// Sections are declared before cooldownPolicySchema so it can reuse them
+// instead of duplicating field definitions.
 
 // Adaptive TTL upgrade — a key's cooldown TTL grows (1x, 2x, 4x …) while it
 // keeps failing. max_multiplier is clamped to 1..16 by the backend (<= 0 → 4).
@@ -788,6 +786,27 @@ export const providerCooldownLearningConfigSchema = z.object({
 		.min(1, t("validation.minNumber", { n: "1" }))
 		.max(100, t("validation.maxNumber", { n: "100" })),
 });
+
+// The provider's cooldown policy as edited from the provider detail page.
+// rate_limit / quota are the cooldown rule sets; capacity / escalation /
+// learning are optional per-provider overrides of the plugin-level
+// capabilities. They are `.partial()` because a provider-level override may
+// carry only the fields it changes (or just `{ enabled: false }`), and the
+// backend fills the rest from the plugin defaults.
+export const cooldownPolicySchema = z.object({
+	rate_limit: cooldownPolicyRuleSchema.optional(),
+	quota: cooldownPolicyRuleSchema.optional(),
+	capacity: providerCooldownCapacityConfigSchema.partial().optional(),
+	escalation: providerCooldownEscalationConfigSchema.partial().optional(),
+	learning: providerCooldownLearningConfigSchema.partial().optional(),
+});
+
+export type CooldownPolicyFormSchema = z.infer<typeof cooldownPolicySchema>;
+export type CooldownPolicyRuleFormSchema = z.infer<typeof cooldownPolicyRuleSchema>;
+export type CooldownPolicyMatchFormSchema = z.infer<typeof cooldownPolicyMatchSchema>;
+export type CooldownCapacityConfigFormSchema = z.infer<typeof cooldownPolicySchema>["capacity"];
+export type CooldownEscalationConfigFormSchema = z.infer<typeof cooldownPolicySchema>["escalation"];
+export type CooldownLearningConfigFormSchema = z.infer<typeof cooldownPolicySchema>["learning"];
 
 // The plugin's capability sections as a whole. Each section may be absent
 // (undefined) — the backend then treats that capability as not configured.

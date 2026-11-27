@@ -1,3 +1,4 @@
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -21,10 +22,23 @@ import { useFieldArray, useForm, useFormContext, useWatch, type Control, type Re
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { buildProviderUpdatePayload } from "../views/utils";
-import type { ModelProvider } from "@/lib/types/config";
+import type { CooldownPolicy, ModelProvider } from "@/lib/types/config";
+import type { LearnedLimitEntry } from "@/lib/types/plugins";
 import { useGetProviderErrorCatalogQuery } from "@/lib/store/apis/providerErrorCatalogApi";
 import { ErrorSampleBrowser } from "./errorSampleBrowser";
+import { LearnedLimitsPanel } from "./learnedLimitsPanel";
 import type { ErrorPattern } from "@/lib/store/apis/errorPatternsApi";
+import {
+	cooldownCapabilityMode,
+	resolveEffectiveCapabilities,
+	type CooldownCapabilityKey,
+	type CooldownCapabilityMode,
+} from "@/components/providerCooldown/defaults";
+import { useCooldownCapabilityDefaults } from "@/components/providerCooldown/useCooldownCapabilityDefaults";
+import { CapabilityOverrideCard } from "@/components/providerCooldown/capabilityOverrideCard";
+import { EscalationFields } from "@/components/providerCooldown/escalationFields";
+import { CapacityFields } from "@/components/providerCooldown/capacityFields";
+import { LearningFields } from "@/components/providerCooldown/learningFields";
 
 interface CooldownPolicyFormFragmentProps {
 	provider: ModelProvider;
@@ -33,6 +47,16 @@ interface CooldownPolicyFormFragmentProps {
 
 const RULE_FIELDS = ["rate_limit", "quota"] as const;
 type RuleField = (typeof RULE_FIELDS)[number];
+
+// Every top-level key the form knows about. Anything else found on the stored
+// policy (e.g. a section added by a newer backend) is carried over untouched,
+// and any of THESE keys that resolves to undefined is deleted from the payload
+// rather than sent — `JSON.stringify` would drop it anyway, but the spread of
+// the stored policy keeps the old value, which is exactly how the previous
+// implementation wiped sections it didn't know about.
+const COOLDOWN_POLICY_KEYS = ["rate_limit", "quota", "capacity", "escalation", "learning"] as const;
+
+type CapabilityModes = Record<CooldownCapabilityKey, CooldownCapabilityMode>;
 
 const DEFAULT_RATE_LIMIT_RULE = (ttlSeconds: number): NonNullable<CooldownPolicyFormSchema["rate_limit"]> => ({
 	match: [{ status_code: 429 }],
@@ -63,11 +87,23 @@ function isValidStatusCode(value: unknown): value is number {
 	return typeof value === "number" && Number.isInteger(value) && value >= STATUS_CODE_MIN && value <= STATUS_CODE_MAX;
 }
 
+const modesFromValues = (values: CooldownPolicyFormSchema): CapabilityModes => ({
+	escalation: cooldownCapabilityMode(values.escalation),
+	capacity: cooldownCapabilityMode(values.capacity),
+	learning: cooldownCapabilityMode(values.learning),
+});
+
+function formatInt(value: number): string {
+	return value.toLocaleString("en-US");
+}
+
 export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolicyFormFragmentProps) {
 	const { t } = useTranslation("providers");
+	const { t: tc } = useTranslation("common");
 	const dispatch = useAppDispatch();
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
+	const pluginDefaults = useCooldownCapabilityDefaults();
 
 	const buildDefaultValues = () => {
 		const policy = provider.cooldown_policy;
@@ -75,10 +111,17 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 		// Explicit policy (even empty) → reflect exactly what's stored, so a
 		// stored `{}` (no cooldown rules) shows both rate_limit AND quota OFF
 		// instead of re-injecting the default rate_limit rule.
+		//
+		// The capability sections are NEVER defaulted here: `undefined` is the
+		// wire-level signal for "inherit the plugin default". Injecting values
+		// would silently turn an inherit into an override on the next save.
 		const hasPolicy = policy != null;
 		return {
 			rate_limit: hasPolicy ? policy?.rate_limit : DEFAULT_RATE_LIMIT_RULE(60),
 			quota: policy?.quota ?? undefined,
+			capacity: policy?.capacity,
+			escalation: policy?.escalation,
+			learning: policy?.learning,
 		} as CooldownPolicyFormSchema;
 	};
 
@@ -90,10 +133,19 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 	});
 
 	const initialValuesRef = useRef<CooldownPolicyFormSchema>(buildDefaultValues());
+	const [modes, setModes] = useState<CapabilityModes>(() => modesFromValues(buildDefaultValues()));
+	// All capability sections start collapsed — the tab already carries two
+	// large blocks above (usage + water level) and these three are opt-in.
+	const [openSections, setOpenSections] = useState<string[]>([]);
 
 	const watchedFormValues = useWatch({ control: form.control }) as CooldownPolicyFormSchema;
 
 	const isFormChanged = useMemo(() => JSON.stringify(watchedFormValues) !== JSON.stringify(initialValuesRef.current), [watchedFormValues]);
+
+	const effective = useMemo(
+		() => resolveEffectiveCapabilities(provider.cooldown_policy, pluginDefaults),
+		[provider.cooldown_policy, pluginDefaults],
+	);
 
 	useEffect(() => {
 		dispatch(setProviderFormDirtyState(isFormChanged));
@@ -102,22 +154,71 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 	useEffect(() => {
 		const next = buildDefaultValues();
 		initialValuesRef.current = next;
+		setModes(modesFromValues(next));
 		form.reset(next);
 	}, [form, provider.name, provider.cooldown_policy]);
+
+	/**
+	 * Builds the submitted policy. Starts from the stored policy so unknown
+	 * keys survive, then overwrites the five keys the form owns and deletes any
+	 * of them that is `undefined` (i.e. "inherit" / "not configured").
+	 */
+	const buildCooldownPolicy = (data: CooldownPolicyFormSchema): CooldownPolicy => {
+		const policy: Record<string, unknown> = {
+			...(provider.cooldown_policy ?? {}),
+			rate_limit: data.rate_limit,
+			quota: data.quota,
+			capacity: data.capacity,
+			escalation: data.escalation,
+			learning: data.learning,
+		};
+		for (const key of COOLDOWN_POLICY_KEYS) {
+			if (policy[key] === undefined) delete policy[key];
+		}
+		return policy as unknown as CooldownPolicy;
+	};
+
+	const onCapabilityModeChange = (key: CooldownCapabilityKey, next: CooldownCapabilityMode) => {
+		setModes((prev) => ({ ...prev, [key]: next }));
+		const options = { shouldDirty: true, shouldValidate: true };
+		if (next === "inherit") {
+			form.setValue(key, undefined as never, options);
+			return;
+		}
+		if (next === "disabled") {
+			form.setValue(key, { enabled: false } as never, options);
+			return;
+		}
+		// Custom starts from what the provider actually gets today, so the
+		// operator edits a meaningful baseline instead of empty inputs.
+		form.setValue(key, { ...effective[key], enabled: true } as never, options);
+	};
+
+	const onAdoptLearnedLimit = (limit: LearnedLimitEntry) => {
+		if (limit.estimatedTokenLimit === null) return;
+		const current = form.getValues("capacity");
+		const base = current ?? { ...effective.capacity, enabled: true };
+		form.setValue(
+			"capacity",
+			{ ...base, enabled: true, token_limit: limit.estimatedTokenLimit },
+			{ shouldDirty: true, shouldValidate: true },
+		);
+		setModes((prev) => ({ ...prev, capacity: "custom" }));
+		setOpenSections((prev) => (prev.includes("capacity") ? prev : [...prev, "capacity"]));
+		void form.trigger("capacity");
+	};
 
 	const onSubmit = (data: CooldownPolicyFormSchema) => {
 		updateProvider(
 			buildProviderUpdatePayload(provider, {
-				cooldown_policy: {
-					rate_limit: data.rate_limit,
-					quota: data.quota,
-				},
+				cooldown_policy: buildCooldownPolicy(data),
 			}),
 		)
 			.unwrap()
 			.then(() => {
 				toast.success(t("fragments.cooldownPolicy.toast.updated"));
 				initialValuesRef.current = JSON.parse(JSON.stringify(data)) as CooldownPolicyFormSchema;
+				setModes(modesFromValues(data));
 				form.reset(data);
 			})
 			.catch((err: unknown) => {
@@ -127,7 +228,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 			});
 	};
 
-	const onClear = () => {
+	const onRestoreDefault = () => {
 		updateProvider(
 			buildProviderUpdatePayload(provider, {
 				cooldown_policy: null,
@@ -136,8 +237,18 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 			.unwrap()
 			.then(() => {
 				toast.success(t("fragments.cooldownPolicy.toast.cleared"));
-				const resetValues = { rate_limit: DEFAULT_RATE_LIMIT_RULE(60), quota: undefined } as CooldownPolicyFormSchema;
+				// Provider props still carry the old policy until the update
+				// invalidates the tag, so reset to the "no custom policy" shape
+				// explicitly instead of re-deriving it from `provider`.
+				const resetValues = {
+					rate_limit: DEFAULT_RATE_LIMIT_RULE(60),
+					quota: undefined,
+					capacity: undefined,
+					escalation: undefined,
+					learning: undefined,
+				} as CooldownPolicyFormSchema;
 				initialValuesRef.current = JSON.parse(JSON.stringify(resetValues)) as CooldownPolicyFormSchema;
+				setModes(modesFromValues(resetValues));
 				form.reset(resetValues);
 			})
 			.catch((err: unknown) => {
@@ -146,6 +257,36 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 				});
 			});
 	};
+
+	const noLimitLabel = tc("cooldownCapability.capacity.noLimit");
+	const escalationSummary = effective.escalation.enabled
+		? tc("cooldownCapability.escalation.effectiveSummary", { multiplier: effective.escalation.max_multiplier })
+		: tc("cooldownCapability.summaryDisabled");
+	const capacitySummary = effective.capacity.enabled
+		? tc("cooldownCapability.capacity.effectiveSummary", {
+				tokens: effective.capacity.token_limit > 0 ? formatInt(effective.capacity.token_limit) : noLimitLabel,
+				requests: effective.capacity.request_limit > 0 ? formatInt(effective.capacity.request_limit) : noLimitLabel,
+				window: effective.capacity.window_seconds,
+				headroom: effective.capacity.headroom,
+				scope: tc(`cooldownCapability.capacity.scope.${effective.capacity.scope}`),
+				action: tc(`cooldownCapability.capacity.action.${effective.capacity.action}`),
+			})
+		: tc("cooldownCapability.summaryDisabled");
+	const learningSummary = effective.learning.enabled
+		? tc("cooldownCapability.learning.effectiveSummary", {
+				window: effective.learning.window_seconds,
+				min: effective.learning.min_samples,
+				max: effective.learning.max_samples,
+			})
+		: tc("cooldownCapability.summaryDisabled");
+	const capabilitySummaries: Record<CooldownCapabilityKey, string> = {
+		escalation: escalationSummary,
+		capacity: capacitySummary,
+		learning: learningSummary,
+	};
+
+	const updateDisabled = !hasUpdateProviderAccess || isUpdatingProvider;
+	const capacityWindowSeconds = form.getValues("capacity")?.window_seconds ?? effective.capacity.window_seconds;
 
 	return (
 		<Form {...form}>
@@ -163,17 +304,111 @@ export function CooldownPolicyFormFragment({ provider, onCancel }: CooldownPolic
 					</div>
 				</div>
 
+				{/* Three per-provider capability overrides — inherit / custom / off. */}
+				<div data-testid="providercooldown-capabilities" className="rounded-md border px-3">
+					<Accordion type="multiple" value={openSections} onValueChange={setOpenSections}>
+						<AccordionItem value="escalation">
+							<AccordionTrigger data-testid="providercooldown-escalation-accordion-trigger">
+								<span className="flex items-center gap-2 text-sm font-medium">
+									{tc("cooldownCapability.escalation.title")}
+									<span className="text-muted-foreground text-xs font-normal">{tc(`cooldownCapability.mode.${modes.escalation}`)}</span>
+								</span>
+							</AccordionTrigger>
+							<AccordionContent className="pt-0">
+								<CapabilityOverrideCard
+									testId="providercooldown-escalation-card"
+									title={tc("cooldownCapability.escalation.title")}
+									description={tc("cooldownCapability.escalation.description")}
+									value={modes.escalation}
+									onChange={(next) => onCapabilityModeChange("escalation", next)}
+									inheritedSummary={capabilitySummaries.escalation}
+									disabled={updateDisabled}
+								>
+									<EscalationFields
+										value={form.watch("escalation") ?? {}}
+										onChange={(next) => form.setValue("escalation", next, { shouldDirty: true, shouldValidate: true })}
+										disabled={updateDisabled}
+									/>
+								</CapabilityOverrideCard>
+							</AccordionContent>
+						</AccordionItem>
+
+						<AccordionItem value="capacity">
+							<AccordionTrigger data-testid="providercooldown-capacity-accordion-trigger">
+								<span className="flex items-center gap-2 text-sm font-medium">
+									{tc("cooldownCapability.capacity.title")}
+									<span className="text-muted-foreground text-xs font-normal">{tc(`cooldownCapability.mode.${modes.capacity}`)}</span>
+								</span>
+							</AccordionTrigger>
+							<AccordionContent className="pt-0">
+								<CapabilityOverrideCard
+									testId="providercooldown-capacity-card"
+									title={tc("cooldownCapability.capacity.title")}
+									description={tc("cooldownCapability.capacity.description")}
+									value={modes.capacity}
+									onChange={(next) => onCapabilityModeChange("capacity", next)}
+									inheritedSummary={capabilitySummaries.capacity}
+									disabled={updateDisabled}
+								>
+									<CapacityFields
+										value={form.watch("capacity") ?? {}}
+										onChange={(next) => form.setValue("capacity", next, { shouldDirty: true, shouldValidate: true })}
+										disabled={updateDisabled}
+									/>
+								</CapabilityOverrideCard>
+							</AccordionContent>
+						</AccordionItem>
+
+						<AccordionItem value="learning">
+							<AccordionTrigger data-testid="providercooldown-learning-accordion-trigger">
+								<span className="flex items-center gap-2 text-sm font-medium">
+									{tc("cooldownCapability.learning.title")}
+									<span className="text-muted-foreground text-xs font-normal">{tc(`cooldownCapability.mode.${modes.learning}`)}</span>
+								</span>
+							</AccordionTrigger>
+							<AccordionContent className="pt-0">
+								<CapabilityOverrideCard
+									testId="providercooldown-learning-card"
+									title={tc("cooldownCapability.learning.title")}
+									description={tc("cooldownCapability.learning.description")}
+									value={modes.learning}
+									onChange={(next) => onCapabilityModeChange("learning", next)}
+									inheritedSummary={capabilitySummaries.learning}
+									disabled={updateDisabled}
+									panel={
+										<LearnedLimitsPanel
+											provider={String(provider.name)}
+											capacityWindowSeconds={capacityWindowSeconds}
+											onAdopt={onAdoptLearnedLimit}
+											disabled={updateDisabled}
+										/>
+									}
+								>
+									<LearningFields
+										value={form.watch("learning") ?? {}}
+										onChange={(next) => form.setValue("learning", next, { shouldDirty: true, shouldValidate: true })}
+										disabled={updateDisabled}
+									/>
+								</CapabilityOverrideCard>
+							</AccordionContent>
+						</AccordionItem>
+					</Accordion>
+				</div>
+
 				<div className="flex flex-wrap items-center justify-between gap-2 pb-6">
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onClick={onClear}
-						disabled={!hasUpdateProviderAccess || isUpdatingProvider}
-						data-testid="provider-cooldown-clear-button"
-					>
-						{t("fragments.cooldownPolicy.clear")}
-					</Button>
+					<div className="flex flex-wrap items-center gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={onRestoreDefault}
+							disabled={updateDisabled}
+							data-testid="provider-cooldown-clear-button"
+						>
+							{t("fragments.cooldownPolicy.restoreDefault")}
+						</Button>
+						<span className="text-muted-foreground text-xs">{t("fragments.cooldownPolicy.restoreDefaultHint")}</span>
+					</div>
 					<div className="flex items-center gap-2">
 						{onCancel && (
 							<Button type="button" variant="outline" size="sm" onClick={onCancel}>
