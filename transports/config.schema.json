@@ -3900,106 +3900,16 @@
                     "description": "Additional lower-case substrings treated as quota exhaustion (extends built-in patterns)"
                   },
                   "escalation": {
-                    "type": "object",
-                    "description": "Optional adaptive cooldown escalation. Disabled by default. When enabled, a key that keeps failing inside a 300s window gets a longer TTL (1x, 2x, 4x ... up to max_multiplier), and when 3+ distinct keys fail for the same provider/model inside 60s, new marks start at 2x. Success clears the key's counter. Escalated TTLs are capped at 1 hour.",
-                    "properties": {
-                      "enabled": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Turn adaptive TTL escalation on (default false = current behaviour)"
-                      },
-                      "max_multiplier": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 16,
-                        "default": 4,
-                        "description": "Upper bound on how much a single key's TTL can grow (1..16, values above 16 are clamped)"
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/$defs/cooldown_escalation",
+                    "description": "Plugin-level DEFAULT adaptive escalation for every provider without its own cooldown_policy.escalation section."
                   },
                   "capacity": {
-                    "type": "object",
-                    "description": "Optional retrospective capacity gate. Disabled by default, and inert unless at least one of token_limit / request_limit is greater than 0. It accounts REAL usage only (the token usage the provider reports, or billed_usage on a failed-but-billed attempt) over a rolling per-second window, and once the window's usage reaches limit*headroom, subsequent requests are short-circuited with a 429. The request that crosses the line still goes out (the same trade-off the passive cooldown makes); nothing is estimated and the request body is never read. This is the gateway's OWN budget gate, not a provider-declared quota.",
-                    "properties": {
-                      "enabled": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Turn the capacity gate on (default false = current behaviour, no state allocated)"
-                      },
-                      "token_limit": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "default": 0,
-                        "description": "Per-window token budget. 0 means unlimited. The gate engages once the window's real token usage reaches token_limit * headroom."
-                      },
-                      "request_limit": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "default": 0,
-                        "description": "Per-window request budget. 0 means unlimited. The gate engages once the window's request count reaches request_limit * headroom. At least one of token_limit / request_limit must be positive for the gate to do anything."
-                      },
-                      "window_seconds": {
-                        "type": "integer",
-                        "minimum": 10,
-                        "maximum": 3600,
-                        "default": 60,
-                        "description": "Rolling window length in seconds (clamped to 10..3600; values <= 0 fall back to 60). One bucket per second is kept per accounting key and expired buckets are cleared lazily."
-                      },
-                      "headroom": {
-                        "type": "number",
-                        "minimum": 0.1,
-                        "maximum": 1.0,
-                        "default": 0.9,
-                        "description": "Fraction of the limit that may be spent before the gate engages (0.9 = block once 90% of the budget is used). Clamped to 0.1..1.0; values <= 0 fall back to 0.9."
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": ["provider", "provider_model"],
-                        "default": "provider",
-                        "description": "Accounting granularity: provider (one budget shared by every model of the provider) or provider_model (an independent budget per provider/model pair)."
-                      },
-                      "action": {
-                        "type": "string",
-                        "enum": ["fallback", "reject"],
-                        "default": "fallback",
-                        "description": "What happens once the gate engages: fallback lets the configured fallback chain pick the request up, reject returns the 429 immediately."
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/$defs/cooldown_capacity",
+                    "description": "Plugin-level DEFAULT capacity gate for every provider without its own cooldown_policy.capacity section."
                   },
                   "learning": {
-                    "type": "object",
-                    "description": "Optional read-only limit learner. Disabled by default. When enabled, the plugin watches provider RATE-LIMIT rejections (HTTP 429 classified as rate_limit by the provider's cooldown policy — quota/entitlement failures are ignored) and derives an estimate of the provider's effective per-window token limit from the REAL token usage that preceded each rejection. The estimate, its bounds, the sample count and a confidence band are published read-only through GET /api/plugins/provider-cooldown/learned-limits. Nothing is ever written back to the configuration.",
-                    "properties": {
-                      "enabled": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Turn the limit learner on (default false = current behaviour, no state allocated)"
-                      },
-                      "window_seconds": {
-                        "type": "integer",
-                        "minimum": 10,
-                        "maximum": 3600,
-                        "default": 60,
-                        "description": "Rolling window length in seconds used to measure the real token consumption that preceded a rejection (clamped to 10..3600; values <= 0 fall back to 60). Every published limit is expressed as 'tokens per window'."
-                      },
-                      "max_samples": {
-                        "type": "integer",
-                        "minimum": 5,
-                        "maximum": 500,
-                        "default": 50,
-                        "description": "How many rejection samples are kept per provider/model pair; the oldest is dropped first (clamped to 5..500; values <= 0 fall back to 50)."
-                      },
-                      "min_samples": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 100,
-                        "default": 5,
-                        "description": "How many samples are required before an estimate is published. Below it the pair is reported with confidence 'insufficient' and no estimate (clamped to 1..100; values <= 0 fall back to 5)."
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/$defs/cooldown_learning",
+                    "description": "Plugin-level DEFAULT limit learner for every provider without its own cooldown_policy.learning section."
                   }
                 },
                 "required": [
@@ -4060,6 +3970,108 @@
           "minimum": 1,
           "default": 50,
           "description": "Maximum number of models retained per bundle provider entry."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_escalation": {
+      "type": "object",
+      "description": "Optional adaptive cooldown escalation. Disabled by default. When enabled, a key that keeps failing inside a 300s window gets a longer TTL (1x, 2x, 4x ... up to max_multiplier), and when 3+ distinct keys fail for the same provider/model inside 60s, new marks start at 2x. Success clears the key's counter. Escalated TTLs are capped at 1 hour. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn adaptive TTL escalation on (default false = current behaviour). A provider section with enabled=false explicitly turns escalation off for that provider, even when the plugin-level default is on."
+        },
+        "max_multiplier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 4,
+          "description": "Upper bound on how much a single key's TTL can grow (1..16, values above 16 are clamped; values <= 0 fall back to 4)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_capacity": {
+      "type": "object",
+      "description": "Optional retrospective capacity gate. Disabled by default, and inert unless at least one of token_limit / request_limit is greater than 0. It accounts REAL usage only (the token usage the provider reports, or billed_usage on a failed-but-billed attempt) over a rolling per-second window, and once the window's usage reaches limit*headroom, subsequent requests are short-circuited with a 429. The request that crosses the line still goes out (the same trade-off the passive cooldown makes); nothing is estimated and the request body is never read. This is the gateway's OWN budget gate, not a provider-declared quota. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn the capacity gate on (default false = current behaviour, no state allocated). A provider section with enabled=false explicitly turns the gate off for that provider, even when the plugin-level default is on."
+        },
+        "token_limit": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Per-window token budget. 0 means unlimited. The gate engages once the window's real token usage reaches token_limit * headroom."
+        },
+        "request_limit": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Per-window request budget. 0 means unlimited. The gate engages once the window's request count reaches request_limit * headroom. At least one of token_limit / request_limit must be positive for the gate to do anything."
+        },
+        "window_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600,
+          "default": 60,
+          "description": "Rolling window length in seconds (clamped to 10..3600; values <= 0 fall back to 60). One bucket per second is kept per accounting key and expired buckets are cleared lazily."
+        },
+        "headroom": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1.0,
+          "default": 0.9,
+          "description": "Fraction of the limit that may be spent before the gate engages (0.9 = block once 90% of the budget is used). Clamped to 0.1..1.0; values <= 0 fall back to 0.9."
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["provider", "provider_model"],
+          "default": "provider",
+          "description": "Accounting granularity: provider (one budget shared by every model of the provider) or provider_model (an independent budget per provider/model pair)."
+        },
+        "action": {
+          "type": "string",
+          "enum": ["fallback", "reject"],
+          "default": "fallback",
+          "description": "What happens once the gate engages: fallback lets the configured fallback chain pick the request up, reject returns the 429 immediately."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_learning": {
+      "type": "object",
+      "description": "Optional read-only limit learner. Disabled by default. When enabled, the plugin watches provider RATE-LIMIT rejections (HTTP 429 classified as rate_limit by the provider's cooldown policy — quota/entitlement failures are ignored) and derives an estimate of the provider's effective per-window token limit from the REAL token usage that preceded each rejection. The estimate, its bounds, the sample count and a confidence band are published read-only through GET /api/plugins/provider-cooldown/learned-limits. Nothing is ever written back to the configuration. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn the limit learner on (default false = current behaviour, no state allocated). A provider section with enabled=false explicitly turns the learner off for that provider, even when the plugin-level default is on."
+        },
+        "window_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600,
+          "default": 60,
+          "description": "Rolling window length in seconds used to measure the real token consumption that preceded a rejection (clamped to 10..3600; values <= 0 fall back to 60). Every published limit is expressed as 'tokens per window'."
+        },
+        "max_samples": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 500,
+          "default": 50,
+          "description": "How many rejection samples are kept per provider/model pair; the oldest is dropped first (clamped to 5..500; values <= 0 fall back to 50)."
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 5,
+          "description": "How many samples are required before an estimate is published. Below it the pair is reported with confidence 'insufficient' and no estimate (clamped to 1..100; values <= 0 fall back to 5)."
         }
       },
       "additionalProperties": false
@@ -4136,13 +4148,25 @@
     },
     "cooldown_policy": {
       "type": "object",
-      "description": "Per-provider cooldown policy: rules for rate-limit and quota errors. Quota is checked before rate_limit. A nil/unset CooldownPolicy falls back to bifrost's built-in default for that provider (see docs).",
+      "description": "Per-provider cooldown policy: rules for rate-limit and quota errors plus optional capability overrides. Quota is checked before rate_limit. A nil/unset CooldownPolicy falls back to bifrost's built-in default for that provider; a nil/unset capacity / escalation / learning section inherits the plugin-level default from plugins[].config (provider-cooldown), while a section with enabled=false explicitly turns that capability off for this provider. Sections are replaced wholesale (no field-level merge with the plugin default).",
       "properties": {
         "rate_limit": {
           "$ref": "#/$defs/cooldown_policy_rule"
         },
         "quota": {
           "$ref": "#/$defs/cooldown_policy_rule"
+        },
+        "capacity": {
+          "$ref": "#/$defs/cooldown_capacity",
+          "description": "Provider-specific capacity gate override. Omit to inherit the plugin-level default; set enabled=false to disable the gate for this provider."
+        },
+        "escalation": {
+          "$ref": "#/$defs/cooldown_escalation",
+          "description": "Provider-specific adaptive escalation override. Omit to inherit the plugin-level default; set enabled=false to disable escalation for this provider."
+        },
+        "learning": {
+          "$ref": "#/$defs/cooldown_learning",
+          "description": "Provider-specific limit-learner override (window length, sample caps). Omit to inherit the plugin-level default; set enabled=false to disable learning for this provider."
         }
       },
       "additionalProperties": false

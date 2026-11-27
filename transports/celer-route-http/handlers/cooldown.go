@@ -31,6 +31,7 @@ type KeyNameResolver func(provider schemas.ModelProvider, keyID string) string
 //	GET    /api/plugins/provider-cooldown/state                    — dump active entries
 //	GET    /api/plugins/provider-cooldown/stats                    — lifetime counters + active count
 //	GET    /api/plugins/provider-cooldown/learned-limits           — learned per-window token limits
+//	GET    /api/plugins/provider-cooldown/capacity-usage           — live capacity-gate usage per provider/model
 //	DELETE /api/plugins/provider-cooldown/state/{provider}/{keyId} — manually un-cool a key
 //
 // The handler is safe to wire unconditionally — when the plugin is not
@@ -59,6 +60,7 @@ func (h *CooldownHandler) RegisterRoutes(r *router.Router, middlewares ...schema
 	r.GET("/api/plugins/provider-cooldown/state", lib.ChainMiddlewares(h.getState, middlewares...))
 	r.GET("/api/plugins/provider-cooldown/stats", lib.ChainMiddlewares(h.getStats, middlewares...))
 	r.GET("/api/plugins/provider-cooldown/learned-limits", lib.ChainMiddlewares(h.getLearnedLimits, middlewares...))
+	r.GET("/api/plugins/provider-cooldown/capacity-usage", lib.ChainMiddlewares(h.getCapacityUsage, middlewares...))
 	r.DELETE("/api/plugins/provider-cooldown/state/{provider}/{keyId}", lib.ChainMiddlewares(h.clearKey, middlewares...))
 }
 
@@ -208,12 +210,20 @@ func (h *CooldownHandler) getStats(ctx *fasthttp.RequestCtx) {
 // response because every limit in it is expressed as "tokens per window" —
 // without the window length the number is meaningless.
 //
+// The top-level WindowSeconds is the plugin-DEFAULT learner window, kept for
+// backward compatibility. Each entry's own window_seconds is authoritative for
+// that provider: a provider may configure a different learning.window_seconds
+// in its cooldown_policy, and the estimate is always expressed in that window.
+//
 // A pair whose sample count is below the configured minimum is still listed,
 // with confidence "insufficient" and no estimate fields: the operator can see
 // that the system is watching but has not learned anything trustworthy yet.
 type cooldownLearnedLimitsResponse struct {
-	Plugin        string                          `json:"plugin"`
-	Count         int                             `json:"count"`
+	Plugin string `json:"plugin"`
+	Count  int    `json:"count"`
+	// WindowSeconds is the plugin-DEFAULT learner window, kept for backward
+	// compatibility. Each entry's own window_seconds is the authoritative unit
+	// for that provider.
 	WindowSeconds int                             `json:"window_seconds"`
 	Limits        []providercooldown.LearnedLimit `json:"limits"`
 }
@@ -239,6 +249,37 @@ func (h *CooldownHandler) getLearnedLimits(ctx *fasthttp.RequestCtx) {
 		Count:         len(limits),
 		WindowSeconds: plugin.LearningWindowSeconds(),
 		Limits:        limits,
+	})
+}
+
+// cooldownCapacityUsageResponse is the JSON shape returned by GET
+// capacity-usage. Entries is always an array (empty, never null) so clients can
+// iterate without a nil check; Count mirrors its length.
+type cooldownCapacityUsageResponse struct {
+	Plugin  string                                   `json:"plugin"`
+	Count   int                                      `json:"count"`
+	Entries []providercooldown.ProviderCapacityUsage `json:"entries"`
+}
+
+// getCapacityUsage serves the live capacity-gate usage per provider/model.
+//
+// It is read-only and reports only keys whose rolling window still holds
+// usage. Like the other cooldown endpoints it fails with HTTP 400 when the
+// plugin is not loaded so the contract stays uniform across the handler.
+func (h *CooldownHandler) getCapacityUsage(ctx *fasthttp.RequestCtx) {
+	plugin := h.resolve()
+	if plugin == nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "provider-cooldown plugin is not loaded")
+		return
+	}
+	entries := plugin.CapacityUsage()
+	if entries == nil {
+		entries = []providercooldown.ProviderCapacityUsage{}
+	}
+	SendJSON(ctx, cooldownCapacityUsageResponse{
+		Plugin:  providercooldown.PluginName,
+		Count:   len(entries),
+		Entries: entries,
 	})
 }
 

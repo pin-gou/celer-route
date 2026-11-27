@@ -410,6 +410,12 @@ func TestCooldownPolicyValidateCapabilitySections(t *testing.T) {
 			if !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("error %q does not mention %q", err, tt.want)
 			}
+			// The write path reports this error verbatim (behind a message that
+			// no longer repeats "cooldown policy"), so the field path must be
+			// anchored exactly once, not double-prefixed.
+			if n := strings.Count(err.Error(), "cooldown_policy"); n != 1 {
+				t.Fatalf("error %q must contain the cooldown_policy prefix exactly once, got %d", err, n)
+			}
 		})
 	}
 

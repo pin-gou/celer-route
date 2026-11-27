@@ -1,0 +1,177 @@
+package providercooldown
+
+import (
+	"sort"
+	"strings"
+
+	"github.com/pin-gou/celer-route/core/schemas"
+)
+
+// capacityUsageSource* label where a snapshot entry's gate came from. A
+// provider that configures its own capacity section in its CooldownPolicy gets
+// "provider"; every provider that simply inherits the plugin-level default
+// gets "default".
+const (
+	capacityUsageSourceDefault  = "default"
+	capacityUsageSourceProvider = "provider"
+)
+
+// ProviderCapacityUsage is one live entry of the retrospective capacity gate,
+// as reported by the monitoring endpoint.
+//
+// It is a read-only snapshot: the usage numbers are the real tokens / requests
+// accounted in the current rolling window, the thresholds are limit*headroom
+// (the value the gate actually compares against), and Headroom is the fraction
+// the operator configured. Model is empty when Scope is "provider" because the
+// budget is shared across every model of that provider.
+//
+// Source tells the operator whether the effective budget comes from the
+// provider's own cooldown_policy.capacity section ("provider") or from the
+// plugin-level default every unconfigured provider inherits ("default").
+type ProviderCapacityUsage struct {
+	Provider          schemas.ModelProvider `json:"provider"`
+	Model             string                `json:"model,omitempty"`
+	Scope             string                `json:"scope"`
+	WindowSeconds     int64                 `json:"window_seconds"`
+	UsedTokens        int64                 `json:"used_tokens"`
+	UsedRequests      int64                 `json:"used_requests"`
+	TokenLimit        int64                 `json:"token_limit"`
+	RequestLimit      int64                 `json:"request_limit"`
+	Headroom          float64               `json:"headroom"`
+	ThresholdTokens   int64                 `json:"threshold_tokens"`
+	ThresholdRequests int64                 `json:"threshold_requests"`
+	RetryAfterSeconds int64                 `json:"retry_after_seconds"`
+	Source            string                `json:"source"`
+}
+
+// CapacityUsage returns a point-in-time snapshot of the capacity gate's live
+// accounting entries across the plugin-default gate and every per-provider
+// override gate. Only keys that still hold usage inside their window are
+// reported, so a provider whose window has fully slid away does not appear.
+//
+// The slice is always non-nil (empty when no state or no gate is enabled), so
+// the HTTP endpoint can serialize "entries": [] instead of null.
+//
+// Cost: this is a diagnostic read. It takes each gate's own mutex for the
+// duration of the snapshot and does not touch, reorder or add locking to the
+// request path.
+func (p *CooldownPlugin) CapacityUsage() []ProviderCapacityUsage {
+	if p == nil || p.State == nil {
+		return []ProviderCapacityUsage{}
+	}
+	return p.State.capacityUsage()
+}
+
+// capacityUsage aggregates the default and per-provider gates into one sorted
+// slice. A (provider, model, scope) that appears in both a stale default gate
+// and a provider gate (possible while a reconfiguration is in flight) is
+// reported once, with the provider-specific gate winning.
+func (c *CooldownState) capacityUsage() []ProviderCapacityUsage {
+	entries := make([]ProviderCapacityUsage, 0)
+	if c == nil {
+		return entries
+	}
+	if g := c.capacity.Load(); g != nil {
+		entries = append(entries, g.capacityUsage(capacityUsageSourceDefault)...)
+	}
+	c.capacityRegistry.Range(func(_, v any) bool {
+		if holder, ok := v.(*capacityHolder); ok {
+			if g := holder.gate.Load(); g != nil {
+				entries = append(entries, g.capacityUsage(capacityUsageSourceProvider)...)
+			}
+		}
+		return true
+	})
+	return dedupeCapacityUsage(entries)
+}
+
+// capacityUsage snapshots one gate's live keys. Expired keys encountered on the
+// way are dropped, which is the same lazy cleanup check() performs.
+func (g *capacityGate) capacityUsage(source string) []ProviderCapacityUsage {
+	if g == nil {
+		return nil
+	}
+	now := g.nowSecond()
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	out := make([]ProviderCapacityUsage, 0, len(g.keys))
+	for key, w := range g.keys {
+		tokens, requests := w.sweepLocked(g.windowSeconds, now)
+		if tokens == 0 && requests == 0 {
+			delete(g.keys, key)
+			continue
+		}
+		provider, model := splitCapacityWindowKey(key, g.scope)
+		entry := ProviderCapacityUsage{
+			Provider:          provider,
+			Model:             model,
+			Scope:             g.scope,
+			WindowSeconds:     g.windowSeconds,
+			UsedTokens:        tokens,
+			UsedRequests:      requests,
+			TokenLimit:        g.tokenLimit,
+			RequestLimit:      g.requestLimit,
+			Headroom:          g.headroom,
+			ThresholdTokens:   g.tokenThresh,
+			ThresholdRequests: g.requestThresh,
+			Source:            source,
+		}
+		// Mirror check(): RetryAfterSeconds is only meaningful once the window
+		// is actually over a threshold, and is 0 otherwise.
+		tokenHit := g.tokenThresh > 0 && tokens >= g.tokenThresh
+		requestHit := g.requestThresh > 0 && requests >= g.requestThresh
+		if tokenHit || requestHit {
+			entry.RetryAfterSeconds = g.retryAfterLocked(w, now, tokens, requests)
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// splitCapacityWindowKey reverses windowKey. A provider-scoped gate keys on the
+// bare provider name, so model stays empty; a provider_model gate keys on
+// "provider|model". The split uses the FIRST separator so a model name that
+// itself contains "|" is preserved intact.
+func splitCapacityWindowKey(key, scope string) (schemas.ModelProvider, string) {
+	if scope != CapacityScopeProviderModel {
+		return schemas.ModelProvider(key), ""
+	}
+	if i := strings.IndexByte(key, '|'); i >= 0 {
+		return schemas.ModelProvider(key[:i]), key[i+1:]
+	}
+	return schemas.ModelProvider(key), ""
+}
+
+// dedupeCapacityUsage keeps one entry per (provider, model, scope), preferring
+// the provider-specific gate over a stale default-gate entry, then sorts by
+// provider and model for a stable, diffable response.
+func dedupeCapacityUsage(in []ProviderCapacityUsage) []ProviderCapacityUsage {
+	if len(in) == 0 {
+		return in
+	}
+	idxByKey := make(map[string]int, len(in))
+	out := in[:0]
+	for _, e := range in {
+		key := string(e.Provider) + "\x00" + e.Model + "\x00" + e.Scope
+		if idx, ok := idxByKey[key]; ok {
+			if out[idx].Source == capacityUsageSourceDefault && e.Source == capacityUsageSourceProvider {
+				out[idx] = e
+			}
+			continue
+		}
+		idxByKey[key] = len(out)
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Provider != out[j].Provider {
+			return out[i].Provider < out[j].Provider
+		}
+		if out[i].Model != out[j].Model {
+			return out[i].Model < out[j].Model
+		}
+		return out[i].Source < out[j].Source
+	})
+	return out
+}
