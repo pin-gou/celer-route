@@ -69,21 +69,21 @@ const (
 	// defaultLearningWindowSeconds is the rolling window the learner uses to
 	// measure "tokens already consumed". It matches the order of magnitude of
 	// a provider's TPM window (60s) and the capacity gate's default window.
-	defaultLearningWindowSeconds = 60
-	minLearningWindowSeconds     = 10
-	maxLearningWindowSeconds     = 3600
+	defaultLearningWindowSeconds = schemas.DefaultLearningWindowSeconds
+	minLearningWindowSeconds     = schemas.MinLearningWindowSeconds
+	maxLearningWindowSeconds     = schemas.MaxLearningWindowSeconds
 
 	// defaultLearningMaxSamples is how many 429 samples are kept per
 	// (provider, model) pair. Older samples are dropped first.
-	defaultLearningMaxSamples = 50
-	minLearningMaxSamples     = 5
-	maxLearningMaxSamples     = 500
+	defaultLearningMaxSamples = schemas.DefaultLearningMaxSamples
+	minLearningMaxSamples     = schemas.MinLearningMaxSamples
+	maxLearningMaxSamples     = schemas.MaxLearningMaxSamples
 
 	// defaultLearningMinSamples is the number of samples required before an
 	// estimate is published. Below it the entry reports "insufficient".
-	defaultLearningMinSamples = 5
-	minLearningMinSamples     = 1
-	maxLearningMinSamples     = 100
+	defaultLearningMinSamples = schemas.DefaultLearningMinSamples
+	minLearningMinSamples     = schemas.MinLearningMinSamples
+	maxLearningMinSamples     = schemas.MaxLearningMinSamples
 )
 
 // Confidence bands published alongside every estimate. The bands are derived
@@ -100,96 +100,6 @@ const (
 	// LearningConfidenceHigh means the estimate rests on many samples.
 	LearningConfidenceHigh = "high"
 )
-
-// LearningConfig configures the optional read-only limit learner.
-//
-// The learner is completely inert unless Enabled is true: no state is
-// allocated, no lock is taken on the request path, and no sample is
-// collected. It never writes configuration — the only thing it produces is a
-// report.
-type LearningConfig struct {
-	// Enabled turns the learner on. Default false keeps current behaviour.
-	Enabled bool `json:"enabled"`
-
-	// WindowSeconds is the rolling window used to measure the real token
-	// consumption that preceded a rejection. <= 0 falls back to 60; values
-	// are clamped into 10..3600.
-	WindowSeconds int `json:"window_seconds"`
-
-	// MaxSamples is how many samples are kept per (provider, model) pair.
-	// The oldest sample is dropped when the cap is exceeded. <= 0 falls back
-	// to 50; values are clamped into 5..500.
-	MaxSamples int `json:"max_samples"`
-
-	// MinSamples is how many samples are required before an estimate is
-	// published. Below it the entry reports "insufficient". <= 0 falls back
-	// to 5; values are clamped into 1..100.
-	MinSamples int `json:"min_samples"`
-}
-
-// Normalized returns a copy of the config with defaults applied and values
-// clamped the same way ParseConfig does, so callers that build the struct
-// directly still get deterministic behaviour.
-func (c *LearningConfig) Normalized() *LearningConfig {
-	if c == nil {
-		return nil
-	}
-	out := *c
-	out.WindowSeconds = normalizeLearningWindowSeconds(out.WindowSeconds)
-	out.MaxSamples = normalizeLearningMaxSamples(out.MaxSamples)
-	out.MinSamples = normalizeLearningMinSamples(out.MinSamples)
-	// A min_samples above max_samples could never be reached (the sample
-	// buffer is capped), which would silently disable the learner forever.
-	// Pull it down to the cap instead.
-	if out.MinSamples > out.MaxSamples {
-		out.MinSamples = out.MaxSamples
-	}
-	return &out
-}
-
-// Active reports whether the learner should do any work at all.
-func (c *LearningConfig) Active() bool {
-	return c != nil && c.Enabled
-}
-
-func normalizeLearningWindowSeconds(n int) int {
-	switch {
-	case n <= 0:
-		return defaultLearningWindowSeconds
-	case n < minLearningWindowSeconds:
-		return minLearningWindowSeconds
-	case n > maxLearningWindowSeconds:
-		return maxLearningWindowSeconds
-	default:
-		return n
-	}
-}
-
-func normalizeLearningMaxSamples(n int) int {
-	switch {
-	case n <= 0:
-		return defaultLearningMaxSamples
-	case n < minLearningMaxSamples:
-		return minLearningMaxSamples
-	case n > maxLearningMaxSamples:
-		return maxLearningMaxSamples
-	default:
-		return n
-	}
-}
-
-func normalizeLearningMinSamples(n int) int {
-	switch {
-	case n <= 0:
-		return defaultLearningMinSamples
-	case n < minLearningMinSamples:
-		return minLearningMinSamples
-	case n > maxLearningMinSamples:
-		return maxLearningMinSamples
-	default:
-		return n
-	}
-}
 
 // LearnedLimit is the read-only estimate for one (provider, model) pair.
 //

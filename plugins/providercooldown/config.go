@@ -36,12 +36,14 @@ type Config struct {
 	// failing (and when many keys fail at once). Nil or Enabled=false keeps
 	// the pre-escalation behaviour byte-for-byte.
 	//
-	// This intentionally lives in the *plugin* config rather than in
-	// schemas.CooldownPolicy: the provider cooldown policy form rebuilds the
-	// whole cooldown_policy object from the fields it knows about, silently
-	// dropping any sub-field it does not understand. The plugin config has no
-	// such form (the UI only toggles the plugin on/off), so fields here
-	// survive an unrelated save.
+	// This deliberately stays in the *plugin* config rather than being read
+	// from schemas.CooldownPolicy: the provider cooldown policy form rebuilds
+	// the whole cooldown_policy object from the fields it knows about,
+	// silently dropping any sub-field it does not understand. The plugin
+	// config has no such form (the UI only toggles the plugin on/off), so
+	// fields here survive an unrelated save. The type itself now lives in
+	// core/schemas so the per-provider policy can adopt it without
+	// duplicating the shape.
 	Escalation *EscalationConfig `json:"escalation,omitempty"`
 
 	// Capacity optionally enables a retrospective budget gate: real token /
@@ -52,11 +54,8 @@ type Config struct {
 	// Nil or Enabled=false (the default) keeps the feature completely inert:
 	// no state is allocated, no lock is taken, and no request is gated.
 	//
-	// Like Escalation, this lives in the *plugin* config rather than in
-	// schemas.CooldownPolicy: the provider-cooldown policy form rebuilds the
-	// whole cooldown_policy object from the fields it knows about, silently
-	// dropping unknown sub-fields. The plugin config has no such form, so
-	// these fields survive an unrelated save.
+	// Like Escalation, this lives in the *plugin* config rather than being
+	// read from schemas.CooldownPolicy, for the same form-round-trip reason.
 	Capacity *CapacityConfig `json:"capacity,omitempty"`
 
 	// Learning optionally enables the read-only limit learner: the plugin
@@ -70,147 +69,15 @@ type Config struct {
 	Learning *LearningConfig `json:"learning,omitempty"`
 }
 
-// CapacityConfig configures the optional retrospective capacity gate.
-//
-// The gate never estimates tokens and never reads the request body: it only
-// sums the real usage the provider reported (response usage, or
-// BilledUsage on a failed-but-billed attempt) over a rolling window, then
-// refuses *subsequent* requests once the window's usage crosses
-// limit*headroom. The request that crosses the line still goes out — the same
-// trade-off the passive cooldown already makes — in exchange for zero
-// estimation error and explainable thresholds.
-type CapacityConfig struct {
-	// Enabled turns the gate on. Default false keeps current behaviour.
-	Enabled bool `json:"enabled"`
-
-	// TokenLimit is the per-window token budget. 0 means "no token limit".
-	TokenLimit int64 `json:"token_limit"`
-
-	// RequestLimit is the per-window request budget. 0 means "no request
-	// limit". At least one of TokenLimit / RequestLimit must be non-zero for
-	// the gate to do anything.
-	RequestLimit int64 `json:"request_limit"`
-
-	// WindowSeconds is the rolling window length. <= 0 falls back to 60;
-	// values are clamped into 10..3600.
-	WindowSeconds int `json:"window_seconds"`
-
-	// Headroom is the fraction of the limit that may be used before the gate
-	// engages (0.9 = block once 90% of the budget is spent). <= 0 falls back
-	// to 0.9; values are clamped into 0.1..1.0.
-	Headroom float64 `json:"headroom"`
-
-	// Scope selects the accounting granularity: "provider" (default) shares
-	// one budget across every model of a provider, while "provider_model"
-	// keeps an independent budget per (provider, model) pair.
-	Scope string `json:"scope"`
-
-	// Action decides what happens once the gate engages: "fallback" (default)
-	// allows the configured fallback chain to take over, "reject" refuses the
-	// request outright.
-	Action string `json:"action"`
-}
-
-// Normalized returns a copy of the config with defaults applied and values
-// clamped the same way ParseConfig does, so callers that build the struct
-// directly still get deterministic behaviour.
-func (c *CapacityConfig) Normalized() *CapacityConfig {
-	if c == nil {
-		return nil
-	}
-	out := *c
-	out.WindowSeconds = normalizeCapacityWindowSeconds(out.WindowSeconds)
-	out.Headroom = normalizeCapacityHeadroom(out.Headroom)
-	out.Scope = normalizeCapacityScope(out.Scope)
-	out.Action = normalizeCapacityAction(out.Action)
-	return &out
-}
-
-// Active reports whether the gate should do any work at all. A gate with no
-// limit configured is a no-op even when Enabled is true.
-func (c *CapacityConfig) Active() bool {
-	return c != nil && c.Enabled && (c.TokenLimit > 0 || c.RequestLimit > 0)
-}
-
-func normalizeCapacityWindowSeconds(n int) int {
-	switch {
-	case n <= 0:
-		return defaultCapacityWindowSeconds
-	case n < minCapacityWindowSeconds:
-		return minCapacityWindowSeconds
-	case n > maxCapacityWindowSeconds:
-		return maxCapacityWindowSeconds
-	default:
-		return n
-	}
-}
-
-func normalizeCapacityHeadroom(h float64) float64 {
-	switch {
-	case h <= 0:
-		return defaultCapacityHeadroom
-	case h < minCapacityHeadroom:
-		return minCapacityHeadroom
-	case h > maxCapacityHeadroom:
-		return maxCapacityHeadroom
-	default:
-		return h
-	}
-}
-
-func normalizeCapacityScope(s string) string {
-	if strings.TrimSpace(strings.ToLower(s)) == CapacityScopeProviderModel {
-		return CapacityScopeProviderModel
-	}
-	return CapacityScopeProvider
-}
-
-func normalizeCapacityAction(a string) string {
-	if strings.TrimSpace(strings.ToLower(a)) == CapacityActionReject {
-		return CapacityActionReject
-	}
-	return CapacityActionFallback
-}
-
-// EscalationConfig controls the optional adaptive TTL upgrade.
-//
-// The behaviour is expressed purely as a longer TTL — no sleeps, no blocking,
-// and no change to the bytes sent upstream.
-type EscalationConfig struct {
-	// Enabled turns the feature on. Default false keeps current behaviour.
-	Enabled bool `json:"enabled"`
-
-	// MaxMultiplier caps how much a single key's TTL can grow (1x, 2x, 4x …).
-	// Values <= 0 fall back to defaultEscalationMaxMultiplier; values above
-	// maxAllowedEscalationMultiplier are clamped to it.
-	MaxMultiplier int `json:"max_multiplier"`
-}
-
-// Normalized returns a copy of the config with MaxMultiplier applied the same
-// way ParseConfig / AsState apply it, so callers that build the struct
-// directly still get deterministic behaviour.
-func (e *EscalationConfig) Normalized() *EscalationConfig {
-	if e == nil {
-		return nil
-	}
-	out := *e
-	out.MaxMultiplier = normalizeMaxMultiplier(out.MaxMultiplier)
-	return &out
-}
-
-// normalizeMaxMultiplier applies the documented default (4) and upper bound
-// (16). Negative / zero means "unset" and takes the default; everything above
-// the bound is clamped.
-func normalizeMaxMultiplier(n int) int {
-	switch {
-	case n <= 0:
-		return defaultEscalationMaxMultiplier
-	case n > maxAllowedEscalationMultiplier:
-		return maxAllowedEscalationMultiplier
-	default:
-		return n
-	}
-}
+// The capability config types are owned by core/schemas so the plugin config
+// and the per-provider CooldownPolicy (schemas.CooldownPolicy) stay
+// structurally identical. These aliases keep the historical package-level
+// names working at every existing call site.
+type (
+	CapacityConfig   = schemas.CooldownCapacityConfig
+	EscalationConfig = schemas.CooldownEscalationConfig
+	LearningConfig   = schemas.CooldownLearningConfig
+)
 
 // ParseConfig decodes the raw config map (as received from the plugin
 // loader). Unknown keys are surfaced as errors so typos don't silently
@@ -281,8 +148,7 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 				return nil, fmt.Errorf("escalation: unknown key %q", k)
 			}
 		}
-		ec.MaxMultiplier = normalizeMaxMultiplier(ec.MaxMultiplier)
-		c.Escalation = ec
+		c.Escalation = ec.Normalized()
 	}
 	if v, ok := raw["capacity"]; ok {
 		m, ok := v.(map[string]any)

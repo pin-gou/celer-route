@@ -10,27 +10,29 @@ import (
 	"github.com/pin-gou/celer-route/core/schemas"
 )
 
-// Defaults / bounds for CapacityConfig. Values are normalized once at
-// construction time so the hot path never re-derives them.
+// Defaults / bounds for CooldownCapacityConfig. The values and the
+// normalization rules are owned by core/schemas; these aliases keep the
+// historical package-level names available while leaving exactly one source
+// of truth for the numbers.
 const (
-	defaultCapacityWindowSeconds = 60
-	minCapacityWindowSeconds     = 10
-	maxCapacityWindowSeconds     = 3600
+	defaultCapacityWindowSeconds = schemas.DefaultCapacityWindowSeconds
+	minCapacityWindowSeconds     = schemas.MinCapacityWindowSeconds
+	maxCapacityWindowSeconds     = schemas.MaxCapacityWindowSeconds
 
-	defaultCapacityHeadroom = 0.9
-	minCapacityHeadroom     = 0.1
-	maxCapacityHeadroom     = 1.0
+	defaultCapacityHeadroom = schemas.DefaultCapacityHeadroom
+	minCapacityHeadroom     = schemas.MinCapacityHeadroom
+	maxCapacityHeadroom     = schemas.MaxCapacityHeadroom
 
 	// CapacityScopeProvider shares one budget across every model of a
 	// provider; CapacityScopeProviderModel keeps an independent budget per
 	// (provider, model) pair.
-	CapacityScopeProvider      = "provider"
-	CapacityScopeProviderModel = "provider_model"
+	CapacityScopeProvider      = schemas.CapacityScopeProvider
+	CapacityScopeProviderModel = schemas.CapacityScopeProviderModel
 
 	// CapacityActionFallback allows the configured fallback chain to take
 	// over once the gate engages; CapacityActionReject refuses the request.
-	CapacityActionFallback = "fallback"
-	CapacityActionReject   = "reject"
+	CapacityActionFallback = schemas.CapacityActionFallback
+	CapacityActionReject   = schemas.CapacityActionReject
 
 	// capacityGateErrorType is the error type the gate stamps on its synthetic
 	// 429. It is deliberately distinct from "no_eligible_keys": the client
@@ -119,10 +121,10 @@ func newCapacityGate(cfg *CapacityConfig) *capacityGate {
 	g := &capacityGate{
 		tokenLimit:    cfg.TokenLimit,
 		requestLimit:  cfg.RequestLimit,
-		windowSeconds: int64(normalizeCapacityWindowSeconds(cfg.WindowSeconds)),
-		scope:         normalizeCapacityScope(cfg.Scope),
-		action:        normalizeCapacityAction(cfg.Action),
-		headroom:      normalizeCapacityHeadroom(cfg.Headroom),
+		windowSeconds: int64(schemas.NormalizeCapacityWindowSeconds(cfg.WindowSeconds)),
+		scope:         schemas.NormalizeCapacityScope(cfg.Scope),
+		action:        schemas.NormalizeCapacityAction(cfg.Action),
+		headroom:      schemas.NormalizeCapacityHeadroom(cfg.Headroom),
 		keys:          make(map[string]*capacityWindow),
 	}
 	if g.tokenLimit > 0 {

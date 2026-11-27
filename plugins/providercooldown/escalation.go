@@ -56,11 +56,11 @@ const (
 const (
 	// defaultEscalationMaxMultiplier applies when max_multiplier is unset
 	// (nil / zero / negative).
-	defaultEscalationMaxMultiplier = 4
+	defaultEscalationMaxMultiplier = schemas.DefaultEscalationMaxMultiplier
 
 	// maxAllowedEscalationMultiplier is the upper bound max_multiplier is
 	// clamped to: 2^4 = 16x is already far beyond any sane cooldown.
-	maxAllowedEscalationMultiplier = 16
+	maxAllowedEscalationMultiplier = schemas.MaxEscalationMultiplier
 )
 
 // escalationKey identifies one per-key escalation counter. Provider, keyID and
@@ -109,7 +109,7 @@ type escalationState struct {
 
 func newEscalationState(maxMultiplier int) *escalationState {
 	return &escalationState{
-		maxMultiplier: normalizeMaxMultiplier(maxMultiplier),
+		maxMultiplier: schemas.NormalizeEscalationMaxMultiplier(maxMultiplier),
 		entries:       make(map[escalationKey]*escalationEntry),
 		storm:         make(map[stormBucketKey]map[string]time.Time),
 	}

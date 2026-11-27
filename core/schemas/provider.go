@@ -674,6 +674,19 @@ func (r *CooldownPolicyRule) RetryAfterModeOrDefault() string {
 type CooldownPolicy struct {
 	RateLimit *CooldownPolicyRule `json:"rate_limit,omitempty"`
 	Quota     *CooldownPolicyRule `json:"quota,omitempty"`
+
+	// Capacity optionally enables the retrospective capacity gate for this
+	// policy. Nil means "not configured" — the plugin-level capacity section
+	// (when present) is what the provider-cooldown plugin applies.
+	Capacity *CooldownCapacityConfig `json:"capacity,omitempty"`
+
+	// Escalation optionally enables adaptive TTL escalation for this policy.
+	// Nil means "not configured".
+	Escalation *CooldownEscalationConfig `json:"escalation,omitempty"`
+
+	// Learning optionally enables the read-only limit learner for this
+	// policy. Nil means "not configured".
+	Learning *CooldownLearningConfig `json:"learning,omitempty"`
 }
 
 // Cooldown policy TTL defaults applied by DefaultCooldownPolicy. Tuned per
@@ -1022,20 +1035,34 @@ func (p *CooldownPolicy) Validate() error {
 			)
 		}
 	}
-	if p.Quota == nil {
-		return nil
-	}
-	for i, m := range p.Quota.Match {
-		if !m.IsBareStatusMatch() {
-			continue
+	if p.Quota != nil {
+		for i, m := range p.Quota.Match {
+			if !m.IsBareStatusMatch() {
+				continue
+			}
+			return fmt.Errorf(
+				"cooldown_policy.quota.match[%d] matches any %d response regardless of body; "+
+					"quota is evaluated before rate_limit, so this rule shadows every rate_limit rule "+
+					"and mislabels transient rate limits as quota exhaustion. "+
+					"Add message_contains, type, or code to target only genuine quota errors",
+				i, *m.StatusCode,
+			)
 		}
-		return fmt.Errorf(
-			"cooldown_policy.quota.match[%d] matches any %d response regardless of body; "+
-				"quota is evaluated before rate_limit, so this rule shadows every rate_limit rule "+
-				"and mislabels transient rate limits as quota exhaustion. "+
-				"Add message_contains, type, or code to target only genuine quota errors",
-			i, *m.StatusCode,
-		)
+	}
+	if p.Capacity != nil {
+		if err := p.Capacity.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
+	}
+	if p.Escalation != nil {
+		if err := p.Escalation.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
+	}
+	if p.Learning != nil {
+		if err := p.Learning.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
 	}
 	return nil
 }
