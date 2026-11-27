@@ -560,7 +560,14 @@ func (c *CooldownState) markWithPolicy(policy *schemas.CooldownPolicy, provider 
 	// skipped entirely.
 	if escalate {
 		es := c.ensureEscalationLocked()
-		effective = es.applyLocked(provider, keyID, model, scope, effective, maxMultiplier, now)
+		// The storm signal is judged with the persistent-failure semantics
+		// only when the chronic section is active for this provider: with
+		// chronic off no key is chronically unhealthy, so the signal keeps its
+		// historical meaning (and the deployment stays byte-for-byte
+		// identical to the pre-B4 behaviour). The policy is a plain value, so
+		// passing it down the mark path allocates nothing.
+		storm := stormSignalPolicy{persistence: chronicActive, state: c, spec: chronic}
+		effective = es.applyLocked(provider, keyID, model, scope, effective, maxMultiplier, now, storm)
 	}
 	// Chronic backoff runs AFTER escalation on purpose: applyLocked's counter
 	// advance and storm-window recording are the side effects that keep the

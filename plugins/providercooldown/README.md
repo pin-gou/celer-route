@@ -104,11 +104,34 @@ When `escalation.enabled` is true, cooldown TTLs grow on repeat failures:
   (see `escalation.chronic` below for the hysteresis that replaces this rule for
   chronically bad keys);
 - when 3+ distinct keys fail for the same provider/model within 60s, new marks
-  start at 2x until that window goes quiet;
+  start at 2x until that window goes quiet — see "Storm signal" below for the
+  two refinements that stop a stable split of bad credentials from holding the
+  signal on forever;
 - escalated TTLs are capped at 1 hour and are never shorter than the base TTL.
 
 It is expressed only as a longer TTL — no sleeps, no blocking, and no change to
 the upstream request bytes.
+
+#### Storm signal: chronic keys do not count, and the signal must be fresh
+
+The original rule ("3+ distinct keys failed inside 60s → shared outage") cannot
+tell a real group outage from a fleet where a few credentials are permanently
+broken. With four chronically bad keys and two healthy ones, the bad keys
+re-enter the 60s window on every probe, so the signal never turns off and every
+healthy key's ordinary 429 is inflated to 2x. Two refinements fix that, and both
+are active **only when `escalation.chronic` is enabled** for the provider:
+
+| Refinement | Behaviour |
+|---|---|
+| **Chronic exclusion** | Distinct-key counting skips keys that are currently in chronic long-backoff mode. The predicate is the very same `isChronicLocked` the chronic TTL uses, so the two views can never disagree about a key. 4 chronic + 2 healthy keys therefore count as 2 — below the threshold of 3 — and the signal stays off. Once a key recovers (`recovery_successes` consecutive successes) it counts again. |
+| **Freshness** | The bucket records when the failing-key set last **grew** (`grewAt`). The signal only fires while `now − grewAt ≤ 30s`. A real outage pushes the count over the threshold within moments (which refreshes the timestamp); a stable split keeps the count constant and lets the signal age out. |
+
+Both refinements are gated on chronic being enabled, so with chronic off (the
+default) the storm signal keeps its original meaning exactly — distinct-key
+count alone, no freshness window — and the deployment behaves byte-for-byte like
+before. The threshold mark itself is still evaluated *before* the current
+failure is recorded, so the key that reaches the threshold is not escalated by
+its own hit.
 
 #### `escalation.chronic` — long backoff for chronically bad keys (default off)
 

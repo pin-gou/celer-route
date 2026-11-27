@@ -302,7 +302,7 @@ func TestEscalationConcurrentMarks(t *testing.T) {
 		t.Fatalf("escalation entries = %d, want <= %d", got, distinctKeys+1)
 	}
 	bucket := s.escalation.storm[stormBucketKey{provider: provider, model: "gpt-4o"}]
-	if got := len(bucket); got > distinctKeys+1 {
+	if got := len(bucket.members); got > distinctKeys+1 {
 		t.Fatalf("storm bucket = %d keys, want <= %d", got, distinctKeys+1)
 	}
 }
