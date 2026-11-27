@@ -259,6 +259,34 @@ func TestConfig_DefaultOnInitialization(t *testing.T) {
 	if !log.contains("initialized") {
 		t.Fatalf("expected init log message, got %v", log.msgs)
 	}
+	// No plugin-level capacity section → no deprecation warning.
+	if log.warnCount() != 0 {
+		t.Fatalf("Init(nil) must not warn, got %v", log.msgs)
+	}
+}
+
+func TestConfig_LegacyCapacityWarnsOnce(t *testing.T) {
+	// A config.json that still carries the plugin-level capacity section gets
+	// exactly one deprecation warning at init — the section is still honoured,
+	// but operators are told to move to per-provider configuration.
+	log := &testLogger{}
+	plugin := NewPlugin(log)
+	defer plugin.Cleanup()
+
+	if err := plugin.Init(map[string]any{
+		"capacity": map[string]any{
+			"enabled":     true,
+			"token_limit": float64(1000),
+		},
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if !log.contains("plugin-level capacity config is a deprecated fleet default") {
+		t.Fatalf("expected a deprecation warning for config.capacity, got %v", log.msgs)
+	}
+	if got := log.warnCount(); got != 1 {
+		t.Fatalf("deprecation warning emitted %d times, want exactly 1: %v", got, log.msgs)
+	}
 }
 
 func TestPluginCustomQuotaPatternMatches(t *testing.T) {

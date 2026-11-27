@@ -469,6 +469,10 @@ export interface LearnedLimitsResponse {
 // The provider-cooldown plugin config's optional capability sections, as read
 // back from Plugin.config. Absent sections mean "not configured at plugin
 // level", so the frontend constants apply.
+//
+// `capacity` is only read now: it is the deprecated fleet-wide default still
+// honoured for providers without their own `cooldown_policy.capacity`. The
+// plugin page no longer edits it — see providerCooldownPluginConfigFormSchema.
 export interface ProviderCooldownCapabilityDefaults {
 	escalation?: CooldownEscalationConfig;
 	capacity?: CooldownCapacityConfig;

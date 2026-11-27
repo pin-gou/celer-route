@@ -44,6 +44,13 @@ type Config struct {
 	// — cannot silently drop it on an unrelated save.
 	Escalation *EscalationConfig `json:"escalation,omitempty"`
 
+	// Deprecated: legacy fleet default. A single plugin-level capacity section
+	// is inherited by every provider without its own cooldown_policy.capacity,
+	// which is why capacity is now configured per provider (and why the plugin
+	// UI no longer edits this key). The field is kept so existing config.json
+	// deployments keep gating exactly as before; it is only read, never
+	// rewritten by the UI.
+	//
 	// Capacity optionally enables a retrospective budget gate: real token /
 	// request usage is accounted after each terminal request, and once a
 	// rolling window's usage crosses limit*headroom, subsequent requests are

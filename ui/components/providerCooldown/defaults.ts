@@ -74,14 +74,35 @@ export function resolveEffectiveCapacity(
 }
 
 /**
+ * Where the capacity gate that applies to a provider actually comes from:
+ *   - `provider`       → the provider carries its own `cooldown_policy.capacity`
+ *   - `legacy-default` → no provider section, but the plugin-level (config.json)
+ *                        section exists and actually gates; it is a deprecated
+ *                        fleet-wide default that the UI no longer lets anyone
+ *                        edit, only observe.
+ *   - `none`           → nothing is configured (or the legacy section is inert),
+ *                        so the gate does not run for this provider.
+ */
+export type CooldownCapacitySource = "provider" | "legacy-default" | "none";
+
+/**
  * Fleet-level summary of the capacity gate for one provider: which tri-state
- * it is in, whether the gate actually blocks anything today (enabled with at
- * least one positive limit), and the values that apply after inheritance.
+ * it is in, where the effective values come from, whether the gate actually
+ * blocks anything today (enabled with at least one positive limit), and the
+ * values that apply after inheritance.
  */
 export interface CapacityGateStatus {
 	mode: CooldownCapabilityMode;
+	source: CooldownCapacitySource;
 	active: boolean;
 	effective: Required<CooldownCapacityConfig>;
+}
+
+/** Whether the plugin-level capacity section exists and is actually gating. */
+export function isLegacyCapacityActive(pluginSegment: CooldownCapacityConfig | undefined): boolean {
+	if (pluginSegment === undefined) return false;
+	const effective = resolveEffectiveCapacity(undefined, pluginSegment);
+	return effective.enabled && (effective.token_limit > 0 || effective.request_limit > 0);
 }
 
 export function capacityGateStatus(
@@ -89,9 +110,16 @@ export function capacityGateStatus(
 	pluginSegment: CooldownCapacityConfig | undefined,
 ): CapacityGateStatus {
 	const effective = resolveEffectiveCapacity(providerSegment, pluginSegment);
+	const active = effective.enabled && (effective.token_limit > 0 || effective.request_limit > 0);
+	// A legacy section that is present but inert (disabled, or enabled with no
+	// limit) is reported as "not configured" — it never blocks anything, so
+	// calling it a default the provider "uses" would be misleading.
+	const source: CooldownCapacitySource =
+		providerSegment !== undefined ? "provider" : isLegacyCapacityActive(pluginSegment) ? "legacy-default" : "none";
 	return {
 		mode: cooldownCapabilityMode(providerSegment),
-		active: effective.enabled && (effective.token_limit > 0 || effective.request_limit > 0),
+		source,
+		active,
 		effective,
 	};
 }

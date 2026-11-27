@@ -812,18 +812,25 @@ export type CooldownLearningConfigFormSchema = z.infer<typeof cooldownPolicySche
 
 // The plugin's capability sections as a whole. Each section may be absent
 // (undefined) — the backend then treats that capability as not configured.
+//
+// `capacity` is read-only here: it still exists in a stored config.json as a
+// deprecated fleet-wide default, but the plugin page no longer edits it (a
+// single global token limit inherited by every unconfigured provider is
+// exactly what per-provider configuration replaced). The provider detail page
+// owns the capacity gate; see `cooldownPolicySchema.capacity`.
 export const providerCooldownPluginConfigSchema = z.object({
 	escalation: providerCooldownEscalationConfigSchema.optional(),
 	capacity: providerCooldownCapacityConfigSchema.optional(),
 	learning: providerCooldownLearningConfigSchema.optional(),
 });
 
-// Form variant: every section is always present in the form so that turning
-// a section off keeps its last values and still submits them with
-// `enabled: false` (omitting the key would leave the old value in place).
+// Form variant for the plugin page. escalation and learning are always
+// present so that turning a section off keeps its last values and still
+// submits them with `enabled: false` (omitting the key would leave the old
+// value in place on the backend).
+// `capacity` is deliberately absent — it is not editable plugin-wide anymore.
 export const providerCooldownPluginConfigFormSchema = z.object({
 	escalation: providerCooldownEscalationConfigSchema,
-	capacity: providerCooldownCapacityConfigSchema,
 	learning: providerCooldownLearningConfigSchema,
 });
 

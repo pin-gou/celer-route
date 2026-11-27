@@ -60,14 +60,16 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
 | `config.quota_patterns` | array | `[]` | extra lower-case substrings treated as quota exhaustion; required at the config level (falls back to the built-in list when empty) |
 | `config.escalation.*` | object | absent | **plugin-level default** adaptive TTL escalation (see below); a provider's own `cooldown_policy.escalation` overrides it |
-| `config.capacity.*` | object | absent | **plugin-level default** retrospective capacity gate (see below); a provider's own `cooldown_policy.capacity` overrides it |
+| `config.capacity.*` | object | absent | **deprecated legacy fleet default** retrospective capacity gate (see below); a provider's own `cooldown_policy.capacity` overrides it. Kept for backward compatibility — the UI no longer edits it and only shows a read-only warning plus the fleet water level |
 | `config.learning.*` | object | absent | **plugin-level default** read-only limit learner (see below); a provider's own `cooldown_policy.learning` overrides it |
 
 ### Plugin-level defaults vs per-provider overrides
 
 The three capability sections in the plugin config are **defaults**, not the
 only place they can live. A provider carries its own section in
-`schemas.CooldownPolicy` (set from the provider detail page in the UI):
+`schemas.CooldownPolicy` (set from the provider detail page in the UI). The
+plugin-level `capacity` section is deprecated and no longer editable, so only
+`escalation` and `learning` are still presented as fleet defaults:
 
 - **section absent** → the provider inherits the plugin-level section; if that
   is absent too, the capability is off;
@@ -128,8 +130,12 @@ the request body:
    passive cooldown makes — in exchange for zero estimation error and a
    threshold that is easy to reason about.
 
-Set as the plugin-level **default** (a provider's own
-`cooldown_policy.capacity` replaces it wholesale):
+Set as the **deprecated** plugin-level fleet default (a provider's own
+`cooldown_policy.capacity` replaces it wholesale). This key is legacy
+compatibility only: the plugin page no longer offers an editor for it, just a
+warning with a "clear global default" action, and `GET
+/api/plugins/provider-cooldown/capacity-usage` is surfaced there as a read-only
+fleet water level:
 
 ```json
 {
@@ -404,10 +410,12 @@ config parsing.
   default `off` keeps the fixed `ttl_seconds`. The hint is read from
   `BifrostError.ExtraFields.ProviderResponseHeaders`, so it is available
   through the plugin interface without any transport-specific code.
-- `escalation`, `capacity` and `learning` are plugin-level defaults; a
-  provider that sets its own section in `cooldown_policy` replaces the whole
-  section, so changing the plugin default does not retroactively change a
-  provider that already overrides it.
+- `escalation` and `learning` are plugin-level defaults; `capacity` is a
+  **deprecated legacy fleet default** (still honoured for providers without
+  their own section, but no longer editable from the plugin page). A provider
+  that sets its own section in `cooldown_policy` replaces the whole section, so
+  changing a plugin default does not retroactively change a provider that
+  already overrides it.
 - The cooldown state lives in-process. For multi-instance deployments
   replace `CooldownState` with a `KVStore`-backed implementation that
   satisfies the same `Mark` / `IsCoolingDown` semantics.

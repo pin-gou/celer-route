@@ -1075,6 +1075,13 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 		learningEnabled := cfg.Learning.Active()
 		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t; providers without their own cooldown_policy section inherit these defaults)",
 			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled, learningEnabled)
+		// The plugin-level capacity section is a deprecated fleet-wide default:
+		// one global limit inherited by every provider without an override. Warn
+		// once at startup (only when the section is actually present) so
+		// operators still relying on it know to move to per-provider config.
+		if cfg.Capacity != nil {
+			p.logger.Warn("[provider-cooldown] plugin-level capacity config is a deprecated fleet default; configure capacity per provider (provider.cooldown_policy.capacity). It still applies to providers without an override.")
+		}
 	}
 	return nil
 }
