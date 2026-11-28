@@ -940,8 +940,6 @@ function MatchEditor({
 
 	return (
 		<div className="space-y-3">
-			{ruleKey === "rate_limit" && <DimensionField ruleKey={ruleKey} index={index} control={control} />}
-
 			<FormField
 				control={control}
 				name={fieldName}
@@ -1019,6 +1017,11 @@ function MatchEditor({
 				baseName={`${baseName}.code`}
 				fieldKind="code"
 			/>
+
+			{/* Last by design: the dimension governs which TTL the match cools
+			    with, so it is filled in once the predicate is known — and 自动
+			    echoes what the classifier would decide for that predicate. */}
+			{ruleKey === "rate_limit" && <DimensionField ruleKey={ruleKey} index={index} control={control} />}
 		</div>
 	);
 }
