@@ -252,8 +252,22 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 				default:
 					return nil, fmt.Errorf("capacity.action: unknown value %q (expected %q or %q)", s, CapacityActionFallback, CapacityActionReject)
 				}
+			case "key_limits":
+				limits, err := parseCapacityKeyLimits(vv)
+				if err != nil {
+					return nil, err
+				}
+				cc.KeyLimits = limits
 			default:
 				return nil, fmt.Errorf("capacity: unknown key %q", k)
+			}
+		}
+		if len(cc.KeyLimits) > 0 {
+			if scope := schemas.NormalizeCapacityScope(cc.Scope); scope != CapacityScopeKey {
+				return nil, fmt.Errorf(
+					"capacity.key_limits requires capacity.scope %q (the effective scope is %q)",
+					CapacityScopeKey, scope,
+				)
 			}
 		}
 		c.Capacity = cc.Normalized()
@@ -482,4 +496,58 @@ func toFloat64(v any) (float64, error) {
 	default:
 		return 0, fmt.Errorf("expected number, got %T", v)
 	}
+}
+
+// parseCapacityKeyLimits decodes a capacity.key_limits object: a map of key
+// NAME → { token_limit?, request_limit? }. Absent fields inherit the
+// provider-level value at gate-build time; an explicit 0 means "unlimited for
+// this credential", which is why the fields are pointers.
+func parseCapacityKeyLimits(v any) (map[string]schemas.CooldownCapacityKeyLimit, error) {
+	entries, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("capacity.key_limits: expected object, got %T", v)
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]schemas.CooldownCapacityKeyLimit, len(entries))
+	for name, rawEntry := range entries {
+		if strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("capacity.key_limits: empty key name")
+		}
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("capacity.key_limits[%q]: expected object, got %T", name, rawEntry)
+		}
+		var limit schemas.CooldownCapacityKeyLimit
+		for field, value := range entry {
+			switch field {
+			case "token_limit":
+				n, err := toInt64(value)
+				if err != nil {
+					return nil, fmt.Errorf("capacity.key_limits[%q].token_limit: %w", name, err)
+				}
+				if n < 0 {
+					return nil, fmt.Errorf("capacity.key_limits[%q].token_limit: must not be negative, got %d", name, n)
+				}
+				limit.TokenLimit = &n
+			case "request_limit":
+				n, err := toInt64(value)
+				if err != nil {
+					return nil, fmt.Errorf("capacity.key_limits[%q].request_limit: %w", name, err)
+				}
+				if n < 0 {
+					return nil, fmt.Errorf("capacity.key_limits[%q].request_limit: must not be negative, got %d", name, n)
+				}
+				limit.RequestLimit = &n
+			default:
+				return nil, fmt.Errorf("capacity.key_limits[%q]: unknown key %q", name, field)
+			}
+		}
+		if limit.TokenLimit == nil && limit.RequestLimit == nil {
+			return nil, fmt.Errorf("capacity.key_limits[%q]: must set token_limit or request_limit", name)
+		}
+		out[name] = limit
+	}
+	return out, nil
 }

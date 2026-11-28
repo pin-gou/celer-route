@@ -393,3 +393,68 @@ func TestPluginIsQuotaExhaustedMethodNoCustomPatterns(t *testing.T) {
 		t.Fatal("isQuotaExhausted should not match generic rate limit")
 	}
 }
+
+// TestParseConfigCapacityKeyLimits pins the plugin-level parsing of per-key
+// overrides, including the scope requirement (the same rule Validate and the
+// provider write path enforce).
+func TestParseConfigCapacityKeyLimits(t *testing.T) {
+	cfg, err := ParseConfig(map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides":       map[string]any{},
+		"quota_patterns":      []any{},
+		"capacity": map[string]any{
+			"enabled":     true,
+			"scope":       "key",
+			"token_limit": float64(1000),
+			"key_limits": map[string]any{
+				"key-a": map[string]any{"token_limit": float64(10)},
+				"key-b": map[string]any{"request_limit": float64(0)},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseConfig returned an error: %v", err)
+	}
+	if cfg.Capacity == nil || len(cfg.Capacity.KeyLimits) != 2 {
+		t.Fatalf("expected two per-key overrides, got %+v", cfg.Capacity)
+	}
+	a := cfg.Capacity.KeyLimits["key-a"]
+	if a.TokenLimit == nil || *a.TokenLimit != 10 || a.RequestLimit != nil {
+		t.Fatalf("key-a override = %+v, want token_limit=10 and no request limit", a)
+	}
+	b := cfg.Capacity.KeyLimits["key-b"]
+	if b.RequestLimit == nil || *b.RequestLimit != 0 || b.TokenLimit != nil {
+		t.Fatalf("key-b override = %+v, want an explicit request_limit=0", b)
+	}
+
+	// key_limits is meaningless outside the key scope and must be rejected
+	// rather than silently ignored.
+	_, err = ParseConfig(map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides":       map[string]any{},
+		"quota_patterns":      []any{},
+		"capacity": map[string]any{
+			"enabled":    true,
+			"scope":      "provider_model",
+			"key_limits": map[string]any{"key-a": map[string]any{"token_limit": float64(10)}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "capacity.key_limits requires capacity.scope") {
+		t.Fatalf("expected a scope error, got %v", err)
+	}
+
+	// An entry that sets nothing is a typo, not a no-op.
+	_, err = ParseConfig(map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides":       map[string]any{},
+		"quota_patterns":      []any{},
+		"capacity": map[string]any{
+			"enabled":    true,
+			"scope":      "key",
+			"key_limits": map[string]any{"key-a": map[string]any{}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "must set token_limit or request_limit") {
+		t.Fatalf("expected an empty-entry error, got %v", err)
+	}
+}

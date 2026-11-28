@@ -1,6 +1,7 @@
 package schemas
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -80,10 +81,10 @@ func TestCooldownCapacityConfigNormalized(t *testing.T) {
 			if got == nil {
 				t.Fatal("Normalized() = nil")
 			}
-			if *got != tt.want {
+			if !reflect.DeepEqual(*got, tt.want) {
 				t.Fatalf("Normalized() = %+v, want %+v", *got, tt.want)
 			}
-			if in != tt.in {
+			if !reflect.DeepEqual(in, tt.in) {
 				t.Fatalf("Normalized() mutated the receiver: %+v", in)
 			}
 		})
@@ -117,6 +118,12 @@ func TestCooldownCapacityConfigValidate(t *testing.T) {
 		{Scope: "PROVIDER_MODEL", Action: "Reject"},
 		{Scope: CapacityScopeKey},
 		{Scope: "KEY"},
+		{
+			Enabled:    true,
+			Scope:      CapacityScopeKey,
+			KeyLimits:  map[string]CooldownCapacityKeyLimit{"small": {TokenLimit: ptrInt64(100)}, "wide": {RequestLimit: ptrInt64(0)}},
+			TokenLimit: 1000,
+		},
 	}
 	for i := range valid {
 		if err := valid[i].Validate(); err != nil {
@@ -147,6 +154,36 @@ func TestCooldownCapacityConfigValidate(t *testing.T) {
 		{"negative request limit", CooldownCapacityConfig{RequestLimit: -1}, "capacity.request_limit"},
 		{"unknown scope", CooldownCapacityConfig{Scope: "tenant"}, "capacity.scope"},
 		{"unknown action", CooldownCapacityConfig{Action: "warn"}, "capacity.action"},
+		{
+			"key_limits under the provider scope",
+			CooldownCapacityConfig{Scope: CapacityScopeProvider, KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {TokenLimit: ptrInt64(1)}}},
+			"capacity.key_limits requires capacity.scope",
+		},
+		{
+			"key_limits under the provider_model scope",
+			CooldownCapacityConfig{Scope: CapacityScopeProviderModel, KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {TokenLimit: ptrInt64(1)}}},
+			"capacity.key_limits requires capacity.scope",
+		},
+		{
+			"empty key name",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{"  ": {TokenLimit: ptrInt64(1)}}},
+			"empty key name",
+		},
+		{
+			"entry with no limit",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {}}},
+			"must set token_limit or request_limit",
+		},
+		{
+			"negative per-key token limit",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {TokenLimit: ptrInt64(-1)}}},
+			"token_limit must not be negative",
+		},
+		{
+			"negative per-key request limit",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {RequestLimit: ptrInt64(-1)}}},
+			"request_limit must not be negative",
+		},
 	}
 	for _, tt := range invalid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -700,5 +737,49 @@ func TestCooldownPolicyValidateCapabilitySections(t *testing.T) {
 	}
 	if err := policy.Validate(); err == nil || !strings.Contains(err.Error(), "cooldown_policy.rate_limit.retry_after_mode") {
 		t.Fatalf("expected rate_limit error to win, got %v", err)
+	}
+}
+
+// ptrInt64 is a local helper for the key_limits cases above.
+func ptrInt64(v int64) *int64 { return &v }
+
+// TestCooldownCapacityConfigNormalizedDeepCopiesKeyLimits pins that a
+// normalized config cannot be mutated through the caller's pointer fields.
+func TestCooldownCapacityConfigNormalizedDeepCopiesKeyLimits(t *testing.T) {
+	token := int64(100)
+	in := CooldownCapacityConfig{
+		Enabled:   true,
+		Scope:     CapacityScopeKey,
+		KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {TokenLimit: &token}},
+	}
+	out := in.Normalized()
+	token = 5
+	if got := *out.KeyLimits["k"].TokenLimit; got != 100 {
+		t.Fatalf("normalized copy followed the caller's pointer: got %d, want 100", got)
+	}
+	outToken := *out.KeyLimits["k"].TokenLimit
+	if &outToken == in.KeyLimits["k"].TokenLimit {
+		t.Fatal("normalized copy aliases the caller's pointer")
+	}
+}
+
+// TestCooldownCapacityConfigActiveWithKeyLimits pins that per-key budgets can
+// be the only configured budget.
+func TestCooldownCapacityConfigActiveWithKeyLimits(t *testing.T) {
+	cfg := &CooldownCapacityConfig{
+		Enabled:   true,
+		Scope:     CapacityScopeKey,
+		KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {RequestLimit: ptrInt64(10)}},
+	}
+	if !cfg.Active() {
+		t.Fatal("a key_limits-only section must be active")
+	}
+	zero := &CooldownCapacityConfig{
+		Enabled:   true,
+		Scope:     CapacityScopeKey,
+		KeyLimits: map[string]CooldownCapacityKeyLimit{"k": {RequestLimit: ptrInt64(0)}},
+	}
+	if zero.Active() {
+		t.Fatal("an all-zero key_limits section is a no-op and must not be active")
 	}
 }

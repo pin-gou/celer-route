@@ -443,7 +443,12 @@ func TestGetCooldownLearnedLimits_WithSamples(t *testing.T) {
 	}
 	body := string(ctx.Response.Body())
 	for _, want := range []string{
-		`"count":1`,
+		// Every rejection is reported at both learning levels: the aggregate
+		// (provider_model) entry and the credential that hit it (key_model).
+		`"count":2`,
+		`"scope":"provider_model"`,
+		`"scope":"key_model"`,
+		`"key_name":"secret-key-name"`,
 		`"window_seconds":60`,
 		`"provider":"openai"`,
 		`"model":"gpt-4o"`,
@@ -457,8 +462,10 @@ func TestGetCooldownLearnedLimits_WithSamples(t *testing.T) {
 			t.Fatalf("expected %s in body, got %s", want, body)
 		}
 	}
-	// No key material may leak through the report.
-	for _, forbidden := range []string{"secret-key-id", "secret-key-name", "key_id"} {
+	// No key material may leak through the report. The credential's display
+	// name is a label the operator wrote, and it is required to attribute a
+	// per-key suggestion; the credential ID stays internal.
+	for _, forbidden := range []string{"secret-key-id", `"key_id"`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("report must not contain %q, got %s", forbidden, body)
 		}

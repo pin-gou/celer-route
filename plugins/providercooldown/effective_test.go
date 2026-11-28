@@ -326,7 +326,15 @@ func TestLearningPerProviderWindow(t *testing.T) {
 	if got := p.LearningWindowSeconds(); got != 0 {
 		t.Fatalf("LearningWindowSeconds() = %d, want 0 when learning is off by default", got)
 	}
-	if got := len(p.LearnedLimits()); got != 2 {
-		t.Fatalf("LearnedLimits() returned %d entries, want 2", got)
+	// One aggregate entry per provider; the per-credential entries reported
+	// alongside them are covered by the P1 tests.
+	aggregate := 0
+	for _, l := range p.LearnedLimits() {
+		if l.Scope == LearningScopeProviderModel {
+			aggregate++
+		}
+	}
+	if aggregate != 2 {
+		t.Fatalf("LearnedLimits() returned %d aggregate entries, want 2", aggregate)
 	}
 }

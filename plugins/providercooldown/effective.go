@@ -124,8 +124,13 @@ type capacitySpec struct {
 // capacitySpecOf normalizes cfg into a capacitySpec. The second return value
 // is false when the capability is inert (nil, disabled, or no limit set), the
 // same predicate as CooldownCapacityConfig.Active.
+//
+// The per-key overrides are NOT part of the returned spec: they live in a map,
+// which would make the struct non-comparable and force an allocation on every
+// call (this runs 2-3 times per request). Change detection compares them
+// separately, against the gate's already-normalized copy.
 func capacitySpecOf(cfg *schemas.CooldownCapacityConfig) (capacitySpec, bool) {
-	if cfg == nil || !cfg.Enabled || (cfg.TokenLimit <= 0 && cfg.RequestLimit <= 0) {
+	if cfg == nil || !cfg.Active() {
 		return capacitySpec{}, false
 	}
 	return capacitySpec{
@@ -294,26 +299,36 @@ func (d *capabilityDefaults) observationSpecOf(policy *schemas.CooldownPolicy) (
 	return spec, true
 }
 
-// dedupeLearnedLimits keeps one entry per (provider, model) pair, preferring
-// the LAST occurrence. Callers append the plugin-default learner first and the
-// per-provider learners after it, so a provider whose section was added while
-// the plugin was running reports its current window instead of the stale
-// default-learner window.
+// dedupeLearnedLimits keeps one entry per (scope, provider, key, model) tuple,
+// preferring the LAST occurrence. Callers append the plugin-default learner
+// first and the per-provider learners after it, so a provider whose section was
+// added while the plugin was running reports its current window instead of the
+// stale default-learner window.
+//
+// The scope and the credential are part of the identity: the same
+// (provider, model) legitimately has one aggregate entry and one entry per
+// key, and collapsing them would drop the per-key view entirely.
 func dedupeLearnedLimits(in []LearnedLimit) []LearnedLimit {
 	if len(in) < 2 {
 		return in
 	}
-	byPair := make(map[string]LearnedLimit, len(in))
+	byTuple := make(map[string]LearnedLimit, len(in))
 	for _, l := range in {
-		byPair[l.Provider+"|"+l.Model] = l
+		byTuple[l.Provider+"\x00"+l.Scope+"\x00"+l.KeyID+"\x00"+l.Model] = l
 	}
-	out := make([]LearnedLimit, 0, len(byPair))
-	for _, l := range byPair {
+	out := make([]LearnedLimit, 0, len(byTuple))
+	for _, l := range byTuple {
 		out = append(out, l)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Provider != out[j].Provider {
 			return out[i].Provider < out[j].Provider
+		}
+		if out[i].Scope != out[j].Scope {
+			return out[i].Scope < out[j].Scope
+		}
+		if out[i].KeyID != out[j].KeyID {
+			return out[i].KeyID < out[j].KeyID
 		}
 		return out[i].Model < out[j].Model
 	})

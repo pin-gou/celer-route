@@ -968,7 +968,7 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 		for _, k := range keys {
 			_, kind, matchedScope, suppressed := c.lookupSuppressed(provider, k.ID, model)
 			if !suppressed {
-				if capacityGate != nil && capacityGate.check(provider, k.ID, model) != nil {
+				if capacityGate != nil && capacityGate.checkKey(provider, k.ID, k.Name, model) != nil {
 					// This credential's own window is over budget. Rotate past
 					// it instead of refusing the request: the only request that
 					// has to be refused is the one no key can serve (handled in
@@ -1125,7 +1125,7 @@ func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMar
 		// they are billing/entitlement failures, not a window limit, so
 		// they say nothing about the provider's TPM.
 		if kind == CooldownKindRateLimit {
-			c.observeRateLimit(ctx, policy, provider, model, keyID, bifrostErr)
+			c.observeRateLimit(ctx, policy, provider, model, keyID, keyName, bifrostErr)
 		}
 		if logger != nil {
 			logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s) from per-key-failure marker", provider, keyID, keyName, model, ttl, kind, scope)

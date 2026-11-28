@@ -96,8 +96,11 @@ func TestLearningRPMRejectionsDoNotPolluteTokenEstimate(t *testing.T) {
 	if l.LimiterDimension != string(dimensionTPM) {
 		t.Fatalf("limiter_dimension = %q, want %q", l.LimiterDimension, dimensionTPM)
 	}
-	if l.KeyCount != 1 {
-		t.Fatalf("key_count = %d, want 1 (only key-tpm carries the estimate)", l.KeyCount)
+	// KeyCount reports the credentials that produced any retained sample, not
+	// just the token-participating ones: with two estimates in the report, the
+	// count answers "how many credentials does this aggregate cover".
+	if l.KeyCount != 2 {
+		t.Fatalf("key_count = %d, want 2 (key-tpm and key-rpm both produced samples)", l.KeyCount)
 	}
 }
 
@@ -450,7 +453,15 @@ func TestLearningDimensionConcurrentObserveAndLimits(t *testing.T) {
 		go func(w int) {
 			defer wg.Done()
 			for i := 0; i < 50; i++ {
-				l.observe(schemas.OpenAI, "gpt-4o", fmt.Sprintf("key-%d", i%4), int64(i%7)*1000, 0, dims[(w+i)%3], clk.Now())
+				l.observe(learnObservation{
+					provider:   schemas.OpenAI,
+					model:      "gpt-4o",
+					scope:      LearningScopeProviderModel,
+					keyID:      fmt.Sprintf("key-%d", i%4),
+					usedTokens: int64(i%7) * 1000,
+					dimension:  dims[(w+i)%3],
+					at:         clk.Now(),
+				})
 			}
 		}(w)
 	}

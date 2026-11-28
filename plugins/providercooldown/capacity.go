@@ -97,6 +97,17 @@ type capacityGate struct {
 	action        string
 	headroom      float64
 
+	// keyLimits overrides the provider-level thresholds for individual
+	// credentials, keyed by the key's NAME (the stable, user-authored
+	// identifier written in config.json). Empty unless Scope is "key".
+	keyLimits map[string]capacityKeyLimits
+
+	// keyNames maps a credential ID — what the accounting keys and the usage
+	// snapshot carry — to its name, learned from the key pool on the check path
+	// so the snapshot can report the override and a readable label. Guarded by
+	// mu; a rename self-heals on the next check.
+	keyNames map[string]string
+
 	// now is the clock, shared with the owning CooldownState so tests inject
 	// one fake clock for both features. It is a method value, so a clock
 	// installed after the gate was built is still honoured.
@@ -112,17 +123,36 @@ type capacityGate struct {
 	lastSweepSecond int64
 }
 
+// capacityKeyLimits is one credential's resolved budget: the raw limits (for
+// reporting and for change detection) plus the thresholds the gate compares
+// against, both already normalized with the provider's headroom.
+type capacityKeyLimits struct {
+	tokenLimit    int64
+	requestLimit  int64
+	tokenThresh   int64 // 0 when unlimited
+	requestThresh int64 // 0 when unlimited
+}
+
 // capacityVerdict is returned by check when the gate refuses a request.
 type capacityVerdict struct {
 	usedTokens        int64
 	usedRequests      int64
 	retryAfterSeconds int64
+	// tokenLimit / requestLimit are the effective budgets that produced this
+	// verdict (the provider-level scalars, or a credential's override). They
+	// are only used for logging and diagnostics.
+	tokenLimit   int64
+	requestLimit int64
 }
 
 // newCapacityGateFromSpec builds a gate from an already-normalized spec. The
 // only constructor: callers go through capacitySpecOf so the same
 // normalization is applied everywhere.
-func newCapacityGateFromSpec(spec capacitySpec) *capacityGate {
+//
+// keyLimits is the raw per-credential override map from the config (nil in the
+// common case). Each entry is resolved against the provider-level scalars here,
+// once, so the request path only does a map lookup.
+func newCapacityGateFromSpec(spec capacitySpec, keyLimits map[string]schemas.CooldownCapacityKeyLimit) *capacityGate {
 	g := &capacityGate{
 		tokenLimit:    spec.tokenLimit,
 		requestLimit:  spec.requestLimit,
@@ -138,22 +168,103 @@ func newCapacityGateFromSpec(spec capacitySpec) *capacityGate {
 	if g.requestLimit > 0 {
 		g.requestThresh = capacityThreshold(g.requestLimit, g.headroom)
 	}
+	if len(keyLimits) > 0 && g.scope == CapacityScopeKey {
+		g.keyLimits = make(map[string]capacityKeyLimits, len(keyLimits))
+		for name, raw := range keyLimits {
+			if name == "" {
+				continue
+			}
+			g.keyLimits[name] = newCapacityKeyLimits(raw, g.tokenLimit, g.requestLimit, g.headroom)
+		}
+	}
 	return g
 }
 
+// newCapacityKeyLimits resolves one override against the provider-level
+// defaults and precomputes its thresholds.
+func newCapacityKeyLimits(raw schemas.CooldownCapacityKeyLimit, baseToken, baseRequest int64, headroom float64) capacityKeyLimits {
+	token, request := raw.TokenLimit, raw.RequestLimit
+	lim := capacityKeyLimits{tokenLimit: baseToken, requestLimit: baseRequest}
+	if token != nil {
+		lim.tokenLimit = *token
+	}
+	if request != nil {
+		lim.requestLimit = *request
+	}
+	if lim.tokenLimit < 0 {
+		lim.tokenLimit = 0
+	}
+	if lim.requestLimit < 0 {
+		lim.requestLimit = 0
+	}
+	if lim.tokenLimit > 0 {
+		lim.tokenThresh = capacityThreshold(lim.tokenLimit, headroom)
+	}
+	if lim.requestLimit > 0 {
+		lim.requestThresh = capacityThreshold(lim.requestLimit, headroom)
+	}
+	return lim
+}
+
+// baseLimits is the provider-level budget, used for every credential without an
+// override and for the scopes that have no credential in their accounting key.
+func (g *capacityGate) baseLimits() capacityKeyLimits {
+	return capacityKeyLimits{
+		tokenLimit:    g.tokenLimit,
+		requestLimit:  g.requestLimit,
+		tokenThresh:   g.tokenThresh,
+		requestThresh: g.requestThresh,
+	}
+}
+
+// limitsFor resolves the budget that applies to one credential. An unknown or
+// empty name falls back to the provider-level budget.
+func (g *capacityGate) limitsFor(keyName string) capacityKeyLimits {
+	if len(g.keyLimits) > 0 && keyName != "" {
+		if lim, ok := g.keyLimits[keyName]; ok {
+			return lim
+		}
+	}
+	return g.baseLimits()
+}
+
 // matchesCapacitySpec reports whether the gate was built from the given
-// normalized spec. Field-by-field scalar comparison: no reflect, no
-// allocation.
-func (g *capacityGate) matchesCapacitySpec(spec capacitySpec) bool {
+// normalized spec and per-key overrides. Field-by-field comparison: no reflect,
+// no allocation.
+func (g *capacityGate) matchesCapacitySpec(spec capacitySpec, keyLimits map[string]schemas.CooldownCapacityKeyLimit) bool {
 	if g == nil {
 		return false
 	}
-	return g.tokenLimit == spec.tokenLimit &&
-		g.requestLimit == spec.requestLimit &&
-		g.windowSeconds == spec.windowSeconds &&
-		g.headroom == spec.headroom &&
-		g.scope == spec.scope &&
-		g.action == spec.action
+	if g.tokenLimit != spec.tokenLimit ||
+		g.requestLimit != spec.requestLimit ||
+		g.windowSeconds != spec.windowSeconds ||
+		g.headroom != spec.headroom ||
+		g.scope != spec.scope ||
+		g.action != spec.action {
+		return false
+	}
+	return g.keyLimitsMatch(keyLimits)
+}
+
+// keyLimitsMatch reports whether the gate's resolved overrides reflect the raw
+// config map. It compares the raw values against the stored resolved ones, so
+// no map is allocated on the request path; the common nil/nil case exits after
+// one length check.
+func (g *capacityGate) keyLimitsMatch(raw map[string]schemas.CooldownCapacityKeyLimit) bool {
+	if len(g.keyLimits) != len(raw) {
+		return false
+	}
+	for name, entry := range raw {
+		cur, ok := g.keyLimits[name]
+		if !ok {
+			return false
+		}
+		want := newCapacityKeyLimits(entry, g.tokenLimit, g.requestLimit, g.headroom)
+		if cur != want {
+			return false
+		}
+	}
+	return true
 }
 
 // capacityThreshold converts limit*headroom into the integer usage count at
@@ -215,11 +326,28 @@ func (g *capacityGate) nowSecond() int64 {
 // away costs no memory.
 //
 // keyID selects the per-key budget under the "key" scope; it is ignored by
-// the other scopes (their key does not contain a credential).
+// the other scopes (their key does not contain a credential). The provider-level
+// budget is used, which is the only budget when no per-key override is
+// configured — see checkKey when the credential's name is known.
 func (g *capacityGate) check(provider schemas.ModelProvider, keyID string, model string) *capacityVerdict {
 	if g == nil {
 		return nil
 	}
+	return g.checkWith(provider, keyID, "", model, g.baseLimits())
+}
+
+// checkKey is check with the credential's identity, so a per-key override
+// (capacity.key_limits) applies. The name is also remembered against the ID, so
+// the usage snapshot can label the row and report the same thresholds the gate
+// actually used.
+func (g *capacityGate) checkKey(provider schemas.ModelProvider, keyID string, keyName string, model string) *capacityVerdict {
+	if g == nil {
+		return nil
+	}
+	return g.checkWith(provider, keyID, keyName, model, g.limitsFor(keyName))
+}
+
+func (g *capacityGate) checkWith(provider schemas.ModelProvider, keyID string, keyName string, model string, lim capacityKeyLimits) *capacityVerdict {
 	if g.scope != CapacityScopeProvider && model == "" {
 		// Nothing to attribute; never gate on an unattributable pair.
 		return nil
@@ -230,6 +358,17 @@ func (g *capacityGate) check(provider schemas.ModelProvider, keyID string, model
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	if keyName != "" && keyID != "" {
+		// Remember the display name for the snapshot. Writing only on a change
+		// keeps the steady state to one map read.
+		if cur, ok := g.keyNames[keyID]; !ok || cur != keyName {
+			if g.keyNames == nil {
+				g.keyNames = make(map[string]string, 4)
+			}
+			g.keyNames[keyID] = keyName
+		}
+	}
+
 	w := g.keys[key]
 	if w == nil {
 		return nil
@@ -239,15 +378,17 @@ func (g *capacityGate) check(provider schemas.ModelProvider, keyID string, model
 		delete(g.keys, key)
 		return nil
 	}
-	tokenHit := g.tokenThresh > 0 && tokens >= g.tokenThresh
-	requestHit := g.requestThresh > 0 && requests >= g.requestThresh
+	tokenHit := lim.tokenThresh > 0 && tokens >= lim.tokenThresh
+	requestHit := lim.requestThresh > 0 && requests >= lim.requestThresh
 	if !tokenHit && !requestHit {
 		return nil
 	}
 	return &capacityVerdict{
 		usedTokens:        tokens,
 		usedRequests:      requests,
-		retryAfterSeconds: g.retryAfterLocked(w, now, tokens, requests),
+		retryAfterSeconds: g.retryAfterLocked(w, now, tokens, requests, lim.tokenThresh, lim.requestThresh),
+		tokenLimit:        lim.tokenLimit,
+		requestLimit:      lim.requestLimit,
 	}
 }
 
@@ -300,15 +441,15 @@ func (g *capacityGate) sweepKeysLocked(now int64) {
 // does) and taking the release time of the bucket that brings usage back
 // under the threshold; the larger of the two wins, because both must hold.
 // Falls back to a full window when nothing usable can be computed.
-func (g *capacityGate) retryAfterLocked(w *capacityWindow, now, tokens, requests int64) int64 {
+func (g *capacityGate) retryAfterLocked(w *capacityWindow, now, tokens, requests, tokenThresh, requestThresh int64) int64 {
 	wait := int64(0)
-	if g.tokenThresh > 0 && tokens >= g.tokenThresh {
-		if d := g.secondsUntilBelow(w, now, tokens, g.tokenThresh, true); d > wait {
+	if tokenThresh > 0 && tokens >= tokenThresh {
+		if d := g.secondsUntilBelow(w, now, tokens, tokenThresh, true); d > wait {
 			wait = d
 		}
 	}
-	if g.requestThresh > 0 && requests >= g.requestThresh {
-		if d := g.secondsUntilBelow(w, now, requests, g.requestThresh, false); d > wait {
+	if requestThresh > 0 && requests >= requestThresh {
+		if d := g.secondsUntilBelow(w, now, requests, requestThresh, false); d > wait {
 			wait = d
 		}
 	}
@@ -467,7 +608,7 @@ func (c *CooldownState) enableCapacity(cfg *CapacityConfig) {
 	if !ok {
 		return
 	}
-	g := newCapacityGateFromSpec(spec)
+	g := newCapacityGateFromSpec(spec, cfg.KeyLimits)
 	g.now = c.nowTime
 	c.defaultCapacitySpec = spec
 	c.defaultCapacityActive = true
@@ -499,16 +640,22 @@ func (c *CooldownState) gateFor(provider schemas.ModelProvider, policy *schemas.
 	if c == nil {
 		return nil
 	}
-	spec, ok := capacitySpecOf(c.defaults.resolveCapacity(policy))
+	cfg := c.defaults.resolveCapacity(policy)
+	spec, ok := capacitySpecOf(cfg)
 	if !ok {
 		return nil
 	}
+	var keyLimits map[string]schemas.CooldownCapacityKeyLimit
+	if cfg != nil {
+		keyLimits = cfg.KeyLimits
+	}
 	// Same effective spec as the plugin default → share its gate. This is the
 	// common case (a provider with no capacity section) and costs one struct
-	// comparison, no allocation. The gate's accounting keys already include
-	// the provider, so sharing is safe across providers.
+	// comparison plus the per-key override check, no allocation. The gate's
+	// accounting keys already include the provider, so sharing is safe across
+	// providers.
 	if c.defaultCapacityActive && spec == c.defaultCapacitySpec {
-		if g := c.capacity.Load(); g != nil {
+		if g := c.capacity.Load(); g != nil && g.keyLimitsMatch(keyLimits) {
 			return g
 		}
 	}
@@ -520,17 +667,17 @@ func (c *CooldownState) gateFor(provider schemas.ModelProvider, policy *schemas.
 		holderAny, _ = c.capacityRegistry.LoadOrStore(provider, fresh)
 		holder, _ = holderAny.(*capacityHolder)
 	}
-	if g := holder.gate.Load(); g != nil && g.matchesCapacitySpec(spec) {
+	if g := holder.gate.Load(); g != nil && g.matchesCapacitySpec(spec, keyLimits) {
 		return g
 	}
 
 	holder.mu.Lock()
 	defer holder.mu.Unlock()
 	// Re-check under the lock: a concurrent request may have rebuilt it.
-	if g := holder.gate.Load(); g != nil && g.matchesCapacitySpec(spec) {
+	if g := holder.gate.Load(); g != nil && g.matchesCapacitySpec(spec, keyLimits) {
 		return g
 	}
-	g := newCapacityGateFromSpec(spec)
+	g := newCapacityGateFromSpec(spec, keyLimits)
 	g.now = c.nowTime
 	holder.gate.Store(g)
 	return g
@@ -596,7 +743,7 @@ func (p *CooldownPlugin) capacityShortCircuitPerKey(ctx *schemas.BifrostContext,
 	var worst *capacityVerdict
 	worstKeyID := ""
 	for _, k := range keys {
-		v := gate.check(provider, k.ID, model)
+		v := gate.checkKey(provider, k.ID, k.Name, model)
 		if v == nil {
 			// This key still has budget: the request can be served.
 			return nil
@@ -639,7 +786,7 @@ func (p *CooldownPlugin) capacityShortCircuitFor(ctx *schemas.BifrostContext, ga
 		p.logger.Info(
 			"[provider-cooldown] capacity gate short-circuit on %s/%s (key=%q) — used %d token(s) / %d request(s) in %ds window (token_limit=%d, request_limit=%d, headroom=%.2f, scope=%s, action=%s, retry-after %ds)",
 			provider, model, keyID, verdict.usedTokens, verdict.usedRequests, gate.windowSeconds,
-			gate.tokenLimit, gate.requestLimit, gate.headroom, gate.scope, gate.action, retryAfter,
+			verdict.tokenLimit, verdict.requestLimit, gate.headroom, gate.scope, gate.action, retryAfter,
 		)
 	}
 	return &schemas.LLMPluginShortCircuit{
@@ -701,8 +848,15 @@ func (p *CooldownPlugin) recordCapacity(ctx *schemas.BifrostContext, policy *sch
 	// The learner's observer window accounts the same real usage, but
 	// read-only: it never gates anything. It stays provider/model granular
 	// because the estimate it produces is a provider/model limit.
+	//
+	// The per-credential ring records the same usage a second time, so a
+	// rejection can be measured against the key that hit it ("key_model"
+	// estimates). That ring is key-scoped; unattributable usage (keyless
+	// provider / no attempt trail) falls back to the provider/model bucket,
+	// exactly like the gate's own "key" scope does.
 	if l := state.learnerFor(provider, policy); l != nil {
 		l.observer.record(provider, "", model, tokens)
+		l.keyObserver.record(provider, keyID, model, tokens)
 	}
 }
 

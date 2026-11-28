@@ -34,20 +34,24 @@ const (
 // provider's own cooldown_policy.capacity section ("provider") or from the
 // plugin-level default every unconfigured provider inherits ("default").
 type ProviderCapacityUsage struct {
-	Provider          schemas.ModelProvider `json:"provider"`
-	KeyID             string                `json:"key_id,omitempty"`
-	Model             string                `json:"model,omitempty"`
-	Scope             string                `json:"scope"`
-	WindowSeconds     int64                 `json:"window_seconds"`
-	UsedTokens        int64                 `json:"used_tokens"`
-	UsedRequests      int64                 `json:"used_requests"`
-	TokenLimit        int64                 `json:"token_limit"`
-	RequestLimit      int64                 `json:"request_limit"`
-	Headroom          float64               `json:"headroom"`
-	ThresholdTokens   int64                 `json:"threshold_tokens"`
-	ThresholdRequests int64                 `json:"threshold_requests"`
-	RetryAfterSeconds int64                 `json:"retry_after_seconds"`
-	Source            string                `json:"source"`
+	Provider schemas.ModelProvider `json:"provider"`
+	KeyID    string                `json:"key_id,omitempty"`
+	// KeyName is the credential's display name, resolved from the key pool on
+	// the check path. Empty for the provider / provider_model scopes and for a
+	// credential the gate has not seen in a key-pool check yet.
+	KeyName           string  `json:"key_name,omitempty"`
+	Model             string  `json:"model,omitempty"`
+	Scope             string  `json:"scope"`
+	WindowSeconds     int64   `json:"window_seconds"`
+	UsedTokens        int64   `json:"used_tokens"`
+	UsedRequests      int64   `json:"used_requests"`
+	TokenLimit        int64   `json:"token_limit"`
+	RequestLimit      int64   `json:"request_limit"`
+	Headroom          float64 `json:"headroom"`
+	ThresholdTokens   int64   `json:"threshold_tokens"`
+	ThresholdRequests int64   `json:"threshold_requests"`
+	RetryAfterSeconds int64   `json:"retry_after_seconds"`
+	Source            string  `json:"source"`
 }
 
 // CapacityUsage returns a point-in-time snapshot of the capacity gate's live
@@ -110,27 +114,35 @@ func (g *capacityGate) capacityUsage(source string) []ProviderCapacityUsage {
 			continue
 		}
 		provider, keyID, model := splitCapacityWindowKey(key, g.scope)
+		// A per-key override changes the thresholds this row was measured
+		// against, so report the effective ones (and a readable label).
+		keyName := ""
+		if keyID != "" {
+			keyName = g.keyNames[keyID]
+		}
+		lim := g.limitsFor(keyName)
 		entry := ProviderCapacityUsage{
 			Provider:          provider,
 			KeyID:             keyID,
+			KeyName:           keyName,
 			Model:             model,
 			Scope:             g.scope,
 			WindowSeconds:     g.windowSeconds,
 			UsedTokens:        tokens,
 			UsedRequests:      requests,
-			TokenLimit:        g.tokenLimit,
-			RequestLimit:      g.requestLimit,
+			TokenLimit:        lim.tokenLimit,
+			RequestLimit:      lim.requestLimit,
 			Headroom:          g.headroom,
-			ThresholdTokens:   g.tokenThresh,
-			ThresholdRequests: g.requestThresh,
+			ThresholdTokens:   lim.tokenThresh,
+			ThresholdRequests: lim.requestThresh,
 			Source:            source,
 		}
 		// Mirror check(): RetryAfterSeconds is only meaningful once the window
 		// is actually over a threshold, and is 0 otherwise.
-		tokenHit := g.tokenThresh > 0 && tokens >= g.tokenThresh
-		requestHit := g.requestThresh > 0 && requests >= g.requestThresh
+		tokenHit := lim.tokenThresh > 0 && tokens >= lim.tokenThresh
+		requestHit := lim.requestThresh > 0 && requests >= lim.requestThresh
 		if tokenHit || requestHit {
-			entry.RetryAfterSeconds = g.retryAfterLocked(w, now, tokens, requests)
+			entry.RetryAfterSeconds = g.retryAfterLocked(w, now, tokens, requests, lim.tokenThresh, lim.requestThresh)
 		}
 		out = append(out, entry)
 	}

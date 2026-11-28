@@ -4094,6 +4094,26 @@
           "enum": ["fallback", "reject"],
           "default": "fallback",
           "description": "What happens once the gate engages: fallback lets the configured fallback chain pick the request up, reject returns the 429 immediately."
+        },
+        "key_limits": {
+          "type": "object",
+          "description": "Per-credential budget overrides, keyed by the key's name (the stable, user-authored identifier in the provider's keys list). Only valid with scope=\"key\": the other scopes have no credential in their accounting key. An omitted token_limit / request_limit inherits the provider-level value; an explicit 0 means unlimited for that credential (so a credential can be exempted). A key_limits-only section (no provider-level token_limit / request_limit) is valid: listed credentials get a budget and unlisted ones are not gated.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "token_limit": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Per-window token budget for this credential. Omit to inherit the provider-level token_limit; 0 means unlimited for this credential."
+              },
+              "request_limit": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Per-window request budget for this credential. Omit to inherit the provider-level request_limit; 0 means unlimited for this credential."
+              }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

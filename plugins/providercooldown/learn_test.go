@@ -55,7 +55,26 @@ func learnQuotaErr() *schemas.BifrostError {
 // a successful request does through PostLLMHook.
 func learnSpend(t *testing.T, p *CooldownPlugin, provider schemas.ModelProvider, model string, tokens int) {
 	t.Helper()
+	spendWithKey(t, p, provider, model, "", tokens)
+}
+
+// learnSpendForKey records usage attributed to a specific credential, the way
+// a successful request served by that key does: the attempt trail carries the
+// key, so both observer rings (aggregate and per-credential) see the tokens.
+func learnSpendForKey(t *testing.T, p *CooldownPlugin, provider schemas.ModelProvider, model string, keyID string, tokens int) {
+	t.Helper()
+	if keyID == "" {
+		t.Fatal("learnSpendForKey requires a keyID")
+	}
+	spendWithKey(t, p, provider, model, keyID, tokens)
+}
+
+func spendWithKey(t *testing.T, p *CooldownPlugin, provider schemas.ModelProvider, model string, keyID string, tokens int) {
+	t.Helper()
 	ctx := schemas.NewBifrostContext(nil, time.Time{})
+	if keyID != "" {
+		ctx.SetValue(schemas.BifrostContextKeyAttemptTrail, []schemas.KeyAttemptRecord{{KeyID: keyID, KeyName: keyID}})
+	}
 	resp, err, hookErr := p.PostLLMHook(ctx, capacityResp(provider, model, tokens), nil)
 	if hookErr != nil {
 		t.Fatalf("PostLLMHook returned an error: %v", hookErr)
@@ -76,15 +95,29 @@ func learnReject(t *testing.T, p *CooldownPlugin, provider schemas.ModelProvider
 	p.State.AsMarker(nil)(ctx, provider, keyID, keyID, model, bifrostErr)
 }
 
-// learnLimitsFor returns the learned entry for (provider, model).
+// learnLimitsFor returns the AGGREGATE (provider_model) learned entry for
+// (provider, model). The per-credential entries are covered by
+// learnKeyLimitFor.
 func learnLimitsFor(t *testing.T, p *CooldownPlugin, provider schemas.ModelProvider, model string) LearnedLimit {
 	t.Helper()
 	for _, l := range p.LearnedLimits() {
-		if l.Provider == string(provider) && l.Model == model {
+		if l.Provider == string(provider) && l.Model == model && l.Scope == LearningScopeProviderModel {
 			return l
 		}
 	}
-	t.Fatalf("no learned limit for %s/%s", provider, model)
+	t.Fatalf("no aggregate learned limit for %s/%s", provider, model)
+	return LearnedLimit{}
+}
+
+// learnKeyLimitFor returns the per-credential (key_model) learned entry.
+func learnKeyLimitFor(t *testing.T, p *CooldownPlugin, provider schemas.ModelProvider, keyID string, model string) LearnedLimit {
+	t.Helper()
+	for _, l := range p.LearnedLimits() {
+		if l.Provider == string(provider) && l.Model == model && l.Scope == LearningScopeKeyModel && l.KeyID == keyID {
+			return l
+		}
+	}
+	t.Fatalf("no key-level learned limit for %s/%s/%s", provider, keyID, model)
 	return LearnedLimit{}
 }
 
@@ -126,25 +159,36 @@ func TestLearningCollectsSamplesPerProviderModel(t *testing.T) {
 	learnSpend(t, p, schemas.Anthropic, "claude-sonnet-4", 700)
 	learnReject(t, p, schemas.Anthropic, "claude-sonnet-4", "key-2", learnRateLimitErr())
 
+	// Every rejection is reported twice: once as the aggregate
+	// (provider_model) view and once against the credential that hit it.
 	limits := p.LearnedLimits()
-	if len(limits) != 2 {
-		t.Fatalf("expected one entry per (provider, model), got %d: %+v", len(limits), limits)
+	if len(limits) != 4 {
+		t.Fatalf("expected one aggregate and one per-key entry per (provider, model), got %d: %+v", len(limits), limits)
 	}
-	// Sorted by provider then model: anthropic comes first.
-	if limits[0].Provider != string(schemas.Anthropic) || limits[0].Model != "claude-sonnet-4" {
+	// Sorted by provider, scope, key: anthropic/key_model, anthropic/provider_model, ...
+	if limits[0].Provider != string(schemas.Anthropic) || limits[0].Scope != LearningScopeKeyModel {
 		t.Fatalf("unexpected first entry: %+v", limits[0])
 	}
-	if limits[0].SampleCount != 1 {
-		t.Fatalf("anthropic sample count = %d, want 1", limits[0].SampleCount)
+	if limits[0].KeyID != "key-2" || limits[0].KeyName != "key-2" {
+		t.Fatalf("per-key entry lost its credential: %+v", limits[0])
 	}
-	if limits[1].Provider != string(schemas.OpenAI) || limits[1].Model != "gpt-4o" {
+	if limits[0].SampleCount != 1 {
+		t.Fatalf("anthropic per-key sample count = %d, want 1", limits[0].SampleCount)
+	}
+	if limits[1].Provider != string(schemas.Anthropic) || limits[1].Scope != LearningScopeProviderModel {
 		t.Fatalf("unexpected second entry: %+v", limits[1])
 	}
 	if limits[1].SampleCount != 1 {
-		t.Fatalf("openai sample count = %d, want 1", limits[1].SampleCount)
+		t.Fatalf("anthropic sample count = %d, want 1", limits[1].SampleCount)
 	}
-	if limits[1].FirstSeen.IsZero() || limits[1].LastSeen.IsZero() {
-		t.Fatalf("expected first/last seen timestamps, got %+v", limits[1])
+	if limits[3].Provider != string(schemas.OpenAI) || limits[3].Model != "gpt-4o" {
+		t.Fatalf("unexpected last entry: %+v", limits[3])
+	}
+	if limits[3].SampleCount != 1 {
+		t.Fatalf("openai sample count = %d, want 1", limits[3].SampleCount)
+	}
+	if limits[3].FirstSeen.IsZero() || limits[3].LastSeen.IsZero() {
+		t.Fatalf("expected first/last seen timestamps, got %+v", limits[3])
 	}
 }
 

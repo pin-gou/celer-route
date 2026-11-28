@@ -173,6 +173,50 @@ type CooldownCapacityConfig struct {
 	// allows the configured fallback chain to take over, "reject" refuses the
 	// request outright.
 	Action string `json:"action"`
+
+	// KeyLimits optionally overrides TokenLimit / RequestLimit for individual
+	// credentials, keyed by the key's `name` (the stable, user-authored
+	// identifier). It is only meaningful with Scope "key": the other scopes
+	// have no credential in their accounting key, so per-key overrides would
+	// have nothing to apply to.
+	//
+	// Nil fields inherit the provider-level values, so an entry only has to
+	// name what actually differs for that key. An explicit 0 means "no limit
+	// for this key" (unlike the provider-level scalars, where 0 is only a
+	// default and the gate must stay active for the other keys).
+	KeyLimits map[string]CooldownCapacityKeyLimit `json:"key_limits,omitempty"`
+}
+
+// CooldownCapacityKeyLimit overrides the per-window budgets of one credential.
+// Nil means "inherit the provider-level value".
+type CooldownCapacityKeyLimit struct {
+	TokenLimit   *int64 `json:"token_limit,omitempty"`
+	RequestLimit *int64 `json:"request_limit,omitempty"`
+}
+
+// resolved returns the (token, request) limits this override applies on top of
+// the given provider-level defaults.
+func (k CooldownCapacityKeyLimit) resolved(baseToken, baseRequest int64) (int64, int64) {
+	token, request := baseToken, baseRequest
+	if k.TokenLimit != nil {
+		token = *k.TokenLimit
+	}
+	if k.RequestLimit != nil {
+		request = *k.RequestLimit
+	}
+	return token, request
+}
+
+// hasKeyLimits reports whether any entry raises a positive limit, which is what
+// lets a key_limits-only section activate the gate (per-key budgets with no
+// provider-wide default).
+func hasKeyLimits(limits map[string]CooldownCapacityKeyLimit) bool {
+	for _, l := range limits {
+		if (l.TokenLimit != nil && *l.TokenLimit > 0) || (l.RequestLimit != nil && *l.RequestLimit > 0) {
+			return true
+		}
+	}
+	return false
 }
 
 // Normalized returns a copy of the config with defaults applied and values
@@ -187,13 +231,37 @@ func (c *CooldownCapacityConfig) Normalized() *CooldownCapacityConfig {
 	out.Headroom = NormalizeCapacityHeadroom(out.Headroom)
 	out.Scope = NormalizeCapacityScope(out.Scope)
 	out.Action = NormalizeCapacityAction(out.Action)
+	// Deep-copy the per-key overrides so normalizing never aliases (or later
+	// mutates) the caller's map or its pointer fields.
+	if len(out.KeyLimits) > 0 {
+		keyLimits := make(map[string]CooldownCapacityKeyLimit, len(out.KeyLimits))
+		for name, entry := range out.KeyLimits {
+			entry.TokenLimit = cloneInt64Ptr(entry.TokenLimit)
+			entry.RequestLimit = cloneInt64Ptr(entry.RequestLimit)
+			keyLimits[name] = entry
+		}
+		out.KeyLimits = keyLimits
+	}
+	return &out
+}
+
+// cloneInt64Ptr copies a *int64 so a normalized config cannot share a pointer
+// with (and be mutated through) the caller's value.
+func cloneInt64Ptr(v *int64) *int64 {
+	if v == nil {
+		return nil
+	}
+	out := *v
 	return &out
 }
 
 // Active reports whether the gate should do any work at all. A gate with no
 // limit configured is a no-op even when Enabled is true.
+//
+// key_limits counts as a configured limit: a provider may declare per-key
+// budgets without a provider-wide default.
 func (c *CooldownCapacityConfig) Active() bool {
-	return c != nil && c.Enabled && (c.TokenLimit > 0 || c.RequestLimit > 0)
+	return c != nil && c.Enabled && (c.TokenLimit > 0 || c.RequestLimit > 0 || hasKeyLimits(c.KeyLimits))
 }
 
 // Validate performs strict validation for write paths. Unlike Normalized it
@@ -238,6 +306,31 @@ func (c *CooldownCapacityConfig) Validate() error {
 			"capacity.action %q is invalid; must be %q or %q (or empty for the default)",
 			c.Action, CapacityActionFallback, CapacityActionReject,
 		)
+	}
+	if len(c.KeyLimits) > 0 {
+		if scope := NormalizeCapacityScope(c.Scope); scope != CapacityScopeKey {
+			return fmt.Errorf(
+				"capacity.key_limits requires capacity.scope %q (the effective scope is %q); per-key budgets have no effect under another scope",
+				CapacityScopeKey, scope,
+			)
+		}
+		for name, limit := range c.KeyLimits {
+			if strings.TrimSpace(name) == "" {
+				return fmt.Errorf("capacity.key_limits contains an empty key name")
+			}
+			if limit.TokenLimit == nil && limit.RequestLimit == nil {
+				return fmt.Errorf(
+					"capacity.key_limits[%q] must set token_limit or request_limit (leave out the entry to inherit)",
+					name,
+				)
+			}
+			if limit.TokenLimit != nil && *limit.TokenLimit < 0 {
+				return fmt.Errorf("capacity.key_limits[%q].token_limit must not be negative, got %d", name, *limit.TokenLimit)
+			}
+			if limit.RequestLimit != nil && *limit.RequestLimit < 0 {
+				return fmt.Errorf("capacity.key_limits[%q].request_limit must not be negative, got %d", name, *limit.RequestLimit)
+			}
+		}
 	}
 	return nil
 }
