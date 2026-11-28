@@ -1,47 +1,72 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+	COOLDOWN_WINDOW_OPTIONS,
+	DEFAULT_COOLDOWN_WINDOW,
+	cooldownWindowLabelKey,
+	formatUpdatedAt,
+	type CooldownWindowKey,
+} from "@/components/providerCooldown/cooldownWindow";
 import { useGetErrorPatternsQuery, type ErrorPattern } from "@/lib/store/apis/errorPatternsApi";
 import { useTranslation } from "react-i18next";
 
 interface ErrorSampleBrowserProps {
 	provider: string;
 	onApply: (pattern: ErrorPattern) => void;
+	/**
+	 * Controlled window. When the tab owns the window it passes it down and
+	 * this component renders no selector of its own — two independent window
+	 * pickers on the same page could show two error lists computed over
+	 * different windows, which reads as contradictory data.
+	 */
+	window?: CooldownWindowKey;
 }
 
-const WINDOW_OPTIONS = ["1h", "24h"] as const;
-
-export function ErrorSampleBrowser({ provider, onApply }: ErrorSampleBrowserProps) {
+/**
+ * The provider's current error shapes, each one click away from becoming a
+ * cooldown match.
+ */
+export function ErrorSampleBrowser({ provider, onApply, window }: ErrorSampleBrowserProps) {
 	const { t } = useTranslation("providers");
-	// Default to the last 1h of errors — the most actionable window for
-	// "what is failing right now". The user can widen to 24h via the selector.
-	const [selectedWindow, setSelectedWindow] = React.useState<string>("1h");
-	const { data, isLoading, error } = useGetErrorPatternsQuery({
+	const { t: tc } = useTranslation("common");
+	// Uncontrolled fallback for the contexts that embed this browser without
+	// a tab around it (the provider config sheet).
+	const [localWindow, setLocalWindow] = React.useState<CooldownWindowKey>(DEFAULT_COOLDOWN_WINDOW);
+	const isControlled = window !== undefined;
+	const activeWindow = window ?? localWindow;
+
+	const { data, isLoading, error, fulfilledTimeStamp } = useGetErrorPatternsQuery({
 		provider,
-		window: selectedWindow,
+		window: activeWindow,
 		limit: 20,
 	});
 
 	const patterns = data?.patterns ?? [];
 	const totalErrors = data?.total_errors ?? 0;
+	const updatedAt = formatUpdatedAt(fulfilledTimeStamp);
 
 	return (
 		<div className="flex flex-col gap-3">
-			{/* Provider label + window selector */}
+			{/* Provider label + window selector (only when uncontrolled) */}
 			<div className="flex items-center gap-2">
 				<div className="flex-1 truncate font-mono text-xs font-medium">{provider}</div>
-				<Select value={selectedWindow} onValueChange={setSelectedWindow}>
-					<SelectTrigger className="h-7 w-36 text-xs" data-testid="error-sample-browser-window-trigger">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						{WINDOW_OPTIONS.map((w) => (
-							<SelectItem key={w} value={w}>
-								{t(`fragments.cooldownPolicy.errorSample.windowOptions.${w}`)}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
+				{isControlled ? (
+					<span className="text-muted-foreground shrink-0 text-xs">{tc(cooldownWindowLabelKey(activeWindow))}</span>
+				) : (
+					<Select value={activeWindow} onValueChange={(value) => setLocalWindow(value as CooldownWindowKey)}>
+						<SelectTrigger className="h-7 w-36 text-xs" data-testid="error-sample-browser-window-trigger">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{COOLDOWN_WINDOW_OPTIONS.map((option) => (
+								<SelectItem key={option.key} value={option.key}>
+									{tc(cooldownWindowLabelKey(option.key))}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				)}
 			</div>
 
 			{isLoading && <p className="text-muted-foreground py-4 text-center text-xs">{t("fragments.cooldownPolicy.errorSample.loading")}</p>}
@@ -51,13 +76,24 @@ export function ErrorSampleBrowser({ provider, onApply }: ErrorSampleBrowserProp
 			{!isLoading && !error && patterns.length === 0 && (
 				<div className="py-4 text-center">
 					<p className="text-muted-foreground text-xs">{t("fragments.cooldownPolicy.errorSample.noErrors")}</p>
-					<p className="text-muted-foreground mt-1 text-xs">{t("fragments.cooldownPolicy.errorSample.tryChangingWindow")}</p>
+					{/* The hint only makes sense while a wider window is still
+					    available — on the 24h window it would be a lie. */}
+					{activeWindow !== "24h" && (
+						<p className="text-muted-foreground mt-1 text-xs">{t("fragments.cooldownPolicy.errorSample.tryChangingWindow")}</p>
+					)}
 				</div>
 			)}
 
 			{!isLoading && !error && patterns.length > 0 && (
 				<div className="space-y-2">
-					<p className="text-muted-foreground text-xs">{t("fragments.cooldownPolicy.errorSample.totalErrors", { count: totalErrors })}</p>
+					<div className="flex flex-wrap items-center justify-between gap-2">
+						<p className="text-muted-foreground text-xs">{t("fragments.cooldownPolicy.errorSample.totalErrors", { count: totalErrors })}</p>
+						{updatedAt && (
+							<span data-testid="error-sample-updated-at" className="text-muted-foreground text-xs">
+								{t("fragments.cooldownPolicy.errorSample.updatedAt", { time: updatedAt })}
+							</span>
+						)}
+					</div>
 					<div className="max-h-80 space-y-1 overflow-y-auto">
 						{patterns.map((p) => (
 							<div
@@ -74,6 +110,18 @@ export function ErrorSampleBrowser({ provider, onApply }: ErrorSampleBrowserProp
 												{p.status_code >= 100 && p.status_code <= 599 ? p.status_code : "—"}
 											</span>
 										)}
+										{/* Echo of the automatic dimension decision, computed server-side
+										    from these same fields. Only a positive determination is
+										    shown: on a non-429 bucket "unknown" is noise, and the
+										    match editor explains what auto would do where it matters. */}
+										{p.limiter_dimension === "rpm" || p.limiter_dimension === "tpm" ? (
+											<span
+												className="text-muted-foreground shrink-0 rounded border px-1 text-[10px]"
+												data-testid={`error-sample-dimension-${p.rank}`}
+											>
+												{t(`fragments.cooldownPolicy.matchField.dimensionValue_${p.limiter_dimension}`)}
+											</span>
+										) : null}
 									</div>
 									<div className="text-muted-foreground truncate font-mono text-xs">
 										{p.error_type && <span>{p.error_type} </span>}

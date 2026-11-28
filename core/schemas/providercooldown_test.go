@@ -118,6 +118,62 @@ func TestValidateCooldownPolicy_RetryAfterMode(t *testing.T) {
 	}
 }
 
+func TestValidateCooldownPolicy_DimensionTTL(t *testing.T) {
+	base := func(r *CooldownPolicyRule) *CooldownPolicy {
+		return &CooldownPolicy{RateLimit: r}
+	}
+	valid := []*CooldownPolicyRule{
+		{TTLSeconds: 30, Match: []CooldownPolicyMatch{{MessageContains: []string{"rate limit"}}}},
+		{TTLSeconds: 30, RPMTTLSeconds: 90, TPMTTLSeconds: 40, Match: []CooldownPolicyMatch{{MessageContains: []string{"rate limit"}}}},
+	}
+	for _, r := range valid {
+		if err := base(r).Validate(); err != nil {
+			t.Fatalf("dimension TTLs %+v on rate_limit must validate, got %v", r, err)
+		}
+	}
+
+	validQuota := &CooldownPolicy{Quota: &CooldownPolicyRule{
+		TTLSeconds: 600,
+		Match:      []CooldownPolicyMatch{{MessageContains: []string{"quota exceeded"}}},
+	}}
+	if err := validQuota.Validate(); err != nil {
+		t.Fatalf("quota rule without dimension TTLs must validate, got %v", err)
+	}
+
+	negative := []struct {
+		name string
+		rule *CooldownPolicyRule
+		want string
+	}{
+		{"negative rpm", &CooldownPolicyRule{TTLSeconds: 30, RPMTTLSeconds: -1}, "rpm_ttl_seconds"},
+		{"negative tpm", &CooldownPolicyRule{TTLSeconds: 30, TPMTTLSeconds: -1}, "tpm_ttl_seconds"},
+	}
+	for _, tc := range negative {
+		tc.rule.Match = []CooldownPolicyMatch{{MessageContains: []string{"rate limit"}}}
+		err := base(tc.rule).Validate()
+		if err == nil {
+			t.Fatalf("%s must be rejected", tc.name)
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s error %q must mention %q", tc.name, err.Error(), tc.want)
+		}
+	}
+
+	quotaWithDimension := []*CooldownPolicyRule{
+		{TTLSeconds: 600, RPMTTLSeconds: 90, Match: []CooldownPolicyMatch{{MessageContains: []string{"quota exceeded"}}}},
+		{TTLSeconds: 600, TPMTTLSeconds: 40, Match: []CooldownPolicyMatch{{MessageContains: []string{"quota exceeded"}}}},
+	}
+	for _, r := range quotaWithDimension {
+		err := (&CooldownPolicy{Quota: r}).Validate()
+		if err == nil {
+			t.Fatalf("quota rule with dimension TTLs must be rejected")
+		}
+		if !strings.Contains(err.Error(), "only valid on the rate_limit rule") {
+			t.Fatalf("error %q must explain the rate_limit-only restriction", err.Error())
+		}
+	}
+}
+
 func TestCooldownPolicyRule_RetryAfterModeOrDefault(t *testing.T) {
 	tests := []struct {
 		name string

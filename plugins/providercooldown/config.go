@@ -36,27 +36,31 @@ type Config struct {
 	// failing (and when many keys fail at once). Nil or Enabled=false keeps
 	// the pre-escalation behaviour byte-for-byte.
 	//
-	// This intentionally lives in the *plugin* config rather than in
-	// schemas.CooldownPolicy: the provider cooldown policy form rebuilds the
-	// whole cooldown_policy object from the fields it knows about, silently
-	// dropping any sub-field it does not understand. The plugin config has no
-	// such form (the UI only toggles the plugin on/off), so fields here
-	// survive an unrelated save.
+	// This is the plugin-level DEFAULT: a provider whose own
+	// schemas.CooldownPolicy carries an escalation section uses that instead
+	// (whole-section replacement, no field-level merge). Keeping the default
+	// in the plugin config means the provider cooldown policy form — which
+	// rebuilds the whole cooldown_policy object from the fields it knows about
+	// — cannot silently drop it on an unrelated save.
 	Escalation *EscalationConfig `json:"escalation,omitempty"`
 
+	// Deprecated: legacy fleet default. A single plugin-level capacity section
+	// is inherited by every provider without its own cooldown_policy.capacity,
+	// which is why capacity is now configured per provider (and why the plugin
+	// UI no longer edits this key). The field is kept so existing config.json
+	// deployments keep gating exactly as before; it is only read, never
+	// rewritten by the UI.
+	//
 	// Capacity optionally enables a retrospective budget gate: real token /
 	// request usage is accounted after each terminal request, and once a
 	// rolling window's usage crosses limit*headroom, subsequent requests are
 	// short-circuited until enough of the window slides away.
 	//
 	// Nil or Enabled=false (the default) keeps the feature completely inert:
-	// no state is allocated, no lock is taken, and no request is gated.
-	//
-	// Like Escalation, this lives in the *plugin* config rather than in
-	// schemas.CooldownPolicy: the provider-cooldown policy form rebuilds the
-	// whole cooldown_policy object from the fields it knows about, silently
-	// dropping unknown sub-fields. The plugin config has no such form, so
-	// these fields survive an unrelated save.
+	// no state is allocated, no lock is taken, and no request is gated. This
+	// is the plugin-level default; a provider that configures its own capacity
+	// section in schemas.CooldownPolicy uses that gate instead (and can switch
+	// it off with enabled=false).
 	Capacity *CapacityConfig `json:"capacity,omitempty"`
 
 	// Learning optionally enables the read-only limit learner: the plugin
@@ -67,150 +71,35 @@ type Config struct {
 	// Nil or Enabled=false (the default) keeps the feature completely inert:
 	// no state is allocated, no sample is collected, and nothing is ever
 	// written back to the configuration. The learner only produces a report.
+	// This is the plugin-level default; providers can override the window
+	// length in their own schemas.CooldownPolicy learning section.
 	Learning *LearningConfig `json:"learning,omitempty"`
+
+	// Health optionally enables health-aware key weighting: each key's
+	// observed success rate is folded into an EWMA and the key-pool filter
+	// scales that key's Weight by it, so chronically failing credentials
+	// receive a smaller (never zero) share of the traffic.
+	//
+	// Nil or Enabled=false (the default) keeps the feature completely inert:
+	// no state is allocated, no lock is taken, and every key keeps its
+	// configured weight. This is the plugin-level DEFAULT: a provider whose
+	// own schemas.CooldownPolicy carries a health section uses that instead
+	// (whole-section replacement, no field-level merge), and a section with
+	// only enabled=false explicitly turns the feature off for that provider.
+	Health *HealthConfig `json:"health,omitempty"`
 }
 
-// CapacityConfig configures the optional retrospective capacity gate.
-//
-// The gate never estimates tokens and never reads the request body: it only
-// sums the real usage the provider reported (response usage, or
-// BilledUsage on a failed-but-billed attempt) over a rolling window, then
-// refuses *subsequent* requests once the window's usage crosses
-// limit*headroom. The request that crosses the line still goes out — the same
-// trade-off the passive cooldown already makes — in exchange for zero
-// estimation error and explainable thresholds.
-type CapacityConfig struct {
-	// Enabled turns the gate on. Default false keeps current behaviour.
-	Enabled bool `json:"enabled"`
-
-	// TokenLimit is the per-window token budget. 0 means "no token limit".
-	TokenLimit int64 `json:"token_limit"`
-
-	// RequestLimit is the per-window request budget. 0 means "no request
-	// limit". At least one of TokenLimit / RequestLimit must be non-zero for
-	// the gate to do anything.
-	RequestLimit int64 `json:"request_limit"`
-
-	// WindowSeconds is the rolling window length. <= 0 falls back to 60;
-	// values are clamped into 10..3600.
-	WindowSeconds int `json:"window_seconds"`
-
-	// Headroom is the fraction of the limit that may be used before the gate
-	// engages (0.9 = block once 90% of the budget is spent). <= 0 falls back
-	// to 0.9; values are clamped into 0.1..1.0.
-	Headroom float64 `json:"headroom"`
-
-	// Scope selects the accounting granularity: "provider" (default) shares
-	// one budget across every model of a provider, while "provider_model"
-	// keeps an independent budget per (provider, model) pair.
-	Scope string `json:"scope"`
-
-	// Action decides what happens once the gate engages: "fallback" (default)
-	// allows the configured fallback chain to take over, "reject" refuses the
-	// request outright.
-	Action string `json:"action"`
-}
-
-// Normalized returns a copy of the config with defaults applied and values
-// clamped the same way ParseConfig does, so callers that build the struct
-// directly still get deterministic behaviour.
-func (c *CapacityConfig) Normalized() *CapacityConfig {
-	if c == nil {
-		return nil
-	}
-	out := *c
-	out.WindowSeconds = normalizeCapacityWindowSeconds(out.WindowSeconds)
-	out.Headroom = normalizeCapacityHeadroom(out.Headroom)
-	out.Scope = normalizeCapacityScope(out.Scope)
-	out.Action = normalizeCapacityAction(out.Action)
-	return &out
-}
-
-// Active reports whether the gate should do any work at all. A gate with no
-// limit configured is a no-op even when Enabled is true.
-func (c *CapacityConfig) Active() bool {
-	return c != nil && c.Enabled && (c.TokenLimit > 0 || c.RequestLimit > 0)
-}
-
-func normalizeCapacityWindowSeconds(n int) int {
-	switch {
-	case n <= 0:
-		return defaultCapacityWindowSeconds
-	case n < minCapacityWindowSeconds:
-		return minCapacityWindowSeconds
-	case n > maxCapacityWindowSeconds:
-		return maxCapacityWindowSeconds
-	default:
-		return n
-	}
-}
-
-func normalizeCapacityHeadroom(h float64) float64 {
-	switch {
-	case h <= 0:
-		return defaultCapacityHeadroom
-	case h < minCapacityHeadroom:
-		return minCapacityHeadroom
-	case h > maxCapacityHeadroom:
-		return maxCapacityHeadroom
-	default:
-		return h
-	}
-}
-
-func normalizeCapacityScope(s string) string {
-	if strings.TrimSpace(strings.ToLower(s)) == CapacityScopeProviderModel {
-		return CapacityScopeProviderModel
-	}
-	return CapacityScopeProvider
-}
-
-func normalizeCapacityAction(a string) string {
-	if strings.TrimSpace(strings.ToLower(a)) == CapacityActionReject {
-		return CapacityActionReject
-	}
-	return CapacityActionFallback
-}
-
-// EscalationConfig controls the optional adaptive TTL upgrade.
-//
-// The behaviour is expressed purely as a longer TTL — no sleeps, no blocking,
-// and no change to the bytes sent upstream.
-type EscalationConfig struct {
-	// Enabled turns the feature on. Default false keeps current behaviour.
-	Enabled bool `json:"enabled"`
-
-	// MaxMultiplier caps how much a single key's TTL can grow (1x, 2x, 4x …).
-	// Values <= 0 fall back to defaultEscalationMaxMultiplier; values above
-	// maxAllowedEscalationMultiplier are clamped to it.
-	MaxMultiplier int `json:"max_multiplier"`
-}
-
-// Normalized returns a copy of the config with MaxMultiplier applied the same
-// way ParseConfig / AsState apply it, so callers that build the struct
-// directly still get deterministic behaviour.
-func (e *EscalationConfig) Normalized() *EscalationConfig {
-	if e == nil {
-		return nil
-	}
-	out := *e
-	out.MaxMultiplier = normalizeMaxMultiplier(out.MaxMultiplier)
-	return &out
-}
-
-// normalizeMaxMultiplier applies the documented default (4) and upper bound
-// (16). Negative / zero means "unset" and takes the default; everything above
-// the bound is clamped.
-func normalizeMaxMultiplier(n int) int {
-	switch {
-	case n <= 0:
-		return defaultEscalationMaxMultiplier
-	case n > maxAllowedEscalationMultiplier:
-		return maxAllowedEscalationMultiplier
-	default:
-		return n
-	}
-}
+// The capability config types are owned by core/schemas so the plugin config
+// and the per-provider CooldownPolicy (schemas.CooldownPolicy) stay
+// structurally identical. These aliases keep the historical package-level
+// names working at every existing call site.
+type (
+	CapacityConfig   = schemas.CooldownCapacityConfig
+	EscalationConfig = schemas.CooldownEscalationConfig
+	ChronicConfig    = schemas.CooldownChronicConfig
+	LearningConfig   = schemas.CooldownLearningConfig
+	HealthConfig     = schemas.CooldownHealthConfig
+)
 
 // ParseConfig decodes the raw config map (as received from the plugin
 // loader). Unknown keys are surfaced as errors so typos don't silently
@@ -277,12 +166,25 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 					return nil, fmt.Errorf("escalation.max_multiplier: %w", err)
 				}
 				ec.MaxMultiplier = n
+			case "chronic":
+				ch, err := parseChronicConfig(vv)
+				if err != nil {
+					return nil, err
+				}
+				ec.Chronic = ch
 			default:
 				return nil, fmt.Errorf("escalation: unknown key %q", k)
 			}
 		}
-		ec.MaxMultiplier = normalizeMaxMultiplier(ec.MaxMultiplier)
-		c.Escalation = ec
+		// Chronic is a sub-behaviour of escalation (it chooses the long TTL an
+		// escalated cooldown should use), so an enabled chronic block under a
+		// disabled escalation section can never do anything. Reject it at parse
+		// time instead of letting it silently no-op — this is a new field, so
+		// there is no backward compatibility to preserve here.
+		if ec.Chronic != nil && ec.Chronic.Enabled && !ec.Enabled {
+			return nil, fmt.Errorf("escalation.chronic.enabled requires escalation.enabled=true")
+		}
+		c.Escalation = ec.Normalized()
 	}
 	if v, ok := raw["capacity"]; ok {
 		m, ok := v.(map[string]any)
@@ -334,10 +236,10 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 					return nil, fmt.Errorf("capacity.scope: expected string, got %T", vv)
 				}
 				switch strings.TrimSpace(strings.ToLower(s)) {
-				case CapacityScopeProvider, CapacityScopeProviderModel:
+				case CapacityScopeProvider, CapacityScopeProviderModel, CapacityScopeKey:
 					cc.Scope = strings.TrimSpace(strings.ToLower(s))
 				default:
-					return nil, fmt.Errorf("capacity.scope: unknown value %q (expected %q or %q)", s, CapacityScopeProvider, CapacityScopeProviderModel)
+					return nil, fmt.Errorf("capacity.scope: unknown value %q (expected %q, %q or %q)", s, CapacityScopeProvider, CapacityScopeProviderModel, CapacityScopeKey)
 				}
 			case "action":
 				s, ok := vv.(string)
@@ -350,8 +252,22 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 				default:
 					return nil, fmt.Errorf("capacity.action: unknown value %q (expected %q or %q)", s, CapacityActionFallback, CapacityActionReject)
 				}
+			case "key_limits":
+				limits, err := parseCapacityKeyLimits(vv)
+				if err != nil {
+					return nil, err
+				}
+				cc.KeyLimits = limits
 			default:
 				return nil, fmt.Errorf("capacity: unknown key %q", k)
+			}
+		}
+		if len(cc.KeyLimits) > 0 {
+			if scope := schemas.NormalizeCapacityScope(cc.Scope); scope != CapacityScopeKey {
+				return nil, fmt.Errorf(
+					"capacity.key_limits requires capacity.scope %q (the effective scope is %q)",
+					CapacityScopeKey, scope,
+				)
 			}
 		}
 		c.Capacity = cc.Normalized()
@@ -394,12 +310,110 @@ func ParseConfig(raw map[string]any) (*Config, error) {
 		}
 		c.Learning = lc.Normalized()
 	}
+	if v, ok := raw["health"]; ok {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("health: expected object, got %T", v)
+		}
+		hc := &HealthConfig{}
+		for k, vv := range m {
+			switch k {
+			case "enabled":
+				b, ok := vv.(bool)
+				if !ok {
+					return nil, fmt.Errorf("health.enabled: expected boolean, got %T", vv)
+				}
+				hc.Enabled = b
+			case "half_life_seconds":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("health.half_life_seconds: %w", err)
+				}
+				hc.HalfLifeSeconds = n
+			case "min_samples":
+				n, err := toInt(vv)
+				if err != nil {
+					return nil, fmt.Errorf("health.min_samples: %w", err)
+				}
+				hc.MinSamples = n
+			case "min_weight_factor":
+				f, err := toFloat64(vv)
+				if err != nil {
+					return nil, fmt.Errorf("health.min_weight_factor: %w", err)
+				}
+				hc.MinWeightFactor = f
+			default:
+				return nil, fmt.Errorf("health: unknown key %q", k)
+			}
+		}
+		c.Health = hc.Normalized()
+	}
 	return c, nil
+}
+
+// parseChronicConfig decodes the escalation.chronic sub-object with the same
+// strict posture as the other sections: unknown keys are errors, and every
+// field is normalized by EscalationConfig.Normalized afterwards.
+func parseChronicConfig(v any) (*ChronicConfig, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("escalation.chronic: expected object, got %T", v)
+	}
+	ch := &ChronicConfig{}
+	for k, vv := range m {
+		switch k {
+		case "enabled":
+			b, ok := vv.(bool)
+			if !ok {
+				return nil, fmt.Errorf("escalation.chronic.enabled: expected boolean, got %T", vv)
+			}
+			ch.Enabled = b
+		case "success_rate_threshold":
+			f, err := toFloat64(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.success_rate_threshold: %w", err)
+			}
+			ch.SuccessRateThreshold = f
+		case "min_samples":
+			n, err := toInt(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.min_samples: %w", err)
+			}
+			ch.MinSamples = n
+		case "chronic_max_ttl_seconds":
+			n, err := toInt(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.chronic_max_ttl_seconds: %w", err)
+			}
+			ch.ChronicMaxTTLSeconds = n
+		case "jitter_ratio":
+			f, err := toFloat64(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.jitter_ratio: %w", err)
+			}
+			ch.JitterRatio = f
+		case "recovery_successes":
+			n, err := toInt(vv)
+			if err != nil {
+				return nil, fmt.Errorf("escalation.chronic.recovery_successes: %w", err)
+			}
+			ch.RecoverySuccesses = n
+		default:
+			return nil, fmt.Errorf("escalation.chronic: unknown key %q", k)
+		}
+	}
+	return ch, nil
 }
 
 // AsState builds a CooldownState with the parsed config applied. The state
 // is independent of the receiver and is safe to mutate further (e.g. via
 // SetTTLOverride) without affecting the source Config.
+//
+// The capability sections are registered as the state's DEFAULTS: each
+// provider that configures its own capacity / escalation / learning / health
+// section in schemas.CooldownPolicy overrides them at request time, and
+// providers without one keep inheriting these. No per-provider state is
+// created here — the plugin does not know the provider list.
 //
 // If a logger is provided, AsState logs a warning for each ttl_overrides
 // key whose name does not match any known Bifrost provider. A typo
@@ -425,13 +439,16 @@ func (c *Config) AsState(logger schemas.Logger) *CooldownState {
 		s.SetTTLOverride(mp, time.Duration(secs)*time.Second)
 	}
 	if esc := c.Escalation.Normalized(); esc != nil && esc.Enabled {
-		s.enableEscalation(esc.MaxMultiplier)
+		s.enableEscalation(esc)
 	}
 	if capCfg := c.Capacity.Normalized(); capCfg.Active() {
 		s.enableCapacity(capCfg)
 	}
 	if learnCfg := c.Learning.Normalized(); learnCfg.Active() {
 		s.enableLearning(learnCfg)
+	}
+	if healthCfg := c.Health.Normalized(); healthCfg.Active() {
+		s.enableHealth(healthCfg)
 	}
 	return s
 }
@@ -479,4 +496,58 @@ func toFloat64(v any) (float64, error) {
 	default:
 		return 0, fmt.Errorf("expected number, got %T", v)
 	}
+}
+
+// parseCapacityKeyLimits decodes a capacity.key_limits object: a map of key
+// NAME → { token_limit?, request_limit? }. Absent fields inherit the
+// provider-level value at gate-build time; an explicit 0 means "unlimited for
+// this credential", which is why the fields are pointers.
+func parseCapacityKeyLimits(v any) (map[string]schemas.CooldownCapacityKeyLimit, error) {
+	entries, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("capacity.key_limits: expected object, got %T", v)
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]schemas.CooldownCapacityKeyLimit, len(entries))
+	for name, rawEntry := range entries {
+		if strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("capacity.key_limits: empty key name")
+		}
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("capacity.key_limits[%q]: expected object, got %T", name, rawEntry)
+		}
+		var limit schemas.CooldownCapacityKeyLimit
+		for field, value := range entry {
+			switch field {
+			case "token_limit":
+				n, err := toInt64(value)
+				if err != nil {
+					return nil, fmt.Errorf("capacity.key_limits[%q].token_limit: %w", name, err)
+				}
+				if n < 0 {
+					return nil, fmt.Errorf("capacity.key_limits[%q].token_limit: must not be negative, got %d", name, n)
+				}
+				limit.TokenLimit = &n
+			case "request_limit":
+				n, err := toInt64(value)
+				if err != nil {
+					return nil, fmt.Errorf("capacity.key_limits[%q].request_limit: %w", name, err)
+				}
+				if n < 0 {
+					return nil, fmt.Errorf("capacity.key_limits[%q].request_limit: must not be negative, got %d", name, n)
+				}
+				limit.RequestLimit = &n
+			default:
+				return nil, fmt.Errorf("capacity.key_limits[%q]: unknown key %q", name, field)
+			}
+		}
+		if limit.TokenLimit == nil && limit.RequestLimit == nil {
+			return nil, fmt.Errorf("capacity.key_limits[%q]: must set token_limit or request_limit", name)
+		}
+		out[name] = limit
+	}
+	return out, nil
 }

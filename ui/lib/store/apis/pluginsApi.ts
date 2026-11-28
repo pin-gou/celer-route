@@ -1,9 +1,13 @@
 import {
+	CapacityUsageResponse,
 	CooldownStateEntry,
 	CooldownStats,
 	CooldownStateResponse,
 	CooldownStatsResponse,
 	CreatePluginRequest,
+	LearnedLimitConfidence,
+	LearnedLimitEntry,
+	LearnedLimitsResponse,
 	Plugin,
 	PluginsResponse,
 	RtkStatsHistogramResponse,
@@ -12,6 +16,86 @@ import {
 	UpdatePluginRequest,
 } from "@/lib/types/plugins";
 import { baseApi } from "./baseApi";
+
+// Wire shapes for the provider-cooldown capacity/learning endpoints. Declared
+// locally and kept private: the UI only ever sees the camelCase contract, so
+// these exist purely to type `transformResponse` without falling back to
+// `any`.
+interface CapacityUsageWireEntry {
+	provider: string;
+	model?: string;
+	key_id?: string;
+	key_name?: string;
+	scope?: string;
+	window_seconds?: number;
+	used_tokens?: number;
+	used_requests?: number;
+	token_limit?: number;
+	request_limit?: number;
+	headroom?: number;
+	threshold_tokens?: number;
+	threshold_requests?: number;
+	retry_after_seconds?: number;
+	source?: string;
+}
+
+interface CapacityUsageWireResponse {
+	plugin?: string;
+	count?: number;
+	entries?: CapacityUsageWireEntry[];
+}
+
+interface LearnedLimitWireEntry {
+	provider: string;
+	model?: string;
+	scope?: string;
+	key_name?: string | null;
+	sample_count?: number;
+	key_count?: number;
+	estimated_token_limit?: number | null;
+	window_seconds?: number;
+	lower_bound?: number | null;
+	upper_bound?: number | null;
+	confidence?: string;
+	request_sample_count?: number;
+	estimated_request_limit?: number | null;
+	request_lower_bound?: number | null;
+	request_upper_bound?: number | null;
+	request_confidence?: string;
+	limiter_dimension?: string;
+	dimension_sample_counts?: Record<string, number>;
+	first_seen?: string;
+	last_seen?: string;
+}
+
+interface LearnedLimitsWireResponse {
+	plugin?: string;
+	count?: number;
+	window_seconds?: number;
+	limits?: LearnedLimitWireEntry[];
+}
+
+function normalizeLearnedConfidence(value: string | undefined): LearnedLimitConfidence {
+	switch (value) {
+		case "low":
+		case "medium":
+		case "high":
+			return value;
+		default:
+			return "insufficient";
+	}
+}
+
+function normalizeLearnedDimension(value: string | undefined): LearnedLimitEntry["limiterDimension"] {
+	switch (value) {
+		case "rpm":
+		case "tpm":
+		case "unknown":
+			return value;
+		default:
+			return null;
+	}
+}
 
 export const pluginsApi = baseApi.injectEndpoints({
 	endpoints: (builder) => ({
@@ -205,6 +289,31 @@ export const pluginsApi = baseApi.injectEndpoints({
 							}
 						}
 					}
+					// per_key stays keyed by "<provider>::<keyID>" (the
+					// lookup key the plugin uses) and only its row fields
+					// are camelCased.
+					let perKey: CooldownStats["perKey"];
+					if (response.per_key && typeof response.per_key === "object") {
+						perKey = {};
+						for (const [key, row] of Object.entries(response.per_key)) {
+							const r = row as {
+								mark_count?: number;
+								suppressed_count?: number;
+								success_count?: number;
+								last_mark_at?: string;
+								last_success_at?: string;
+								cooldown_remaining?: number;
+							};
+							perKey[key] = {
+								markCount: r.mark_count ?? 0,
+								suppressedCount: r.suppressed_count ?? 0,
+								successCount: r.success_count ?? 0,
+								lastMarkAt: r.last_mark_at,
+								lastSuccessAt: r.last_success_at,
+								cooldownRemaining: r.cooldown_remaining,
+							};
+						}
+					}
 					return {
 						stats: {
 							markCount: response.mark_count,
@@ -213,6 +322,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 							byKind,
 							perProvider,
 							perProviderModel,
+							perKey,
 						},
 					};
 				}
@@ -241,6 +351,73 @@ export const pluginsApi = baseApi.injectEndpoints({
 				}
 				return response;
 			},
+		}),
+
+		// GET /api/plugins/provider-cooldown/capacity-usage — live capacity
+		// accounting per (provider, model): how much of the rolling window's
+		// budget is spent and whether the gate is currently engaged. Backend
+		// returns snake_case; mapped to camelCase for the UI contract.
+		getCapacityUsage: builder.query<CapacityUsageResponse, void>({
+			query: () => "/plugins/provider-cooldown/capacity-usage",
+			providesTags: ["Plugins"],
+			transformResponse: (response: CapacityUsageWireResponse): CapacityUsageResponse => ({
+				plugin: response.plugin ?? "provider-cooldown",
+				count: response.count ?? response.entries?.length ?? 0,
+				entries: (response.entries ?? []).map((entry) => ({
+					provider: entry.provider,
+					model: entry.model ?? "",
+					keyId: entry.key_id,
+					keyName: entry.key_name,
+					scope: entry.scope === "provider_model" ? "provider_model" : entry.scope === "key" ? "key" : "provider",
+					windowSeconds: entry.window_seconds ?? 0,
+					usedTokens: entry.used_tokens ?? 0,
+					usedRequests: entry.used_requests ?? 0,
+					tokenLimit: entry.token_limit ?? 0,
+					requestLimit: entry.request_limit ?? 0,
+					headroom: entry.headroom ?? 0,
+					thresholdTokens: entry.threshold_tokens ?? 0,
+					thresholdRequests: entry.threshold_requests ?? 0,
+					retryAfterSeconds: entry.retry_after_seconds ?? 0,
+					source: entry.source === "provider" ? "provider" : "default",
+				})),
+			}),
+		}),
+
+		// GET /api/plugins/provider-cooldown/learned-limits — the read-only
+		// learner's per-(provider, model) estimate of the effective window
+		// limit. Same snake_case → camelCase mapping as capacity-usage.
+		getLearnedLimits: builder.query<LearnedLimitsResponse, void>({
+			query: () => "/plugins/provider-cooldown/learned-limits",
+			providesTags: ["Plugins"],
+			transformResponse: (response: LearnedLimitsWireResponse): LearnedLimitsResponse => ({
+				plugin: response.plugin ?? "provider-cooldown",
+				count: response.count ?? response.limits?.length ?? 0,
+				windowSeconds: response.window_seconds ?? 0,
+				limits: (response.limits ?? []).map((limit) => ({
+					provider: limit.provider,
+					model: limit.model ?? "",
+					// Older servers omit the scope; their only level was the
+					// aggregate one.
+					scope: limit.scope === "key_model" ? "key_model" : "provider_model",
+					keyName: limit.key_name ?? null,
+					sampleCount: limit.sample_count ?? 0,
+					keyCount: limit.key_count ?? 0,
+					estimatedTokenLimit: limit.estimated_token_limit ?? null,
+					windowSeconds: limit.window_seconds ?? response.window_seconds ?? 0,
+					lowerBound: limit.lower_bound ?? null,
+					upperBound: limit.upper_bound ?? null,
+					confidence: normalizeLearnedConfidence(limit.confidence),
+					requestSampleCount: limit.request_sample_count ?? 0,
+					estimatedRequestLimit: limit.estimated_request_limit ?? null,
+					requestLowerBound: limit.request_lower_bound ?? null,
+					requestUpperBound: limit.request_upper_bound ?? null,
+					requestConfidence: normalizeLearnedConfidence(limit.request_confidence),
+					limiterDimension: normalizeLearnedDimension(limit.limiter_dimension),
+					dimensionSampleCounts: limit.dimension_sample_counts ?? null,
+					firstSeen: limit.first_seen ?? "",
+					lastSeen: limit.last_seen ?? "",
+				})),
+			}),
 		}),
 
 		// -----------------------------------------------------------------------
@@ -299,6 +476,8 @@ export const {
 	useGetCooldownStateQuery,
 	useGetCooldownStatsQuery,
 	useUnfreezeCooldownMutation,
+	useGetCapacityUsageQuery,
+	useGetLearnedLimitsQuery,
 	useGetRtkStatsQuery,
 	useGetRtkStatsHistogramQuery,
 } = pluginsApi;

@@ -344,8 +344,62 @@ func TestUpdateProvider_RejectsBareQuotaMatchInCooldownPolicy(t *testing.T) {
 	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
 	}
-	if !strings.Contains(string(ctx.Response.Body()), "cooldown policy") {
-		t.Fatalf("expected the error to name the cooldown policy, got %s", string(ctx.Response.Body()))
+	if !strings.Contains(string(ctx.Response.Body()), "cooldown_policy.quota.match[0]") {
+		t.Fatalf("expected the error to name cooldown_policy.quota.match[0], got %s", string(ctx.Response.Body()))
+	}
+	// The field path is already fully qualified, so the prose must not repeat
+	// "cooldown policy" (that produced "Invalid cooldown policy:
+	// cooldown_policy..." before the message was de-duplicated).
+	if strings.Contains(string(ctx.Response.Body()), "cooldown policy") {
+		t.Fatalf("error message must not repeat the cooldown-policy phrase, got %s", string(ctx.Response.Body()))
+	}
+}
+
+// TestUpdateProvider_RejectsOutOfRangeCapacitySection pins the write-path
+// validation of the optional capacity section and the de-duplicated error
+// message: the client sees the fully-qualified cooldown_policy.capacity.* path
+// exactly once, with no repeated "cooldown policy" prose.
+func TestUpdateProvider_RejectsOutOfRangeCapacitySection(t *testing.T) {
+	SetLogger(&mockLogger{})
+	lib.SetLogger(&mockLogger{})
+
+	h := &ProviderHandler{
+		inMemoryStore: &lib.Config{
+			Providers: map[schemas.ModelProvider]configstore.ProviderConfig{
+				schemas.Sensenova: {},
+			},
+		},
+		modelsManager: &mockModelsManager{},
+	}
+
+	body := `{
+		"network_config": {},
+		"concurrency_and_buffer_size": {"concurrency": 1000, "buffer_size": 5000},
+		"cooldown_policy": {
+			"capacity": {"enabled": true, "token_limit": 1000, "window_seconds": 1}
+		}
+	}`
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod(fasthttp.MethodPut)
+	ctx.Request.SetRequestURI("/api/providers/sensenova")
+	ctx.Request.SetBodyString(body)
+	ctx.SetUserValue("provider", string(schemas.Sensenova))
+
+	h.updateProvider(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	got := string(ctx.Response.Body())
+	if !strings.Contains(got, "Invalid provider configuration:") {
+		t.Fatalf("expected the generic provider-configuration prefix, got %s", got)
+	}
+	if !strings.Contains(got, "cooldown_policy.capacity.window_seconds") {
+		t.Fatalf("expected the fully-qualified capacity field path, got %s", got)
+	}
+	if strings.Contains(got, "cooldown policy") {
+		t.Fatalf("error message must not repeat the cooldown-policy phrase, got %s", got)
 	}
 }
 

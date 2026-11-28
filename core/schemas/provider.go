@@ -591,6 +591,36 @@ type CooldownPolicyMatch struct {
 	MessageContains []string `json:"message_contains,omitempty"`
 	Type            []string `json:"type,omitempty"`
 	Code            []string `json:"code,omitempty"`
+
+	// Dimension optionally pins which upstream budget this match cools:
+	// "rpm" (request rate) or "tpm" (token rate). Empty means "auto": the
+	// dimension is derived from the provider error body at mark time (see
+	// the provider-cooldown plugin's limiterDimensionOf).
+	//
+	// Pinning exists because automatic derivation can only read what the
+	// provider says, and not every provider names the exhausted budget. For
+	// a match the operator knows targets a specific limit, pinning removes
+	// the guesswork without affecting any other match.
+	//
+	// Only meaningful on a rate_limit rule: quota exhaustion is a billing /
+	// entitlement failure, not a request- or token-rate window, so Validate
+	// rejects it there.
+	Dimension string `json:"dimension,omitempty"`
+}
+
+// CooldownLimiterDimension values accepted by CooldownPolicyMatch.Dimension.
+const (
+	CooldownDimensionRPM = "rpm"
+	CooldownDimensionTPM = "tpm"
+)
+
+// NormalizedDimension returns the match's pinned dimension in canonical
+// lower-case form, or "" when it is unset (auto).
+func (m *CooldownPolicyMatch) NormalizedDimension() string {
+	if m == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(m.Dimension))
 }
 
 // CooldownPolicyScope describes the granularity at which a cooldown mark is
@@ -630,6 +660,18 @@ type CooldownPolicyRule struct {
 	Match      []CooldownPolicyMatch `json:"match"`
 	MatchMode  string                `json:"match_mode,omitempty"` // "any" | "all"; defaults to "any" when empty
 	TTLSeconds int                   `json:"ttl_seconds"`
+	// RPMTTLSeconds overrides TTLSeconds for rate-limit rejections that the
+	// plugin classifies as request-rate (RPM/RPS). Only meaningful on a
+	// rate_limit rule; 0 (the default) falls back to TTLSeconds and keeps the
+	// pre-existing behaviour byte-for-byte. A request-rate limit that is
+	// consumed outside this gateway recovers on a longer timescale than a
+	// token-rate limit, so a longer TTL avoids burning a probe every few
+	// seconds. See the plugin's limiterDimensionOf for the classification
+	// table.
+	RPMTTLSeconds int `json:"rpm_ttl_seconds,omitempty"`
+	// TPMTTLSeconds is the token-rate counterpart of RPMTTLSeconds. Only
+	// meaningful on a rate_limit rule; 0 falls back to TTLSeconds.
+	TPMTTLSeconds int `json:"tpm_ttl_seconds,omitempty"`
 	// RetryAfterMode controls whether a provider-supplied retry hint
 	// (Retry-After / x-ratelimit-reset-*, captured on the error path in
 	// BifrostError.ExtraFields.ProviderResponseHeaders) may override
@@ -643,6 +685,13 @@ type CooldownPolicyRule struct {
 	//   - "exact": effective = providerHint, falling back to TTLSeconds when
 	//     no usable hint is present. Note this can shorten a long quota TTL to
 	//     a short hint, so evaluate it per rule before enabling.
+	//
+	// When RPMTTLSeconds / TPMTTLSeconds are configured they replace TTLSeconds
+	// as the base for the matching dimension, and "off" gains one extra meaning:
+	// a usable provider hint becomes a LOWER BOUND on that mark
+	// (effective = max(base, hint)). "cap" and "exact" keep their usual meaning
+	// relative to that base. With both fields unset the mode semantics above are
+	// unchanged.
 	RetryAfterMode string `json:"retry_after_mode,omitempty"`
 }
 
@@ -674,6 +723,24 @@ func (r *CooldownPolicyRule) RetryAfterModeOrDefault() string {
 type CooldownPolicy struct {
 	RateLimit *CooldownPolicyRule `json:"rate_limit,omitempty"`
 	Quota     *CooldownPolicyRule `json:"quota,omitempty"`
+
+	// Capacity optionally enables the retrospective capacity gate for this
+	// policy. Nil means "not configured" — the plugin-level capacity section
+	// (when present) is what the provider-cooldown plugin applies.
+	Capacity *CooldownCapacityConfig `json:"capacity,omitempty"`
+
+	// Escalation optionally enables adaptive TTL escalation for this policy.
+	// Nil means "not configured".
+	Escalation *CooldownEscalationConfig `json:"escalation,omitempty"`
+
+	// Learning optionally enables the read-only limit learner for this
+	// policy. Nil means "not configured".
+	Learning *CooldownLearningConfig `json:"learning,omitempty"`
+
+	// Health optionally enables health-aware key weighting for this policy:
+	// the key-pool filter scales each key's Weight by its EWMA success rate.
+	// Nil means "not configured" (inherit the plugin-level default).
+	Health *CooldownHealthConfig `json:"health,omitempty"`
 }
 
 // Cooldown policy TTL defaults applied by DefaultCooldownPolicy. Tuned per
@@ -963,6 +1030,55 @@ func (r *CooldownPolicyRule) MatchModeOrDefault() string {
 	return r.MatchMode
 }
 
+// MatchDimension reports whether the rule fires for err and, when it does,
+// the limiter dimension explicitly pinned on the matches that fired.
+//
+// The second return value is "" when no fired match pins one — that is the
+// "auto" case, and the caller derives the dimension from the error body.
+//
+// Resolution under match_mode "any": matches are scanned in order; a fired
+// match without a dimension records that the rule fires but the scan keeps
+// going, so a later fired match that DOES pin a dimension still wins. First
+// pinned value wins, which keeps the outcome deterministic and explainable
+// ("the first matching predicate that names a dimension decides").
+//
+// Under "all" every match must fire, so the same first-pinned-wins scan
+// applies over the full set.
+//
+// This re-runs the match predicates, so callers that already know the rule
+// fires (classifyForMarker) may call it directly and ignore fired.
+func (r *CooldownPolicyRule) MatchDimension(err *BifrostError) (fired bool, dimension string) {
+	if r == nil || len(r.Match) == 0 || err == nil {
+		return false, ""
+	}
+	if r.Enabled != nil && !*r.Enabled {
+		return false, ""
+	}
+	if r.MatchModeOrDefault() == "all" {
+		for i := range r.Match {
+			if !r.Match[i].Matches(err) {
+				return false, ""
+			}
+		}
+		for i := range r.Match {
+			if d := r.Match[i].NormalizedDimension(); d != "" {
+				return true, d
+			}
+		}
+		return true, ""
+	}
+	for i := range r.Match {
+		if !r.Match[i].Matches(err) {
+			continue
+		}
+		fired = true
+		if d := r.Match[i].NormalizedDimension(); d != "" {
+			return true, d
+		}
+	}
+	return fired, ""
+}
+
 // ResolveCooldownPolicy returns the CooldownPolicy that should govern the
 // (provider, attempt) given to the cooldown plugin. The configured policy
 // always wins; nil CooldownPolicy falls back to DefaultCooldownPolicy so
@@ -982,11 +1098,14 @@ func ResolveCooldownPolicy(provider ModelProvider, configured *CooldownPolicy) *
 // (provider create/update) so a mistake is visible immediately instead of
 // showing up later as a wrong cooldown kind — or as no cooldown at all.
 //
-// Two checks today:
+// Two structural checks plus the dimension-TTL bounds:
 //
 //  1. retry_after_mode must be one of "" / "off" / "cap" / "exact"
 //     (case-insensitive). A typo would otherwise silently behave like "off".
 //  2. A quota rule that matches on a bare status code.
+//  3. rpm_ttl_seconds / tpm_ttl_seconds must be non-negative and may only be
+//     set on the rate_limit rule (they select a TTL for a rate-limit
+//     dimension, which quota marks do not have).
 //
 // Quota is evaluated BEFORE rate_limit (see CooldownPlugin.classify), so a
 // bare {status_code: 429} claims every 429 — including all the transient
@@ -1021,21 +1140,77 @@ func (p *CooldownPolicy) Validate() error {
 				rule.name, rule.rule.RetryAfterMode,
 			)
 		}
-	}
-	if p.Quota == nil {
-		return nil
-	}
-	for i, m := range p.Quota.Match {
-		if !m.IsBareStatusMatch() {
-			continue
+		if rule.rule.RPMTTLSeconds < 0 {
+			return fmt.Errorf(
+				"cooldown_policy.%s.rpm_ttl_seconds %d is invalid; must be >= 0 (0 falls back to ttl_seconds)",
+				rule.name, rule.rule.RPMTTLSeconds,
+			)
 		}
-		return fmt.Errorf(
-			"cooldown_policy.quota.match[%d] matches any %d response regardless of body; "+
-				"quota is evaluated before rate_limit, so this rule shadows every rate_limit rule "+
-				"and mislabels transient rate limits as quota exhaustion. "+
-				"Add message_contains, type, or code to target only genuine quota errors",
-			i, *m.StatusCode,
-		)
+		if rule.rule.TPMTTLSeconds < 0 {
+			return fmt.Errorf(
+				"cooldown_policy.%s.tpm_ttl_seconds %d is invalid; must be >= 0 (0 falls back to ttl_seconds)",
+				rule.name, rule.rule.TPMTTLSeconds,
+			)
+		}
+		if rule.name == "quota" && (rule.rule.RPMTTLSeconds != 0 || rule.rule.TPMTTLSeconds != 0) {
+			return fmt.Errorf(
+				"cooldown_policy.quota.rpm_ttl_seconds / tpm_ttl_seconds are only valid on the rate_limit rule; " +
+					"a quota exhaustion is not a request- or token-rate window, so the dimension split does not apply",
+			)
+		}
+		for i := range rule.rule.Match {
+			dim := rule.rule.Match[i].NormalizedDimension()
+			switch dim {
+			case "", CooldownDimensionRPM, CooldownDimensionTPM:
+				// valid ("" = derive automatically from the error body)
+			default:
+				return fmt.Errorf(
+					"cooldown_policy.%s.match[%d].dimension %q is invalid; must be %q, %q, or empty for automatic detection",
+					rule.name, i, rule.rule.Match[i].Dimension, CooldownDimensionRPM, CooldownDimensionTPM,
+				)
+			}
+			if rule.name == "quota" && dim != "" {
+				return fmt.Errorf(
+					"cooldown_policy.quota.match[%d].dimension is only valid on the rate_limit rule; "+
+						"a quota exhaustion is not a request- or token-rate window, so pinning a dimension there has no effect",
+					i,
+				)
+			}
+		}
+	}
+	if p.Quota != nil {
+		for i, m := range p.Quota.Match {
+			if !m.IsBareStatusMatch() {
+				continue
+			}
+			return fmt.Errorf(
+				"cooldown_policy.quota.match[%d] matches any %d response regardless of body; "+
+					"quota is evaluated before rate_limit, so this rule shadows every rate_limit rule "+
+					"and mislabels transient rate limits as quota exhaustion. "+
+					"Add message_contains, type, or code to target only genuine quota errors",
+				i, *m.StatusCode,
+			)
+		}
+	}
+	if p.Capacity != nil {
+		if err := p.Capacity.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
+	}
+	if p.Escalation != nil {
+		if err := p.Escalation.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
+	}
+	if p.Learning != nil {
+		if err := p.Learning.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
+	}
+	if p.Health != nil {
+		if err := p.Health.Validate(); err != nil {
+			return fmt.Errorf("cooldown_policy.%w", err)
+		}
 	}
 	return nil
 }

@@ -1184,6 +1184,10 @@ func TestSchemaProviderCooldownConfig(t *testing.T) {
 			"scope": "provider_model",
 			"action": "fallback"
 		},
+		"escalation": {
+			"enabled": true,
+			"max_multiplier": 2
+		},
 		"learning": {
 			"enabled": true,
 			"window_seconds": 60,
@@ -1239,6 +1243,15 @@ func TestSchemaProviderCooldownConfig(t *testing.T) {
 				"ttl_overrides": {"openai": 300},
 				"quota_patterns": ["insufficient_quota"],
 				"capacity": {"enabled": true, "token_limit": 1000, "action": "explode"}
+			}`),
+		},
+		{
+			name: "escalation max_multiplier above the maximum is rejected",
+			config: providerCooldownPluginConfig(`{
+				"default_ttl_seconds": 600,
+				"ttl_overrides": {"openai": 300},
+				"quota_patterns": ["insufficient_quota"],
+				"escalation": {"enabled": true, "max_multiplier": 99}
 			}`),
 		},
 		{
@@ -1467,6 +1480,47 @@ func TestSchemaProviderCooldownPolicy(t *testing.T) {
 		}
 	})
 
+	t.Run("dimension TTLs on rate_limit are accepted", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"rpm_ttl_seconds": 90,
+							"tpm_ttl_seconds": 40
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected dimension TTLs to validate, got: %v", err)
+		}
+	})
+
+	t.Run("negative dimension TTL is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"sensenova": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"rate_limit": {
+							"match": [{"status_code": 429}],
+							"ttl_seconds": 30,
+							"rpm_ttl_seconds": -1
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("negative rpm_ttl_seconds must be rejected")
+		}
+	})
+
 	t.Run("match array is required", func(t *testing.T) {
 		cfg := `{
 			"providers": {
@@ -1585,6 +1639,117 @@ func TestSchemaProviderCooldownPolicy(t *testing.T) {
 		}`
 		if err := validateConfig(t, compiled, cfg); err == nil {
 			t.Error("invalid retry_after_mode must be rejected by the enum")
+		}
+	})
+
+	t.Run("capability sections on a provider policy accept", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"capacity": {
+							"enabled": true,
+							"token_limit": 200000,
+							"request_limit": 500,
+							"window_seconds": 60,
+							"headroom": 0.9,
+							"scope": "provider_model",
+							"action": "fallback"
+						},
+						"escalation": {"enabled": true, "max_multiplier": 2},
+						"learning": {
+							"enabled": true,
+							"window_seconds": 120,
+							"max_samples": 50,
+							"min_samples": 5
+						}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected provider capability sections to validate, got: %v", err)
+		}
+	})
+
+	t.Run("capacity enabled=false with no limits accepts", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"capacity": {"enabled": false}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err != nil {
+			t.Errorf("expected an explicitly disabled capacity section to validate, got: %v", err)
+		}
+	})
+
+	t.Run("provider capacity window below the minimum is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"capacity": {"enabled": true, "token_limit": 1000, "window_seconds": 1}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("provider capacity window_seconds: 1 must be rejected")
+		}
+	})
+
+	t.Run("provider escalation max_multiplier above the maximum is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"escalation": {"enabled": true, "max_multiplier": 99}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("provider escalation max_multiplier: 99 must be rejected")
+		}
+	})
+
+	t.Run("provider learning min_samples above the maximum is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"learning": {"enabled": true, "min_samples": 1000}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("provider learning min_samples: 1000 must be rejected")
+		}
+	})
+
+	t.Run("unknown provider capacity key is rejected", func(t *testing.T) {
+		cfg := `{
+			"providers": {
+				"openai": {
+					"keys": [{"name": "k1", "weight": 1, "models": ["m1"]}],
+					"cooldown_policy": {
+						"capacity": {"enabled": true, "token_limit": 1000, "token_budget": 5}
+					}
+				}
+			}
+		}`
+		if err := validateConfig(t, compiled, cfg); err == nil {
+			t.Error("unknown provider capacity key must be rejected by additionalProperties:false")
 		}
 	})
 }

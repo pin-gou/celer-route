@@ -443,7 +443,12 @@ func TestGetCooldownLearnedLimits_WithSamples(t *testing.T) {
 	}
 	body := string(ctx.Response.Body())
 	for _, want := range []string{
-		`"count":1`,
+		// Every rejection is reported at both learning levels: the aggregate
+		// (provider_model) entry and the credential that hit it (key_model).
+		`"count":2`,
+		`"scope":"provider_model"`,
+		`"scope":"key_model"`,
+		`"key_name":"secret-key-name"`,
 		`"window_seconds":60`,
 		`"provider":"openai"`,
 		`"model":"gpt-4o"`,
@@ -457,10 +462,124 @@ func TestGetCooldownLearnedLimits_WithSamples(t *testing.T) {
 			t.Fatalf("expected %s in body, got %s", want, body)
 		}
 	}
-	// No key material may leak through the report.
-	for _, forbidden := range []string{"secret-key-id", "secret-key-name", "key_id"} {
+	// No key material may leak through the report. The credential's display
+	// name is a label the operator wrote, and it is required to attribute a
+	// per-key suggestion; the credential ID stays internal.
+	for _, forbidden := range []string{"secret-key-id", `"key_id"`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("report must not contain %q, got %s", forbidden, body)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// getCapacityUsage (GET /api/plugins/provider-cooldown/capacity-usage)
+// -----------------------------------------------------------------------------
+
+func TestGetCooldownCapacityUsage_PluginNotLoaded(t *testing.T) {
+	h := NewCooldownHandler(func() *providercooldown.CooldownPlugin { return nil })
+	ctx := newCooldownCtx(nil)
+	h.getCapacityUsage(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusBadRequest {
+		t.Fatalf("expected 400 when plugin not loaded, got %d", got)
+	}
+	if !strings.Contains(string(ctx.Response.Body()), "provider-cooldown plugin is not loaded") {
+		t.Fatalf("expected plugin-not-loaded message, got %s", ctx.Response.Body())
+	}
+}
+
+// TestGetCooldownCapacityUsage_Empty pins that a loaded plugin with no traffic
+// returns 200 with entries as an empty array, never null: the monitoring UI
+// iterates the field unconditionally.
+func TestGetCooldownCapacityUsage_Empty(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	h := newCooldownHandlerWithPlugin(plugin)
+
+	ctx := newCooldownCtx(nil)
+	h.getCapacityUsage(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	for _, want := range []string{
+		`"plugin":"provider-cooldown"`,
+		`"count":0`,
+		`"entries":[]`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in body, got %s", want, body)
+		}
+	}
+}
+
+// TestGetCooldownCapacityUsage_WithUsage pins the response shape once the gate
+// has accounted a real request: usage, limits, thresholds, headroom, window,
+// scope and source all round-trip through the HTTP response.
+func TestGetCooldownCapacityUsage_WithUsage(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+	if err := plugin.Init(map[string]any{
+		"capacity": map[string]any{
+			"enabled":        true,
+			"token_limit":    1000,
+			"request_limit":  100,
+			"window_seconds": 60,
+			"headroom":       0.9,
+			"scope":          "provider_model",
+		},
+	}); err != nil {
+		t.Fatalf("Init returned an error: %v", err)
+	}
+
+	// One successful request burns 900 real tokens, exactly the threshold
+	// (1000 * 0.9), so the gate reports a Retry-After of a full window.
+	usageCtx := schemas.NewBifrostContext(nil, time.Time{})
+	resp := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			Usage: &schemas.BifrostLLMUsage{TotalTokens: 900},
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType: schemas.ChatCompletionRequest,
+				RoutingInfo: schemas.RoutingInfo{Provider: schemas.OpenAI, Model: "gpt-4o"},
+			},
+		},
+	}
+	if _, _, err := plugin.PostLLMHook(usageCtx, resp, nil); err != nil {
+		t.Fatalf("PostLLMHook returned an error: %v", err)
+	}
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(nil)
+	h.getCapacityUsage(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	for _, want := range []string{
+		`"count":1`,
+		`"provider":"openai"`,
+		`"model":"gpt-4o"`,
+		`"scope":"provider_model"`,
+		`"window_seconds":60`,
+		`"used_tokens":900`,
+		`"used_requests":1`,
+		`"token_limit":1000`,
+		`"request_limit":100`,
+		`"headroom":0.9`,
+		`"threshold_tokens":900`,
+		`"threshold_requests":90`,
+		// The exact value depends on which wall-clock second the snapshot
+		// lands in (59 or 60), so only presence is pinned here; the precise
+		// semantics are covered deterministically by the plugin's fake-clock
+		// tests.
+		`"retry_after_seconds":`,
+		`"source":"default"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in body, got %s", want, body)
 		}
 	}
 }
@@ -561,5 +680,88 @@ func TestGetStats_IncludesPerProviderModel(t *testing.T) {
 	}
 	if !strings.Contains(body, `"claude-3"`) {
 		t.Fatalf("expected claude-3 model key in per_provider_model, got %s", body)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// getStats — per_key
+// -----------------------------------------------------------------------------
+
+// TestGetStats_IncludesPerKey pins the per-key block: keys are
+// "<provider>::<keyID>" and each row carries the mark / suppressed / success
+// counters plus the two timestamps and the remaining cooldown.
+func TestGetStats_IncludesPerKey(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+
+	// k-a: marked once, then suppressed once.
+	plugin.State.MarkWithTTL(schemas.OpenAI, "k-a", "", time.Minute, providercooldown.CooldownKindRateLimit, schemas.CooldownScopeKey)
+	filter := plugin.State.AsFilter(nil)
+	if _, err := filter(nil, schemas.OpenAI, "gpt-4o", []schemas.Key{{ID: "k-a"}, {ID: "k-cold"}}); err != nil {
+		t.Fatalf("filter: %v", err)
+	}
+
+	// k-b: served one successful request.
+	successCtx := schemas.NewBifrostContext(nil, time.Time{})
+	successCtx.SetValue(schemas.BifrostContextKeyAttemptTrail, []schemas.KeyAttemptRecord{
+		{Attempt: 1, KeyID: "k-b", KeyName: "k-b"},
+	})
+	successResp := &schemas.BifrostResponse{
+		ChatResponse: &schemas.BifrostChatResponse{
+			ExtraFields: schemas.BifrostResponseExtraFields{
+				RequestType: schemas.ChatCompletionRequest,
+				RoutingInfo: schemas.RoutingInfo{Provider: schemas.OpenAI, Model: "gpt-4o"},
+			},
+		},
+	}
+	if _, _, err := plugin.PostLLMHook(successCtx, successResp, nil); err != nil {
+		t.Fatalf("PostLLMHook: %v", err)
+	}
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(nil)
+	h.getStats(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	body := string(ctx.Response.Body())
+	for _, want := range []string{
+		`"per_key":{`,
+		`"openai::k-a":{`,
+		`"mark_count":1,"suppressed_count":1,"success_count":0`,
+		`"openai::k-b":{`,
+		`"mark_count":0,"suppressed_count":0,"success_count":1`,
+		`"last_mark_at":`,
+		`"last_success_at":`,
+		`"cooldown_remaining":`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in body, got %s", want, body)
+		}
+	}
+	// The key that never cooled down and never served a request must not
+	// appear at all — per_key is sparse, not a full cross-product.
+	if strings.Contains(body, `"openai::k-cold"`) {
+		t.Fatalf("untouched key must not appear in per_key, got %s", body)
+	}
+}
+
+// TestGetStats_PerKeyAlwaysPresent pins that per_key is emitted as an empty
+// object (never null) when no traffic has been observed, so clients can
+// iterate it unconditionally.
+func TestGetStats_PerKeyAlwaysPresent(t *testing.T) {
+	plugin := providercooldown.NewPlugin(nil)
+	defer plugin.Cleanup()
+
+	h := newCooldownHandlerWithPlugin(plugin)
+	ctx := newCooldownCtx(nil)
+	h.getStats(ctx)
+
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", got, ctx.Response.Body())
+	}
+	if body := string(ctx.Response.Body()); !strings.Contains(body, `"per_key":{}`) {
+		t.Fatalf("expected an empty per_key object, got %s", body)
 	}
 }

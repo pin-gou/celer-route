@@ -56,6 +56,7 @@ vi.mock("@/lib/store/apis/pluginsApi", async (importOriginal) => {
 		useGetCooldownStateQuery: () => ({ data: { state: [] }, isLoading: false }),
 		useGetCooldownStatsQuery: () => ({ data: { stats: { markCount: 0, suppressedCount: 0, activeCount: 0 } }, isLoading: false }),
 		useUnfreezeCooldownMutation: () => [vi.fn(), { isLoading: false }],
+		useGetCapacityUsageQuery: () => ({ data: { plugin: "provider-cooldown", count: 0, entries: [] }, isLoading: false }),
 		useGetRtkStatsQuery: () => ({
 			data: {
 				stats: {
@@ -183,6 +184,11 @@ describe("PluginsView — dispatch logic (task 11.2)", () => {
 
 		// The provider-cooldown fragment renders the enabled switch at minimum
 		expect(screen.getByTestId("providercooldown-enabled-switch")).toBeTruthy();
+		// The fleet default policies section only carries escalation + learning;
+		// the capacity gate is configured per provider, never plugin-wide.
+		expect(screen.getByText("providerCooldown.capabilityDefaultsTitle")).toBeTruthy();
+		expect(screen.getByTestId("providercooldown-escalation-enabled")).toBeTruthy();
+		expect(screen.queryByTestId("providercooldown-capacity-enabled")).toBeNull();
 	});
 
 	it("renders RtkFragment when selectedPlugin.name is 'rtk'", () => {

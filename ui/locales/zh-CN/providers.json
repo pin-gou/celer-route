@@ -578,6 +578,10 @@
 			},
 			"ttlLabel": "冷却时长（秒）",
 			"ttlDescription": "命中的 key 进入冷却的秒数；冷却期间不会被路由选中。",
+			"rpmTtlLabel": "请求速率冷却（秒，可选）",
+			"rpmTtlDescription": "命中请求速率（RPM/RPS）限流时的冷却时长。留空则使用上方的冷却时长。若请求速率额度被本网关之外的流量占用，建议设置得更长。",
+			"tpmTtlLabel": "词元速率冷却（秒，可选）",
+			"tpmTtlDescription": "命中词元速率（TPM）限流时的冷却时长。留空则使用上方的冷却时长。",
 			"retryAfterMode": {
 				"label": "时长来源",
 				"description": "固定时长只按下面填写的秒数冷却。参考提示且不超过设定时长：提供商给出的重试时间更短时采用它。完全按提示：直接采用提供商给出的时间，可能变长也可能变短。",
@@ -599,17 +603,29 @@
 				"statusCodePlaceholder": "请输入 HTTP 状态码（可选）",
 				"messageContains": "消息包含（任一命中，可选）",
 				"type": "错误类型（精确匹配，可选）",
-				"code": "错误代码（精确匹配，可选)"
+				"code": "错误代码（精确匹配，可选)",
+				"dimension": "限流维度",
+				"dimensionDescription": "命中后按哪个上游额度选择冷却时长。自动：根据提供商的错误体（错误代码 / 类型 / 消息）判定是请求速率还是词元速率；若错误体没有说明，则沿用「冷却时长」。请求速率 / 词元速率：强制按该维度冷却，适合你明确知道这条规则只针对某种限流的情况。只对速率限制规则生效。",
+				"dimensionAuto": "自动（按错误体判定）",
+				"dimensionRPM": "请求速率（RPM/RPS）",
+				"dimensionTPM": "词元速率（TPM）",
+				"dimensionAutoPreview": "自动判定：{{dimension}}",
+				"dimensionValue_rpm": "请求速率",
+				"dimensionValue_tpm": "词元速率",
+				"dimensionValue_unknown": "无法判定（沿用冷却时长）",
+				"dimensionNoTTL": "已固定为{{field}}维度，但未配置对应的冷却时长，将沿用「冷却时长」。"
 			},
 			"clear": "清除自定义策略",
+			"restoreDefault": "恢复全局默认",
+			"restoreDefaultHint": "将清除该提供商的全部冷却策略覆盖，包括三项高级能力。",
 			"cancel": "取消",
 			"save": "保存冷却策略",
 			"errorSample": {
-				"title": "错误样本",
+				"title": "从错误生成规则",
 				"loading": "正在加载错误样本...",
 				"error": "加载错误样本失败",
 				"noErrors": "此时间窗内暂无错误记录。",
-				"tryChangingWindow": "可尝试切换到 24 小时窗口查看。",
+				"tryChangingWindow": "可切换到 24 小时窗口查看。",
 				"totalErrors": "共 {{count}} 条错误",
 				"apply": "应用",
 				"windowOptions": {
@@ -621,7 +637,9 @@
 				"toast": {
 					"applied": "已将错误样本作为新匹配项添加",
 					"skippedInvalidStatusCode": "已忽略错误样本中无效的 HTTP 状态码（仅接受 100–599），本次匹配项已通过错误类型 / 代码 / 消息添加。"
-				}
+				},
+				"description": "列出该提供商当前的错误形态。点击「应用」可把一条错误直接写成冷却规则的匹配项。",
+				"updatedAt": "更新于 {{time}}"
 			},
 			"typeSelect": {
 				"selectPlaceholder": "选择已知值…",
@@ -636,7 +654,7 @@
 			}
 		},
 		"providerUsage": {
-			"title": "容量水位",
+			"title": "用量分布",
 			"description": "按模型 × API Key 统计的近期消耗。请求数为上游尝试次数，包含 fallback 重试。",
 			"windowOptions": {
 				"1h": "最近 1 小时",
@@ -663,15 +681,7 @@
 				"avgTokens": "平均词元",
 				"cancelledNote": "取消 {{count}}"
 			},
-			"baseline": {
-				"title": "基线：错误 Top 3",
-				"totalErrors": "共 {{count}} 条错误",
-				"loading": "正在加载错误基线...",
-				"error": "加载错误基线失败。",
-				"empty": "此时间窗内暂无错误。",
-				"unknown": "未知错误",
-				"count": "{{count}}×"
-			}
+			"updatedAt": "更新于 {{time}}"
 		},
 		"performance": {
 			"concurrency": "并发数",

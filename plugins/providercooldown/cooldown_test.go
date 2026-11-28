@@ -70,6 +70,19 @@ func (l *testLogger) count() int {
 	return len(l.msgs)
 }
 
+// warnCount counts the lines emitted at warn level.
+func (l *testLogger) warnCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, m := range l.msgs {
+		if strings.HasPrefix(m, "warn ") {
+			n++
+		}
+	}
+	return n
+}
+
 func (l *testLogger) Fatal(msg string, args ...any)          { l.record("fatal", msg, args) }
 func (l *testLogger) SetLevel(schemas.LogLevel)              {}
 func (l *testLogger) SetOutputType(schemas.LoggerOutputType) {}

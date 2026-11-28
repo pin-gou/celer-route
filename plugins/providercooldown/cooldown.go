@@ -2,6 +2,7 @@ package providercooldown
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -154,27 +155,57 @@ type CooldownState struct {
 	ttlOverrides map[schemas.ModelProvider]time.Duration
 
 	// escalation, when non-nil, enables adaptive TTL escalation (see
-	// escalation.go). Nil — the default — means the whole subsystem is inert:
-	// no extra state is read, no TTL is scaled, and the Mark path is unchanged.
+	// escalation.go). It is created eagerly only when the plugin-level
+	// default enables it; a state where only some providers enable escalation
+	// through their own CooldownPolicy creates it lazily on the first mark
+	// that needs it. Nil plus an inert defaults.escalation means the whole
+	// subsystem stays inert: no extra state is read, no TTL is scaled, and the
+	// Mark path is unchanged.
 	escalation *escalationState
 
-	// capacity, when non-nil, enables the retrospective budget gate (see
-	// capacity.go). Nil — the default — means the whole subsystem is inert:
-	// no windows are allocated, no lock is taken, and no request is gated.
-	// Stored in an atomic pointer so Init can swap a state's gate while
-	// requests are in flight without a lock on the read path.
-	capacity atomic.Pointer[capacityGate]
+	// health, when non-nil, holds the per-(provider, key, model) EWMA success
+	// rates used by health-aware key weighting (see health.go). It is created
+	// lazily by the first observation of a provider whose effective health
+	// section is enabled, so a deployment with the feature off keeps it nil
+	// and every entry point short-circuits. Guarded by c.mu.
+	health *healthState
 
-	// learning, when non-nil, enables the read-only limit learner (see
-	// learn.go). Nil — the default — means the whole subsystem is inert:
-	// no samples are collected, no observer window is allocated, and no
-	// configuration is ever touched. The learner only produces a report.
-	learning atomic.Pointer[limitLearner]
+	// defaults holds the plugin-level (default) capacity / escalation /
+	// learning / health sections. A provider's own CooldownPolicy section
+	// replaces the matching default wholesale; nil or a section that is not
+	// configured falls back to these defaults.
+	defaults capabilityDefaults
+
+	// capacity, when non-nil, is the DEFAULT capacity gate built from
+	// defaults.capacity (see capacity.go). Providers whose effective capacity
+	// spec differs get their own gate from capacityRegistry. Stored in an
+	// atomic pointer so a reconfiguration can swap it without a lock on the
+	// read path.
+	capacity              atomic.Pointer[capacityGate]
+	defaultCapacitySpec   capacitySpec
+	defaultCapacityActive bool
+	capacityRegistry      sync.Map // schemas.ModelProvider -> *capacityHolder
+
+	// learning, when non-nil, is the DEFAULT limit learner built from
+	// defaults.learning (see learn.go). Providers whose effective learning
+	// spec differs get their own learner from learningRegistry.
+	learning              atomic.Pointer[limitLearner]
+	defaultLearningSpec   learningSpec
+	defaultLearningActive bool
+	learningRegistry      sync.Map // schemas.ModelProvider -> *learnerHolder
 
 	// now is the time source used by the state. Nil means time.Now. Tests
 	// inject a fake clock here; production never mutates it. It must not be
 	// swapped while the state is in concurrent use.
 	now func() time.Time
+
+	// randFloat supplies the [0, 1) draw used to jitter the chronic long
+	// backoff. Nil means "use the state-owned rng below". Tests inject a fixed
+	// value to pin exact TTLs. Both fields are only touched by the mark path,
+	// which holds c.mu (write), so they need no separate lock and are never
+	// read from a concurrent reader.
+	randFloat func() float64
+	rng       *rand.Rand
 
 	// Lifetime totals (atomic; cover all kinds including unclassified).
 	markCount       atomic.Uint64
@@ -212,6 +243,14 @@ type CooldownState struct {
 	// every provider (modulo unclassified legacy marks, which contribute
 	// to neither sub-bucket). Guarded by c.mu (RWMutex).
 	perProviderScopeModel map[schemas.ModelProvider]*ProviderKindCounters
+
+	// perKey holds the per-(provider, key_id) observability counters (mark /
+	// suppressed / success plus their last-seen timestamps). It is a pure
+	// observation layer: nothing reads it to make a routing decision, it only
+	// reports what the existing mark / suppress / success paths already did.
+	// Guarded by c.mu (RWMutex); pruned by the same GC tick that prunes
+	// the escalation tables (see cleanupPerKeyStatsLocked).
+	perKey map[perKeyID]*perKeyEntry
 }
 
 // NewCooldownState returns a CooldownState with the given default TTL.
@@ -228,6 +267,7 @@ func NewCooldownState(ttl time.Duration) *CooldownState {
 		perProviderModel:      make(map[string]*ProviderKindCounters),
 		perProviderScopeKey:   make(map[schemas.ModelProvider]*ProviderKindCounters),
 		perProviderScopeModel: make(map[schemas.ModelProvider]*ProviderKindCounters),
+		perKey:                make(map[perKeyID]*perKeyEntry),
 	}
 }
 
@@ -462,6 +502,11 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 // effective TTL (the configured default or per-provider override), preserving
 // the behaviour of Mark.
 //
+// This is the policy-less entry point: escalation uses the plugin default. The
+// plugin's own paths (the per-key marker and PostLLMHook) call markWithPolicy
+// with the provider's stamped CooldownPolicy instead, so a provider can carry
+// its own escalation section.
+//
 // For keyless providers (schemas.IsKeylessProvider, e.g. bare `opencode`),
 // an empty keyID is the legal sentinel key returned by bifrost's
 // GetKeysForProvider; the mark is then recorded against the whole provider
@@ -476,12 +521,32 @@ func (c *CooldownState) Mark(provider schemas.ModelProvider, keyID string) {
 // (the filter only consults the model granularity when the runtime model is
 // non-empty), so the mark is skipped rather than recorded as a dead entry.
 func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string, model string, ttl time.Duration, kind CooldownKind, scope schemas.CooldownPolicyScope) {
+	c.markWithPolicy(nil, provider, keyID, model, ttl, kind, scope)
+}
+
+// markWithPolicy is MarkWithTTL with an explicit per-provider policy. A nil
+// policy means "use the plugin defaults".
+func (c *CooldownState) markWithPolicy(policy *schemas.CooldownPolicy, provider schemas.ModelProvider, keyID string, model string, ttl time.Duration, kind CooldownKind, scope schemas.CooldownPolicyScope) {
+	if c == nil {
+		return
+	}
 	if keyID == "" && !schemas.IsKeylessProvider(provider) {
 		return
 	}
 	if scope.OrDefault() == schemas.CooldownScopeModel && model == "" {
 		return
 	}
+	// Resolve the effective escalation section before taking the lock. The
+	// registry/defaults are immutable after construction, so this is a couple
+	// of pointer reads; when escalation is off for this provider the mark path
+	// stays byte-for-byte the pre-escalation behaviour.
+	maxMultiplier, escalate := c.defaults.escalationMaxMultiplier(policy)
+	// Chronic long-backoff is a SUB-section of escalation: chronicActive is
+	// false unless the effective escalation section is enabled AND its chronic
+	// block is enabled. Resolving it here keeps the disabled case at two
+	// pointer reads with no lock and no clock read.
+	chronic, chronicActive := c.defaults.chronicSpec(policy)
+
 	c.mu.Lock()
 	effective := ttl
 	if effective <= 0 {
@@ -491,14 +556,37 @@ func (c *CooldownState) MarkWithTTL(provider schemas.ModelProvider, keyID string
 	// Escalation is applied after the base TTL (including any retry_after_mode
 	// resolution) has been computed, so the two features compose: the mode
 	// decides the base, then the multiplier stretches it, then the 1h ceiling
-	// bounds it. With escalation disabled this is a single nil check.
-	if c.escalation != nil {
-		effective = c.escalation.applyLocked(provider, keyID, model, scope, effective, now)
+	// bounds it. With escalation disabled for this provider this branch is
+	// skipped entirely.
+	if escalate {
+		es := c.ensureEscalationLocked()
+		// The storm signal is judged with the persistent-failure semantics
+		// only when the chronic section is active for this provider: with
+		// chronic off no key is chronically unhealthy, so the signal keeps its
+		// historical meaning (and the deployment stays byte-for-byte
+		// identical to the pre-B4 behaviour). The policy is a plain value, so
+		// passing it down the mark path allocates nothing.
+		storm := stormSignalPolicy{persistence: chronicActive, state: c, spec: chronic}
+		effective = es.applyLocked(provider, keyID, model, scope, effective, maxMultiplier, now, storm)
+	}
+	// Chronic backoff runs AFTER escalation on purpose: applyLocked's counter
+	// advance and storm-window recording are the side effects that keep the
+	// escalation state self-consistent, so a chronic key keeps counting its
+	// failures. When the chronic latch is released (after recovery_successes
+	// consecutive successes) the success path clears those counters, so the next
+	// failure starts a fresh, non-stale count. The TTL returned by applyLocked
+	// is only a floor here: the chronic value replaces it when it is longer.
+	if chronicActive {
+		effective = c.applyChronicTTLLocked(provider, keyID, model, chronic, effective, now)
 	}
 	c.cooldowns[c.markKey(provider, keyID, model, scope)] = CooldownRecord{
 		expiresAt: now.Add(effective),
 		kind:      kind,
 	}
+	// Per-key observation: record the mark against the key it belongs to so
+	// the stats endpoint can attribute cooldowns per credential instead of
+	// only per provider. Purely additive — it changes no decision here.
+	c.recordPerKeyMarkLocked(provider, keyID, now)
 	idx := kindIndex(kind)
 	c.markByKind[idx].Add(1)
 	if kind == CooldownKindRateLimit {
@@ -701,15 +789,25 @@ func (c *CooldownState) ClearKey(provider schemas.ModelProvider, keyID string, m
 //     全来自 key-scope 命中"). For every provider the two sub-buckets sum
 //     to PerProvider (modulo unclassified legacy marks, which contribute to
 //     neither sub-bucket because they have no kind).
+//   - PerKey is the same observation broken down per (provider, key_id),
+//     keyed by "<provider>::<keyID>". It carries the mark / suppressed /
+//     success counters plus the remaining time on the key's longest active
+//     cooldown, so an operator can tell "which key is paying for it"
+//     instead of only "which provider".
+//   - ChronicKeyCount is the number of distinct (provider, key_id) pairs with
+//     at least one health row currently latched in chronic long-backoff. It is
+//     zero unless escalation.chronic is enabled for some provider.
 type CooldownStats struct {
 	MarkCount             uint64                                         `json:"mark_count"`
 	SuppressedCount       uint64                                         `json:"suppressed_count"`
 	CurrentActiveCount    int                                            `json:"current_active_count"`
+	ChronicKeyCount       int                                            `json:"chronic_key_count"`
 	ByKind                ByKindCounters                                 `json:"by_kind"`
 	PerProvider           map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider"`
 	PerProviderModel      map[string]ProviderKindCounters                `json:"per_provider_model,omitempty"`
 	PerProviderScopeKey   map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider_scope_key,omitempty"`
 	PerProviderScopeModel map[schemas.ModelProvider]ProviderKindCounters `json:"per_provider_scope_model,omitempty"`
+	PerKey                map[string]PerKeyStats                         `json:"per_key,omitempty"`
 }
 
 // Stats returns the lifetime counters and the current number of active
@@ -734,6 +832,12 @@ func (c *CooldownState) Stats() CooldownStats {
 			},
 		},
 	}
+	// The per-key rows carry the remaining time of the key's longest active
+	// cooldown. That value is taken from Snapshot() — the same source the
+	// GET /state endpoint serves — so the two views can never disagree.
+	// Snapshot() takes its own read lock, so it has to run BEFORE this
+	// method takes c.mu: sync.RWMutex is not reentrant.
+	remaining := perKeyRemainingByKey(c.Snapshot())
 	c.mu.RLock()
 	stats.CurrentActiveCount = len(c.cooldowns)
 	stats.PerProvider = make(map[schemas.ModelProvider]ProviderKindCounters, len(c.perProvider))
@@ -752,6 +856,8 @@ func (c *CooldownState) Stats() CooldownStats {
 	for p, pc := range c.perProviderScopeModel {
 		stats.PerProviderScopeModel[p] = *pc
 	}
+	stats.PerKey = c.perKeyStatsSnapshot(remaining)
+	stats.ChronicKeyCount = c.chronicKeyCountLocked()
 	c.mu.RUnlock()
 	return stats
 }
@@ -781,6 +887,11 @@ func (c *CooldownState) runGCLocked(logger schemas.Logger, interval time.Duratio
 			if c.escalation != nil {
 				c.escalation.cleanupLocked(now)
 			}
+			// The per-key observability rows are pruned on the same tick as
+			// the escalation tables, so every in-memory table of this state
+			// shares one bounded cadence.
+			c.cleanupPerKeyStatsLocked(now)
+			c.cleanupHealthLocked(now)
 			c.mu.Unlock()
 			if pruned > 0 && logger != nil {
 				logger.Debug("[provider-cooldown] GC pruned %d expired entries, %d remaining", pruned, remaining)
@@ -819,16 +930,55 @@ func (c *CooldownState) RunGC(logger schemas.Logger, stop <-chan struct{}) {
 // (incrementing the suppressed counters per key) is a quick
 // perProvider[provider][kind].Suppressed++ under a short write lock; in
 // practice this is uncontended because filter calls are not concurrent
-// with each other for the same provider.
+// with each other for the same provider. The per-key observation counter is
+// bumped in the same critical section, so a suppression still costs exactly
+// one short write lock.
+//
+// Optional health-aware weighting (see health.go): when the effective health
+// section for the provider is enabled, each surviving key's Weight is scaled by
+// its EWMA success rate (floored at min_weight_factor) on the returned copy.
+// When disabled — the default — the returned keys carry their configured
+// Weight unchanged.
 func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 	return func(ctx *schemas.BifrostContext, provider schemas.ModelProvider, model string, keys []schemas.Key) ([]schemas.Key, error) {
 		if len(keys) == 0 {
 			return keys, nil
 		}
 		out := make([]schemas.Key, 0, len(keys))
+		// The per-provider policy is resolved once per filter call; both the
+		// health section and the capacity gate read it.
+		policy := policyFromContext(ctx)
+		// Health-aware weighting is resolved once per filter call. An inert
+		// configuration (nil or disabled for this provider) leaves healthActive
+		// false and the whole subsystem is skipped, keeping the disabled path
+		// at the cost of two pointer reads.
+		healthSpec, healthActive := healthSpecOf(c.defaults.resolveHealth(policy))
+		// Per-key capacity gate (scope=key only). For every other scope — and
+		// for the default, fully disabled deployment — this resolves to nil, so
+		// the filter behaves exactly as before. Per-key suppression happens
+		// HERE rather than in PreProviderHook because only the filter knows
+		// which keys the worker is about to choose from: removing one key's
+		// exhausted budget leaves every other key selectable.
+		capacityGate := c.capacityGateForFilter(provider, policy)
+		// now is resolved lazily: the happy path (nothing suppressed) must not
+		// pay for a clock read, and one read covers every vetoed key in this
+		// call.
+		var now time.Time
+		nowResolved := false
 		for _, k := range keys {
 			_, kind, matchedScope, suppressed := c.lookupSuppressed(provider, k.ID, model)
 			if !suppressed {
+				if capacityGate != nil && capacityGate.checkKey(provider, k.ID, k.Name, model) != nil {
+					// This credential's own window is over budget. Rotate past
+					// it instead of refusing the request: the only request that
+					// has to be refused is the one no key can serve (handled in
+					// PreProviderHook). No cooldown counter is touched — this is
+					// a budget decision, not a cooldown suppression.
+					if logger != nil {
+						logger.Info("[provider-cooldown] capacity gate excluded key %s/%s (name=%s, model=%s, scope=key)", provider, k.ID, k.Name, model)
+					}
+					continue
+				}
 				out = append(out, k)
 				continue
 			}
@@ -840,7 +990,9 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 			// per-kind breakdown faithful to CooldownPolicy-driven marks.
 			if kind != "" {
 				c.suppressedByKind[idx].Add(1)
-				c.mu.Lock()
+			}
+			c.mu.Lock()
+			if kind != "" {
 				switch kind {
 				case CooldownKindRateLimit:
 					c.perProviderMarkLocked(provider).RateLimit.SuppressedCount++
@@ -870,8 +1022,17 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 						c.perProviderScopeMarkLocked(provider, schemas.CooldownScopeKey).Quota.SuppressedCount++
 					}
 				}
-				c.mu.Unlock()
 			}
+			// Per-key observation: the vetoed key itself gets the credit, so
+			// the stats endpoint can show which credential the filter keeps
+			// taking out of the rotation. Like the legacy suppressedCount
+			// above, this flat counter also covers unclassified marks.
+			if !nowResolved {
+				now = c.nowTime()
+				nowResolved = true
+			}
+			c.recordPerKeySuppressedLocked(provider, k.ID, now)
+			c.mu.Unlock()
 			if logger != nil {
 				logger.Info("[provider-cooldown] suppressed key %s/%s (name=%s, model=%s, kind=%s)", provider, k.ID, k.Name, model, kind)
 			}
@@ -885,6 +1046,14 @@ func (c *CooldownState) AsFilter(logger schemas.Logger) schemas.KeyPoolFilter {
 			if rem := c.ShortestRemainingCooldown(provider, model, keys); rem > 0 {
 				ctx.SetValue(schemas.BifrostContextKeyRetryAfterSeconds, retryAfterSecondsHint(rem))
 			}
+		}
+		// Health-aware weighting: scale every live key's Weight by its EWMA
+		// success rate so a chronically failing credential receives a smaller
+		// (never zero) share of the traffic. Suppressed keys are already out of
+		// `out`, so they are not weighted. This only edits the copies `out`
+		// already holds — the caller's slice is never mutated.
+		if healthActive {
+			c.applyHealthWeights(provider, model, out, healthSpec)
 		}
 		return out, nil
 	}
@@ -939,14 +1108,24 @@ func (c *CooldownState) AsMarker(logger schemas.Logger) schemas.PerKeyFailureMar
 		if !ok {
 			return
 		}
-		c.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
+		// Resolve the policy once and use it for both the mark (so the
+		// provider's own escalation section applies) and the learning sample
+		// (so the provider's own learning window applies).
+		policy := policyFromContext(ctx)
+		c.markWithPolicy(policy, provider, keyID, model, ttl, kind, scope)
+		// Health signal (optional, off by default): a policy-matched rejection
+		// is evidence that this credential is unhealthy at selection time.
+		// Only rate_limit / quota matches (the ok==true branch above) are
+		// recorded — an unrelated error would say nothing about a provider's
+		// throughput budget and must not depress the key's weight.
+		c.observe(policy, provider, keyID, model, false)
 		// Optional read-only learning (off by default): a rate-limit
 		// rejection brackets the provider's effective per-window token
 		// limit. Quota-classified rejections are deliberately NOT sampled —
 		// they are billing/entitlement failures, not a window limit, so
 		// they say nothing about the provider's TPM.
 		if kind == CooldownKindRateLimit {
-			c.observeRateLimit(ctx, provider, model, keyID, bifrostErr)
+			c.observeRateLimit(ctx, policy, provider, model, keyID, keyName, bifrostErr)
 		}
 		if logger != nil {
 			logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s) from per-key-failure marker", provider, keyID, keyName, model, ttl, kind, scope)
@@ -1030,10 +1209,19 @@ func (p *CooldownPlugin) Init(rawConfig any) error {
 	p.startGC()
 	if p.logger != nil {
 		escalationEnabled := cfg.Escalation != nil && cfg.Escalation.Enabled
+		chronicEnabled := escalationEnabled && cfg.Escalation.Chronic != nil && cfg.Escalation.Chronic.Enabled
 		capacityEnabled := cfg.Capacity.Active()
 		learningEnabled := cfg.Learning.Active()
-		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, capacity=%t, learning=%t)",
-			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, capacityEnabled, learningEnabled)
+		healthEnabled := cfg.Health.Active()
+		p.logger.Info("[provider-cooldown] initialized (default_ttl=%v, %d provider override(s), %d custom quota pattern(s), escalation=%t, chronic=%t, capacity=%t, learning=%t, health=%t; providers without their own cooldown_policy section inherit these defaults)",
+			p.State.ttl, len(p.State.ttlOverrides), len(p.quotaPatterns), escalationEnabled, chronicEnabled, capacityEnabled, learningEnabled, healthEnabled)
+		// The plugin-level capacity section is a deprecated fleet-wide default:
+		// one global limit inherited by every provider without an override. Warn
+		// once at startup (only when the section is actually present) so
+		// operators still relying on it know to move to per-provider config.
+		if cfg.Capacity != nil {
+			p.logger.Warn("[provider-cooldown] plugin-level capacity config is a deprecated fleet default; configure capacity per provider (provider.cooldown_policy.capacity). It still applies to providers without an override.")
+		}
 	}
 	return nil
 }
@@ -1175,8 +1363,17 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 
 	// Retrospective capacity gate (optional, off by default). Accounting uses
 	// real usage only, so this check never estimates tokens or reads the
-	// request body. A nil gate (the default) costs exactly one pointer check.
-	if gate := p.State.capacityGate(); gate != nil {
+	// request body. The gate is resolved per provider: a provider's own
+	// CooldownPolicy capacity section wins over the plugin default, and the
+	// default-off case costs one pointer walk and one nil check.
+	//
+	// The provider / provider_model scopes decide on (provider[, model])
+	// alone, so they are evaluated here, before the key pool is consulted. The
+	// per-key scope needs the pool and is evaluated further down, once the
+	// keys are known.
+	policy := policyFromContext(ctx)
+	gate := p.State.gateFor(provider, policy)
+	if gate != nil && gate.scope != CapacityScopeKey {
 		if sc := p.capacityShortCircuit(ctx, gate, provider, model); sc != nil {
 			return req, sc, nil
 		}
@@ -1208,6 +1405,17 @@ func (p *CooldownPlugin) PreProviderHook(ctx *schemas.BifrostContext, req *schem
 			keys = []schemas.Key{{}}
 		} else {
 			return req, nil, nil
+		}
+	}
+
+	// Per-key capacity gate (scope=key only). The provider/model scopes were
+	// already decided above; this one needs the credential list. It refuses
+	// the request only when NO key still has budget — when at least one does,
+	// AsFilter below keeps the exhausted keys out of the selection, so a
+	// single over-budget credential never blocks the others.
+	if gate != nil && gate.scope == CapacityScopeKey {
+		if sc := p.capacityShortCircuitPerKey(ctx, gate, provider, model, keys); sc != nil {
+			return req, sc, nil
 		}
 	}
 
@@ -1342,7 +1550,7 @@ func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvid
 		policy = schemas.DefaultCooldownPolicy(provider)
 	}
 	if policy.Quota != nil && policy.Quota.MatchesRule(bifrostErr) {
-		return effectiveCooldownTTL(policy.Quota, bifrostErr), keyID, keyName, CooldownKindQuota, policy.Quota.ScopeOrDefault(), true
+		return effectiveQuotaCooldownTTL(policy.Quota, bifrostErr), keyID, keyName, CooldownKindQuota, policy.Quota.ScopeOrDefault(), true
 	}
 	if policy.RateLimit != nil && policy.RateLimit.MatchesRule(bifrostErr) {
 		return effectiveCooldownTTL(policy.RateLimit, bifrostErr), keyID, keyName, CooldownKindRateLimit, policy.RateLimit.ScopeOrDefault(), true
@@ -1354,18 +1562,94 @@ func classifyForMarker(ctx *schemas.BifrostContext, provider schemas.ModelProvid
 // optionally honouring the provider's own retry hint captured on the error
 // path in bifrostErr.ExtraFields.ProviderResponseHeaders.
 //
-// RetryAfterModeOrDefault() == "off" (the default) returns TTLSeconds verbatim
-// without reading any header, so configurations that predate the mode keep
-// byte-for-byte the previous behaviour.
+// Two modes of operation, selected by whether the rule configures a
+// dimension-specific TTL:
+//
+// With RPMTTLSeconds and TPMTTLSeconds both unset (0), this is the pre-B3
+// implementation byte-for-byte: RetryAfterModeOrDefault() == "off" (the
+// default) returns TTLSeconds verbatim without reading any header, "cap" is
+// min(TTLSeconds, hint) and "exact" is the hint (falling back to TTLSeconds).
+//
+// With either dimension TTL set, the rate-limit dimension derived from the
+// error body picks the base: rpm -> RPMTTLSeconds, tpm -> TPMTTLSeconds,
+// unknown (or an unset dimension value) -> TTLSeconds. The retry_after_mode is
+// then applied relative to that base:
+//
+//   - "off": a usable provider hint is a LOWER BOUND, effective = max(base,
+//     hint). This is a deliberate change from the legacy "ignore hints" rule,
+//     because the dimension TTL is a floor derived from how the budget
+//     recovers; a provider asking us to wait longer must still be honoured.
+//   - "cap": effective = min(base, hint); no usable hint -> base.
+//   - "exact": effective = hint; no usable hint -> base.
+//
+// The hint is always bounded by maxProviderRetryAfterHint inside
+// providerRetryAfterHint, so neither branch can park a key for days.
 func effectiveCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.BifrostError) time.Duration {
+	return effectiveCooldownTTLInternal(rule, bifrostErr, true)
+}
+
+// effectiveQuotaCooldownTTL is the quota-rule variant. rpm_ttl_seconds /
+// tpm_ttl_seconds are rate_limit-only (Validate rejects them on a quota rule),
+// so the quota path ignores them even if a policy reached the runtime without
+// validation. The legacy mode semantics apply unchanged.
+func effectiveQuotaCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.BifrostError) time.Duration {
+	return effectiveCooldownTTLInternal(rule, bifrostErr, false)
+}
+
+func effectiveCooldownTTLInternal(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.BifrostError, dimensionAware bool) time.Duration {
 	if rule == nil {
 		return 0
 	}
 	ttl := time.Duration(rule.TTLSeconds) * time.Second
-	mode := rule.RetryAfterModeOrDefault()
-	if mode != "cap" && mode != "exact" {
-		return ttl
+	rpmTTL := 0
+	tpmTTL := 0
+	if dimensionAware {
+		rpmTTL = rule.RPMTTLSeconds
+		tpmTTL = rule.TPMTTLSeconds
 	}
+	if rpmTTL <= 0 && tpmTTL <= 0 {
+		// No dimension override: preserve the historical behaviour exactly,
+		// including not reading headers at all in "off" mode.
+		mode := rule.RetryAfterModeOrDefault()
+		if mode != "cap" && mode != "exact" {
+			return ttl
+		}
+		if bifrostErr == nil {
+			return ttl
+		}
+		hint := providerRetryAfterHint(bifrostErr.ExtraFields.ProviderResponseHeaders)
+		if hint <= 0 {
+			return ttl
+		}
+		if mode == "cap" && hint > ttl {
+			return ttl
+		}
+		return hint
+	}
+
+	// Dimension-aware base selection. An unset dimension value falls back to
+	// ttl_seconds; a dimension whose own TTL is 0 also falls back (per-field
+	// opt-in).
+	//
+	// Quota rules never reach this branch with a dimension: a quota rule must
+	// not pin one (Validate rejects it) and quota_ttl_bytes is not a rate
+	// window, so effectiveQuotaCooldownTTL forces dimensionUnknown.
+	dimension := dimensionUnknown
+	if dimensionAware {
+		dimension = resolveDimension(rule, bifrostErr)
+	}
+	switch dimension {
+	case dimensionRPM:
+		if rpmTTL > 0 {
+			ttl = time.Duration(rpmTTL) * time.Second
+		}
+	case dimensionTPM:
+		if tpmTTL > 0 {
+			ttl = time.Duration(tpmTTL) * time.Second
+		}
+	}
+
+	mode := rule.RetryAfterModeOrDefault()
 	if bifrostErr == nil {
 		return ttl
 	}
@@ -1373,10 +1657,21 @@ func effectiveCooldownTTL(rule *schemas.CooldownPolicyRule, bifrostErr *schemas.
 	if hint <= 0 {
 		return ttl
 	}
-	if mode == "cap" && hint > ttl {
+	switch mode {
+	case "cap":
+		if hint < ttl {
+			return hint
+		}
+		return ttl
+	case "exact":
+		return hint
+	default:
+		// "off" with a dimension TTL configured: the hint is a lower bound.
+		if hint > ttl {
+			return hint
+		}
 		return ttl
 	}
-	return hint
 }
 
 func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
@@ -1386,30 +1681,40 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 	// Snapshot the state once: Init replaces it on a config reload, and this
 	// hook touches the state several times.
 	state := p.State
+	// The per-provider policy is stamped on the context by core before every
+	// attempt. Both capabilities below resolve their effective section from it
+	// (own section, else plugin default), so two providers can run different
+	// windows / thresholds inside the same state.
+	policy := policyFromContext(ctx)
 	// Optional read-only learning (off by default). The sample is taken
 	// BEFORE the terminal attempt's own usage is accounted, so the measured
-	// window consumption is the one that preceded the rejection. A nil
-	// learner (the default) costs one pointer check.
+	// window consumption is the one that preceded the rejection. Learning
+	// disabled for this provider costs a couple of pointer reads.
 	if bifrostErr != nil {
-		state.observeLearnedRateLimit(ctx, bifrostErr)
+		state.observeLearnedRateLimit(ctx, policy, bifrostErr)
 	}
-	// Capacity accounting runs for every terminal outcome — success included —
-	// before the cooldown-only early return below, which deliberately records
-	// no cooldown state on success. A nil gate (the default) is a no-op.
-	if gate := state.capacityGate(); gate != nil {
-		p.recordCapacity(ctx, gate, resp, bifrostErr)
-	}
-	// The learner's observer window accounts the same real usage the capacity
-	// gate does, but read-only: it never gates anything.
-	if l := state.learner(); l != nil {
-		p.recordCapacity(ctx, l.observer, resp, bifrostErr)
-	}
+	// Capacity + observer accounting runs for every terminal outcome — success
+	// included — before the cooldown-only early return below, which
+	// deliberately records no cooldown state on success. When neither
+	// capability is on for this provider this returns before inspecting the
+	// response at all.
+	p.recordCapacity(ctx, policy, resp, bifrostErr)
 	if bifrostErr == nil {
-		// Success: clear this key's escalation counter so a recovered key is
-		// not punished for earlier 429s. This deliberately records NO cooldown
-		// state — success must stay a no-op for the cooldown map itself. When
+		// Success: the health observation runs FIRST so the chronic latch and
+		// the consecutive-success counter are up to date when the escalation
+		// clear below decides whether this success was enough to end a chronic
+		// backoff (recovery_successes hysteresis). Both steps are independent of
+		// each other otherwise.
+		state.observeSuccess(policy, ctx, resp)
+		// Then clear this key's escalation counter so a recovered key is not
+		// punished for earlier 429s. This deliberately records NO cooldown state
+		// — success must stay a no-op for the cooldown map itself. When
 		// escalation is disabled the helper returns before reading ctx.
-		state.clearEscalationOnSuccess(ctx)
+		state.clearEscalationOnSuccess(policy, ctx)
+		// Per-key observation: a success is the third leg of the per-key
+		// picture (marks / suppressions / successes). It is counted for the
+		// key that served the request and changes no cooldown state.
+		state.recordPerKeySuccess(ctx, resp)
 		return resp, bifrostErr, nil
 	}
 
@@ -1438,7 +1743,7 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 			if fallbackKeyID == "" && !schemas.IsKeylessProvider(provider) {
 				return resp, bifrostErr, nil
 			}
-			state.Mark(provider, fallbackKeyID)
+			state.markWithPolicy(policy, provider, fallbackKeyID, "", 0, "", schemas.CooldownScopeKey)
 			if p.logger != nil {
 				p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, TTL=%v, legacy quota_patterns match)", provider, fallbackKeyID, fallbackKeyName, state.EffectiveTTL(provider))
 			}
@@ -1447,7 +1752,7 @@ func (p *CooldownPlugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.
 	}
 
 	provider, _, _, _ := lastAttemptProviderAndKey(ctx, bifrostErr)
-	state.MarkWithTTL(provider, keyID, model, ttl, kind, scope)
+	state.markWithPolicy(policy, provider, keyID, model, ttl, kind, scope)
 	if p.logger != nil {
 		p.logger.Info("[provider-cooldown] marked key %s/%s (name=%s, model=%s, TTL=%v, kind=%s, scope=%s)", provider, keyID, keyName, model, ttl, kind, scope)
 	}

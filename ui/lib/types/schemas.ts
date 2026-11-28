@@ -680,6 +680,10 @@ export const cooldownPolicyMatchSchema = z
 		message_contains: z.array(z.string().min(1)).optional(),
 		type: z.array(z.string().min(1)).optional(),
 		code: z.array(z.string().min(1)).optional(),
+		// Pinned limiter dimension; absent = automatic detection from the error
+		// body. Declared so a value configured through config.json/API survives a
+		// save from this form instead of being stripped by zod.
+		dimension: z.enum(["rpm", "tpm"]).optional(),
 	})
 	.refine(
 		(m) =>
@@ -694,6 +698,12 @@ export const cooldownPolicyRuleSchema = z.object({
 	match: z.array(cooldownPolicyMatchSchema).min(1),
 	match_mode: z.enum(["any", "all"]).default("any"),
 	ttl_seconds: z.number().int().min(1),
+	// Rate-limit-only dimension split. Optional and 0/absent means "fall back
+	// to ttl_seconds"; declared so a configured value is not stripped by zod
+	// on the next save even when the form leaves the inputs blank. The bounds
+	// mirror the backend (>= 0, no upper bound — same as ttl_seconds).
+	rpm_ttl_seconds: z.number().int().min(0).optional(),
+	tpm_ttl_seconds: z.number().int().min(0).optional(),
 	enabled: z.boolean().optional(),
 	scope: z.enum(["key", "model"]).optional(),
 	// How ttl_seconds combines with the provider's Retry-After hint. Must be
@@ -703,29 +713,66 @@ export const cooldownPolicyRuleSchema = z.object({
 	retry_after_mode: z.enum(["off", "cap", "exact"]).optional(),
 });
 
-export const cooldownPolicySchema = z.object({
-	rate_limit: cooldownPolicyRuleSchema.optional(),
-	quota: cooldownPolicyRuleSchema.optional(),
-});
-
-export type CooldownPolicyFormSchema = z.infer<typeof cooldownPolicySchema>;
-export type CooldownPolicyRuleFormSchema = z.infer<typeof cooldownPolicyRuleSchema>;
-export type CooldownPolicyMatchFormSchema = z.infer<typeof cooldownPolicyMatchSchema>;
-
 // ---------------------------------------------------------------------------
-// Provider cooldown plugin — optional capability sections
+// Provider cooldown — optional capability sections (escalation / capacity /
+// learning)
 // ---------------------------------------------------------------------------
-// These mirror plugins/providercooldown/config.go's EscalationConfig /
-// CapacityConfig / LearningConfig. They live in the *plugin* config (not in
-// schemas.CooldownPolicy) because the provider-level cooldown policy form
-// rebuilds the whole cooldown_policy object from the fields it knows about
-// and would silently drop unknown sub-fields.
+// These mirror schemas.CooldownEscalationConfig / CooldownCapacityConfig /
+// CooldownLearningConfig. The same three sections exist in two places:
 //
-// Every section is optional: a plugin config that never mentions one of them
-// means "not configured" and the backend keeps the feature inert.
+//   - the provider-cooldown *plugin* config (plugin-wide defaults), and
+//   - a provider's own cooldown_policy (per-provider override).
+//
+// A provider-level section is tri-state: absent → inherit the plugin default,
+// `{ enabled: false }` → explicitly off, otherwise → custom. Because of that,
+// the per-provider variants are declared `.partial()` below: a provider only
+// has to send the fields it cares about. Resolution is whole-section — a
+// present section does NOT merge with the plugin default; fields it omits fall
+// back to the built-in defaults (0 / "" meaning "use the backend default").
+//
+// Sections are declared before cooldownPolicySchema so it can reuse them
+// instead of duplicating field definitions.
 
 // Adaptive TTL upgrade — a key's cooldown TTL grows (1x, 2x, 4x …) while it
 // keeps failing. max_multiplier is clamped to 1..16 by the backend (<= 0 → 4).
+//
+// `chronic` is declared but not edited here: it is the optional long-backoff
+// sub-section configured via config.json / API. Declaring it is what keeps zod
+// from stripping a stored block when this form saves an unrelated edit (zod
+// drops unknown keys). Every field is optional so any partial stored object
+// round-trips unchanged.
+export const providerCooldownChronicConfigSchema = z.object({
+	enabled: z.boolean().optional(),
+	success_rate_threshold: z
+		.number({ error: t("validation.numberExpected") })
+		.gt(0, t("validation.minNumber", { n: "0" }))
+		.lt(1, t("validation.maxNumber", { n: "1" }))
+		.optional(),
+	min_samples: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(1, t("validation.minNumber", { n: "1" }))
+		.max(1000, t("validation.maxNumber", { n: "1000" }))
+		.optional(),
+	chronic_max_ttl_seconds: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(30, t("validation.minNumber", { n: "30" }))
+		.max(86400, t("validation.maxNumber", { n: "86400" }))
+		.optional(),
+	jitter_ratio: z
+		.number({ error: t("validation.numberExpected") })
+		.min(0, t("validation.minNumber", { n: "0" }))
+		.max(1, t("validation.maxNumber", { n: "1" }))
+		.optional(),
+	recovery_successes: z
+		.number({ error: t("validation.numberExpected") })
+		.int(t("validation.integerExpected"))
+		.min(1, t("validation.minNumber", { n: "1" }))
+		.max(1000, t("validation.maxNumber", { n: "1000" }))
+		.optional(),
+});
+
 export const providerCooldownEscalationConfigSchema = z.object({
 	enabled: z.boolean(),
 	max_multiplier: z
@@ -733,6 +780,7 @@ export const providerCooldownEscalationConfigSchema = z.object({
 		.int(t("validation.integerExpected"))
 		.min(1, t("validation.minNumber", { n: "1" }))
 		.max(16, t("validation.maxNumber", { n: "16" })),
+	chronic: providerCooldownChronicConfigSchema.optional(),
 });
 
 // Retrospective capacity gate — real usage is summed over a rolling window and
@@ -758,12 +806,38 @@ export const providerCooldownCapacityConfigSchema = z.object({
 		.number({ error: t("validation.numberExpected") })
 		.min(0.1, t("validation.minNumber", { n: "0.1" }))
 		.max(1, t("validation.maxNumber", { n: "1" })),
-	scope: z.enum(["provider", "provider_model"], {
+	scope: z.enum(["provider", "provider_model", "key"], {
 		error: t("validation.fieldRequired", { field: "Scope" }),
 	}),
 	action: z.enum(["fallback", "reject"], {
 		error: t("validation.fieldRequired", { field: "Action" }),
 	}),
+	// Per-credential overrides, keyed by the key's NAME. Only meaningful with
+	// scope "key"; the payload builder strips them under the other scopes
+	// because the backend rejects that combination. An empty entry is rejected
+	// here for the same reason the backend rejects it: it would silently do
+	// nothing.
+	key_limits: z
+		.record(
+			z.string(),
+			z
+				.object({
+					token_limit: z
+						.number({ error: t("validation.numberExpected") })
+						.int(t("validation.integerExpected"))
+						.min(0, t("validation.minNumber", { n: "0" }))
+						.optional(),
+					request_limit: z
+						.number({ error: t("validation.numberExpected") })
+						.int(t("validation.integerExpected"))
+						.min(0, t("validation.minNumber", { n: "0" }))
+						.optional(),
+				})
+				.refine((value) => value.token_limit !== undefined || value.request_limit !== undefined, {
+					message: t("validation.fieldRequired", { field: "token_limit / request_limit" }),
+				}),
+		)
+		.optional(),
 });
 
 // Read-only limit learner — watches upstream rate-limit rejections and
@@ -789,20 +863,49 @@ export const providerCooldownLearningConfigSchema = z.object({
 		.max(100, t("validation.maxNumber", { n: "100" })),
 });
 
+// The provider's cooldown policy as edited from the provider detail page.
+// rate_limit / quota are the cooldown rule sets; capacity / escalation /
+// learning are optional per-provider overrides of the plugin-level
+// capabilities. They are `.partial()` because a provider-level override may
+// carry only the fields it changes (or just `{ enabled: false }`). A present
+// section replaces the plugin default wholesale — omitted fields fall back to
+// the built-in defaults, not to the plugin default.
+export const cooldownPolicySchema = z.object({
+	rate_limit: cooldownPolicyRuleSchema.optional(),
+	quota: cooldownPolicyRuleSchema.optional(),
+	capacity: providerCooldownCapacityConfigSchema.partial().optional(),
+	escalation: providerCooldownEscalationConfigSchema.partial().optional(),
+	learning: providerCooldownLearningConfigSchema.partial().optional(),
+});
+
+export type CooldownPolicyFormSchema = z.infer<typeof cooldownPolicySchema>;
+export type CooldownPolicyRuleFormSchema = z.infer<typeof cooldownPolicyRuleSchema>;
+export type CooldownPolicyMatchFormSchema = z.infer<typeof cooldownPolicyMatchSchema>;
+export type CooldownCapacityConfigFormSchema = z.infer<typeof cooldownPolicySchema>["capacity"];
+export type CooldownEscalationConfigFormSchema = z.infer<typeof cooldownPolicySchema>["escalation"];
+export type CooldownLearningConfigFormSchema = z.infer<typeof cooldownPolicySchema>["learning"];
+
 // The plugin's capability sections as a whole. Each section may be absent
 // (undefined) — the backend then treats that capability as not configured.
+//
+// `capacity` is read-only here: it still exists in a stored config.json as a
+// deprecated fleet-wide default, but the plugin page no longer edits it (a
+// single global token limit inherited by every unconfigured provider is
+// exactly what per-provider configuration replaced). The provider detail page
+// owns the capacity gate; see `cooldownPolicySchema.capacity`.
 export const providerCooldownPluginConfigSchema = z.object({
 	escalation: providerCooldownEscalationConfigSchema.optional(),
 	capacity: providerCooldownCapacityConfigSchema.optional(),
 	learning: providerCooldownLearningConfigSchema.optional(),
 });
 
-// Form variant: every section is always present in the form so that turning
-// a section off keeps its last values and still submits them with
-// `enabled: false` (omitting the key would leave the old value in place).
+// Form variant for the plugin page. escalation and learning are always
+// present so that turning a section off keeps its last values and still
+// submits them with `enabled: false` (omitting the key would leave the old
+// value in place on the backend).
+// `capacity` is deliberately absent — it is not editable plugin-wide anymore.
 export const providerCooldownPluginConfigFormSchema = z.object({
 	escalation: providerCooldownEscalationConfigSchema,
-	capacity: providerCooldownCapacityConfigSchema,
 	learning: providerCooldownLearningConfigSchema,
 });
 

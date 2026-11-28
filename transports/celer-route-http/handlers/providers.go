@@ -411,10 +411,13 @@ func (h *ProviderHandler) addProvider(ctx *fasthttp.RequestCtx) {
 			}
 		}
 	}
-	// A quota rule matching a bare status code would shadow every rate_limit
-	// rule (quota is evaluated first). See CooldownPolicy.Validate.
+	// Validate the cooldown policy: rule shapes (a bare status_code quota rule
+	// would shadow every rate_limit rule) plus the optional capacity /
+	// escalation / learning sections. Errors already carry the fully-qualified
+	// cooldown_policy.<section>.<field> path, so the client-facing message must
+	// not repeat "cooldown policy".
 	if err := payload.CooldownPolicy.Validate(); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid cooldown policy: %v", err))
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid provider configuration: %v", err))
 		return
 	}
 	// Check if provider already exists
@@ -618,11 +621,14 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Reject cooldown policies that would silently shadow the rate_limit rule
-	// (a bare status_code match inside quota). Surfacing this at save time is
-	// the only cheap moment: once stored, the misclassification only shows up
-	// as the wrong "quota exhausted" badge on the cooldown state page.
+	// (a bare status_code match inside quota), and capability sections whose
+	// values are out of range. Surfacing this at save time is the only cheap
+	// moment: once stored, a misclassification only shows up as the wrong
+	// "quota exhausted" badge on the cooldown state page. The error string is
+	// already qualified (cooldown_policy.<section>.<field>), so the message
+	// deliberately does not repeat "cooldown policy".
 	if err := payload.CooldownPolicy.Validate(); err != nil {
-		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid cooldown policy: %v", err))
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid provider configuration: %v", err))
 		return
 	}
 

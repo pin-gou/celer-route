@@ -414,6 +414,10 @@ export interface CooldownPolicyMatch {
 	message_contains?: string[];
 	type?: string[];
 	code?: string[];
+	// Optional pin for which upstream budget this match cools. "rpm" = request
+	// rate, "tpm" = token rate. Omit for automatic detection from the provider
+	// error body. Only valid on a rate_limit rule.
+	dimension?: "rpm" | "tpm";
 }
 
 // CooldownPolicyRule groups one or more matches and the TTL applied when the
@@ -427,14 +431,106 @@ export interface CooldownPolicyRule {
 	ttl_seconds: number;
 	enabled?: boolean;
 	scope?: "key" | "model";
+	// Rate-limit-only dimension split. 0/absent falls back to ttl_seconds.
+	// Declared here (and in the zod schema) so a value configured through
+	// config.json/API survives a save from this form instead of being stripped.
+	rpm_ttl_seconds?: number;
+	tpm_ttl_seconds?: number;
+}
+
+// CooldownEscalationConfig mirrors schemas.CooldownEscalationConfig: a key's
+// cooldown TTL grows while it keeps failing. max_multiplier is clamped to
+// 1..16 by the backend; an unset value takes the backend default (4).
+//
+// `chronic` is the optional long-backoff sub-section. Neither form on this page
+// edits it (it is configured via config.json / API), but it is declared here and
+// in the zod schema so a stored block survives a save instead of being stripped.
+export interface CooldownEscalationConfig {
+	enabled?: boolean;
+	max_multiplier?: number;
+	chronic?: CooldownChronicConfig;
+}
+
+// CooldownChronicConfig mirrors schemas.CooldownChronicConfig: a (provider, key,
+// model) whose EWMA success rate stays below success_rate_threshold gets a
+// jittered chronic_max_ttl_seconds backoff, and the chronic mark is only lifted
+// after recovery_successes consecutive successes. Only effective when the parent
+// escalation section is enabled. Unset numeric fields take backend defaults
+// (threshold 0.3, min_samples 10, ttl 1800, jitter 0, recovery 3).
+export interface CooldownChronicConfig {
+	enabled?: boolean;
+	success_rate_threshold?: number;
+	min_samples?: number;
+	chronic_max_ttl_seconds?: number;
+	jitter_ratio?: number;
+	recovery_successes?: number;
+}
+
+// CooldownCapacityConfig mirrors schemas.CooldownCapacityConfig: real token and
+// request usage is summed over a rolling window and further requests are gated
+// once limit*headroom is crossed. An unset (0) numeric field takes the backend
+// default (window 60, headroom 0.9); token_limit / request_limit of 0 mean
+// "no limit". `scope: "key"` keeps an independent budget per
+// (provider, key, model) triple, so one exhausted credential is rotated past
+// instead of blocking the whole provider.
+export interface CooldownCapacityConfig {
+	enabled?: boolean;
+	token_limit?: number;
+	request_limit?: number;
+	window_seconds?: number;
+	headroom?: number;
+	scope?: "provider" | "provider_model" | "key";
+	action?: "fallback" | "reject";
+	/**
+	 * Per-credential budget overrides keyed by the key's NAME, for
+	 * `scope: "key"` only. An omitted field inherits the provider-level value;
+	 * an explicit 0 means unlimited for that credential.
+	 */
+	key_limits?: Record<string, CooldownCapacityKeyLimit>;
+}
+
+export interface CooldownCapacityKeyLimit {
+	token_limit?: number;
+	request_limit?: number;
+}
+
+// CooldownLearningConfig mirrors schemas.CooldownLearningConfig: the read-only
+// learner that estimates the provider's effective per-window limit from
+// upstream rate-limit feedback. Unset numeric fields take backend defaults
+// (window 60, max_samples 50, min_samples 5).
+export interface CooldownLearningConfig {
+	enabled?: boolean;
+	window_seconds?: number;
+	max_samples?: number;
+	min_samples?: number;
+}
+
+// CooldownHealthConfig mirrors schemas.CooldownHealthConfig: each key's
+// observed success rate folds into an EWMA and the key pool scales that key's
+// Weight by it. Unset numeric fields take backend defaults (half_life 120,
+// min_samples 5, min_weight_factor 0.05). min_weight_factor can never be zero.
+export interface CooldownHealthConfig {
+	enabled?: boolean;
+	half_life_seconds?: number;
+	min_samples?: number;
+	min_weight_factor?: number;
 }
 
 // CooldownPolicy attaches rate_limit / quota rules to a single provider. quota
 // is checked before rate_limit. nil falls back to the built-in default for
 // that provider (see docs).
+//
+// capacity / escalation / learning / health are optional per-provider
+// overrides of the plugin-level capability defaults: absent means "inherit the
+// plugin default", `{ enabled: false }` means "explicitly off for this
+// provider".
 export interface CooldownPolicy {
 	rate_limit?: CooldownPolicyRule;
 	quota?: CooldownPolicyRule;
+	capacity?: CooldownCapacityConfig;
+	escalation?: CooldownEscalationConfig;
+	learning?: CooldownLearningConfig;
+	health?: CooldownHealthConfig;
 }
 
 // ProviderConfig matching Go's lib.ProviderConfig

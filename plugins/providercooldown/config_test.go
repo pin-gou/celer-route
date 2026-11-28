@@ -120,8 +120,8 @@ func TestConfigAsStateIgnoresNonPositiveOverrides(t *testing.T) {
 	c := &Config{
 		DefaultTTLSeconds: 60,
 		TTLOverrides: map[string]int{
-			"openai":    -5,  // ignored
-			"anthropic": 0,   // ignored
+			"openai":    -5, // ignored
+			"anthropic": 0,  // ignored
 		},
 	}
 	s := c.AsState(nil)
@@ -138,9 +138,9 @@ func TestConfigAsStateWarnsOnUnknownProvider(t *testing.T) {
 	c := &Config{
 		DefaultTTLSeconds: 60,
 		TTLOverrides: map[string]int{
-			"openai":    30,  // known — no warning expected
-			"open-ai":   45,  // typo — warning expected
-			"anthropic": 90,  // known — no warning expected
+			"openai":           30,  // known — no warning expected
+			"open-ai":          45,  // typo — warning expected
+			"anthropic":        90,  // known — no warning expected
 			"made-up-provider": 120, // unknown — warning expected
 		},
 	}
@@ -259,6 +259,34 @@ func TestConfig_DefaultOnInitialization(t *testing.T) {
 	if !log.contains("initialized") {
 		t.Fatalf("expected init log message, got %v", log.msgs)
 	}
+	// No plugin-level capacity section → no deprecation warning.
+	if log.warnCount() != 0 {
+		t.Fatalf("Init(nil) must not warn, got %v", log.msgs)
+	}
+}
+
+func TestConfig_LegacyCapacityWarnsOnce(t *testing.T) {
+	// A config.json that still carries the plugin-level capacity section gets
+	// exactly one deprecation warning at init — the section is still honoured,
+	// but operators are told to move to per-provider configuration.
+	log := &testLogger{}
+	plugin := NewPlugin(log)
+	defer plugin.Cleanup()
+
+	if err := plugin.Init(map[string]any{
+		"capacity": map[string]any{
+			"enabled":     true,
+			"token_limit": float64(1000),
+		},
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if !log.contains("plugin-level capacity config is a deprecated fleet default") {
+		t.Fatalf("expected a deprecation warning for config.capacity, got %v", log.msgs)
+	}
+	if got := log.warnCount(); got != 1 {
+		t.Fatalf("deprecation warning emitted %d times, want exactly 1: %v", got, log.msgs)
+	}
 }
 
 func TestPluginCustomQuotaPatternMatches(t *testing.T) {
@@ -363,5 +391,70 @@ func TestPluginIsQuotaExhaustedMethodNoCustomPatterns(t *testing.T) {
 	}
 	if plugin.isQuotaExhausted(transient) {
 		t.Fatal("isQuotaExhausted should not match generic rate limit")
+	}
+}
+
+// TestParseConfigCapacityKeyLimits pins the plugin-level parsing of per-key
+// overrides, including the scope requirement (the same rule Validate and the
+// provider write path enforce).
+func TestParseConfigCapacityKeyLimits(t *testing.T) {
+	cfg, err := ParseConfig(map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides":       map[string]any{},
+		"quota_patterns":      []any{},
+		"capacity": map[string]any{
+			"enabled":     true,
+			"scope":       "key",
+			"token_limit": float64(1000),
+			"key_limits": map[string]any{
+				"key-a": map[string]any{"token_limit": float64(10)},
+				"key-b": map[string]any{"request_limit": float64(0)},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseConfig returned an error: %v", err)
+	}
+	if cfg.Capacity == nil || len(cfg.Capacity.KeyLimits) != 2 {
+		t.Fatalf("expected two per-key overrides, got %+v", cfg.Capacity)
+	}
+	a := cfg.Capacity.KeyLimits["key-a"]
+	if a.TokenLimit == nil || *a.TokenLimit != 10 || a.RequestLimit != nil {
+		t.Fatalf("key-a override = %+v, want token_limit=10 and no request limit", a)
+	}
+	b := cfg.Capacity.KeyLimits["key-b"]
+	if b.RequestLimit == nil || *b.RequestLimit != 0 || b.TokenLimit != nil {
+		t.Fatalf("key-b override = %+v, want an explicit request_limit=0", b)
+	}
+
+	// key_limits is meaningless outside the key scope and must be rejected
+	// rather than silently ignored.
+	_, err = ParseConfig(map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides":       map[string]any{},
+		"quota_patterns":      []any{},
+		"capacity": map[string]any{
+			"enabled":    true,
+			"scope":      "provider_model",
+			"key_limits": map[string]any{"key-a": map[string]any{"token_limit": float64(10)}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "capacity.key_limits requires capacity.scope") {
+		t.Fatalf("expected a scope error, got %v", err)
+	}
+
+	// An entry that sets nothing is a typo, not a no-op.
+	_, err = ParseConfig(map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides":       map[string]any{},
+		"quota_patterns":      []any{},
+		"capacity": map[string]any{
+			"enabled":    true,
+			"scope":      "key",
+			"key_limits": map[string]any{"key-a": map[string]any{}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "must set token_limit or request_limit") {
+		t.Fatalf("expected an empty-entry error, got %v", err)
 	}
 }

@@ -3909,106 +3909,20 @@
                     "description": "Additional lower-case substrings treated as quota exhaustion (extends built-in patterns)"
                   },
                   "escalation": {
-                    "type": "object",
-                    "description": "Optional adaptive cooldown escalation. Disabled by default. When enabled, a key that keeps failing inside a 300s window gets a longer TTL (1x, 2x, 4x ... up to max_multiplier), and when 3+ distinct keys fail for the same provider/model inside 60s, new marks start at 2x. Success clears the key's counter. Escalated TTLs are capped at 1 hour.",
-                    "properties": {
-                      "enabled": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Turn adaptive TTL escalation on (default false = current behaviour)"
-                      },
-                      "max_multiplier": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 16,
-                        "default": 4,
-                        "description": "Upper bound on how much a single key's TTL can grow (1..16, values above 16 are clamped)"
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/$defs/cooldown_escalation",
+                    "description": "Plugin-level DEFAULT adaptive escalation for every provider without its own cooldown_policy.escalation section."
                   },
                   "capacity": {
-                    "type": "object",
-                    "description": "Optional retrospective capacity gate. Disabled by default, and inert unless at least one of token_limit / request_limit is greater than 0. It accounts REAL usage only (the token usage the provider reports, or billed_usage on a failed-but-billed attempt) over a rolling per-second window, and once the window's usage reaches limit*headroom, subsequent requests are short-circuited with a 429. The request that crosses the line still goes out (the same trade-off the passive cooldown makes); nothing is estimated and the request body is never read. This is the gateway's OWN budget gate, not a provider-declared quota.",
-                    "properties": {
-                      "enabled": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Turn the capacity gate on (default false = current behaviour, no state allocated)"
-                      },
-                      "token_limit": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "default": 0,
-                        "description": "Per-window token budget. 0 means unlimited. The gate engages once the window's real token usage reaches token_limit * headroom."
-                      },
-                      "request_limit": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "default": 0,
-                        "description": "Per-window request budget. 0 means unlimited. The gate engages once the window's request count reaches request_limit * headroom. At least one of token_limit / request_limit must be positive for the gate to do anything."
-                      },
-                      "window_seconds": {
-                        "type": "integer",
-                        "minimum": 10,
-                        "maximum": 3600,
-                        "default": 60,
-                        "description": "Rolling window length in seconds (clamped to 10..3600; values <= 0 fall back to 60). One bucket per second is kept per accounting key and expired buckets are cleared lazily."
-                      },
-                      "headroom": {
-                        "type": "number",
-                        "minimum": 0.1,
-                        "maximum": 1.0,
-                        "default": 0.9,
-                        "description": "Fraction of the limit that may be spent before the gate engages (0.9 = block once 90% of the budget is used). Clamped to 0.1..1.0; values <= 0 fall back to 0.9."
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": ["provider", "provider_model"],
-                        "default": "provider",
-                        "description": "Accounting granularity: provider (one budget shared by every model of the provider) or provider_model (an independent budget per provider/model pair)."
-                      },
-                      "action": {
-                        "type": "string",
-                        "enum": ["fallback", "reject"],
-                        "default": "fallback",
-                        "description": "What happens once the gate engages: fallback lets the configured fallback chain pick the request up, reject returns the 429 immediately."
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/$defs/cooldown_capacity",
+                    "description": "Plugin-level DEFAULT capacity gate for every provider without its own cooldown_policy.capacity section."
                   },
                   "learning": {
-                    "type": "object",
-                    "description": "Optional read-only limit learner. Disabled by default. When enabled, the plugin watches provider RATE-LIMIT rejections (HTTP 429 classified as rate_limit by the provider's cooldown policy — quota/entitlement failures are ignored) and derives an estimate of the provider's effective per-window token limit from the REAL token usage that preceded each rejection. The estimate, its bounds, the sample count and a confidence band are published read-only through GET /api/plugins/provider-cooldown/learned-limits. Nothing is ever written back to the configuration.",
-                    "properties": {
-                      "enabled": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Turn the limit learner on (default false = current behaviour, no state allocated)"
-                      },
-                      "window_seconds": {
-                        "type": "integer",
-                        "minimum": 10,
-                        "maximum": 3600,
-                        "default": 60,
-                        "description": "Rolling window length in seconds used to measure the real token consumption that preceded a rejection (clamped to 10..3600; values <= 0 fall back to 60). Every published limit is expressed as 'tokens per window'."
-                      },
-                      "max_samples": {
-                        "type": "integer",
-                        "minimum": 5,
-                        "maximum": 500,
-                        "default": 50,
-                        "description": "How many rejection samples are kept per provider/model pair; the oldest is dropped first (clamped to 5..500; values <= 0 fall back to 50)."
-                      },
-                      "min_samples": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 100,
-                        "default": 5,
-                        "description": "How many samples are required before an estimate is published. Below it the pair is reported with confidence 'insufficient' and no estimate (clamped to 1..100; values <= 0 fall back to 5)."
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/$defs/cooldown_learning",
+                    "description": "Plugin-level DEFAULT limit learner for every provider without its own cooldown_policy.learning section."
+                  },
+                  "health": {
+                    "$ref": "#/$defs/cooldown_health",
+                    "description": "Plugin-level DEFAULT health-aware key weighting for every provider without its own cooldown_policy.health section."
                   }
                 },
                 "required": [
@@ -4073,6 +3987,212 @@
       },
       "additionalProperties": false
     },
+    "cooldown_escalation": {
+      "type": "object",
+      "description": "Optional adaptive cooldown escalation. Disabled by default. When enabled, a key that keeps failing inside a 300s window gets a longer TTL (1x, 2x, 4x ... up to max_multiplier), and when 3+ distinct keys fail for the same provider/model inside 60s, new marks start at 2x. Success clears the key's counter unless the optional chronic sub-section has that key in long-backoff mode, where recovery_successes consecutive successes are required. Escalated TTLs are capped at 1 hour (the chronic sub-section can exceed that up to its own configurable limit). Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn adaptive TTL escalation on (default false = current behaviour). A provider section with enabled=false explicitly turns escalation off for that provider, even when the plugin-level default is on."
+        },
+        "max_multiplier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 4,
+          "description": "Upper bound on how much a single key's TTL can grow (1..16, values above 16 are clamped; values <= 0 fall back to 4)"
+        },
+        "chronic": {
+          "$ref": "#/$defs/cooldown_chronic",
+          "description": "Optional long backoff for chronically unhealthy keys/models. Sub-section of escalation: it only takes effect when escalation.enabled is true, and (like every other section) a provider's own escalation section replaces the plugin-level one wholesale — a provider section that omits chronic does NOT inherit it. Default off."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_chronic": {
+      "type": "object",
+      "description": "Optional chronic long-backoff. Disabled by default. When enabled, a (provider, key, model) whose observed EWMA success rate is below success_rate_threshold with at least min_samples observations is treated as chronically unhealthy: its cooldown records chronic_max_ttl_seconds (with jitter) instead of the short escalated TTL, so the gateway stops burning one upstream request every couple of minutes just to re-learn the same 429. The chronic mark is only lifted after recovery_successes CONSECUTIVE successes, so a key with a ~15% success rate cannot reset on a lucky probe. Half-open probing needs no scheduler: when the long TTL lapses the key is selectable again (with health weighting it is de-prioritised but never unselectable) and the next natural rotation is the probe. Only effective when escalation.enabled is true; used both as the plugin-level default and, optionally, as a per-provider cooldown_policy.escalation.chronic sub-section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn chronic long-backoff on (default false = current behaviour). Requires escalation.enabled=true; the combination chronic.enabled=true with escalation.enabled=false is rejected."
+        },
+        "success_rate_threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "default": 0.3,
+          "description": "EWMA success rate below which a row with enough samples counts as chronically unhealthy (strictly between 0 and 1; values <= 0 fall back to 0.3, values outside the open interval are clamped inside it)."
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 10,
+          "description": "How many observations a (provider, key, model) row needs before the chronic predicate may fire (clamped to 1..1000; values <= 0 fall back to 10)."
+        },
+        "chronic_max_ttl_seconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 86400,
+          "default": 1800,
+          "description": "Long backoff recorded for a chronic row, before jitter (clamped to 30..86400; values <= 0 fall back to 1800). Chronic only ever lengthens a cooldown: if the base or escalated TTL is already longer, that value is kept."
+        },
+        "jitter_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0,
+          "description": "Fractional jitter applied to chronic_max_ttl_seconds (0.2 = ±20%, clamped to 0..1), which de-synchronises keys that started failing together. 0 (the shipped default) means no jitter; 0.2 is the recommended value for production."
+        },
+        "recovery_successes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 3,
+          "description": "How many CONSECUTIVE successes lift the chronic mark (clamped to 1..1000; values <= 0 fall back to 3). This is the hysteresis that stops a single lucky probe from resetting a chronically failing key; the key's escalation counters are kept until this threshold is reached."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_capacity": {
+      "type": "object",
+      "description": "Optional retrospective capacity gate. Disabled by default, and inert unless at least one of token_limit / request_limit is greater than 0. It accounts REAL usage only (the token usage the provider reports, or billed_usage on a failed-but-billed attempt) over a rolling per-second window, and once the window's usage reaches limit*headroom, subsequent requests are short-circuited with a 429. The request that crosses the line still goes out (the same trade-off the passive cooldown makes); nothing is estimated and the request body is never read. This is the gateway's OWN budget gate, not a provider-declared quota. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn the capacity gate on (default false = current behaviour, no state allocated). A provider section with enabled=false explicitly turns the gate off for that provider, even when the plugin-level default is on."
+        },
+        "token_limit": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Per-window token budget. 0 means unlimited. The gate engages once the window's real token usage reaches token_limit * headroom."
+        },
+        "request_limit": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Per-window request budget. 0 means unlimited. The gate engages once the window's request count reaches request_limit * headroom. At least one of token_limit / request_limit must be positive for the gate to do anything."
+        },
+        "window_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600,
+          "default": 60,
+          "description": "Rolling window length in seconds (clamped to 10..3600; values <= 0 fall back to 60). One bucket per second is kept per accounting key and expired buckets are cleared lazily."
+        },
+        "headroom": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1.0,
+          "default": 0.9,
+          "description": "Fraction of the limit that may be spent before the gate engages (0.9 = block once 90% of the budget is used). Clamped to 0.1..1.0; values <= 0 fall back to 0.9."
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["provider", "provider_model", "key"],
+          "default": "provider",
+          "description": "Accounting granularity: provider (one budget shared by every model of the provider), provider_model (an independent budget per provider/model pair), or key (an independent budget per provider/key/model triple). With key, each credential's window is accounted and enforced separately: a key over its own budget is removed from the candidate pool and the request rotates to a key that still has budget, so one exhausted credential never blocks the others. Only when no key has any budget left is the request short-circuited (honouring action). Usage that cannot be attributed to a credential (a keyless provider, or an attempt whose key is unknown) is accounted in the provider_model bucket instead of being dropped; a keyless provider is gated through that same bucket. Under key the budget is per model as well, so one key serving two models keeps two independent windows."
+        },
+        "action": {
+          "type": "string",
+          "enum": ["fallback", "reject"],
+          "default": "fallback",
+          "description": "What happens once the gate engages: fallback lets the configured fallback chain pick the request up, reject returns the 429 immediately."
+        },
+        "key_limits": {
+          "type": "object",
+          "description": "Per-credential budget overrides, keyed by the key's name (the stable, user-authored identifier in the provider's keys list). Only valid with scope=\"key\": the other scopes have no credential in their accounting key. An omitted token_limit / request_limit inherits the provider-level value; an explicit 0 means unlimited for that credential (so a credential can be exempted). A key_limits-only section (no provider-level token_limit / request_limit) is valid: listed credentials get a budget and unlisted ones are not gated.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "token_limit": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Per-window token budget for this credential. Omit to inherit the provider-level token_limit; 0 means unlimited for this credential."
+              },
+              "request_limit": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Per-window request budget for this credential. Omit to inherit the provider-level request_limit; 0 means unlimited for this credential."
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_learning": {
+      "type": "object",
+      "description": "Optional read-only limit learner. Disabled by default. When enabled, the plugin watches provider RATE-LIMIT rejections (HTTP 429 classified as rate_limit by the provider's cooldown policy — quota/entitlement failures are ignored) and derives an estimate of the provider's effective per-window token limit from the REAL token usage that preceded each rejection. The estimate, its bounds, the sample count and a confidence band are published read-only through GET /api/plugins/provider-cooldown/learned-limits. Nothing is ever written back to the configuration. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn the limit learner on (default false = current behaviour, no state allocated). A provider section with enabled=false explicitly turns the learner off for that provider, even when the plugin-level default is on."
+        },
+        "window_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600,
+          "default": 60,
+          "description": "Rolling window length in seconds used to measure the real token consumption that preceded a rejection (clamped to 10..3600; values <= 0 fall back to 60). Every published limit is expressed as 'tokens per window'."
+        },
+        "max_samples": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 500,
+          "default": 50,
+          "description": "How many rejection samples are kept per provider/model pair; the oldest is dropped first (clamped to 5..500; values <= 0 fall back to 50)."
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 5,
+          "description": "How many samples are required before an estimate is published. Below it the pair is reported with confidence 'insufficient' and no estimate (clamped to 1..100; values <= 0 fall back to 5)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cooldown_health": {
+      "type": "object",
+      "description": "Optional health-aware key weighting. Disabled by default. When enabled, the plugin folds each (provider, key, model) triple's observed success/failure stream into an exponentially weighted moving average success rate (half-life configurable), and the key-pool filter scales that key's configured Weight by it before weighted-random selection. The effect is purely a selection probability: no request is ever refused and no cooldown entry is created or extended. MinWeightFactor keeps a floor above zero so a de-prioritised key still receives a small share of traffic and can demonstrate recovery. Used both as the plugin-level default and, optionally, as a per-provider cooldown_policy section (whole-section replacement, no field-level merge).",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn health-aware weighting on (default false = current behaviour, no state allocated, weights unchanged). A provider section with enabled=false explicitly turns the feature off for that provider, even when the plugin-level default is on."
+        },
+        "half_life_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600,
+          "default": 120,
+          "description": "EWMA half-life in seconds: an observation one half-life old carries half the weight of a fresh one (clamped to 10..3600; values <= 0 fall back to 120). A key that recovers therefore climbs back to its configured weight quickly once observed again."
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 5,
+          "description": "How many observations a (provider, key, model) triple needs before its health may scale the key's Weight. Below it the key keeps its configured weight exactly (clamped to 1..1000; values <= 0 fall back to 5)."
+        },
+        "min_weight_factor": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1,
+          "default": 0.05,
+          "description": "Lower bound of the health scaling factor (clamped to 0.01..1.0; values <= 0 fall back to 0.05). It is never zero: a key that is never selected can never demonstrate recovery, so zero would starve the pool instead of merely de-prioritising it."
+        }
+      },
+      "additionalProperties": false
+    },
     "cooldown_policy_match": {
       "type": "object",
       "description": "Single predicate contributing to a cooldown rule. All non-zero fields must hold against the BifrostError for the match to fire; matching across multiple MessageContains values is OR. A match with no fields set is a no-op.",
@@ -4097,6 +4217,11 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Exact (case-insensitive) values matching BifrostError.Error.Code"
+        },
+        "dimension": {
+          "type": "string",
+          "enum": ["rpm", "tpm"],
+          "description": "Optional pin for which upstream budget this match cools: \"rpm\" (request rate, RPM/RPS) or \"tpm\" (token rate). Omit for automatic detection from the provider error body (code, type and message, matched against an ordered pattern table). A pin is match-scoped, so a specific predicate (e.g. code=EndpointRPMExceeded) cannot be overridden by a generic catch-all in the same rule. Only valid on a rate_limit rule: quota exhaustion is a billing/entitlement failure, not a rate window, and is rejected at validation time."
         }
       },
       "additionalProperties": false
@@ -4133,6 +4258,16 @@
           "minimum": 1,
           "description": "Cooldown TTL in seconds applied to a key when the rule fires"
         },
+        "rpm_ttl_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rate-limit only. TTL in seconds used when the rejection is classified as a request-rate limit (RPM/RPS: EndpointRPMExceeded, 'rpm exhausted', 'rps exhausted', RequestBurstTooFast, Throttling.BurstRate, or a generic 'rate limit exceeded' with no token wording). 0 or omitted falls back to ttl_seconds. A request-rate budget consumed outside this gateway recovers slowly, so a longer value (e.g. 90) avoids probing the key every few seconds. Only meaningful on the rate_limit rule: the provider API rejects it on a quota rule, and a config.json value there is ignored at runtime. With either dimension TTL set, retry_after_mode 'off' treats the provider hint as a lower bound (max(base, hint)); 'cap'/'exact' keep their usual meaning relative to this base."
+        },
+        "tpm_ttl_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rate-limit only. TTL in seconds used when the rejection is classified as a token-rate limit (TPM: EndpointTPMExceeded, ModelAccountTpmRateLimitExceeded, 'tpm exhausted', 'token rate limit', 'tokens per minute'). 0 or omitted falls back to ttl_seconds. Only meaningful on the rate_limit rule: the provider API rejects it on a quota rule, and a config.json value there is ignored at runtime. Interacts with retry_after_mode exactly like rpm_ttl_seconds."
+        },
         "retry_after_mode": {
           "type": "string",
           "enum": ["off", "cap", "exact"],
@@ -4145,13 +4280,29 @@
     },
     "cooldown_policy": {
       "type": "object",
-      "description": "Per-provider cooldown policy: rules for rate-limit and quota errors. Quota is checked before rate_limit. A nil/unset CooldownPolicy falls back to bifrost's built-in default for that provider (see docs).",
+      "description": "Per-provider cooldown policy: rules for rate-limit and quota errors plus optional capability overrides. Quota is checked before rate_limit. A nil/unset CooldownPolicy falls back to bifrost's built-in default for that provider; a nil/unset capacity / escalation / learning / health section inherits the plugin-level default from plugins[].config (provider-cooldown), while a section with enabled=false explicitly turns that capability off for this provider. Sections are replaced wholesale (no field-level merge with the plugin default).",
       "properties": {
         "rate_limit": {
           "$ref": "#/$defs/cooldown_policy_rule"
         },
         "quota": {
           "$ref": "#/$defs/cooldown_policy_rule"
+        },
+        "capacity": {
+          "$ref": "#/$defs/cooldown_capacity",
+          "description": "Provider-specific capacity gate override. Omit to inherit the plugin-level default; set enabled=false to disable the gate for this provider."
+        },
+        "escalation": {
+          "$ref": "#/$defs/cooldown_escalation",
+          "description": "Provider-specific adaptive escalation override. Omit to inherit the plugin-level default; set enabled=false to disable escalation for this provider."
+        },
+        "learning": {
+          "$ref": "#/$defs/cooldown_learning",
+          "description": "Provider-specific limit-learner override (window length, sample caps). Omit to inherit the plugin-level default; set enabled=false to disable learning for this provider."
+        },
+        "health": {
+          "$ref": "#/$defs/cooldown_health",
+          "description": "Provider-specific health-aware key weighting override. Omit to inherit the plugin-level default; set enabled=false to disable health weighting for this provider."
         }
       },
       "additionalProperties": false

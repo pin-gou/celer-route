@@ -50053,6 +50053,57 @@
               ]
             }
           }
+        },
+        {
+          "name": "provider-cooldown capacity-usage endpoint - live capacity-gate snapshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "pm.test('provider-cooldown capacity-usage endpoint returns a snapshot object', function () {",
+                  "  pm.expect(pm.response.code, 'failed: ' + pm.response.text()).to.eql(200);",
+                  "  var j = pm.response.json();",
+                  "  pm.expect(j, 'expected JSON body').to.be.ok;",
+                  "  pm.expect(j.plugin, 'expected plugin name').to.eql('provider-cooldown');",
+                  "  pm.expect(typeof j.count, 'count should be numeric').to.eql('number');",
+                  "  pm.expect(j.entries, 'entries should be an array (empty is valid)').to.be.an('array');",
+                  "  pm.expect(j.entries.length, 'entries length should match count').to.eql(j.count);",
+                  "});",
+                  "pm.test('capacity-usage entries (when present) carry the documented shape', function () {",
+                  "  if ([401, 403, 404, 429, 500, 502, 503, 504].indexOf(pm.response.code) !== -1) { return; }",
+                  "  var j = pm.response.json();",
+                  "  (j.entries || []).forEach(function (e) {",
+                  "    pm.expect(e.provider, 'entry.provider').to.be.a('string');",
+                  "    pm.expect(e.scope, 'entry.scope').to.be.a('string');",
+                  "    pm.expect(e.source, 'entry.source').to.be.a('string');",
+                  "    pm.expect(typeof e.window_seconds, 'entry.window_seconds').to.eql('number');",
+                  "    pm.expect(typeof e.used_tokens, 'entry.used_tokens').to.eql('number');",
+                  "    pm.expect(typeof e.retry_after_seconds, 'entry.retry_after_seconds').to.eql('number');",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plugins/provider-cooldown/capacity-usage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plugins",
+                "provider-cooldown",
+                "capacity-usage"
+              ]
+            }
+          }
         }
       ]
     },
@@ -50136,6 +50187,16 @@
                   "  pm.expect(typeof j.by_kind.quota.mark_count, 'by_kind.quota.mark_count should be numeric').to.eql('number');",
                   "  pm.expect(typeof j.by_kind.quota.suppressed_count, 'by_kind.quota.suppressed_count should be numeric').to.eql('number');",
                   "  pm.expect(j.per_provider, 'per_provider should be present').to.be.an('object');",
+                  "  pm.expect(j.per_key, 'per_key should be present (object, may be empty)').to.be.an('object');",
+                  "});",
+                  "pm.test('per_key rows carry the documented per-key counters', function () {",
+                  "  var j = pm.response.json();",
+                  "  Object.keys(j.per_key || {}).forEach(function (id) {",
+                  "    var row = j.per_key[id];",
+                  "    pm.expect(typeof row.mark_count, 'per_key[' + id + '].mark_count should be numeric').to.eql('number');",
+                  "    pm.expect(typeof row.suppressed_count, 'per_key[' + id + '].suppressed_count should be numeric').to.eql('number');",
+                  "    pm.expect(typeof row.success_count, 'per_key[' + id + '].success_count should be numeric').to.eql('number');",
+                  "  });",
                   "});"
                 ]
               }
@@ -50176,6 +50237,23 @@
                   "  pm.expect(typeof j.window_seconds, 'window_seconds should be numeric').to.eql('number');",
                   "  pm.expect(j.limits, 'limits should be an array').to.be.an('array');",
                   "  pm.expect(j.limits.length, 'limits length should match count').to.eql(j.count);",
+                  "});",
+                  "pm.test('learned-limits report splits the limiter dimension', function () {",
+                  "  var j = pm.response.json();",
+                  "  (j.limits || []).forEach(function (l) {",
+                  "    pm.expect(typeof l.sample_count, 'sample_count should be numeric').to.eql('number');",
+                  "    var counts = l.dimension_sample_counts || {};",
+                  "    var total = 0;",
+                  "    Object.keys(counts).forEach(function (k) {",
+                  "      pm.expect(['rpm','tpm','unknown'].indexOf(k), 'unexpected dimension ' + k).to.be.at.least(0);",
+                  "      total += counts[k];",
+                  "    });",
+                  "    pm.expect(total, 'retained samples must cover at least the counted ones').to.be.at.least(l.sample_count);",
+                  "    if (l.limiter_dimension === 'rpm') {",
+                  "      pm.expect(l.estimated_token_limit, 'an rpm-only pair must not publish a token estimate').to.eql(undefined);",
+                  "      pm.expect(l.confidence, 'an rpm-only pair must report insufficient confidence').to.eql('insufficient');",
+                  "    }",
+                  "  });",
                   "});",
                   "pm.test('learned-limits report exposes no key material', function () {",
                   "  var raw = pm.response.text();",

@@ -1,5 +1,6 @@
 // Plugins types that match the Go backend structures
 
+import type { CooldownCapacityConfig, CooldownEscalationConfig, CooldownHealthConfig, CooldownLearningConfig } from "@/lib/types/config";
 import { z } from "zod";
 
 export const SEMANTIC_CACHE_PLUGIN = "semantic_cache";
@@ -369,6 +370,26 @@ export interface ByKindCounters {
 	quota: KindCounters;
 }
 
+// Per-(provider, key) observability rollup surfaced under
+// CooldownStats.perKey. Rows are keyed by "<provider>::<keyID>"; a keyless
+// provider (whose sentinel key has no ID) collapses to "<provider>::".
+//
+// markCount / suppressedCount / successCount are lifetime monotonic
+// counters. Unlike the byKind / perProvider breakdowns, suppressedCount here
+// also covers unclassified (legacy quota_patterns) suppressions, so it sums
+// to the aggregate suppressedCount. lastMarkAt / lastSuccessAt are absent
+// until the event happens. cooldownRemaining is the remaining time (ns) on
+// the key's longest still-active cooldown, derived from the same snapshot
+// the GET /state endpoint serves; absent when the key is not cooling down.
+export interface PerKeyStats {
+	markCount: number;
+	suppressedCount: number;
+	successCount: number;
+	lastMarkAt?: string;
+	lastSuccessAt?: string;
+	cooldownRemaining?: number;
+}
+
 // Lifetime counters + point-in-time active count surfaced by GET
 // /api/plugins/provider-cooldown/stats.
 //
@@ -382,6 +403,9 @@ export interface ByKindCounters {
 // to explain "为什么总 304 但按模型细分只有 300" — the missing 4 sits in
 // perProviderScopeKey. For every provider the two sub-buckets sum to
 // perProvider (modulo unclassified legacy marks).
+//
+// perKey breaks the same observation down per (provider, key) so an
+// operator can tell which credential is absorbing the cooldowns.
 export interface CooldownStats {
 	markCount: number;
 	suppressedCount: number;
@@ -391,6 +415,7 @@ export interface CooldownStats {
 	perProviderModel?: Record<string, Record<string, ProviderKindCounters>>;
 	perProviderScopeKey?: Record<string, ProviderKindCounters>;
 	perProviderScopeModel?: Record<string, ProviderKindCounters>;
+	perKey?: Record<string, PerKeyStats>;
 }
 
 export interface CooldownStateResponse {
@@ -406,6 +431,111 @@ export interface UnfreezeCooldownResponse {
 	provider: string;
 	keyId: string;
 	model?: string;
+}
+
+// Where a capacity entry's limits come from: the plugin-level default or the
+// provider's own cooldown_policy.capacity override.
+export type CapacityUsageSource = "default" | "provider";
+
+// One live accounting row surfaced by GET
+// /api/plugins/provider-cooldown/capacity-usage. `threshold_*` is the
+// effective gate threshold (limit * headroom), so used/threshold is what the
+// UI should render as the consumed fraction. retry_after_seconds > 0 means the
+// gate is currently engaged for this row. `keyId` is set only under the
+// `scope: "key"` granularity, where every credential keeps its own window;
+// apart from `provider` every scope also keeps the model.
+export interface CapacityUsageEntry {
+	provider: string;
+	model: string;
+	keyId?: string;
+	/** Credential display name when the gate has resolved it (scope "key"). */
+	keyName?: string;
+	scope: "provider" | "provider_model" | "key";
+	windowSeconds: number;
+	usedTokens: number;
+	usedRequests: number;
+	tokenLimit: number;
+	requestLimit: number;
+	headroom: number;
+	thresholdTokens: number;
+	thresholdRequests: number;
+	retryAfterSeconds: number;
+	source: CapacityUsageSource;
+}
+
+export interface CapacityUsageResponse {
+	plugin: string;
+	count: number;
+	entries: CapacityUsageEntry[];
+}
+
+export type LearnedLimitConfidence = "insufficient" | "low" | "medium" | "high";
+
+/**
+ * The learning level an estimate was measured at.
+ *
+ * - `provider_model`: the aggregate budget of every credential serving one
+ *   model. This is what a `provider_model` (or `provider`) capacity gate
+ *   enforces.
+ * - `key_model`: one credential's own budget. This is what a `key`-scoped gate
+ *   enforces.
+ *
+ * The two must never be mixed: an aggregate number adopted into a key-scoped
+ * gate multiplies the budget by the number of keys.
+ */
+export type LearnedLimitScope = "provider_model" | "key_model";
+
+// One estimate surfaced by GET /api/plugins/provider-cooldown/learned-limits.
+// `estimatedTokenLimit` is null when the token sample count has not reached
+// min_samples yet (confidence "insufficient"); `estimatedRequestLimit` behaves
+// the same way for the request budget, which is learned from RPM rejections.
+export interface LearnedLimitEntry {
+	provider: string;
+	model: string;
+	/** Older servers omit it; treat a missing value as `provider_model`. */
+	scope: LearnedLimitScope;
+	/** Credential display name for a `key_model` entry; empty otherwise. */
+	keyName: string | null;
+	sampleCount: number;
+	keyCount: number;
+	estimatedTokenLimit: number | null;
+	windowSeconds: number;
+	lowerBound: number | null;
+	upperBound: number | null;
+	confidence: LearnedLimitConfidence;
+	/** How many RPM rejections back the request estimate. */
+	requestSampleCount: number;
+	estimatedRequestLimit: number | null;
+	requestLowerBound: number | null;
+	requestUpperBound: number | null;
+	requestConfidence: LearnedLimitConfidence;
+	/** Dominant limiter dimension among the samples behind the token estimate. */
+	limiterDimension?: "rpm" | "tpm" | "unknown" | null;
+	/** Retained sample count per limiter dimension (`rpm` / `tpm` / `unknown`). */
+	dimensionSampleCounts?: Record<string, number> | null;
+	firstSeen: string;
+	lastSeen: string;
+}
+
+export interface LearnedLimitsResponse {
+	plugin: string;
+	count: number;
+	windowSeconds: number;
+	limits: LearnedLimitEntry[];
+}
+
+// The provider-cooldown plugin config's optional capability sections, as read
+// back from Plugin.config. Absent sections mean "not configured at plugin
+// level", so the frontend constants apply.
+//
+// `capacity` is only read now: it is the deprecated fleet-wide default still
+// honoured for providers without their own `cooldown_policy.capacity`. The
+// plugin page no longer edits it — see providerCooldownPluginConfigFormSchema.
+export interface ProviderCooldownCapabilityDefaults {
+	escalation?: CooldownEscalationConfig;
+	capacity?: CooldownCapacityConfig;
+	learning?: CooldownLearningConfig;
+	health?: CooldownHealthConfig;
 }
 
 // Process-lifetime compression counters surfaced by GET

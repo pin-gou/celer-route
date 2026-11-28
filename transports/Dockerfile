@@ -63,6 +63,12 @@ ENV CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH
 ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=$GOPROXY
 
+# Sumdb override: when building behind firewalls where sum.golang.org is
+# unreachable, goproxy.cn proxies the sumdb, so point GOSUMDB at the proxy.
+# Pass --build-arg GOSUMDB=sum.golang.org to restore default verification.
+ARG GOSUMDB=sum.golang.org
+ENV GOSUMDB=$GOSUMDB
+
 # Module source selection:
 #   USE_LOCAL_MODULES=1 -> go.work with ./core ./framework ./plugins/* ./transports
 #                          (for pre-release CI / local builds before modules are published)
@@ -179,7 +185,7 @@ ENV GOGC="" \
     GOMEMLIMIT=""
 
 RUN apk upgrade --no-cache && \
-    apk add --no-cache musl libgcc ca-certificates zlib=1.3.2-r0
+    apk add --no-cache musl libgcc ca-certificates zlib
 
 COPY --from=builder /app/main .
 COPY --from=builder /app/celer-route-admin .

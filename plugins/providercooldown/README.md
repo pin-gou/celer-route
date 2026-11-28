@@ -10,11 +10,13 @@ routes straight to the next available key or fallback.
 
 ## Behaviour
 
-1. `PostLLMHook` inspects each terminal `BifrostError`. When the error
-   looks like a quota / billing exhaustion (HTTP 402, or HTTP 429 with a
-   matching message — see `IsQuotaExhausted` in `cooldown.go`), the
-   `(provider, key_id)` of the last failed attempt is recorded in an
-   in-memory map with an expiry timestamp.
+1. `PostLLMHook` inspects each terminal `BifrostError` and classifies it
+   against the provider's `CooldownPolicy`: quota matches are checked first,
+   then rate-limit matches. A provider with no policy of its own uses the
+   built-in default for that provider (`schemas.DefaultCooldownPolicy`). When
+   a rule fires, the `(provider, key_id)` — or `(provider, key_id, model)`
+   when the rule's scope is `model` — of the last failed attempt is recorded
+   in an in-memory map with an expiry timestamp.
 2. The bifrost core `KeyPoolFilter` hook consumes that map and removes
    cooled keys from the weighted-random candidate pool. Subsequent
    requests skip the cooled key entirely — LB picks another key in the
@@ -23,10 +25,9 @@ routes straight to the next available key or fallback.
 3. The `RunGC` ticker prunes expired entries every minute. `IsCoolingDown`
    also prunes lazily on read.
 
-Transient 429s ("too many requests, retry later") are intentionally NOT
-treated as quota exhaustion and do not trigger a cooldown — they
-self-heal on retry and over-cooling them would cause unnecessary
-fallback churn.
+A 429 that matches the rate-limit rule is cooled for that rule's TTL; an
+error that only *looks* transient but matches no rule is left alone, so it
+self-heals on retry without causing fallback churn.
 
 The cooldown state is in-memory per process. Container / process restarts
 wipe it. For multi-instance deployments, replace `CooldownState` with a
@@ -43,6 +44,7 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
       "config": {
         "default_ttl_seconds": 300,
         "ttl_overrides": { "openai": 30, "anthropic": 1200 },
+        "quota_patterns": ["insufficient_quota"],
         "escalation": { "enabled": false, "max_multiplier": 4 }
       }
     }
@@ -56,23 +58,251 @@ store backed by `BifrostConfig.KVStore` (interface-compatible).
 | `name` | string | — | must be `"provider-cooldown"` |
 | `config.default_ttl_seconds` | int | 300 | applied to every provider without an override; `<= 0` falls back to 300 |
 | `config.ttl_overrides` | object | `{}` | map of provider name → seconds; non-positive entries ignored |
-| `config.escalation.enabled` | bool | `false` | adaptive TTL escalation (see below); off = unchanged behaviour |
-| `config.escalation.max_multiplier` | int | `4` | per-key TTL growth ceiling, clamped to `1..16` |
-| `config.capacity` | object | absent | optional retrospective capacity gate (see below); absent or `enabled=false` = unchanged behaviour |
-| `config.learning` | object | absent | optional read-only limit learner (see below); absent or `enabled=false` = unchanged behaviour |
+| `config.quota_patterns` | array | `[]` | extra lower-case substrings treated as quota exhaustion; required at the config level (falls back to the built-in list when empty) |
+| `config.escalation.*` | object | absent | **plugin-level default** adaptive TTL escalation (see below); a provider's own `cooldown_policy.escalation` overrides it. Its `chronic` sub-object is the optional long-backoff for chronically bad keys |
+| `config.capacity.*` | object | absent | **deprecated legacy fleet default** retrospective capacity gate (see below); a provider's own `cooldown_policy.capacity` overrides it. Kept for backward compatibility — the UI no longer edits it and only shows a read-only warning plus the fleet water level |
+| `config.learning.*` | object | absent | **plugin-level default** read-only limit learner (see below); a provider's own `cooldown_policy.learning` overrides it |
+| `config.health.*` | object | absent | **plugin-level default** health-aware key weighting (see below); a provider's own `cooldown_policy.health` overrides it |
+
+### Plugin-level defaults vs per-provider overrides
+
+The capability sections in the plugin config are **defaults**, not the only
+place they can live. A provider carries its own section in
+`schemas.CooldownPolicy` (set from the provider detail page in the UI). The
+plugin-level `capacity` section is deprecated and no longer editable, so only
+`escalation`, `learning` and `health` are still presented as fleet defaults:
+
+- **section absent** → the provider inherits the plugin-level section; if that
+  is absent too, the capability is off;
+- **`{ "enabled": false }`** → explicitly off for this provider, even when the
+  plugin default is on;
+- **section present with values** → replaces the plugin-level section
+  **wholesale** — there is no field-level merge.
+
+Resolution lives in `effective.go` (`capabilityDefaults.resolveCapacity` /
+`resolveEscalation` / `resolveLearning` / `resolveHealth`); core stamps the
+provider policy on the request context before every attempt
+(`BifrostContextKeyCooldownPolicy`). The config types and their bounds/defaults
+are shared with the write API and live in `core/schemas/cooldownpolicy.go`.
+
+Read-only endpoints exposed by the plugin (wired in
+`transports/celer-route-http/handlers/cooldown.go`):
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/plugins/provider-cooldown/state` | active cooldown entries |
+| `GET /api/plugins/provider-cooldown/stats` | mark / suppressed counters, per provider, per provider+model **and per key** (`per_key`) |
+| `GET /api/plugins/provider-cooldown/learned-limits` | learned per-window limits; each entry carries its own `window_seconds` (the top-level one is the plugin default, kept for compatibility) |
+| `GET /api/plugins/provider-cooldown/capacity-usage` | live capacity-gate accounting per provider, provider+model or provider+key+model (per `scope`), with `source` = `default` \| `provider` |
+
+#### Per-key metrics surface
+
+`GET /api/plugins/provider-cooldown/stats` is the metric surface for key-level
+health. Its `per_key` block is keyed by `"<provider>::<keyID>"` and carries the
+three counters the optimisation batches are measured with:
+
+| Field | Meaning |
+|---|---|
+| `mark_count` | cooldowns recorded for this key |
+| `suppressed_count` | times the key pool filter vetoed this key |
+| `success_count` | requests that completed successfully on this key |
+
+plus `last_mark_at`, `last_success_at` and `cooldown_remaining`, and the
+top-level `chronic_key_count` (distinct keys currently in chronic long-backoff).
+The per-key rows sum to the aggregate `mark_count` / `suppressed_count`, so the
+breakdown cannot drift from the totals.
+
+These counters are **not** exported as Prometheus metrics. `core/schemas/plugin.go`
+has no "plugin contributes a collector" seam, the telemetry plugin owns a private
+`prometheus.Registry` that is created and replaced on reload, and registering into
+it from another plugin would need unregister-on-reload bookkeeping — a duplicate
+registration panics, which would take the whole `/metrics` endpoint down. The
+`/stats` endpoint answers the same question ("which key is paying for the
+cooldowns?") with no extra wiring, and it keeps the high-cardinality key id out of
+Prometheus label space entirely.
 
 ### Adaptive TTL escalation (optional, default off)
 
 When `escalation.enabled` is true, cooldown TTLs grow on repeat failures:
 
 - the same `(provider, key, model)` failing again within 300s doubles the TTL
-  (1x → 2x → 4x … up to `max_multiplier`); a successful call clears the count;
+  (1x → 2x → 4x … up to `max_multiplier`); a successful call clears the count
+  (see `escalation.chronic` below for the hysteresis that replaces this rule for
+  chronically bad keys);
 - when 3+ distinct keys fail for the same provider/model within 60s, new marks
-  start at 2x until that window goes quiet;
+  start at 2x until that window goes quiet — see "Storm signal" below for the
+  two refinements that stop a stable split of bad credentials from holding the
+  signal on forever;
 - escalated TTLs are capped at 1 hour and are never shorter than the base TTL.
 
 It is expressed only as a longer TTL — no sleeps, no blocking, and no change to
 the upstream request bytes.
+
+#### Storm signal: chronic keys do not count, and the signal must be fresh
+
+The original rule ("3+ distinct keys failed inside 60s → shared outage") cannot
+tell a real group outage from a fleet where a few credentials are permanently
+broken. With four chronically bad keys and two healthy ones, the bad keys
+re-enter the 60s window on every probe, so the signal never turns off and every
+healthy key's ordinary 429 is inflated to 2x. Two refinements fix that, and both
+are active **only when `escalation.chronic` is enabled** for the provider:
+
+| Refinement | Behaviour |
+|---|---|
+| **Chronic exclusion** | Distinct-key counting skips keys that are currently in chronic long-backoff mode. The predicate is the very same `isChronicLocked` the chronic TTL uses, so the two views can never disagree about a key. 4 chronic + 2 healthy keys therefore count as 2 — below the threshold of 3 — and the signal stays off. Once a key recovers (`recovery_successes` consecutive successes) it counts again. |
+| **Freshness** | The bucket records when the failing-key set last **grew** (`grewAt`). The signal only fires while `now − grewAt ≤ 30s`. A real outage pushes the count over the threshold within moments (which refreshes the timestamp); a stable split keeps the count constant and lets the signal age out. |
+
+Both refinements are gated on chronic being enabled, so with chronic off (the
+default) the storm signal keeps its original meaning exactly — distinct-key
+count alone, no freshness window — and the deployment behaves byte-for-byte like
+before. The threshold mark itself is still evaluated *before* the current
+failure is recorded, so the key that reaches the threshold is not escalated by
+its own hit.
+
+#### `escalation.chronic` — long backoff for chronically bad keys (default off)
+
+Escalation alone is capped at `base_ttl × max_multiplier`: with the common
+`ttl_seconds=30` + `max_multiplier=4` that tops out at 120s, so a key whose
+quota is consumed outside this gateway is probed every two minutes — and each
+probe is itself an upstream request that consumes the account's RPM. The
+"success clears every counter" rule makes it worse: a key with a ~15% success
+rate keeps resetting on its lucky probe, so it is never left alone.
+
+`escalation.chronic` reuses the health EWMA (the same observations that feed
+health-aware weighting) to detect that case and switch it to a long, jittered
+backoff:
+
+| Field | Default | Notes |
+|---|---|---|
+| `enabled` | `false` | Requires `escalation.enabled=true`; the combination with escalation off is rejected |
+| `success_rate_threshold` | `0.3` | EWMA success rate below which a row with enough samples is chronic; strictly inside `(0, 1)` |
+| `min_samples` | `10` | Observations required before the predicate may fire (1–1000) |
+| `chronic_max_ttl_seconds` | `1800` | Long backoff, before jitter (30–86400). Never shortens a longer base/escalated TTL |
+| `jitter_ratio` | `0` | `0.2` = ±20% random jitter so keys that failed together do not retry in lockstep. `0` disables jitter; `0.2` is the recommended production value |
+| `recovery_successes` | `3` | Consecutive successes required to lift the chronic mark (1–1000) |
+
+Behaviour:
+
+- **Detection** — chronic is evaluated per `(provider, key, model)`, and once
+  latched it survives a single success. Key-scope marks (no model) aggregate all
+  model rows of that key, and any chronically bad model makes the key chronic at
+  key scope (a bad model cannot hide behind a healthy sibling).
+- **Long TTL** — while chronic, each failure records
+  `chronic_max_ttl_seconds × (1 ± jitter_ratio)`, floored at the normal
+  (escalated) TTL. The escalation/storm counters keep advancing as usual, so the
+  state stays self-consistent when the key recovers.
+- **Half-open probe, no scheduler** — when the long TTL lapses the key is
+  selectable again (with health weighting it is de-prioritised but never
+  unselectable), so the next natural rotation is the probe. A failed probe earns
+  another long backoff; a successful one just serves traffic.
+- **Hysteresis recovery** — one success does NOT clear the chronic mark or the
+  key's escalation counters. Only `recovery_successes` consecutive successes do,
+  after which the next failure starts from the original 1x TTL. A recovered
+  upstream is therefore picked up within at most ~2× `chronic_max_ttl_seconds`.
+- **Rollback** — `escalation.chronic.enabled=false` (or omitting the block)
+  restores the pre-chronic behaviour byte-for-byte, including "success clears
+  the counters".
+
+Because sections are replaced wholesale, a provider-level `escalation` section
+that omits `chronic` disables chronic for that provider even when the plugin
+default enables it.
+
+### RPM/TPM dimension split (optional, default off)
+
+A rate-limit 429 can come from two different budgets, and they recover on very
+different timescales:
+
+- **RPM/RPS** (request rate) — the account's request budget is full. When it is
+  consumed by traffic outside this gateway (the production SenseNova case) it
+  does not clear until that external consumer stops, so the default token-rate
+  TTL merely probes the key again seconds later, and each probe consumes
+  another request from the same exhausted budget.
+- **TPM** (token rate) — our own token throughput hit the window limit. The
+  usual short TTL matches how fast the window drains.
+
+The plugin derives the dimension from the error body (`dimension.go`,
+`limiterDimensionOf`), case-insensitively, from the error type, code and
+rendered message:
+
+| Dimension | Recognised signals (production samples included) |
+|---|---|
+| `rpm` | `EndpointRPMExceeded`, `ModelAccountRpmRateLimitExceeded`, `rpm exhausted`, `rps exhausted`, `RequestBurstTooFast`, `Throttling.BurstRate`, and a generic `rate limit exceeded` that mentions no token/TPM wording. `rps` folds into this bucket: requests-per-second is still a request-rate limit |
+| `tpm` | `EndpointTPMExceeded`, `ModelAccountTpmRateLimitExceeded`, `tpm exhausted`, `token rate limit`, `tokens per minute` |
+| `unknown` | anything else. Falls back to `ttl_seconds` |
+
+Token patterns are evaluated before request patterns, so a body carrying both
+a generic "rate limit exceeded" phrase and a token budget signal resolves to
+`tpm`; `EndpointTPMExceeded` can therefore never be misfiled as `rpm`.
+
+Set the per-dimension TTLs on the **rate_limit** rule (they are rejected on a
+quota rule — a quota exhaustion is not a rate window):
+
+| Field | Default | Notes |
+|---|---|---|
+| `rpm_ttl_seconds` | `0` | TTL for `rpm` marks. `0` falls back to `ttl_seconds`. Ergonomics: 60–120s for an externally consumed RPM budget |
+| `tpm_ttl_seconds` | `0` | TTL for `tpm` marks. `0` falls back to `ttl_seconds`. Leaving both at `0` restores the pre-B3 behaviour byte-for-byte |
+
+Recommended SenseNova configuration (the provider page's cooldown editor can
+set the same two fields):
+
+```json
+{
+  "providers": {
+    "sensenova": {
+      "cooldown_policy": {
+        "rate_limit": {
+          "match": [{ "status_code": 429 }],
+          "ttl_seconds": 30,
+          "rpm_ttl_seconds": 90
+        }
+      }
+    }
+  }
+}
+```
+
+#### Interaction with `retry_after_mode`
+
+With either dimension TTL set, the dimension-specific value becomes the base
+and the retry hint is combined with it as follows:
+
+| `retry_after_mode` | no usable provider hint | usable provider hint |
+|---|---|---|
+| `off` (default) | base | `max(base, hint)` — the hint is a **lower bound** |
+| `cap` | base | `min(base, hint)` |
+| `exact` | base | `hint` |
+
+`base` = `rpm_ttl_seconds` for an rpm mark, `tpm_ttl_seconds` for a tpm mark,
+otherwise `ttl_seconds`. **This is a deliberate change to `off`**: previously
+`off` ignored provider hints entirely, but a dimension TTL is a floor derived
+from how the budget recovers, and a provider asking us to wait longer must
+still be honoured. When both dimension fields are `0`, `off` keeps its exact
+legacy meaning (fixed TTL, no header read). Hints remain bounded by
+`maxProviderRetryAfterHint` (24h) in every branch.
+
+The production SenseNova 429 carries only `X-Request-Id` and **no**
+`retry-after`, so the dimension TTL — not the hint — is what makes this work;
+the hint can only extend it further.
+
+#### Learning decontamination
+
+The same dimension is recorded on every learning sample. The learner still
+records **all** dimensions (for diagnostics and the report's
+`dimension_sample_counts`), but it estimates the token limit from **non-RPM
+samples only**:
+
+- an RPM rejection at `usedTokens≈0` says nothing about the token budget;
+  including it dragged the median and the lower bound to ~0, which is the
+  misleading `learned-limits` report the deployment produced;
+- `sample_count` / `key_count` / `lower_bound` / `upper_bound` /
+  `confidence` therefore describe the participating (tpm + unknown) samples;
+- `limiter_dimension` is the dominant dimension among those participants; when
+  every retained sample is an RPM rejection it reports `"rpm"`, and the entry
+  stays `insufficient` with no estimate — the operator can tell the token
+  estimate is unavailable instead of trusting a ~0;
+- `dimension_sample_counts` (e.g. `{"rpm":12,"tpm":8,"unknown":2}`) is
+  aggregated on each report from the bounded sample buffer; summing it
+  reconstructs the total retained sample count.
 
 ### Retrospective capacity gate (optional, default off)
 
@@ -96,6 +326,13 @@ the request body:
 3. The request that crosses the line still goes out — the same trade-off the
    passive cooldown makes — in exchange for zero estimation error and a
    threshold that is easy to reason about.
+
+Set as the **deprecated** plugin-level fleet default (a provider's own
+`cooldown_policy.capacity` replaces it wholesale). This key is legacy
+compatibility only: the plugin page no longer offers an editor for it, just a
+warning with a "clear global default" action, and `GET
+/api/plugins/provider-cooldown/capacity-usage` is surfaced there as a read-only
+fleet water level:
 
 ```json
 {
@@ -123,8 +360,61 @@ the request body:
 | `capacity.request_limit` | `0` | requests per window; `0` = unlimited |
 | `capacity.window_seconds` | `60` | clamped to `10..3600` |
 | `capacity.headroom` | `0.9` | gate engages at `limit * headroom`; clamped to `0.1..1.0` |
-| `capacity.scope` | `"provider"` | `"provider"` shares one budget per provider; `"provider_model"` per provider/model |
+| `capacity.scope` | `"provider"` | `"provider"` shares one budget per provider; `"provider_model"` per provider/model; `"key"` per provider/key/model (see below) |
 | `capacity.action` | `"fallback"` | `"fallback"` lets the fallback chain take over; `"reject"` returns the 429 immediately |
+
+#### Per-key budgets (`capacity.scope: "key"`)
+
+`"provider"` and `"provider_model"` share one budget across every credential of
+a provider, so a single exhausted account can block the whole provider even when
+the other keys are fine. `"key"` keeps an independent window per
+`(provider, key, model)`:
+
+- **accounting** — `PostLLMHook` adds each terminal request's real usage to the
+  window of the credential that served it (resolved from the attempt trail, the
+  same source the cooldown marker uses);
+- **enforcement while selecting** — the key pool filter removes only the keys
+  whose own window is over `limit * headroom`, so the request rotates to a key
+  that still has budget. This is what makes "one key over its budget blocked,
+  every other key unaffected" true: the filter is the only place that knows
+  which keys the worker may pick from;
+- **enforcement before selecting** — `PreProviderHook` runs before key
+  selection, so it can only ask "does the pool still have any budget?". It
+  short-circuits with the usual capacity 429 **only when no key has budget
+  left**, honouring `action` (`reject` still skips the fallback chain, `fallback`
+  still hands the request over);
+- **unattributable usage** — a keyless provider, or an attempt whose key cannot
+  be resolved, is accounted in the `provider_model` bucket instead of being
+  dropped. `record` and `check` share the same key derivation, so they never
+  disagree about where an attempt lands. A keyless provider's only (sentinel)
+  key has no id and is therefore gated through that same bucket;
+- **observability** — `GET /api/plugins/provider-cooldown/capacity-usage`
+  returns one row per credential, each carrying `key_id` (no new endpoint).
+
+```json
+{
+  "providers": {
+    "sensenova": {
+      "keys": [{ "name": "sensenova-key-1", "value": "env.SENSENOVA_API_KEY_1", "models": ["*"], "weight": 1 }],
+      "cooldown_policy": {
+        "capacity": {
+          "enabled": true,
+          "token_limit": 200000,
+          "request_limit": 500,
+          "window_seconds": 60,
+          "headroom": 0.9,
+          "scope": "key",
+          "action": "fallback"
+        }
+      }
+    }
+  }
+}
+```
+
+Notes: the budget is per model as well, so one key serving two models keeps two
+independent windows; and the per-key gate never creates a cooldown — a key that
+is over budget is merely skipped for selection until its window slides.
 
 Notes:
 
@@ -161,7 +451,9 @@ How it works:
 1. Every provider rejection classified as **rate limit** by the provider's
    `CooldownPolicy` produces one sample. Quota / entitlement failures
    (`insufficient_quota`, …) are deliberately ignored — they say nothing
-   about a window limit.
+   about a window limit. Each sample also records its limiter dimension
+   (rpm / tpm / unknown, see the RPM/TPM section above); RPM samples are kept
+   for diagnostics but excluded from the token-limit estimate.
 2. `used` comes from the same **real-usage** accounting the capacity gate
    uses (the token usage the provider reported, or `billed_usage` on a
    failed-but-billed attempt) — never an estimate. The learner keeps its own
@@ -193,6 +485,9 @@ trustworthy yet.
 Confidence bands are derived from the sample count relative to
 `min_samples`: `< min_samples` → `insufficient`, `< 3 × min_samples` → `low`,
 `< 6 × min_samples` → `medium`, otherwise `high`.
+
+Each provider can learn over its own window; the plugin-level section below is
+the default for providers that do not override it:
 
 ```json
 {
@@ -235,9 +530,12 @@ GET /api/plugins/provider-cooldown/learned-limits
       "sample_count": 12,
       "key_count": 2,
       "estimated_token_limit": 82000,
+      "window_seconds": 60,
       "lower_bound": 71000,
       "upper_bound": 91000,
       "confidence": "medium",
+      "limiter_dimension": "tpm",
+      "dimension_sample_counts": { "rpm": 4, "tpm": 10, "unknown": 2 },
       "first_seen": "2026-11-20T10:15:02Z",
       "last_seen": "2026-11-20T11:02:41Z"
     }
@@ -249,6 +547,16 @@ Notes:
 
 - **The learner only reads.** It never writes a cooldown policy, a capacity
   limit, or anything else — the estimate is a *suggestion* for the operator.
+- `sample_count` counts the samples that participate in the estimate
+  (non-RPM); `dimension_sample_counts` covers every retained sample, so
+  `sample_count + dimension_sample_counts["rpm"]` is the retained total.
+- **An RPM rejection is not token evidence.** See the RPM/TPM section: only a
+  tpm/unknown sample is used for the estimate, which is why a pair that only
+  ever hits RPM reports `limiter_dimension: "rpm"` and `confidence:
+  "insufficient"` instead of a ~0 limit.
+- Each entry carries its own `window_seconds` because providers may learn over
+  different windows; the top-level `window_seconds` in the response is the
+  plugin-level default window, kept for backward compatibility.
 - The learned number is the aggregate limit our own traffic hit for one
   `(provider, model)` pair. With several keys in use, the provider's per-key
   limits add up, so the learned value is the sum of the limits we exercised;
@@ -257,6 +565,59 @@ Notes:
   window; a 60s window matches a TPM limit, not a daily quota.
 - State is in-memory and per-process, and is dropped when the process restarts
   (or when the plugin is re-initialized).
+
+### Health-aware key weighting (optional, default off)
+
+Passive cooldown removes a failing key for the length of its TTL, but between
+cooldowns weighted-random still gives that key its full configured weight, so
+every rotation spends a request on a credential that is known to be failing.
+`health` closes that gap: it folds each `(provider, key, model)` triple's
+observed success/failure stream into an exponentially weighted moving average
+(EWMA) success rate and scales that key's `Weight` by it **before** weighted
+selection.
+
+```json
+{
+  "config": {
+    "default_ttl_seconds": 300,
+    "ttl_overrides": {},
+    "quota_patterns": ["insufficient_quota"],
+    "health": {
+      "enabled": true,
+      "half_life_seconds": 120,
+      "min_samples": 5,
+      "min_weight_factor": 0.05
+    }
+  }
+}
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `health.enabled` | `false` | `false` = feature fully inert (no state, no lock, weights unchanged) |
+| `health.half_life_seconds` | `120` | EWMA half-life; an observation one half-life old counts half. Clamped to `10..3600` |
+| `health.min_samples` | `5` | observations needed before the weight may be scaled; below it the weight is untouched. Clamped to `1..1000` |
+| `health.min_weight_factor` | `0.05` | floor of the scaling factor; clamped to `0.01..1.0` and never zero |
+
+Notes:
+
+- **Selection only.** A success in `PostLLMHook` raises the key's EWMA; a
+  policy-matched rate-limit / quota rejection observed by the per-key failure
+  marker lowers it. Nothing here marks a cooldown, refuses a request or changes
+  the upstream bytes.
+- **Never zero.** `min_weight_factor` keeps a de-prioritised key in the rotation
+  at a small, non-zero share. That share is its recovery probe: without it the
+  key could never report success again and the pool would slowly starve. A
+  scaled weight is also floored at the selector's minimum selectable unit
+  (`0.01`) so the guarantee survives `WeightedRandom`'s integer quantization.
+- **Fast recovery.** The EWMA is time-aware: a key that sat idle for several
+  half-lives snaps back to healthy on its first success afterwards instead of
+  being punished for stale history.
+- **No-op on the disabled path.** With the feature off (the default) every key
+  keeps its configured weight byte-for-byte and no state is allocated.
+- The plugin page does not edit `health` yet. Saving an unrelated plugin or
+  provider setting preserves a stored `health` section untouched (both forms
+  spread the stored object before overwriting the fields they own).
 
 ## Build the deployment image
 
@@ -358,11 +719,19 @@ config parsing.
 
 ## Limitations
 
-- The plugin cannot read the upstream provider's `Retry-After` /
-  `retry-after-ms` response header — those aren't surfaced through the
-  `LLMPlugin` interface. The TTL is therefore a fixed configured value
-  rather than provider-driven. Use `ttl_overrides` to tune per provider
-  if the default 10 minutes doesn't match a known reset cadence.
+- Provider retry hints (`Retry-After`, `x-ratelimit-reset-*`) are only used
+  when the matched rule sets `retry_after_mode` to `cap` or `exact`; the
+  default `off` keeps the fixed `ttl_seconds`. The one exception is a
+  rate_limit rule with `rpm_ttl_seconds` / `tpm_ttl_seconds` configured: `off`
+  then treats a usable hint as a lower bound (`max(base, hint)`). The hint is
+  read from `BifrostError.ExtraFields.ProviderResponseHeaders`, so it is
+  available through the plugin interface without any transport-specific code.
+- `escalation`, `learning` and `health` are plugin-level defaults; `capacity` is
+  a **deprecated legacy fleet default** (still honoured for providers without
+  their own section, but no longer editable from the plugin page). A provider
+  that sets its own section in `cooldown_policy` replaces the whole section, so
+  changing a plugin default does not retroactively change a provider that
+  already overrides it.
 - The cooldown state lives in-process. For multi-instance deployments
   replace `CooldownState` with a `KVStore`-backed implementation that
   satisfies the same `Mark` / `IsCoolingDown` semantics.
