@@ -117,6 +117,34 @@ describe("CooldownCapacityCard", () => {
 		expect(screen.getByTestId("providers2-capacity-empty").textContent).toContain("capacityUsage.emptyDisabled");
 	});
 
+	it("groups key-scoped rows by credential and summarizes how many are engaged", () => {
+		mocks.entries = [
+			capacityEntry({
+				scope: "key",
+				keyId: "key-1-id",
+				keyName: "key-1",
+				model: "gpt-4o",
+				limitSource: "key_model",
+				retryAfterSeconds: 12,
+			}),
+			capacityEntry({ scope: "key", keyId: "key-1-id", keyName: "key-1", model: "gpt-4o-mini", limitSource: "key" }),
+			capacityEntry({ scope: "key", keyId: "key-2-id", keyName: "key-2", model: "gpt-4o" }),
+		];
+		render(<CooldownCapacityCard provider={provider()} />);
+
+		const summary = screen.getByTestId("providers2-capacity-summary");
+		expect(summary.textContent).toContain("3");
+		expect(summary.textContent).toContain("1");
+
+		expect(screen.getByTestId("providers2-capacity-group-key-1-id").textContent).toContain("key-1");
+		expect(screen.getByTestId("providers2-capacity-group-key-2-id").textContent).toContain("key-2");
+		// The most specific layer is called out; the shared default is not.
+		expect(screen.getByTestId("providers2-capacity-limit-source-gpt-4o|key-1-id").textContent).toContain(
+			"cooldownCapability.capacityUsage.limitSource.key_model",
+		);
+		expect(screen.queryByTestId("providers2-capacity-limit-source-gpt-4o|key-2-id")).toBeNull();
+	});
+
 	it("hides the whole card when the plugin is not loaded (HTTP 400)", () => {
 		mocks.error = { status: 400 };
 		render(<CooldownCapacityCard provider={provider()} />);

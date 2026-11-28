@@ -469,7 +469,7 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
 
 - **继承全局默认**：不写该段。容量闸门没有插件级默认值，所以该提供商不启用闸门；
 - **关闭**：该提供商不设闸门
-- **自定义**：填写上限、窗口、余量、统计粒度与耗尽后的处理方式，保存后生效
+- **自定义**：填写上限、预算单位、窗口、余量、耗尽后的处理方式，保存后生效
 
 :::note 旧版全局容量配置属于遗留兼容
 早期版本可以在插件页设置一份**全局** `capacity` 默认值，或直接写进 `config.json`。这个入口
@@ -520,11 +520,26 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
 | `request_limit` | `0` | 每窗口请求数上限；`0` 表示不限 |
 | `window_seconds` | `60` | 滑动窗口长度，合法范围 `10`–`3600` |
 | `headroom` | `0.9` | 用量达到 `上限 × headroom` 即触发闸门，合法范围 `0.1`–`1.0` |
-| `scope` | `"provider"` | `"provider"`：同一提供商的全部模型共享一份预算；`"provider_model"`：每个「提供商 + 模型」各有一份；`"key"`：每个「提供商 + 密钥 + 模型」各有一份（见下文） |
+| `scope` | `"provider"` | 预算单位。`"provider"`：同一提供商的全部模型、全部密钥共享 1 份预算；`"provider_model"`：每个模型 1 份（同模型下所有密钥共享）；`"key"`：每把密钥 × 每个模型各 1 份（见下文）。下方的 `token_limit` / `request_limit` 是**每一份**的上限，份数越多合计可用越大 |
 | `action` | `"fallback"` | `"fallback"`：交给 fallback 链继续尝试；`"reject"`：直接拒绝，不再回退 |
-| `key_limits` | 空 | 只在 `scope: "key"` 下生效：按密钥**名称**单独覆盖 `token_limit` / `request_limit`。字段留空表示继承上面的默认值，填 `0` 表示该密钥不限制（见下文） |
+| `key_limits` | 空 | 只在 `scope: "key"` 下生效：按密钥**名称**单独覆盖 `token_limit` / `request_limit`，并在条目内可用 `models` 再按模型收窄。字段留空表示继承上面的默认值，填 `0` 表示该密钥（在该模型上）不限制（见下文） |
 
-#### 按密钥独立预算（`scope: "key"`）
+#### 预算单位：先决定「一份预算」是什么
+
+`scope` 决定一份预算覆盖哪些维度。它是整个闸门里**最容易看错**的一项，因为
+`token_limit` / `request_limit` 是**每一份**的额度，不是总量：
+
+| 预算单位 | `scope` | 份数 | 合计可用 |
+|---|---|---|---|
+| 整个提供商 | `provider` | 1 | 单值 |
+| 每个模型（密钥共享） | `provider_model` | 模型数 M | 单值 × M |
+| 每把密钥 × 每个模型 | `key` | 密钥数 K × M | 单值 × K × M |
+
+配置页会在选完预算单位后直接显示「当前 N 份预算」和「合计可用」，就是因为这个乘法
+关系不写出来一定会被误读：按密钥 × 模型填了 200,000 词元，实际放行量是
+`200,000 × K × M`。
+
+#### 按密钥 × 模型独立预算（`scope: "key"`）
 
 `"provider"` 和 `"provider_model"` 都是**一把密钥超支就影响整个提供商**——即使其它
 密钥还有额度。`"key"` 为每个 `(提供商, 密钥, 模型)` 维护独立窗口：
@@ -541,17 +556,18 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
   `provider_model` 桶而不是丢弃；`record` 与 `check` 共用同一套桶键推导，所以不会出现
   「记到 A 桶、查 B 桶」的不一致。keyless 提供商唯一的（哨兵）密钥没有 id，因此正是
   通过这个桶被拦截。
-- **可观测量**：`GET /api/plugins/provider-cooldown/capacity-usage` 直接复用，每个
-  密钥一行，带 `key_id`（不新增接口）。
+- **可观测量**：`GET /api/plugins/provider-cooldown/capacity-usage` 直接复用，
+  每个 `(密钥, 模型)` 一行，带 `key_id` 与 `limit_source`（该行的阈值来自哪一层：
+  `base` / `key` / `key_model`），不新增接口。
 
 限制：预算同时按模型切分，所以同一把密钥服务两个模型会有两份独立窗口；按密钥的闸门
 **不会产生冷却**，超支的密钥只是暂时不参与选择，窗口滑走即恢复。
 
-#### 单密钥上限覆盖（`key_limits`）
+#### 单密钥 / 单模型上限覆盖（`key_limits`）
 
-`token_limit` / `request_limit` 是**一个数字**，`scope: "key"` 时它对每把密钥各生效一次
-——语义就是「每把密钥都有 N/窗口」。密钥**同质**（同一账号下轮换的多把 key）时这就是
-对的，不需要额外配置。
+`token_limit` / `request_limit` 是**一个数字**，`scope: "key"` 时它对每把密钥的每个模型
+各生效一次——语义就是「每把密钥在每个模型上都有 N/窗口」。密钥**同质**（同一账号下
+轮换的多把 key）、模型额度也相同时这就是对的，不需要额外配置。
 
 当密钥**异质**（不同账号、不同套餐、不同子账号额度）时，单值只能取一个折中：额度大的
 被提前拦、额度小的照样撞墙。这时用 `key_limits` 按密钥名称覆盖：
@@ -578,9 +594,33 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
   密钥被约束，未列出的密钥不拦截
 - 只允许在 `scope: "key"` 下使用；其它粒度会让保存被拒绝（没有密钥维度的记账桶可套用）
 
+如果同一把密钥在不同模型上的额度也不一样（免费额度按模型发放的典型情况），在密钥
+条目里再加一层 `models`：
+
+```jsonc
+"key_limits": {
+  "sensenova-key-4": {
+    "token_limit": 200000,
+    "models": {
+      "sensenova-v2":   { "token_limit": 50000 },
+      "sensenova-lite": { "token_limit": 0 }
+    }
+  }
+}
+```
+
+解析顺序是**最具体优先**：`base`（提供商级）→ `key`（密钥）→ `key_model`（密钥 × 模型）。
+`models` 里的条目只需写与密钥级不同的维度，省略的维度继续继承密钥级的值；显式写 `0`
+仍然是「该模型上不限制」。三层都可以单独存在：只配 `models` 也能激活闸门。
+
+界面上的对应关系：容量的「单密钥上限」区域列出每把密钥，展开某把密钥即可为单个模型
+添加覆盖；「闸门实时水位」里该行的 `limit_source` 徽标会标明阈值来自哪一层，避免
+「我明明配了密钥上限，为什么这个模型没被拦」这类排查。
+
 **怎么判断该不该单配**：先在闸门里只观察不设限（`token_limit` / `request_limit` 都为 0），
-跑一两天看「闸门实时水位」卡片——`scope: "key"` 时每个密钥一行。如果所有密钥都在**相近
-用量**上撞墙，说明同质，单值就够；如果某一把明显更早撞墙，给它单独设一个更小的值。
+跑一两天看「闸门实时水位」卡片——`scope: "key"` 时每个 `(密钥, 模型)` 一行，按密钥分组。
+如果所有密钥都在**相近用量**上撞墙，说明同质，单值就够；如果某一把明显更早撞墙，给它
+单独设一个更小的值；如果同一把密钥只在某个模型上提前撞墙，就为那个模型加 `models` 覆盖。
 
 配置示例（容量一律配在 `provider.cooldown_policy.capacity`）：
 
@@ -679,6 +719,7 @@ GET /api/plugins/provider-cooldown/capacity-usage
       "headroom": 0.9,
       "threshold_tokens": 180000,
       "threshold_requests": 450,
+      "limit_source": "base",
       "retry_after_seconds": 37,
       "source": "provider"
     }
@@ -690,12 +731,13 @@ GET /api/plugins/provider-cooldown/capacity-usage
 |------|------|
 | `provider` / `model` | 统计对象；`scope = provider` 时没有 `model`，表示该提供商的全部模型共用一份预算 |
 | `key_id` | 仅 `scope = key` 时出现，表示这一行属于哪把密钥；无法归因的用量会以「无 key_id」的行出现在 `provider_model` 桶里 |
-| `scope` | `provider`（跨模型共享）、`provider_model`（按模型独立）或 `key`（按密钥 + 模型独立） |
+| `scope` | `provider`（整个提供商 1 份）、`provider_model`（每个模型 1 份）或 `key`（每把密钥 × 每个模型 1 份） |
 | `window_seconds` | 该行的滚动窗口长度 |
 | `used_tokens` / `used_requests` | 当前窗口内已记账的真实用量 |
-| `token_limit` / `request_limit` | 配置的上限，`0` 表示不限 |
+| `token_limit` / `request_limit` | 该行实际生效的上限（可能来自默认值、密钥覆盖或模型覆盖），`0` 表示不限 |
 | `headroom` | 配置的余量比例 |
 | `threshold_tokens` / `threshold_requests` | 闸门实际比较的阈值，即 `上限 × headroom`；`0` 表示该项不限 |
+| `limit_source` | 该行阈值的来源层：`base`（提供商级默认）、`key`（`key_limits[密钥]`）、`key_model`（`key_limits[密钥].models[模型]`） |
 | `retry_after_seconds` | 建议再等多少秒窗口用量才会回落到阈值以下；`0` 表示当前未被拦截 |
 | `source` | 该段配置的来源：`provider` = 提供商自己的 `cooldown_policy.capacity`，`default` = 插件级默认段 |
 
@@ -826,15 +868,21 @@ GET /api/plugins/provider-cooldown/capacity-usage
 该提供商的「学习建议」，每一条显示模型、样本数、估算窗口、估算上限与置信度。如果该
 估算的窗口和容量闸门当前的窗口不一致，列表会提示两者不能直接通用。
 
-每条建议右侧有 **采用为上限** 按钮。它只是把估算值**预填**到「回溯式容量闸门」
-（词元上限填 `token_limit`、请求上限填 `request_limit`），并把闸门切到 **自定义**
-——**不会自动保存**，也不会改动别的提供商。确认无误后仍需点 **保存冷却策略** 才会
-真正生效。
+每条建议右侧有 **采用为上限** 按钮。它只是把估算值**预填**到「回溯式容量闸门」，
+并把闸门切到 **自定义**——**不会自动保存**，也不会改动别的提供商。确认无误后仍需点
+**保存冷却策略** 才会真正生效。
+
+写入位置取决于估算的层级：
+
+- `provider_model`（聚合口径）→ 闸门的 `token_limit` / `request_limit`（每个模型一份）；
+- `key_model`（单密钥口径）→ 该密钥在 `key_limits[<密钥名>]` 里的覆盖值，**不会**写进
+  上面那个共享的默认值。否则一次「某把密钥的额度」采纳，会把所有密钥的预算都改成这个数。
 
 采纳受**层级**约束：列表只展示与闸门当前 `scope` 同一层级的估算——闸门是
 `scope: "key"` 时只列 `key_model` 建议，`scope: "provider_model"` 时只列
 `provider_model` 建议。`scope: "provider"` 没有可采纳的层级（学习不产出跨模型的
-汇总值），界面会说明原因而不是给一个能点的数字。
+汇总值），界面会说明原因而不是给一个能点的数字。采纳 `key_model` 后，该密钥的覆盖值
+可以在「单密钥上限」区域直接看到，再按模型细分即可。
 
 学习结果同时通过一个**只读**接口暴露：
 

@@ -499,9 +499,11 @@ func toFloat64(v any) (float64, error) {
 }
 
 // parseCapacityKeyLimits decodes a capacity.key_limits object: a map of key
-// NAME → { token_limit?, request_limit? }. Absent fields inherit the
-// provider-level value at gate-build time; an explicit 0 means "unlimited for
-// this credential", which is why the fields are pointers.
+// NAME → { token_limit?, request_limit?, models? }. Absent fields inherit the
+// credential-level value at gate-build time; an explicit 0 means "unlimited for
+// this credential", which is why the fields are pointers. `models` nests the
+// same two fields one level deeper, for credentials whose quota differs by
+// model.
 func parseCapacityKeyLimits(v any) (map[string]schemas.CooldownCapacityKeyLimit, error) {
 	entries, ok := v.(map[string]any)
 	if !ok {
@@ -540,14 +542,72 @@ func parseCapacityKeyLimits(v any) (map[string]schemas.CooldownCapacityKeyLimit,
 					return nil, fmt.Errorf("capacity.key_limits[%q].request_limit: must not be negative, got %d", name, n)
 				}
 				limit.RequestLimit = &n
+			case "models":
+				models, err := parseCapacityModelLimits(name, value)
+				if err != nil {
+					return nil, err
+				}
+				limit.Models = models
 			default:
 				return nil, fmt.Errorf("capacity.key_limits[%q]: unknown key %q", name, field)
 			}
 		}
-		if limit.TokenLimit == nil && limit.RequestLimit == nil {
+		if limit.TokenLimit == nil && limit.RequestLimit == nil && len(limit.Models) == 0 {
 			return nil, fmt.Errorf("capacity.key_limits[%q]: must set token_limit or request_limit", name)
 		}
 		out[name] = limit
+	}
+	return out, nil
+}
+
+// parseCapacityModelLimits decodes the optional per-model overrides inside one
+// credential: a map of model name → { token_limit?, request_limit? }.
+func parseCapacityModelLimits(keyName string, v any) (map[string]schemas.CooldownCapacityModelLimit, error) {
+	entries, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("capacity.key_limits[%q].models: expected object, got %T", keyName, v)
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]schemas.CooldownCapacityModelLimit, len(entries))
+	for model, rawEntry := range entries {
+		if strings.TrimSpace(model) == "" {
+			return nil, fmt.Errorf("capacity.key_limits[%q].models: empty model name", keyName)
+		}
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("capacity.key_limits[%q].models[%q]: expected object, got %T", keyName, model, rawEntry)
+		}
+		var limit schemas.CooldownCapacityModelLimit
+		for field, value := range entry {
+			switch field {
+			case "token_limit":
+				n, err := toInt64(value)
+				if err != nil {
+					return nil, fmt.Errorf("capacity.key_limits[%q].models[%q].token_limit: %w", keyName, model, err)
+				}
+				if n < 0 {
+					return nil, fmt.Errorf("capacity.key_limits[%q].models[%q].token_limit: must not be negative, got %d", keyName, model, n)
+				}
+				limit.TokenLimit = &n
+			case "request_limit":
+				n, err := toInt64(value)
+				if err != nil {
+					return nil, fmt.Errorf("capacity.key_limits[%q].models[%q].request_limit: %w", keyName, model, err)
+				}
+				if n < 0 {
+					return nil, fmt.Errorf("capacity.key_limits[%q].models[%q].request_limit: must not be negative, got %d", keyName, model, n)
+				}
+				limit.RequestLimit = &n
+			default:
+				return nil, fmt.Errorf("capacity.key_limits[%q].models[%q]: unknown key %q", keyName, model, field)
+			}
+		}
+		if limit.TokenLimit == nil && limit.RequestLimit == nil {
+			return nil, fmt.Errorf("capacity.key_limits[%q].models[%q]: must set token_limit or request_limit", keyName, model)
+		}
+		out[model] = limit
 	}
 	return out, nil
 }

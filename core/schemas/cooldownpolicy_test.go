@@ -833,3 +833,114 @@ func TestCooldownCapacityKeyLimitsJSONRoundTrip(t *testing.T) {
 		t.Fatalf("empty key_limits must be omitted, got %s", bare)
 	}
 }
+
+// TestCooldownCapacityConfigValidateKeyModelLimits pins the nested layer's
+// write-path rules: a models-only credential is valid, empty model names and
+// empty model entries are not, and the scope requirement still applies.
+func TestCooldownCapacityConfigValidateKeyModelLimits(t *testing.T) {
+	valid := []CooldownCapacityConfig{
+		{
+			Scope: CapacityScopeKey,
+			KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"k": {Models: map[string]CooldownCapacityModelLimit{
+					"gpt-4o": {TokenLimit: ptrInt64(100)},
+				}},
+			},
+		},
+		{
+			Scope: CapacityScopeKey,
+			KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"k": {TokenLimit: ptrInt64(1000), Models: map[string]CooldownCapacityModelLimit{
+					"gpt-4o": {RequestLimit: ptrInt64(0)},
+				}},
+			},
+		},
+	}
+	for i := range valid {
+		if err := valid[i].Validate(); err != nil {
+			t.Fatalf("valid config %+v rejected: %v", valid[i], err)
+		}
+	}
+
+	invalid := []struct {
+		name string
+		cfg  CooldownCapacityConfig
+		want string
+	}{
+		{
+			"models under the provider_model scope",
+			CooldownCapacityConfig{Scope: CapacityScopeProviderModel, KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"k": {Models: map[string]CooldownCapacityModelLimit{"gpt-4o": {TokenLimit: ptrInt64(1)}}},
+			}},
+			"capacity.key_limits requires capacity.scope",
+		},
+		{
+			"empty model name",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"k": {Models: map[string]CooldownCapacityModelLimit{"  ": {TokenLimit: ptrInt64(1)}}},
+			}},
+			"empty model name",
+		},
+		{
+			"model entry with no limit",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"k": {Models: map[string]CooldownCapacityModelLimit{"gpt-4o": {}}},
+			}},
+			"must set token_limit or request_limit",
+		},
+		{
+			"negative model token limit",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"k": {Models: map[string]CooldownCapacityModelLimit{"gpt-4o": {TokenLimit: ptrInt64(-1)}}},
+			}},
+			"token_limit must not be negative",
+		},
+		{
+			"negative model request limit",
+			CooldownCapacityConfig{Scope: CapacityScopeKey, KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"k": {Models: map[string]CooldownCapacityModelLimit{"gpt-4o": {RequestLimit: ptrInt64(-1)}}},
+			}},
+			"request_limit must not be negative",
+		},
+	}
+	for _, tt := range invalid {
+		err := tt.cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Fatalf("%s: err = %v, want it to contain %q", tt.name, err, tt.want)
+		}
+	}
+}
+
+// TestCooldownCapacityConfigNormalizedDeepCopiesModelLimits pins that
+// normalizing never aliases the caller's nested map or pointer fields.
+func TestCooldownCapacityConfigNormalizedDeepCopiesModelLimits(t *testing.T) {
+	token := int64(100)
+	in := &CooldownCapacityConfig{
+		Scope: CapacityScopeKey,
+		KeyLimits: map[string]CooldownCapacityKeyLimit{
+			"k": {Models: map[string]CooldownCapacityModelLimit{
+				"gpt-4o": {TokenLimit: &token},
+			}},
+		},
+	}
+	out := in.Normalized()
+	if out == nil {
+		t.Fatal("Normalized returned nil")
+	}
+	got := out.KeyLimits["k"].Models["gpt-4o"].TokenLimit
+	if got == nil || *got != 100 {
+		t.Fatalf("normalized model token limit = %v, want 100", got)
+	}
+	if got == in.KeyLimits["k"].Models["gpt-4o"].TokenLimit {
+		t.Fatal("normalized config must not share the caller's pointer")
+	}
+	// Mutating the output must not leak back into the input.
+	*got = 1
+	if *in.KeyLimits["k"].Models["gpt-4o"].TokenLimit != 100 {
+		t.Fatal("mutating the normalized copy changed the caller's value")
+	}
+	delete(out.KeyLimits["k"].Models, "gpt-4o")
+	if _, ok := in.KeyLimits["k"].Models["gpt-4o"]; !ok {
+		t.Fatal("mutating the normalized map changed the caller's map")
+	}
+}

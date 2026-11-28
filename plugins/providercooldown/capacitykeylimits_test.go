@@ -197,3 +197,173 @@ func TestCapacityKeyLimitsIgnoredOutsideKeyScope(t *testing.T) {
 		t.Fatalf("overrides must not be built outside the key scope, got %+v", g.keyLimits)
 	}
 }
+
+// TestCapacityKeyModelLimitsOverridePerModel pins the third resolution layer:
+// a credential may carry a different budget per model, and the narrowest layer
+// wins over the credential-level value.
+func TestCapacityKeyModelLimitsOverridePerModel(t *testing.T) {
+	g := keyLimitGate(t, 1000, map[string]schemas.CooldownCapacityKeyLimit{
+		"k": {
+			TokenLimit: int64Ptr(1000),
+			Models: map[string]schemas.CooldownCapacityModelLimit{
+				"gpt-4o": {TokenLimit: int64Ptr(100)},
+			},
+		},
+	})
+
+	g.record(schemas.OpenAI, "id-k", "gpt-4o", 100)
+	g.record(schemas.OpenAI, "id-k", "gpt-4o-mini", 100)
+
+	// gpt-4o: 100 tokens against 100*0.9 = 90 → over budget.
+	v := g.checkKey(schemas.OpenAI, "id-k", "k", "gpt-4o")
+	if v == nil {
+		t.Fatal("the per-model override must gate gpt-4o at its own threshold")
+	}
+	if v.tokenLimit != 100 {
+		t.Fatalf("verdict token_limit = %d, want the model override 100", v.tokenLimit)
+	}
+	// gpt-4o-mini has no model override, so the credential's 1000 applies.
+	if v := g.checkKey(schemas.OpenAI, "id-k", "k", "gpt-4o-mini"); v != nil {
+		t.Fatalf("a model without an override must inherit the key budget, got %+v", v)
+	}
+}
+
+// TestCapacityKeyModelLimitsInheritPerField pins that a model entry only names
+// what differs from its credential: an omitted dimension still inherits.
+func TestCapacityKeyModelLimitsInheritPerField(t *testing.T) {
+	g := keyLimitGate(t, 1000, map[string]schemas.CooldownCapacityKeyLimit{
+		"k": {
+			TokenLimit:   int64Ptr(1000),
+			RequestLimit: int64Ptr(10),
+			Models: map[string]schemas.CooldownCapacityModelLimit{
+				"gpt-4o": {RequestLimit: int64Ptr(2)},
+			},
+		},
+	})
+
+	for i := 0; i < 2; i++ {
+		g.record(schemas.OpenAI, "id-k", "gpt-4o", 100)
+	}
+	v := g.checkKey(schemas.OpenAI, "id-k", "k", "gpt-4o")
+	if v == nil {
+		t.Fatal("the model's request override (2*0.9 → 2) must engage at 2 requests")
+	}
+	if v.tokenLimit != 1000 {
+		t.Fatalf("token_limit = %d, want the inherited key value 1000", v.tokenLimit)
+	}
+	if v.requestLimit != 2 {
+		t.Fatalf("request_limit = %d, want the model override 2", v.requestLimit)
+	}
+}
+
+// TestCapacityKeyModelLimitsSnapshotReportsSource pins the observability side:
+// the row must say which layer produced its thresholds.
+func TestCapacityKeyModelLimitsSnapshotReportsSource(t *testing.T) {
+	g := keyLimitGate(t, 1000, map[string]schemas.CooldownCapacityKeyLimit{
+		"k": {
+			TokenLimit: int64Ptr(1000),
+			Models: map[string]schemas.CooldownCapacityModelLimit{
+				"gpt-4o": {TokenLimit: int64Ptr(100)},
+			},
+		},
+	})
+
+	g.record(schemas.OpenAI, "id-k", "gpt-4o", 95)
+	g.record(schemas.OpenAI, "id-k", "gpt-4o-mini", 95)
+	g.checkKey(schemas.OpenAI, "id-k", "k", "gpt-4o")
+
+	byModel := map[string]ProviderCapacityUsage{}
+	for _, row := range g.capacityUsage(capacityUsageSourceProvider) {
+		byModel[row.Model] = row
+	}
+	if got := byModel["gpt-4o"].LimitSource; got != capacityLimitSourceKeyModel {
+		t.Fatalf("gpt-4o limit_source = %q, want %q", got, capacityLimitSourceKeyModel)
+	}
+	if got := byModel["gpt-4o"].TokenLimit; got != 100 {
+		t.Fatalf("gpt-4o token_limit = %d, want the model override 100", got)
+	}
+	if got := byModel["gpt-4o-mini"].LimitSource; got != capacityLimitSourceKey {
+		t.Fatalf("gpt-4o-mini limit_source = %q, want %q", got, capacityLimitSourceKey)
+	}
+}
+
+// TestCapacityKeyModelLimitsOnlyConfigActivatesGate pins that a nested override
+// alone may activate the gate: no provider-wide scalar is required.
+func TestCapacityKeyModelLimitsOnlyConfigActivatesGate(t *testing.T) {
+	cfg := &schemas.CooldownCapacityConfig{
+		Enabled: true,
+		Scope:   schemas.CapacityScopeKey,
+		KeyLimits: map[string]schemas.CooldownCapacityKeyLimit{
+			"k": {Models: map[string]schemas.CooldownCapacityModelLimit{
+				"gpt-4o": {RequestLimit: int64Ptr(2)},
+			}},
+		},
+	}
+	if !cfg.Active() {
+		t.Fatal("a models-only key_limits section must activate the gate")
+	}
+	spec, ok := capacitySpecOf(cfg)
+	if !ok {
+		t.Fatal("capacitySpecOf must accept a models-only key_limits section")
+	}
+	g := newCapacityGateFromSpec(spec, cfg.KeyLimits)
+
+	for i := 0; i < 2; i++ {
+		g.record(schemas.OpenAI, "id-k", "gpt-4o", 0)
+	}
+	if v := g.checkKey(schemas.OpenAI, "id-k", "k", "gpt-4o"); v == nil {
+		t.Fatal("the nested request budget must engage")
+	}
+	// Another model has no budget at all under this key.
+	if v := g.checkKey(schemas.OpenAI, "id-k", "k", "gpt-4o-mini"); v != nil {
+		t.Fatalf("a model without a nested budget must not be gated, got %+v", v)
+	}
+}
+
+// TestCapacityKeyModelLimitsRebuildDetection pins that changing a nested
+// override forces a gate rebuild, while an identical map does not.
+func TestCapacityKeyModelLimitsRebuildDetection(t *testing.T) {
+	cfg := &schemas.CooldownCapacityConfig{
+		Enabled:    true,
+		TokenLimit: 1000,
+		Scope:      schemas.CapacityScopeKey,
+		KeyLimits: map[string]schemas.CooldownCapacityKeyLimit{
+			"k": {Models: map[string]schemas.CooldownCapacityModelLimit{
+				"gpt-4o": {TokenLimit: int64Ptr(100)},
+			}},
+		},
+	}
+	spec, ok := capacitySpecOf(cfg)
+	if !ok {
+		t.Fatal("capacitySpecOf reported the gate as inert")
+	}
+	g := newCapacityGateFromSpec(spec, cfg.KeyLimits)
+
+	same := map[string]schemas.CooldownCapacityKeyLimit{
+		"k": {Models: map[string]schemas.CooldownCapacityModelLimit{
+			"gpt-4o": {TokenLimit: int64Ptr(100)},
+		}},
+	}
+	if !g.matchesCapacitySpec(spec, same) {
+		t.Fatal("an identical nested override must not force a rebuild")
+	}
+
+	changed := map[string]schemas.CooldownCapacityKeyLimit{
+		"k": {Models: map[string]schemas.CooldownCapacityModelLimit{
+			"gpt-4o": {TokenLimit: int64Ptr(200)},
+		}},
+	}
+	if g.matchesCapacitySpec(spec, changed) {
+		t.Fatal("a changed nested override must force a rebuild")
+	}
+
+	addedModel := map[string]schemas.CooldownCapacityKeyLimit{
+		"k": {Models: map[string]schemas.CooldownCapacityModelLimit{
+			"gpt-4o":      {TokenLimit: int64Ptr(100)},
+			"gpt-4o-mini": {TokenLimit: int64Ptr(50)},
+		}},
+	}
+	if g.matchesCapacitySpec(spec, addedModel) {
+		t.Fatal("an added model override must force a rebuild")
+	}
+}

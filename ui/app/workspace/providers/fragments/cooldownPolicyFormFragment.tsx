@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getErrorMessage, setProviderFormDirtyState, useAppDispatch } from "@/lib/store";
-import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
+import { useGetModelsQuery, useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
 import { useGetProviderKeysQuery } from "@/lib/store/apis/providersApi";
 import {
 	cooldownPolicySchema,
@@ -120,6 +120,12 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 	// The provider payload does not embed its keys; the per-key capacity editor
 	// needs their names, which is what capacity.key_limits is keyed by.
 	const { data: providerKeys = [] } = useGetProviderKeysQuery(String(provider.name));
+	// The model catalog drives two things on the capacity card: the budget-count
+	// preview (N models × M keys) and the per-model override picker. It is the
+	// same query the default-parameters tab already uses, and it only runs for
+	// the provider being edited.
+	const { data: modelsData } = useGetModelsQuery({ provider: String(provider.name), unfiltered: true }, { skip: !provider.name });
+	const modelOptions = useMemo(() => (modelsData?.models ?? []).filter((m) => !m.is_deprecated).map((m) => m.name), [modelsData]);
 	const pluginDefaults = useCooldownCapabilityDefaults();
 
 	const buildDefaultValues = () => {
@@ -247,8 +253,22 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 		const current = form.getValues("capacity");
 		const base = current ?? { ...effective.capacity, enabled: true };
 		const next = { ...base, enabled: true };
-		if (token !== null) next.token_limit = token;
-		if (request !== null) next.request_limit = request;
+		if (limit.scope === "key_model") {
+			// The estimate belongs to ONE credential. Writing it into the shared
+			// token_limit would grant every other key the same budget, so it goes
+			// to that credential's override (the most specific layer the gate
+			// applies to it). Without a key name there is nothing to attach it
+			// to — refuse instead of silently widening the budget.
+			const keyName = limit.keyName;
+			if (!keyName) return;
+			const keyEntry = { ...(next.key_limits?.[keyName] ?? {}) };
+			if (token !== null) keyEntry.token_limit = token;
+			if (request !== null) keyEntry.request_limit = request;
+			next.key_limits = { ...(next.key_limits ?? {}), [keyName]: keyEntry };
+		} else {
+			if (token !== null) next.token_limit = token;
+			if (request !== null) next.request_limit = request;
+		}
 		form.setValue("capacity", next, { shouldDirty: true, shouldValidate: true });
 		setModes((prev) => ({ ...prev, capacity: "custom" }));
 		setOpenSections((prev) => (prev.includes("capacity") ? prev : [...prev, "capacity"]));
@@ -408,6 +428,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 										onChange={(next) => form.setValue("capacity", next, { shouldDirty: true, shouldValidate: true })}
 										disabled={updateDisabled}
 										keys={providerKeys}
+										modelOptions={modelOptions}
 									/>
 								</CapabilityOverrideCard>
 							</AccordionContent>

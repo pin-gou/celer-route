@@ -437,6 +437,13 @@ export interface UnfreezeCooldownResponse {
 // provider's own cooldown_policy.capacity override.
 export type CapacityUsageSource = "default" | "provider";
 
+// Which configuration layer produced the thresholds this row is compared
+// against. The gate resolves most-specific-first:
+//   base      → the provider-level token_limit / request_limit
+//   key       → capacity.key_limits[key].{token,request}_limit
+//   key_model → capacity.key_limits[key].models[model].{token,request}_limit
+export type CapacityLimitSource = "base" | "key" | "key_model";
+
 // One live accounting row surfaced by GET
 // /api/plugins/provider-cooldown/capacity-usage. `threshold_*` is the
 // effective gate threshold (limit * headroom), so used/threshold is what the
@@ -459,6 +466,8 @@ export interface CapacityUsageEntry {
 	headroom: number;
 	thresholdTokens: number;
 	thresholdRequests: number;
+	/** Which override layer supplied the thresholds above. */
+	limitSource?: CapacityLimitSource;
 	retryAfterSeconds: number;
 	source: CapacityUsageSource;
 }

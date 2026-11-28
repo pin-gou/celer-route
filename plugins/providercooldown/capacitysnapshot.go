@@ -50,8 +50,12 @@ type ProviderCapacityUsage struct {
 	Headroom          float64 `json:"headroom"`
 	ThresholdTokens   int64   `json:"threshold_tokens"`
 	ThresholdRequests int64   `json:"threshold_requests"`
-	RetryAfterSeconds int64   `json:"retry_after_seconds"`
-	Source            string  `json:"source"`
+	// LimitSource names the override layer behind the thresholds above:
+	// "base" (provider-level), "key" (capacity.key_limits[key]) or
+	// "key_model" (capacity.key_limits[key].models[model]).
+	LimitSource       string `json:"limit_source,omitempty"`
+	RetryAfterSeconds int64  `json:"retry_after_seconds"`
+	Source            string `json:"source"`
 }
 
 // CapacityUsage returns a point-in-time snapshot of the capacity gate's live
@@ -120,7 +124,7 @@ func (g *capacityGate) capacityUsage(source string) []ProviderCapacityUsage {
 		if keyID != "" {
 			keyName = g.keyNames[keyID]
 		}
-		lim := g.limitsFor(keyName)
+		lim, limitSource := g.limitsFor(keyName, model)
 		entry := ProviderCapacityUsage{
 			Provider:          provider,
 			KeyID:             keyID,
@@ -135,6 +139,7 @@ func (g *capacityGate) capacityUsage(source string) []ProviderCapacityUsage {
 			Headroom:          g.headroom,
 			ThresholdTokens:   lim.tokenThresh,
 			ThresholdRequests: lim.requestThresh,
+			LimitSource:       limitSource,
 			Source:            source,
 		}
 		// Mirror check(): RetryAfterSeconds is only meaningful once the window

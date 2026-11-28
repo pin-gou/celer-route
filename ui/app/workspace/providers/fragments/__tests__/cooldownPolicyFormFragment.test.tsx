@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 		{ id: "key-2-id", name: "key-2" },
 	],
 	learnedLimits: [] as Array<Record<string, unknown>>,
+	models: [{ name: "gpt-4o" }, { name: "gpt-4o-mini" }] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -44,6 +45,13 @@ vi.mock("@/lib/store/apis/providersApi", async (importOriginal) => {
 		...actual,
 		useUpdateProviderMutation: () => [mocks.updateProvider, { isLoading: false }],
 		useGetProviderKeysQuery: () => ({ data: mocks.providerKeys, isLoading: false, error: undefined }),
+		// The capacity card fetches the provider's model catalog to spell out the
+		// budget count and populate the per-model override picker.
+		useGetModelsQuery: () => ({
+			data: { models: mocks.models, total: mocks.models.length },
+			isLoading: false,
+			error: undefined,
+		}),
 	};
 });
 
@@ -505,7 +513,7 @@ describe("CooldownPolicyFormFragment — learning scopes and per-key limits", ()
 		expect(screen.queryByTestId("providercooldown-learning-adopt-gpt-4o")).toBeNull();
 	});
 
-	it("key scope offers only the per-credential estimate", async () => {
+	it("key scope adopts a per-credential estimate into that key, not the shared default", async () => {
 		render(
 			<CooldownPolicyFormFragment
 				provider={baseProvider({ capacity: { enabled: true, scope: "key", window_seconds: 60 } } as unknown as CooldownPolicy)}
@@ -519,17 +527,22 @@ describe("CooldownPolicyFormFragment — learning scopes and per-key limits", ()
 
 		fireEvent.click(screen.getByTestId("providercooldown-learning-adopt-key-1|gpt-4o"));
 
-		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-token-limit")).toBeTruthy());
-		expect((screen.getByTestId("providercooldown-capacity-token-limit") as HTMLInputElement).value).toBe("2000");
-		expect((screen.getByTestId("providercooldown-capacity-request-limit") as HTMLInputElement).value).toBe("20");
+		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-key-limit-token-key-1")).toBeTruthy());
+		// The estimate belongs to key-1, so it lands on key-1's override.
+		expect((screen.getByTestId("providercooldown-capacity-key-limit-token-key-1") as HTMLInputElement).value).toBe("2000");
+		expect((screen.getByTestId("providercooldown-capacity-key-limit-request-key-1") as HTMLInputElement).value).toBe("20");
+		// The shared default is untouched: adopting one key's budget must not
+		// grant every other key the same number.
+		expect((screen.getByTestId("providercooldown-capacity-token-limit") as HTMLInputElement).value).toBe("");
+		expect((screen.getByTestId("providercooldown-capacity-key-limit-token-key-2") as HTMLInputElement).value).toBe("");
 
 		await save();
 		expect(submittedPolicy()?.capacity).toMatchObject({
 			enabled: true,
 			scope: "key",
-			token_limit: 2000,
-			request_limit: 20,
+			key_limits: { "key-1": { token_limit: 2000, request_limit: 20 } },
 		});
+		expect((submittedPolicy()?.capacity as Record<string, unknown>).token_limit).toBeUndefined();
 	});
 
 	it("per-key overrides are editable and an emptied field removes the entry", async () => {
@@ -656,5 +669,108 @@ describe("CooldownPolicyFormFragment — learning scopes and per-key limits", ()
 		// The backend rejects key_limits under any other scope, so the payload
 		// must not carry them even when an older config stored some.
 		expect(submittedPolicy()?.capacity).not.toHaveProperty("key_limits");
+	});
+});
+/**
+ * The capacity gate's budget unit multiplies the limit, and the per-model
+ * override is the narrowest of three layers. Both are easy to misread, so the
+ * UI has to state the consequence and keep the override on the credential it
+ * belongs to.
+ */
+describe("CooldownPolicyFormFragment — budget unit preview and per-model overrides", () => {
+	beforeEach(() => {
+		mocks.updateProvider.mockReset();
+		mocks.updateProvider.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) }));
+		mocks.learnedLimits = [];
+		mocks.models = [{ name: "gpt-4o" }, { name: "gpt-4o-mini" }];
+	});
+
+	it("spells out the budget count and the aggregate limit", () => {
+		const { unmount } = render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					capacity: { enabled: true, scope: "key", token_limit: 1000, request_limit: 10, window_seconds: 60 },
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("capacity");
+
+		// 2 keys × 2 models = 4 budgets; 1,000 tokens each = 4,000 aggregate.
+		const preview = screen.getByTestId("providercooldown-capacity-scope-preview");
+		expect(preview.textContent).toContain("4");
+		const total = screen.getByTestId("providercooldown-capacity-scope-total");
+		expect(total.textContent).toContain("4,000");
+		expect(total.textContent).toContain("40");
+		unmount();
+
+		// Under the whole-provider unit the multiplier disappears.
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					capacity: { enabled: true, scope: "provider", token_limit: 1000, request_limit: 10, window_seconds: 60 },
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("capacity");
+		expect(screen.getByTestId("providercooldown-capacity-scope-preview").textContent).toContain("1");
+		const singleTotal = screen.getByTestId("providercooldown-capacity-scope-total");
+		expect(singleTotal.textContent).toContain("1,000");
+		expect(singleTotal.textContent).not.toContain("4,000");
+	});
+
+	it("edits a per-model override inside a credential and submits it nested", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					capacity: {
+						enabled: true,
+						scope: "key",
+						token_limit: 1000,
+						key_limits: { "key-1": { token_limit: 500 } },
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("capacity");
+
+		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-key-model-add-key-1")).toBeTruthy());
+		fireEvent.click(screen.getByTestId("providercooldown-capacity-key-model-add-key-1"));
+
+		const tokenInput = screen.getByTestId("providercooldown-capacity-key-model-token-key-1-gpt-4o") as HTMLInputElement;
+		// Seeded from the credential-level value, so the operator edits a real
+		// baseline instead of an empty entry.
+		expect(tokenInput.value).toBe("500");
+		fireEvent.change(tokenInput, { target: { value: "50" } });
+
+		await save();
+		expect((submittedPolicy()?.capacity as Record<string, unknown>).key_limits).toEqual({
+			"key-1": { token_limit: 500, models: { "gpt-4o": { token_limit: 50 } } },
+		});
+	});
+
+	it("removing a per-model override keeps the credential-level limits", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					capacity: {
+						enabled: true,
+						scope: "key",
+						token_limit: 1000,
+						key_limits: {
+							"key-1": { token_limit: 500, models: { "gpt-4o": { token_limit: 50 } } },
+						},
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("capacity");
+
+		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-key-model-remove-key-1-gpt-4o")).toBeTruthy());
+		fireEvent.click(screen.getByTestId("providercooldown-capacity-key-model-remove-key-1-gpt-4o"));
+
+		await save();
+		expect((submittedPolicy()?.capacity as Record<string, unknown>).key_limits).toEqual({
+			"key-1": { token_limit: 500 },
+		});
 	});
 });

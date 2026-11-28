@@ -440,7 +440,7 @@
 		"capacityStatusDisabled": "Off",
 		"capacityStatusLegacy": "Using the legacy global default",
 		"capacityStatusUnconfigured": "Not configured (inert)",
-		"capacitySummary": "{{tokens}} tokens · {{requests}} requests / {{window}}s · headroom {{headroom}} · {{scope}}",
+		"capacitySummary": "per budget: {{tokens}} tokens · {{requests}} requests / {{window}}s · headroom {{headroom}} · {{scope}}",
 		"capacityLegacyHint_one": "{{count}} provider is still using the global capacity default from config.json.",
 		"capacityLegacyHint_other": "{{count}} providers are still using the global capacity default from config.json.",
 		"configureCooldown": "Configure cooldown",

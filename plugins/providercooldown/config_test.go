@@ -458,3 +458,100 @@ func TestParseConfigCapacityKeyLimits(t *testing.T) {
 		t.Fatalf("expected an empty-entry error, got %v", err)
 	}
 }
+
+// TestParseConfigCapacityKeyModelLimits pins the nested per-model layer: it is
+// parsed under a per-key entry, inherits that entry, and rejects empty/invalid
+// entries instead of silently dropping them.
+func TestParseConfigCapacityKeyModelLimits(t *testing.T) {
+	base := map[string]any{
+		"default_ttl_seconds": float64(300),
+		"ttl_overrides":       map[string]any{},
+		"quota_patterns":      []any{},
+	}
+	withCapacity := func(capacity map[string]any) map[string]any {
+		out := map[string]any{}
+		for k, v := range base {
+			out[k] = v
+		}
+		out["capacity"] = capacity
+		return out
+	}
+
+	cfg, err := ParseConfig(withCapacity(map[string]any{
+		"enabled":     true,
+		"scope":       "key",
+		"token_limit": float64(1000),
+		"key_limits": map[string]any{
+			"key-a": map[string]any{
+				"token_limit": float64(500),
+				"models": map[string]any{
+					"gpt-4o":      map[string]any{"token_limit": float64(100)},
+					"gpt-4o-mini": map[string]any{"request_limit": float64(0)},
+				},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ParseConfig returned an error: %v", err)
+	}
+	entry := cfg.Capacity.KeyLimits["key-a"]
+	if entry.TokenLimit == nil || *entry.TokenLimit != 500 {
+		t.Fatalf("key-level token_limit = %v, want 500", entry.TokenLimit)
+	}
+	if len(entry.Models) != 2 {
+		t.Fatalf("expected two model overrides, got %+v", entry.Models)
+	}
+	if m := entry.Models["gpt-4o"]; m.TokenLimit == nil || *m.TokenLimit != 100 || m.RequestLimit != nil {
+		t.Fatalf("gpt-4o override = %+v, want token_limit=100 only", m)
+	}
+	if m := entry.Models["gpt-4o-mini"]; m.RequestLimit == nil || *m.RequestLimit != 0 || m.TokenLimit != nil {
+		t.Fatalf("gpt-4o-mini override = %+v, want an explicit request_limit=0", m)
+	}
+
+	// A models-only credential is valid: no credential-level scalar required.
+	if _, err := ParseConfig(withCapacity(map[string]any{
+		"enabled": true,
+		"scope":   "key",
+		"key_limits": map[string]any{
+			"key-a": map[string]any{
+				"models": map[string]any{"gpt-4o": map[string]any{"request_limit": float64(5)}},
+			},
+		},
+	})); err != nil {
+		t.Fatalf("a models-only key_limits section must parse, got %v", err)
+	}
+
+	invalid := []struct {
+		name     string
+		capacity map[string]any
+		want     string
+	}{
+		{
+			"empty model name",
+			map[string]any{"enabled": true, "scope": "key", "key_limits": map[string]any{
+				"key-a": map[string]any{"models": map[string]any{" ": map[string]any{"token_limit": float64(1)}}},
+			}},
+			"empty model name",
+		},
+		{
+			"model entry with no limit",
+			map[string]any{"enabled": true, "scope": "key", "key_limits": map[string]any{
+				"key-a": map[string]any{"models": map[string]any{"gpt-4o": map[string]any{}}},
+			}},
+			"must set token_limit or request_limit",
+		},
+		{
+			"negative model token limit",
+			map[string]any{"enabled": true, "scope": "key", "key_limits": map[string]any{
+				"key-a": map[string]any{"models": map[string]any{"gpt-4o": map[string]any{"token_limit": float64(-1)}}},
+			}},
+			"must not be negative",
+		},
+	}
+	for _, tt := range invalid {
+		_, err := ParseConfig(withCapacity(tt.capacity))
+		if err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Fatalf("%s: err = %v, want it to contain %q", tt.name, err, tt.want)
+		}
+	}
+}
