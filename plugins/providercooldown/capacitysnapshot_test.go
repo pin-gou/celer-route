@@ -61,6 +61,7 @@ func TestCapacityUsageDefaultGate(t *testing.T) {
 		Headroom:          0.9,
 		ThresholdTokens:   900,
 		ThresholdRequests: 90,
+		LimitSource:       capacityLimitSourceBase,
 		RetryAfterSeconds: 0, // below both thresholds
 		Source:            capacityUsageSourceDefault,
 	}

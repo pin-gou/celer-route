@@ -47,6 +47,13 @@ const (
 	// isCapacityGateError uses it to recognise the synthetic error without
 	// adding a wire-visible field.
 	capacityGateMessagePrefix = "capacity gate: "
+
+	// The configuration layer a resolved budget came from. Reported by the
+	// usage snapshot so an operator can tell a shared default apart from a
+	// per-key or per-(key, model) override.
+	capacityLimitSourceBase     = "base"
+	capacityLimitSourceKey      = "key"
+	capacityLimitSourceKeyModel = "key_model"
 )
 
 // capacityBucket is one second of accounted usage. epoch is the Unix second
@@ -101,6 +108,12 @@ type capacityGate struct {
 	// credentials, keyed by the key's NAME (the stable, user-authored
 	// identifier written in config.json). Empty unless Scope is "key".
 	keyLimits map[string]capacityKeyLimits
+
+	// keyModelLimits narrows a credential's budget to individual models:
+	// key name → model → thresholds. It is the most specific layer, so it wins
+	// over keyLimits (which wins over the provider-level scalars). Empty unless
+	// Scope is "key" and at least one key declares per-model overrides.
+	keyModelLimits map[string]map[string]capacityKeyLimits
 
 	// keyNames maps a credential ID — what the accounting keys and the usage
 	// snapshot carry — to its name, learned from the key pool on the check path
@@ -174,22 +187,41 @@ func newCapacityGateFromSpec(spec capacitySpec, keyLimits map[string]schemas.Coo
 			if name == "" {
 				continue
 			}
-			g.keyLimits[name] = newCapacityKeyLimits(raw, g.tokenLimit, g.requestLimit, g.headroom)
+			keyLim := newCapacityKeyLimits(raw.TokenLimit, raw.RequestLimit, g.tokenLimit, g.requestLimit, g.headroom)
+			g.keyLimits[name] = keyLim
+			if len(raw.Models) == 0 {
+				continue
+			}
+			models := make(map[string]capacityKeyLimits, len(raw.Models))
+			for model, modelRaw := range raw.Models {
+				if model == "" {
+					continue
+				}
+				// Inherit from the credential layer, not the provider layer:
+				// a per-model override only names what differs from its key.
+				models[model] = newCapacityKeyLimits(modelRaw.TokenLimit, modelRaw.RequestLimit, keyLim.tokenLimit, keyLim.requestLimit, g.headroom)
+			}
+			if len(models) > 0 {
+				if g.keyModelLimits == nil {
+					g.keyModelLimits = make(map[string]map[string]capacityKeyLimits, len(keyLimits))
+				}
+				g.keyModelLimits[name] = models
+			}
 		}
 	}
 	return g
 }
 
-// newCapacityKeyLimits resolves one override against the provider-level
-// defaults and precomputes its thresholds.
-func newCapacityKeyLimits(raw schemas.CooldownCapacityKeyLimit, baseToken, baseRequest int64, headroom float64) capacityKeyLimits {
-	token, request := raw.TokenLimit, raw.RequestLimit
+// newCapacityKeyLimits resolves one override layer on top of the values of the
+// layer above it and precomputes its thresholds. Nil pointers inherit; an
+// explicit 0 means "unlimited at this layer".
+func newCapacityKeyLimits(tokenLimit, requestLimit *int64, baseToken, baseRequest int64, headroom float64) capacityKeyLimits {
 	lim := capacityKeyLimits{tokenLimit: baseToken, requestLimit: baseRequest}
-	if token != nil {
-		lim.tokenLimit = *token
+	if tokenLimit != nil {
+		lim.tokenLimit = *tokenLimit
 	}
-	if request != nil {
-		lim.requestLimit = *request
+	if requestLimit != nil {
+		lim.requestLimit = *requestLimit
 	}
 	if lim.tokenLimit < 0 {
 		lim.tokenLimit = 0
@@ -217,15 +249,27 @@ func (g *capacityGate) baseLimits() capacityKeyLimits {
 	}
 }
 
-// limitsFor resolves the budget that applies to one credential. An unknown or
-// empty name falls back to the provider-level budget.
-func (g *capacityGate) limitsFor(keyName string) capacityKeyLimits {
-	if len(g.keyLimits) > 0 && keyName != "" {
-		if lim, ok := g.keyLimits[keyName]; ok {
-			return lim
+// limitsFor resolves the budget that applies to one credential on one model.
+// The most specific layer wins:
+//
+//	key × model → key → provider
+//
+// The second return value names the layer that produced the budget, so the
+// usage snapshot can explain why a row's threshold is not the shared default.
+func (g *capacityGate) limitsFor(keyName string, model string) (capacityKeyLimits, string) {
+	if keyName != "" && len(g.keyModelLimits) > 0 {
+		if models, ok := g.keyModelLimits[keyName]; ok && model != "" {
+			if lim, ok := models[model]; ok {
+				return lim, capacityLimitSourceKeyModel
+			}
 		}
 	}
-	return g.baseLimits()
+	if keyName != "" && len(g.keyLimits) > 0 {
+		if lim, ok := g.keyLimits[keyName]; ok {
+			return lim, capacityLimitSourceKey
+		}
+	}
+	return g.baseLimits(), capacityLimitSourceBase
 }
 
 // matchesCapacitySpec reports whether the gate was built from the given
@@ -259,9 +303,24 @@ func (g *capacityGate) keyLimitsMatch(raw map[string]schemas.CooldownCapacityKey
 		if !ok {
 			return false
 		}
-		want := newCapacityKeyLimits(entry, g.tokenLimit, g.requestLimit, g.headroom)
+		want := newCapacityKeyLimits(entry.TokenLimit, entry.RequestLimit, g.tokenLimit, g.requestLimit, g.headroom)
 		if cur != want {
 			return false
+		}
+		curModels := g.keyModelLimits[name]
+		if len(curModels) != len(entry.Models) {
+			return false
+		}
+		for model, modelEntry := range entry.Models {
+			curModel, ok := curModels[model]
+			if !ok {
+				return false
+			}
+			// Inherit from the credential layer, exactly as construction does.
+			wantModel := newCapacityKeyLimits(modelEntry.TokenLimit, modelEntry.RequestLimit, cur.tokenLimit, cur.requestLimit, g.headroom)
+			if curModel != wantModel {
+				return false
+			}
 		}
 	}
 	return true
@@ -344,7 +403,8 @@ func (g *capacityGate) checkKey(provider schemas.ModelProvider, keyID string, ke
 	if g == nil {
 		return nil
 	}
-	return g.checkWith(provider, keyID, keyName, model, g.limitsFor(keyName))
+	lim, _ := g.limitsFor(keyName, model)
+	return g.checkWith(provider, keyID, keyName, model, lim)
 }
 
 func (g *capacityGate) checkWith(provider schemas.ModelProvider, keyID string, keyName string, model string, lim capacityKeyLimits) *capacityVerdict {

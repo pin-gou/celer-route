@@ -492,6 +492,18 @@ export interface CooldownCapacityConfig {
 export interface CooldownCapacityKeyLimit {
 	token_limit?: number;
 	request_limit?: number;
+	/**
+	 * Per-model overrides for this credential, keyed by model name. They win
+	 * over the credential-level values above, which in turn win over the
+	 * provider-level `token_limit` / `request_limit`. `scope: "key"` only.
+	 */
+	models?: Record<string, CooldownCapacityModelLimit>;
+}
+
+/** The budget one (key, model) pair may carry. Same shapes as the layers above. */
+export interface CooldownCapacityModelLimit {
+	token_limit?: number;
+	request_limit?: number;
 }
 
 // CooldownLearningConfig mirrors schemas.CooldownLearningConfig: the read-only

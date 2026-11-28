@@ -832,10 +832,40 @@ export const providerCooldownCapacityConfigSchema = z.object({
 						.int(t("validation.integerExpected"))
 						.min(0, t("validation.minNumber", { n: "0" }))
 						.optional(),
+					// Per-model overrides inside a credential: the most specific
+					// layer, for accounts whose quota differs by model. Each
+					// entry follows the same "at least one field" rule.
+					models: z
+						.record(
+							z.string(),
+							z
+								.object({
+									token_limit: z
+										.number({ error: t("validation.numberExpected") })
+										.int(t("validation.integerExpected"))
+										.min(0, t("validation.minNumber", { n: "0" }))
+										.optional(),
+									request_limit: z
+										.number({ error: t("validation.numberExpected") })
+										.int(t("validation.integerExpected"))
+										.min(0, t("validation.minNumber", { n: "0" }))
+										.optional(),
+								})
+								.refine((value) => value.token_limit !== undefined || value.request_limit !== undefined, {
+									message: t("validation.fieldRequired", { field: "token_limit / request_limit" }),
+								}),
+						)
+						.optional(),
 				})
-				.refine((value) => value.token_limit !== undefined || value.request_limit !== undefined, {
-					message: t("validation.fieldRequired", { field: "token_limit / request_limit" }),
-				}),
+				.refine(
+					(value) =>
+						value.token_limit !== undefined ||
+						value.request_limit !== undefined ||
+						(value.models !== undefined && Object.keys(value.models).length > 0),
+					{
+						message: t("validation.fieldRequired", { field: "token_limit / request_limit" }),
+					},
+				),
 		)
 		.optional(),
 });

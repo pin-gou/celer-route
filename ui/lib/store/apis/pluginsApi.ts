@@ -35,6 +35,7 @@ interface CapacityUsageWireEntry {
 	headroom?: number;
 	threshold_tokens?: number;
 	threshold_requests?: number;
+	limit_source?: string;
 	retry_after_seconds?: number;
 	source?: string;
 }
@@ -377,6 +378,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 					headroom: entry.headroom ?? 0,
 					thresholdTokens: entry.threshold_tokens ?? 0,
 					thresholdRequests: entry.threshold_requests ?? 0,
+					limitSource: entry.limit_source === "key_model" ? "key_model" : entry.limit_source === "key" ? "key" : "base",
 					retryAfterSeconds: entry.retry_after_seconds ?? 0,
 					source: entry.source === "provider" ? "provider" : "default",
 				})),

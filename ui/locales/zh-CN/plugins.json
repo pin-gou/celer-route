@@ -440,7 +440,7 @@
 		"capacityStatusDisabled": "已关闭",
 		"capacityStatusLegacy": "沿用户全局默认",
 		"capacityStatusUnconfigured": "未配置（不生效）",
-		"capacitySummary": "{{tokens}} 词元 · {{requests}} 请求 / {{window}} 秒 · 余量 {{headroom}} · {{scope}}",
+		"capacitySummary": "每份预算：{{tokens}} 词元 · {{requests}} 请求 / {{window}} 秒 · 余量 {{headroom}} · {{scope}}",
 		"capacityLegacyHint_one": "{{count}} 个提供商仍在沿用 config.json 的全局默认容量配置。",
 		"capacityLegacyHint_other": "{{count}} 个提供商仍在沿用 config.json 的全局默认容量配置。",
 		"configureCooldown": "配置冷却",

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { COOLDOWN_OBSERVABILITY_POLLING_INTERVAL_MS } from "@/components/providerCooldown/defaults";
 import { formatUpdatedAt } from "@/components/providerCooldown/cooldownWindow";
 import { getQueryErrorStatus } from "@/components/providerCooldown/queryError";
@@ -43,6 +44,8 @@ function CapacityRow({ entry }: { entry: CapacityUsageEntry }) {
 	return (
 		<div data-testid={`providers2-capacity-row-${rowId}`} className="space-y-2 rounded-md border p-2.5">
 			<div className="flex flex-wrap items-center justify-between gap-2">
+				{/* Inside a credential group the model is the row identity, so the
+				    key label above already answers "whose budget". */}
 				<span className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
 					<span>{entry.model || t("cooldownCapability.capacityUsage.allModels")}</span>
 					{entry.keyId && (
@@ -52,6 +55,11 @@ function CapacityRow({ entry }: { entry: CapacityUsageEntry }) {
 					)}
 				</span>
 				<div className="flex items-center gap-1.5">
+					{entry.limitSource && entry.limitSource !== "base" && (
+						<Badge variant="secondary" data-testid={`providers2-capacity-limit-source-${rowId}`}>
+							{t(`cooldownCapability.capacityUsage.limitSource.${entry.limitSource}`)}
+						</Badge>
+					)}
 					<Badge variant="outline" data-testid={`providers2-capacity-source-${rowId}`}>
 						{entry.source === "provider"
 							? t("cooldownCapability.capacityUsage.sourceProvider")
@@ -90,6 +98,12 @@ function CapacityRow({ entry }: { entry: CapacityUsageEntry }) {
  * filtered to the provider being viewed. 400 means the provider-cooldown
  * plugin isn't loaded — the whole card is hidden then, since there is nothing
  * the operator can do about it from a provider page.
+ *
+ * A key-scoped gate produces one row per (credential, model), which on a
+ * provider with several keys multiplies into a long list that reads like
+ * duplicate models. Rows are therefore grouped by credential, with a summary
+ * line above, so "3 of 30 budgets are over threshold" is visible without
+ * scanning every row.
  */
 export function CooldownCapacityCard({ provider }: CooldownCapacityCardProps) {
 	const { t } = useTranslation("common");
@@ -97,9 +111,24 @@ export function CooldownCapacityCard({ provider }: CooldownCapacityCardProps) {
 		pollingInterval: COOLDOWN_OBSERVABILITY_POLLING_INTERVAL_MS,
 	});
 
+	const entries = useMemo(() => (data?.entries ?? []).filter((entry) => entry.provider === provider.name), [data, provider.name]);
+
+	const groups = useMemo(() => {
+		const byKey = new Map<string, { keyId: string; keyName?: string; entries: CapacityUsageEntry[] }>();
+		for (const entry of entries) {
+			const id = entry.keyId ?? "";
+			const group = byKey.get(id) ?? { keyId: id, keyName: entry.keyName, entries: [] };
+			group.entries.push(entry);
+			byKey.set(id, group);
+		}
+		return Array.from(byKey.values()).sort((a, b) => a.keyId.localeCompare(b.keyId));
+	}, [entries]);
+
+	const engagedCount = entries.filter((entry) => entry.retryAfterSeconds > 0).length;
+	const hasCredential = entries.some((entry) => !!entry.keyId);
+
 	if (getQueryErrorStatus(error) === 400) return null;
 
-	const entries = (data?.entries ?? []).filter((entry) => entry.provider === provider.name);
 	// An explicit `{ enabled: false }` on the provider means the gate will never
 	// engage, no matter what the plugin default is.
 	const gateExplicitlyDisabled = provider.cooldown_policy?.capacity?.enabled === false;
@@ -138,9 +167,23 @@ export function CooldownCapacityCard({ provider }: CooldownCapacityCardProps) {
 			)}
 
 			{!isLoading && !error && !gateExplicitlyDisabled && entries.length > 0 && (
-				<div className="space-y-2">
-					{entries.map((entry) => (
-						<CapacityRow key={`${entry.scope}|${entry.keyId ?? ""}|${entry.model}`} entry={entry} />
+				<div className="space-y-3">
+					<p className="text-muted-foreground text-xs" data-testid="providers2-capacity-summary">
+						{t("cooldownCapability.capacityUsage.summary", { count: entries.length, engaged: engagedCount })}
+					</p>
+					{groups.map((group) => (
+						<div key={group.keyId || "no-key"} className="space-y-2">
+							{hasCredential && (
+								<p className="text-muted-foreground font-mono text-xs" data-testid={`providers2-capacity-group-${group.keyId || "no-key"}`}>
+									{group.keyId
+										? t("cooldownCapability.capacityUsage.groupKey", { name: group.keyName || group.keyId })
+										: t("cooldownCapability.capacityUsage.groupNoKey")}
+								</p>
+							)}
+							{group.entries.map((entry) => (
+								<CapacityRow key={`${entry.scope}|${entry.keyId ?? ""}|${entry.model}`} entry={entry} />
+							))}
+						</div>
 					))}
 				</div>
 			)}

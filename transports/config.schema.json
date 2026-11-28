@@ -4097,7 +4097,7 @@
         },
         "key_limits": {
           "type": "object",
-          "description": "Per-credential budget overrides, keyed by the key's name (the stable, user-authored identifier in the provider's keys list). Only valid with scope=\"key\": the other scopes have no credential in their accounting key. An omitted token_limit / request_limit inherits the provider-level value; an explicit 0 means unlimited for that credential (so a credential can be exempted). A key_limits-only section (no provider-level token_limit / request_limit) is valid: listed credentials get a budget and unlisted ones are not gated.",
+          "description": "Per-credential budget overrides, keyed by the key's name (the stable, user-authored identifier in the provider's keys list). Only valid with scope=\"key\": the other scopes have no credential in their accounting key. An omitted token_limit / request_limit inherits the provider-level value; an explicit 0 means unlimited for that credential (so a credential can be exempted). A key_limits-only section (no provider-level token_limit / request_limit) is valid: listed credentials get a budget and unlisted ones are not gated. Each credential may additionally narrow its budget per model through models, for accounts whose quota differs by model; the gate resolves base -> key -> key x model, most specific first.",
           "additionalProperties": {
             "type": "object",
             "properties": {
@@ -4110,6 +4110,26 @@
                 "type": "integer",
                 "minimum": 0,
                 "description": "Per-window request budget for this credential. Omit to inherit the provider-level request_limit; 0 means unlimited for this credential."
+              },
+              "models": {
+                "type": "object",
+                "description": "Per-model overrides inside this credential, keyed by model name. The most specific layer: it wins over the credential-level values above, which win over the provider-level scalars. A model entry only has to name the dimension that differs; an omitted dimension inherits the credential-level value. Only meaningful with scope=\"key\".",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "token_limit": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Per-window token budget for this credential on this model. Omit to inherit the credential-level token_limit; 0 means unlimited."
+                    },
+                    "request_limit": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Per-window request budget for this credential on this model. Omit to inherit the credential-level request_limit; 0 means unlimited."
+                    }
+                  },
+                  "additionalProperties": false
+                }
               }
             },
             "additionalProperties": false

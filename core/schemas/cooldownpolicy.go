@@ -184,36 +184,53 @@ type CooldownCapacityConfig struct {
 	// name what actually differs for that key. An explicit 0 means "no limit
 	// for this key" (unlike the provider-level scalars, where 0 is only a
 	// default and the gate must stay active for the other keys).
+	//
+	// Each entry may also carry Models, which narrows the override to
+	// individual models for credentials whose quota is not uniform across
+	// them. See CooldownCapacityKeyLimit.
 	KeyLimits map[string]CooldownCapacityKeyLimit `json:"key_limits,omitempty"`
 }
 
 // CooldownCapacityKeyLimit overrides the per-window budgets of one credential.
 // Nil means "inherit the provider-level value".
+//
+// Models narrows the override to individual models. It exists because a
+// credential's quota is not always uniform across models: an account may have a
+// small free-tier bucket on an expensive model and a large one on a cheap
+// model. The gate resolves most-specific-first:
+//
+//	base (provider) → key → key × model
+//
+// so a Models entry only has to name the models that actually deviate.
 type CooldownCapacityKeyLimit struct {
+	TokenLimit   *int64 `json:"token_limit,omitempty"`
+	RequestLimit *int64 `json:"request_limit,omitempty"`
+
+	// Models overrides the credential's budget for specific models, keyed by
+	// the model name. Nil fields inherit the credential-level value above.
+	Models map[string]CooldownCapacityModelLimit `json:"models,omitempty"`
+}
+
+// CooldownCapacityModelLimit overrides the per-window budgets of one
+// (credential, model) pair. Nil means "inherit the credential-level value".
+type CooldownCapacityModelLimit struct {
 	TokenLimit   *int64 `json:"token_limit,omitempty"`
 	RequestLimit *int64 `json:"request_limit,omitempty"`
 }
 
-// resolved returns the (token, request) limits this override applies on top of
-// the given provider-level defaults.
-func (k CooldownCapacityKeyLimit) resolved(baseToken, baseRequest int64) (int64, int64) {
-	token, request := baseToken, baseRequest
-	if k.TokenLimit != nil {
-		token = *k.TokenLimit
-	}
-	if k.RequestLimit != nil {
-		request = *k.RequestLimit
-	}
-	return token, request
-}
-
 // hasKeyLimits reports whether any entry raises a positive limit, which is what
 // lets a key_limits-only section activate the gate (per-key budgets with no
-// provider-wide default).
+// provider-wide default). A nested per-model override counts too.
 func hasKeyLimits(limits map[string]CooldownCapacityKeyLimit) bool {
+	positive := func(v *int64) bool { return v != nil && *v > 0 }
 	for _, l := range limits {
-		if (l.TokenLimit != nil && *l.TokenLimit > 0) || (l.RequestLimit != nil && *l.RequestLimit > 0) {
+		if positive(l.TokenLimit) || positive(l.RequestLimit) {
 			return true
+		}
+		for _, m := range l.Models {
+			if positive(m.TokenLimit) || positive(m.RequestLimit) {
+				return true
+			}
 		}
 	}
 	return false
@@ -232,12 +249,22 @@ func (c *CooldownCapacityConfig) Normalized() *CooldownCapacityConfig {
 	out.Scope = NormalizeCapacityScope(out.Scope)
 	out.Action = NormalizeCapacityAction(out.Action)
 	// Deep-copy the per-key overrides so normalizing never aliases (or later
-	// mutates) the caller's map or its pointer fields.
+	// mutates) the caller's map or its pointer fields. The nested per-model
+	// map gets the same treatment.
 	if len(out.KeyLimits) > 0 {
 		keyLimits := make(map[string]CooldownCapacityKeyLimit, len(out.KeyLimits))
 		for name, entry := range out.KeyLimits {
 			entry.TokenLimit = cloneInt64Ptr(entry.TokenLimit)
 			entry.RequestLimit = cloneInt64Ptr(entry.RequestLimit)
+			if len(entry.Models) > 0 {
+				models := make(map[string]CooldownCapacityModelLimit, len(entry.Models))
+				for model, modelEntry := range entry.Models {
+					modelEntry.TokenLimit = cloneInt64Ptr(modelEntry.TokenLimit)
+					modelEntry.RequestLimit = cloneInt64Ptr(modelEntry.RequestLimit)
+					models[model] = modelEntry
+				}
+				entry.Models = models
+			}
 			keyLimits[name] = entry
 		}
 		out.KeyLimits = keyLimits
@@ -318,7 +345,7 @@ func (c *CooldownCapacityConfig) Validate() error {
 			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("capacity.key_limits contains an empty key name")
 			}
-			if limit.TokenLimit == nil && limit.RequestLimit == nil {
+			if limit.TokenLimit == nil && limit.RequestLimit == nil && len(limit.Models) == 0 {
 				return fmt.Errorf(
 					"capacity.key_limits[%q] must set token_limit or request_limit (leave out the entry to inherit)",
 					name,
@@ -329,6 +356,29 @@ func (c *CooldownCapacityConfig) Validate() error {
 			}
 			if limit.RequestLimit != nil && *limit.RequestLimit < 0 {
 				return fmt.Errorf("capacity.key_limits[%q].request_limit must not be negative, got %d", name, *limit.RequestLimit)
+			}
+			for model, modelLimit := range limit.Models {
+				if strings.TrimSpace(model) == "" {
+					return fmt.Errorf("capacity.key_limits[%q].models contains an empty model name", name)
+				}
+				if modelLimit.TokenLimit == nil && modelLimit.RequestLimit == nil {
+					return fmt.Errorf(
+						"capacity.key_limits[%q].models[%q] must set token_limit or request_limit (leave out the entry to inherit)",
+						name, model,
+					)
+				}
+				if modelLimit.TokenLimit != nil && *modelLimit.TokenLimit < 0 {
+					return fmt.Errorf(
+						"capacity.key_limits[%q].models[%q].token_limit must not be negative, got %d",
+						name, model, *modelLimit.TokenLimit,
+					)
+				}
+				if modelLimit.RequestLimit != nil && *modelLimit.RequestLimit < 0 {
+					return fmt.Errorf(
+						"capacity.key_limits[%q].models[%q].request_limit must not be negative, got %d",
+						name, model, *modelLimit.RequestLimit,
+					)
+				}
 			}
 		}
 	}
