@@ -1,6 +1,7 @@
 package schemas
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -781,5 +782,54 @@ func TestCooldownCapacityConfigActiveWithKeyLimits(t *testing.T) {
 	}
 	if zero.Active() {
 		t.Fatal("an all-zero key_limits section is a no-op and must not be active")
+	}
+}
+
+// TestCooldownCapacityKeyLimitsJSONRoundTrip pins that per-key overrides survive
+// the config store's JSON round-trip, and that an explicit 0 stays an explicit
+// 0 instead of collapsing into "inherit".
+func TestCooldownCapacityKeyLimitsJSONRoundTrip(t *testing.T) {
+	policy := CooldownPolicy{
+		Capacity: &CooldownCapacityConfig{
+			Enabled:    true,
+			Scope:      CapacityScopeKey,
+			TokenLimit: 1000,
+			KeyLimits: map[string]CooldownCapacityKeyLimit{
+				"key-a": {TokenLimit: ptrInt64(0)},
+				"key-b": {RequestLimit: ptrInt64(20)},
+			},
+		},
+	}
+	raw, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back CooldownPolicy
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if back.Capacity == nil || len(back.Capacity.KeyLimits) != 2 {
+		t.Fatalf("per-key overrides lost in the round-trip: %s", raw)
+	}
+	a := back.Capacity.KeyLimits["key-a"]
+	if a.TokenLimit == nil || *a.TokenLimit != 0 || a.RequestLimit != nil {
+		t.Fatalf("key-a round-trip = %+v, want an explicit token_limit=0 and no request limit", a)
+	}
+	b := back.Capacity.KeyLimits["key-b"]
+	if b.RequestLimit == nil || *b.RequestLimit != 20 || b.TokenLimit != nil {
+		t.Fatalf("key-b round-trip = %+v, want request_limit=20 and no token limit", b)
+	}
+	if err := back.Validate(); err != nil {
+		t.Fatalf("round-tripped policy must validate: %v", err)
+	}
+
+	// No overrides => the field is omitted entirely (byte-compatible with a
+	// config written before this feature existed).
+	bare, err := json.Marshal(&CooldownCapacityConfig{Enabled: true, Scope: CapacityScopeKey, TokenLimit: 1})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(bare), "key_limits") {
+		t.Fatalf("empty key_limits must be omitted, got %s", bare)
 	}
 }

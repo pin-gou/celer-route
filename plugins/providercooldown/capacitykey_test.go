@@ -321,3 +321,71 @@ func TestParseConfigCapacityScopeKey(t *testing.T) {
 		t.Fatalf("NormalizeCapacityScope(tenant) = %q, want the provider fallback", got)
 	}
 }
+
+// TestCapacityKeyLimitsEndToEnd proves the per-key override is actually applied
+// on the request path — through the key-pool filter and PreProviderHook, i.e.
+// the two places core consults — and not just inside the gate's unit tests.
+//
+// Setup: the provider-level budget allows 900 tokens per window (1000 * 0.9),
+// but key-2 is overridden to 100 (threshold 90). Both keys carry the same
+// provider, model and traffic; only the override makes them behave differently.
+func TestCapacityKeyLimitsEndToEnd(t *testing.T) {
+	clk := newFakeClock()
+	s := NewCooldownState(5 * time.Minute)
+	s.now = clk.Now
+	p := &CooldownPlugin{State: s}
+	policy := keyScopePolicy(&schemas.CooldownCapacityConfig{
+		Enabled:       true,
+		TokenLimit:    1000,
+		WindowSeconds: 60,
+		Scope:         schemas.CapacityScopeKey,
+		KeyLimits: map[string]schemas.CooldownCapacityKeyLimit{
+			"key-2": {TokenLimit: int64Ptr(100)},
+		},
+	})
+
+	keys := []schemas.Key{
+		{ID: "id-1", Name: "key-1"},
+		{ID: "id-2", Name: "key-2"},
+	}
+
+	// 100 tokens is far below key-1's 900 threshold but over key-2's 90.
+	spendOnKey(t, p, policy, schemas.OpenAI, "gpt-4o", "id-1", 100)
+	spendOnKey(t, p, policy, schemas.OpenAI, "gpt-4o", "id-2", 100)
+
+	// The filter must rotate past key-2 only.
+	if got := filterKeys(t, p, policy, schemas.OpenAI, "gpt-4o", keys...); len(got) != 1 || got[0] != "id-1" {
+		t.Fatalf("filtered keys = %v, want only id-1 (id-2 is over its per-key budget)", got)
+	}
+	// The request still proceeds because one key has budget.
+	if sc := checkCapacityWithKeys(p, policy, schemas.OpenAI, "gpt-4o", keys...); sc != nil {
+		t.Fatalf("a pool with a key under budget was rejected: %q", sc.Error.Error.Message)
+	}
+
+	// Push key-1 past the provider-level threshold: now no key has budget.
+	spendOnKey(t, p, policy, schemas.OpenAI, "gpt-4o", "id-1", 850)
+	if got := filterKeys(t, p, policy, schemas.OpenAI, "gpt-4o", keys...); len(got) != 0 {
+		t.Fatalf("filtered keys = %v, want none", got)
+	}
+	sc := checkCapacityWithKeys(p, policy, schemas.OpenAI, "gpt-4o", keys...)
+	if sc == nil {
+		t.Fatal("a pool with no remaining budget must be short-circuited")
+	}
+	if sc.Error.StatusCode == nil || *sc.Error.StatusCode != 429 {
+		t.Fatalf("status = %v, want 429", sc.Error.StatusCode)
+	}
+
+	// Renaming the key in the config must stop the override from matching: the
+	// name is the anchor the operator writes, and the accounting identity (the
+	// ID) is deliberately not used for the lookup.
+	renamed := []schemas.Key{
+		{ID: "id-1", Name: "key-1"},
+		{ID: "id-2", Name: "key-2-renamed"},
+	}
+	// With the override no longer matching, id-2 falls back to the
+	// provider-level budget (100 < 900) and becomes selectable again, while
+	// id-1 keeps its 950 tokens and stays over.
+	if got := filterKeys(t, p, policy, schemas.OpenAI, "gpt-4o", renamed...); len(got) != 1 || got[0] != "id-2" {
+		t.Fatalf("filtered keys = %v, want only id-2 (the renamed key falls back to the provider budget)", got)
+	}
+}
