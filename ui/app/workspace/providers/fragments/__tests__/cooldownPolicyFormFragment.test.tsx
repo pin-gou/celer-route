@@ -17,6 +17,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
 	updateProvider: vi.fn(),
+	providerKeys: [
+		{ id: "key-1-id", name: "key-1" },
+		{ id: "key-2-id", name: "key-2" },
+	],
+	learnedLimits: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -38,6 +43,7 @@ vi.mock("@/lib/store/apis/providersApi", async (importOriginal) => {
 	return {
 		...actual,
 		useUpdateProviderMutation: () => [mocks.updateProvider, { isLoading: false }],
+		useGetProviderKeysQuery: () => ({ data: mocks.providerKeys, isLoading: false, error: undefined }),
 	};
 });
 
@@ -70,23 +76,9 @@ vi.mock("@/lib/store/apis/pluginsApi", async (importOriginal) => {
 		useGetLearnedLimitsQuery: () => ({
 			data: {
 				plugin: "provider-cooldown",
-				count: 1,
+				count: mocks.learnedLimits.length,
 				windowSeconds: 60,
-				limits: [
-					{
-						provider: "openai",
-						model: "gpt-4o",
-						sampleCount: 12,
-						keyCount: 2,
-						estimatedTokenLimit: 5000,
-						windowSeconds: 60,
-						lowerBound: 4800,
-						upperBound: 5200,
-						confidence: "high",
-						firstSeen: "2026-01-01T00:00:00Z",
-						lastSeen: "2026-01-02T00:00:00Z",
-					},
-				],
+				limits: mocks.learnedLimits,
 			},
 			error: undefined,
 		}),
@@ -132,10 +124,63 @@ function openSection(capability: "escalation" | "capacity" | "learning") {
 	fireEvent.click(screen.getByTestId(`providercooldown-${capability}-accordion-trigger`));
 }
 
+/**
+ * One aggregate estimate and one per-credential estimate for the same
+ * (provider, model). The learner reports both levels because the capacity gate
+ * can enforce either — and they must never be mixed.
+ */
+function defaultLearnedLimits() {
+	return [
+		{
+			provider: "openai",
+			model: "gpt-4o",
+			scope: "provider_model",
+			keyName: null,
+			sampleCount: 12,
+			keyCount: 2,
+			estimatedTokenLimit: 5000,
+			windowSeconds: 60,
+			lowerBound: 4800,
+			upperBound: 5200,
+			confidence: "high",
+			requestSampleCount: 6,
+			estimatedRequestLimit: 120,
+			requestLowerBound: 100,
+			requestUpperBound: 121,
+			requestConfidence: "medium",
+			limiterDimension: "tpm",
+			firstSeen: "2026-01-01T00:00:00Z",
+			lastSeen: "2026-01-02T00:00:00Z",
+		},
+		{
+			provider: "openai",
+			model: "gpt-4o",
+			scope: "key_model",
+			keyName: "key-1",
+			sampleCount: 10,
+			keyCount: 1,
+			estimatedTokenLimit: 2000,
+			windowSeconds: 60,
+			lowerBound: 1900,
+			upperBound: 2100,
+			confidence: "medium",
+			requestSampleCount: 5,
+			estimatedRequestLimit: 20,
+			requestLowerBound: 19,
+			requestUpperBound: 21,
+			requestConfidence: "low",
+			limiterDimension: "tpm",
+			firstSeen: "2026-01-01T00:00:00Z",
+			lastSeen: "2026-01-02T00:00:00Z",
+		},
+	];
+}
+
 describe("CooldownPolicyFormFragment — capability tri-state payload", () => {
 	beforeEach(() => {
 		mocks.updateProvider.mockReset();
 		mocks.updateProvider.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) }));
+		mocks.learnedLimits = defaultLearnedLimits();
 	});
 
 	it("inherits: the payload omits the capability section entirely", async () => {
@@ -298,16 +343,22 @@ describe("CooldownPolicyFormFragment — capability tri-state payload", () => {
 		expect(quota.ttl_seconds).toBe(600);
 	});
 
-	it("adopting a learned limit prefills the capacity token limit and switches to custom", async () => {
-		render(<CooldownPolicyFormFragment provider={baseProvider()} />);
+	it("adopting a learned limit prefills both budgets for the matching level", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({ capacity: { enabled: true, scope: "provider_model", window_seconds: 60 } } as unknown as CooldownPolicy)}
+			/>,
+		);
 		openSection("learning");
 		fireEvent.click(screen.getByTestId("providercooldown-learning-adopt-gpt-4o"));
 
 		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-token-limit")).toBeTruthy());
 		expect((screen.getByTestId("providercooldown-capacity-token-limit") as HTMLInputElement).value).toBe("5000");
+		// The request budget learned from RPM rejections is adopted too.
+		expect((screen.getByTestId("providercooldown-capacity-request-limit") as HTMLInputElement).value).toBe("120");
 
 		await save();
-		expect(submittedPolicy()?.capacity).toMatchObject({ enabled: true, token_limit: 5000 });
+		expect(submittedPolicy()?.capacity).toMatchObject({ enabled: true, token_limit: 5000, request_limit: 120 });
 	});
 });
 /**
@@ -426,5 +477,184 @@ describe("CooldownPolicyFormFragment — rate-limit dimension pin", () => {
 		await waitFor(() => expect(screen.getByTestId("provider-cooldown-quota-match-0-status-code")).toBeTruthy());
 
 		expect(screen.queryByTestId("provider-cooldown-quota-match-0-dimension-trigger")).toBeNull();
+	});
+});
+/**
+ * Learning levels vs the capacity gate's scope, plus the per-key limit editor.
+ *
+ * The learner reports two levels and the gate enforces exactly one of them, so
+ * the panel must only offer the matching level: an aggregate estimate written
+ * into a key-scoped gate multiplies the budget by the number of keys.
+ */
+describe("CooldownPolicyFormFragment — learning scopes and per-key limits", () => {
+	beforeEach(() => {
+		mocks.updateProvider.mockReset();
+		mocks.updateProvider.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) }));
+		mocks.learnedLimits = defaultLearnedLimits();
+	});
+
+	it("provider scope explains that there is no adoptable estimate", () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({ capacity: { enabled: true, scope: "provider", token_limit: 1000 } } as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("learning");
+
+		expect(screen.getByTestId("providercooldown-learning-scope-provider-hint")).toBeTruthy();
+		expect(screen.queryByTestId("providercooldown-learning-adopt-gpt-4o")).toBeNull();
+	});
+
+	it("key scope offers only the per-credential estimate", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({ capacity: { enabled: true, scope: "key", window_seconds: 60 } } as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("learning");
+
+		// The aggregate row is not offered under a key-scoped gate.
+		expect(screen.queryByTestId("providercooldown-learning-suggestion-gpt-4o")).toBeNull();
+		expect(screen.getByTestId("providercooldown-learning-suggestion-key-1|gpt-4o")).toBeTruthy();
+
+		fireEvent.click(screen.getByTestId("providercooldown-learning-adopt-key-1|gpt-4o"));
+
+		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-token-limit")).toBeTruthy());
+		expect((screen.getByTestId("providercooldown-capacity-token-limit") as HTMLInputElement).value).toBe("2000");
+		expect((screen.getByTestId("providercooldown-capacity-request-limit") as HTMLInputElement).value).toBe("20");
+
+		await save();
+		expect(submittedPolicy()?.capacity).toMatchObject({
+			enabled: true,
+			scope: "key",
+			token_limit: 2000,
+			request_limit: 20,
+		});
+	});
+
+	it("per-key overrides are editable and an emptied field removes the entry", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					capacity: {
+						enabled: true,
+						scope: "key",
+						token_limit: 1000,
+						key_limits: { "key-1": { token_limit: 5 } },
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("capacity");
+
+		await waitFor(() => expect(screen.getByTestId("providercooldown-capacity-key-limit-token-key-1")).toBeTruthy());
+		expect((screen.getByTestId("providercooldown-capacity-key-limit-token-key-1") as HTMLInputElement).value).toBe("5");
+		// A key without an override starts blank (= inherit).
+		expect((screen.getByTestId("providercooldown-capacity-key-limit-token-key-2") as HTMLInputElement).value).toBe("");
+
+		fireEvent.change(screen.getByTestId("providercooldown-capacity-key-limit-token-key-2"), { target: { value: "50" } });
+		fireEvent.change(screen.getByTestId("providercooldown-capacity-key-limit-token-key-1"), { target: { value: "" } });
+
+		await save();
+		expect((submittedPolicy()?.capacity as Record<string, unknown>).key_limits).toEqual({ "key-2": { token_limit: 50 } });
+	});
+
+	it("shows the request estimate when the token estimate is still missing", async () => {
+		mocks.learnedLimits = [
+			{
+				provider: "openai",
+				model: "gpt-4o",
+				scope: "provider_model",
+				keyName: null,
+				sampleCount: 0,
+				keyCount: 2,
+				estimatedTokenLimit: null,
+				windowSeconds: 60,
+				lowerBound: null,
+				upperBound: null,
+				confidence: "insufficient",
+				requestSampleCount: 8,
+				estimatedRequestLimit: 120,
+				requestLowerBound: 100,
+				requestUpperBound: 121,
+				requestConfidence: "high",
+				limiterDimension: "rpm",
+				firstSeen: "2026-01-01T00:00:00Z",
+				lastSeen: "2026-01-02T00:00:00Z",
+			},
+		];
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({ capacity: { enabled: true, scope: "provider_model", window_seconds: 60 } } as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("learning");
+
+		expect(screen.getByTestId("providercooldown-learning-token-gpt-4o").textContent).toContain(
+			"cooldownCapability.learning.noTokenEstimate",
+		);
+		expect(screen.getByTestId("providercooldown-learning-request-gpt-4o").textContent).toContain(
+			"cooldownCapability.learning.requestEstimate",
+		);
+		// The request budget alone is still adoptable.
+		const adopt = screen.getByTestId("providercooldown-learning-adopt-gpt-4o") as HTMLButtonElement;
+		expect(adopt.disabled).toBe(false);
+	});
+
+	it("disables adopt when neither budget has an estimate", () => {
+		mocks.learnedLimits = [
+			{
+				provider: "openai",
+				model: "gpt-4o",
+				scope: "provider_model",
+				keyName: null,
+				sampleCount: 1,
+				keyCount: 1,
+				estimatedTokenLimit: null,
+				windowSeconds: 60,
+				lowerBound: null,
+				upperBound: null,
+				confidence: "insufficient",
+				requestSampleCount: 1,
+				estimatedRequestLimit: null,
+				requestLowerBound: null,
+				requestUpperBound: null,
+				requestConfidence: "insufficient",
+				limiterDimension: "unknown",
+				firstSeen: "2026-01-01T00:00:00Z",
+				lastSeen: "2026-01-02T00:00:00Z",
+			},
+		];
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({ capacity: { enabled: true, scope: "provider_model", window_seconds: 60 } } as unknown as CooldownPolicy)}
+			/>,
+		);
+		openSection("learning");
+
+		const adopt = screen.getByTestId("providercooldown-learning-adopt-gpt-4o") as HTMLButtonElement;
+		expect(adopt.disabled).toBe(true);
+	});
+
+	it("strips per-key overrides when the scope is not key", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: RATE_LIMIT_RULE,
+					capacity: {
+						enabled: true,
+						scope: "provider_model",
+						token_limit: 1000,
+						key_limits: { "key-1": { token_limit: 5 } },
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		changeTtl();
+
+		await save();
+		// The backend rejects key_limits under any other scope, so the payload
+		// must not carry them even when an older config stored some.
+		expect(submittedPolicy()?.capacity).not.toHaveProperty("key_limits");
 	});
 });

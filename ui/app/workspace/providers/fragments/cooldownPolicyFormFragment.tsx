@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getErrorMessage, setProviderFormDirtyState, useAppDispatch } from "@/lib/store";
 import { useUpdateProviderMutation } from "@/lib/store/apis/providersApi";
+import { useGetProviderKeysQuery } from "@/lib/store/apis/providersApi";
 import {
 	cooldownPolicySchema,
 	type CooldownPolicyFormSchema,
@@ -23,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { buildProviderUpdatePayload } from "../views/utils";
 import type { CooldownPolicy, ModelProvider } from "@/lib/types/config";
+import type { CooldownCapacityConfig } from "@/lib/types/config";
 import type { LearnedLimitEntry } from "@/lib/types/plugins";
 import { useGetProviderErrorCatalogQuery } from "@/lib/store/apis/providerErrorCatalogApi";
 import { ErrorSampleBrowser } from "./errorSampleBrowser";
@@ -115,6 +117,9 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 	const dispatch = useAppDispatch();
 	const hasUpdateProviderAccess = useRbac(RbacResource.ModelProvider, RbacOperation.Update);
 	const [updateProvider, { isLoading: isUpdatingProvider }] = useUpdateProviderMutation();
+	// The provider payload does not embed its keys; the per-key capacity editor
+	// needs their names, which is what capacity.key_limits is keyed by.
+	const { data: providerKeys = [] } = useGetProviderKeysQuery(String(provider.name));
 	const pluginDefaults = useCooldownCapabilityDefaults();
 
 	const buildDefaultValues = () => {
@@ -187,6 +192,18 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 		for (const key of COOLDOWN_POLICY_KEYS) {
 			if (policy[key] === undefined) delete policy[key];
 		}
+		// Per-key limits only exist under the "key" scope; sending them under
+		// another scope would make the backend reject the whole policy. The form
+		// keeps the values so switching back restores them.
+		const capacity = policy.capacity as Record<string, unknown> | undefined;
+		if (capacity && typeof capacity === "object") {
+			const scope = capacity.scope ?? effective.capacity.scope;
+			if (scope !== "key") {
+				const cleaned = { ...capacity };
+				delete cleaned.key_limits;
+				policy.capacity = cleaned;
+			}
+		}
 		// The dimension TTLs (rpm_ttl_seconds / tpm_ttl_seconds) select a
 		// cooldown for a RATE-LIMIT dimension, so the backend rejects them on a
 		// quota rule. The form only offers them on the rate_limit rule, but a
@@ -219,14 +236,20 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 	};
 
 	const onAdoptLearnedLimit = (limit: LearnedLimitEntry) => {
-		if (limit.estimatedTokenLimit === null) return;
+		const token = limit.estimatedTokenLimit;
+		const request = limit.estimatedRequestLimit;
+		if (token === null && request === null) return;
+		// Never mix learning levels. A key_model estimate is one credential's
+		// budget; writing it into a model-wide gate (or the reverse) is the
+		// "N times the budget" mistake the scope field exists to prevent.
+		const expectedScope = limit.scope === "key_model" ? "key" : "provider_model";
+		if (capacityScope !== expectedScope) return;
 		const current = form.getValues("capacity");
 		const base = current ?? { ...effective.capacity, enabled: true };
-		form.setValue(
-			"capacity",
-			{ ...base, enabled: true, token_limit: limit.estimatedTokenLimit },
-			{ shouldDirty: true, shouldValidate: true },
-		);
+		const next = { ...base, enabled: true };
+		if (token !== null) next.token_limit = token;
+		if (request !== null) next.request_limit = request;
+		form.setValue("capacity", next, { shouldDirty: true, shouldValidate: true });
 		setModes((prev) => ({ ...prev, capacity: "custom" }));
 		setOpenSections((prev) => (prev.includes("capacity") ? prev : [...prev, "capacity"]));
 		void form.trigger("capacity");
@@ -310,7 +333,12 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 	};
 
 	const updateDisabled = !hasUpdateProviderAccess || isUpdatingProvider;
-	const capacityWindowSeconds = form.getValues("capacity")?.window_seconds ?? effective.capacity.window_seconds;
+	// Both are read from the watched form state (not getValues) so the learning
+	// panel re-filters as soon as the operator changes the gate's scope/window.
+	const capacityWindowSeconds = watchedFormValues.capacity?.window_seconds ?? effective.capacity.window_seconds;
+	const capacityScope = (watchedFormValues.capacity?.scope ?? effective.capacity.scope ?? "provider") as NonNullable<
+		CooldownCapacityConfig["scope"]
+	>;
 
 	return (
 		<Form {...form}>
@@ -379,6 +407,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 										value={form.watch("capacity") ?? {}}
 										onChange={(next) => form.setValue("capacity", next, { shouldDirty: true, shouldValidate: true })}
 										disabled={updateDisabled}
+										keys={providerKeys}
 									/>
 								</CapabilityOverrideCard>
 							</AccordionContent>
@@ -404,6 +433,7 @@ export function CooldownPolicyFormFragment({ provider, onCancel, window }: Coold
 										<LearnedLimitsPanel
 											provider={String(provider.name)}
 											capacityWindowSeconds={capacityWindowSeconds}
+											capacityScope={capacityScope}
 											onAdopt={onAdoptLearnedLimit}
 											disabled={updateDisabled}
 										/>

@@ -481,6 +481,17 @@ export interface CooldownCapacityConfig {
 	headroom?: number;
 	scope?: "provider" | "provider_model" | "key";
 	action?: "fallback" | "reject";
+	/**
+	 * Per-credential budget overrides keyed by the key's NAME, for
+	 * `scope: "key"` only. An omitted field inherits the provider-level value;
+	 * an explicit 0 means unlimited for that credential.
+	 */
+	key_limits?: Record<string, CooldownCapacityKeyLimit>;
+}
+
+export interface CooldownCapacityKeyLimit {
+	token_limit?: number;
+	request_limit?: number;
 }
 
 // CooldownLearningConfig mirrors schemas.CooldownLearningConfig: the read-only

@@ -25,6 +25,7 @@ interface CapacityUsageWireEntry {
 	provider: string;
 	model?: string;
 	key_id?: string;
+	key_name?: string;
 	scope?: string;
 	window_seconds?: number;
 	used_tokens?: number;
@@ -47,6 +48,8 @@ interface CapacityUsageWireResponse {
 interface LearnedLimitWireEntry {
 	provider: string;
 	model?: string;
+	scope?: string;
+	key_name?: string | null;
 	sample_count?: number;
 	key_count?: number;
 	estimated_token_limit?: number | null;
@@ -54,6 +57,11 @@ interface LearnedLimitWireEntry {
 	lower_bound?: number | null;
 	upper_bound?: number | null;
 	confidence?: string;
+	request_sample_count?: number;
+	estimated_request_limit?: number | null;
+	request_lower_bound?: number | null;
+	request_upper_bound?: number | null;
+	request_confidence?: string;
 	limiter_dimension?: string;
 	dimension_sample_counts?: Record<string, number>;
 	first_seen?: string;
@@ -359,6 +367,7 @@ export const pluginsApi = baseApi.injectEndpoints({
 					provider: entry.provider,
 					model: entry.model ?? "",
 					keyId: entry.key_id,
+					keyName: entry.key_name,
 					scope: entry.scope === "provider_model" ? "provider_model" : entry.scope === "key" ? "key" : "provider",
 					windowSeconds: entry.window_seconds ?? 0,
 					usedTokens: entry.used_tokens ?? 0,
@@ -387,6 +396,10 @@ export const pluginsApi = baseApi.injectEndpoints({
 				limits: (response.limits ?? []).map((limit) => ({
 					provider: limit.provider,
 					model: limit.model ?? "",
+					// Older servers omit the scope; their only level was the
+					// aggregate one.
+					scope: limit.scope === "key_model" ? "key_model" : "provider_model",
+					keyName: limit.key_name ?? null,
 					sampleCount: limit.sample_count ?? 0,
 					keyCount: limit.key_count ?? 0,
 					estimatedTokenLimit: limit.estimated_token_limit ?? null,
@@ -394,6 +407,11 @@ export const pluginsApi = baseApi.injectEndpoints({
 					lowerBound: limit.lower_bound ?? null,
 					upperBound: limit.upper_bound ?? null,
 					confidence: normalizeLearnedConfidence(limit.confidence),
+					requestSampleCount: limit.request_sample_count ?? 0,
+					estimatedRequestLimit: limit.estimated_request_limit ?? null,
+					requestLowerBound: limit.request_lower_bound ?? null,
+					requestUpperBound: limit.request_upper_bound ?? null,
+					requestConfidence: normalizeLearnedConfidence(limit.request_confidence),
 					limiterDimension: normalizeLearnedDimension(limit.limiter_dimension),
 					dimensionSampleCounts: limit.dimension_sample_counts ?? null,
 					firstSeen: limit.first_seen ?? "",

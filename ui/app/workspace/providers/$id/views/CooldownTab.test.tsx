@@ -97,6 +97,8 @@ vi.mock("@/lib/store/apis/providersApi", async (importOriginal) => {
 	return {
 		...actual,
 		useUpdateProviderMutation: () => [vi.fn(), { isLoading: false }],
+		// The cooldown form's per-key capacity editor reads the provider's keys.
+		useGetProviderKeysQuery: () => ({ data: [], isLoading: false, error: undefined }),
 	};
 });
 

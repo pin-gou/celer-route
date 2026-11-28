@@ -511,7 +511,7 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
 > 入口。`default_ttl_seconds`、`ttl_overrides`、`quota_patterns` 是该插件配置的既有
 > 必填项，改动时要一并保留。
 
-这一段各字段的含义（`enabled` 默认 `false`，`token_limit` / `request_limit` 至少填一个）：
+这一段各字段的含义（`enabled` 默认 `false`，`token_limit` / `request_limit` / `key_limits` 至少要配一项）：
 
 | 字段 | 默认 | 说明 |
 |------|------|------|
@@ -522,6 +522,7 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
 | `headroom` | `0.9` | 用量达到 `上限 × headroom` 即触发闸门，合法范围 `0.1`–`1.0` |
 | `scope` | `"provider"` | `"provider"`：同一提供商的全部模型共享一份预算；`"provider_model"`：每个「提供商 + 模型」各有一份；`"key"`：每个「提供商 + 密钥 + 模型」各有一份（见下文） |
 | `action` | `"fallback"` | `"fallback"`：交给 fallback 链继续尝试；`"reject"`：直接拒绝，不再回退 |
+| `key_limits` | 空 | 只在 `scope: "key"` 下生效：按密钥**名称**单独覆盖 `token_limit` / `request_limit`。字段留空表示继承上面的默认值，填 `0` 表示该密钥不限制（见下文） |
 
 #### 按密钥独立预算（`scope: "key"`）
 
@@ -545,6 +546,41 @@ Invalid provider configuration: cooldown_policy.capacity.window_seconds must be 
 
 限制：预算同时按模型切分，所以同一把密钥服务两个模型会有两份独立窗口；按密钥的闸门
 **不会产生冷却**，超支的密钥只是暂时不参与选择，窗口滑走即恢复。
+
+#### 单密钥上限覆盖（`key_limits`）
+
+`token_limit` / `request_limit` 是**一个数字**，`scope: "key"` 时它对每把密钥各生效一次
+——语义就是「每把密钥都有 N/窗口」。密钥**同质**（同一账号下轮换的多把 key）时这就是
+对的，不需要额外配置。
+
+当密钥**异质**（不同账号、不同套餐、不同子账号额度）时，单值只能取一个折中：额度大的
+被提前拦、额度小的照样撞墙。这时用 `key_limits` 按密钥名称覆盖：
+
+```jsonc
+"capacity": {
+  "enabled": true,
+  "scope": "key",
+  "window_seconds": 60,
+  "request_limit": 20,
+  "key_limits": {
+    "sensenova-key-4": { "request_limit": 5 },
+    "sensenova-key-5": { "request_limit": 50, "token_limit": 0 }
+  }
+}
+```
+
+- 键是密钥的 **`name`**（用户在配置里写的那个），不是系统生成的 `id`
+- 未出现在 `key_limits` 里的密钥使用上面的默认值
+- 字段省略 = 继承默认值；显式写 `0` = 这把密钥**不限制**（和默认值的语义不同，
+  默认值里的 `0` 只是"没配"）
+- 只写了部分字段时，另一个维度继续继承
+- `key_limits` 可以单独存在（不配 `token_limit` / `request_limit`）：此时只有列出的
+  密钥被约束，未列出的密钥不拦截
+- 只允许在 `scope: "key"` 下使用；其它粒度会让保存被拒绝（没有密钥维度的记账桶可套用）
+
+**怎么判断该不该单配**：先在闸门里只观察不设限（`token_limit` / `request_limit` 都为 0），
+跑一两天看「闸门实时水位」卡片——`scope: "key"` 时每个密钥一行。如果所有密钥都在**相近
+用量**上撞墙，说明同质，单值就够；如果某一把明显更早撞墙，给它单独设一个更小的值。
 
 配置示例（容量一律配在 `provider.cooldown_policy.capacity`）：
 
@@ -718,13 +754,25 @@ GET /api/plugins/provider-cooldown/capacity-usage
   学成「TPM 限额很低」。
 - **RPM 拒绝不算词元证据**：请求速率（RPM）和词元速率（TPM）是两种不同的额度。
   一把坏密钥在窗口几乎没消耗词元时被 RPM 拒绝，如果也拿去估计词元上限，会把估计
-  拉到接近 0。网关会记录每次拒绝的限流类型用于排障，但**只用 TPM 与无法判断类型的
-  样本**做词元上限估计；RPM 样本只在报告的维度计数里体现。
-- **只用真实用量**：样本里的「已消耗词元」来自上游真实回报的用量（失败但已计
-  费的尝试用其已计费用量），**不做任何词元估算**。取不到就是 0，此时区间
-  退化为一个点，估计值会偏保守。
-- **按「提供商 + 模型」分别学习**：每个组合各有一份样本与一个估计值。
-- **样本有上限**：每个组合只保留最近若干条样本，超出时丢弃最旧的。
+  拉到接近 0。所以**只用 TPM 与无法判断类型的样本**做词元上限估计。
+- **但 RPM 拒绝是请求额度的证据**：这类样本被拿去做第二个估计——把同样的区间法套在
+  **请求数**上：
+
+  ```
+  [ 拒绝时窗口内已计数的请求数 , 该值 + 1 ]   ← 这条被拒的请求本来也会算一次
+  ```
+
+  于是每个组合可能同时给出**两个**建议值：词元上限与请求上限。每条样本只进入其中
+  一个估计，所以 `sample_count + request_sample_count` 等于保留的样本总数。
+- **只用真实用量**：样本里的「已消耗」来自上游真实回报的用量（失败但已计费的尝试用
+  其已计费用量），**不做任何估算**。取不到就是 0，此时区间退化为一个点，估计值会
+  偏保守。
+- **同时在两个层级上学习**：每次拒绝会记两遍——一遍是**聚合**口径
+  （`provider_model`，同一模型下所有密钥一起打的量），一遍是**单密钥**口径
+  （`key_model`，被拒的那把密钥自己的量）。两个层级的数字**不能混用**：聚合值填进
+  按密钥的闸门，等于把预算放大到「密钥数 × 额度」。
+- **样本有上限**：每个组合（每个层级各算一个组合）只保留最近若干条样本，超出时丢弃
+  最旧的。
 
 ### 怎么开启
 
@@ -778,9 +826,15 @@ GET /api/plugins/provider-cooldown/capacity-usage
 该提供商的「学习建议」，每一条显示模型、样本数、估算窗口、估算上限与置信度。如果该
 估算的窗口和容量闸门当前的窗口不一致，列表会提示两者不能直接通用。
 
-每条建议右侧有 **采用为上限** 按钮。它只是把估算值**预填**到「回溯式容量闸门」的
-`token_limit`，并把闸门切到 **自定义**——**不会自动保存**，也不会改动别的提供商。
-确认无误后仍需点 **保存冷却策略** 才会真正生效。
+每条建议右侧有 **采用为上限** 按钮。它只是把估算值**预填**到「回溯式容量闸门」
+（词元上限填 `token_limit`、请求上限填 `request_limit`），并把闸门切到 **自定义**
+——**不会自动保存**，也不会改动别的提供商。确认无误后仍需点 **保存冷却策略** 才会
+真正生效。
+
+采纳受**层级**约束：列表只展示与闸门当前 `scope` 同一层级的估算——闸门是
+`scope: "key"` 时只列 `key_model` 建议，`scope: "provider_model"` 时只列
+`provider_model` 建议。`scope: "provider"` 没有可采纳的层级（学习不产出跨模型的
+汇总值），界面会说明原因而不是给一个能点的数字。
 
 学习结果同时通过一个**只读**接口暴露：
 
@@ -791,23 +845,51 @@ GET /api/plugins/provider-cooldown/learned-limits
 ```json
 {
   "plugin": "provider-cooldown",
-  "count": 1,
+  "count": 2,
   "window_seconds": 60,
   "limits": [
     {
       "provider": "openai",
       "model": "gpt-4o",
+      "scope": "provider_model",
       "sample_count": 12,
-      "key_count": 1,
+      "key_count": 2,
       "estimated_token_limit": 82000,
       "window_seconds": 60,
       "lower_bound": 71000,
       "upper_bound": 91000,
       "confidence": "medium",
+      "request_sample_count": 4,
+      "estimated_request_limit": 120,
+      "request_lower_bound": 110,
+      "request_upper_bound": 121,
+      "request_confidence": "low",
       "limiter_dimension": "tpm",
       "dimension_sample_counts": { "rpm": 4, "tpm": 10, "unknown": 2 },
       "first_seen": "2026-11-20T10:15:02Z",
       "last_seen": "2026-11-20T11:02:41Z"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "scope": "key_model",
+      "key_name": "openai-key-1",
+      "sample_count": 10,
+      "key_count": 1,
+      "estimated_token_limit": 41000,
+      "window_seconds": 60,
+      "lower_bound": 39000,
+      "upper_bound": 42000,
+      "confidence": "medium",
+      "request_sample_count": 3,
+      "estimated_request_limit": 60,
+      "request_lower_bound": 58,
+      "request_upper_bound": 61,
+      "request_confidence": "low",
+      "limiter_dimension": "tpm",
+      "dimension_sample_counts": { "rpm": 3, "tpm": 10 },
+      "first_seen": "2026-11-20T10:20:11Z",
+      "last_seen": "2026-11-20T11:01:07Z"
     }
   ]
 }
@@ -815,28 +897,37 @@ GET /api/plugins/provider-cooldown/learned-limits
 
 | 字段 | 含义 |
 |------|------|
-| `sample_count` | **参与估计**的限流次数（不含 RPM 样本） |
-| `key_count` | 这些参与估计的样本来自几把密钥；大于 1 时，建议值是我们多把密钥打的**总量** |
-| `estimated_token_limit` | **建议值**：每个观测窗口内多少词元会被上游拒绝 |
-| `window_seconds` | **这一条估算对应的窗口长度**。不同提供商可以配置不同的学习窗口，所以窗口跟着估算走；响应顶层的 `window_seconds` 只是插件级默认窗口，为向后兼容保留 |
-| `lower_bound` / `upper_bound` | 建议值的可信区间：参与估计的样本中，观测到的拒绝点最小 / 最大的那一个 |
-| `confidence` | `insufficient`（样本还不够，不给建议值）/ `low` / `medium` / `high` |
-| `limiter_dimension` | 参与估计的样本中的主导限流类型（`tpm` / `unknown`）。如果这个组合**只**遇到过 RPM 拒绝，这里会显示 `rpm`，同时不给建议值——说明「没有可用的词元证据」，而不是「词元上限约为 0」 |
-| `dimension_sample_counts` | 每种限流类型各保留了多少样本（如 `{"rpm":4,"tpm":10,"unknown":2}`）。把它们相加可以得到保留样本总数，用来看清 RPM 噪声与词元证据各占多少 |
+| `scope` | `provider_model`（聚合口径，同一模型下所有密钥合计）或 `key_model`（单密钥口径）。**两个层级的数字不能混用** |
+| `key_name` | 仅 `key_model` 出现：该建议属于哪把密钥（按名称；密钥 ID 不对外暴露） |
+| `sample_count` | 参与**词元**估计的限流次数（不含 RPM 样本） |
+| `key_count` | 这些样本来自几把密钥；大于 1 时，建议值是我们多把密钥打的**总量** |
+| `estimated_token_limit` | **词元建议值**：每个观测窗口内多少词元会被上游拒绝 |
+| `lower_bound` / `upper_bound` | 词元建议值的可信区间：样本中观测到的拒绝点最小 / 最大的那一个 |
+| `confidence` | 词元估计的置信度：`insufficient`（样本还不够，不给建议值）/ `low` / `medium` / `high` |
+| `request_sample_count` | 参与**请求数**估计的样本数（即 RPM 拒绝次数） |
+| `estimated_request_limit` | **请求建议值**：每个观测窗口内多少次请求会被上游拒绝。0/缺失表示暂无估算 |
+| `request_lower_bound` / `request_upper_bound` | 请求建议值的可信区间（次数） |
+| `request_confidence` | 请求估计的置信度，分档同 `confidence` |
+| `window_seconds` | **这一条估算对应的窗口长度**（词元与请求共用同一个窗口）。不同提供商可以配置不同的学习窗口，所以窗口跟着估算走；响应顶层的 `window_seconds` 只是插件级默认窗口，为向后兼容保留 |
+| `limiter_dimension` | 参与词元估计的样本中的主导限流类型（`tpm` / `unknown`）。如果这个组合**只**遇到过 RPM 拒绝，这里会显示 `rpm`，词元建议值为空——说明「没有可用的词元证据」，而不是「词元上限约为 0」；此时请求建议值通常可用 |
+| `dimension_sample_counts` | 每种限流类型各保留了多少样本（如 `{"rpm":4,"tpm":10,"unknown":2}`）。`sample_count + request_sample_count` 等于这些值之和 |
 
 置信度按样本数相对 `min_samples` 分档：不足 `min_samples` 为 `insufficient`
-（**此时不输出任何建议值**，只报样本数），小于 3 倍为 `low`，小于 6 倍为
-`medium`，否则为 `high`。
+（**此时不输出该维度的建议值**，只报样本数），小于 3 倍为 `low`，小于 6 倍为
+`medium`，否则为 `high`。两个估计**各自**算自己的置信度，也各自受 `min_samples`
+约束——一个层级的样本多，不会抬高另一个层级的置信度。
 
 ### 行为边界
 
 - **只读**：不写任何配置，不改冷却策略，也不改闸门阈值。建议值要由你手动采纳。
-- **样本不足就不给结论**：宁可说「还看不出来」，也不给一个靠不住的数字。
-- **RPM 拒绝不污染词元估计**：只有 TPM / 无法判断类型的样本参与估计；如果一个组合
-  只遇到过 RPM 拒绝，会明确显示「不可用」并以 `limiter_dimension=rpm` 说明原因，
-  而不是给出一个接近 0 的误导值。
-- **看到的是「我们这一侧撞到的总限额」**：同一个提供商配了多把密钥时，上游的
-  单 key 限额会叠加，所以学到的是我们实际打出的总量，而不是某一把密钥的限额。
+- **样本不足就不给结论**：宁可说「还看不出来」，也不给一个靠不住的数字；两个估计
+  各自判定。
+- **RPM 拒绝不污染词元估计**：只有 TPM / 无法判断类型的样本参与词元估计；如果一个
+  组合只遇到过 RPM 拒绝，词元建议值为空并以 `limiter_dimension=rpm` 说明原因，而不是
+  给出一个接近 0 的误导值——但它的**请求**建议值仍然可用。
+- **层级不可混用**：`provider_model` 建议值是同一模型下所有密钥合计打出来的总量，
+  `key_model` 才是单把密钥的额度。把聚合值填进按密钥的闸门，等于把预算放大到
+  「密钥数 × 额度」，所以接口和界面都带着 `scope`，采纳时也只允许同层级。
 - **统计窗口要选对**：60 秒窗口对应 TPM 级别的限额；如果上游限的是天/月配额，
   应该把 `window_seconds` 调到对应的量级，否则学出来的数没有意义。
 - 状态保存在**进程内存**中，进程重启即清空；多实例部署时每个实例各自统计。

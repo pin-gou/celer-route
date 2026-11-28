@@ -70,6 +70,7 @@ export function resolveEffectiveCapacity(
 		headroom: positiveOr(source?.headroom, DEFAULT_CAPACITY_HEADROOM),
 		scope: source?.scope || DEFAULT_CAPACITY_SCOPE,
 		action: source?.action || DEFAULT_CAPACITY_ACTION,
+		key_limits: source?.key_limits ?? {},
 	};
 }
 

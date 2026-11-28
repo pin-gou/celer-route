@@ -47,7 +47,7 @@ function CapacityRow({ entry }: { entry: CapacityUsageEntry }) {
 					<span>{entry.model || t("cooldownCapability.capacityUsage.allModels")}</span>
 					{entry.keyId && (
 						<span data-testid={`providers2-capacity-key-${rowId}`} className="text-muted-foreground break-all">
-							{t("cooldownCapability.capacityUsage.key")} {entry.keyId}
+							{t("cooldownCapability.capacityUsage.key")} {entry.keyName || entry.keyId}
 						</span>
 					)}
 				</span>

@@ -812,6 +812,32 @@ export const providerCooldownCapacityConfigSchema = z.object({
 	action: z.enum(["fallback", "reject"], {
 		error: t("validation.fieldRequired", { field: "Action" }),
 	}),
+	// Per-credential overrides, keyed by the key's NAME. Only meaningful with
+	// scope "key"; the payload builder strips them under the other scopes
+	// because the backend rejects that combination. An empty entry is rejected
+	// here for the same reason the backend rejects it: it would silently do
+	// nothing.
+	key_limits: z
+		.record(
+			z.string(),
+			z
+				.object({
+					token_limit: z
+						.number({ error: t("validation.numberExpected") })
+						.int(t("validation.integerExpected"))
+						.min(0, t("validation.minNumber", { n: "0" }))
+						.optional(),
+					request_limit: z
+						.number({ error: t("validation.numberExpected") })
+						.int(t("validation.integerExpected"))
+						.min(0, t("validation.minNumber", { n: "0" }))
+						.optional(),
+				})
+				.refine((value) => value.token_limit !== undefined || value.request_limit !== undefined, {
+					message: t("validation.fieldRequired", { field: "token_limit / request_limit" }),
+				}),
+		)
+		.optional(),
 });
 
 // Read-only limit learner — watches upstream rate-limit rejections and

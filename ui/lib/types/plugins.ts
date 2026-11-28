@@ -448,6 +448,8 @@ export interface CapacityUsageEntry {
 	provider: string;
 	model: string;
 	keyId?: string;
+	/** Credential display name when the gate has resolved it (scope "key"). */
+	keyName?: string;
 	scope: "provider" | "provider_model" | "key";
 	windowSeconds: number;
 	usedTokens: number;
@@ -469,12 +471,31 @@ export interface CapacityUsageResponse {
 
 export type LearnedLimitConfidence = "insufficient" | "low" | "medium" | "high";
 
+/**
+ * The learning level an estimate was measured at.
+ *
+ * - `provider_model`: the aggregate budget of every credential serving one
+ *   model. This is what a `provider_model` (or `provider`) capacity gate
+ *   enforces.
+ * - `key_model`: one credential's own budget. This is what a `key`-scoped gate
+ *   enforces.
+ *
+ * The two must never be mixed: an aggregate number adopted into a key-scoped
+ * gate multiplies the budget by the number of keys.
+ */
+export type LearnedLimitScope = "provider_model" | "key_model";
+
 // One estimate surfaced by GET /api/plugins/provider-cooldown/learned-limits.
-// `estimated_token_limit` is null when the sample count has not reached
-// min_samples yet (confidence "insufficient").
+// `estimatedTokenLimit` is null when the token sample count has not reached
+// min_samples yet (confidence "insufficient"); `estimatedRequestLimit` behaves
+// the same way for the request budget, which is learned from RPM rejections.
 export interface LearnedLimitEntry {
 	provider: string;
 	model: string;
+	/** Older servers omit it; treat a missing value as `provider_model`. */
+	scope: LearnedLimitScope;
+	/** Credential display name for a `key_model` entry; empty otherwise. */
+	keyName: string | null;
 	sampleCount: number;
 	keyCount: number;
 	estimatedTokenLimit: number | null;
@@ -482,7 +503,13 @@ export interface LearnedLimitEntry {
 	lowerBound: number | null;
 	upperBound: number | null;
 	confidence: LearnedLimitConfidence;
-	/** Dominant limiter dimension among the samples behind the estimate. */
+	/** How many RPM rejections back the request estimate. */
+	requestSampleCount: number;
+	estimatedRequestLimit: number | null;
+	requestLowerBound: number | null;
+	requestUpperBound: number | null;
+	requestConfidence: LearnedLimitConfidence;
+	/** Dominant limiter dimension among the samples behind the token estimate. */
 	limiterDimension?: "rpm" | "tpm" | "unknown" | null;
 	/** Retained sample count per limiter dimension (`rpm` / `tpm` / `unknown`). */
 	dimensionSampleCounts?: Record<string, number> | null;
