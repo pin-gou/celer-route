@@ -48,6 +48,7 @@ const pattern = {
 	error_type: "rate_limit_error",
 	error_code: "EndpointRPMExceeded",
 	sample_message: "rpm exhausted",
+	limiter_dimension: "rpm",
 };
 
 describe("ErrorSampleBrowser", () => {
@@ -90,5 +91,23 @@ describe("ErrorSampleBrowser", () => {
 		render(<ErrorSampleBrowser provider="openai" onApply={() => {}} window="1h" />);
 
 		expect(screen.getByText("fragments.cooldownPolicy.errorSample.tryChangingWindow")).toBeTruthy();
+	});
+
+	it("echoes the automatic rate-limit dimension on the error shape", () => {
+		mocks.patterns = [pattern];
+		render(<ErrorSampleBrowser provider="openai" onApply={() => {}} window="1h" />);
+
+		const badge = screen.getByTestId("error-sample-dimension-1");
+		expect(badge.textContent).toContain("dimensionValue_rpm");
+	});
+
+	it("omits the dimension badge when auto cannot decide", () => {
+		// "unknown" is the absence of a determination; showing it on every
+		// non-429 bucket would be noise, and the match editor explains it where
+		// the operator can act on it.
+		mocks.patterns = [{ ...pattern, limiter_dimension: "unknown" }];
+		render(<ErrorSampleBrowser provider="openai" onApply={() => {}} window="1h" />);
+
+		expect(screen.queryByTestId("error-sample-dimension-1")).toBeNull();
 	});
 });

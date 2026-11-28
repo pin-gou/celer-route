@@ -10,6 +10,13 @@ export interface ErrorPattern {
 	error_code?: string;
 	sample_message?: string;
 	example_request_id?: string;
+	/**
+	 * What the cooldown classifier would decide for this error shape:
+	 * "rpm" (request rate), "tpm" (token rate) or "unknown". Computed
+	 * server-side from the same fields the mark path reads, so the echo cannot
+	 * drift from the real decision.
+	 */
+	limiter_dimension?: "rpm" | "tpm" | "unknown";
 }
 
 export interface ErrorPatternsResponse {

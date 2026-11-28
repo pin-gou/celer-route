@@ -40,6 +40,7 @@ import { CapabilityOverrideCard } from "@/components/providerCooldown/capability
 import { EscalationFields } from "@/components/providerCooldown/escalationFields";
 import { CapacityFields } from "@/components/providerCooldown/capacityFields";
 import { LearningFields } from "@/components/providerCooldown/learningFields";
+import { limiterDimensionOfMatch, type LimiterDimension } from "@/lib/utils/limiterDimension";
 
 interface CooldownPolicyFormFragmentProps {
 	provider: ModelProvider;
@@ -826,6 +827,14 @@ function MatchSummaryRow({
 						</span>
 					)}
 				</div>
+				{ruleKey === "rate_limit" && match?.dimension && (
+					<span
+						className="text-muted-foreground shrink-0 rounded border px-1 font-mono text-[10px]"
+						data-testid={`provider-cooldown-${ruleKey}-match-${index}-dimension-badge`}
+					>
+						{t(`fragments.cooldownPolicy.matchField.dimensionValue_${match.dimension}`)}
+					</span>
+				)}
 				<div className="flex shrink-0 items-center gap-0.5">
 					<Button
 						type="button"
@@ -931,6 +940,8 @@ function MatchEditor({
 
 	return (
 		<div className="space-y-3">
+			{ruleKey === "rate_limit" && <DimensionField ruleKey={ruleKey} index={index} control={control} />}
+
 			<FormField
 				control={control}
 				name={fieldName}
@@ -1008,6 +1019,92 @@ function MatchEditor({
 				baseName={`${baseName}.code`}
 				fieldKind="code"
 			/>
+		</div>
+	);
+}
+
+/**
+ * Which upstream budget the match cools.
+ *
+ * "自动" (the default) leaves the decision to the backend classifier, which
+ * reads the provider error body at mark time. Pinning is for matches the
+ * operator KNOWS target one budget: not every provider names the exhausted
+ * limit in its 429, and a pinned predicate (e.g.
+ * code=EndpointRPMExceeded) must not be overridden by a generic catch-all in
+ * the same rule.
+ *
+ * While 自动 is selected the field echoes what the classifier would decide for
+ * this match's own predicates, so the operator can see the effect without
+ * sending a request.
+ */
+function DimensionField({ ruleKey, index, control }: { ruleKey: RuleField; index: number; control: Control<CooldownPolicyFormSchema> }) {
+	const { t } = useTranslation("providers");
+	const { setValue, watch } = useFormContext<CooldownPolicyFormSchema>();
+	const baseName = `${ruleKey}.match.${index}` as const;
+
+	const pinned = watch(`${baseName}.dimension` as never) as unknown as "rpm" | "tpm" | undefined;
+	const code = watch(`${baseName}.code` as never) as unknown as string[] | undefined;
+	const type = watch(`${baseName}.type` as never) as unknown as string[] | undefined;
+	const messageContains = watch(`${baseName}.message_contains` as never) as unknown as string[] | undefined;
+	const rpmTTL = watch(`${ruleKey}.rpm_ttl_seconds` as never) as unknown as number | undefined;
+	const tpmTTL = watch(`${ruleKey}.tpm_ttl_seconds` as never) as unknown as number | undefined;
+
+	const selected = pinned ?? "auto";
+	const autoDimension = limiterDimensionOfMatch({ code, type, message_contains: messageContains });
+	// A pinned dimension without its own TTL still cools for ttl_seconds — say
+	// so, otherwise the pin looks like it had no effect.
+	const pinnedTTLMissing = pinned !== undefined && ((pinned === "rpm" ? rpmTTL : tpmTTL) ?? 0) <= 0;
+
+	return (
+		<div className="space-y-1">
+			<div className="flex items-center gap-1.5">
+				<span className="text-xs font-medium">{t("fragments.cooldownPolicy.matchField.dimension")}</span>
+				<HelpHint>{t("fragments.cooldownPolicy.matchField.dimensionDescription")}</HelpHint>
+			</div>
+
+			<Select
+				value={selected}
+				onValueChange={(value) =>
+					setValue(`${baseName}.dimension` as never, (value === "auto" ? undefined : value) as never, {
+						shouldDirty: true,
+						shouldValidate: true,
+					})
+				}
+			>
+				<SelectTrigger className="w-full" data-testid={`provider-cooldown-${ruleKey}-match-${index}-dimension-trigger`}>
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent>
+					<SelectItem value="auto" data-testid={`provider-cooldown-${ruleKey}-match-${index}-dimension-auto`}>
+						{t("fragments.cooldownPolicy.matchField.dimensionAuto")}
+					</SelectItem>
+					<SelectItem value="rpm" data-testid={`provider-cooldown-${ruleKey}-match-${index}-dimension-rpm`}>
+						{t("fragments.cooldownPolicy.matchField.dimensionRPM")}
+					</SelectItem>
+					<SelectItem value="tpm" data-testid={`provider-cooldown-${ruleKey}-match-${index}-dimension-tpm`}>
+						{t("fragments.cooldownPolicy.matchField.dimensionTPM")}
+					</SelectItem>
+				</SelectContent>
+			</Select>
+
+			{selected === "auto" && (
+				<p className="text-muted-foreground text-xs" data-testid={`provider-cooldown-${ruleKey}-match-${index}-dimension-preview`}>
+					{t("fragments.cooldownPolicy.matchField.dimensionAutoPreview", {
+						dimension: t(`fragments.cooldownPolicy.matchField.dimensionValue_${autoDimension}`),
+					})}
+				</p>
+			)}
+
+			{pinnedTTLMissing && (
+				<p
+					className="text-xs text-amber-600 dark:text-amber-500"
+					data-testid={`provider-cooldown-${ruleKey}-match-${index}-dimension-no-ttl`}
+				>
+					{t("fragments.cooldownPolicy.matchField.dimensionNoTTL", {
+						field: t(pinned === "rpm" ? "fragments.cooldownPolicy.rpmTtlLabel" : "fragments.cooldownPolicy.tpmTtlLabel"),
+					})}
+				</p>
+			)}
 		</div>
 	);
 }

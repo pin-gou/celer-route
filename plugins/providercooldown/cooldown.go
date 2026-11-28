@@ -1630,7 +1630,15 @@ func effectiveCooldownTTLInternal(rule *schemas.CooldownPolicyRule, bifrostErr *
 	// Dimension-aware base selection. An unset dimension value falls back to
 	// ttl_seconds; a dimension whose own TTL is 0 also falls back (per-field
 	// opt-in).
-	switch limiterDimensionOf(bifrostErr) {
+	//
+	// Quota rules never reach this branch with a dimension: a quota rule must
+	// not pin one (Validate rejects it) and quota_ttl_bytes is not a rate
+	// window, so effectiveQuotaCooldownTTL forces dimensionUnknown.
+	dimension := dimensionUnknown
+	if dimensionAware {
+		dimension = resolveDimension(rule, bifrostErr)
+	}
+	switch dimension {
 	case dimensionRPM:
 		if rpmTTL > 0 {
 			ttl = time.Duration(rpmTTL) * time.Second

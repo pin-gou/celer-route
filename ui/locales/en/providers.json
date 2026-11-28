@@ -603,7 +603,17 @@
 				"statusCodePlaceholder": "Please enter an HTTP status code (optional)",
 				"messageContains": "Message contains (any one matches, optional)",
 				"type": "Error type (exact, optional)",
-				"code": "Error code (exact, optional)"
+				"code": "Error code (exact, optional)",
+				"dimension": "Rate-limit dimension",
+				"dimensionDescription": "Which upstream budget picks the cooldown duration once this match fires. Auto: derive request rate vs token rate from the provider error body (code / type / message); when the body names no budget, the plain cooldown TTL applies. Request rate / token rate: force that dimension — use it when you know this predicate only ever targets one limit. Only applies to the rate-limit rule.",
+				"dimensionAuto": "Auto (from the error body)",
+				"dimensionRPM": "Request rate (RPM/RPS)",
+				"dimensionTPM": "Token rate (TPM)",
+				"dimensionAutoPreview": "Auto decides: {{dimension}}",
+				"dimensionValue_rpm": "request rate",
+				"dimensionValue_tpm": "token rate",
+				"dimensionValue_unknown": "undetermined (uses cooldown TTL)",
+				"dimensionNoTTL": "Pinned to {{field}}, but that TTL is not configured — the plain cooldown TTL will be used."
 			},
 			"clear": "Clear custom policy",
 			"restoreDefault": "Restore global default",

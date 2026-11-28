@@ -310,3 +310,121 @@ describe("CooldownPolicyFormFragment — capability tri-state payload", () => {
 		expect(submittedPolicy()?.capacity).toMatchObject({ enabled: true, token_limit: 5000 });
 	});
 });
+/**
+ * The dimension pin: which upstream budget a match cools.
+ *
+ * Default is 自动 (no field in the payload), and the editor echoes what the
+ * automatic classifier would decide for the predicates already typed. Pinning
+ * exists because not every provider names the exhausted budget in its 429.
+ */
+describe("CooldownPolicyFormFragment — rate-limit dimension pin", () => {
+	beforeEach(() => {
+		mocks.updateProvider.mockReset();
+		mocks.updateProvider.mockImplementation(() => ({ unwrap: () => Promise.resolve({}) }));
+	});
+
+	async function openRateLimitMatchEditor() {
+		fireEvent.click(screen.getByTestId("provider-cooldown-rate_limit-match-0-edit"));
+		await waitFor(() => expect(screen.getByTestId("provider-cooldown-rate_limit-match-0-dimension-trigger")).toBeTruthy());
+	}
+
+	it("defaults to auto and echoes what the classifier decides for this match", async () => {
+		render(<CooldownPolicyFormFragment provider={baseProvider()} />);
+		await openRateLimitMatchEditor();
+
+		const trigger = screen.getByTestId("provider-cooldown-rate_limit-match-0-dimension-trigger");
+		expect(trigger.textContent).toContain("matchField.dimensionAuto");
+
+		// The seeded match is a bare [429]: no budget is named, so auto cannot
+		// choose a dimension-specific TTL.
+		const preview = screen.getByTestId("provider-cooldown-rate_limit-match-0-dimension-preview");
+		expect(preview.textContent).toContain("dimensionValue_unknown");
+	});
+
+	it("echoes the token-rate decision for a token-shaped predicate", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: {
+						match: [{ status_code: 429, code: ["EndpointTPMExceeded"] }],
+						match_mode: "any",
+						ttl_seconds: 60,
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		await openRateLimitMatchEditor();
+
+		const preview = screen.getByTestId("provider-cooldown-rate_limit-match-0-dimension-preview");
+		expect(preview.textContent).toContain("dimensionValue_tpm");
+	});
+
+	it("keeps a stored pin through an unrelated save (zod must not strip it)", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: {
+						match: [{ status_code: 429, code: ["EndpointRPMExceeded"], dimension: "rpm" }],
+						match_mode: "any",
+						ttl_seconds: 60,
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		changeTtl();
+
+		await save();
+
+		const match = (submittedPolicy()?.rate_limit as Record<string, unknown>)?.match as Array<Record<string, unknown>>;
+		expect(match[0].dimension).toBe("rpm");
+	});
+
+	it("shows the pin on the collapsed match row", () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: {
+						match: [{ status_code: 429, code: ["EndpointRPMExceeded"], dimension: "rpm" }],
+						match_mode: "any",
+						ttl_seconds: 60,
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+
+		const badge = screen.getByTestId("provider-cooldown-rate_limit-match-0-dimension-badge");
+		expect(badge.textContent).toContain("dimensionValue_rpm");
+	});
+
+	it("warns when the pin has no dedicated TTL configured", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: {
+						match: [{ status_code: 429, code: ["EndpointRPMExceeded"], dimension: "rpm" }],
+						match_mode: "any",
+						ttl_seconds: 60,
+					},
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		await openRateLimitMatchEditor();
+
+		expect(screen.getByTestId("provider-cooldown-rate_limit-match-0-dimension-no-ttl")).toBeTruthy();
+	});
+
+	it("does not offer a dimension on the quota rule", async () => {
+		render(
+			<CooldownPolicyFormFragment
+				provider={baseProvider({
+					rate_limit: RATE_LIMIT_RULE,
+					quota: { match: [{ status_code: 429, message_contains: ["insufficient_quota"] }], ttl_seconds: 600 },
+				} as unknown as CooldownPolicy)}
+			/>,
+		);
+		fireEvent.click(screen.getByTestId("provider-cooldown-quota-match-0-edit"));
+		await waitFor(() => expect(screen.getByTestId("provider-cooldown-quota-match-0-status-code")).toBeTruthy());
+
+		expect(screen.queryByTestId("provider-cooldown-quota-match-0-dimension-trigger")).toBeNull();
+	});
+});

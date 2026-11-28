@@ -104,7 +104,38 @@ func limiterDimensionOf(err *schemas.BifrostError) limiterDimension {
 		}
 	}
 	b.WriteString(err.GetErrorString())
-	return matchLimiterDimension(strings.ToLower(b.String()))
+	return LimiterDimensionOfText(b.String())
+}
+
+// LimiterDimensionOfFields derives the dimension from the individual pieces an
+// aggregated error pattern carries (the /logs/error-patterns buckets), so the
+// UI can echo what the automatic classifier would decide for that error shape
+// without re-implementing the pattern table on the client.
+//
+// It is the field-level entry point of the same classifier limiterDimensionOf
+// uses; the pattern table stays the single source of truth.
+func LimiterDimensionOfFields(errType string, errCode string, message string) string {
+	var b strings.Builder
+	if errCode != "" {
+		b.WriteString(errCode)
+		b.WriteByte(' ')
+	}
+	if errType != "" {
+		b.WriteString(errType)
+		b.WriteByte(' ')
+	}
+	b.WriteString(message)
+	return string(LimiterDimensionOfText(b.String()))
+}
+
+// LimiterDimensionOfText is the public, text-level entry point of the
+// classifier. It lower-cases the haystack and applies the ordered pattern
+// table; "" is impossible (unmatched text yields "unknown").
+//
+// Exported so the error-patterns handler can annotate its buckets with the
+// same decision the mark path would make.
+func LimiterDimensionOfText(text string) limiterDimension {
+	return matchLimiterDimension(strings.ToLower(text))
 }
 
 // matchLimiterDimension applies the ordered pattern table to an already
@@ -134,4 +165,37 @@ func matchLimiterDimension(haystack string) limiterDimension {
 // diagnostics but excluded from the estimate.
 func isTokenBudgetDimension(d limiterDimension) bool {
 	return d != dimensionRPM
+}
+
+// resolveDimension decides which budget a rate-limit rejection is attributed
+// to. An operator-pinned match dimension always wins; otherwise the classifier
+// reads the provider error body.
+//
+// The pin is match-scoped on purpose: a policy can carry a predicate that is
+// known to target the request rate (e.g. code=EndpointRPMExceeded) next to a
+// generic status_code=429 catch-all, and only the specific one should force
+// the longer RPM TTL.
+//
+// This runs on the failure path (marks and learning samples), never on the
+// success path.
+func resolveDimension(rule *schemas.CooldownPolicyRule, err *schemas.BifrostError) limiterDimension {
+	if err == nil {
+		return dimensionUnknown
+	}
+	if rule != nil {
+		if _, explicit := rule.MatchDimension(err); explicit != "" {
+			return limiterDimension(explicit)
+		}
+	}
+	return limiterDimensionOf(err)
+}
+
+// rateLimitRuleOf returns the policy's rate-limit rule, or nil when there is
+// no policy at all (plugin defaults, or a caller that never stamped one). The
+// nil-safe accessor keeps the learning path from dereferencing a nil policy.
+func rateLimitRuleOf(policy *schemas.CooldownPolicy) *schemas.CooldownPolicyRule {
+	if policy == nil {
+		return nil
+	}
+	return policy.RateLimit
 }

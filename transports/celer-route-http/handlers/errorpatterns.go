@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/pin-gou/celer-route/core/schemas"
+	"github.com/pin-gou/celer-route/plugins/providercooldown"
 	"github.com/valyala/fasthttp"
 )
 
@@ -30,6 +31,17 @@ type errorPattern struct {
 	ErrorCode        string `json:"error_code,omitempty"`
 	SampleMessage    string `json:"sample_message,omitempty"`
 	ExampleRequestID string `json:"example_request_id,omitempty"`
+
+	// LimiterDimension is what the provider-cooldown classifier would decide
+	// for this error shape: "rpm" (request rate), "tpm" (token rate) or
+	// "unknown" (the body names no budget). Always present, so the provider
+	// page can echo the automatic decision instead of leaving it implicit —
+	// which cooldown TTL a 429 will actually use is otherwise invisible.
+	//
+	// Computed from the same field set the classifier reads at mark time, via
+	// the plugin's exported helper, so the echo cannot drift from the real
+	// decision.
+	LimiterDimension string `json:"limiter_dimension"`
 }
 
 // getErrorPatterns returns error pattern clusters for the given provider.
@@ -104,6 +116,7 @@ func (h *LoggingHandler) getErrorPatterns(ctx *fasthttp.RequestCtx) {
 		if p.SampleMessage != nil && *p.SampleMessage != "" {
 			ep.SampleMessage = *p.SampleMessage
 		}
+		ep.LimiterDimension = providercooldown.LimiterDimensionOfFields(ep.ErrorType, ep.ErrorCode, ep.SampleMessage)
 		resp.Patterns = append(resp.Patterns, ep)
 	}
 

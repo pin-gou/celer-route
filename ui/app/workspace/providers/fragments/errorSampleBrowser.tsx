@@ -110,6 +110,18 @@ export function ErrorSampleBrowser({ provider, onApply, window }: ErrorSampleBro
 												{p.status_code >= 100 && p.status_code <= 599 ? p.status_code : "—"}
 											</span>
 										)}
+										{/* Echo of the automatic dimension decision, computed server-side
+										    from these same fields. Only a positive determination is
+										    shown: on a non-429 bucket "unknown" is noise, and the
+										    match editor explains what auto would do where it matters. */}
+										{p.limiter_dimension === "rpm" || p.limiter_dimension === "tpm" ? (
+											<span
+												className="text-muted-foreground shrink-0 rounded border px-1 text-[10px]"
+												data-testid={`error-sample-dimension-${p.rank}`}
+											>
+												{t(`fragments.cooldownPolicy.matchField.dimensionValue_${p.limiter_dimension}`)}
+											</span>
+										) : null}
 									</div>
 									<div className="text-muted-foreground truncate font-mono text-xs">
 										{p.error_type && <span>{p.error_type} </span>}

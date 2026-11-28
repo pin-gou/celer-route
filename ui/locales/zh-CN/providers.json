@@ -603,7 +603,17 @@
 				"statusCodePlaceholder": "请输入 HTTP 状态码（可选）",
 				"messageContains": "消息包含（任一命中，可选）",
 				"type": "错误类型（精确匹配，可选）",
-				"code": "错误代码（精确匹配，可选)"
+				"code": "错误代码（精确匹配，可选)",
+				"dimension": "限流维度",
+				"dimensionDescription": "命中后按哪个上游额度选择冷却时长。自动：根据提供商的错误体（错误代码 / 类型 / 消息）判定是请求速率还是词元速率；若错误体没有说明，则沿用「冷却时长」。请求速率 / 词元速率：强制按该维度冷却，适合你明确知道这条规则只针对某种限流的情况。只对速率限制规则生效。",
+				"dimensionAuto": "自动（按错误体判定）",
+				"dimensionRPM": "请求速率（RPM/RPS）",
+				"dimensionTPM": "词元速率（TPM）",
+				"dimensionAutoPreview": "自动判定：{{dimension}}",
+				"dimensionValue_rpm": "请求速率",
+				"dimensionValue_tpm": "词元速率",
+				"dimensionValue_unknown": "无法判定（沿用冷却时长）",
+				"dimensionNoTTL": "已固定为{{field}}维度，但未配置对应的冷却时长，将沿用「冷却时长」。"
 			},
 			"clear": "清除自定义策略",
 			"restoreDefault": "恢复全局默认",

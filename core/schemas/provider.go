@@ -591,6 +591,36 @@ type CooldownPolicyMatch struct {
 	MessageContains []string `json:"message_contains,omitempty"`
 	Type            []string `json:"type,omitempty"`
 	Code            []string `json:"code,omitempty"`
+
+	// Dimension optionally pins which upstream budget this match cools:
+	// "rpm" (request rate) or "tpm" (token rate). Empty means "auto": the
+	// dimension is derived from the provider error body at mark time (see
+	// the provider-cooldown plugin's limiterDimensionOf).
+	//
+	// Pinning exists because automatic derivation can only read what the
+	// provider says, and not every provider names the exhausted budget. For
+	// a match the operator knows targets a specific limit, pinning removes
+	// the guesswork without affecting any other match.
+	//
+	// Only meaningful on a rate_limit rule: quota exhaustion is a billing /
+	// entitlement failure, not a request- or token-rate window, so Validate
+	// rejects it there.
+	Dimension string `json:"dimension,omitempty"`
+}
+
+// CooldownLimiterDimension values accepted by CooldownPolicyMatch.Dimension.
+const (
+	CooldownDimensionRPM = "rpm"
+	CooldownDimensionTPM = "tpm"
+)
+
+// NormalizedDimension returns the match's pinned dimension in canonical
+// lower-case form, or "" when it is unset (auto).
+func (m *CooldownPolicyMatch) NormalizedDimension() string {
+	if m == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(m.Dimension))
 }
 
 // CooldownPolicyScope describes the granularity at which a cooldown mark is
@@ -1000,6 +1030,55 @@ func (r *CooldownPolicyRule) MatchModeOrDefault() string {
 	return r.MatchMode
 }
 
+// MatchDimension reports whether the rule fires for err and, when it does,
+// the limiter dimension explicitly pinned on the matches that fired.
+//
+// The second return value is "" when no fired match pins one — that is the
+// "auto" case, and the caller derives the dimension from the error body.
+//
+// Resolution under match_mode "any": matches are scanned in order; a fired
+// match without a dimension records that the rule fires but the scan keeps
+// going, so a later fired match that DOES pin a dimension still wins. First
+// pinned value wins, which keeps the outcome deterministic and explainable
+// ("the first matching predicate that names a dimension decides").
+//
+// Under "all" every match must fire, so the same first-pinned-wins scan
+// applies over the full set.
+//
+// This re-runs the match predicates, so callers that already know the rule
+// fires (classifyForMarker) may call it directly and ignore fired.
+func (r *CooldownPolicyRule) MatchDimension(err *BifrostError) (fired bool, dimension string) {
+	if r == nil || len(r.Match) == 0 || err == nil {
+		return false, ""
+	}
+	if r.Enabled != nil && !*r.Enabled {
+		return false, ""
+	}
+	if r.MatchModeOrDefault() == "all" {
+		for i := range r.Match {
+			if !r.Match[i].Matches(err) {
+				return false, ""
+			}
+		}
+		for i := range r.Match {
+			if d := r.Match[i].NormalizedDimension(); d != "" {
+				return true, d
+			}
+		}
+		return true, ""
+	}
+	for i := range r.Match {
+		if !r.Match[i].Matches(err) {
+			continue
+		}
+		fired = true
+		if d := r.Match[i].NormalizedDimension(); d != "" {
+			return true, d
+		}
+	}
+	return fired, ""
+}
+
 // ResolveCooldownPolicy returns the CooldownPolicy that should govern the
 // (provider, attempt) given to the cooldown plugin. The configured policy
 // always wins; nil CooldownPolicy falls back to DefaultCooldownPolicy so
@@ -1078,6 +1157,25 @@ func (p *CooldownPolicy) Validate() error {
 				"cooldown_policy.quota.rpm_ttl_seconds / tpm_ttl_seconds are only valid on the rate_limit rule; " +
 					"a quota exhaustion is not a request- or token-rate window, so the dimension split does not apply",
 			)
+		}
+		for i := range rule.rule.Match {
+			dim := rule.rule.Match[i].NormalizedDimension()
+			switch dim {
+			case "", CooldownDimensionRPM, CooldownDimensionTPM:
+				// valid ("" = derive automatically from the error body)
+			default:
+				return fmt.Errorf(
+					"cooldown_policy.%s.match[%d].dimension %q is invalid; must be %q, %q, or empty for automatic detection",
+					rule.name, i, rule.rule.Match[i].Dimension, CooldownDimensionRPM, CooldownDimensionTPM,
+				)
+			}
+			if rule.name == "quota" && dim != "" {
+				return fmt.Errorf(
+					"cooldown_policy.quota.match[%d].dimension is only valid on the rate_limit rule; "+
+						"a quota exhaustion is not a request- or token-rate window, so pinning a dimension there has no effect",
+					i,
+				)
+			}
 		}
 	}
 	if p.Quota != nil {

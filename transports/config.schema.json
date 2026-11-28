@@ -4188,6 +4188,11 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Exact (case-insensitive) values matching BifrostError.Error.Code"
+        },
+        "dimension": {
+          "type": "string",
+          "enum": ["rpm", "tpm"],
+          "description": "Optional pin for which upstream budget this match cools: \"rpm\" (request rate, RPM/RPS) or \"tpm\" (token rate). Omit for automatic detection from the provider error body (code, type and message, matched against an ordered pattern table). A pin is match-scoped, so a specific predicate (e.g. code=EndpointRPMExceeded) cannot be overridden by a generic catch-all in the same rule. Only valid on a rate_limit rule: quota exhaustion is a billing/entitlement failure, not a rate window, and is rejected at validation time."
         }
       },
       "additionalProperties": false

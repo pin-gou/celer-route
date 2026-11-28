@@ -680,6 +680,10 @@ export const cooldownPolicyMatchSchema = z
 		message_contains: z.array(z.string().min(1)).optional(),
 		type: z.array(z.string().min(1)).optional(),
 		code: z.array(z.string().min(1)).optional(),
+		// Pinned limiter dimension; absent = automatic detection from the error
+		// body. Declared so a value configured through config.json/API survives a
+		// save from this form instead of being stripped by zod.
+		dimension: z.enum(["rpm", "tpm"]).optional(),
 	})
 	.refine(
 		(m) =>

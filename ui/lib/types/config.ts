@@ -414,6 +414,10 @@ export interface CooldownPolicyMatch {
 	message_contains?: string[];
 	type?: string[];
 	code?: string[];
+	// Optional pin for which upstream budget this match cools. "rpm" = request
+	// rate, "tpm" = token rate. Omit for automatic detection from the provider
+	// error body. Only valid on a rate_limit rule.
+	dimension?: "rpm" | "tpm";
 }
 
 // CooldownPolicyRule groups one or more matches and the TTL applied when the
